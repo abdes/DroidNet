@@ -61,7 +61,11 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         else
         {
             using var publication = await services.Publication.AcquireForMountAsync(services.Projects.ActiveProject!, timeout.Token).ConfigureAwait(true);
-            var bindings = publication.RootPaths.Select(static path => new Oxygen.Editor.Runtime.Engine.RuntimeCookedRoot(path)).ToArray();
+            var bindings = publication.Roots.Zip(publication.RootPaths, static (root, path) => new Oxygen.Editor.Runtime.Engine.RuntimeCookedRoot(
+                path,
+                root.Container == Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootContainer.PakFile
+                    ? Oxygen.Editor.Runtime.Engine.RuntimeCookedRootKind.PakFile
+                    : Oxygen.Editor.Runtime.Engine.RuntimeCookedRootKind.LooseFolder)).ToArray();
             var mounts = await services.Mounts.PrepareAsync(services.Projects.ActiveProject!, publication, timeout.Token).ConfigureAwait(true);
             await fixture.Runtime.RefreshProjectCookedRootsAsync(bindings, mounts).ConfigureAwait(true);
         }

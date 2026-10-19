@@ -9,8 +9,11 @@ authorities for validating and interpreting those blocks.
 The reader checks section bounds, record sizes, required digests, member paths,
 unique identities and paired resource-table/data roles. Texture descriptor
 records carry the virtual path the texture is addressed by; asset and texture
-virtual paths share one namespace. The reader accepts only the current format;
-recook older content with current native tools.
+virtual paths share one namespace. `TextureDescriptorFile` reads a texture
+descriptor (`.otex`) into its `TextureResourceRecord`; the loose catalog lists
+each texture by its engine key (`AssetKey.FromVirtualPath`) with that record.
+The reader accepts only the current format; recook older content with current
+native tools.
 
 The native format is owned by
 [LooseCookedIndexFormat.h](../../../../Oxygen.Engine/src/Oxygen/Data/LooseCookedIndexFormat.h).

@@ -27,7 +27,40 @@ public sealed class LibraryMetadataCacheTests
         using var workspace = new CookWorkspace();
         var fingerprint = new string('A', 64);
         var content = missingReport ? JsonSerializer.Serialize(new { Fingerprint = fingerprint, Digest = "invalid", Report = (string?)null }) : "{";
-        workspace.WriteText(".build/cache/cooked-dependencies-v2/" + fingerprint + ".json", content);
+        workspace.WriteText(".build/cache/cooked-dependencies-v3/" + fingerprint + ".json", content);
         _ = (await CookedDependencyCache.ReadAsync(workspace.Root, fingerprint, [], this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeNull();
+    }
+
+    /// <summary>A library's cooked textures have no dependency entries; a report of its assets still matches it.</summary>
+    /// <returns>The asynchronous texture-record check.</returns>
+    [TestMethod]
+    public async Task ReportMatchesALibraryThatAlsoHoldsTextures()
+    {
+        // Arrange
+        using var workspace = new CookWorkspace();
+        var fingerprint = new string('B', 64);
+        var source = Guid.Parse("aaaaaaaa-aaaa-7aaa-8aaa-aaaaaaaaaaaa");
+        var material = Guid.Parse("11111111-1111-4111-8111-111111111111");
+        var report = $$"""
+            { "schema": "oxygen.cooked-dependencies.v3", "source_key": "{{source}}", "assets": [
+              { "asset_key": "{{material}}", "asset_type": 1, "virtual_path": "/Art/Materials/Tile.omat",
+                "dependencies": [], "key_references": [], "resource_bindings": [], "complete": true } ] }
+            """;
+        var digest = Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(report)));
+        workspace.WriteText(".build/cache/cooked-dependencies-v3/" + fingerprint + ".json", JsonSerializer.Serialize(new { Fingerprint = fingerprint, Digest = digest, Report = report }));
+        var root = Oxygen.Managed.Core.FileSystemPath.From(workspace.Root);
+        var tile = Oxygen.Managed.Core.AssetPath.Parse("/Art/Materials/Tile.omat");
+        var grid = Oxygen.Managed.Core.AssetPath.Parse("/Art/Textures/Grid.otex");
+        Oxygen.Managed.Assets.Catalog.AssetRecord[] records =
+        [
+            new(tile) { Cooked = new(root, "Materials/Tile.omat", source, Oxygen.Managed.Assets.Persistence.AssetKey.FromBytes(material.ToByteArray(bigEndian: true)), 1, 1, new string('0', 64)) { VirtualPath = tile } },
+            new(grid) { Cooked = new(root, "Textures/Grid.otex", source, Oxygen.Managed.Assets.Persistence.AssetKey.FromVirtualPath(grid.VirtualPath), 0, 51, new string('0', 64)) { VirtualPath = grid } },
+        ];
+
+        // Act
+        var cached = await CookedDependencyCache.ReadAsync(workspace.Root, fingerprint, records, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        // Assert
+        _ = cached.Should().NotBeNull();
     }
 }

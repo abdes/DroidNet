@@ -31,11 +31,10 @@ public sealed class CookedContentMountService
         try
         {
             captured.RequireAvailableGenerations();
-            for (var index = 0; index < captured.Roots.Length; index++)
+            var mounted = captured.MountableRoots.ToArray();
+            foreach (var (binding, path) in mounted)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                var binding = captured.Roots[index];
-                var path = captured.RootPaths[index];
                 if (binding.Container == CookPublicationRootContainer.PakFile)
                 {
                     readers.Add(await AcquirePakAsync(binding, path, cancellationToken).ConfigureAwait(false));
@@ -50,7 +49,7 @@ public sealed class CookedContentMountService
                     throw new InvalidDataException($"Cooked content has no index: '{binding.Name}'.");
                 }
 
-                var inventory = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+                var inventory = (await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false)).RequireCurrent(path);
                 if (inventory.Index.SourceGuid != binding.SourceKey || !string.Equals(inventory.Fingerprint, binding.IndexSha256, StringComparison.OrdinalIgnoreCase))
                 {
                     throw CookedLibraryChangedException.ForChangedRoot(binding, path, inventory.Index.SourceGuid, inventory.Fingerprint);
@@ -59,7 +58,7 @@ public sealed class CookedContentMountService
                 inventory.ValidateMetadata(files.GetFiles());
             }
 
-            return new(captured, captured.RootPaths, readers);
+            return new(captured, [.. mounted.Select(static entry => entry.Path)], readers);
         }
         catch
         {

@@ -13,4 +13,8 @@ public sealed record PakDocument(
     ushort ContentVersion,
     Guid SourceIdentity,
     string CatalogDigest,
-    IReadOnlyList<PakAssetEntry> Assets);
+    IReadOnlyList<PakAssetEntry> Assets)
+{
+    /// <summary>Gets the textures its browse index names, in browse-index order.</summary>
+    public IReadOnlyList<PakTextureEntry> Textures { get; init; } = [];
+}

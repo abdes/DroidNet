@@ -6,6 +6,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using DroidNet.Storage.Native;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core.Compatibility;
 using Testably.Abstractions;
@@ -78,9 +79,11 @@ internal static class CookedDependencyCache
         return report;
     }
 
+    // The report describes the library's assets; its cooked textures are resources, which reference nothing.
     private static void ValidateRecords(CookedDependencyReport report, IReadOnlyList<AssetRecord> records)
     {
-        if (report.Assets.Count != records.Count || records.Any(record => record.Cooked is not { } cooked
+        var assets = records.Where(static record => record.Cooked?.AssetType != (byte)AssetType.Unknown).ToArray();
+        if (report.Assets.Count != assets.Length || assets.Any(record => record.Cooked is not { } cooked
             || cooked.SourceIdentity != report.SourceIdentity
             || !report.Assets.TryGetValue(cooked.AssetKey.ToString(), out var asset)
             || asset.AssetType != cooked.AssetType
@@ -91,7 +94,7 @@ internal static class CookedDependencyCache
     }
 
     private static string CachePath(string projectRoot, string fingerprint)
-        => Path.Combine(projectRoot, ".build", "cache", "cooked-dependencies-v2", fingerprint + ".json");
+        => Path.Combine(projectRoot, ".build", "cache", "cooked-dependencies-v3", fingerprint + ".json");
 
     private sealed record CachedReport(string Fingerprint, string Digest, string Report);
 }

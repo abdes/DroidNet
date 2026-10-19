@@ -2,26 +2,73 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Concurrent;
 using System.Security.Cryptography;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Catalog.LooseCooked;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 
 /// <summary>Index identity and catalog metadata, without certifying payload integrity.</summary>
-internal sealed record CookedIndexSnapshot(Document Index, string Fingerprint)
+/// <remarks>
+/// Every read hashes the index bytes, so its fingerprint is always that of the file read; the parse, its catalog records
+/// and the finding that the root needs recooking are shared by every read of the same bytes at the same path.
+/// </remarks>
+internal sealed class CookedIndexSnapshot
 {
-    /// <summary>Reads one immutable index opening. No content payload is read.</summary>
-    public static async Task<CookedIndexSnapshot> ReadAsync(string root, CancellationToken cancellationToken)
+    // The latest read of each index path, by the digest of the bytes read; other bytes replace it.
+    private static readonly ConcurrentDictionary<string, (string Fingerprint, CookedIndexRead Read)> Reads
+        = new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly Lazy<Task<IReadOnlyList<AssetRecord>>> records;
+
+    private CookedIndexSnapshot(Document index, string fingerprint, FileSystemPath root)
     {
-        var file = new FileStream(Path.Combine(root, "container.index.bin"), FileMode.Open,
-            FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
+        this.Index = index;
+        this.Fingerprint = fingerprint;
+        this.records = new(() => BuildRecordsAsync(index, root));
+    }
+
+    /// <summary>Gets the index metadata.</summary>
+    public Document Index { get; }
+
+    /// <summary>Gets the SHA-256 of the index bytes, which identifies the root's content.</summary>
+    public string Fingerprint { get; }
+
+    /// <summary>Reads one immutable index opening, reusing the parse of identical bytes. No content payload is read.</summary>
+    /// <param name="root">The loose cooked root.</param>
+    /// <param name="cancellationToken">Cancels reading.</param>
+    /// <returns>The current index, or the format of an index that needs recooking.</returns>
+    /// <exception cref="FileNotFoundException">The root has no index.</exception>
+    /// <exception cref="InvalidDataException">The index is damaged.</exception>
+    public static async Task<CookedIndexRead> ReadAsync(string root, CancellationToken cancellationToken)
+    {
+        var path = Path.GetFullPath(Path.Combine(root, "container.index.bin"));
+        var file = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
         await using var lifetime = file.ConfigureAwait(false);
         using var bytes = new MemoryStream();
         await file.CopyToAsync(bytes, cancellationToken).ConfigureAwait(false);
-        bytes.Position = 0;
-        var index = LooseCookedIndex.Read(bytes);
-        return new(index, Convert.ToHexString(SHA256.HashData(bytes.GetBuffer().AsSpan(0, checked((int)bytes.Length)))));
+        var content = bytes.GetBuffer().AsSpan(0, checked((int)bytes.Length));
+        var fingerprint = Convert.ToHexString(SHA256.HashData(content));
+        if (Reads.TryGetValue(path, out var cached) && string.Equals(cached.Fingerprint, fingerprint, StringComparison.Ordinal))
+        {
+            return cached.Read;
+        }
+
+        CookedIndexRead read = LooseCookedIndex.ReadFormatVersion(content) is { } version && version != LooseCookedIndex.Version
+            ? new CookedIndexRead.Stale(version)
+            : new CookedIndexRead.Current(new(LooseCookedIndex.Read(Rewind(bytes)), fingerprint, FileSystemPath.From(root)));
+        Reads[path] = (fingerprint, read);
+        return read;
     }
+
+    /// <summary>Gets the catalog records of the root's assets and textures, built once per index opening.</summary>
+    /// <param name="cancellationToken">Cancels waiting; the shared read continues for other callers.</param>
+    /// <returns>The records.</returns>
+    public Task<IReadOnlyList<AssetRecord>> ReadRecordsAsync(CancellationToken cancellationToken)
+        => this.records.Value.WaitAsync(cancellationToken);
 
     /// <summary>Checks the protected member list and sizes, without hashing their contents.</summary>
     public void ValidateMetadata(IReadOnlyList<CookedFileEntry> actual)
@@ -41,5 +88,17 @@ internal sealed record CookedIndexSnapshot(Document Index, string Fingerprint)
         {
             throw new InvalidDataException($"Cooked content is missing an indexed file: {expected.First().Key}.");
         }
+    }
+
+    private static async Task<IReadOnlyList<AssetRecord>> BuildRecordsAsync(Document index, FileSystemPath root)
+    {
+        using var catalog = new LooseCookedIndexAssetCatalog(index, root);
+        return await catalog.QueryAsync(new(AssetQueryScope.All), CancellationToken.None).ConfigureAwait(false);
+    }
+
+    private static MemoryStream Rewind(MemoryStream stream)
+    {
+        stream.Position = 0;
+        return stream;
     }
 }

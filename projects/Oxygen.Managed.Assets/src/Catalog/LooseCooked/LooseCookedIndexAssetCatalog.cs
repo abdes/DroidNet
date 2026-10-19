@@ -17,14 +17,16 @@ namespace Oxygen.Managed.Assets.Catalog.LooseCooked;
 /// A catalog provider backed by a runtime-compatible loose cooked index (<c>container.index.bin</c>).
 /// </summary>
 /// <remarks>
-/// This provider enumerates the keyed assets of the current index, identified by the native
-/// virtual paths it records (e.g. <c>/Content/Materials/Wood.omat</c>).
+/// This provider enumerates the keyed assets and the texture descriptors of the current index, identified by the
+/// native virtual paths it records (e.g. <c>/Content/Materials/Wood.omat</c>); a texture's record carries the facts its
+/// descriptor file states.
 /// </remarks>
 public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAssetCatalog, IDisposable
 {
     private readonly IStorageProvider? storage;
     private readonly LooseCookedIndexAssetCatalogOptions? options;
     private readonly IFileSystemCatalogEventSource eventSource;
+    private readonly Document? capturedDocument;
 
     private readonly Subject<AssetChange> changes = new();
     private readonly IDisposable eventSubscription;
@@ -41,10 +43,9 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         ArgumentNullException.ThrowIfNull(document);
         ArgumentNullException.ThrowIfNull(cookedRoot);
         this.cookedRoot = cookedRoot;
-        this.entries = CreateEntries(document, this.cookedRoot);
+        this.capturedDocument = document;
         this.eventSource = new NoopFileSystemCatalogEventSource();
         this.eventSubscription = Disposable.Empty;
-        this.isInitialized = true;
     }
 
     /// <summary>
@@ -171,6 +172,77 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         return string.Empty;
     }
 
+    private static async Task<byte[]?> ReadDiskFileAsync(string path, CancellationToken cancellationToken)
+    {
+        try
+        {
+            return await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            return null;
+        }
+    }
+
+    private static async Task<IReadOnlyDictionary<AssetPath, AssetRecord>> CreateEntriesAsync(
+        Document document,
+        FileSystemPath root,
+        Func<string, CancellationToken, Task<byte[]?>> readFile,
+        CancellationToken cancellationToken)
+    {
+        var records = new CookedAssetRecords();
+        foreach (var entry in document.Assets)
+        {
+            records.Add(entry.VirtualPath ?? string.Empty, identity => new(root, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span))
+            {
+                VirtualPath = identity,
+                References = entry.References,
+            });
+        }
+
+        foreach (var file in document.Files.Where(static file => file.Kind == FileKind.TextureDescriptor && file.VirtualPath is not null))
+        {
+            var texture = ReadTexture(await readFile(Path.Combine(root.FullPath, file.RelativePath), cancellationToken).ConfigureAwait(false));
+            records.Add(file.VirtualPath!, identity => new(root, file.RelativePath, document.SourceGuid, AssetKey.FromVirtualPath(file.VirtualPath!), (byte)AssetType.Unknown, file.Size, Convert.ToHexString(file.Sha256.Span))
+            {
+                VirtualPath = identity,
+                Texture = texture,
+            });
+        }
+
+        return records.Records;
+    }
+
+    // A texture whose descriptor cannot be read is still listed, without its facts; validation reports the damage.
+    private static TextureResourceRecord? ReadTexture(byte[]? bytes)
+    {
+        try
+        {
+            return bytes is null ? null : TextureDescriptorFile.Read(bytes);
+        }
+        catch (InvalidDataException)
+        {
+            return null;
+        }
+    }
+
+    private async Task<byte[]?> ReadStorageFileAsync(string path, CancellationToken cancellationToken)
+    {
+        var document = await this.storage!.GetDocumentFromPathAsync(path, cancellationToken).ConfigureAwait(false);
+        if (!await document.ExistsAsync().ConfigureAwait(false))
+        {
+            return null;
+        }
+
+        var stream = await document.OpenReadAsync(cancellationToken).ConfigureAwait(false);
+        await using (stream.ConfigureAwait(false))
+        {
+            using var copy = new MemoryStream();
+            await stream.CopyToAsync(copy, cancellationToken).ConfigureAwait(false);
+            return copy.ToArray();
+        }
+    }
+
     private async Task EnsureInitializedAsync(CancellationToken cancellationToken)
     {
         if (this.isInitialized)
@@ -178,7 +250,15 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
             return;
         }
 
-        await this.ReloadSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        if (this.capturedDocument is { } document)
+        {
+            Volatile.Write(ref this.entries, await CreateEntriesAsync(document, this.cookedRoot, ReadDiskFileAsync, cancellationToken).ConfigureAwait(false));
+        }
+        else
+        {
+            await this.ReloadSnapshotAsync(cancellationToken).ConfigureAwait(false);
+        }
+
         this.isInitialized = true;
     }
 
@@ -242,22 +322,7 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
         var stream = await indexDoc.OpenReadAsync(cancellationToken).ConfigureAwait(false);
         await using var streamLifetime = stream.ConfigureAwait(false);
         var document = LooseCookedIndex.Read(stream);
-        Volatile.Write(ref this.entries, CreateEntries(document, this.cookedRoot));
-    }
-
-    private static IReadOnlyDictionary<AssetPath, AssetRecord> CreateEntries(Document document, FileSystemPath root)
-    {
-        var records = new CookedAssetRecords();
-        foreach (var entry in document.Assets)
-        {
-            records.Add(entry.VirtualPath ?? string.Empty, identity => new(root, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span))
-            {
-                VirtualPath = identity,
-                References = entry.References,
-            });
-        }
-
-        return records.Records;
+        Volatile.Write(ref this.entries, await CreateEntriesAsync(document, this.cookedRoot, this.ReadStorageFileAsync, cancellationToken).ConfigureAwait(false));
     }
 
     private sealed class NoopFileSystemCatalogEventSource : IFileSystemCatalogEventSource

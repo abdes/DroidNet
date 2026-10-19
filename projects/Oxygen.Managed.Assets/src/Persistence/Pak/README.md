@@ -12,10 +12,13 @@ unchanged while they use it hold their own handle and call `Read`.
 The reader checks the header and footer magic, the format and browse index
 versions, the UUIDv7 source identity, the directory and browse index bounds,
 duplicate keys and paths, browse entries naming assets the directory lacks, and
-texture entries outside the texture table. Asset and texture virtual paths share
-one namespace. A pak without a browse index is rejected: the editor lists pak
-assets by virtual path. The reader accepts only the current format; repack older
-content with current native tools.
+texture entries outside the texture table. `PakDocument.Textures` lists each
+browse-indexed texture with its texture-table record (`TextureResourceRecord`:
+2D or cube, format and size), which `PakAssetCatalog` lists by the texture's
+engine key. Asset and texture virtual paths share one namespace. A pak without a
+browse index is rejected: the editor lists pak assets by virtual path. The
+reader accepts only the current format; repack older content with current native
+tools.
 
 The native format is owned by
 [PakFormat_core.h](../../../../Oxygen.Engine/src/Oxygen/Data/PakFormat_core.h);

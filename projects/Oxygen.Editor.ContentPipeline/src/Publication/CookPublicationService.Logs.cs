@@ -26,6 +26,12 @@ public sealed partial class CookPublicationService
         Guid? actualSourceKey,
         string? actualIndexSha256);
 
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Cooked content '{RootName}' at '{RootPath}' cannot be read until it is recooked: it was cooked in another index format or its generation is gone.")]
+    private static partial void LogRootNeedsRecooking(ILogger logger, string rootName, string rootPath);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Cooked library '{LibraryName}' at '{LibraryPath}' is left out of the cooked content: {Reason}.")]
+    private static partial void LogLibraryUnreadable(ILogger logger, string libraryName, string libraryPath, string reason);
+
     [LoggerMessage(Level = LogLevel.Information, Message = "Republished cooked content of project '{ProjectRoot}' as publication {PublicationId}.")]
     private static partial void LogRepublished(ILogger logger, Guid? publicationId, string projectRoot);
 

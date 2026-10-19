@@ -21,10 +21,11 @@ public sealed class CookedDependencyReportTests
 
         _ = asset.Dependencies.Should().ContainSingle().Which.Should().Be("22222222-2222-4222-8222-222222222222");
         _ = asset.KeyReferences.Select(static reference => reference.TargetKind)
-            .Should().Equal(CookedKeyReferenceTargetKind.Asset, CookedKeyReferenceTargetKind.PhysicsResource, CookedKeyReferenceTargetKind.Logical);
+            .Should().Equal(CookedKeyReferenceTargetKind.Asset, CookedKeyReferenceTargetKind.PhysicsResource, CookedKeyReferenceTargetKind.Logical, CookedKeyReferenceTargetKind.Texture);
         _ = asset.KeyReferences[0].ExpectedAssetType.Should().Be(2);
         _ = asset.ResourceBindings.Select(static binding => binding.State)
-            .Should().Equal(CookedResourceBindingState.Fallback, CookedResourceBindingState.Error);
+            .Should().Equal(CookedResourceBindingState.Fallback, CookedResourceBindingState.Error, CookedResourceBindingState.External);
+        _ = asset.ResourceBindings[2].Kind.Should().Be(CookedResourceKind.ExternalTexture);
     }
 
     [TestMethod]
@@ -42,19 +43,21 @@ public sealed class CookedDependencyReportTests
     [TestMethod]
     public void Parse_RejectsLegacyWireSchemaIdentifier()
     {
-        var legacy = ReportJson.Replace("oxygen.cooked-dependencies.v2", "oxygen.cooked-dependencies.v1", StringComparison.Ordinal);
+        var legacy = ReportJson.Replace("oxygen.cooked-dependencies.v3", "oxygen.cooked-dependencies.v2", StringComparison.Ordinal);
 
         var parse = () => CookedDependencyReport.Parse(legacy);
         _ = parse.Should().Throw<InvalidDataException>()
-            .WithMessage("*Expected oxygen.cooked-dependencies.v2; received 'oxygen.cooked-dependencies.v1'*installed native Inspector*");
+            .WithMessage("*Expected oxygen.cooked-dependencies.v3; received 'oxygen.cooked-dependencies.v2'*installed native Inspector*");
     }
 
     [TestMethod]
-    [DataRow((byte)2, true)]
-    [DataRow((byte)3, false)]
-    public void AssetTargetReferenceRequiresMatchingIndexedType(byte indexedType, bool expectedMatch)
+    [DataRow(CookedKeyReferenceTargetKind.Asset, (byte)2, true)]
+    [DataRow(CookedKeyReferenceTargetKind.Asset, (byte)3, false)]
+    [DataRow(CookedKeyReferenceTargetKind.Texture, (byte)0, true)]
+    [DataRow(CookedKeyReferenceTargetKind.Texture, (byte)2, false)]
+    public void KeyReferenceRequiresMatchingIndexedType(CookedKeyReferenceTargetKind targetKind, byte indexedType, bool expectedMatch)
     {
-        var reference = new CookedKeyReference("22222222-2222-4222-8222-222222222222", CookedKeyReferenceTargetKind.Asset, 2);
+        var reference = new CookedKeyReference("22222222-2222-4222-8222-222222222222", targetKind, targetKind == CookedKeyReferenceTargetKind.Asset ? (byte)2 : (byte)0);
         var target = new Managed.Assets.Catalog.CookedAssetMetadata(
             FileSystemPath.From("C:\\Cooked"), "assets/target.bin", Guid.CreateVersion7(), new(1, 2), indexedType, 0, new string('0', 64));
 
@@ -63,7 +66,7 @@ public sealed class CookedDependencyReportTests
 
     private const string ReportJson = """
         {
-          "schema": "oxygen.cooked-dependencies.v2",
+          "schema": "oxygen.cooked-dependencies.v3",
           "source_key": "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa",
           "assets": [
             {
@@ -74,11 +77,13 @@ public sealed class CookedDependencyReportTests
               "key_references": [
                 { "asset_key": "22222222-2222-4222-8222-222222222222", "target_kind": 1, "expected_asset_type": 2 },
                 { "asset_key": "33333333-3333-4333-8333-333333333333", "target_kind": 2, "expected_asset_type": 0 },
-                { "asset_key": "44444444-4444-4444-8444-444444444444", "target_kind": 3, "expected_asset_type": 0 }
+                { "asset_key": "44444444-4444-4444-8444-444444444444", "target_kind": 3, "expected_asset_type": 0 },
+                { "asset_key": "55555555-5555-4555-8555-555555555555", "target_kind": 4, "expected_asset_type": 0 }
               ],
               "resource_bindings": [
                 { "kind": 2, "index": 0, "state": "fallback" },
-                { "kind": 2, "index": 4294967295, "state": "error" }
+                { "kind": 2, "index": 4294967295, "state": "error" },
+                { "kind": 5, "index": 3, "state": "external" }
               ],
               "complete": true
             }

@@ -45,8 +45,11 @@ public sealed partial class MaterialEditorViewModel
         if (!this.isDisposed)
         {
             this.AssetStatus = items.Find(this.document.File.Asset);
+            // A project texture names its image; a packaged or library texture states its shape.
             this.availableTextures = [.. AssetRule.For(AssetKind.Texture).Apply(items)
-                .Where(static item => item.DescriptorPath is { } descriptorPath && TextureSourceAssetImporter.HasSourceImage(descriptorPath.FullPath))];
+                .Where(static item => item.DescriptorPath is { } descriptorPath
+                    ? TextureSourceAssetImporter.HasSourceImage(descriptorPath.FullPath)
+                    : item.CookedMetadata?.Texture is { Is2D: true })];
             foreach (var channel in this.TextureChannels)
             {
                 channel.Refresh(this.availableTextures, channel.SelectedVirtualPath);

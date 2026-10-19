@@ -18,10 +18,12 @@ public static class PakIndex
     public const int BrowseHeaderSize = 24;
     public const int BrowseEntrySize = 24;
     public const int BrowseTextureEntrySize = 12;
-    public const ushort Version = 9;
+    public const ushort Version = 10;
     public const uint BrowseIndexVersion = 2;
 
+    private const int FooterTextureTableOffset = 104;
     private const int FooterTextureTableCount = 112;
+    private const int FooterTextureTableEntrySize = 116;
     private const int FooterBrowseOffset = 184;
     private const int FooterBrowseSize = 192;
     private const int FooterCatalogOffset = 200;
@@ -79,8 +81,11 @@ public static class PakIndex
 
         var directory = ReadDirectory(stream, footer, length - FooterSize);
         var textureCount = BinaryPrimitives.ReadUInt32LittleEndian(footer.AsSpan(FooterTextureTableCount, 4));
-        var assets = ReadBrowseIndex(stream, footer, length - FooterSize, directory, textureCount);
-        return new PakDocument(contentVersion, sourceIdentity, ReadCatalogDigest(stream, footer, length - FooterSize), assets);
+        var (assets, textures) = ReadBrowseIndex(stream, footer, length - FooterSize, directory, textureCount);
+        return new PakDocument(contentVersion, sourceIdentity, ReadCatalogDigest(stream, footer, length - FooterSize), assets)
+        {
+            Textures = ReadTextures(stream, footer, length - FooterSize, textures),
+        };
     }
 
     private static (ushort ContentVersion, Guid SourceIdentity) ReadHeader(byte[] header)
@@ -141,7 +146,28 @@ public static class PakIndex
         return directory;
     }
 
-    private static List<PakAssetEntry> ReadBrowseIndex(
+    private static List<PakTextureEntry> ReadTextures(Stream stream, byte[] footer, ulong footerOffset, List<(string Path, uint Index)> textures)
+    {
+        var offset = BinaryPrimitives.ReadUInt64LittleEndian(footer.AsSpan(FooterTextureTableOffset, 8));
+        var count = BinaryPrimitives.ReadUInt32LittleEndian(footer.AsSpan(FooterTextureTableCount, 4));
+        var entrySize = BinaryPrimitives.ReadUInt32LittleEndian(footer.AsSpan(FooterTextureTableEntrySize, 4));
+        if (textures.Count == 0)
+        {
+            return [];
+        }
+
+        if (entrySize != TextureResourceRecord.Size || offset > footerOffset || (ulong)count * entrySize > footerOffset - offset)
+        {
+            throw new InvalidDataException("The pak texture table is out of bounds.");
+        }
+
+        return [.. textures.Select(texture => new PakTextureEntry(
+            texture.Path,
+            texture.Index,
+            TextureResourceRecord.Read(ReadBlock(stream, offset + ((ulong)texture.Index * entrySize), TextureResourceRecord.Size))))];
+    }
+
+    private static (List<PakAssetEntry> Assets, List<(string Path, uint Index)> Textures) ReadBrowseIndex(
         Stream stream,
         byte[] footer,
         ulong footerOffset,
@@ -198,6 +224,7 @@ public static class PakIndex
         }
 
         var texturesStart = BrowseHeaderSize + ((int)entryCount * BrowseEntrySize);
+        var textures = new List<(string Path, uint Index)>(checked((int)textureEntryCount));
         for (var index = 0; index < (int)textureEntryCount; index++)
         {
             var entry = bytes.AsSpan(texturesStart + (index * BrowseTextureEntrySize), BrowseTextureEntrySize);
@@ -207,9 +234,11 @@ public static class PakIndex
             {
                 throw new InvalidDataException($"The pak browse index maps a texture outside the texture table: {path}.");
             }
+
+            textures.Add((path, textureIndex));
         }
 
-        return assets;
+        return (assets, textures);
     }
 
     // The catalog ends with the SHA-256 digest of its canonical contents.

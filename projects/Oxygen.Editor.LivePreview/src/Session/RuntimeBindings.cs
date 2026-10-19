@@ -10,11 +10,11 @@ namespace Oxygen.Editor.LivePreview.Session;
 /// <summary>Translates a publication's roots into the runtime mount set, in the publication's precedence order.</summary>
 internal static class RuntimeBindings
 {
-    /// <summary>Gets the runtime mounts of a publication: its roots' paths and how the engine reads each one.</summary>
+    /// <summary>Gets the runtime mounts of a publication: its mountable roots' paths and how the engine reads each one.</summary>
     /// <param name="publication">The captured publication.</param>
     /// <returns>The mounts, lowest precedence first.</returns>
     public static RuntimeCookedRoot[] Of(CookPublicationReadLease publication)
-        => [.. publication.Roots.Zip(publication.RootPaths, static (root, path) => new RuntimeCookedRoot(path, KindOf(root.Container)))];
+        => [.. publication.MountableRoots.Select(static entry => new RuntimeCookedRoot(entry.Path, KindOf(entry.Root.Container)))];
 
     private static RuntimeCookedRootKind KindOf(CookPublicationRootContainer container) => container switch
     {

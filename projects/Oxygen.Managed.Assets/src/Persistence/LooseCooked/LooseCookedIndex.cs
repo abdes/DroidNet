@@ -16,9 +16,20 @@ public static class LooseCookedIndex
     public const int AssetEntrySize = 81;
     public const int FileRecordSize = 50;
     public const int Sha256Size = 32;
-    public const ushort Version = 4;
+    public const ushort Version = 5;
 
     private static readonly byte[] HeaderMagic = Encoding.ASCII.GetBytes("OXLCIDX\0");
+
+    /// <summary>
+    /// Reads the format version an index declares, without validating anything else, so that content cooked in another
+    /// format can be told apart from damaged content.
+    /// </summary>
+    /// <param name="bytes">The index's leading bytes.</param>
+    /// <returns>The declared version, or null when the bytes do not start with a loose index header.</returns>
+    public static ushort? ReadFormatVersion(ReadOnlySpan<byte> bytes)
+        => bytes.Length >= HeaderSize && bytes[..8].SequenceEqual(HeaderMagic)
+            ? BinaryPrimitives.ReadUInt16LittleEndian(bytes.Slice(8, 2))
+            : null;
 
     /// <summary>Reads and validates current loose-index metadata.</summary>
     /// <param name="stream">A seekable stream positioned anywhere in the index.</param>

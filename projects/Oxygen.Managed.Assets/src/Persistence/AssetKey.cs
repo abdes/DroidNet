@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using System.Buffers.Binary;
+using System.IO.Hashing;
 using System.Runtime.InteropServices;
+using System.Text;
 
 namespace Oxygen.Managed.Assets.Persistence;
 
@@ -21,6 +23,18 @@ public readonly record struct AssetKey(ulong Part0, ulong Part1)
         }
 
         return new(BinaryPrimitives.ReadUInt64LittleEndian(bytes[..8]), BinaryPrimitives.ReadUInt64LittleEndian(bytes.Slice(8, 8)));
+    }
+
+    /// <summary>
+    /// Derives the key the engine gives what lives at a virtual path, an asset or a cooked texture: the canonical
+    /// XXH3-128 digest of the path's UTF-8 bytes.
+    /// </summary>
+    /// <param name="virtualPath">The canonical virtual path.</param>
+    /// <returns>The key.</returns>
+    public static AssetKey FromVirtualPath(string virtualPath)
+    {
+        ArgumentNullException.ThrowIfNull(virtualPath);
+        return FromBytes(XxHash128.Hash(Encoding.UTF8.GetBytes(virtualPath)));
     }
 
     /// <summary>Writes the asset key to a destination of at least 16 bytes.</summary>

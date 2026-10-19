@@ -75,8 +75,7 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     internal static IObservable<IReadOnlyList<CubeTextureAsset>>? CubeTextures(IAssetFeed? assetProvider)
         => assetProvider?.Items
             .Select(static assets => (IReadOnlyList<CubeTextureAsset>)AssetRule.For(AssetKind.Texture).Apply(assets)
-                .Where(static asset => asset.DescriptorPath is not null)
-                .Select(static asset => (Asset: asset, Cube: TextureSourceAssetImporter.ReadCubeDescriptor(asset.DescriptorPath!.FullPath)))
+                .Select(static asset => (Asset: asset, Cube: DescribeCube(asset)))
                 .Where(static entry => entry.Cube is not null)
                 .Select(static entry => new CubeTextureAsset(entry.Asset, entry.Cube!.Value.StoresRadiance))
                 .ToArray())
@@ -93,6 +92,12 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
 
         this.assetSubscription = this.cubeTextures.ObserveOn(this.observerScheduler).Subscribe(this.UpdateRows);
     }
+
+    // A project texture's descriptor says whether it is a cube; a packaged or library texture's cooked record does.
+    private static CubeDescriptorInfo? DescribeCube(AssetEntry asset)
+        => asset.DescriptorPath is { } descriptorPath ? TextureSourceAssetImporter.ReadCubeDescriptor(descriptorPath.FullPath)
+            : asset.CookedMetadata?.Texture is { IsCube: true } texture ? new CubeDescriptorInfo(texture.StoresRadiance)
+            : null;
 
     private void UpdateRows(IReadOnlyList<CubeTextureAsset> cubemaps)
     {

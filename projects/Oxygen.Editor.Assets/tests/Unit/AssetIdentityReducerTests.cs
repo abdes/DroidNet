@@ -7,6 +7,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -60,6 +61,30 @@ public sealed partial class AssetIdentityReducerTests
         _ = row.SourcePath.Should().BeNull();
         _ = row.DescriptorPath.Should().BeNull();
         _ = row.DiagnosticCodes.Should().BeEmpty();
+    }
+
+    /// <summary>A packaged texture has no asset type; it is a selectable texture by its file type.</summary>
+    [TestMethod]
+    public void PackagedTexturesAreSelectableTextures()
+    {
+        using var workspace = new TempWorkspace();
+        var identity = AssetPath.Parse("/Props/Textures/Sky.otex");
+        var pak = FileSystemPath.From(workspace.SourcePath("props.pak"));
+        var record = new AssetRecord(identity)
+        {
+            Cooked = new CookedAssetMetadata(pak, DescriptorRelativePath: null, Guid.CreateVersion7(), AssetKey.FromVirtualPath(identity.VirtualPath), AssetType: 0, DescriptorSize: 39, DescriptorSha256: null)
+            {
+                VirtualPath = identity,
+                Texture = new(TextureType: 5, Format: 39, Width: 16, Height: 16, ArrayLayers: 6),
+            },
+        };
+        var rows = Reduce(workspace, [record]);
+        var row = rows.Should().ContainSingle().Subject;
+        _ = row.Kind.Should().Be(AssetKind.Texture);
+        _ = row.PrimaryState.Should().Be(AssetState.Packaged);
+        _ = row.Origin.Should().Be(AssetOrigin.Package);
+        _ = row.IsSelectable.Should().BeTrue();
+        _ = AssetRule.For(AssetKind.Texture).Accepts(row).Should().BeTrue();
     }
     [TestMethod]
     public void ReduceWhenDescriptorAndOutputExistRequiresFreshnessProof()

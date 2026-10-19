@@ -36,7 +36,7 @@ public sealed record CookedDependencyReport(Guid SourceIdentity, ImmutableDictio
         {
             var wireSchema = root.TryGetProperty("schema", out var schema) && schema.ValueKind == JsonValueKind.String
                 ? schema.GetString() : "<missing or invalid>";
-            throw new InvalidDataException($"The native dependency report does not match its schema. Expected oxygen.cooked-dependencies.v2; received '{wireSchema}'. Verify that the installed native Inspector matches the current SDK source.");
+            throw new InvalidDataException($"The native dependency report does not match its schema. Expected oxygen.cooked-dependencies.v3; received '{wireSchema}'. Verify that the installed native Inspector matches the current SDK source.");
         }
 
         var assets = root.GetProperty("assets").EnumerateArray().Select(ReadAsset).ToArray();
@@ -96,6 +96,7 @@ public sealed record CookedDependencyReport(Guid SourceIdentity, ImmutableDictio
             "resource" => CookedResourceBindingState.Resource,
             "error" => CookedResourceBindingState.Error,
             "fallback" => CookedResourceBindingState.Fallback,
+            "external" => CookedResourceBindingState.External,
             _ => throw new InvalidDataException($"Unknown native resource-binding state '{state}'."),
         };
 }

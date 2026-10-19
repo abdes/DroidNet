@@ -85,7 +85,7 @@ internal sealed class AssetIdentityReducer
         => new(
             Identity: identity,
             DisplayName: GetDisplayName(identity),
-            Kind: AssetKinds.FromCookedType(selected.Cooked!.AssetType),
+            Kind: AssetKinds.FromCooked(selected.Cooked!, identity),
             PrimaryState: AssetState.Packaged,
             DerivedState: null,
             RuntimeAvailability: AssetRuntimeAvailability.Unknown,
@@ -137,7 +137,7 @@ internal sealed class AssetIdentityReducer
         => AssetFileTypes.Find(record.Identity.Name) is { Category: AssetFileCategory.Cooked or AssetFileCategory.CookedResource };
 
     private static AssetKind GetKind(AssetRecord record)
-        => record.Cooked is { } cooked ? AssetKinds.FromCookedType(cooked.AssetType) : AssetKinds.FromFileName(record.Identity.Name);
+        => record.Cooked is { } cooked ? AssetKinds.FromCooked(cooked, record.Identity) : AssetKinds.FromFileName(record.Identity.Name);
 
     private AssetEntry? CreateItem(AssetPath identity, List<AssetRecord> records, ProjectContext project)
     {

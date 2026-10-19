@@ -7,6 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
@@ -50,7 +51,7 @@ public sealed class CookedLibraryResolutionTests
         await File.WriteAllBytesAsync(descriptorPath, damaged, this.TestContext.CancellationToken).ConfigureAwait(false);
         var rejected = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = rejected.IsPublished.Should().BeFalse();
-        var dependencyCache = Path.Combine(consumer.Root, ".build/cache/cooked-dependencies-v2");
+        var dependencyCache = Path.Combine(consumer.Root, ".build/cache/cooked-dependencies-v3");
         _ = (Directory.Exists(dependencyCache) && Directory.EnumerateFiles(dependencyCache, "*", SearchOption.AllDirectories).Any()).Should().BeFalse(
             "damaged descriptor bytes must not seed a dependency cache under the unchanged index identity");
         await File.WriteAllBytesAsync(descriptorPath, original, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -74,6 +75,54 @@ public sealed class CookedLibraryResolutionTests
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
 
         await this.AssertLibraryFailuresPreserveOutputAsync(consumer, context, library.Root, root, service, scene).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// A material uses a texture a declared library holds: the cook binds it by key, copies nothing, and records the
+    /// library texture as a dependency.
+    /// </summary>
+    /// <returns>The asynchronous cooked-library texture regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task MaterialCookUsesDeclaredCookedLibraryTexture()
+    {
+        // Arrange
+        using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        _ = Directory.CreateDirectory(Path.Combine(library.Root, "Art/Textures"));
+        await File.WriteAllBytesAsync(Path.Combine(library.Root, "Art/Textures/Surface.tga"), [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 0, 0, 255], this.TestContext.CancellationToken).ConfigureAwait(false);
+        library.WriteText("Art/Textures/Surface.otex.json", """
+            { "source": "Surface.tga", "intent": "albedo", "virtual_path": "/Art/Textures/Surface.otex",
+              "decode": { "color_space": "srgb" }, "output": { "format": "rgba8_srgb" } }
+            """);
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
+        var texture = await CreateService(library, new SceneDescriptorGenerator(), api, compatibility).CookAssetAsync(AssetPath.Parse("/Art/Textures/Surface.otex.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = texture.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, texture.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
+        var root = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var context = consumer.ProjectContext with { LocalFolderMounts = [new("Art library", FileSystemPath.From(root))] };
+        consumer.Activate(context);
+        var materialPath = Path.Combine(consumer.Root, "Content/Materials/Tiled.omat.json");
+        _ = Directory.CreateDirectory(Path.GetDirectoryName(materialPath)!);
+        var material = File.Create(materialPath);
+        await using (material.ConfigureAwait(false))
+        {
+            MaterialSourceWriter.Write(material, new MaterialSource(
+                name: "Tiled",
+                pbrMetallicRoughness: new MaterialPbrMetallicRoughness(baseColorR: 1, baseColorG: 1, baseColorB: 1, baseColorA: 1, metallicFactor: 0, roughnessFactor: 0.5f),
+                alphaMode: MaterialAlphaMode.Opaque,
+                alphaCutoff: 0.5f,
+                doubleSided: false).WithTextureReference("base_color", "/Art/Textures/Surface.otex"));
+        }
+        var service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
+
+        // Act
+        var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Tiled.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        // Assert
+        _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
+        _ = result.CookedAssets.Should().NotContain(static asset => asset.Kind == ContentCookAssetKind.Texture);
+        _ = result.InputSnapshot!.CookedDependencies.Should().ContainSingle(static dependency => dependency.AssetUri == AssetPath.Parse("/Art/Textures/Surface.otex"));
     }
 
     /// <summary>The saved library order selects the captured native dependency and invalidates its consumer.</summary>

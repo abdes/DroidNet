@@ -4,6 +4,7 @@
 
 using System.Buffers.Binary;
 using System.Text;
+using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.Pak;
 
 namespace Oxygen.Testing;
@@ -15,7 +16,8 @@ internal static class PakFixture
     /// <param name="destination">The stream to replace with the pak.</param>
     /// <param name="document">The header fields and the assets, listed in the directory and the browse index.</param>
     /// <param name="textures">The texture entries of the browse index.</param>
-    /// <param name="textureTableCount">The texture table count the footer records.</param>
+    /// <param name="textureTableCount">The entries of the texture table, which the footer records.</param>
+    /// <param name="textureRecords">The leading texture table records; the others are zero.</param>
     /// <param name="browseIndex">Whether the pak embeds a browse index.</param>
     /// <param name="browseOnly">Assets listed in the browse index but missing from the directory.</param>
     public static void Write(
@@ -24,9 +26,11 @@ internal static class PakFixture
         IReadOnlyList<(uint TextureIndex, string VirtualPath)>? textures = null,
         uint textureTableCount = 0,
         bool browseIndex = true,
-        IReadOnlyList<PakAssetEntry>? browseOnly = null)
+        IReadOnlyList<PakAssetEntry>? browseOnly = null,
+        IReadOnlyList<TextureResourceRecord>? textureRecords = null)
     {
         textures ??= [];
+        textureRecords ??= [];
         browseOnly ??= [];
         destination.SetLength(0);
         var header = new byte[PakIndex.HeaderSize];
@@ -41,6 +45,12 @@ internal static class PakFixture
         {
             offsets.Add(checked((ulong)destination.Position));
             destination.Write(new byte[asset.DescriptorSize]);
+        }
+
+        var textureTableOffset = checked((ulong)destination.Position);
+        for (var index = 0; index < textureTableCount; index++)
+        {
+            destination.Write(index < textureRecords.Count ? Encode(textureRecords[index]) : new byte[TextureResourceRecord.Size]);
         }
 
         var directoryOffset = checked((ulong)destination.Position);
@@ -75,13 +85,31 @@ internal static class PakFixture
         BinaryPrimitives.WriteUInt64LittleEndian(footer.AsSpan(0), directoryOffset);
         BinaryPrimitives.WriteUInt64LittleEndian(footer.AsSpan(8), directorySize);
         BinaryPrimitives.WriteUInt64LittleEndian(footer.AsSpan(16), (ulong)document.Assets.Count);
+        BinaryPrimitives.WriteUInt64LittleEndian(footer.AsSpan(104), textureTableOffset);
         BinaryPrimitives.WriteUInt32LittleEndian(footer.AsSpan(112), textureTableCount);
+        BinaryPrimitives.WriteUInt32LittleEndian(footer.AsSpan(116), TextureResourceRecord.Size);
         BinaryPrimitives.WriteUInt64LittleEndian(footer.AsSpan(184), browseOffset);
         BinaryPrimitives.WriteUInt64LittleEndian(footer.AsSpan(192), browseSize);
         BinaryPrimitives.WriteUInt64LittleEndian(footer.AsSpan(200), catalogOffset);
         BinaryPrimitives.WriteUInt64LittleEndian(footer.AsSpan(208), catalogSize);
         "OXPAKEND"u8.CopyTo(footer.AsSpan(248));
         destination.Write(footer);
+    }
+
+    /// <summary>Encodes a texture table record as the engine lays it out.</summary>
+    /// <param name="record">The record.</param>
+    /// <returns>The record's bytes.</returns>
+    public static byte[] Encode(TextureResourceRecord record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+        var bytes = new byte[TextureResourceRecord.Size];
+        bytes[12] = record.TextureType;
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(14), record.Width);
+        BinaryPrimitives.WriteUInt32LittleEndian(bytes.AsSpan(18), record.Height);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(22), 1);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(24), record.ArrayLayers);
+        bytes[28] = record.Format;
+        return bytes;
     }
 
     private static byte[] EncodeBrowseIndex(

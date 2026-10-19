@@ -45,7 +45,7 @@ public sealed partial class MissingAssetRecoveryTests : DroidNet.Tests.VisualUse
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         _ = model.SelectedGeometry.Should().Be(missing);
         _ = view.FindDescendant<SplitButton>(button => string.Equals(button.Name, "AssetSplitButton", StringComparison.Ordinal))!.Content.Should().Be("DoesNotExist.ogeo");
-        _ = (await fixture.ReadNodeAsync(node.Id, timeout.Token).ConfigureAwait(true)).GeometryName.Should().Be("cube", "a failed replacement retains the last resolved geometry");
+        _ = (await fixture.ReadNodeAsync(node.Id, timeout.Token).ConfigureAwait(true)).GeometryName.Should().Be("Cube", "a failed replacement retains the last resolved geometry");
         await fixture.Document.History.UndoAsync(timeout.Token).ConfigureAwait(true);
         _ = await AssertGeometryAsync(fixture, node.Id, "Cube", timeout.Token).ConfigureAwait(true);
         fixture.Results.Clear();

@@ -52,7 +52,7 @@ public sealed partial class PreviewSession
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Cooked-content refresh failed during {Stage} for project {ProjectRoot}. Preview state: {PreviewState}.")]
+        Message = "Cooked-content refresh failed while {Stage} for project {ProjectRoot}. Preview state: {PreviewState}.")]
     private static partial void LogCookedRootRefreshFailed(ILogger logger, Exception exception, string stage, string projectRoot, string previewState);
 
     private void LogCookedRootRefreshFailed(Exception exception, string stage, string projectRoot, string previewState)

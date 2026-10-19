@@ -30,9 +30,12 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
         var reader = await CookOutputReadLease.AcquireAsync(root.FullPath, cancellationToken).ConfigureAwait(false);
         try
         {
-            using var catalog = new LooseCookedIndexAssetCatalog(new NativeStorageProvider(new RealFileSystem()), new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = root });
-            var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
-            var index = await CookedIndexSnapshot.ReadAsync(root.FullPath, cancellationToken).ConfigureAwait(false);
+            if (await CookedIndexSnapshot.ReadAsync(root.FullPath, cancellationToken).ConfigureAwait(false) is not CookedIndexRead.Current { Snapshot: var index })
+            {
+                return false;
+            }
+
+            var records = await index.ReadRecordsAsync(cancellationToken).ConfigureAwait(false);
             var fingerprint = index.Fingerprint;
             if (await CookedDependencyCache.ReadAsync(operation.Project.ProjectRoot.FullPath, fingerprint, records, cancellationToken).ConfigureAwait(false) is not null)
             {

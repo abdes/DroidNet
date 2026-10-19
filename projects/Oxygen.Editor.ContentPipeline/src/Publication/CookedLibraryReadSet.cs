@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.LooseCooked;
 using Oxygen.Managed.Assets.Catalog.Pak;
@@ -22,13 +23,16 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 internal sealed partial class CookedLibraryReadSet : IDisposable
 {
     private readonly List<Root> roots = [];
-    private readonly List<(string name, string message)> failures = [];
+    private readonly List<UnreadableLibrary> unreadable = [];
     private IReadOnlyList<CookedContentSource> order = [];
     private string projectRoot = string.Empty;
     private ProjectContext project = null!;
     private Func<AssetPath, ContentCookInput?>? resolveImported;
     private IReadOnlyCollection<AssetPath> knownProjectOutputs = [];
     private ProjectAssetKeyIndex? projectIdentities;
+
+    /// <summary>Gets the declared libraries that could not be read; they are left out of every binding until they can be.</summary>
+    public IReadOnlyList<UnreadableLibrary> Unreadable => this.unreadable;
 
     /// <summary>Gets a value indicating whether cached dependencies name keys absent from every declared library index.</summary>
     public bool HasUnresolvedAssetKeys => this.roots.Where(static root => root.Dependencies is not null)
@@ -139,6 +143,12 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             }
 
             libraries.Add(new(asset.Identity, root.Name, root.Path, key, asset.Cooked.AssetType, root.Fingerprint));
+            if (asset.Cooked.AssetType == (byte)AssetType.Unknown)
+            {
+                // A cooked texture is a resource and references nothing.
+                continue;
+            }
+
             var metadata = await this.GetDependencyMetadataAsync(root, key, inspector, operationRoot, artifacts, cancellationToken).ConfigureAwait(false);
             if (metadata?.Complete != true)
             {
@@ -146,7 +156,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
                 continue;
             }
 
-            foreach (var reference in metadata.KeyReferences.Where(static reference => reference.TargetKind == CookedKeyReferenceTargetKind.Asset))
+            foreach (var reference in metadata.KeyReferences.Where(static reference => reference.TargetKind is CookedKeyReferenceTargetKind.Asset or CookedKeyReferenceTargetKind.Texture))
             {
                 var dependency = reference.AssetKey;
                 var found = this.FindKey(dependency);
@@ -189,7 +199,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     public CookDependencyGraph Apply(CookDependencyGraph graph)
     {
         var diagnostics = graph.Diagnostics.ToBuilder();
-        foreach (var (name, message) in this.failures)
+        foreach (var (name, _, message) in this.unreadable)
         {
             foreach (var consumer in graph.Assets.Where(input => graph.NativeReferences.GetValueOrDefault(input.AssetUri, []).Length != 0))
             {
@@ -299,19 +309,15 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     }
 
     internal static bool MatchesExpectedAssetType(CookedKeyReference reference, CookedAssetMetadata target)
-        => reference.ExpectedAssetType == 0 || target.AssetType == reference.ExpectedAssetType;
+        => reference.TargetKind == CookedKeyReferenceTargetKind.Texture
+            ? target.AssetType == (byte)AssetType.Unknown
+            : reference.ExpectedAssetType == 0 || target.AssetType == reference.ExpectedAssetType;
 
-    /// <summary>Uses the same saved low-to-high source order as runtime mounting.</summary>
+    /// <summary>Uses the same saved low-to-high source order as runtime mounting; unreadable libraries are left out.</summary>
     /// <param name="projectRoots">The operation's staged and reusable project roots.</param>
     /// <returns>Native lookup roots ordered from lowest to highest priority.</returns>
     internal ImmutableArray<CookPublicationRoot> OrderBindings(IEnumerable<CookPublicationRoot> projectRoots)
     {
-        if (this.failures.Count != 0)
-        {
-            throw new InvalidDataException("Cooked libraries could not be read: "
-                + string.Join("; ", this.failures.Select(static failure => failure.name + ": " + failure.message)));
-        }
-
         var owned = projectRoots.OrderBy(static root => root.Name, StringComparer.Ordinal).ToArray();
         var result = new List<CookPublicationRoot>();
         foreach (var source in this.order)
@@ -410,6 +416,12 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     private (Root root, AssetRecord asset) FindKey(string key)
         => this.roots.AsEnumerable().Reverse().SelectMany(root => root.Assets.Where(asset => string.Equals(asset.Cooked?.AssetKey.ToString(), key, StringComparison.OrdinalIgnoreCase)).Select(asset => (root, asset))).FirstOrDefault();
 
+    /// <summary>A declared library that could not be read.</summary>
+    /// <param name="Name">The library's mount name.</param>
+    /// <param name="Path">The library's folder or pak file.</param>
+    /// <param name="Reason">Why it could not be read.</param>
+    public sealed record UnreadableLibrary(string Name, string Path, string Reason);
+
     /// <summary>A library asset preferred over the project's source, in the root that holds it.</summary>
     /// <param name="CookedRoot">The physical cooked root.</param>
     /// <param name="Asset">The asset's index entry.</param>
@@ -426,7 +438,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            this.failures.Add((AssetPath.Engine.Mount, failure.Message));
+            this.unreadable.Add(new(AssetPath.Engine.Mount, engineContent.Path.FullPath, failure.Message));
         }
     }
 
@@ -444,9 +456,15 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         {
             CookOutputLease.RejectReparsePoint(path);
             files = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
-            var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
-            using var catalog = new LooseCookedIndexAssetCatalog(index.Index, mount.Root);
-            var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
+            var read = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+            if (read is CookedIndexRead.Stale stale)
+            {
+                this.unreadable.Add(new(mount.Name, path, $"it was cooked in index format {stale.FormatVersion}; recook it"));
+                return;
+            }
+
+            var index = read.RequireCurrent(path);
+            var records = await index.ReadRecordsAsync(cancellationToken).ConfigureAwait(false);
             var fingerprint = index.Fingerprint;
             var metadata = await CookedDependencyCache.ReadAsync(this.projectRoot, fingerprint, records, cancellationToken).ConfigureAwait(false);
             this.roots.Add(new(mount.Name, path, records, fingerprint, files) { SourceKey = index.Index.SourceGuid, Dependencies = metadata });
@@ -454,7 +472,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            this.failures.Add((mount.Name, failure.Message));
+            this.unreadable.Add(new(mount.Name, path, failure.Message));
         }
         finally
         {
@@ -478,7 +496,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         }
         catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
         {
-            this.failures.Add((mount.Name, failure.Message));
+            this.unreadable.Add(new(mount.Name, mount.Path.FullPath, failure.Message));
         }
         finally
         {

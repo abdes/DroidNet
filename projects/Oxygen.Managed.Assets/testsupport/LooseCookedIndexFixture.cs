@@ -12,6 +12,17 @@ namespace Oxygen.Testing;
 /// <summary>Small binary fixture emitter for reader and orchestration tests; never shipped.</summary>
 internal static class LooseCookedIndexFixture
 {
+    /// <summary>Makes an index on disk claim another format version, as one cooked by an older or newer cooker would.</summary>
+    /// <param name="indexPath">The index file.</param>
+    /// <param name="version">The format version it claims.</param>
+    /// <returns>The asynchronous rewrite.</returns>
+    public static async Task RewriteFormatVersionAsync(string indexPath, ushort version)
+    {
+        var bytes = await File.ReadAllBytesAsync(indexPath).ConfigureAwait(false);
+        BinaryPrimitives.WriteUInt16LittleEndian(bytes.AsSpan(8, 2), version);
+        await File.WriteAllBytesAsync(indexPath, bytes).ConfigureAwait(false);
+    }
+
     public static void Write(Stream destination, Document document)
     {
         using var strings = new MemoryStream();

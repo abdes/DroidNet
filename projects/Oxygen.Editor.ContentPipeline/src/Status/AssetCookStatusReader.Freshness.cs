@@ -28,7 +28,12 @@ public sealed partial class AssetCookStatusReader
 
             try
             {
-                var current = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+                // A root cooked in another index format has no readable output: it needs recooking.
+                if (await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false) is not CookedIndexRead.Current { Snapshot: var current })
+                {
+                    continue;
+                }
+
                 if (root.SourceKey != current.Index.SourceGuid
                     || !string.Equals(root.IndexSha256, current.Fingerprint, StringComparison.OrdinalIgnoreCase))
                 {

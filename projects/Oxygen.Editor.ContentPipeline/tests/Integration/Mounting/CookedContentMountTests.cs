@@ -50,6 +50,22 @@ public sealed class CookedContentMountTests
         File.WriteAllBytes(Path.Combine(fixture.First, "Materials", "Shared.omat"), [9]);
     }
 
+    /// <summary>A library cooked in another index format is left out and named, and the remaining content still mounts.</summary>
+    /// <returns>The asynchronous stale-library regression.</returns>
+    [TestMethod]
+    public async Task StaleLibraryIsLeftOutWhileTheRestMounts()
+    {
+        using var fixture = new MountFixture();
+        await LooseCookedIndexFixture.RewriteFormatVersionAsync(Path.Combine(fixture.First, "container.index.bin"), 4).ConfigureAwait(false);
+
+        using var libraries = await CookedLibraryReadSet.AcquireAsync(fixture.Project, new EngineContentPakFixture(), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var reader = await fixture.CaptureAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var mounts = await fixture.Service.PrepareAsync(fixture.Project, reader, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = libraries.Unreadable.Should().ContainSingle().Which.Name.Should().Be("First");
+        _ = mounts.Roots.Should().Equal(fixture.Second, fixture.ProjectOutput);
+    }
+
     /// <summary>Explicit overrides and repeated aliases use the final occurrence of a physical root.</summary>
     /// <returns>The asynchronous source-order regression.</returns>
     [TestMethod]
@@ -109,7 +125,7 @@ public sealed class CookedContentMountTests
         using var reader = await fixture.CaptureAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
         var recorded = reader.Roots.Single(static root => string.Equals(root.Name, "First", StringComparison.Ordinal));
         fixture.RecookFirst();
-        var current = await CookedIndexSnapshot.ReadAsync(fixture.First, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var current = (await CookedIndexSnapshot.ReadAsync(fixture.First, this.TestContext.CancellationToken).ConfigureAwait(false)).RequireCurrent(fixture.First);
         Func<Task> open = () => reader.CreateCatalogAsync(recorded, this.TestContext.CancellationToken);
         var changed = (await open.Should().ThrowAsync<CookedLibraryChangedException>().ConfigureAwait(false)).Which;
         _ = changed.Message.Should().Contain("'First'").And.Contain(fixture.First)
@@ -197,7 +213,7 @@ public sealed class CookedContentMountTests
         public async Task<CookPublicationReadLease> CaptureAsync(ProjectContext project, CancellationToken token)
         {
             using var libraries = await CookedLibraryReadSet.AcquireAsync(project, new EngineContentPakFixture(), token).ConfigureAwait(false);
-            var index = await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, token).ConfigureAwait(false);
+            var index = (await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, token).ConfigureAwait(false)).RequireCurrent(this.ProjectOutput);
             var roots = libraries.OrderBindings([new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, LibraryPath: null)]);
             var document = new CookPublicationDocument(
                 CookPublicationDocument.CurrentVersion,

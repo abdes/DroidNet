@@ -22,7 +22,7 @@ public sealed record CookedAssetDependencies(string AssetKey, byte AssetType, st
     public ImmutableArray<CookedResourceBinding> ResourceBindings { get; init; } = [];
 }
 
-/// <summary>A native key reference; only asset-target references are cook dependencies.</summary>
+/// <summary>A native key reference; asset- and texture-target references are cook dependencies.</summary>
 /// <param name="AssetKey">The referenced native key.</param>
 /// <param name="TargetKind">The native target classification.</param>
 /// <param name="ExpectedAssetType">The expected asset type, or zero when not applicable.</param>
@@ -34,6 +34,9 @@ public enum CookedKeyReferenceTargetKind : byte
     Asset = 1,
     PhysicsResource = 2,
     Logical = 3,
+
+    /// <summary>A texture another container holds, which an external texture binding names.</summary>
+    Texture = 4,
 }
 
 /// <summary>A descriptor-local native resource binding, not a cooked asset dependency.</summary>
@@ -49,6 +52,9 @@ public enum CookedResourceKind : byte
     Texture = 2,
     Script = 3,
     Physics = 4,
+
+    /// <summary>A texture another container holds; the index selects its texture key reference.</summary>
+    ExternalTexture = 5,
 }
 
 /// <summary>Native classification of an indexed resource binding.</summary>
@@ -57,4 +63,7 @@ public enum CookedResourceBindingState
     Resource,
     Error,
     Fallback,
+
+    /// <summary>A texture another container holds, named by key.</summary>
+    External,
 }

@@ -28,7 +28,7 @@ public static class AssetIdentity
         return new(
             identity,
             AssetIdentityReducer.GetDisplayName(identity),
-            AssetKinds.FromCookedType(source.AssetType),
+            AssetKinds.FromCooked(source, identity),
             !exists ? AssetState.Broken : source.IsPackaged ? AssetState.Packaged : AssetState.Cooked,
             DerivedState: null,
             effective.RuntimeAvailability,

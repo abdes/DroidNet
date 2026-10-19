@@ -25,6 +25,8 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
     : ICookPublicationReader
 {
     private readonly Lock sync = new();
+    private readonly HashSet<(Guid Publication, string RootPath)> reportedUnavailableRoots = [];
+    private readonly HashSet<CookedLibraryReadSet.UnreadableLibrary> reportedUnreadableLibraries = [];
     private PreviewRegistration? registration;
 
     private Microsoft.Extensions.Logging.ILogger Logger { get; } = (Microsoft.Extensions.Logging.ILogger?)logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance;
@@ -63,7 +65,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
                     }
 
                     using var baseline = await this.AcquireForOperationAsync(operation, token).ConfigureAwait(false);
-                    using var libraries = await CookedLibraryReadSet.AcquireAsync(project, engineContent, token).ConfigureAwait(false);
+                    using var libraries = this.ReportUnreadableLibraries(await CookedLibraryReadSet.AcquireAsync(project, engineContent, token).ConfigureAwait(false));
                     var document = BuildMetadataDocument(operation, project, baseline, libraries, droppedRoots: ImmutableHashSet<string>.Empty);
                     if ((baseline.Document is { } current
                             && string.Equals(current.MountConfigurationIdentity, document.MountConfigurationIdentity, StringComparison.Ordinal)
@@ -105,7 +107,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
     {
         coordinator.VerifyWriter(operation);
         using var baseline = await this.AcquireForOperationAsync(operation, cancellationToken).ConfigureAwait(false);
-        using var libraries = await CookedLibraryReadSet.AcquireAsync(next, engineContent, cancellationToken).ConfigureAwait(false);
+        using var libraries = this.ReportUnreadableLibraries(await CookedLibraryReadSet.AcquireAsync(next, engineContent, cancellationToken).ConfigureAwait(false));
         var document = BuildMetadataDocument(operation, next, baseline, libraries, droppedRoots: ImmutableHashSet<string>.Empty);
         var transaction = await CookPublicationTransaction.ReserveAsync(operation, baseline, [], files, projectManager, cancellationToken).ConfigureAwait(false);
         var projectChange = new CookPublicationJournal.ProjectConfiguration(ProjectInfo.ToJson(expected), ProjectInfo.ToJson(desired));

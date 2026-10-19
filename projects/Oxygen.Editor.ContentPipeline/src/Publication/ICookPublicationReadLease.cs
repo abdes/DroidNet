@@ -27,7 +27,10 @@ public interface ICookPublicationReadLease : IDisposable
     /// <summary>Gets the accepted roots in native precedence order.</summary>
     public ImmutableArray<CookPublicationRoot> Roots { get; }
 
-    /// <summary>Gets owned roots whose lifetime marker is missing; they must be rebuilt before they are read.</summary>
+    /// <summary>
+    /// Gets roots that cannot be read until they are recooked: owned roots whose lifetime marker is missing, and loose
+    /// roots cooked in another index format.
+    /// </summary>
     public ImmutableArray<CookPublicationRoot> UnavailableRoots { get; }
 
     /// <summary>Gets the physical output folder of each project mount, by mount name.</summary>

@@ -49,8 +49,8 @@ public sealed class PakIndexTests
     }
 
     [TestMethod]
-    [DataRow(8)]
-    [DataRow(10)]
+    [DataRow(9)]
+    [DataRow(11)]
     public void Read_WithAnotherFormatVersion_ShouldThrow(int version)
     {
         using var stream = Write(CreateDocument());
@@ -89,14 +89,18 @@ public sealed class PakIndexTests
     }
 
     [TestMethod]
-    public void Read_WithTexturesInsideTheTextureTable_ShouldListOnlyAssets()
+    public void Read_WithTexturesInsideTheTextureTable_ShouldListThemWithTheirRecords()
     {
         using var stream = new MemoryStream();
-        PakFixture.Write(stream, CreateDocument(), textures: [(1, "/Engine/Generated/Textures/White.otex")], textureTableCount: 2);
+        var cube = new TextureResourceRecord(TextureType: 5, Format: 39, Width: 16, Height: 16, ArrayLayers: 6);
+        PakFixture.Write(stream, CreateDocument(), textures: [(1, "/Engine/Generated/Textures/Sky.otex")], textureTableCount: 2, textureRecords: [new(0, 0, 0, 0, 0), cube]);
 
         var read = PakIndex.Read(stream);
 
         _ = read.Assets.Should().HaveCount(2);
+        _ = read.Textures.Should().ContainSingle().Which.Should().Be(new PakTextureEntry("/Engine/Generated/Textures/Sky.otex", 1, cube));
+        _ = read.Textures[0].Texture.IsCube.Should().BeTrue();
+        _ = read.Textures[0].Texture.StoresRadiance.Should().BeTrue();
     }
 
     private static void AssertRejected(MemoryStream stream)

@@ -247,6 +247,19 @@ assets) lives in the SDK's engine content pak, `share/oxygen/engine.pak`, under
 - a scene renderable must not silently cook with an all-zero geometry key; an
   unresolved reference fails the scene cook with a diagnostic.
 
+Textures follow the same rule. A material's texture or a scene's environment
+texture (sky light, sky sphere and fog cubemaps, the metering mask) names the
+texture's virtual path. The native cook binds a texture the job's own output
+holds to that output's texture table, and a texture a cooked context root holds
+(the engine pak, a declared pak or a mounted library) by its texture key, the
+engine's key of its virtual path, without copying it; the runtime resolves that
+key in the newest mount holding it. Material jobs therefore receive the cooked
+context roots like scene, geometry and sidecar jobs. The asset catalog lists the
+cooked textures of loose libraries and paks with the facts their texture record
+states (2D or cube, format), which the texture pickers use, and the library
+closure records a library texture as a cooked dependency of the material or
+scene that uses it.
+
 ### 7.5 Import Manifest
 
 Use an explicit manifest model that can be serialized to the native
@@ -690,6 +703,17 @@ production API.
    valid authoring access. Missing owned generation markers preserve provenance
    for repair but forbid reuse and mounting. Rebuild fresh generations; never
    recreate a marker.
+8. A loose root whose index declares another format is stale, not damaged: the
+   index header names its version, so no parse is attempted. Opening the
+   publication lists it with the unavailable roots, which status, catalogs and
+   mounting skip and which a cook rebuilds; unlike a missing generation marker,
+   it does not block admission of the rest of the publication. A library that is
+   stale or cannot be read is left out of the publication's bindings, so the
+   rest of the content still mounts; a cook that needs it fails with
+   `asset_cook.library_unavailable`. The publication service logs each
+   unavailable root once per publication, and each unreadable library once for
+   as long as it stays unreadable. Every index read hashes the file's bytes, and
+   the parse and catalog records of identical bytes are shared by every reader.
 
 After publication, maintenance reclaims unused generations automatically. It
 protects selected documents, active/recovery roots and native or managed reader
@@ -900,7 +924,7 @@ preview; no library is copied into project authoring or claimed as a newly
 produced project asset.
 
 Dependency inspection uses the existing native Inspector in metadata-only mode.
-Cache its versioned report under `.build/cache/cooked-dependencies-v2`, keyed by
+Cache its versioned report under `.build/cache/cooked-dependencies-v3`, keyed by
 the verified container-file fingerprint. Validate the report schema,
 cached-report digest, container identity and indexed asset keys/types/paths
 before reuse. Missing or damaged cache entries require inspection; they cannot

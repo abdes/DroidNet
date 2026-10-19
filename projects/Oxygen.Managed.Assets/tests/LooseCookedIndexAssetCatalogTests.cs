@@ -141,6 +141,44 @@ public sealed class LooseCookedIndexAssetCatalogTests
         }
     }
 
+    /// <summary>
+    /// A texture descriptor is listed by its engine key with the facts its file states; one whose file is missing is
+    /// listed without them.
+    /// </summary>
+    /// <returns>The asynchronous texture listing check.</returns>
+    [TestMethod]
+    public async Task QueryAsync_ShouldListTextureDescriptorsWithTheirFacts()
+    {
+        var fs = new MockFileSystem();
+        _ = fs.Directory.CreateDirectory(@"C:\Cooked\Textures");
+        var cube = new TextureResourceRecord(TextureType: 5, Format: 39, Width: 16, Height: 16, ArrayLayers: 6);
+        var sidecar = new byte[TextureDescriptorFile.Size];
+        "OTEX"u8.CopyTo(sidecar);
+        sidecar[4] = 1;
+        sidecar[8] = 1;
+        Oxygen.Testing.PakFixture.Encode(cube).CopyTo(sidecar, 12);
+        await fs.File.WriteAllBytesAsync(@"C:\Cooked\Textures\Sky.otex", sidecar, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var document = new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [],
+        [
+            new FileRecord(FileKind.TextureDescriptor, "Textures/Sky.otex", (ulong)sidecar.Length, SHA256.HashData(sidecar), "/Content/Textures/Sky.otex"),
+            new FileRecord(FileKind.TextureDescriptor, "Textures/Gone.otex", (ulong)sidecar.Length, SHA256.HashData(sidecar), "/Content/Textures/Gone.otex"),
+        ]);
+        var stream = new MemoryStream();
+        await using var streamLifetime = stream.ConfigureAwait(false);
+        Oxygen.Testing.LooseCookedIndexFixture.Write(stream, document);
+        await fs.File.WriteAllBytesAsync(@"C:\Cooked\container.index.bin", stream.ToArray(), this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var catalog = new LooseCookedIndexAssetCatalog(new NativeStorageProvider(fs), new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = FileSystemPath.From(@"C:\Cooked") });
+
+        var records = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var sky = records.Single(record => record.Identity == AssetPath.Parse("/Content/Textures/Sky.otex")).Cooked!;
+        _ = sky.AssetKey.Should().Be(AssetKey.FromVirtualPath("/Content/Textures/Sky.otex"));
+        _ = sky.AssetType.Should().Be((byte)AssetType.Unknown);
+        _ = sky.DescriptorRelativePath.Should().Be("Textures/Sky.otex");
+        _ = sky.Texture.Should().Be(cube);
+        _ = records.Single(record => record.Identity == AssetPath.Parse("/Content/Textures/Gone.otex")).Cooked!.Texture.Should().BeNull();
+    }
+
     /// <summary>Mount precedence applies between containers, not to malformed duplicate entries inside one index.</summary>
     /// <returns>The asynchronous duplicate-path regression.</returns>
     [TestMethod]

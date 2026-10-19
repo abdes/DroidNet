@@ -39,8 +39,12 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
     public IEnumerable<string> ProjectOutputPaths => this.state.Products.Products
         .SelectMany(static product => product.Outputs).Select(static output => output.Asset.VirtualPath);
 
-    /// <summary>Gets owned roots whose lifetime marker is missing and must be rebuilt into fresh generations.</summary>
+    /// <inheritdoc />
     public ImmutableArray<CookPublicationRoot> UnavailableRoots => this.state.UnavailableRoots;
+
+    /// <summary>Gets the roots a runtime mounts, with their physical paths, in native precedence order: every root but the unavailable ones.</summary>
+    public IEnumerable<(CookPublicationRoot Root, string Path)> MountableRoots
+        => this.Roots.Zip(this.RootPaths).Where(entry => !this.UnavailableRoots.Contains(entry.First));
 
     internal CookPublicationDocument? Document => this.state.Document;
 
@@ -69,7 +73,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
         }
 
         var path = root.ResolvePath(this.ProjectRoot.FullPath);
-        var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+        var index = (await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false)).RequireCurrent(path);
         if (index.Index.SourceGuid != root.SourceKey || !string.Equals(index.Fingerprint, root.IndexSha256, StringComparison.OrdinalIgnoreCase))
         {
             throw CookedLibraryChangedException.ForChangedRoot(root, path, index.Index.SourceGuid, index.Fingerprint);
@@ -78,14 +82,17 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
         return new(index.Index, FileSystemPath.From(path));
     }
 
-    /// <summary>Requires sealed owned roots before native mounting or publication, including disk-only publication.</summary>
+    /// <summary>
+    /// Requires sealed owned roots before native mounting or publication, including disk-only publication. A root cooked in
+    /// another index format is not a broken generation: it is left unmounted until it is recooked.
+    /// </summary>
     internal void RequireAvailableGenerations()
     {
         ObjectDisposedException.ThrowIf(this.disposed, this);
-        if (!this.UnavailableRoots.IsEmpty)
+        if (!this.state.UnsealedRoots.IsEmpty)
         {
             throw new InvalidDataException("Cooked generations need rebuilding: "
-                + string.Join(", ", this.UnavailableRoots.Select(static root => root.Name)) + ".");
+                + string.Join(", ", this.state.UnsealedRoots.Select(static root => root.Name)) + ".");
         }
     }
 
@@ -185,7 +192,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
         gate.VerifyOwner(project.ProjectRoot);
         if (!selection.Version.Exists)
         {
-            return new(new(project, selection, document: null, [], []));
+            return new(new(project, selection, document: null, [], [], []));
         }
 
         var head = JsonSerializer.Deserialize<CookPublicationHead>(selection.Content.AsSpan(), CookPublicationDocument.JsonOptions);
@@ -219,6 +226,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
 
             handles.EnsureCapacity(checked(document.Roots.Length + 1));
             var unavailable = ImmutableArray.CreateBuilder<CookPublicationRoot>(document.Roots.Length);
+            var unsealed = ImmutableArray.CreateBuilder<CookPublicationRoot>();
             foreach (var root in document.Roots)
             {
                 cancellationToken.ThrowIfCancellationRequested();
@@ -236,10 +244,17 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
                 else if (root.Owner == CookPublicationRootOwner.Project)
                 {
                     unavailable.Add(root);
+                    unsealed.Add(root);
+                    continue;
+                }
+
+                if (await IsStaleAsync(root, project, cancellationToken).ConfigureAwait(false))
+                {
+                    unavailable.Add(root);
                 }
             }
 
-            return new(new(project, selection, document, handles, unavailable.ToImmutable()));
+            return new(new(project, selection, document, handles, unavailable.ToImmutable(), unsealed.ToImmutable()));
         }
         catch
         {
@@ -249,6 +264,25 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
             }
 
             throw;
+        }
+    }
+
+    // A loose root cooked in another index format has nothing readable until it is recooked. The read is shared with
+    // every later consumer of the same index; a missing or damaged index is reported by the consumer that needs it.
+    private static async Task<bool> IsStaleAsync(CookPublicationRoot root, ProjectContext project, CancellationToken cancellationToken)
+    {
+        if (root.Container != CookPublicationRootContainer.LooseFolder)
+        {
+            return false;
+        }
+
+        try
+        {
+            return await CookedIndexSnapshot.ReadAsync(root.ResolvePath(project.ProjectRoot.FullPath), cancellationToken).ConfigureAwait(false) is CookedIndexRead.Stale;
+        }
+        catch (Exception error) when (error is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            return false;
         }
     }
 
@@ -268,13 +302,14 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
     private sealed class SharedState
     {
         internal SharedState(ProjectContext project, FileSnapshot head, CookPublicationDocument? document, List<FileStream> handles,
-            ImmutableArray<CookPublicationRoot> unavailableRoots)
+            ImmutableArray<CookPublicationRoot> unavailableRoots, ImmutableArray<CookPublicationRoot> unsealedRoots)
         {
             this.Head = head;
             this.ProjectRoot = project.ProjectRoot;
             this.Document = document;
             this.Handles = handles;
             this.UnavailableRoots = unavailableRoots;
+            this.UnsealedRoots = unsealedRoots;
             var roots = document?.Roots ?? [];
             this.RootPaths = [.. roots.Select(root => root.ResolvePath(project.ProjectRoot.FullPath))];
             this.ProjectRoots = roots.Where(static root => root.Owner == CookPublicationRootOwner.Project)
@@ -295,6 +330,9 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
         internal ImmutableArray<string> RootPaths { get; }
 
         internal ImmutableArray<CookPublicationRoot> UnavailableRoots { get; }
+
+        // Owned roots whose generation marker is missing; they must be rebuilt into fresh generations.
+        internal ImmutableArray<CookPublicationRoot> UnsealedRoots { get; }
 
         internal ImmutableDictionary<string, FileSystemPath> ProjectRoots { get; }
 

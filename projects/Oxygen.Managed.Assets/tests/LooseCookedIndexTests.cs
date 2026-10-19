@@ -83,9 +83,21 @@ public sealed class LooseCookedIndexTests
     }
 
     [TestMethod]
+    public void ReadFormatVersion_ShouldReadTheDeclaredVersionOfAnyLooseIndex()
+    {
+        using var stream = new MemoryStream();
+        Oxygen.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
+        BinaryPrimitives.WriteUInt16LittleEndian(stream.GetBuffer().AsSpan(8, 2), 4);
+
+        _ = LooseCookedIndex.ReadFormatVersion(stream.ToArray()).Should().Be((ushort)4);
+        _ = LooseCookedIndex.ReadFormatVersion(new byte[LooseCookedIndex.HeaderSize]).Should().BeNull();
+    }
+
+    [TestMethod]
     [DataRow(1)]
     [DataRow(2)]
     [DataRow(3)]
+    [DataRow(4)]
     [DataRow(65535)]
     public void Read_WithUnsupportedVersion_ShouldThrow(int version)
     {

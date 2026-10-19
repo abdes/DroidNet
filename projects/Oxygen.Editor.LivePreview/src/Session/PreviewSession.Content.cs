@@ -96,17 +96,17 @@ public sealed partial class PreviewSession
             return false;
         }
 
-        var stage = "publication admission";
+        var stage = "reading the cooked content";
         var mounted = false;
         try
         {
             var (reader, set) = await this.AdmitCookedContentAsync(active).ConfigureAwait(true);
             using var retained = reader;
             var bindings = RuntimeBindings.Of(reader);
-            stage = "native mount and preview resume";
+            stage = "mounting the content in the engine";
             await engine.RefreshProjectCookedRootsAsync(bindings, set).ConfigureAwait(true);
             mounted = true;
-            stage = "asset catalog refresh";
+            stage = "refreshing the asset catalog";
             await catalog.UsePublicationAsync(reader, CancellationToken.None).ConfigureAwait(true);
             this.Failure = null;
             this.State = PreviewSessionState.Ready;
@@ -118,7 +118,7 @@ public sealed partial class PreviewSession
         {
             this.LogCookedRootRefreshFailed(exception, stage, active.ProjectRoot.FullPath, mounted ? "mounted" : "unavailable");
             var title = mounted ? "Content Browser unavailable" : "Preview unavailable";
-            var message = $"Failed during {stage}: {exception.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()}";
+            var message = $"Failed while {stage}: {exception.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()}";
             RuntimeOperationResults.PublishFailure(
                 results,
                 status,

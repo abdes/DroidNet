@@ -17,7 +17,7 @@ public sealed partial class CookPublicationService
     {
         using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(false);
         await CookPublicationTransaction.RequireSettledSelectionAsync(project, files, gate, cancellationToken).ConfigureAwait(false);
-        return await CookPublicationReadLease.OpenUnderGateAsync(project, files, gate, cancellationToken).ConfigureAwait(false);
+        return this.ReportUnavailableRoots(await CookPublicationReadLease.OpenUnderGateAsync(project, files, gate, cancellationToken).ConfigureAwait(false));
     }
 
     /// <inheritdoc />
@@ -66,6 +66,47 @@ public sealed partial class CookPublicationService
             throw new DroidNet.Storage.StorageWriteConflictException("The saved content configuration changed. Reopen the project before cooking or mounting it.");
         }
 
-        return await CookPublicationReadLease.OpenUnderGateAsync(operation.Project, files, gate, cancellationToken).ConfigureAwait(false);
+        return this.ReportUnavailableRoots(await CookPublicationReadLease.OpenUnderGateAsync(operation.Project, files, gate, cancellationToken).ConfigureAwait(false));
+    }
+
+    // Each unreadable root of a publication is reported once, however often the publication is read.
+    private CookPublicationReadLease ReportUnavailableRoots(CookPublicationReadLease lease)
+    {
+        foreach (var root in lease.UnavailableRoots)
+        {
+            var path = root.ResolvePath(lease.ProjectRoot.FullPath);
+            bool first;
+            lock (this.sync)
+            {
+                first = this.reportedUnavailableRoots.Add((lease.Document?.OperationId ?? Guid.Empty, path));
+            }
+
+            if (first)
+            {
+                LogRootNeedsRecooking(this.Logger, root.Name, path);
+            }
+        }
+
+        return lease;
+    }
+
+    // A library that cannot be read is left out of the publication and reported once for as long as it stays unreadable.
+    private CookedLibraryReadSet ReportUnreadableLibraries(CookedLibraryReadSet libraries)
+    {
+        foreach (var library in libraries.Unreadable)
+        {
+            bool first;
+            lock (this.sync)
+            {
+                first = this.reportedUnreadableLibraries.Add(library);
+            }
+
+            if (first)
+            {
+                LogLibraryUnreadable(this.Logger, library.Name, library.Path, library.Reason);
+            }
+        }
+
+        return libraries;
     }
 }

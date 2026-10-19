@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
 
@@ -23,6 +25,19 @@ public static class AssetKinds
         AssetType.PhysicsScene => AssetKind.PhysicsScene,
         _ => AssetKind.Unknown,
     };
+
+    /// <summary>
+    /// Maps cooked content to the editor's asset kind: an asset by its native type, and a cooked texture, which has
+    /// none, by its file type.
+    /// </summary>
+    /// <param name="cooked">The cooked metadata.</param>
+    /// <param name="identity">The virtual path it is listed under.</param>
+    /// <returns>The asset kind, or <see cref="AssetKind.Unknown"/> for unsupported content.</returns>
+    public static AssetKind FromCooked(CookedAssetMetadata cooked, AssetPath identity)
+    {
+        ArgumentNullException.ThrowIfNull(cooked);
+        return cooked.AssetType == (byte)AssetType.Unknown ? FromFileName(identity.Name) : FromCookedType(cooked.AssetType);
+    }
 
     /// <summary>Maps a file to the editor's asset kind from its file type.</summary>
     /// <param name="path">A file name, path or virtual path.</param>

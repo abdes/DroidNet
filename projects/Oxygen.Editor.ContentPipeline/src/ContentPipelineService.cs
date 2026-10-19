@@ -381,7 +381,7 @@ public sealed partial class ContentPipelineService(
             Jobs = keptJobs.Select(job => job with
             {
                 DependsOn = job.DependsOn.Where(keptIds.Contains).ToArray(),
-                CookedContextRoots = job.Type is "scene-descriptor" or "geometry-descriptor" or "script-sidecar" && scope.CookedContextRoots.Count > 0 ? scope.CookedContextRoots : null,
+                CookedContextRoots = job.Type is "material-descriptor" or "scene-descriptor" or "geometry-descriptor" or "script-sidecar" && scope.CookedContextRoots.Count > 0 ? scope.CookedContextRoots : null,
             }).ToArray(),
         };
     }

@@ -3,12 +3,16 @@
 // SPDX-License-Identifier: MIT
 
 using System.Reactive.Linq;
+using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Catalog.Pak;
 
-/// <summary>A fixed catalog of the assets a pak's browse index lists; a pak is read-only, so the catalog never changes.</summary>
+/// <summary>
+/// A fixed catalog of the assets and textures a pak's browse index lists; a pak is read-only, so the catalog never
+/// changes.
+/// </summary>
 public sealed class PakAssetCatalog : IAssetCatalog
 {
     private readonly IReadOnlyDictionary<AssetPath, AssetRecord> records;
@@ -28,6 +32,15 @@ public sealed class PakAssetCatalog : IAssetCatalog
             {
                 VirtualPath = identity,
                 References = asset.References,
+            });
+        }
+
+        foreach (var texture in document.Textures)
+        {
+            records.Add(texture.VirtualPath, identity => new(pakPath, null, document.SourceIdentity, AssetKey.FromVirtualPath(texture.VirtualPath), (byte)AssetType.Unknown, TextureResourceRecord.Size, null)
+            {
+                VirtualPath = identity,
+                Texture = texture.Texture,
             });
         }
 

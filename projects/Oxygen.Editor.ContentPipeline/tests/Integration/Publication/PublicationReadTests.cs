@@ -6,6 +6,8 @@ using System.Text.Json;
 using AwesomeAssertions;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
+using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core;
@@ -143,6 +145,43 @@ public sealed class PublicationReadTests
         _ = publication.FindProjectRoot("Content").Should().Be(FileSystemPath.From(root));
         Action admit = publication.RequireAvailableGenerations;
         _ = admit.Should().Throw<InvalidDataException>();
+    }
+
+    /// <summary>
+    /// A root cooked in another index format is unavailable from the moment the publication opens: catalogs and mounting
+    /// skip it while the publication is still admitted, and every reader shares one read of its index until the index
+    /// changes.
+    /// </summary>
+    /// <returns>The asynchronous stale-format regression.</returns>
+    [TestMethod]
+    public async Task StaleIndexFormatMakesTheRootUnavailable()
+    {
+        // Arrange
+        using var project = new ProjectDirectory();
+        var context = PublicationContext(project.Root);
+        var files = new NativeAtomicFileStore(new RealFileSystem());
+        using var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var root = await WritePublicationFixtureAsync(context, files, FileVersion.Missing, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var indexPath = Path.Combine(root, "container.index.bin");
+        await LooseCookedIndexFixture.RewriteFormatVersionAsync(indexPath, 4).ConfigureAwait(false);
+
+        // Act
+        using var publication = await CookPublicationReadLease.OpenUnderGateAsync(context, files, gate, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var catalogs = await publication.CreateCatalogsAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var mounts = await new CookedContentMountService().PrepareAsync(context, publication, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var first = await CookedIndexSnapshot.ReadAsync(root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var again = await CookedIndexSnapshot.ReadAsync(root, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await LooseCookedIndexFixture.RewriteFormatVersionAsync(indexPath, 3).ConfigureAwait(false);
+        var changed = await CookedIndexSnapshot.ReadAsync(root, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        // Assert
+        _ = publication.UnavailableRoots.Should().ContainSingle();
+        _ = catalogs.Should().BeEmpty();
+        _ = publication.MountableRoots.Should().BeEmpty();
+        _ = mounts.Roots.Should().BeEmpty();
+        _ = first.Should().Be(new CookedIndexRead.Stale(4));
+        _ = again.Should().BeSameAs(first);
+        _ = changed.Should().Be(new CookedIndexRead.Stale(3));
     }
 
     /// <summary>A new project has an empty selection instead of invented cooked roots or producer evidence.</summary>
