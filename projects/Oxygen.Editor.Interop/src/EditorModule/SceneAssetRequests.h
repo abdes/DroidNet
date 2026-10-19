@@ -19,7 +19,6 @@
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Content/TextureResourceLocator.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
@@ -39,7 +38,6 @@ class Scene;
 }
 
 namespace oxygen::interop::module {
-struct CookedRootBinding;
 
 //! New edits validate their observed revision; saved assignments retain identity.
 enum class MaterialSlotAssignmentIntent : std::uint8_t {
@@ -56,11 +54,10 @@ enum class EnvironmentTextureSlot : std::uint8_t {
 };
 inline constexpr std::size_t kEnvironmentTextureSlotCount = 3U;
 
-//! Authored source of one environment texture; no locator clears the slot.
+//! Authored source of one environment texture: the virtual path of its cooked
+//! texture descriptor. No path clears the slot.
 struct EnvironmentTextureSource final {
-  std::optional<content::TextureResourceLocator> locator;
-  //! Project mount whose current cooked root replaces the locator's root.
-  std::optional<std::wstring> project_mount;
+  std::optional<std::string> virtual_path;
 };
 
 using EnvironmentTextureSources
@@ -91,7 +88,7 @@ public:
   using AssetAvailability = std::function<bool(const std::string &, bool)>;
   using Texture = std::shared_ptr<const data::TextureResource>;
   using TextureCompletion = std::function<void(content::ResourceKey, Texture, std::string)>;
-  using TextureLoader = std::function<void(const content::TextureResourceLocator&, TextureCompletion)>;
+  using TextureLoader = std::function<void(const std::string&, TextureCompletion)>;
   using EnvironmentApply
     = std::function<void(scene::Scene&, const EnvironmentTextureKeys&)>;
   struct EnvironmentTextureStatus {
@@ -134,10 +131,6 @@ public:
     FailureCallback on_failure = {}, SuccessCallback on_success = {});
   OXGN_EI_NDAPI auto InspectEnvironmentTexture(
     EnvironmentTextureSlot slot) const -> EnvironmentTextureStatus;
-
-  //! Accept the same immutable bindings as the native mount owners.
-  OXGN_EI_API void SetCookedRoots(
-    std::shared_ptr<const std::vector<CookedRootBinding>> roots) noexcept;
 
   //! Re-request current bindings after mounted sources have been refreshed.
   //! Existing scene objects remain usable until their replacements arrive.

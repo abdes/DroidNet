@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -105,7 +105,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
     public static bool IsRetired(string projectRoot, CookProvenance.Product product)
     {
         ArgumentNullException.ThrowIfNull(product);
-        if (product.SourceInput is not { } source || product.SourceUri.IsSameOrInside(AssetPath.Engine))
+        if (product.SourceInput is not { } source)
         {
             return false;
         }
@@ -153,7 +153,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
                 .Where(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal) && listed.Contains(output.Asset.VirtualPath))
                 .Select(static output => output.Asset.VirtualPath).Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)],
             [.. leaving.SelectMany(static product => product.AuxiliaryFiles)
-                .Where(file => !kept.Contains(file) && inventory.Files.TryGetValue(file, out var member) && member.Kind == FileKind.Auxiliary)
+                .Where(file => !kept.Contains(file) && inventory.Files.TryGetValue(file, out var member) && member.Kind?.IsPathKeyed() == true)
                 .Distinct(StringComparer.Ordinal).Order(StringComparer.Ordinal)]);
         if (!removal.IsEmpty)
         {
@@ -245,7 +245,7 @@ internal sealed record CookRootRepair(ImmutableHashSet<string> EmptyRoots, Immut
             .Concat(owners.SelectMany(static product => product.Outputs)
                 .Where(output => string.Equals(output.RootMount, mount, StringComparison.Ordinal) && output.Asset.DescriptorRelativePath is not null)
                 .Select(static output => output.Asset.DescriptorRelativePath!)).ToHashSet(StringComparer.Ordinal);
-        foreach (var file in inventory.Files.Where(file => file.Value.Kind == FileKind.Auxiliary
+        foreach (var file in inventory.Files.Where(file => file.Value.Kind?.IsPathKeyed() == true
             && !associatedResources.Contains(file.Key)))
         {
             diagnostics.Add(Failure(Path.Combine(path, file.Key), "Cannot rebuild this auxiliary file: its source owner is unknown."));

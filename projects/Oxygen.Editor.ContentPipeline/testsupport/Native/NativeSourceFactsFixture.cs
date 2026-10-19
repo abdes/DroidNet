@@ -32,7 +32,7 @@ internal sealed class NativeSourceFactsFixture(ProjectContext project, ICookDocu
         var native = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var scopes = new ProjectCookScopeProvider(new DroidNet.Storage.Native.NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
         var analyzer = new CookSourceAnalyzer(operation, artifacts, native, new ContentImportManifestBuilder(),
-            new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(native)), scopes, documents);
+            new SceneDescriptorGenerator(), scopes, documents);
         return await analyzer.ReadAsync(inputs, cancellationToken).ConfigureAwait(false);
     }
 }

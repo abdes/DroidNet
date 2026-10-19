@@ -7,7 +7,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.LooseCooked;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;

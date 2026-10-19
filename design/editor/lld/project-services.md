@@ -41,9 +41,9 @@ workspace UI, content pipeline execution, engine mounts, or native interop.
 
 Current project behavior is split across:
 
-- `Oxygen.Editor.ProjectBrowser.ProjectBrowserService`: template copy,
-  known locations, recent project enumeration, create/open entry points,
-  Project Browser settings.
+- `Oxygen.Editor.ProjectBrowser.ProjectBrowserService`: template copy, known
+  locations, recent project enumeration, create/open entry points, Project
+  Browser settings.
 - `Oxygen.Editor.Projects.ProjectManagerService`: loads/saves `Project.oxy`,
   stores `CurrentProject`, loads/saves scenes, creates scenes.
 - `Oxygen.Editor.Projects.ProjectInfo`: persisted project metadata including
@@ -60,8 +60,8 @@ Baseline strengths:
 - Project manifests already persist authoring mounts.
 - A default `Content` authoring mount is created when missing.
 - Recent project usage exists in persistent state.
-- Unit tests already cover key `ProjectManagerService` project/scene load
-  paths. They do not yet cover project creation, validation classification,
+- Unit tests already cover key `ProjectManagerService` project/scene load paths.
+  They do not yet cover project creation, validation classification,
   recent-project stale-state classification, or active-context replacement.
 
 Baseline gaps:
@@ -115,13 +115,13 @@ Target invariants:
 4. Project services may define cook scope, but content pipeline executes cook.
 5. Project services do not call native interop.
 6. A project can be validated without activating the workspace.
-7. A loaded project has deterministic authoring roots and a deterministic
-   cooked root policy.
+7. A loaded project has deterministic authoring roots and a deterministic cooked
+   root policy.
 8. Active project state is exposed through `IProjectContextService`, not through
    mutable `IProjectManagerService.CurrentProject`.
 9. Content Browser source roots, local roots, and derived cooked roots are
-   exposed from `ProjectContext`/cook-scope policy, not guessed from current
-   UI selection.
+   exposed from `ProjectContext`/cook-scope policy, not guessed from current UI
+   selection.
 
 ## 6. Ownership
 
@@ -172,6 +172,8 @@ V0.1 required fields:
 - `Thumbnail`: optional project-relative path.
 - `AuthoringMounts`: persisted project-relative authoring roots.
 - `LocalFolderMounts`: persisted absolute local roots.
+- `PakFileMounts`: persisted absolute `.pak` files mounted read-only as cooked
+  libraries.
 
 Optional `DefaultSceneId : Guid?` is the stable configured scene identity,
 persisted in the manifest and propagated through `ProjectContext`. Creation
@@ -182,11 +184,11 @@ Workspace startup honors an explicit activation scene request before the
 configured default. The approved legacy recovery path may migrate a resolvable
 `LastOpenedScene` once when no default exists, persisting the migrated identity.
 Usage history never overrides an existing default. `ActiveScene` is only the
-explicitly accepted editable graph, or null after retirement; it never infers
-a scene from list order. An invalid/missing default
-must remain a visible, recoverable configuration/load failure with explicit
-Open Scene available; it must not silently load a discovered scene. Guarded
-cross-scene replacement qualification is closed under C30/T8 in the
+explicitly accepted editable graph, or null after retirement; it never infers a
+scene from list order. An invalid/missing default must remain a visible,
+recoverable configuration/load failure with explicit Open Scene available; it
+must not silently load a discovered scene. Guarded cross-scene replacement
+qualification is closed under C30/T8 in the
 [Explorer plan](../plan/scene-explorer-dynamictree-design.md).
 
 Rules:
@@ -250,7 +252,8 @@ Required fields:
 - local folder roots.
 - cooked root path policy.
 - read-only snapshot projection needed by shell consumers, such as scene
-  metadata available at activation time. This is not a live `IProject` reference.
+  metadata available at activation time. This is not a live `IProject`
+  reference.
 - recent project usage identity, when known.
 
 `ProjectInfo.Location` is a runtime project-context field. `LastUsedOn` belongs
@@ -276,6 +279,7 @@ Path rules:
 
 - project-relative authoring mount paths are normalized against project root.
 - local folder mount paths are normalized as absolute paths.
+- pak file mount paths are absolute and name `.pak` files.
 - identity comparisons use `StringComparer.OrdinalIgnoreCase` for V0.1.
 - display preserves the path casing stored in the manifest or selected by the
   user.
@@ -345,8 +349,8 @@ Required behavior:
 
 - validate destination before writing.
 - copy template payload.
-- create a complete V0.1 manifest with new `Id`, `Name`, and explicit
-  authoring mounts.
+- create a complete V0.1 manifest with new `Id`, `Name`, and explicit authoring
+  mounts.
 - validate the created project before activation.
 - clean up only files it created if creation fails before activation.
 
@@ -402,8 +406,8 @@ public enum ContentBrowserRootKind
 }
 ```
 
-The adapter is a view/workflow projection. Project services remain the source
-of project facts and do not depend on this type.
+The adapter is a view/workflow projection. Project services remain the source of
+project facts and do not depend on this type.
 
 ## 9. UI Surfaces
 
@@ -431,6 +435,7 @@ Loading and saving `Project.oxy` must preserve:
 - thumbnail.
 - authoring mounts.
 - local folder mounts.
+- pak file mounts.
 
 The V0.1 editor owns the manifest it writes. Unknown fields are not part of the
 V0.1 contract. If future schema evolution requires extensions, the project
@@ -512,8 +517,7 @@ Examples:
 - missing manifest: "The selected folder is not an Oxygen project."
 - malformed manifest: "Project.oxy is invalid."
 - inaccessible path: "The editor cannot access this project folder."
-- template copy failure: "Project creation failed while copying template
-  files."
+- template copy failure: "Project creation failed while copying template files."
 
 ## 13. Dependency Rules
 
@@ -565,8 +569,7 @@ ED-M06 project-service gates:
 - browser and template workflows consume layout rules from
   `project-layout-and-templates.md` instead of defining local folder policy.
 - missing/inaccessible content roots surface as `ProjectContentRoots`
-  diagnostics; browser code does not silently reinterpret them as empty
-  folders.
+  diagnostics; browser code does not silently reinterpret them as empty folders.
 
 ED-M07 project-service gates:
 
@@ -578,8 +581,8 @@ ED-M07 project-service gates:
 - project services do not persist cooked paths, generated descriptor paths, or
   import manifest paths into `Project.oxy`.
 - content pipeline can construct `ContentCookScope` for current-scene,
-  asset/folder, and project cook from project-service facts without depending
-  on Project Browser or WinUI.
+  asset/folder, and project cook from project-service facts without depending on
+  Project Browser or WinUI.
 
 Straightforward unit tests should cover:
 
@@ -608,6 +611,6 @@ absolute local mounts are explicit nonportable dependencies.
 
 Saved file plumbing consumes immutable serialized snapshots from the authoring
 owner, coordinates per-destination writes, and preserves last valid source per
-documents-and-commands section 16. It does not infer scene revisions or authoring
-policy from runtime completion. ED-M07A qualifies integrity; ED-M07B consumes the
-project facts for safe publication and matched-build qualification.
+documents-and-commands section 16. It does not infer scene revisions or
+authoring policy from runtime completion. ED-M07A qualifies integrity; ED-M07B
+consumes the project facts for safe publication and matched-build qualification.

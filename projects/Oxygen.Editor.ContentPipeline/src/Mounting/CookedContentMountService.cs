@@ -36,6 +36,12 @@ public sealed class CookedContentMountService
                 cancellationToken.ThrowIfCancellationRequested();
                 var binding = captured.Roots[index];
                 var path = captured.RootPaths[index];
+                if (binding.Container == CookPublicationRootContainer.PakFile)
+                {
+                    readers.Add(await AcquirePakAsync(binding, path, cancellationToken).ConfigureAwait(false));
+                    continue;
+                }
+
                 CookOutputLease.RejectReparsePoint(path);
                 var files = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
                 readers.Add(files);
@@ -64,5 +70,20 @@ public sealed class CookedContentMountService
 
             throw;
         }
+    }
+
+    // The publication recorded the pak's identity and catalog digest; any other pak at that path is a changed library.
+    private static async Task<PakReadLease> AcquirePakAsync(CookPublicationRoot binding, string path, CancellationToken cancellationToken)
+    {
+        var lease = await PakReadLease.AcquireAsync(FileSystemPath.From(path), cancellationToken).ConfigureAwait(false);
+        if (lease.Document.SourceIdentity != binding.SourceKey
+            || !string.Equals(lease.Document.CatalogDigest, binding.IndexSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            var changed = CookedLibraryChangedException.ForChangedRoot(binding, path, lease.Document.SourceIdentity, lease.Document.CatalogDigest);
+            lease.Dispose();
+            throw changed;
+        }
+
+        return lease;
     }
 }

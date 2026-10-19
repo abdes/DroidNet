@@ -45,9 +45,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));
         using var services = new CatalogWorkloadServices(fixture);
-        var definitions = (await services.Builtins.GetAsync(timeout.Token).ConfigureAwait(true)).Catalog!;
-        _ = definitions.Should().NotBeNull();
-        await SeedCatalogWorkloadAsync(fixture, services.Projects.ActiveProject!, services.Pipeline, definitions, timeout.Token).ConfigureAwait(true);
+        await SeedCatalogWorkloadAsync(fixture, services.Projects.ActiveProject!, services.Pipeline, timeout.Token).ConfigureAwait(true);
         await fixture.InitializeAsync(timeout.Token, mountPublished: true).ConfigureAwait(true);
         await fixture.RefreshCookedRootsAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
         _ = fixture.Runtime.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);
@@ -84,10 +82,10 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
             };
             var state = new ContentBrowserState();
             state.SetSelectedFolders([AssetPath.Content]);
-            await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
+            await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
             using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
             using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
-            using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider, services.Projects, state, CreateStatusHosting(), services.Builtins) : new ListLayoutViewModel(provider, services.Projects, state, CreateStatusHosting(), services.Builtins);
+            using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider, services.Projects, state, CreateStatusHosting()) : new ListLayoutViewModel(provider, services.Projects, state, CreateStatusHosting());
             var query = new AssetQueryView
             {
                 ViewModel = state.Query,
@@ -145,7 +143,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
         await WaitForRenderAsync().WaitAsync(cancellationToken).ConfigureAwait(true);
         var cold = watch.Elapsed;
         var rows = await provider.Items.FirstAsync();
-        _ = rows.Where(static row => !row.IsBuiltin && (row.DescriptorPath is not null || row.Kind == AssetKind.ForeignSource)).Should().HaveCount(1000).And.OnlyContain(static row => row.CookStatus != null && row.CookStatus.Freshness == AssetCookFreshness.Current);
+        _ = rows.Where(static row => !row.IsPackaged && (row.DescriptorPath is not null || row.Kind == AssetKind.ForeignSource)).Should().HaveCount(1000).And.OnlyContain(static row => row.CookStatus != null && row.CookStatus.Freshness == AssetCookFreshness.Current);
         _ = rows.Should().NotContain(static row => row.RuntimeAvailability == AssetRuntimeAvailability.Updating);
         var selector = view.FindDescendant<ListViewBase>();
         _ = selector.Should().NotBeNull("the browser must realize its asset selector before timing feedback");

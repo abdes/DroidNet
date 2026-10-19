@@ -6,7 +6,8 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Assets.Persistence;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 
 namespace Oxygen.Testing;
 

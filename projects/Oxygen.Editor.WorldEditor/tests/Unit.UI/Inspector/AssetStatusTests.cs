@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.World.Inspector.Geometry;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
@@ -32,7 +33,7 @@ internal sealed class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
         var catalog = new Mock<Oxygen.Editor.Assets.IAssetFeed>();
         _ = catalog.SetupGet(value => value.Items).Returns(updates);
         _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
+        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
         {
             IsExpanded = true,
         };
@@ -51,7 +52,7 @@ internal sealed class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
         {
             await WaitForRenderAsync().ConfigureAwait(true);
             var content = (FrameworkElement)flyout.Content;
-            var button = content.FindDescendant<Button>(candidate => candidate.DataContext is MaterialPickerRow row && row.Item.Asset == asset.Identity)!;
+            var button = content.FindDescendant<Button>(candidate => candidate.DataContext is AssetChoiceRow row && row.Choice.Asset == asset.Identity)!;
             _ = button.Should().NotBeNull();
             var before = button.DataContext;
             updates.OnNext([material with { CookActivity = new(Guid.NewGuid(), CookRunState.Queued) }]);

@@ -10,25 +10,10 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.Assets;
 
 /// <summary>
-///     The identity rules of project assets: which references denote the same asset, how built-ins group with their
-///     verified cooked copies, and how one cooked source presents an asset without changing its identity.
+///     The identity rules of project assets: how one cooked source presents an asset without changing its identity.
 /// </summary>
 public static class AssetIdentity
 {
-    /// <summary>Returns one entry per logical identity among the supplied entries.</summary>
-    /// <param name="items">Rows already restricted to the relevant folder scope.</param>
-    /// <returns>Canonical built-ins with their verified cooked companions, and all independent assets.</returns>
-    public static IReadOnlyList<AssetEntry> GroupBuiltins(IEnumerable<AssetEntry> items)
-        => items.GroupBy(static item => (item.Kind, Identity: item.IsBuiltin ? item.BuiltinOrigin ?? item.Identity : item.Identity))
-            .Select(static group => Combine(group.Key.Identity, group.ToArray())).ToArray();
-
-    /// <summary>Checks both the logical identity and its proven existing reference aliases.</summary>
-    /// <param name="item">The projected logical asset.</param>
-    /// <param name="identity">The reference being selected or invoked.</param>
-    /// <returns>Whether this row represents that reference.</returns>
-    public static bool Represents(AssetEntry item, AssetPath identity)
-        => item.Identity == identity || item.CookedCompanions.Any(companion => companion.Identity == identity);
-
     /// <summary>Describes an asset as one cooked source provides it, retaining the source ordinary assignments use.</summary>
     /// <param name="effective">The asset selected by ordinary native resolution.</param>
     /// <param name="source">The representation explicitly being browsed.</param>
@@ -38,16 +23,13 @@ public static class AssetIdentity
     {
         var identity = source.VirtualPath ?? effective.Identity;
         var physicalPath = AssetIdentityReducer.TryResolveIndexedDescriptorPath(source);
-        var exists = physicalPath is not null && File.Exists(physicalPath.FullPath);
-        var library = project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == source.RootFolderPath);
-        var winningLibrary = project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == effective.CookedMetadata?.RootFolderPath);
-        var origin = effective.VerifiedBuiltinSources.FirstOrDefault(proof => proof.Identity == identity && proof.Root == source.RootFolderPath)?.Origin;
-        origin ??= effective.IsBuiltin && effective.CookedMetadata == source ? effective : null;
+        var exists = source.IsPackaged || (physicalPath is not null && File.Exists(physicalPath.FullPath));
+        var library = source.IsPackaged ? null : project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == source.ContainerPath);
         return new(
             identity,
-            origin?.DisplayName ?? AssetIdentityReducer.GetDisplayName(identity),
+            AssetIdentityReducer.GetDisplayName(identity),
             AssetKinds.FromCookedType(source.AssetType),
-            !exists ? AssetState.Broken : origin is not null ? AssetState.Generated : AssetState.Cooked,
+            !exists ? AssetState.Broken : source.IsPackaged ? AssetState.Packaged : AssetState.Cooked,
             DerivedState: null,
             effective.RuntimeAvailability,
             library is null ? identity.VirtualPath : "/" + library.Name + "/" + source.DescriptorRelativePath,
@@ -60,33 +42,19 @@ public static class AssetIdentity
         {
             CookedMetadata = source,
             EffectiveCookedSource = effective.CookedMetadata,
-            EffectiveCookedSourceName = winningLibrary?.Name ?? "project output",
+            EffectiveCookedSourceName = LibraryName(project, effective) ?? "project output",
             RuntimeReason = effective.RuntimeReason,
-            Generated = origin?.Generated,
-            BuiltinOrigin = origin?.BuiltinOrigin ?? origin?.Identity,
-            VerifiedBuiltinSources = effective.VerifiedBuiltinSources,
             OverriddenCookedSources = source == effective.CookedMetadata ? effective.OverriddenCookedSources : [],
         };
     }
 
-    private static AssetEntry Combine(AssetPath identity, AssetEntry[] group)
+    // The library whose container provides the effective asset: a declared folder or pak, or the engine content pak.
+    private static string? LibraryName(ProjectContext project, AssetEntry effective)
     {
-        var primary = group.FirstOrDefault(item => item.Identity == identity) ?? group[0];
-        if (group.Length == 1)
-        {
-            return primary;
-        }
-
-        var companions = group.Where(item => !ReferenceEquals(item, primary)).ToArray();
-        var runtime = group.FirstOrDefault(static item => item.RuntimeAvailability == AssetRuntimeAvailability.Failed)
-            ?? group.FirstOrDefault(static item => item.RuntimeAvailability == AssetRuntimeAvailability.Updating)
-            ?? primary;
-        return primary with
-        {
-            CookedCompanions = companions,
-            RuntimeAvailability = runtime.RuntimeAvailability,
-            RuntimeReason = runtime.RuntimeReason,
-            DiagnosticCodes = group.SelectMany(static item => item.DiagnosticCodes).Distinct(StringComparer.Ordinal).ToArray(),
-        };
+        var container = effective.CookedMetadata?.ContainerPath;
+        return container is null ? null
+            : project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == container)?.Name
+                ?? project.PakFileMounts.FirstOrDefault(mount => mount.Path == container)?.Name
+                ?? (effective.Origin == AssetOrigin.Engine && effective.IsPackaged ? AssetPath.Engine.Mount : null);
     }
 }

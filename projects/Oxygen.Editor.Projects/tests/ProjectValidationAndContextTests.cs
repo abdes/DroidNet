@@ -62,6 +62,22 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
+    [DataRow("C:/Paks/Props.pak", ProjectValidationState.Valid)]
+    [DataRow("C:/Paks/Props.zip", ProjectValidationState.InvalidContentRoots)]
+    public async Task ValidateAsync_ShouldAcceptOnlyPakFilesAsPakFileMounts(string pakPath, ProjectValidationState expected)
+    {
+        var (storage, document) = CreateStorageWithProjectFile();
+        storage.Setup(s => s.DocumentExistsAsync(FileSystemPath.From(pakPath).FullPath)).ReturnsAsync(value: true);
+        var service = new ProjectValidationService(storage.Object);
+        document.Setup(d => d.ReadAllTextAsync(It.IsAny<CancellationToken>()))
+            .ReturnsAsync(CreateManifestJson(schemaVersion: 1, pakFilePath: pakPath));
+
+        var result = await service.ValidateAsync("project").ConfigureAwait(false);
+
+        _ = result.State.Should().Be(expected);
+    }
+
+    [TestMethod]
     public void ProjectContextService_ShouldReplayCurrentValueToNewSubscribers()
     {
         var service = new ProjectContextService();
@@ -587,8 +603,20 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         return (storage, document);
     }
 
-    private static string CreateManifestJson(int schemaVersion, bool includeAuthoringMounts = true)
+    private static string CreateManifestJson(int schemaVersion, bool includeAuthoringMounts = true, string? pakFilePath = null)
     {
+        var pakFileMounts = pakFilePath is null
+            ? string.Empty
+            : $$"""
+              ,
+                "PakFileMounts": [
+                  {
+                    "Name": "Props",
+                    "AbsolutePath": "{{pakFilePath}}"
+                  }
+                ]
+              """;
+
         var authoringMounts = includeAuthoringMounts
             ? """
               ,
@@ -608,7 +636,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
                    "Name": "Project",
                    "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
                    "Thumbnail": "Media/Preview.png"{{authoringMounts}},
-                   "LocalFolderMounts": []
+                   "LocalFolderMounts": []{{pakFileMounts}}
                  }
                  """;
     }

@@ -53,6 +53,7 @@ public partial class ProjectLayoutViewModel(
     IAssetCatalog catalog,
     IAssetFolderSource folders,
     HostingContext hostingContext,
+    Oxygen.Editor.ContentPipeline.IEngineContentPak engineContent,
     ILoggerFactory? loggerFactory,
     Relocation.IAssetRelocationWorkflow? relocation = null,
     IAssetRelocationService? relocationService = null)
@@ -417,6 +418,8 @@ public partial class ProjectLayoutViewModel(
         {
             await this.RestoreMountAsync(root, context, mount.Name, mount.Root.FullPath, isProjectRelative: false, mount.IsExpanded).ConfigureAwait(true);
         }
+
+        await this.MountPaksAsync(root, projectInfo).ConfigureAwait(true);
     }
 
     private Task PreloadRecentTemplatesAsync() => this.ReloadMountTreeAsync();
@@ -452,6 +455,11 @@ public partial class ProjectLayoutViewModel(
         foreach (var mount in context.LocalFolderMounts)
         {
             projectInfo.LocalFolderMounts.Add(mount);
+        }
+
+        foreach (var mount in context.PakFileMounts)
+        {
+            projectInfo.PakFileMounts.Add(mount);
         }
 
         foreach (var source in context.CookedContentOrder)
@@ -553,6 +561,8 @@ public partial class ProjectLayoutViewModel(
             .FirstOrDefault(m => string.Equals(m.MountPoint.Name, mountName, StringComparison.Ordinal));
         mount ??= children.OfType<VirtualFolderMountTreeItemAdapter>()
             .FirstOrDefault(m => string.Equals(m.MountPointName, mountName, StringComparison.Ordinal));
+        mount ??= children.OfType<PakMountTreeItemAdapter>()
+            .FirstOrDefault(m => string.Equals(m.MountPointName, mountName, StringComparison.Ordinal));
 
         if (mount == null)
         {
@@ -584,6 +594,9 @@ public partial class ProjectLayoutViewModel(
                 case VirtualFolderMountTreeItemAdapter virtualMount:
                     _ = result.Add(virtualMount.MountPointName);
                     break;
+                case PakMountTreeItemAdapter pak:
+                    _ = result.Add(pak.MountPointName);
+                    break;
             }
         }
 
@@ -595,6 +608,7 @@ public partial class ProjectLayoutViewModel(
         {
             AuthoringMountPointTreeItemAdapter authoring => authoring.VirtualRootPath,
             VirtualFolderMountTreeItemAdapter virtualMount => virtualMount.VirtualRootPath,
+            PakMountTreeItemAdapter pak => pak.VirtualRootPath,
             FolderTreeItemAdapter folder => this.GetFolderVirtualPath(folder),
             CookedFolderTreeItemAdapter folder => folder.VirtualPath,
             _ => null,

@@ -41,7 +41,7 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
         var projects = new ProjectContextService();
         var state = new ContentBrowserState();
         var hosting = CreateStatusHosting();
-        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, hosting, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture()) : new ListLayoutViewModel(provider.Object, projects, state, hosting, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
+        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, hosting) : new ListLayoutViewModel(provider.Object, projects, state, hosting);
         FrameworkElement view = tiles ? new TilesLayoutView
         {
             ViewModel = (TilesLayoutViewModel)model,

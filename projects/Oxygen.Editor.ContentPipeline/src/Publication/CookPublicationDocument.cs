@@ -24,7 +24,7 @@ internal sealed record CookPublicationDocument(
     ImmutableArray<CookProvenance.Product> Products,
     CookPublicationInputs? CookInputs)
 {
-    internal const int CurrentVersion = 2;
+    internal const int CurrentVersion = 3;
 
     internal static JsonSerializerOptions JsonOptions { get; } = new()
     {
@@ -45,7 +45,8 @@ internal sealed record CookPublicationDocument(
             {
                 project.AuthoringMounts,
                 project.LocalFolderMounts,
-                Order = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder),
+                project.PakFileMounts,
+                Order = CookedContentOrdering.Resolve(project),
             }, JsonOptions)));
 
     internal void Validate(ProjectContext project)
@@ -56,7 +57,9 @@ internal sealed record CookPublicationDocument(
                 || string.IsNullOrWhiteSpace(root.Name)
                 || root.Owner is not (CookPublicationRootOwner.Project or CookPublicationRootOwner.Library)
                 || (root.Owner == CookPublicationRootOwner.Project && root.LibraryPath is not null)
-                || (root.Owner == CookPublicationRootOwner.Library && (root.LibraryPath is null || !Path.IsPathFullyQualified(root.LibraryPath))))
+                || (root.Owner == CookPublicationRootOwner.Library && (root.LibraryPath is null || !Path.IsPathFullyQualified(root.LibraryPath)))
+                || root.Container is not (CookPublicationRootContainer.LooseFolder or CookPublicationRootContainer.PakFile)
+                || (root.Owner == CookPublicationRootOwner.Project && root.Container != CookPublicationRootContainer.LooseFolder))
             || this.Roots.Select(static root => (root.Owner, root.Name.ToUpperInvariant())).Distinct().Count() != this.Roots.Length
             || (!this.Products.IsEmpty && this.CookInputs is null))
         {

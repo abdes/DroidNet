@@ -5,6 +5,7 @@
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Inspector.Presentation;
 
@@ -65,12 +66,9 @@ public sealed partial class ExposureSectionView
 
     private void ClearMeteringMask_Click(object sender, RoutedEventArgs args) => this.ViewModel?.SetMeteringMask(textureUri: null);
 
-    private void MeteringMaskItem_Click(object sender, RoutedEventArgs args)
+    private void OnMeteringMaskChoiceInvoked(object? sender, AssetChoice choice)
     {
-        if (sender is FrameworkElement { DataContext: AssetPickerRow row } && row.Item.IsEnabled)
-        {
-            this.ViewModel?.SetMeteringMask(row.Item.Asset);
-            this.MeteringMaskFlyout.Hide();
-        }
+        this.ViewModel?.SetMeteringMask(choice.Asset);
+        this.MeteringMaskFlyout.Hide();
     }
 }

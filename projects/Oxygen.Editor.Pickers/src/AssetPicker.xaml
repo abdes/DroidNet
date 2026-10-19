@@ -1,0 +1,115 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.Pickers.AssetPicker"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:pickers="using:Oxygen.Editor.Pickers">
+    <UserControl.Resources>
+        <DataTemplate x:Key="GlyphTemplate">
+            <FontIcon
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                FontSize="18"
+                Glyph="{Binding}" />
+        </DataTemplate>
+        <DataTemplate x:Key="ChoiceTemplate" x:DataType="pickers:AssetChoiceRow">
+            <Button
+                Padding="8,6"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Left"
+                AutomationProperties.Name="{x:Bind Choice.Name, Mode=OneWay}"
+                Background="Transparent"
+                BorderThickness="0"
+                Click="OnChoiceClicked"
+                DataContext="{x:Bind}"
+                IsEnabled="{x:Bind Choice.IsEnabled, Mode=OneWay}"
+                ToolTipService.ToolTip="{x:Bind Choice.DisplayPath, Mode=OneWay}">
+                <Grid ColumnSpacing="8">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <Border
+                        Width="32"
+                        Height="32"
+                        VerticalAlignment="Center"
+                        BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                        BorderThickness="1">
+                        <controls:Thumbnail
+                            Width="30"
+                            Height="30"
+                            Content="{x:Bind Choice.Glyph, Mode=OneWay}"
+                            ContentTemplate="{StaticResource GlyphTemplate}" />
+                    </Border>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                        <TextBlock
+                            Style="{ThemeResource BodyTextBlockStyle}"
+                            Text="{x:Bind Choice.Name, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap" />
+                        <TextBlock
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Style="{ThemeResource CaptionTextBlockStyle}"
+                            Text="{x:Bind Choice.DisplayType, Mode=OneWay}"
+                            TextTrimming="CharacterEllipsis"
+                            TextWrapping="NoWrap"
+                            ToolTipService.ToolTip="{x:Bind Choice.DisplayType, Mode=OneWay}" />
+                    </StackPanel>
+                </Grid>
+            </Button>
+        </DataTemplate>
+        <DataTemplate x:Key="GroupTemplate" x:DataType="pickers:AssetChoiceGroup">
+            <StackPanel>
+                <TextBlock
+                    Margin="8,8,8,4"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{ThemeResource CaptionTextBlockStyle}"
+                    Text="{x:Bind Title}" />
+                <ItemsRepeater ItemTemplate="{StaticResource ChoiceTemplate}" ItemsSource="{x:Bind Rows}" />
+            </StackPanel>
+        </DataTemplate>
+    </UserControl.Resources>
+    <Grid RowSpacing="4">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <TextBox
+            AutomationProperties.Name="Search assets"
+            PlaceholderText="Search"
+            Text="{x:Bind Model.SearchText, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
+            Visibility="{x:Bind pickers:AssetPicker.VisibleWhen(ShowSearch), Mode=OneWay}" />
+        <Button
+            Grid.Row="1"
+            Padding="8,6"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Left"
+            AutomationProperties.Name="{x:Bind Model.Clear.Name, Mode=OneWay}"
+            Background="Transparent"
+            BorderThickness="0"
+            Click="OnClearClicked"
+            Visibility="{x:Bind pickers:AssetPicker.VisibleWhen(Model.HasClear), Mode=OneWay}">
+            <StackPanel>
+                <TextBlock Style="{ThemeResource BodyTextBlockStyle}" Text="{x:Bind Model.Clear.Name, Mode=OneWay}" />
+                <TextBlock
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{ThemeResource CaptionTextBlockStyle}"
+                    Text="{x:Bind Model.Clear.DisplayType, Mode=OneWay}" />
+            </StackPanel>
+        </Button>
+        <ScrollViewer Grid.Row="2" MaxHeight="{x:Bind MaxListHeight, Mode=OneWay}">
+            <StackPanel>
+                <ItemsRepeater ItemTemplate="{StaticResource GroupTemplate}" ItemsSource="{x:Bind Model.Groups, Mode=OneWay}" />
+                <TextBlock
+                    Margin="8"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Style="{ThemeResource CaptionTextBlockStyle}"
+                    Text="{x:Bind EmptyText, Mode=OneWay}"
+                    TextWrapping="Wrap"
+                    Visibility="{x:Bind pickers:AssetPicker.VisibleWhen(Model.IsEmpty), Mode=OneWay}" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

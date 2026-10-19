@@ -31,12 +31,12 @@ public sealed class RetainedSourceCookTests
     [DataRow("fbx")]
     public async Task RetainedSourceCookPublishesAndReusesNativeOutputs(string extension)
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", extension, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
 
         var result = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -47,7 +47,7 @@ public sealed class RetainedSourceCookTests
         var expectedPrefixes = new[] { "/Content/Geometry/Models/Model/", "/Content/Materials/Models/Model/", "/Content/Scenes/Models/Model/" };
         _ = result.CookedAssets.Should().OnlyContain(asset => asset.SourceAssetUri == source && expectedPrefixes.Any(prefix => asset.VirtualPath.StartsWith(prefix, StringComparison.Ordinal)));
         var count = runner.ImportCount;
-        var reopened = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var reopened = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var repeat = await reopened.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = repeat.IsUpToDate.Should().BeTrue();
         _ = runner.ImportCount.Should().Be(count, "unchanged imports must verify and reuse native output without recooking");
@@ -60,13 +60,13 @@ public sealed class RetainedSourceCookTests
     [TestCategory("NativeContent")]
     public async Task ProjectCookIncludesRetainedSourcesAndAuthoredMaterials()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var first = await WriteRetainedModelAsync(workspace, "First", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await WriteRetainedModelAsync(workspace, "Second", "fbx", this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.WriteMaterial("Content/Materials/Authored.omat.json", "Authored");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var result = await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Status.Should().BeOneOf([OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings], string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.IsPublished.Should().BeTrue();
@@ -81,12 +81,12 @@ public sealed class RetainedSourceCookTests
     [TestCategory("NativeContent")]
     public async Task ChangedRetainedSourceIsRediscoveredOnce()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var path = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf");
         var content = JsonNode.Parse(await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false))!;
@@ -105,11 +105,11 @@ public sealed class RetainedSourceCookTests
     [TestCategory("NativeContent")]
     public async Task ReimportWithChangedAssetNamesPreservesPublishedOutput()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var index = Path.Combine(workspace.CookedRoot("Content"), "container.index.bin");
         var before = await File.ReadAllBytesAsync(index, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -130,13 +130,13 @@ public sealed class RetainedSourceCookTests
     [TestCategory("NativeContent")]
     public async Task ImportDestinationCollisionPreservesExistingSourceOutputs()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var first = await WriteRetainedModelAsync(workspace, "First", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await WriteRetainedModelAsync(workspace, "Second", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         _ = (await service.CookAssetAsync(first, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var settingsPath = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Second/model.gltf.import.json");
         var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(settingsPath, this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -155,21 +155,21 @@ public sealed class RetainedSourceCookTests
     [TestCategory("NativeContent")]
     public async Task RetainedSourceReproducesLogicalIdentitiesInCleanProject()
     {
-        using var first = new CookWorkspace();
-        using var second = new CookWorkspace();
+        using var first = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        using var second = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(first, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var sourceRoot = Path.Combine(first.Root, "Content/SourceMedia/DCC/Model");
         var copyRoot = Path.Combine(second.Root, "Content/SourceMedia/DCC/Model");
         _ = Directory.CreateDirectory(copyRoot);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var one = await CreateService(first, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var one = await CreateService(first, new SceneDescriptorGenerator(), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         foreach (var file in Directory.EnumerateFiles(sourceRoot))
         {
             File.Copy(file, Path.Combine(copyRoot, Path.GetFileName(file)));
         }
 
-        var two = await CreateService(second, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var two = await CreateService(second, new SceneDescriptorGenerator(), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = one.IsPublished.Should().BeTrue();
         _ = two.IsPublished.Should().BeTrue();
         _ = two.Inspection!.Assets.Select(static asset => (asset.VirtualPath, asset.AssetKey)).Should().BeEquivalentTo(one.Inspection!.Assets.Select(static asset => (asset.VirtualPath, asset.AssetKey)));
@@ -181,12 +181,12 @@ public sealed class RetainedSourceCookTests
     [TestCategory("NativeContent")]
     public async Task ChangedImportedBufferLayoutBecomesThePersistedDependencySet()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var directory = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model");
         var primary = Path.Combine(directory, "model.gltf");

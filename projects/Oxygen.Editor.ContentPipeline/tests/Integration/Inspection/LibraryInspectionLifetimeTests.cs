@@ -29,12 +29,12 @@ public sealed class LibraryInspectionLifetimeTests
     [DataRow(false)]
     public async Task InventoryTerminationTransfersCleanupWithoutBlockingFailure(bool duringCook)
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Shared.omat.json", "Shared");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new ContextLeaseRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var source = AssetPath.Parse("/Content/Materials/Shared.omat.json");
         AssertCookSucceeded(await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false));
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -78,13 +78,13 @@ public sealed class LibraryInspectionLifetimeTests
     [TestCategory("NativeContent")]
     public async Task LibraryInspectionRetainsReadersAndWriterUntilDrain()
     {
-        using var library = new CookWorkspace();
-        using var consumer = new CookWorkspace();
+        using var library = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         library.WriteMaterial("Content/Materials/Shared.omat.json", "Shared");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new ContextLeaseRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var producer = CreateService(library, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var producer = CreateService(library, new SceneDescriptorGenerator(), api, compatibility);
         _ = (await producer.CookAssetAsync(AssetPath.Parse("/Content/Materials/Shared.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var root = library.CookedRoot("Content");
         var context = consumer.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(root))] };
@@ -96,7 +96,7 @@ public sealed class LibraryInspectionLifetimeTests
             _ = openForWrite.Should().Throw<IOException>();
             return Task.FromException(new ContentPipelineTerminationException(new IOException("Simulated Inspector termination failure."), drain.Task));
         };
-        var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
         var work = service.RefreshLibraryMetadataAsync(context, this.TestContext.CancellationToken);
         await AssertReaderRetainedUntilDrainAsync(this.TestContext, work, consumer, openForWrite, drain).ConfigureAwait(false);
     }

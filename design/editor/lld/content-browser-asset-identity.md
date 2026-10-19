@@ -4,10 +4,10 @@ Status: `ED-M06 review-ready`
 
 ## 1. Purpose
 
-Define the content browser UX, asset identity model, asset-state reducer,
-typed picker behavior, and missing/broken reference presentation for ED-M06.
-ED-M05 delivered the scalar material picker slice; ED-M06 turns that slice into
-the reusable content browser identity workflow.
+Define the content browser UX, asset identity model, asset-state reducer, typed
+picker behavior, and missing/broken reference presentation for ED-M06. ED-M05
+delivered the scalar material picker slice; ED-M06 turns that slice into the
+reusable content browser identity workflow.
 
 ED-M07B extends the delivered baseline through
 [content-cooking-workflows.md](content-cooking-workflows.md): correct navigation
@@ -16,11 +16,12 @@ filters/details, and authored/built-in/cooked picking. The running-editor review
 identified concrete gaps without changing ED-M06's historical validation scope.
 
 The catalog captures records and cooking status from one retained publication.
-The Cooked tree shows logical mount/folder paths; physical generation directories
-remain storage details. If publication metadata cannot be admitted, authored
-assets remain browsable with **Status unavailable** and the admission diagnostic.
-Existing source errors remain visible and invalid sources remain unselectable.
-Cooking and runtime mounting still reject invalid publication metadata.
+The Cooked tree shows logical mount/folder paths; physical generation
+directories remain storage details. If publication metadata cannot be admitted,
+authored assets remain browsable with **Status unavailable** and the admission
+diagnostic. Existing source errors remain visible and invalid sources remain
+unselectable. Cooking and runtime mounting still reject invalid publication
+metadata.
 
 ## 2. PRD Traceability
 
@@ -64,15 +65,16 @@ The repository already has these useful pieces:
   filesystem, and loose-cooked catalog providers from the active
   `IProjectContextService`.
 - `FileSystemAssetCatalog` for source files and `LooseCookedIndexAssetCatalog`
-  for the exact generation bindings captured from the project publication. Cooked
-  catalog snapshots verify their index identity and do not reload in place.
-- `GameAsset` and `AssetsLayoutViewModel`, which already show list/tile rows
-  and merge `*.omat.json` / `*.omat` by a local logical key.
+  for the exact generation bindings captured from the project publication.
+  Cooked catalog snapshots verify their index identity and do not reload in
+  place.
+- `GameAsset` and `AssetsLayoutViewModel`, which already show list/tile rows and
+  merge `*.omat.json` / `*.omat` by a local logical key.
 - `ProjectLayoutViewModel`, which owns the left project tree and mounted folder
   selection through `ContentBrowserState`.
 - ED-M05 `IMaterialPickerService`, `MaterialPickerResult`,
-  `MaterialPickerFilter`, `MaterialPreviewColor`, and generated/default
-  material rows.
+  `MaterialPickerFilter`, `MaterialPreviewColor`, and generated/default material
+  rows.
 - Material create/open/cook messages from the Content Browser to the Material
   Editor.
 
@@ -82,8 +84,8 @@ Brownfield gaps ED-M06 must close:
   source/cooked relationships, mount availability, or diagnostics.
 - logical source/cooked merge behavior exists only in `AssetsLayoutViewModel`
   and material picker code, not as a shared tested reducer.
-- `AssetRecord` is intentionally minimal, so all type/state enrichment is ad
-  hoc today.
+- `AssetRecord` is intentionally minimal, so all type/state enrichment is ad hoc
+  today.
 - Content Browser defaults can still confuse project-root files, content
   authoring roots, and `.cooked` output.
 - picker state exists for materials only; ED-M06 must define the reusable
@@ -209,9 +211,9 @@ ED-M06 state requirements:
 - `AssetState.Source` remains for non-descriptor authoring/source files such as
   imported images, glTF/FBX sources, or other raw files under browsed roots.
 - `*.omat.json` material picker rows switch from `Source` to `Descriptor`.
-- `MaterialPickerService`, Geometry material slot rendering, and Content
-  Browser row rendering are updated in lockstep. No consumer should infer
-  descriptor state by checking `Source`.
+- `MaterialPickerService`, Geometry material slot rendering, and Content Browser
+  row rendering are updated in lockstep. No consumer should infer descriptor
+  state by checking `Source`.
 - missing/broken/stale/cooked behavior keeps the same user meaning as ED-M05,
   but stale/cooked are represented as derived state for merged rows.
 
@@ -302,13 +304,12 @@ public sealed record MaterialPickerResult(
 
 ED-M06 replaces the ED-M05 `MaterialPickerResult.State` field with
 `PrimaryState` plus `DerivedState` when the picker moves to the shared provider.
-Badge precedence for compact picker/slot display is:
-`Broken`, `Missing`, `Stale`, `Cooked`, `Descriptor`, `Source`, `Generated`.
-The full details surface still shows both primary and derived states where both
-exist. `DisplayPath` and `ThumbnailKey` are excluded from
-`MaterialPickerResult` in ED-M06; reconsider them in ED-M07 only if a concrete
-consumer needs those projection fields. Partial duplicate result types are not
-allowed.
+Badge precedence for compact picker/slot display is: `Broken`, `Missing`,
+`Stale`, `Cooked`, `Descriptor`, `Source`, `Generated`. The full details surface
+still shows both primary and derived states where both exist. `DisplayPath` and
+`ThumbnailKey` are excluded from `MaterialPickerResult` in ED-M06; reconsider
+them in ED-M07 only if a concrete consumer needs those projection fields.
+Partial duplicate result types are not allowed.
 
 ## 8. Services And Adapters
 
@@ -359,8 +360,8 @@ Broken-state detection is Content Browser adapter work, not an
   `PrimaryState = Broken`, row diagnostics, and no crash.
 - loose cooked index read failures remain inside `LooseCookedIndexAssetCatalog`
   as catalog query failures unless the index exposes a record whose target path
-  cannot be resolved; that record becomes `Broken` or `Missing` according to
-  the reducer's path-resolution result.
+  cannot be resolved; that record becomes `Broken` or `Missing` according to the
+  reducer's path-resolution result.
 
 ### 8.2 Asset Browser Filter
 
@@ -382,23 +383,23 @@ Default browser filter:
 
 - include generated/source/descriptor/cooked/stale/broken. For merged rows,
   filters match either `PrimaryState` or `DerivedState`.
-- exclude missing unless the current workspace has unresolved references or
-  the user enables the Missing filter.
+- exclude missing unless the current workspace has unresolved references or the
+  user enables the Missing filter.
 
 Default picker filter:
 
 - include generated/source/descriptor/cooked/stale.
 - exclude broken and missing from normal browse results.
-- always show the current unresolved assignment row when opening a picker from
-  a missing/broken slot.
+- always show the current unresolved assignment row when opening a picker from a
+  missing/broken slot.
 
 The ED-M05 `MaterialPickerFilter` becomes a material-specific facade over
 `AssetBrowserFilter`: `IncludeSource` maps to `IncludeSource` and
-`IncludeDescriptor`, `IncludeCooked` maps to `IncludeCooked` and
-`IncludeStale`, and existing `IncludeMissing` maps to both `IncludeMissing`
-and `IncludeBroken`. Material picker results force `Kinds = { Material }`.
-ED-M06 does not split `MaterialPickerFilter.IncludeMissing` into separate
-missing/broken flags unless this LLD is reopened.
+`IncludeDescriptor`, `IncludeCooked` maps to `IncludeCooked` and `IncludeStale`,
+and existing `IncludeMissing` maps to both `IncludeMissing` and `IncludeBroken`.
+Material picker results force `Kinds = { Material }`. ED-M06 does not split
+`MaterialPickerFilter.IncludeMissing` into separate missing/broken flags unless
+this LLD is reopened.
 
 ### 8.3 Browser Row Provider
 
@@ -480,23 +481,29 @@ Rules:
   read-only. The tree root shows the project's name.
 - the sources footer holds only Mounts and Content priority. Mounts opens the
   Content mounts dialog: each mount's virtual name, backing path and kind
-  (project source, derived output, local library) with rename and unmount,
-  and a form that adds Cooked, Imported, Build or a local folder. Edits apply
-  together; the project's own content cannot be renamed or unmounted, and
-  project sources keep their names because asset paths start with them.
-- Tiles show a rendered thumbnail (ED-M08.11) or, until then, a material's
-  base colour or the type glyph, with name, type and status; List and Details
+  (project source, derived output, local library, pak file, engine content) with
+  rename and unmount, and a form that adds Cooked, Imported, Build, a local
+  folder or a pak file. Edits apply together; the project's own content cannot
+  be renamed or unmounted, and project sources keep their names because asset
+  paths start with them. The engine content is listed last with a lock: the
+  SDK's `engine.pak` is always mounted beneath everything else.
+- the engine pak and each declared pak show in the tree as read-only roots with
+  a package glyph; their folders are the virtual folders of the assets they list
+  (`/Engine/...` for the engine, the pak's own paths under its mount name for a
+  user pak), and selecting one shows those assets.
+- Tiles show a rendered thumbnail (ED-M08.11) or, until then, a material's base
+  colour or the type glyph, with name, type and status; List and Details
   (sortable columns) show the same identity rows.
 - the command row keeps New, Import and Cook as labelled menus and the asset
   commands as icons in Scene Explorer's order (Rename, Cut, Copy, Paste,
   Duplicate, Delete), then Copy path and Show in File Explorer. There is no
-  hand-made overflow menu: toolbar overflow priorities fold path commands
-  first, then asset commands, then Cook; New and Import stay longest. Item
-  context menus mirror the row. Unavailable commands stay visible, disabled,
-  and explain why.
+  hand-made overflow menu: toolbar overflow priorities fold path commands first,
+  then asset commands, then Cook; New and Import stay longest. Item context
+  menus mirror the row. Unavailable commands stay visible, disabled, and explain
+  why.
 - New Folder creates "New folder" in the current authoring folder and names it
-  in place in the sources tree. Folder rename and drag-move relocate every
-  asset inside and update their referrers (§9.5).
+  in place in the sources tree. Folder rename and drag-move relocate every asset
+  inside and update their referrers (§9.5).
 - the optional details pane shows identity facts, referrers and copy/locate
   actions; multi-selection shows aggregated counts. No hover tooltip carries
   information that is unavailable elsewhere.
@@ -554,33 +561,33 @@ Asset identity is the virtual path, and native asset keys derive from it.
 Rename, move (tree drag, Cut/Paste) and folder rename/move therefore change
 identity and must update every authored referrer in one transaction.
 
-- **Reference index.** Built on demand from saved authored files, cached
-  until a catalog change and rebuilt inside every relocation. Each file kind
-  is read structurally: scene component and material-slot geometry/material
-  URIs (component and targeted overrides), the exposure metering mask and
+- **Reference index.** Built on demand from saved authored files, cached until a
+  catalog change and rebuilt inside every relocation. Each file kind is read
+  structurally: scene component and material-slot geometry/material URIs
+  (component and targeted overrides), the exposure metering mask and
   `ExtraAssets`; material texture paths; geometry descriptor material, buffer
   and skeleton paths; texture descriptor `source`, `sources[].file` and
   `virtual_path`; import sidecar `BundleRoot`, `PrimaryRelativePath`, `Files`
   and `OutputDirectory`; input file action references (mapping `action`,
   `linked_action` and combo step `action` virtual paths), scene Play-section
   starting input contexts and script parameter overrides of input kinds.
-  Identities compare without the scheme and `.json` suffix; a rewrite keeps
-  the field's form (full URI, virtual path or file-relative path).
+  Identities compare without the scheme and `.json` suffix; a rewrite keeps the
+  field's form (full URI, virtual path or file-relative path).
 - **Input assets.** An input file may declare several assets; each one's
-  identity is its source folder plus its declared name, not the file. Moving
-  the file relocates all of its assets, Rename file changes none, and Move
-  asset extracts one declaration into its own file. The rules, collision
-  checks and confirmations are owned by
+  identity is its source folder plus its declared name, not the file. Moving the
+  file relocates all of its assets, Rename file changes none, and Move asset
+  extracts one declaration into its own file. The rules, collision checks and
+  confirmations are owned by
   [input authoring §7.2 and §8.4](input-authoring.md#72-asset-identity).
 - **Plan.** Source moves with their companion files (a texture's image, a
   model's sidecar), a folder prefix mapping and the rewritten references of
   every referrer, including a moved descriptor's own `virtual_path`. Rejected:
   collisions, invalid names, read-only or derived targets, moves out of
   authoring mounts or into the moved folder, renaming or moving a mount root or
-  the importer's fixed type folders (`Materials`, `Geometry`, `Scenes`),
-  moving a model file out of its bundle folder, and cooked-only imported
-  outputs. Rename and move ask no confirmation; the result reports what moved
-  and how many referrers were updated, and offers Undo.
+  the importer's fixed type folders (`Materials`, `Geometry`, `Scenes`), moving
+  a model file out of its bundle folder, and cooked-only imported outputs.
+  Rename and move ask no confirmation; the result reports what moved and how
+  many referrers were updated, and offers Undo.
 - **Imported outputs.** A model import owns one output group in its mount,
   `Materials/<group>`, `Geometry/<group>` and `Scenes/<group>`, where the group
   is the sidecar's `OutputDirectory` and may be nested. Import creates no
@@ -590,47 +597,46 @@ identity and must update every authored referrer in one transaction.
   under all three type folders, rewrites `OutputDirectory` in every affected
   sidecar and checks collisions in all three, including other imports' groups;
   the result reports the moved group folders. This is also how an import's
-  destination changes. Moving a group to another mount is rejected. Renaming
-  or moving the bundle folder rewrites `BundleRoot`; renaming the model file
+  destination changes. Moving a group to another mount is rejected. Renaming or
+  moving the bundle folder rewrites `BundleRoot`; renaming the model file
   renames its sidecar and rewrites `PrimaryRelativePath` and `Files`.
-- **Scenes.** Editor scenes live in `Content/Scenes` and are identified by
-  name: they can be renamed (through the scene rename operation) and
-  duplicated, not moved. Deleting the open scene is rejected.
+- **Scenes.** Editor scenes live in `Content/Scenes` and are identified by name:
+  they can be renamed (through the scene rename operation) and duplicated, not
+  moved. Deleting the open scene is rejected.
 - **Transaction.** Runs as the content cook coordinator's project writer. Any
-  open document with unsaved changes rejects the operation with the names of
-  the documents to save. A journal under `.build/relocation/<operation>/`
-  records each move and edit with before/after hashes; files move and
-  referrers are written through the atomic file store against their
-  baselines; any failure restores every file, and project activation recovers
-  an interrupted journal. After the commit, and before the writer is released,
-  registered document participants bring open documents in step; then an
-  explicit cook republishes the moved assets and their referrers. Every move,
-  rewrite, restore, delete and document change is logged.
+  open document with unsaved changes rejects the operation with the names of the
+  documents to save. A journal under `.build/relocation/<operation>/` records
+  each move and edit with before/after hashes; files move and referrers are
+  written through the atomic file store against their baselines; any failure
+  restores every file, and project activation recovers an interrupted journal.
+  After the commit, and before the writer is released, registered document
+  participants bring open documents in step; then an explicit cook republishes
+  the moved assets and their referrers. Every move, rewrite, restore, delete and
+  document change is logged.
 - **Open documents.** Nothing reloads or closes on a rename or move. A scene
-  re-points the references of the affected nodes, slot targets, environment
-  mask and `ExtraAssets` in memory; a material re-points its texture paths; a
-  moved material document re-points its own path and keeps its history. These
-  changes are outside undo history and leave the document clean: the owner
-  records the transaction's written version as its saved state, so cooking
-  accepts it. After the follow-up cook publishes, the runtime refreshes only
-  the affected nodes and the environment. A deleted asset's open document
-  closes.
+  re-points the references of the affected nodes, slot targets, environment mask
+  and `ExtraAssets` in memory; a material re-points its texture paths; a moved
+  material document re-points its own path and keeps its history. These changes
+  are outside undo history and leave the document clean: the owner records the
+  transaction's written version as its saved state, so cooking accepts it. After
+  the follow-up cook publishes, the runtime refreshes only the affected nodes
+  and the environment. A deleted asset's open document closes.
 - **Identity redirects.** A session-wide, in-memory table composes every
   committed relocation's old-to-new identities and resets when the project
-  closes. Undo, redo and paste resolve restored asset references through it,
-  so history is never rewritten or cleared. Restoring a deleted asset
-  completes as a missing reference with the existing diagnostic and a warning,
-  never blocking older undo steps.
-- **Undo.** The operation result offers Undo, which plans and runs the
-  reverse relocation. It is not part of scene history.
+  closes. Undo, redo and paste resolve restored asset references through it, so
+  history is never rewritten or cleared. Restoring a deleted asset completes as
+  a missing reference with the existing diagnostic and a warning, never blocking
+  older undo steps.
+- **Undo.** The operation result offers Undo, which plans and runs the reverse
+  relocation. It is not part of scene history.
 - Copy/Paste and Duplicate create unique new paths, give copied descriptors
   their new identity and rewrite no referrers; model sources and cooked-only
   outputs are not copied. Delete lists referrers, confirms when any exist and
   moves files and companions to the Recycle Bin, keeping an image another
-  texture still uses; remaining referrers report the existing
-  missing-reference diagnostics. The cooker treats a deleted texture as a
-  warning: a material cooks with that slot unbound and a scene without its
-  metering mask, so the rest of the project still cooks.
+  texture still uses; remaining referrers report the existing missing-reference
+  diagnostics. The cooker treats a deleted texture as a warning: a material
+  cooks with that slot unbound and a scene without its metering mask, so the
+  rest of the project still cooks.
 
 ## 10. Persistence And Round Trip
 
@@ -712,7 +718,8 @@ Forbidden:
 - Content Browser must not own import/cook primitive implementations.
 - picker/browser rows must not persist descriptor/cooked paths into authoring
   data.
-- `Oxygen.Managed.Assets` primitives must not depend on Content Browser row types.
+- `Oxygen.Managed.Assets` primitives must not depend on Content Browser row
+  types.
 
 ## 14. Validation Gates
 
@@ -724,18 +731,18 @@ ED-M06 is complete when:
 2. source descriptor and cooked index entries for the same logical material
    merge into one row with separate source/cooked details.
 3. changing a descriptor after cook makes the row `Stale`.
-4. deleting a descriptor for a referenced material shows a `Missing` row for
-   the unresolved assignment and preserves the URI.
+4. deleting a descriptor for a referenced material shows a `Missing` row for the
+   unresolved assignment and preserves the URI.
 5. broken descriptor JSON produces a visible row diagnostic and does not crash
    the browser.
-6. material picker uses the same reducer/provider state as the browser and
-   still returns only typed material identity to Geometry assignment.
+6. material picker uses the same reducer/provider state as the browser and still
+   returns only typed material identity to Geometry assignment.
 7. content browser details can copy asset URI; source/cooked path copy appears
    only when those paths are known.
 8. selecting `.cooked` or project infrastructure folders never changes the
    default material-create target away from a valid authoring content root.
-9. `AssetChangeKind.Relocated` removes the previous URI row and adds/updates
-   the new URI row.
+9. `AssetChangeKind.Relocated` removes the previous URI row and adds/updates the
+   new URI row.
 10. serializer round-trip test confirms scene material slots contain only asset
     URIs, not browser state or filesystem paths.
 

@@ -22,6 +22,7 @@
 
 #include <msclr/gcroot.h>
 
+#include <Utils/Utf8Marshaling.h>
 #include <World/OxygenWorld.h>
 
 using namespace System::Threading::Tasks;
@@ -30,14 +31,7 @@ using namespace oxygen::interop::module;
 namespace Oxygen::Interop::World {
 namespace {
 
-auto FromUtf8(std::string_view text) -> System::String^
-{
-  auto bytes = gcnew array<System::Byte>(static_cast<int>(text.size()));
-  for (int index = 0; index < bytes->Length; ++index) {
-    bytes[index] = static_cast<System::Byte>(text[static_cast<std::size_t>(index)]);
-  }
-  return System::Text::Encoding::UTF8->GetString(bytes);
-}
+using oxygen::interop::FromUtf8;
 
 class NodeObservationCompletion final {
 public:

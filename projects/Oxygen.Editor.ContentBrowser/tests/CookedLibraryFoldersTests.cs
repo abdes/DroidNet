@@ -23,7 +23,7 @@ public sealed class CookedLibraryFoldersTests
         var rows = CookedLibraryFolders.ForFolders([fixture.Shared], fixture.Project, [AssetPath.Parse("/First")]);
         var library = rows.Should().ContainSingle().Subject;
         _ = library.DisplayPath.Should().Be("/First/payloads/shared.bin");
-        _ = library.CookedMetadata!.RootFolderPath.Should().Be(fixture.First);
+        _ = library.CookedMetadata!.ContainerPath.Should().Be(fixture.First);
         _ = library.IsCookedSourceOverridden.Should().BeTrue();
     }
 

@@ -8,7 +8,8 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.LooseCooked;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Assets.Persistence;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
@@ -155,6 +156,6 @@ public sealed class LooseCookedIndexAssetCatalogTests
         await fs.File.WriteAllBytesAsync(@"C:\Cooked\container.index.bin", stream.ToArray(), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var catalog = new LooseCookedIndexAssetCatalog(new NativeStorageProvider(fs), new LooseCookedIndexAssetCatalogOptions { CookedRootFolderPath = FileSystemPath.From(@"C:\Cooked") });
         Func<Task> query = () => catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken);
-        _ = await query.Should().ThrowAsync<InvalidDataException>().WithMessage("*duplicate virtual path*").ConfigureAwait(false);
+        _ = await query.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
     }
 }

@@ -10,11 +10,11 @@ using Moq;
 using Oxygen.Editor.Assets.TestSupport;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Authoring;
-using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Compatibility;
@@ -48,9 +48,10 @@ public sealed class AssetFeedWorkloadBenchmarks
         var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
         var content = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         var storage = new NativeStorageProvider(new RealFileSystem());
-        var publication = new CookPublicationService(runs, projects, files, new ProjectManagerService(storage, atomicFiles: files));
-        var statuses = new AssetCookStatusReader(documents, publication, native.Object);
-        await using var catalog = new AssetCatalog(projects, storage, CreateEmptyImportBuiltins(), publication);
+        var engineContent = new EngineContentPakFixture();
+        var publication = new CookPublicationService(runs, projects, files, new ProjectManagerService(storage, atomicFiles: files), engineContent);
+        var statuses = new AssetCookStatusReader(documents, publication, native.Object, engineContent);
+        await using var catalog = new AssetCatalog(projects, storage, engineContent, publication);
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, projects, new WorkspaceCookScopeProvider(workspace), statuses, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
         IReadOnlyList<AssetEntry> rows = [];
@@ -66,15 +67,6 @@ public sealed class AssetFeedWorkloadBenchmarks
         native.VerifyAdd(service => service.ObservationChanged += It.IsAny<EventHandler>(), Times.Once);
         native.VerifyNoOtherCalls();
         content.VerifyNoOtherCalls();
-    }
-
-    private static IBuiltinCatalogDiscovery CreateEmptyImportBuiltins()
-    {
-        var empty = new BuiltinCatalogSnapshot(Catalog: null, IsLastKnown: false, Notice: null);
-        var builtins = new Mock<IBuiltinCatalogDiscovery>();
-        _ = builtins.SetupGet(value => value.Snapshot).Returns(empty);
-        _ = builtins.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(empty);
-        return builtins.Object;
     }
 
     private static void WriteMaterial(string path)

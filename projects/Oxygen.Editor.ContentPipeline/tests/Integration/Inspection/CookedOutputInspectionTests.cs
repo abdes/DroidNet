@@ -23,10 +23,10 @@ public sealed class CookedOutputInspectionTests
     [TestCategory("NativeContent")]
     public async Task InspectionReportsVerifiedSceneDependenciesWithoutCooking()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         var before = ReadOutputIdentities(workspace.Root);
@@ -51,7 +51,7 @@ public sealed class CookedOutputInspectionTests
     [TestCategory("NativeContent")]
     public async Task InspectionRejectsProvenanceForChangedCookedBytes()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);

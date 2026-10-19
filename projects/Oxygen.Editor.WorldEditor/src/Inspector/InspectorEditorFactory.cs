@@ -6,7 +6,6 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
@@ -22,7 +21,6 @@ internal static class InspectorEditorFactory
     /// <summary>Creates construction operations while leaving cached instance ownership with the host.</summary>
     /// <param name="hosting">The existing WinUI hosting context.</param>
     /// <param name="assets">The shared asset catalog.</param>
-    /// <param name="builtins">The native built-in catalog.</param>
     /// <param name="slots">The geometry slot inventory.</param>
     /// <param name="projects">The active project lifetime.</param>
     /// <param name="logger">The scoped logging factory.</param>
@@ -32,7 +30,6 @@ internal static class InspectorEditorFactory
     internal static Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> Create(
         HostingContext hosting,
         IAssetFeed assets,
-        IBuiltinCatalogDiscovery builtins,
         IGeometryMaterialSlotProvider slots,
         IProjectContextService projects,
         ILoggerFactory? logger,
@@ -41,7 +38,7 @@ internal static class InspectorEditorFactory
         => new()
         {
             [typeof(TransformComponent)] = _ => new TransformViewModel(logger, authoring),
-            [typeof(GeometryComponent)] = _ => new GeometryViewModel(hosting, assets, builtins, slots, projects, authoring),
+            [typeof(GeometryComponent)] = _ => new GeometryViewModel(hosting, assets, slots, projects, authoring),
             [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(authoring),
             [typeof(OrthographicCamera)] = _ => new OrthographicCameraViewModel(authoring),
             [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(authoring),

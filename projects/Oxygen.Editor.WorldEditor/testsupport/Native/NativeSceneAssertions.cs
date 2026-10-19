@@ -8,6 +8,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
 
@@ -34,7 +35,7 @@ internal static class NativeSceneAssertions
     {
         var geometry = fixture.Source.RootNodes.Single(node => node.Id == nodeId).Components.OfType<GeometryComponent>().Single();
         _ = geometry.Geometry.Should().NotBeNull();
-        _ = geometry.Geometry.Should().Be(AssetPath.Generated.Combine($"BasicShapes/{shape}"));
+        _ = geometry.Geometry.Should().Be(EngineAssets.BasicShape(shape));
         var native = await WaitForNodeAsync(fixture, nodeId, state => string.Equals(state.GeometryName, shape, StringComparison.OrdinalIgnoreCase), cancellationToken).ConfigureAwait(true);
         _ = native.GeometryKey.Should().NotBeNullOrEmpty();
         _ = native.VertexCount.Should().BePositive();

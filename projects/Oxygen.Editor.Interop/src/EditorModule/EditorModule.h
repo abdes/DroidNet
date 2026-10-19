@@ -23,6 +23,7 @@
 #include <glm/vec3.hpp>
 
 #include <Oxygen/Base/ObserverPtr.h>
+#include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Core/EngineModule.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Vortex/Types/GroundGridConfig.h>
@@ -74,13 +75,10 @@ namespace oxygen::interop::module {
 
   class InputAccumulatorAdapter;
 
-  //! One accepted physical source and its optional project-owned logical mount.
-  struct CookedRootBinding {
-    std::filesystem::path path {};
-    std::optional<std::wstring> project_mount {};
-  };
-
-  using CookedRootSet = std::shared_ptr<const std::vector<CookedRootBinding>>;
+  //! The accepted cooked content mounts, lowest precedence first, beneath which
+  //! the engine content stays.
+  using CookedRootSet
+    = std::shared_ptr<const std::vector<content::ContentMount>>;
 
   //! A scene node with visible pixels in a picked rectangle.
   struct EditorPickHit {
@@ -289,8 +287,9 @@ namespace oxygen::interop::module {
       float near_plane,
       float far_plane);
 
-    //! Replace the complete loose-root set as one engine-thread refresh request.
-    void ReplaceCookedRoots(std::vector<CookedRootBinding> roots,
+    //! Replace the complete mount set (loose cooked roots and pak files) as one
+    //! engine-thread refresh request.
+    void ReplaceCookedRoots(std::vector<content::ContentMount> roots,
       std::function<void(bool, std::string)> complete);
 
     void SetCookedContentPaused(bool paused,
@@ -376,7 +375,6 @@ namespace oxygen::interop::module {
     // Roots management for thread-safe AssetLoader initialization
     std::mutex roots_mutex_;
     CookedRootSet mounted_roots_;
-    CookedRootSet active_roots_;
     std::function<void(bool, std::string)> pending_roots_completion_;
     std::function<void(bool, std::string)> active_roots_completion_;
     std::uint64_t roots_revision_ = 0;

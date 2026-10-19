@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Documents;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Pickers;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -54,11 +55,10 @@ public sealed partial class PlaySectionView
         this.ViewModel?.InspectAutomaticCameraCommand.Execute(parameter: null);
     }
 
-    private void OnContextCandidateClick(object sender, ItemClickEventArgs args)
+    private void OnContextChoiceInvoked(object? sender, AssetChoice choice)
     {
-        _ = sender;
         this.AddContextFlyout.Hide();
-        this.ViewModel?.AddContextCommand.Execute(args.ClickedItem as AssetEntry);
+        this.ViewModel?.AddContextCommand.Execute(choice.Asset);
     }
 
     private void OnPriorityStarted(object? sender, NumberBoxEditSessionEventArgs args)

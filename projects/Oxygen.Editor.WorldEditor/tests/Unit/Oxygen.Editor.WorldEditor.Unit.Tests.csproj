@@ -26,8 +26,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <Compile Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\testsupport\BuiltinCatalogDiscoveryFixture.cs" Link="BuiltinCatalogDiscoveryFixture.cs" />
-        <None Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\tests\Fixtures\BuiltinGeometryCatalog.json" Link="Fixtures\BuiltinGeometryCatalog.json" CopyToOutputDirectory="PreserveNewest" />
     </ItemGroup>
     <ItemGroup>
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Authoring/SceneAuthoringFixture.cs" Link="Fixtures/SceneAuthoringFixture.cs" />

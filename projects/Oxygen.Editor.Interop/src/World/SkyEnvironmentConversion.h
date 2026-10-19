@@ -7,13 +7,12 @@
 #pragma once
 
 #pragma managed(push, off)
-#include <cstddef>
-#include <filesystem>
 #include <string>
 
 #include <Commands/SetEnvironmentCommand.h>
 #pragma managed(pop)
 
+#include <Utils/Utf8Marshaling.h>
 #include <World/SkyEnvironmentManaged.h>
 
 #pragma managed(push, on)
@@ -21,15 +20,6 @@
 namespace Oxygen::Interop::World {
 
 namespace detail {
-
-  inline auto ToWide(System::String^ value) -> std::wstring
-  {
-    auto result = std::wstring(static_cast<std::size_t>(value->Length), L' ');
-    for (int index = 0; index < value->Length; ++index) {
-      result[static_cast<std::size_t>(index)] = value[index];
-    }
-    return result;
-  }
 
   inline auto ToNativeVec3(System::Numerics::Vector3 value) -> oxygen::Vec3
   {
@@ -42,27 +32,18 @@ namespace detail {
     return System::Numerics::Vector3(value.x, value.y, value.z);
   }
 
-  inline auto ToNativeCubemap(CubemapReferenceManaged value, const char* name)
+  inline auto ToNativeCubemap(System::String ^ path, const char* name)
     -> oxygen::interop::module::CubemapSource
   {
     auto result = oxygen::interop::module::CubemapSource {};
-    if (value.DescriptorRelativePath == nullptr) {
+    if (path == nullptr) {
       return result;
     }
-    if (System::String::IsNullOrWhiteSpace(value.CookedRoot)
-      || System::String::IsNullOrWhiteSpace(value.DescriptorRelativePath)) {
-      throw gcnew System::ArgumentException(gcnew System::String(name)
-        + " requires both a cooked source and a relative descriptor path.");
+    if (System::String::IsNullOrWhiteSpace(path)) {
+      throw gcnew System::ArgumentException(
+        gcnew System::String(name) + " requires a texture virtual path.");
     }
-    result.locator = oxygen::content::TextureResourceLocator {
-      .cooked_root = std::filesystem::path(
-        ToWide(value.CookedRoot)),
-      .descriptor_relative_path = std::filesystem::path(
-        ToWide(value.DescriptorRelativePath)),
-    };
-    if (value.ProjectMount != nullptr) {
-      result.project_mount = ToWide(value.ProjectMount->ToUpperInvariant());
-    }
+    result.virtual_path = oxygen::interop::ToUtf8(path);
     return result;
   }
 
@@ -79,7 +60,7 @@ inline auto ToNativeSky(SkySphereEnvironmentManaged sphere,
   native_sphere.enabled = sphere.Enabled;
   native_sphere.source = sphere.Source;
   native_sphere.cubemap
-    = detail::ToNativeCubemap(sphere.Cubemap, "A sky sphere cubemap");
+    = detail::ToNativeCubemap(sphere.CubemapPath, "A sky sphere cubemap");
   native_sphere.solid_color_rgb = detail::ToNativeVec3(sphere.SolidColorRgb);
   native_sphere.illuminance_lux = sphere.IlluminanceLux;
   native_sphere.intensity = sphere.Intensity;
@@ -90,7 +71,7 @@ inline auto ToNativeSky(SkySphereEnvironmentManaged sphere,
   native_light.enabled = light.Enabled;
   native_light.source = light.Source;
   native_light.cubemap
-    = detail::ToNativeCubemap(light.Cubemap, "A sky light cubemap");
+    = detail::ToNativeCubemap(light.CubemapPath, "A sky light cubemap");
   native_light.illuminance_lux = light.CubemapIlluminanceLux;
   native_light.intensity = light.Intensity;
   native_light.tint_rgb = detail::ToNativeVec3(light.TintRgb);

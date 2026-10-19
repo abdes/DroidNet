@@ -102,9 +102,7 @@ public sealed partial class PreviewSession
         {
             var (reader, set) = await this.AdmitCookedContentAsync(active).ConfigureAwait(true);
             using var retained = reader;
-            var bindings = reader.Roots.Zip(
-                reader.RootPaths,
-                static (root, path) => new RuntimeCookedRoot(path, root.Owner == CookPublicationRootOwner.Project ? root.Name : null)).ToArray();
+            var bindings = RuntimeBindings.Of(reader);
             stage = "native mount and preview resume";
             await engine.RefreshProjectCookedRootsAsync(bindings, set).ConfigureAwait(true);
             mounted = true;

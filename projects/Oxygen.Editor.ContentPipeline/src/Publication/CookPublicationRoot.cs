@@ -14,14 +14,27 @@ public enum CookPublicationRootOwner
     Library,
 }
 
+/// <summary>How a library stores its cooked content.</summary>
+public enum CookPublicationRootContainer
+{
+    /// <summary>A loose cooked root directory.</summary>
+    LooseFolder,
+
+    /// <summary>A pak file.</summary>
+    PakFile,
+}
+
 /// <summary>One binding in the accepted native source order.</summary>
 /// <param name="Owner">The root's ownership and location policy.</param>
 /// <param name="Name">The logical project mount or library name.</param>
 /// <param name="SourceKey">The native source identity; also the owned generation's directory identity.</param>
-/// <param name="IndexSha256">The observed native inventory identity.</param>
+/// <param name="IndexSha256">The observed content identity: the loose index digest, or a pak's catalog digest.</param>
 /// <param name="LibraryPath">The absolute location of a library; null for project-owned roots.</param>
 public sealed record CookPublicationRoot(CookPublicationRootOwner Owner, string Name, Guid SourceKey, string IndexSha256, string? LibraryPath)
 {
+    /// <summary>Gets how the root stores its content; project roots and publications written before paks are loose folders.</summary>
+    public CookPublicationRootContainer Container { get; init; } = CookPublicationRootContainer.LooseFolder;
+
     internal string ResolvePath(string projectRoot) => this.Owner switch
     {
         CookPublicationRootOwner.Project when this.LibraryPath is null => CookPublicationPaths.Generation(projectRoot, this.SourceKey),

@@ -18,8 +18,7 @@ namespace Oxygen.Editor.ContentPipeline;
 public sealed partial class ContentPipelineService
 {
     private static ImmutableArray<AssetPath> SourceDependencies(ContentCookInput input, CookDependencyGraph graph)
-        => graph.Dependencies.TryGetValue(input.AssetUri, out var dependencies) ? dependencies
-            : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(input.AssetUri) ? [ProceduralGeometryDescriptorService.DefaultMaterial] : [];
+        => graph.Dependencies.GetValueOrDefault(input.AssetUri, []);
 
     private static ContentCookInput[] ReadyInputs(Dictionary<AssetPath, ContentCookInput> remaining, CookDependencyGraph graph)
     {
@@ -141,8 +140,7 @@ public sealed partial class ContentPipelineService
                     CapturedInputs = new([.. snapshot.CreateNativeInputs().Inputs, .. graph.GeneratedInputs]),
                     Output = staging.Roots.Single(root => string.Equals(root.Mount, mount.Key, StringComparison.Ordinal)),
                     CookedContextRoots = referenceRoots,
-                    InputDependencies = graph.Dependencies.SetItems(graph.Builtins.Where(ProceduralGeometryDescriptorService.IsGeneratedBasicShape)
-                        .Select(static uri => KeyValuePair.Create<AssetPath, ImmutableArray<AssetPath>>(uri, [ProceduralGeometryDescriptorService.DefaultMaterial]))),
+                    InputDependencies = graph.Dependencies,
                 };
                 var result = await this.CookMixedInputsAsync(operation.OperationId, scope, cancellationToken).ConfigureAwait(false);
                 results.Add(result);

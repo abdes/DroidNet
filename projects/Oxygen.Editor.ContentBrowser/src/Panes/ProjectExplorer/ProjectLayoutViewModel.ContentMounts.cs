@@ -57,12 +57,24 @@ public partial class ProjectLayoutViewModel
     {
         candidate.AuthoringMounts.Clear();
         candidate.LocalFolderMounts.Clear();
+        candidate.PakFileMounts.Clear();
         foreach (var row in rows)
         {
-            if (row.Kind != ContentMountKind.LocalLibrary)
+            switch (row.Kind)
             {
-                candidate.AuthoringMounts.Add(new(row.Name, row.RelativePath!, row.IsExpanded));
-                continue;
+                case ContentMountKind.EngineContent:
+                    // Always mounted from the SDK; the project does not declare it.
+                    continue;
+                case ContentMountKind.PakLibrary:
+                    candidate.PakFileMounts.Add(new(row.Name, FileSystemPath.From(row.AbsolutePath!), row.IsExpanded));
+                    continue;
+                case ContentMountKind.ProjectSource or ContentMountKind.Derived:
+                    candidate.AuthoringMounts.Add(new(row.Name, row.RelativePath!, row.IsExpanded));
+                    continue;
+                case ContentMountKind.LocalLibrary:
+                    break;
+                default:
+                    throw new InvalidOperationException("The Content mounts dialog staged an unknown mount kind.");
             }
 
             // A new authored folder inside the project is a project source; anything else is a read-only library.
@@ -81,20 +93,24 @@ public partial class ProjectLayoutViewModel
         RemapPriorityNames(expected, candidate);
     }
 
+    // A library keeps its priority across a rename: its container is still declared, under a name that is new.
     private static void RemapPriorityNames(ProjectContext previous, ProjectInfo candidate)
-        => candidate.CookedContentOrder = previous.CookedContentOrder.Select(source =>
+    {
+        var before = DeclaredLibrary.Of(previous.LocalFolderMounts, previous.PakFileMounts);
+        var after = DeclaredLibrary.Of(candidate.LocalFolderMounts, candidate.PakFileMounts);
+        candidate.CookedContentOrder = previous.CookedContentOrder.Select(source =>
         {
-            if (source.Kind == CookedContentSourceKind.ProjectOutput || candidate.LocalFolderMounts.Any(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal)))
+            if (source.Kind == CookedContentSourceKind.ProjectOutput || after.Exists(library => library.Is(source)))
             {
                 return source;
             }
 
-            var old = previous.LocalFolderMounts.FirstOrDefault(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
-            var renamed = old is null ? null : candidate.LocalFolderMounts.FirstOrDefault(mount =>
-                mount.Root == old.Root
-                && !previous.LocalFolderMounts.Any(original => string.Equals(original.Name, mount.Name, StringComparison.Ordinal)));
-            return renamed is null ? null : new CookedContentSource(CookedContentSourceKind.LocalFolder, renamed.Name);
+            var old = before.Find(library => library.Is(source));
+            var renamed = old is null ? null : after.Find(library => library.Kind == old.Kind && library.Container == old.Container
+                && !before.Exists(original => string.Equals(original.Name, library.Name, StringComparison.Ordinal)));
+            return renamed is null ? null : new CookedContentSource(renamed.Kind, renamed.Name);
         }).OfType<CookedContentSource>().ToList();
+    }
 
     [RelayCommand(CanExecute = nameof(CanChangeMounts))]
     private async Task ManageMountsAsync()
@@ -104,7 +120,7 @@ public partial class ProjectLayoutViewModel
             return;
         }
 
-        var model = new ContentMountsViewModel(expected, dialogService);
+        var model = new ContentMountsViewModel(expected, dialogService, engineContent);
         var spec = new DialogSpec("Content mounts", new ContentMountsView { ViewModel = model })
         {
             PrimaryButtonText = "Apply",
@@ -120,7 +136,8 @@ public partial class ProjectLayoutViewModel
         }
 
         ApplyMountRows(expected, candidate, model.Mounts, static folder => File.Exists(Path.Combine(folder, "container.index.bin")));
-        if (candidate.AuthoringMounts.SequenceEqual(expected.AuthoringMounts) && candidate.LocalFolderMounts.SequenceEqual(expected.LocalFolderMounts))
+        if (candidate.AuthoringMounts.SequenceEqual(expected.AuthoringMounts) && candidate.LocalFolderMounts.SequenceEqual(expected.LocalFolderMounts)
+            && candidate.PakFileMounts.SequenceEqual(expected.PakFileMounts))
         {
             return;
         }
@@ -131,7 +148,8 @@ public partial class ProjectLayoutViewModel
         if (model.Mounts.LastOrDefault(static row => row.IsNew) is { } added
             && projectContextService.ActiveProject is { } applied
             && (applied.AuthoringMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))
-                || applied.LocalFolderMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))))
+                || applied.LocalFolderMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))
+                || applied.PakFileMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))))
         {
             contentBrowserState.SetSelectedFolders([AssetPath.Create(added.Name)]);
         }
@@ -171,7 +189,7 @@ public partial class ProjectLayoutViewModel
         this.IsApplyingMounts = true;
         try
         {
-            candidate.CookedContentOrder = CookedContentOrdering.Resolve(candidate.LocalFolderMounts, candidate.CookedContentOrder).ToList();
+            candidate.CookedContentOrder = CookedContentOrdering.Resolve(candidate).ToList();
             var request = this.messenger.Send(new ChangeContentMountsRequestMessage(expected, candidate));
             if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
             {
@@ -339,9 +357,11 @@ public partial class ProjectLayoutViewModel
     private void ReconcileSelectedMounts(ProjectContext previous, ProjectInfo candidate)
     {
         var before = previous.AuthoringMounts.Select(mount => (mount.Name, Root: previous.ProjectRoot.Combine(mount.RelativePath)))
-            .Concat(previous.LocalFolderMounts.Select(static mount => (mount.Name, mount.Root))).ToArray();
+            .Concat(previous.LocalFolderMounts.Select(static mount => (mount.Name, mount.Root)))
+            .Concat(previous.PakFileMounts.Select(static mount => (mount.Name, Root: mount.Path))).ToArray();
         var after = candidate.AuthoringMounts.Select(mount => (mount.Name, Root: previous.ProjectRoot.Combine(mount.RelativePath)))
-            .Concat(candidate.LocalFolderMounts.Select(static mount => (mount.Name, mount.Root))).ToArray();
+            .Concat(candidate.LocalFolderMounts.Select(static mount => (mount.Name, mount.Root)))
+            .Concat(candidate.PakFileMounts.Select(static mount => (mount.Name, Root: mount.Path))).ToArray();
 
         // A renamed mount keeps its folders selected under its new name; a removed one leaves the whole project shown.
         var folders = contentBrowserState.SelectedFolders.Select(folder =>
@@ -365,4 +385,17 @@ public partial class ProjectLayoutViewModel
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Content mount update failed.")]
     private partial void LogMountChangeFailed(Exception exception);
+
+    /// <summary>A declared library: a local folder or a pak file, with the container that identifies it across renames.</summary>
+    /// <param name="Kind">The library's kind in the content priority.</param>
+    /// <param name="Name">The library's mount name.</param>
+    /// <param name="Container">The folder or the pak file.</param>
+    private sealed record DeclaredLibrary(CookedContentSourceKind Kind, string Name, FileSystemPath Container)
+    {
+        public static List<DeclaredLibrary> Of(IEnumerable<LocalFolderMount> folders, IEnumerable<PakFileMount> paks)
+            => [.. folders.Select(static folder => new DeclaredLibrary(CookedContentSourceKind.LocalFolder, folder.Name, folder.Root)),
+                .. paks.Select(static pak => new DeclaredLibrary(CookedContentSourceKind.PakFile, pak.Name, pak.Path))];
+
+        public bool Is(CookedContentSource source) => this.Kind == source.Kind && string.Equals(this.Name, source.Name, StringComparison.Ordinal);
+    }
 }

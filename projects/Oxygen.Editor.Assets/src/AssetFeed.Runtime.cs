@@ -29,7 +29,7 @@ public sealed partial class AssetFeed
             return (AssetRuntimeAvailability.Updating, "The preview is updating cooked content.");
         }
 
-        var applicable = status.Requests.Where(request => request.Asset == item.Identity || request.Asset == item.BuiltinOrigin).ToArray();
+        var applicable = status.Requests.Where(request => request.Asset == item.Identity).ToArray();
         if (applicable.FirstOrDefault(static request => request.Succeeded == false) is { } failed)
         {
             return (AssetRuntimeAvailability.Failed, failed.Reason ?? "The asset could not be applied in the preview.");
@@ -40,11 +40,10 @@ public sealed partial class AssetFeed
             return (AssetRuntimeAvailability.Updating, "The asset is loading in the preview.");
         }
 
-        if (item.IsBuiltin && item.BuiltinOrigin is null)
+        // Every runtime mounts the engine content pak as its permanent base.
+        if (item is { Origin: AssetOrigin.Engine, IsPackaged: true })
         {
-            return item.Generated?.IsLastKnown == true
-                ? (AssetRuntimeAvailability.Unavailable, "The engine catalog is last-known. Preview unavailable.")
-                : (AssetRuntimeAvailability.Mounted, null);
+            return (AssetRuntimeAvailability.Mounted, null);
         }
 
         var mounted = status.State == AssetRuntimeContentState.Mounted && item.CookedPath is { } cookedPath && status.Roots.Any(cookedPath.IsSameOrInside);

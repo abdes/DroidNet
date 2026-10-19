@@ -7,6 +7,7 @@ using System.Reactive.Subjects;
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
@@ -28,23 +29,23 @@ public sealed class EnvironmentSchedulingTests
         using var model = new EnvironmentViewModel(assetProvider: provider.Object, observerScheduler: scheduler);
         model.SetScene(fixture.Scene);
         var deliveryThreads = new List<int>();
-        model.Exposure.MeteringMaskRows.CollectionChanged += (_, _) => deliveryThreads.Add(Environment.CurrentManagedThreadId);
+        model.Exposure.MeteringMaskChoices.Groups.CollectionChanged += (_, _) => deliveryThreads.Add(Environment.CurrentManagedThreadId);
         var original = CreateTexture("First");
 
         await Task.Run(() => source.OnNext([original]), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = model.Exposure.MeteringMaskRows.Should().BeEmpty("notifications must wait for the supplied scheduler");
+        _ = MaskRows(model).Should().BeEmpty("notifications must wait for the supplied scheduler");
         var observerThread = Environment.CurrentManagedThreadId;
         scheduler.Start();
-        _ = model.Exposure.MeteringMaskRows.Should().ContainSingle();
+        _ = MaskRows(model).Should().ContainSingle();
         _ = deliveryThreads.Should().OnlyContain(thread => thread == observerThread);
-        var row = model.Exposure.MeteringMaskRows[0];
-        _ = row.Item.Name.Should().Be("First");
+        var row = MaskRows(model)[0];
+        _ = row.Choice.Name.Should().Be("First");
 
         await Task.Run(() => source.OnNext([original with { DisplayName = "Renamed" }]), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = row.Item.Name.Should().Be("First");
+        _ = row.Choice.Name.Should().Be("First");
         scheduler.Start();
-        _ = model.Exposure.MeteringMaskRows[0].Should().BeSameAs(row);
-        _ = row.Item.Name.Should().Be("Renamed");
+        _ = MaskRows(model)[0].Should().BeSameAs(row);
+        _ = row.Choice.Name.Should().Be("Renamed");
         provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     }
 
@@ -63,7 +64,7 @@ public sealed class EnvironmentSchedulingTests
         source.OnNext([CreateTexture("After disposal")]);
         scheduler.Start();
 
-        _ = model.Exposure.MeteringMaskRows.Should().BeEmpty();
+        _ = MaskRows(model).Should().BeEmpty();
         _ = source.HasObservers.Should().BeFalse();
     }
 
@@ -78,9 +79,12 @@ public sealed class EnvironmentSchedulingTests
 
         source.OnNext([CreateTexture("Synchronous")]);
 
-        _ = model.Exposure.MeteringMaskRows.Should().ContainSingle();
-        _ = model.Exposure.MeteringMaskRows[0].Item.Name.Should().Be("Synchronous");
+        _ = MaskRows(model).Should().ContainSingle();
+        _ = MaskRows(model)[0].Choice.Name.Should().Be("Synchronous");
     }
+
+    private static IReadOnlyList<AssetChoiceRow> MaskRows(EnvironmentViewModel model)
+        => [.. model.Exposure.MeteringMaskChoices.Groups.SelectMany(static group => group.Rows)];
 
     private static Mock<IAssetFeed> CreateProvider(IObservable<IReadOnlyList<AssetEntry>> items)
     {

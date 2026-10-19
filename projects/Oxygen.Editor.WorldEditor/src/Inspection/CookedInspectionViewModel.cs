@@ -321,8 +321,8 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
             cancellation.Token.ThrowIfCancellationRequested();
             var project = this.GetCurrentProject(request);
             var asset = request.Asset is { } identity ? await this.ResolveInspectedAssetAsync(identity, project, request, cancellation.Token).ConfigureAwait(true) : null;
-            var isUncopiedBuiltin = asset is { IsBuiltin: true, CookedMetadata: null, CookedCompanions.Count: 0 };
-            var report = isUncopiedBuiltin
+            // A packaged asset is read from its pak: the project has no cooked output of it to inspect.
+            var report = asset is { IsPackaged: true }
                 ? new CookedOutputReport(request.Project.ProjectId, request.Scope, DateTimeOffset.UtcNow, [])
                 : await this.pipeline.InspectCookedOutputAsync(request.Scope, cancellation.Token, validate, project).ConfigureAwait(true);
             cancellation.Token.ThrowIfCancellationRequested();
@@ -360,17 +360,11 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
         if (asset is not null && request.CookedSource is { } requested)
         {
             var source = asset.OverriddenCookedSources.Prepend(asset.CookedMetadata).OfType<Oxygen.Managed.Assets.Catalog.CookedAssetMetadata>()
-                .FirstOrDefault(candidate => candidate.RootFolderPath == requested.RootFolderPath && candidate.VirtualPath == requested.VirtualPath);
+                .FirstOrDefault(candidate => candidate.ContainerPath == requested.ContainerPath && candidate.VirtualPath == requested.VirtualPath);
             return source is null ? null : AssetIdentity.FromCookedSource(asset, source, project);
         }
 
-        if (asset is not { IsBuiltin: true, BuiltinOrigin: null })
-        {
-            return asset;
-        }
-
-        var items = await this.assetProvider.Items.FirstAsync().ToTask(cancellationToken).ConfigureAwait(true);
-        return AssetIdentity.GroupBuiltins(items).FirstOrDefault(row => row.Identity == asset.Identity) ?? asset;
+        return asset;
     }
 
     private void ApplyReport(CookedOutputReport report)
@@ -381,10 +375,10 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
         this.Issues = report.Roots.SelectMany(root => root.Inspection.Diagnostics.Concat(root.Validation?.Diagnostics ?? []).Select(issue => new InspectionIssueRow(root.Name, issue))).ToArray();
         this.StatusText = report.Roots.Any(static root => !root.Inspection.Succeeded || root.Validation?.Succeeded == false)
                 || this.Issues.Any(static issue => issue.Diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal) ? "Inspection has errors"
-            : this.ScopedAsset is { IsBuiltin: true } && this.allAssets.Length == 0 ? this.ScopedAsset.PrimaryBadge
+            : this.ScopedAsset is { IsPackaged: true } && this.allAssets.Length == 0 ? this.ScopedAsset.PrimaryBadge
             : !report.Roots.Any(static root => root.IsPresent) ? "No cooked output"
             : report.Roots.Any(static root => root.Validation is not null) ? "Output validated" : "Output inspected";
-        this.Summary = this.ScopedAsset is { IsBuiltin: true } && report.Roots.Count == 0
+        this.Summary = this.ScopedAsset is { IsPackaged: true } && report.Roots.Count == 0
             ? report.CapturedAt.ToLocalTime().ToString("g", CultureInfo.CurrentCulture)
             : string.Create(CultureInfo.CurrentCulture, $"{this.allAssets.Length:N0} assets · {this.allFiles.Length:N0} root files · {report.CapturedAt.ToLocalTime():g}");
         this.Filter();
@@ -406,12 +400,12 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
     private InspectionAssetRow CreateAssetRow(CookedRootReport root, CookedAssetEntry asset)
     {
         var scoped = this.ScopedAsset is { CookedMetadata: { } metadata } candidate
-            && metadata.RootFolderPath == FileSystemPath.From(root.Inspection.CookedRoot)
+            && metadata.ContainerPath == FileSystemPath.From(root.Inspection.CookedRoot)
             && string.Equals((metadata.VirtualPath ?? candidate.Identity).VirtualPath, asset.VirtualPath, StringComparison.Ordinal) ? candidate : null;
         return new(root, asset, root.Provenance.FirstOrDefault(origin => string.Equals(origin.CookedAssetUri.VirtualPath, asset.VirtualPath, StringComparison.Ordinal)))
         {
             ResolutionText = scoped?.IsCookedSourceOverridden == true ? scoped.PrimaryBadgeTooltip : string.Empty,
-            OtherSources = scoped?.OverriddenCookedSources.Select(static source => source.RootFolderPath).Distinct().Select(static root => root.FullPath).ToArray() ?? [],
+            OtherSources = scoped?.OverriddenCookedSources.Select(static source => source.ContainerPath).Distinct().Select(static root => root.FullPath).ToArray() ?? [],
         };
     }
 }

@@ -254,7 +254,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         source = source.Select(item => item.Kind == AssetKind.ForeignSource && item.SourcePath is { } path
             && File.Exists(path.FullPath + Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.SidecarSuffix)
                 ? item with { ImportSource = item.Identity, ImportSourcePath = path } : item).ToArray();
-        var candidates = source.Where(item => item.Generated is not null || item.ImportSource is not null
+        var candidates = source.Where(item => item.ImportSource is not null
             || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture)
             || IsProjectCookedOutput(publication?.ProjectRoots.Values ?? [], item)).ToArray();
         if (candidates.Length == 0)
@@ -282,30 +282,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         var read = publication is null ? this.cookStatus.ReadAsync(project, identities, cancellationToken)
             : this.cookStatus.ReadAsync(project, publication, identities, cancellationToken);
         var states = (await read.ConfigureAwait(false)).ToDictionary(static state => state.AssetUri);
-        var origins = source.Where(item => item.Generated is not null && states.TryGetValue(item.Identity, out var state) && state.HasAvailableOutput)
-            .SelectMany(item => states[item.Identity].Outputs.Where(output => states[item.Identity].OutputRoots.ContainsKey(output.MountName))
-                .Select(output => new VerifiedBuiltinSource(states[item.Identity].OutputRoots[output.MountName], output.CookedAssetUri, item)))
-            .GroupBy(static entry => entry.Identity)
-            .Where(static group => group.Select(entry => entry.Origin.Identity).Distinct().Take(2).Count() == 1)
-            .ToDictionary(static group => group.Key, static group => group.ToArray());
-        var projectedItems = source.Select(item =>
-        {
-            if (item.IsBuiltin)
-            {
-                return item;
-            }
-
-            var proofs = origins.Values.SelectMany(static entries => entries).Where(proof =>
-                item.Identity == proof.Identity || item.CookedMetadata?.VirtualPath == proof.Identity
-                    || item.OverriddenCookedSources.Any(metadata => metadata.VirtualPath == proof.Identity)).ToArray();
-            var projected = item with { VerifiedBuiltinSources = proofs };
-            var origin = proofs.FirstOrDefault(proof => proof.Origin.Kind == item.Kind
-                && (item.CookedMetadata is { } metadata ? metadata.RootFolderPath == proof.Root && (metadata.VirtualPath is null || metadata.VirtualPath == proof.Identity)
-                    : item.CookedPath?.IsSameOrInside(proof.Root) == true))?.Origin;
-            return item.SourcePath is null && item.DescriptorPath is null && origin is not null
-                ? projected with { Generated = origin.Generated, BuiltinOrigin = origin.Identity, DisplayName = origin.DisplayName, PrimaryState = AssetState.Generated, DerivedState = null }
-                : states.TryGetValue(item.Identity, out var state) ? ApplyOwnedCookStatus(project, projected, state) : projected;
-        }).ToArray();
+        var projectedItems = source.Select(item => states.TryGetValue(item.Identity, out var state) ? ApplyOwnedCookStatus(project, item, state) : item).ToArray();
         return AddKnownImportedOutputs(project, projectedItems, states.Values);
     }
 }

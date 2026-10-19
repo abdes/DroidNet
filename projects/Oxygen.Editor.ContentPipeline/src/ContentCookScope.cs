@@ -37,13 +37,6 @@ public sealed record ContentCookScope(
     /// <summary>Gets the operation-owned directory for source projections before capture.</summary>
     internal string? PreparationRoot { get; init; }
 
-    /// <summary>Gets the native catalog already queried under this operation's artifact lease.</summary>
-    internal BuiltinGeometryCatalog? BuiltinCatalog { get; init; }
-
-    /// <summary>Gets builtin descriptors already materialized by this operation.</summary>
-    internal IReadOnlyDictionary<AssetPath, ContentCookInput> PreparedBuiltins { get; init; }
-        = System.Collections.Immutable.ImmutableDictionary<AssetPath, ContentCookInput>.Empty;
-
     /// <summary>Gets the native recipes already used for source analysis.</summary>
     internal IReadOnlyDictionary<AssetPath, ContentImportJob> NativeJobs { get; init; }
         = System.Collections.Immutable.ImmutableDictionary<AssetPath, ContentImportJob>.Empty;

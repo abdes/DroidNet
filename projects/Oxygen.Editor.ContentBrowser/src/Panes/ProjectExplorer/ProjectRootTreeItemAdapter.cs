@@ -26,6 +26,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     private readonly ILogger logger;
     private readonly IStorageProvider storage;
     private readonly Dictionary<string, VirtualFolderMountTreeItemAdapter> virtualFolderMounts;
+    private readonly List<PakMountTreeItemAdapter> pakMounts = [];
 
     private bool disposed;
 
@@ -118,7 +119,8 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
 
         // A name equal to another mount's, or differing from it only in case, is refused: on a case-insensitive file
         // system the two would share their cooked folder.
-        return !this.virtualFolderMounts.Keys.Any(existing => VirtualPathComparer.CaseFolded.Equals(existing, name));
+        return !this.virtualFolderMounts.Keys.Concat(this.pakMounts.Select(static pak => pak.MountPointName))
+            .Any(existing => VirtualPathComparer.CaseFolded.Equals(existing, name));
     }
 
     /// <summary>
@@ -136,6 +138,22 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         }
 
         this.virtualFolderMounts.Add(mount.MountPointName, mount);
+        return true;
+    }
+
+    /// <summary>Adds a pak mount after the folder mounts; the engine content comes first, then the declared paks.</summary>
+    /// <param name="pak">The pak mount to add.</param>
+    /// <returns><see langword="true"/> when added; otherwise <see langword="false"/> when a mount with the same name already exists.</returns>
+    public bool MountPak(PakMountTreeItemAdapter pak)
+    {
+        ArgumentNullException.ThrowIfNull(pak);
+        if (this.virtualFolderMounts.ContainsKey(pak.MountPointName)
+            || this.pakMounts.Exists(existing => string.Equals(existing.MountPointName, pak.MountPointName, StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        this.pakMounts.Add(pak);
         return true;
     }
 
@@ -193,6 +211,11 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
             foreach (var mount in this.virtualFolderMounts.Values)
             {
                 this.AddChildInternal(mount);
+            }
+
+            foreach (var pak in this.pakMounts)
+            {
+                this.AddChildInternal(pak);
             }
         }
         catch (Exception ex)

@@ -234,7 +234,8 @@ public sealed class CookOrchestrationTests
             workspace.Documents,
             workspace.Compatibility,
             workspace.Files,
-            workspace.Publication);
+            workspace.Publication,
+            workspace.EngineContent);
 
         var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat.json"), CancellationToken.None)
             .ConfigureAwait(false);

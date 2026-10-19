@@ -37,7 +37,7 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(60));
         using var services = new CatalogWorkloadServices(fixture);
-        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
+        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         await using var publication = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
 

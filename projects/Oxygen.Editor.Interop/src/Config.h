@@ -119,13 +119,16 @@ namespace Oxygen::Interop {
     System::String^ CVarsArchivePath;
     array<System::String^>^ ScriptSourceRoots;
     System::String^ ScriptBytecodeCachePath;
+    //! The engine content pak every runtime mounts beneath its content.
+    System::String^ EngineContentPakPath;
 
     PathFinderConfigManaged()
       : WorkspaceRootPath(gcnew System::String("")),
       ShaderLibraryPath(gcnew System::String("")),
       CVarsArchivePath(gcnew System::String("")),
       ScriptSourceRoots(gcnew array<System::String^>(0)),
-      ScriptBytecodeCachePath(gcnew System::String("")) {
+      ScriptBytecodeCachePath(gcnew System::String("")),
+      EngineContentPakPath(gcnew System::String("")) {
     }
 
     static PathFinderConfigManaged^ FromNative(
@@ -137,6 +140,8 @@ namespace Oxygen::Interop {
       m->ScriptSourceRoots = detail::ToManagedStringArray(n.ScriptSourceRoots());
       m->ScriptBytecodeCachePath =
         detail::ToManagedString(n.ScriptBytecodeCachePath().string());
+      m->EngineContentPakPath =
+        detail::ToManagedString(n.EngineContentPakPath().string());
       return m;
     }
 
@@ -161,6 +166,10 @@ namespace Oxygen::Interop {
       if (!System::String::IsNullOrWhiteSpace(ScriptBytecodeCachePath)) {
         builder = std::move(builder).WithScriptBytecodeCachePath(
           detail::ToStdString(ScriptBytecodeCachePath));
+      }
+      if (!System::String::IsNullOrWhiteSpace(EngineContentPakPath)) {
+        builder = std::move(builder).WithEngineContentPakPath(
+          detail::ToStdString(EngineContentPakPath));
       }
       return std::move(builder).Build();
     }

@@ -9,6 +9,7 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Inspector.Geometry;
@@ -100,9 +101,6 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
     [ObservableProperty]
     public partial ImmutableArray<ExposureCompensationKeyData> AutoExposureCompensationCurve { get; set; } = [];
 
-    [ObservableProperty]
-    public partial string MeteringMaskSearchText { get; set; } = string.Empty;
-
     /// <summary>Gets the borrowed scene edit owner.</summary>
     public SceneEnvironmentEditOwner EditOwner { get; }
 
@@ -115,18 +113,13 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
     /// <summary>Gets existing metering choices.</summary>
     public IReadOnlyList<MeteringMode> MeteringModes { get; } = Enum.GetValues<MeteringMode>();
 
-    /// <summary>Gets stable texture rows retained across status updates.</summary>
-    public ObservableCollection<AssetPickerRow> MeteringMaskRows { get; } = [];
+    /// <summary>Gets the textures the metering-mask picker offers, grouped as Engine, Packages and Content.</summary>
+    public AssetPickerModel MeteringMaskChoices { get; } = new(static asset => AssetChoice.For(asset, "Texture", "\uE7C3"));
 
-    /// <summary>Gets texture rows matching the current query without replacing their identities.</summary>
-    public IReadOnlyList<AssetPickerRow> FilteredMeteringMaskRows => string.IsNullOrWhiteSpace(this.MeteringMaskSearchText)
-        ? this.MeteringMaskRows.ToArray()
-        : this.MeteringMaskRows.Where(row => row.Item.Name.Contains(this.MeteringMaskSearchText, StringComparison.OrdinalIgnoreCase)
-            || row.Item.DisplayPath.Contains(this.MeteringMaskSearchText, StringComparison.OrdinalIgnoreCase)).ToArray();
 
     /// <summary>Gets the authored reference name, None, or URI fallback.</summary>
     public string MeteringMaskDisplayName => this.AutoExposureMeteringMask is null ? "None"
-        : this.MeteringMaskRows.FirstOrDefault(row => row.Item.Asset == this.AutoExposureMeteringMask)?.Item.Name
+        : this.MeteringMaskChoices.Find(this.AutoExposureMeteringMask)?.Name
             ?? Path.GetFileNameWithoutExtension(this.AutoExposureMeteringMask.Name);
 
     /// <summary>Gets a value indicating whether manual controls apply.</summary>
@@ -302,7 +295,6 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
         this.CurveEditor.Refresh(this.AutoExposureCompensationCurve);
     }
 
-    partial void OnMeteringMaskSearchTextChanged(string value) => this.OnPropertyChanged(nameof(this.FilteredMeteringMaskRows));
 
     private InspectorFieldDiagnostic Diagnostic(PropertyId property) => this.EditOwner.Diagnostics.Get(property);
 
@@ -328,34 +320,7 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
             return;
         }
 
-        var textures = AssetRule.For(AssetKind.Texture).Apply(assets);
-        var wanted = textures.Select(static asset => asset.Identity).ToHashSet();
-        foreach (var removed in this.MeteringMaskRows.Where(row => !wanted.Contains(row.Item.Asset)).ToArray())
-        {
-            _ = this.MeteringMaskRows.Remove(removed);
-        }
-
-        for (var index = 0; index < textures.Count; index++)
-        {
-            var asset = textures[index];
-            var item = new AssetPickerItem(asset.DisplayName, asset.Identity, "Texture · " + asset.PrimaryBadge, asset.DisplayPath, AssetPickerGroup.Content, asset.IsSelectable, "\uE7C3");
-            var row = this.MeteringMaskRows.FirstOrDefault(candidate => candidate.Item.Asset == asset.Identity);
-            if (row is null)
-            {
-                this.MeteringMaskRows.Insert(Math.Min(index, this.MeteringMaskRows.Count), new(item));
-            }
-            else
-            {
-                row.Update(item);
-                var currentIndex = this.MeteringMaskRows.IndexOf(row);
-                if (currentIndex != index)
-                {
-                    this.MeteringMaskRows.Move(currentIndex, Math.Min(index, this.MeteringMaskRows.Count - 1));
-                }
-            }
-        }
-
-        this.OnPropertyChanged(nameof(this.FilteredMeteringMaskRows));
+        this.MeteringMaskChoices.Update(AssetRule.For(AssetKind.Texture).Apply(assets));
         this.OnPropertyChanged(nameof(this.MeteringMaskDisplayName));
     }
 }

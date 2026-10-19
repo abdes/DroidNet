@@ -15,9 +15,12 @@ public enum CookedContentSourceKind
 
     /// <summary>A declared local folder containing a cooked library.</summary>
     LocalFolder,
+
+    /// <summary>A declared pak file.</summary>
+    PakFile,
 }
 
 /// <summary>Identifies one group in the project's cooked-content mount order.</summary>
-/// <param name="Kind">Project-owned output or a declared local folder.</param>
-/// <param name="Name">The declared folder name; omitted for project output.</param>
+/// <param name="Kind">Project-owned output, a declared local folder or a declared pak file.</param>
+/// <param name="Name">The declared mount name; omitted for project output.</param>
 public sealed record CookedContentSource(CookedContentSourceKind Kind, string? Name = null);

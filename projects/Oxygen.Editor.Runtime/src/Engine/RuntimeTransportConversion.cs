@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using Oxygen.Interop.Input;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 using Oxygen.Interop.World;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -92,14 +93,14 @@ internal static class RuntimeTransportConversion
 
     /// <summary>Converts an authored sky sphere and its resolved cubemap without changing units.</summary>
     /// <param name="value">The authored sky sphere.</param>
-    /// <param name="cubemap">The resolved cubemap, or null for none.</param>
+    /// <param name="cubemap">The cubemap texture, or null for none.</param>
     /// <returns>The native transport value.</returns>
-    public static SkySphereEnvironmentManaged ToNative(SkySphereEnvironmentData value, RuntimeTextureReference? cubemap)
+    public static SkySphereEnvironmentManaged ToNative(SkySphereEnvironmentData value, AssetPath? cubemap)
         => new()
         {
             Enabled = value.Enabled,
             Source = (int)value.Source,
-            Cubemap = ToNative(cubemap),
+            CubemapPath = cubemap?.VirtualPath,
             SolidColorRgb = value.SolidColorRgb,
             IlluminanceLux = value.IlluminanceLux,
             Intensity = value.Intensity,
@@ -109,14 +110,14 @@ internal static class RuntimeTransportConversion
 
     /// <summary>Converts an authored sky light and its resolved cubemap without changing units.</summary>
     /// <param name="value">The authored sky light.</param>
-    /// <param name="cubemap">The resolved cubemap, or null for none.</param>
+    /// <param name="cubemap">The cubemap texture, or null for none.</param>
     /// <returns>The native transport value.</returns>
-    public static SkyLightEnvironmentManaged ToNative(SkyLightEnvironmentData value, RuntimeTextureReference? cubemap)
+    public static SkyLightEnvironmentManaged ToNative(SkyLightEnvironmentData value, AssetPath? cubemap)
         => new()
         {
             Enabled = value.Enabled,
             Source = (int)value.Source,
-            Cubemap = ToNative(cubemap),
+            CubemapPath = cubemap?.VirtualPath,
             CubemapIlluminanceLux = value.CubemapIlluminanceLux,
             Intensity = value.Intensity,
             TintRgb = value.TintRgb,
@@ -236,14 +237,4 @@ internal static class RuntimeTransportConversion
         RuntimeMouseButton.ExtButton2 => PlatformMouseButton.ExtButton2,
         _ => throw new ArgumentOutOfRangeException(nameof(value)),
     };
-
-    private static CubemapReferenceManaged ToNative(RuntimeTextureReference? cubemap)
-        => cubemap is null
-            ? default
-            : new()
-            {
-                CookedRoot = cubemap.CookedRoot,
-                DescriptorRelativePath = cubemap.DescriptorRelativePath,
-                ProjectMount = cubemap.ProjectMount,
-            };
 }

@@ -715,8 +715,7 @@ auto RunSkyContracts() -> NativeStatus
     auto unrequested = sky;
     unrequested.sky_sphere.source = 0;
     unrequested.sky_sphere.intensity = 9.0F;
-    unrequested.sky_sphere.cubemap.locator = oxygen::content::TextureResourceLocator {
-      .cooked_root = "C:/Cooked", .descriptor_relative_path = "Sky.otex" };
+    unrequested.sky_sphere.cubemap.virtual_path = "/Content/Textures/Sky.otex";
     expect_rejected(unrequested, std::logic_error("tag"));
     return {};
   } catch (const std::exception& error) {

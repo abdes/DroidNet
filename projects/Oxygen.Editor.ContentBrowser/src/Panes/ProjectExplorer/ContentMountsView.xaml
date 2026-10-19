@@ -19,7 +19,7 @@
     <StackPanel MinWidth="600" Spacing="12">
         <TextBlock
             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-            Text="Mounts expose folders through stable virtual paths. Unmounting removes the registration, never the files."
+            Text="Mounts expose folders and pak files through stable virtual paths. Unmounting removes the registration, never the files."
             TextWrapping="Wrap" />
 
         <!--  Current mounts: virtual name, backing path, kind, rename and unmount.  -->
@@ -32,20 +32,21 @@
                         Background="{ThemeResource CardBackgroundFillColorDefaultBrush}"
                         BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
                         BorderThickness="1"
-                        ColumnSpacing="12"
+                        ColumnSpacing="8"
                         CornerRadius="6">
+                        <!--  Fixed kind and action columns keep every row's kind, rename and unmount (or lock) aligned.  -->
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="96" />
+                            <ColumnDefinition Width="32" />
+                            <ColumnDefinition Width="32" />
                         </Grid.ColumnDefinitions>
                         <FontIcon
                             VerticalAlignment="Center"
                             FontSize="18"
                             Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                            Glyph="&#xEDA2;" />
+                            Glyph="{x:Bind Glyph}" />
                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                             <TextBlock
                                 Style="{ThemeResource BodyStrongTextBlockStyle}"
@@ -99,12 +100,22 @@
                             Visibility="{x:Bind HasActions}">
                             <FontIcon FontSize="14" Glyph="&#xE711;" />
                         </Button>
+                        <FontIcon
+                            Grid.Column="4"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="{x:Bind LockedToolTip}"
+                            FontSize="14"
+                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                            Glyph="&#xE72E;"
+                            ToolTipService.ToolTip="{x:Bind LockedToolTip}"
+                            Visibility="{x:Bind IsLocked}" />
                     </Grid>
                 </DataTemplate>
             </ItemsControl.ItemTemplate>
         </ItemsControl>
 
-        <!--  Add a mount: a known derived location, or any local folder with its virtual name.  -->
+        <!--  Add a mount: a known derived location, or any local folder or pak file with its name.  -->
         <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Add a mount" />
         <Grid ColumnSpacing="8">
             <Grid.ColumnDefinitions>
@@ -123,23 +134,23 @@
                 Header="Mount point name"
                 PlaceholderText="Environment library"
                 Text="{x:Bind ViewModel.NewMountName, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                Visibility="{x:Bind ViewModel.IsLocalFolder, Mode=OneWay}" />
+                Visibility="{x:Bind ViewModel.IsExternal, Mode=OneWay}" />
             <TextBox
                 Grid.Column="2"
-                Header="Folder path"
-                PlaceholderText="D:/Studio/Assets"
+                Header="{x:Bind ViewModel.PathHeader, Mode=OneWay}"
+                PlaceholderText="{x:Bind ViewModel.PathPlaceholder, Mode=OneWay}"
                 Text="{x:Bind ViewModel.NewMountPath, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
-                Visibility="{x:Bind ViewModel.IsLocalFolder, Mode=OneWay}" />
+                Visibility="{x:Bind ViewModel.IsExternal, Mode=OneWay}" />
             <Button
                 Grid.Column="3"
                 Width="32"
                 Height="32"
                 Padding="0"
                 VerticalAlignment="Bottom"
-                AutomationProperties.Name="Browse for a folder"
+                AutomationProperties.Name="{x:Bind ViewModel.BrowseToolTip, Mode=OneWay}"
                 Command="{x:Bind ViewModel.BrowseCommand}"
-                ToolTipService.ToolTip="Browse for a folder"
-                Visibility="{x:Bind ViewModel.IsLocalFolder, Mode=OneWay}">
+                ToolTipService.ToolTip="{x:Bind ViewModel.BrowseToolTip, Mode=OneWay}"
+                Visibility="{x:Bind ViewModel.IsExternal, Mode=OneWay}">
                 <FontIcon FontSize="14" Glyph="&#xED25;" />
             </Button>
         </Grid>

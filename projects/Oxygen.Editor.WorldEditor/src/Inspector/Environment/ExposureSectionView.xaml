@@ -4,7 +4,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
-    xmlns:environment="using:Oxygen.Editor.World.Inspector.Environment">
+    xmlns:environment="using:Oxygen.Editor.World.Inspector.Environment"
+    xmlns:pickers="using:Oxygen.Editor.Pickers">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -298,42 +299,21 @@
                                     <ColumnDefinition Width="*" />
                                     <ColumnDefinition Width="Auto" />
                                 </Grid.ColumnDefinitions>
-                                <Button
+                                <DropDownButton
                                     HorizontalAlignment="Stretch"
-                                    Content="{x:Bind ViewModel.MeteringMaskDisplayName, Mode=OneWay}"
+                                    HorizontalContentAlignment="Left"
                                     Tag="AutoExposureMeteringMask"
                                     ToolTipService.ToolTip="Choose an exposure metering mask">
-                                    <Button.Flyout>
+                                    <TextBlock Text="{x:Bind ViewModel.MeteringMaskDisplayName, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                    <DropDownButton.Flyout>
                                         <Flyout x:Name="MeteringMaskFlyout">
-                                            <StackPanel Width="320" Spacing="6">
-                                                <TextBox PlaceholderText="Search textures…" Text="{x:Bind ViewModel.MeteringMaskSearchText, Mode=TwoWay}" />
-                                                <ItemsRepeater ItemsSource="{x:Bind ViewModel.FilteredMeteringMaskRows, Mode=OneWay}">
-                                                    <ItemsRepeater.Layout>
-                                                        <StackLayout Spacing="2" />
-                                                    </ItemsRepeater.Layout>
-                                                    <ItemsRepeater.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <Button
-                                                                HorizontalAlignment="Stretch"
-                                                                HorizontalContentAlignment="Left"
-                                                                Click="MeteringMaskItem_Click"
-                                                                IsEnabled="{Binding Item.IsEnabled, Mode=OneWay}"
-                                                                ToolTipService.ToolTip="{Binding Item.DisplayPath, Mode=OneWay}">
-                                                                <StackPanel>
-                                                                    <TextBlock Text="{Binding Item.Name, Mode=OneWay}" />
-                                                                    <TextBlock
-                                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                        Text="{Binding Item.DisplayPath, Mode=OneWay}"
-                                                                        TextTrimming="CharacterEllipsis" />
-                                                                </StackPanel>
-                                                            </Button>
-                                                        </DataTemplate>
-                                                    </ItemsRepeater.ItemTemplate>
-                                                </ItemsRepeater>
-                                            </StackPanel>
+                                            <pickers:AssetPicker
+                                                Width="320"
+                                                ChoiceInvoked="OnMeteringMaskChoiceInvoked"
+                                                Model="{x:Bind ViewModel.MeteringMaskChoices}" />
                                         </Flyout>
-                                    </Button.Flyout>
-                                </Button>
+                                    </DropDownButton.Flyout>
+                                </DropDownButton>
                                 <Button
                                     Grid.Column="1"
                                     Click="ClearMeteringMask_Click"

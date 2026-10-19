@@ -28,7 +28,7 @@ internal static class BrowserTestData
     internal static Oxygen.Editor.ContentPipeline.Publication.CookPublicationService CreateNavigationPublication(ProjectContextService projects, IStorageProvider storage)
     {
         var files = new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
-        return new(Mock.Of<Oxygen.Editor.ContentPipeline.IContentCookCoordinator>(), projects, files, new ProjectManagerService(storage, atomicFiles: files));
+        return new(Mock.Of<Oxygen.Editor.ContentPipeline.IContentCookCoordinator>(), projects, files, new ProjectManagerService(storage, atomicFiles: files), new Oxygen.Editor.ContentPipeline.TestSupport.EngineContentPakFixture());
     }
 
     /// <summary>Creates an asset catalog whose only behavior is the record changes a test announces.</summary>

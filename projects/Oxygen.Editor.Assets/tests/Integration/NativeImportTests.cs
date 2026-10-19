@@ -9,7 +9,6 @@ using Moq;
 using Oxygen.Editor.Assets.TestSupport;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Authoring;
-using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
@@ -46,9 +45,10 @@ public sealed class NativeImportTests
         var scopes = new WorkspaceCookScopeProvider(workspace);
         var storage = new NativeStorageProvider(new RealFileSystem());
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        var publication = new Oxygen.Editor.ContentPipeline.Publication.CookPublicationService(runs, projects, files, new ProjectManagerService(storage, atomicFiles: files));
-        var pipeline = new ContentPipelineService(projects, runs, scopes, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, documents, compatibility, files, publication);
-        await using var catalog = new AssetCatalog(projects, storage, CreateEmptyImportBuiltins(), publication);
+        var engineContent = EngineContentPak.Installed();
+        var publication = new Oxygen.Editor.ContentPipeline.Publication.CookPublicationService(runs, projects, files, new ProjectManagerService(storage, atomicFiles: files), engineContent);
+        var pipeline = new ContentPipelineService(projects, runs, scopes, new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, documents, compatibility, files, publication, engineContent);
+        await using var catalog = new AssetCatalog(projects, storage, engineContent, publication);
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, projects, scopes, pipeline, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
         IReadOnlyList<AssetEntry> choices = [];
@@ -57,7 +57,7 @@ public sealed class NativeImportTests
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = rows.Single(row => row.Identity == source).PrimaryBadge.Should().Be("Not imported");
-        _ = choices.Should().BeEmpty();
+        _ = choices.Should().OnlyContain(static choice => choice.Origin == AssetOrigin.Engine, "only the engine content pak's materials exist before the import");
         var result = await pipeline.ImportSourceAsync(new(projects.ActiveProject!, sourcePath, "Crate", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -72,16 +72,7 @@ public sealed class NativeImportTests
             _ = row.CanCook.Should().BeTrue();
         }
 
-        _ = choices.Select(static choice => choice.Identity).Should().BeEquivalentTo(result.CookedAssets.Where(static output => output.Kind == ContentCookAssetKind.Material).Select(static output => output.CookedAssetUri));
+        _ = choices.Where(static choice => choice.Origin == AssetOrigin.Content).Select(static choice => choice.Identity).Should().BeEquivalentTo(result.CookedAssets.Where(static output => output.Kind == ContentCookAssetKind.Material).Select(static output => output.CookedAssetUri));
         _ = rows.Count(row => row.Identity == source).Should().Be(1);
-    }
-
-    private static IBuiltinCatalogDiscovery CreateEmptyImportBuiltins()
-    {
-        var empty = new BuiltinCatalogSnapshot(Catalog: null, IsLastKnown: false, Notice: null);
-        var builtins = new Mock<IBuiltinCatalogDiscovery>();
-        _ = builtins.SetupGet(value => value.Snapshot).Returns(empty);
-        _ = builtins.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(empty);
-        return builtins.Object;
     }
 }

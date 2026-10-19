@@ -25,10 +25,10 @@ public sealed class IncrementalCookTests
     [TestCategory("NativeContent")]
     public async Task SavedSceneCookUsesSharedRunHistoryAndIncrementalOutput()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var revealed = false;
         workspace.CookCoordinator.RunChanged += (_, args) => revealed |= args.Reveal;
@@ -52,10 +52,11 @@ public sealed class IncrementalCookTests
     [TestCategory("NativeContent")]
     public async Task ExplicitCookSharesQueuedSavedScopeThroughNativePublication()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
-        var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
+        var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
         var hold = WriterHold.Take(workspace.CookCoordinator, this.TestContext.CancellationToken);
         var saved = pipeline.CookSavedAssetAsync(sceneUri, workspace.ProjectContext, this.TestContext.CancellationToken);
@@ -78,9 +79,11 @@ public sealed class IncrementalCookTests
     [TestCategory("NativeContent")]
     public async Task SceneCookPublishesTypedReferenceWithCookedLibraryDependency()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
-        using var library = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
+        using var library = new CookWorkspace(engineContent: EngineContentPak.Installed());
         library.WriteText("Content/Scripts/Orbit.lua", """
             local Script = oxygen.script {}
 
@@ -108,8 +111,7 @@ public sealed class IncrementalCookTests
             Scripts = [AssetPath.Parse("/Content/Scripts/Orbit.oscript")],
         });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
-        var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
 
         var result = await pipeline.CookCurrentSceneAsync(
             AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
@@ -129,14 +131,14 @@ public sealed class IncrementalCookTests
     [TestCategory("NativeContent")]
     public async Task CurrentProjectCookReusesVerifiedProductsWithoutNativeWorkers()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var first = await CreateIncrementalService(workspace, api, compatibility).CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(first);
         var files = ReadOutputIdentities(workspace.Root);
-        var workers = api.Imported.Count + api.CatalogRequests + api.Analyzed.Count;
+        var workers = api.Imported.Count + api.Analyzed.Count;
 
         var second = await CreateIncrementalService(workspace, api, compatibility).CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -145,26 +147,25 @@ public sealed class IncrementalCookTests
         _ = second.CookedAssets.Should().BeEmpty();
         _ = second.ReusedAssets.Should().BeEquivalentTo(first.CookedAssets);
         _ = second.Diagnostics.Select(static diagnostic => diagnostic.Code).Should().BeEquivalentTo(first.Diagnostics.Select(static diagnostic => diagnostic.Code));
-        _ = (api.Imported.Count + api.CatalogRequests + api.Analyzed.Count).Should().Be(workers);
+        _ = (api.Imported.Count + api.Analyzed.Count).Should().Be(workers);
         _ = ReadOutputIdentities(workspace.Root).Should().BeEquivalentTo(files);
     }
 
-    /// <summary>A material content change rebuilds that material while preserving scene/geometry descriptors and native catalog reuse.</summary>
+    /// <summary>A material content change rebuilds that material while preserving scene/geometry descriptors.</summary>
     /// <returns>The asynchronous dependency regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
     public async Task ChangedMaterialRebuildsOnlyItsEmittedProduct()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(first);
         var descriptors = first.Inspection!.Assets.Where(static asset => asset.Kind is ContentCookAssetKind.Geometry or ContentCookAssetKind.Scene)
             .ToDictionary(static asset => asset.VirtualPath, asset => File.ReadAllBytes(Path.Combine(first.Inspection.CookedRoot, asset.DescriptorRelativePath!)), StringComparer.Ordinal);
-        var beforeCatalog = api.CatalogRequests;
         var beforeAnalysis = api.Analyzed.Count;
         var source = Path.Combine(workspace.Root, "Content", "Materials", "Blue.omat.json");
         var timestamp = File.GetLastWriteTimeUtc(source);
@@ -178,7 +179,6 @@ public sealed class IncrementalCookTests
         _ = changed.CookedAssets.Should().ContainSingle(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Materials/Blue.omat.json"));
         _ = api.Imported.Should().ContainSingle();
         _ = api.Imported[0].Manifest.Jobs.Should().ContainSingle(job => job.Type == "material-descriptor");
-        _ = api.CatalogRequests.Should().Be(beforeCatalog);
         _ = api.Analyzed.Skip(beforeAnalysis).SelectMany(static execution => execution.Jobs).Should().ContainSingle(job => job.Type == "material-descriptor");
         foreach (var (path, bytes) in descriptors)
         {
@@ -189,16 +189,22 @@ public sealed class IncrementalCookTests
         _ = (await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).IsUpToDate.Should().BeTrue();
     }
 
-    /// <summary>A corrupt generated descriptor is regenerated despite unchanged length and timestamp.</summary>
+    /// <summary>A corrupt cooked geometry descriptor is regenerated despite unchanged length and timestamp.</summary>
     /// <returns>The asynchronous corruption regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
     public async Task CorruptGeometryDescriptorInvalidatesOnlyThatProduct()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
+
+        // The scene's cube comes from the engine content pak; the project cooks its own geometry only when it authors one.
+        workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
+        DependencyScenario.WriteAuthoredGeometry(workspace, withBuffer: false);
+        DependencyScenario.AddGeometryNode(workspace, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Authored");
+        await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(first);
@@ -228,10 +234,10 @@ public sealed class IncrementalCookTests
     [TestCategory("NativeContent")]
     public async Task FailedCookDoesNotReplaceProductProvenance()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         var path = global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Head(workspace.Root);
@@ -254,10 +260,10 @@ public sealed class IncrementalCookTests
     [TestCategory("NativeContent")]
     public async Task ReusedWarningsStayWithTheirAffectedProduct()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         api.AddSceneWarning = true;
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));

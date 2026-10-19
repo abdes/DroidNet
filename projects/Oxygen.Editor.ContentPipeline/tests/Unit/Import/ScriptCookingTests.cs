@@ -206,7 +206,7 @@ public sealed class ScriptCookingTests : IDisposable
     }
 
     private Task<SceneDescriptorGenerationResult> GenerateAsync(Scene scene)
-        => new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()))
+        => new SceneDescriptorGenerator()
             .GenerateAsync(scene, this.CreateScope(), this.TestContext.CancellationToken);
 
     private ContentCookScope CreateScope()

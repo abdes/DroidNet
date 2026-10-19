@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.LooseCooked;
+using Oxygen.Managed.Assets.Catalog.Pak;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
@@ -18,7 +19,7 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
 {
     /// <inheritdoc />
     public Task<bool> RefreshLibraryMetadataAsync(ProjectContext project, CancellationToken cancellationToken)
-        => project.LocalFolderMounts.Count == 0 || this.engineContentPipelineApi is not ICookedDependencyInspector inspector
+        => (project.LocalFolderMounts.Count == 0 && project.PakFileMounts.Count == 0) || this.engineContentPipelineApi is not ICookedDependencyInspector inspector
             ? Task.FromResult(false)
             : this.cookCoordinator.RunAsync(
                 (operation, token) => this.RefreshLibraryMetadataCoreAsync(operation, project, inspector, token), cancellationToken);
@@ -64,6 +65,21 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
         }
     }
 
+    // The native report reads the pak through its own handle; the lease keeps the pak's bytes fixed meanwhile.
+    private static async Task<bool> InspectPakMetadataAsync(ContentCookOperation operation, PakFileMount pak, ICookedDependencyInspector inspector, CancellationToken cancellationToken)
+    {
+        using var lease = await Publication.PakReadLease.AcquireAsync(pak.Path, cancellationToken).ConfigureAwait(false);
+        var records = await new PakAssetCatalog(lease.Document, pak.Path).QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
+        var projectRoot = operation.Project.ProjectRoot.FullPath;
+        if (await CookedDependencyCache.ReadAsync(projectRoot, lease.Document.CatalogDigest, records, cancellationToken).ConfigureAwait(false) is not null)
+        {
+            return false;
+        }
+
+        _ = await CookedDependencyCache.EnsureAsync(projectRoot, pak.Path.FullPath, lease.Document.CatalogDigest, records, inspector, Path.Combine(projectRoot, ".build", "cook", operation.OperationId.ToString("N")), cancellationToken).ConfigureAwait(false);
+        return true;
+    }
+
     private static async Task ReleaseLibraryMetadataReaderAsync(Task drain, CookOutputReadLease reader)
     {
         try
@@ -92,6 +108,11 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
             }
         }
 
+        foreach (var pak in project.PakFileMounts)
+        {
+            changed |= await InspectPakMetadataAsync(operation, pak, inspector, cancellationToken).ConfigureAwait(false);
+        }
+
         if (inspector is ICookedAssetKeyProvider keys)
         {
             changed |= await this.RefreshProjectIdentitiesAsync(operation, keys, cancellationToken).ConfigureAwait(false);
@@ -104,7 +125,7 @@ public sealed partial class ContentPipelineService : ICookedLibraryMetadataServi
     private async Task<bool> RefreshProjectIdentitiesAsync(ContentCookOperation operation, ICookedAssetKeyProvider provider, CancellationToken cancellationToken)
     {
         // Identity lookup reads only its private path request, so library readers can close before it starts.
-        using (var libraries = await Publication.CookedLibraryReadSet.AcquireAsync(operation.Project, cancellationToken).ConfigureAwait(false))
+        using (var libraries = await Publication.CookedLibraryReadSet.AcquireAsync(operation.Project, this.engineContent, cancellationToken).ConfigureAwait(false))
         {
             if (!libraries.HasUnresolvedAssetKeys)
             {

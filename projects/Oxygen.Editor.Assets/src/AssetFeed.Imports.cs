@@ -27,7 +27,7 @@ public sealed partial class AssetFeed
     }
 
     private static bool IsInOutputRoot(AssetEntry item, FileSystemPath root)
-        => item.CookedMetadata is { } metadata ? metadata.RootFolderPath == root : item.CookedPath?.IsSameOrInside(root) == true;
+        => item.CookedMetadata is { } metadata ? metadata.ContainerPath == root : item.CookedPath?.IsSameOrInside(root) == true;
 
     private static AssetEntry ApplyOwnedCookStatus(ProjectContext project, AssetEntry item, AssetCookStatus status)
     {

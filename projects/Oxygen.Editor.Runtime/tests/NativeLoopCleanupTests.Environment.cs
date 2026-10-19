@@ -161,10 +161,7 @@ public sealed partial class NativeLoopCleanupTests
         var missing = initial with
         {
             ManualExposureEv = 8f,
-            AutoExposureMeteringMask = new(
-                AssetPath.Parse("/Content/Textures/Missing.otex"),
-                Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N")),
-                "Textures/Missing.otex"),
+            AutoExposureMeteringMask = AssetPath.Parse("/Content/Textures/Missing.otex"),
         };
         var request = new RuntimeWorldRequest(Guid.NewGuid(), target, missing);
         _ = commands.Execute(request, this.TestContext.CancellationToken).Succeeded.Should().BeTrue();

@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -41,8 +42,8 @@ public sealed class AssetsViewModelCommandTests
             _ = browser.OpenSelectedCommand.CanExecute(parameter: null).Should().BeFalse("Open acts on one asset");
             _ = browser.ShowInFileExplorerCommand.CanExecute(parameter: null).Should().BeFalse();
 
-            var builtin = CreateAsset("/Engine/Materials/Default.omat", AssetKind.Material, descriptor: null) with { PrimaryState = AssetState.Generated };
-            state.PublishSelection([clay, builtin]);
+            var packaged = CreateAsset(EngineAssets.DefaultMaterial.VirtualPath, AssetKind.Material, descriptor: null) with { PrimaryState = AssetState.Packaged };
+            state.PublishSelection([clay, packaged]);
             _ = browser.CookSelectedAssetCommand.CanExecute(parameter: null).Should().BeFalse("a batch cooks only when every asset has an authored source");
 
             state.PublishSelection([clay]);

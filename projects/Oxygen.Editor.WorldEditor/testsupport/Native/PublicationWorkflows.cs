@@ -173,7 +173,7 @@ internal static class PublicationWorkflows
         timeout.CancelAfter(TimeSpan.FromSeconds(120));
         using var services = new CatalogWorkloadServices(fixture);
         SetCookOnChange(services, enabled: false);
-        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
+        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
         using var automatic = new AutomaticCookService(services.Projects, Mock.Of<IProjectManagerService>(), catalog, services.Pipeline, services.Pipeline, services.Runs, NullLogger<AutomaticCookService>.Instance);
         using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
         using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());

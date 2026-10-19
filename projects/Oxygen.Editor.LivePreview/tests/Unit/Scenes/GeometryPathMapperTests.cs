@@ -12,11 +12,11 @@ namespace Oxygen.Editor.LivePreview.Tests.Scenes;
 [TestClass]
 public sealed class GeometryPathMapperTests
 {
-    /// <summary>Geometry identities, including built-ins, address the engine by their virtual path.</summary>
+    /// <summary>Geometry identities, including engine assets, address the engine by their virtual path.</summary>
     /// <param name="path">The geometry identity and its native reference.</param>
     [TestMethod]
     [DataRow("/Content/Geometry/Example.ogeo")]
-    [DataRow("/Engine/Generated/BasicShapes/Cube")]
+    [DataRow("/Engine/Generated/BasicShapes/Cube.ogeo")]
     public void GeometryReferencesPreserveAuthoringAndUseRuntimePaths(string path)
         => GeometryPathMapper.ToEnginePath(AssetPath.Parse(path)).Should().Be(path);
 }

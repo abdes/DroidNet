@@ -111,8 +111,7 @@ public sealed partial class ContentPipelineService
         }
 
         var mounts = project.AuthoringMounts.Where(mount => !ProjectOutputFolders.Contains(mount)
-            && (path.Length == 0 || string.Equals(mountName, "Engine", StringComparison.Ordinal)
-                || string.Equals(mount.Name, mountName, StringComparison.Ordinal))).ToArray();
+            && (path.Length == 0 || string.Equals(mount.Name, mountName, StringComparison.Ordinal))).ToArray();
         return mounts.Length == 0 ? throw new InvalidDataException("The inspection scope does not belong to a project content mount.")
             : mounts.Select(mount => new InspectionRoot(mount.Name, publication.FindProjectRoot(mount.Name)?.FullPath, path, IsLocal: false)).ToArray();
     }

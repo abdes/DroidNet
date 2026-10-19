@@ -180,7 +180,6 @@ public sealed class SceneNodeEditorViewModelTests
             Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             scenePreview,
             selectionService,
-            new Testing.BuiltinCatalogDiscoveryFixture(),
             Mock.Of<ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),
             Mock.Of<IProjectContextService>(),
             interaction: interaction);

@@ -49,14 +49,15 @@ public sealed partial class AssetBrowserQuery : ObservableObject
     public IReadOnlyList<AssetFilterOption> StatusOptions { get; } =
     [
         new("Not imported", static asset => asset.Kind == AssetKind.ForeignSource && asset.ImportSource is null),
-        new("Needs cooking", static asset => !asset.IsBuiltin && asset.CookStatus?.Freshness == AssetCookFreshness.NeedsCooking),
-        new("Out of date", static asset => !asset.IsBuiltin && asset.CookStatus?.Freshness == AssetCookFreshness.OutOfDate),
+        new("Needs cooking", static asset => asset.CookStatus?.Freshness == AssetCookFreshness.NeedsCooking),
+        new("Out of date", static asset => asset.CookStatus?.Freshness == AssetCookFreshness.OutOfDate),
         new("Unsaved changes", static asset => asset.CookStatus?.HasUnsavedChanges == true || asset.CookActivity?.State == CookRunState.NeedsSave),
         new("In progress", static asset => asset.CookActivity?.State is CookRunState.Queued or CookRunState.Preparing or CookRunState.Cooking or CookRunState.Validating or CookRunState.Publishing or CookRunState.Cancelling
             || asset.RuntimeAvailability == AssetRuntimeAvailability.Updating),
-        new("Cooked", static asset => !asset.IsBuiltin && (asset.CookStatus is { Freshness: AssetCookFreshness.Current, OutputAvailability: CookedOutputAvailability.Present }
-            || (asset.CookStatus is null && asset.PrimaryState == AssetState.Cooked))),
-        new("Built-in", static asset => asset.IsBuiltin),
+        new("Cooked", static asset => asset.CookStatus is { Freshness: AssetCookFreshness.Current, OutputAvailability: CookedOutputAvailability.Present }
+            || (asset.CookStatus is null && asset.PrimaryState == AssetState.Cooked)),
+        new("Engine", static asset => asset.Origin == AssetOrigin.Engine),
+        new("Packages", static asset => asset.Origin == AssetOrigin.Package),
         new("Problems", HasProblems),
     ];
 
@@ -99,8 +100,7 @@ public sealed partial class AssetBrowserQuery : ObservableObject
         ArgumentNullException.ThrowIfNull(asset);
         var search = this.SearchText.Trim();
         return (search.Length == 0 || asset.DisplayName.Contains(search, StringComparison.OrdinalIgnoreCase)
-            || asset.DisplayPath.Contains(search, StringComparison.OrdinalIgnoreCase)
-            || asset.CookedCompanions.Any(companion => companion.DisplayPath.Contains(search, StringComparison.OrdinalIgnoreCase)))
+            || asset.DisplayPath.Contains(search, StringComparison.OrdinalIgnoreCase))
             && MatchesGroup(this.TypeOptions, asset) && MatchesGroup(this.StatusOptions, asset);
     }
 

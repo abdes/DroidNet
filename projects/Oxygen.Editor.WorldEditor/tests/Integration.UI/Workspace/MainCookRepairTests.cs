@@ -51,7 +51,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
         using var services = new CatalogWorkloadServices(fixture);
-        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
+        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
         await using var publication = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
         using var document = fixture.RegisterMainCookDocument(services);
         var uri = AssetPath.Parse("/Content/Scenes/Main.oscene");

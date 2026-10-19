@@ -4,20 +4,21 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.Assets;
+using Oxygen.Editor.Pickers;
 
 namespace Oxygen.Editor.MaterialEditor;
 
-/// <summary>A named cooked texture asset offered by the material assignment picker.</summary>
-public sealed record MaterialTextureChoice(string? VirtualPath, string DisplayName, bool IsAvailable);
-
-/// <summary>An editable texture slot and its available assignments.</summary>
+/// <summary>An editable texture slot and the textures it can be assigned.</summary>
 public sealed partial class MaterialTextureChannel : ObservableObject
 {
-    private readonly Action<MaterialTextureChannel, string?> selectionChanged;
-    private string? selectedVirtualPath;
-    private IReadOnlyList<MaterialTextureChoice> choices = [new(VirtualPath: null, "(None)", IsAvailable: true)];
+    private static readonly AssetChoice NoTexture = new("None", Asset: null, "Remove the texture", "No texture", IsEnabled: true, Glyph: string.Empty);
 
-    /// <summary>Initializes a texture channel row.</summary>
+    private readonly Action<MaterialTextureChannel, string?> selectionChanged;
+    private IReadOnlyDictionary<string, string> namesByPath = new Dictionary<string, string>(StringComparer.Ordinal);
+    private string? selectedVirtualPath;
+
+    /// <summary>Initializes a new instance of the <see cref="MaterialTextureChannel"/> class.</summary>
     /// <param name="channel">The native material schema field.</param>
     /// <param name="displayName">The user-facing channel name.</param>
     /// <param name="selectionChanged">The owning document edit callback.</param>
@@ -34,6 +35,9 @@ public sealed partial class MaterialTextureChannel : ObservableObject
     /// <summary>Gets the user-facing channel name.</summary>
     public string DisplayName { get; }
 
+    /// <summary>Gets the textures the channel can be assigned, grouped as Engine, Packages and Content, with a choice that removes the texture.</summary>
+    public AssetPickerModel Choices { get; } = new(static asset => AssetChoice.For(asset, "Texture", "\uE7C3"), NoTexture);
+
     /// <summary>Gets or sets the assigned canonical virtual path.</summary>
     public string? SelectedVirtualPath
     {
@@ -42,59 +46,42 @@ public sealed partial class MaterialTextureChannel : ObservableObject
         {
             if (this.SetProperty(ref this.selectedVirtualPath, value))
             {
-                this.OnPropertyChanged(nameof(this.WarningText));
-                this.OnPropertyChanged(nameof(this.WarningVisibility));
+                this.OnSelectionShown();
                 this.selectionChanged(this, value);
             }
         }
     }
 
-    /// <summary>Gets the valid authored texture assets and the current unavailable assignment, if any.</summary>
-    public IReadOnlyList<MaterialTextureChoice> Choices
-    {
-        get => this.choices;
-        private set => this.SetProperty(ref this.choices, value);
-    }
+    /// <summary>Gets the picker's text: the assigned texture's name, <c>None</c>, or the missing path.</summary>
+    public string SelectedText => this.SelectedVirtualPath is not { } path
+        ? "None"
+        : this.namesByPath.GetValueOrDefault(path) ?? "Missing: " + path;
 
     /// <summary>Gets a warning for a missing or invalid assigned texture.</summary>
-    public string WarningText
-    {
-        get
-        {
-            if (this.SelectedVirtualPath is null)
-            {
-                return string.Empty;
-            }
-
-            var current = this.Choices.FirstOrDefault(choice => string.Equals(choice.VirtualPath, this.SelectedVirtualPath, StringComparison.Ordinal));
-            return current is { IsAvailable: true }
-                ? string.Empty
-                : $"Missing or invalid {this.DisplayName} texture: {this.SelectedVirtualPath}";
-        }
-    }
+    public string WarningText => this.SelectedVirtualPath is { } path && !this.namesByPath.ContainsKey(path)
+        ? $"Missing or invalid {this.DisplayName} texture: {path}"
+        : string.Empty;
 
     /// <summary>Gets whether the warning is visible.</summary>
     public Visibility WarningVisibility => string.IsNullOrEmpty(this.WarningText) ? Visibility.Collapsed : Visibility.Visible;
 
-    /// <summary>Refreshes choices while retaining unresolved paths so users can see and clear them.</summary>
-    /// <param name="available">The current valid texture assets.</param>
+    /// <summary>Shows the textures the channel accepts now and the source's assignment, which stays visible when unresolved so it can be replaced or removed.</summary>
+    /// <param name="available">The textures the channel accepts.</param>
     /// <param name="selectedVirtualPath">The source's current path.</param>
-    public void Refresh(IReadOnlyList<MaterialTextureChoice> available, string? selectedVirtualPath)
+    public void Refresh(IReadOnlyList<AssetEntry> available, string? selectedVirtualPath)
     {
-        var choices = new List<MaterialTextureChoice>(available.Count + 2) { new(VirtualPath: null, "(None)", true) };
-        choices.AddRange(available);
-        if (selectedVirtualPath is not null
-            && !choices.Any(choice => string.Equals(choice.VirtualPath, selectedVirtualPath, StringComparison.Ordinal)))
-        {
-            choices.Add(new(selectedVirtualPath, $"Missing or invalid: {selectedVirtualPath}", false));
-        }
-
-        if (!this.Choices.SequenceEqual(choices))
-        {
-            this.Choices = choices;
-        }
-
+        ArgumentNullException.ThrowIfNull(available);
+        this.namesByPath = available
+            .DistinctBy(static texture => texture.Identity.VirtualPath, StringComparer.Ordinal)
+            .ToDictionary(static texture => texture.Identity.VirtualPath, static texture => texture.DisplayName, StringComparer.Ordinal);
+        this.Choices.Update(available);
         _ = this.SetProperty(ref this.selectedVirtualPath, selectedVirtualPath, nameof(this.SelectedVirtualPath));
+        this.OnSelectionShown();
+    }
+
+    private void OnSelectionShown()
+    {
+        this.OnPropertyChanged(nameof(this.SelectedText));
         this.OnPropertyChanged(nameof(this.WarningText));
         this.OnPropertyChanged(nameof(this.WarningVisibility));
     }

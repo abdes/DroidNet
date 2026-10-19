@@ -38,19 +38,6 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
 
         token.ThrowIfCancellationRequested();
 
-        if (ProceduralGeometryDescriptorService.IsGeneratedBasicShape(geometryUri))
-        {
-            if (this.engineContentPipelineApi is not IBuiltinGeometryCatalogProvider builtins)
-            {
-                return null;
-            }
-
-            var catalog = await builtins.GetBuiltinGeometryCatalogAsync(project.ProjectRoot.FullPath, AssetPath.Content.Mount, token).ConfigureAwait(false);
-            token.ThrowIfCancellationRequested();
-            var metadata = catalog.Find(geometryUri)?.MaterialSlots;
-            return metadata is null ? null : metadata with { GeometryUri = geometryUri };
-        }
-
         if (this.engineContentPipelineApi is not ICookedGeometryInspector inspector)
         {
             return null;
@@ -60,7 +47,7 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
         var prior = publicationRead.ProductState;
 
         var imports = await ImportedSourceIndex.ReadAsync(project, cookDocuments, prior, token).ConfigureAwait(false);
-        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, token, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
+        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, this.engineContent, token, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
         var operationRoot = Path.Combine(project.ProjectRoot.FullPath, ".build", "inspection");
         try
         {

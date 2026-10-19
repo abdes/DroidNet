@@ -1,4 +1,4 @@
-﻿<?xml version="1.0" encoding="utf-8" ?>
+<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
     x:Class="Oxygen.Editor.World.Inspector.Geometry.GeometryView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
@@ -10,6 +10,7 @@
     xmlns:fields="using:Oxygen.Editor.World.Inspector.Controls"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:pickers="using:Oxygen.Editor.Pickers"
     xmlns:ui="using:CommunityToolkit.WinUI"
     x:Name="root"
     mc:Ignorable="d">
@@ -65,12 +66,7 @@
                             ToolTipService.ToolTip="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}">
                             <muxc:SplitButton.Flyout>
                                 <Flyout x:Name="AssetPickerFlyout">
-                                    <fields:AssetPickerContent
-                                        Groups="{x:Bind ViewModel.Groups, Mode=OneWay}"
-                                        HasNotice="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
-                                        ItemClicked="OnPickerItemClicked"
-                                        NoticeText="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
-                                        RetryCommand="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" />
+                                    <pickers:AssetPicker ChoiceInvoked="OnGeometryChoiceInvoked" Model="{x:Bind ViewModel.GeometryChoices}" />
                                 </Flyout>
                             </muxc:SplitButton.Flyout>
                         </muxc:SplitButton>
@@ -120,13 +116,7 @@
                                 ToolTipService.ToolTip="{x:Bind ViewModel.MaterialToolTip, Mode=OneWay}">
                                 <muxc:SplitButton.Flyout>
                                     <Flyout x:Name="MaterialPickerFlyout" Opening="OnMaterialPickerOpening">
-                                        <fields:AssetPickerContent
-                                            Groups="{x:Bind ViewModel.MaterialGroups, Mode=OneWay}"
-                                            HasNotice="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
-                                            IsMaterial="True"
-                                            ItemClicked="OnMaterialPickerItemClicked"
-                                            NoticeText="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
-                                            RetryCommand="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" />
+                                        <pickers:AssetPicker ChoiceInvoked="OnMaterialChoiceInvoked" Model="{x:Bind ViewModel.MaterialChoices}" />
                                     </Flyout>
                                 </muxc:SplitButton.Flyout>
                             </muxc:SplitButton>

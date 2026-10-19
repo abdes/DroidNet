@@ -14,7 +14,7 @@ namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 /// <summary>
 ///     Represents a virtual folder mount node (utility/secondary roots like .cooked, .imported, .build, or an arbitrary folder).
 /// </summary>
-public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter, IDisposable
+public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter, IDisposable, ILogicalFolderRoot
 {
     private readonly ILogger logger;
     private bool disposed;
@@ -106,9 +106,7 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
     /// </summary>
     public string MountPointName { get; private set; }
 
-    /// <summary>
-    ///     Gets the mount's virtual root, the identity the browser selects it by.
-    /// </summary>
+    /// <inheritdoc />
     public AssetPath VirtualRootPath => AssetPath.Create(this.MountPointName);
 
     /// <summary>

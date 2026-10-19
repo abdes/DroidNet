@@ -14,7 +14,6 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Shell;
-using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
 using static DroidNet.Tests.UiTestHosting;
@@ -43,7 +42,6 @@ public sealed partial class BrowserRoutingTests : DroidNet.Tests.VisualUserInter
         container.RegisterInstance(provider.Object);
         container.RegisterInstance(state);
         container.RegisterInstance(CreateStatusHosting());
-        container.RegisterInstance<IBuiltinCatalogDiscovery>(new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
         container.RegisterInstance<ILoggerFactory>(NullLoggerFactory.Instance);
         ContentBrowserViewModel.RegisterAssetLayouts(container);
         using var outlet = new BrowserLayoutOutlet();

@@ -81,6 +81,9 @@ internal sealed partial class NativeEngineSession
             config.Engine.PathFinder.ShaderLibraryPath = shaders;
         }
 
+        // The engine mounts its content pak beneath every project mount and warns when the SDK lacks it.
+        config.Engine.PathFinder.EngineContentPakPath = installation.EngineContentPakPath;
+
         config.Renderer.PathFinder ??= new PathFinderConfigManaged();
         if (string.IsNullOrWhiteSpace(settings.Renderer.PathFinder.ShaderLibraryPath))
         {

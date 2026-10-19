@@ -22,13 +22,9 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
     {
         ArgumentNullException.ThrowIfNull(asset);
         var facts = new List<AssetInformationFact>();
-        if (asset.IsBuiltin)
+        if (asset.IsPackaged)
         {
-            facts.Add(new("Origin", "Oxygen built-in"));
-            if (asset.AliasDescription.Length > 0)
-            {
-                facts.Add(new("Generator", asset.AliasDescription));
-            }
+            facts.Add(new("Source", "Packaged · read-only"));
         }
         else if (asset.ImportSource is { } origin && origin != asset.Identity)
         {
@@ -45,10 +41,10 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
 
         if (asset.CookedMetadata is { } cooked)
         {
-            facts.Add(new("Cooked source", cooked.RootFolderPath.FullPath));
+            facts.Add(new(cooked.IsPackaged ? "Pak" : "Cooked source", cooked.ContainerPath.FullPath));
             if (asset.OverriddenCookedSources.Count > 0)
             {
-                facts.Add(new("Overrides", string.Join(Environment.NewLine, asset.OverriddenCookedSources.Select(static source => source.RootFolderPath).Distinct())));
+                facts.Add(new("Overrides", string.Join(Environment.NewLine, asset.OverriddenCookedSources.Select(static source => source.ContainerPath).Distinct())));
             }
         }
 
@@ -76,9 +72,7 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
             return;
         }
 
-        var outputs = asset.CookedCompanions.Prepend(asset)
-            .Where(static item => item.IsCookedOnly)
-            .Select(static item => item.Identity)
+        var outputs = (asset.IsCookedOnly ? new[] { asset.Identity } : [])
             .Concat(asset.CookStatus?.Outputs.Where(output => output.SourceAssetUri == asset.Identity).Select(static output => output.CookedAssetUri) ?? [])
             .Distinct()
             .Select(static identity => identity.VirtualPath)
@@ -91,13 +85,13 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
                 text += string.Create(CultureInfo.InvariantCulture, $"{Environment.NewLine}+{outputs.Length - 3} more outputs");
             }
 
-            facts.Add(new(asset.IsBuiltin ? "Project copy" : "Cooked output", text));
+            facts.Add(new("Cooked output", text));
         }
     }
 
     private static string GetDescription(AssetEntry asset)
     {
-        var description = asset.IsBuiltin || asset.IsCookedSourceOverridden || asset.CookStatus is not null || asset.Kind == AssetKind.ForeignSource ? asset.PrimaryBadgeTooltip : asset.PrimaryState switch
+        var description = asset.IsPackaged || asset.IsCookedSourceOverridden || asset.CookStatus is not null || asset.Kind == AssetKind.ForeignSource ? asset.PrimaryBadgeTooltip : asset.PrimaryState switch
         {
             AssetState.Missing => "The referenced asset could not be found.",
             AssetState.Broken => "The asset could not be read or validated.",
@@ -106,7 +100,7 @@ public sealed record AssetInformation(string Title, AssetKind Kind, string Locat
             AssetState.Descriptor => "Cooking status is not available yet.",
             _ => "Source file.",
         };
-        if (!asset.IsBuiltin && asset.CookStatus is null && !string.IsNullOrWhiteSpace(asset.RuntimeReason))
+        if (!asset.IsPackaged && asset.CookStatus is null && !string.IsNullOrWhiteSpace(asset.RuntimeReason))
         {
             description = (description + " " + asset.RuntimeReason).Trim();
         }

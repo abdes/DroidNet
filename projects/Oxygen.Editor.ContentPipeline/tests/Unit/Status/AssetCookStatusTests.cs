@@ -5,7 +5,6 @@
 using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
-using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Moq;
@@ -13,6 +12,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
@@ -142,19 +142,6 @@ public sealed class AssetCookStatusTests
         _ = statuses.Single().Diagnostics.Should().NotBeEmpty().And.OnlyContain(diagnostic => diagnostic.AffectedVirtualPath == path);
     }
 
-    /// <summary>Built-ins without project contributions have no missing descriptor or native-tool requirement.</summary>
-    /// <returns>The asynchronous engine-identity inspection regression.</returns>
-    [TestMethod]
-    public async Task BuiltinsWithoutProjectOutputsDoNotRequireSourceDescriptors()
-    {
-        using var project = new StatusProject();
-        var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
-        AssetPath[] identities = [AssetPath.Generated.Combine("BasicShapes/Cube"), AssetPath.Generated.Combine("Materials/Default")];
-        var statuses = await project.CreateReader(native.Object).ReadAsync(project.Project, identities, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = statuses.Should().HaveCount(2).And.OnlyContain(status => !status.HasPublishedOutput && status.SourcePaths.IsEmpty && status.Diagnostics.IsEmpty);
-        native.VerifyNoOtherCalls();
-    }
-
     /// <summary>Unchanged geometry becomes out of date when its material changes or loses published bytes.</summary>
     /// <param name="damageOutput">Whether to damage output instead of changing material source.</param>
     /// <returns>The asynchronous dependency regression.</returns>
@@ -164,11 +151,11 @@ public sealed class AssetCookStatusTests
     public async Task DependencyChangesAffectConsumerStatus(bool damageOutput)
     {
         using var project = new StatusProject();
-        var catalog = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "BuiltinGeometryCatalog.json"), this.TestContext.CancellationToken).ConfigureAwait(false))!;
-        var geometry = catalog["geometries"]![0]!["descriptor"]!;
-        geometry["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/Content/Material.omat";
+        var geometry = """
+            {"$schema":"oxygen.geometry-descriptor.v1","name":"Geometry","bounds":{"min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},"lods":[{"name":"LOD0","mesh_type":"procedural","bounds":{"min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},"procedural":{"generator":"Cube","mesh_name":"Cube","params":{}},"submeshes":[{"name":"Main","material_ref":"/Content/Material.omat","slot_id":"146b1397-c3e0-bc20-fce3-c55e470b4086","views":[{"view_ref":"__all__"}]}]}]}
+            """;
         var uri = AssetPath.Parse("/Content/Geometry.ogeo.json");
-        await File.WriteAllTextAsync(Path.Combine(project.Root, "Content", "Geometry.ogeo.json"), geometry.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(project.Root, "Content", "Geometry.ogeo.json"), geometry, this.TestContext.CancellationToken).ConfigureAwait(false);
         await project.PublishAsync(this.TestContext.CancellationToken, uri, [StatusProject.SourceUri]).ConfigureAwait(false);
         var reader = project.CreateReader();
         var before = (await reader.ReadAsync(project.Project, [uri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
@@ -266,6 +253,7 @@ public sealed class AssetCookStatusTests
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("oxygen-status-");
         private readonly NativeAtomicFileStore files = new(new Testably.Abstractions.RealFileSystem());
         private readonly Testing.TemporaryNativeArtifacts native;
+        private readonly EngineContentPakFixture engineContent = new();
         private readonly CookPublicationService publication;
         private readonly Mock<IEngineContentPipelineApi> api = new();
         private readonly ProjectManagerService manager = new(new NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
@@ -294,7 +282,7 @@ public sealed class AssetCookStatusTests
                 AuthoringMounts = [.. this.Project.AuthoringMounts],
             };
             File.WriteAllText(Path.Combine(this.Root, "Project.oxy"), ProjectInfo.ToJson(info));
-            this.publication = new(Mock.Of<IContentCookCoordinator>(), Mock.Of<IProjectContextService>(), this.files, this.manager);
+            this.publication = new(Mock.Of<IContentCookCoordinator>(), Mock.Of<IProjectContextService>(), this.files, this.manager, this.engineContent);
         }
 
         public static string MaterialJson => CreateMaterialJson(0.5f);
@@ -324,7 +312,7 @@ public sealed class AssetCookStatusTests
         }
 
         public AssetCookStatusReader CreateReader(INativeCompatibilityService? compatibility = null)
-            => new(this.Documents, this.publication, compatibility ?? this.native);
+            => new(this.Documents, this.publication, compatibility ?? this.native, this.engineContent);
 
         public async Task<AssetCookStatus> ReadAsync(CancellationToken cancellationToken)
             => (await this.CreateReader().ReadAsync(this.Project, [SourceUri], cancellationToken).ConfigureAwait(false)).Single();
@@ -415,7 +403,7 @@ public sealed class AssetCookStatusTests
             public Task<CookSourceFrontier> ReadAsync(IReadOnlyList<ContentCookInput> inputs, CancellationToken cancellationToken)
             {
                 cancellationToken.ThrowIfCancellationRequested();
-                return Task.FromResult(new CookSourceFrontier([.. inputs.Select(this.Describe)], [], [], []));
+                return Task.FromResult(new CookSourceFrontier([.. inputs.Select(this.Describe)], [], []));
             }
 
             private static string KindName(ContentCookAssetKind kind) => kind switch

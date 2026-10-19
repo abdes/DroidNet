@@ -34,7 +34,7 @@ public sealed class TextureCookTests
     [TestCategory("NativeContent")]
     public async Task NamedTextureCooksResolvesReusesAndRepairs()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteText("Content/Textures/Meter.otex.json", MeterDescriptor);
         byte[] image = [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 255, 255, 255];
         await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Content/Textures/Meter.tga"), image, this.TestContext.CancellationToken).ConfigureAwait(false);

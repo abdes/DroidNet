@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
 using Oxygen.Editor.World.Components;
@@ -43,6 +44,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private bool inputEnabled = true;
     private bool updating;
     private bool disposed;
+    private int candidateCount;
 
     /// <summary>Initializes a new instance of the <see cref="PlaySectionViewModel"/> class.</summary>
     /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
@@ -95,8 +97,8 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     /// <summary>Gets the starting input contexts, highest priority first: the order the engine evaluates them.</summary>
     public ObservableCollection<StartingInputContextRowViewModel> Contexts { get; } = [];
 
-    /// <summary>Gets the mapping contexts that can be added.</summary>
-    public ObservableCollection<AssetEntry> ContextCandidates { get; } = [];
+    /// <summary>Gets the mapping contexts that can be added, grouped as Engine, Packages and Content.</summary>
+    public AssetPickerModel ContextChoices { get; } = new(static asset => AssetChoice.For(asset, "Input mapping context", ""));
 
     /// <summary>Gets what Add does, or why it is unavailable.</summary>
     [ObservableProperty]
@@ -123,7 +125,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         && ReferenceEquals(authoring.Scene, current);
 
     /// <summary>Gets a value indicating whether an input context can be added.</summary>
-    public bool CanAddContext => this.CanEdit && this.ContextCandidates.Count > 0;
+    public bool CanAddContext => this.CanEdit && this.candidateCount > 0;
 
     /// <summary>Gets completion of any play edit in flight.</summary>
     internal Task Pending => this.pending;
@@ -266,13 +268,13 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private Task InspectAutomaticCameraAsync()
         => this.automaticCamera is { } camera && this.inspectSceneNode is { } inspect ? inspect(camera) : Task.CompletedTask;
 
-    private bool CanAdd(AssetEntry? candidate) => this.CanEdit && candidate is not null;
+    private bool CanAdd(AssetPath? context) => this.CanEdit && context is not null;
 
     [RelayCommand(CanExecute = nameof(CanAdd))]
-    private Task AddContextAsync(AssetEntry? candidate)
-        => candidate is null
+    private Task AddContextAsync(AssetPath? context)
+        => context is null
             ? Task.CompletedTask
-            : this.EditContextsAsync(contexts => [.. contexts, new StartingInputContextData(candidate.Identity)]);
+            : this.EditContextsAsync(contexts => [.. contexts, new StartingInputContextData(context)]);
 
     private Task EditContextsAsync(Func<List<StartingInputContextData>, List<StartingInputContextData>> edit)
         => this.scene is { } current
@@ -393,14 +395,8 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         var candidates = contexts
             .Where(asset => !listed.Contains(asset.Identity))
             .ToArray();
-        if (!candidates.Select(static asset => asset.Identity).SequenceEqual(this.ContextCandidates.Select(static asset => asset.Identity)))
-        {
-            this.ContextCandidates.Clear();
-            foreach (var candidate in candidates)
-            {
-                this.ContextCandidates.Add(candidate);
-            }
-        }
+        this.ContextChoices.Update(candidates);
+        this.candidateCount = candidates.Length;
 
         this.AddToolTip = AddToolTipFor(this.catalogLoaded, contexts.Count > 0, candidates.Length > 0);
     }

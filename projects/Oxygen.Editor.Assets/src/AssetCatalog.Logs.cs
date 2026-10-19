@@ -15,6 +15,12 @@ namespace Oxygen.Editor.Assets;
 /// </remarks>
 public sealed partial class AssetCatalog
 {
+    [LoggerMessage(Level = LogLevel.Warning, Message = "ENGINE CONTENT PAK UNAVAILABLE: '{Path}' could not be read, so no /Engine asset (basic shapes, the default material) is listed and references to them are missing. Install the SDK, or rebuild the engine's oxygen-engine-content target and reinstall it.")]
+    private partial void LogEngineContentUnavailable(FileSystemPath path, Exception exception);
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Pak file mount '{Mount}' ('{Path}') could not be read, so none of its assets is listed and references to them are missing.")]
+    private partial void LogPakUnavailable(string mount, FileSystemPath path, Exception exception);
+
     [LoggerMessage(Level = LogLevel.Warning, Message = "An observer of the asset catalog failed after the catalog was updated; the update stays in place.")]
     private partial void LogObserverFailed(Exception exception);
 

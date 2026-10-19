@@ -9,8 +9,8 @@ using DependencyObject = Microsoft.UI.Xaml.DependencyObject;
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
 /// <summary>
-///     Gives mounted sources (Cooked, Imported, Build and local libraries) a read-only badge, so derived output is
-///     never mistaken for authored content.
+///     Gives mounted sources (Cooked, Imported, Build, local libraries and paks) a read-only badge, so derived output
+///     is never mistaken for authored content.
 /// </summary>
 public partial class ReadOnlyBadgeTemplateSelector : DataTemplateSelector
 {
@@ -19,5 +19,5 @@ public partial class ReadOnlyBadgeTemplateSelector : DataTemplateSelector
 
     /// <inheritdoc />
     protected override DataTemplate? SelectTemplateCore(object item, DependencyObject container)
-        => item is VirtualFolderMountTreeItemAdapter ? this.ReadOnlyTemplate : null;
+        => item is VirtualFolderMountTreeItemAdapter or PakMountTreeItemAdapter ? this.ReadOnlyTemplate : null;
 }

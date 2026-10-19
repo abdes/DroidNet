@@ -31,5 +31,5 @@ public sealed record CookedInspectionScope(ProjectContext Project, AssetPath? Sc
         => other is not null && other.Project.ProjectId == this.Project.ProjectId
             && other.Project.ProjectRoot == this.Project.ProjectRoot
             && other.Scope == this.Scope && other.Asset == this.Asset
-            && other.CookedSource?.RootFolderPath == this.CookedSource?.RootFolderPath;
+            && other.CookedSource?.ContainerPath == this.CookedSource?.ContainerPath;
 }

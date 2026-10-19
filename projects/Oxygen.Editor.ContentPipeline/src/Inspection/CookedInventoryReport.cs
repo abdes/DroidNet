@@ -5,7 +5,8 @@
 using System.Collections.Immutable;
 using System.Text.Json;
 using Json.Schema;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Assets.Persistence;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
@@ -102,8 +103,14 @@ public sealed class CookedInventoryReport
                 throw new InvalidDataException("The native inventory contains ambiguous or unindexed resource descriptors.");
             }
 
+            var path = row.GetProperty("virtual_path").GetString()!;
+            if (!paths.Add(path))
+            {
+                throw new InvalidDataException("The native inventory contains ambiguous resource virtual paths.");
+            }
+
             var index = row.GetProperty("resource_index");
-            resources.Add(new(row.GetProperty("kind").GetString()!, descriptor, index.ValueKind == JsonValueKind.Null ? null : index.GetUInt32()));
+            resources.Add(new(row.GetProperty("kind").GetString()!, path, descriptor, index.ValueKind == JsonValueKind.Null ? null : index.GetUInt32()));
         }
 
         var issues = root.GetProperty("issues").EnumerateArray().Select(static row => new Issue(
@@ -175,9 +182,10 @@ public sealed class CookedInventoryReport
     public sealed record Asset(Guid Key, byte Type, string VirtualPath, string DescriptorPath);
     /// <summary>A native texture sidecar and its observed table slot; the slot is not a durable identity.</summary>
     /// <param name="Kind">The native resource kind.</param>
+    /// <param name="VirtualPath">The logical name the texture is addressed by.</param>
     /// <param name="DescriptorPath">The indexed physical member.</param>
     /// <param name="ResourceIndex">The validated table slot, or null when integrity failed.</param>
-    public sealed record Resource(string Kind, string DescriptorPath, uint? ResourceIndex);
+    public sealed record Resource(string Kind, string VirtualPath, string DescriptorPath, uint? ResourceIndex);
     /// <summary>One observed mismatch in the protected root.</summary>
     /// <param name="RelativePath">The affected relative path.</param>
     /// <param name="Reason">The native schema's failure classification.</param>

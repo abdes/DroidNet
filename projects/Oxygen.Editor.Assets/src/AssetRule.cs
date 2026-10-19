@@ -8,19 +8,20 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.Assets;
 
 /// <summary>
-/// What a property that references an asset accepts: the project's assets of one kind, and whether they must already
-/// have cooked output.
+/// What a property that references an asset accepts: the assets of one kind, from the engine content, mounted paks
+/// and the project's content, and whether they must already have cooked output.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The kinds a property can reference are the ones the pipeline cooks into an asset (<see cref="AssetFileTypes"/>), so
 /// a kind added to the file types is accepted by its properties without a rule of its own; the rule of any other kind
-/// accepts nothing, such as a script parameter of an engine type the editor does not list. The engine's built-ins are
-/// not offered: the pickers show them in a group of their own, read from the built-in catalog.
+/// accepts nothing, such as a script parameter of an engine type the editor does not list. Engine-internal assets
+/// (<see cref="EngineAssets.Internal"/>) are never offered.
 /// </para>
 /// <para>
 /// A rule never accepts an asset whose file is missing or broken. <see cref="Apply"/> keeps a property's current
-/// assignment even then, so the user sees what it points to; it never lists an asset of another kind, or a built-in.
+/// assignment even then, so the user sees what it points to; it never lists an asset of another kind, or an
+/// engine-internal one.
 /// </para>
 /// </remarks>
 public sealed class AssetRule
@@ -52,14 +53,14 @@ public sealed class AssetRule
     /// </summary>
     public bool Cooked { get; }
 
-    /// <summary>Gets the rule of a property that references the project's assets of a kind.</summary>
+    /// <summary>Gets the rule of a property that references assets of a kind.</summary>
     /// <param name="kind">The kind.</param>
     /// <returns>The rule.</returns>
     public static AssetRule For(AssetKind kind) => Find(kind, cooked: false);
 
     /// <summary>
     /// Gets the rule of a property that references the cooked asset the engine loads, such as a scene reference or a
-    /// script parameter: the project's assets of a kind that have cooked output.
+    /// script parameter: assets of a kind that have cooked output.
     /// </summary>
     /// <param name="kind">The kind.</param>
     /// <returns>The rule.</returns>
@@ -90,12 +91,12 @@ public sealed class AssetRule
         var accepted = assets.Where(this.Accepts).ToList();
         foreach (var identity in keeping.OfType<AssetPath>())
         {
-            if (accepted.Any(asset => AssetIdentity.Represents(asset, identity)))
+            if (accepted.Any(asset => asset.Identity == identity))
             {
                 continue;
             }
 
-            var assigned = assets.FirstOrDefault(asset => AssetIdentity.Represents(asset, identity));
+            var assigned = assets.FirstOrDefault(asset => asset.Identity == identity);
             if (assigned is null)
             {
                 accepted.Add(AssetEntry.Missing(identity));
@@ -117,5 +118,6 @@ public sealed class AssetRule
             ? cooked ? rules.Cooked : rules.Any
             : new AssetRule(kind, cooked, referenceable: false);
 
-    private bool IsOfKind(AssetEntry asset) => this.referenceable && asset.Kind == this.Kind && !asset.IsBuiltin;
+    // Engine-internal assets, such as the transform gizmo's arrow, are the engine's own and are never offered.
+    private bool IsOfKind(AssetEntry asset) => this.referenceable && asset.Kind == this.Kind && !asset.Identity.IsSameOrInside(EngineAssets.Internal);
 }

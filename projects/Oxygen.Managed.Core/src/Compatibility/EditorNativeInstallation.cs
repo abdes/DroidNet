@@ -19,6 +19,9 @@ public sealed record EditorNativeInstallation(string EditorRoot, string EngineRo
     /// <summary>Gets this SDK configuration's installed shader archive.</summary>
     public string ShaderLibraryPath => Path.Combine(this.EngineRoot, "share", "oxygen", "shaders", "shaders.bin");
 
+    /// <summary>Gets the SDK's engine content pak, which holds the <c>/Engine</c> assets.</summary>
+    public string EngineContentPakPath => Path.Combine(this.EngineRoot, "share", "oxygen", "engine.pak");
+
     /// <summary>Gets the SDK's scene player, which Play runs.</summary>
     public string PlayerPath => Path.Combine(this.EngineRoot, "bin", "Oxygen.Player.exe");
 

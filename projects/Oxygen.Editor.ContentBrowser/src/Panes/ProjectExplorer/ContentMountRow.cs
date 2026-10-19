@@ -41,13 +41,21 @@ public sealed partial class ContentMountRow : ObservableObject
     {
         ContentMountKind.ProjectSource => "Project source",
         ContentMountKind.Derived => "Derived output",
+        ContentMountKind.PakLibrary => "Pak file",
+        ContentMountKind.EngineContent => "Engine content",
         _ => "Local library",
     };
+
+    /// <summary>Gets the row's icon glyph: a drive for folders, a package for pak files.</summary>
+    public string Glyph => this.Kind is ContentMountKind.PakLibrary or ContentMountKind.EngineContent ? "\uE7B8" : "\uEDA2";
+
+    /// <summary>Gets a value indicating whether the mount is fixed: the engine content is always mounted, under its own name.</summary>
+    public bool IsLocked => this.Kind == ContentMountKind.EngineContent;
 
     /// <summary>Gets the project-relative path of project and derived mounts.</summary>
     public string? RelativePath { get; init; }
 
-    /// <summary>Gets the absolute path of a local library.</summary>
+    /// <summary>Gets the absolute path of a local library or a pak file.</summary>
     public string? AbsolutePath { get; init; }
 
     /// <summary>Gets a value indicating whether the sources tree shows this mount expanded.</summary>
@@ -79,13 +87,16 @@ public sealed partial class ContentMountRow : ObservableObject
     /// Gets a value indicating whether the mount can be renamed. A project source's name is the first segment of
     /// every asset identity inside it, so it keeps its name until relocation updates references.
     /// </summary>
-    public bool CanRename => this.Kind != ContentMountKind.ProjectSource;
+    public bool CanRename => this.Kind is not (ContentMountKind.ProjectSource or ContentMountKind.EngineContent);
 
-    /// <summary>Gets a value indicating whether the row offers rename and unmount; the project's own content has neither.</summary>
-    public bool HasActions => !this.IsPrimary;
+    /// <summary>Gets a value indicating whether the row offers rename and unmount; the project's own content and the engine content have neither.</summary>
+    public bool HasActions => !this.IsPrimary && !this.IsLocked;
 
-    /// <summary>Gets a value indicating whether the mount can be removed; the project's own content cannot.</summary>
-    public bool CanUnmount => !this.IsPrimary;
+    /// <summary>Gets a value indicating whether the mount can be removed; the project's own content and the engine content cannot.</summary>
+    public bool CanUnmount => !this.IsPrimary && !this.IsLocked;
+
+    /// <summary>Gets the lock badge's tooltip of the engine content.</summary>
+    public string LockedToolTip => "The engine's content is always mounted beneath the project's, and every engine asset path starts with /Engine.";
 
     /// <summary>Gets the rename button's tooltip.</summary>
     public string RenameToolTip => this.CanRename

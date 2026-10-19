@@ -43,6 +43,7 @@ internal static class MountChange
         Settings = settings,
         AuthoringMounts = [.. context.AuthoringMounts],
         LocalFolderMounts = [.. context.LocalFolderMounts],
+        PakFileMounts = [.. context.PakFileMounts],
         CookedContentOrder = [.. context.CookedContentOrder],
         DefaultSceneId = context.DefaultSceneId,
     };
@@ -71,6 +72,12 @@ internal static class MountChange
             loaded.LocalFolderMounts.Add(mount);
         }
 
+        loaded.PakFileMounts.Clear();
+        foreach (var mount in candidate.PakFileMounts)
+        {
+            loaded.PakFileMounts.Add(mount);
+        }
+
         loaded.CookedContentOrder.Clear();
         foreach (var source in candidate.CookedContentOrder)
         {
@@ -80,9 +87,12 @@ internal static class MountChange
 
     private static void Validate(ProjectInfo candidate)
     {
-        var names = candidate.AuthoringMounts.Select(static mount => mount.Name).Concat(candidate.LocalFolderMounts.Select(static mount => mount.Name)).ToArray();
+        var names = candidate.AuthoringMounts.Select(static mount => mount.Name)
+            .Concat(candidate.LocalFolderMounts.Select(static mount => mount.Name))
+            .Concat(candidate.PakFileMounts.Select(static mount => mount.Name)).ToArray();
         if (candidate.AuthoringMounts.Any(static mount => !ProjectOutputFolders.Contains(mount) && VirtualPath.ValidateMountName(mount.Name, VirtualPathRuleSet.Authored) is not null)
-            || candidate.LocalFolderMounts.Any(static mount => string.IsNullOrWhiteSpace(mount.Name) || mount.Name.IndexOfAny(['/', '\\', ':']) >= 0)
+            || candidate.LocalFolderMounts.Select(static mount => mount.Name).Concat(candidate.PakFileMounts.Select(static mount => mount.Name))
+                .Any(static name => string.IsNullOrWhiteSpace(name) || name.IndexOfAny(['/', '\\', ':']) >= 0)
             || names.Distinct(VirtualPathComparer.CaseFolded).Count() != names.Length)
         {
             throw new InvalidDataException("Content mount names must be unique folder names.");
@@ -101,6 +111,19 @@ internal static class MountChange
             }
         }
 
-        _ = CookedContentOrdering.Resolve(candidate.LocalFolderMounts, candidate.CookedContentOrder);
+        foreach (var pak in candidate.PakFileMounts)
+        {
+            if (!PakFileMount.IsPakFile(pak.Path.FullPath))
+            {
+                throw new InvalidDataException($"Pak file mount '{pak.Name}' must name a .pak file: {pak.Path}.");
+            }
+
+            if (!File.Exists(pak.Path.FullPath))
+            {
+                throw new FileNotFoundException($"Pak file '{pak.Name}' is unavailable: {pak.Path}.", pak.Path.FullPath);
+            }
+        }
+
+        _ = CookedContentOrdering.Resolve(candidate);
     }
 }

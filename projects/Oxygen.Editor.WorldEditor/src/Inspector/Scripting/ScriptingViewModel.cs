@@ -15,6 +15,7 @@ using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
@@ -45,6 +46,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     private readonly IScriptDeclarationProvider? declarationProvider;
     private readonly Dictionary<AssetPath, ScriptDeclarations> libraryScripts = [];
     private readonly List<AssetEntry> assets = [];
+    private IReadOnlyList<AssetPath> scriptAssets = [];
     private readonly IDisposable? analysisSubscription;
     private IDisposable? assetSubscription;
     private SceneNode? node;
@@ -93,8 +95,8 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <summary>Gets the slot cards, in slot order.</summary>
     public ObservableCollection<ScriptSlotCardViewModel> Slots { get; } = [];
 
-    /// <summary>Gets the scripts a slot can run.</summary>
-    public ObservableCollection<ScriptAssetChoice> ScriptChoices { get; } = [];
+    /// <summary>Gets the scripts a slot can run, grouped as Engine, Packages and Content.</summary>
+    public AssetPickerModel ScriptChoices { get; } = new(static asset => AssetChoice.For(asset, "Script", "\uE943"));
 
     /// <summary>Gets the message shown instead of the slots, such as for a multi-node selection.</summary>
     [ObservableProperty]
@@ -230,14 +232,10 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <summary>Finds the assets an asset parameter of a native type accepts.</summary>
     /// <param name="assetType">The native asset type the parameter declares.</param>
     /// <returns>The assets, by name.</returns>
-    internal IEnumerable<ScriptAssetChoice> FindAssets(byte assetType)
-    {
-        return AssetRule.ForCooked(AssetKinds.FromCookedType(assetType)).Apply(this.assets)
-            .Select(static asset => new ScriptAssetChoice(asset.Identity, asset.DisplayName, asset.DisplayPath, asset.Kind))
-            .DistinctBy(static choice => choice.Asset)
-            .OrderBy(static choice => choice.Name, StringComparer.OrdinalIgnoreCase)
-            .ThenBy(static choice => choice.Path, StringComparer.OrdinalIgnoreCase);
-    }
+    internal IReadOnlyList<AssetEntry> FindAssets(byte assetType)
+        => [.. AssetRule.ForCooked(AssetKinds.FromCookedType(assetType)).Apply(this.assets)
+            .OrderBy(static asset => asset.DisplayName, StringComparer.OrdinalIgnoreCase)
+            .ThenBy(static asset => asset.DisplayPath, StringComparer.OrdinalIgnoreCase)];
 
     /// <summary>Finds the scene's nodes whose name or path contains a search text.</summary>
     /// <param name="query">The search text; empty finds every node.</param>
@@ -329,17 +327,16 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
 
         this.assets.Clear();
         this.assets.AddRange(value);
-        var scripts = this.FindAssets(ScriptAssetType).ToArray();
-        if (!scripts.SequenceEqual(this.ScriptChoices))
+        var scripts = this.FindAssets(ScriptAssetType);
+        var identities = scripts.Select(static script => script.Identity).ToArray();
+        if (!identities.SequenceEqual(this.scriptAssets))
         {
             // Mounted libraries changed, so library scripts are read again.
             this.libraryScripts.Clear();
-            this.ScriptChoices.Clear();
-            foreach (var script in scripts)
-            {
-                this.ScriptChoices.Add(script);
-            }
+            this.scriptAssets = identities;
         }
+
+        this.ScriptChoices.Update(scripts);
 
         this.Rebuild();
     }

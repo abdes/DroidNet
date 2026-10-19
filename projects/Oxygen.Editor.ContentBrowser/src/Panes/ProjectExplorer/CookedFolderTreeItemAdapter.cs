@@ -8,14 +8,14 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
-/// <summary>A read-only logical folder in the accepted project output.</summary>
+/// <summary>A read-only logical folder of a mount whose folders come from its assets' virtual paths: the accepted project output or a pak.</summary>
 public sealed class CookedFolderTreeItemAdapter : TreeItemAdapter
 {
-    private readonly VirtualFolderMountTreeItemAdapter mount;
+    private readonly ILogicalFolderRoot mount;
     private readonly string nativePath;
     private readonly Dictionary<string, CookedFolderTreeItemAdapter> folders = new(StringComparer.Ordinal);
 
-    private CookedFolderTreeItemAdapter(VirtualFolderMountTreeItemAdapter mount, string nativePath)
+    private CookedFolderTreeItemAdapter(ILogicalFolderRoot mount, string nativePath)
         : base(isRoot: false, isHidden: false)
     {
         this.mount = mount;
@@ -26,7 +26,7 @@ public sealed class CookedFolderTreeItemAdapter : TreeItemAdapter
     public override string Label
     {
         get => this.nativePath[(this.nativePath.LastIndexOf('/') + 1)..];
-        set => throw new InvalidOperationException("Cooked folders are derived from published asset paths.");
+        set => throw new InvalidOperationException("Logical folders are derived from asset paths.");
     }
 
     /// <summary>Gets the browser path without exposing generation storage.</summary>
@@ -38,7 +38,7 @@ public sealed class CookedFolderTreeItemAdapter : TreeItemAdapter
     /// <inheritdoc />
     public override bool ValidateItemName(string name) => false;
 
-    internal static IReadOnlyList<CookedFolderTreeItemAdapter> Build(VirtualFolderMountTreeItemAdapter mount, IEnumerable<string> paths)
+    internal static IReadOnlyList<CookedFolderTreeItemAdapter> Build(ILogicalFolderRoot mount, IEnumerable<string> paths)
     {
         var roots = new Dictionary<string, CookedFolderTreeItemAdapter>(StringComparer.Ordinal);
         foreach (var path in paths)

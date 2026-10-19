@@ -583,7 +583,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                 post.AutoExposureBlackInfluence,
                 post.AutoExposureTransitionDistanceEv,
                 [.. post.AutoExposureCompensationCurve.Select(static key => new RuntimeExposureCompensationKey(key.MeteredEv, key.CompensationEv))],
-                this.CreateTextureReference(post.AutoExposureMeteringMask, "exposure mask"),
+                ToTextureReference(post.AutoExposureMeteringMask),
                 post.BloomIntensity,
                 post.BloomThreshold,
                 post.Saturation,
@@ -596,30 +596,23 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
 
             // Only a cubemap the renderer uses is loaded, so a stale reference
             // behind another source or a disabled system cannot reject the edit.
-            SkySphereCubemap = this.CreateTextureReference(skySphere.ActiveCubemap, "sky sphere cubemap"),
+            SkySphereCubemap = ToTextureReference(skySphere.ActiveCubemap),
             SkyLight = skyLight,
-            SkyLightCubemap = this.CreateTextureReference(skyLight.ActiveCubemap, "sky light cubemap"),
+            SkyLightCubemap = ToTextureReference(skyLight.ActiveCubemap),
             Background = environment.Background ?? new(),
         };
     }
 
-    private RuntimeTextureReference? CreateTextureReference(AssetPath? texture, string label)
+    // The engine resolves a texture by its identity's virtual path in whatever
+    // content is mounted, project or engine, so the reference is the identity.
+    private static AssetPath? ToTextureReference(AssetPath? texture)
     {
-        if (texture is null)
+        if (texture is not null)
         {
-            return null;
+            _ = ContentPipeline.ContentPipelinePaths.ToNativeDescriptorPath(texture, AssetFileTypes.Texture);
         }
 
-        var path = ContentPipeline.ContentPipelinePaths.ToNativeDescriptorPath(texture, AssetFileTypes.Texture);
-        var separator = path.IndexOf('/', 1);
-        if (separator <= 1)
-        {
-            throw new InvalidOperationException($"The {label} requires a source mount.");
-        }
-
-        var cookedRoot = this.engineService.ContentStatus.Bindings.SingleOrDefault(root => string.Equals(root.ProjectMount, path[1..separator], StringComparison.Ordinal))?.Path
-            ?? throw new InvalidOperationException($"The {label} has no accepted cooked generation. Cook its content before previewing it.");
-        return new(texture, cookedRoot, path[(separator + 1)..]) { ProjectMount = path[1..separator] };
+        return texture;
     }
 
     private async Task<bool> SyncSceneCoreAsync(Scene scene, bool skipIfCurrent, CancellationToken cancellationToken)

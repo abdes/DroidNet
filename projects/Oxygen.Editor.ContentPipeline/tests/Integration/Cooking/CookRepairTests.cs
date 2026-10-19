@@ -31,11 +31,11 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task RenamingCookedSceneRetiresOldOutputAndPreservesOtherAssets()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         var previousName = "Main";
@@ -67,7 +67,7 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task RenamingCookedMaterialRetiresOldOutputAndPreservesOtherAssets()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
@@ -95,7 +95,7 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task MaterialInFolderWithSpaceAndParenthesesCooks()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/New folder (2)/Wet Rubber.omat.json", "Wet Rubber");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
@@ -114,7 +114,7 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task AutomaticCookOfDeletedSourceRemovesItsOutput()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
 
@@ -150,10 +150,10 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task DeletingAMaterialCooksTheSceneThatUsesIt()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         File.Delete(Path.Combine(workspace.Root, "Content/Materials/Blue.omat.json"));
@@ -176,7 +176,7 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task DeletedFolderLosesItsCookedMaterialThroughCookOnChange()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         workspace.WriteMaterial("Content/New folder/Blue.omat.json", "Blue");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
@@ -219,7 +219,7 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task MovedMaterialCooksAtItsNewPathThroughCookOnChange()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
@@ -264,7 +264,7 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task DeletingTheLastAssetOfAMountDropsItsRoot()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
@@ -292,7 +292,7 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task CookDropsAnEmptiedMountAndPublishesAnother()
     {
-        using var workspace = new CookWorkspace([new("Content", "Content"), new("Extra", "Extra")]);
+        using var workspace = new CookWorkspace([new("Content", "Content"), new("Extra", "Extra")], EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         workspace.WriteMaterial("Extra/Materials/Red.omat.json", "Red");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
@@ -319,7 +319,7 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task AutomaticCookOfNeverCookedDeletedSourceEndsWithoutError()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
@@ -340,7 +340,7 @@ public sealed class CookRepairTests
     [TestCategory("NativeContent")]
     public async Task RelocatedImportGroupRebuildsOutputsInNewGroup()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         _ = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
@@ -375,7 +375,7 @@ public sealed class CookRepairTests
     [DataRow("unowned output")]
     public async Task AssetCookRebuildsDamagedSharedRoot(string failure)
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         _ = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
@@ -441,7 +441,7 @@ public sealed class CookRepairTests
     [DataRow(false)]
     public async Task DescriptorRepairPreservesUnrelatedRootOwners(bool missing)
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();

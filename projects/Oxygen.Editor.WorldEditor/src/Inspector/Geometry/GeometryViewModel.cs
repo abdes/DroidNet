@@ -9,8 +9,8 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Hosting.WinUI;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Assets;
@@ -37,17 +37,10 @@ namespace Oxygen.Editor.World.Inspector.Geometry;
 public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
 {
     private readonly IAssetFeed assetProvider;
-    private readonly IBuiltinCatalogDiscovery builtins;
     private readonly IGeometryMaterialSlotProvider materialSlots;
     private readonly IProjectContextService projectContexts;
     private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly PropertyBinding<AssetPath?> geometryUriBinding = new(SceneProperties.Geometry.GeometryUriDescriptor);
-    private readonly ObservableCollection<AssetPickerRow> contentItems = [];
-    private readonly ObservableCollection<AssetPickerRow> engineItems = [];
-    private readonly ObservableCollection<MaterialPickerRow> engineMaterials = [];
-    private readonly Dictionary<AssetPath, AssetPickerRow> contentItemsByKey = [];
-    private readonly ObservableCollection<MaterialPickerRow> contentMaterialItems = [];
-    private readonly Dictionary<AssetPath, MaterialPickerItem> contentMaterialItemsByKey = [];
     private readonly DispatcherQueue dispatcherQueue;
 
     private IDisposable? assetChangesSubscription;
@@ -62,46 +55,31 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// </summary>
     /// <param name="hosting">The WinUI hosting context used for UI-thread dispatch.</param>
     /// <param name="assetProvider">The shared asset identity, cook status and runtime availability feed.</param>
-    /// <param name="builtins">The shared engine-provided catalog and last-known availability.</param>
     /// <param name="materialSlots">The native geometry slot inventory reader.</param>
     /// <param name="projectContexts">The active project lifetime.</param>
     /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     public GeometryViewModel(
         HostingContext hosting,
         IAssetFeed assetProvider,
-        IBuiltinCatalogDiscovery builtins,
         IGeometryMaterialSlotProvider materialSlots,
         IProjectContextService projectContexts,
         Func<SceneAuthoring?>? authoringProvider = null)
     {
         this.assetProvider = assetProvider;
-        this.builtins = builtins;
         this.materialSlots = materialSlots;
         this.projectContexts = projectContexts;
         this.authoringProvider = authoringProvider;
         this.dispatcherQueue = hosting.Dispatcher;
 
-        this.Groups = [new AssetGroup("Engine", this.engineItems), new AssetGroup("Content", this.contentItems)];
-        this.MaterialGroups = [new MaterialGroup("Assignment", [new(CreateNoMaterialItem())]), new MaterialGroup("Engine", this.engineMaterials), new MaterialGroup("Content", this.contentMaterialItems)];
-        this.builtins.Changed += this.OnBuiltinCatalogChanged;
-        this.ApplyBuiltinCatalog();
-        _ = this.InitializeBuiltinsAsync();
         this.StartMaterialPickerSubscription();
         this.StartAssetCatalogSubscription();
     }
 
-    /// <summary>
-    /// Gets the collection of geometry asset groups shown to the user. Each group contains
-    /// a list of stable <see cref="AssetPickerRow"/> instances.
-    /// </summary>
-    [ObservableProperty]
-    public partial IReadOnlyList<AssetGroup> Groups { get; set; } = [];
+    /// <summary>Gets the geometries the picker offers, grouped as Engine, Packages and Content.</summary>
+    public AssetPickerModel GeometryChoices { get; } = new(static asset => AssetChoice.For(asset, "Geometry", "\uF158"));
 
-    /// <summary>
-    /// Gets the collection of material assignment groups shown to the user.
-    /// </summary>
-    [ObservableProperty]
-    public partial IReadOnlyList<MaterialGroup> MaterialGroups { get; set; } = [];
+    /// <summary>Gets the materials the slot picker offers, after the choice that clears the slot's override.</summary>
+    public AssetPickerModel MaterialChoices { get; } = new(static asset => AssetChoice.For(asset, "Material", "\uE8B9"), ClearMaterialChoice);
 
     /// <inheritdoc />
     public override string Header => "Geometry";
@@ -208,21 +186,11 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <summary>
     /// Apply the specified geometry asset to all currently selected scene nodes.
     /// </summary>
-    /// <param name="item">The asset picker item to apply. If <see langword="null"/> or not enabled the method returns immediately.</param>
+    /// <param name="choice">The picked geometry. A disabled choice, or one without an asset, is ignored.</param>
     /// <returns>A <see cref="Task"/> that completes when the operation has finished.</returns>
-    public async Task ApplyAssetAsync(AssetPickerItem item)
+    public async Task ApplyAssetAsync(AssetChoice choice)
     {
-        if (!this.IsInputEnabled)
-        {
-            return;
-        }
-
-        if (item is null)
-        {
-            return;
-        }
-
-        if (!item.IsEnabled)
+        if (!this.IsInputEnabled || choice is not { IsEnabled: true, Asset: { } geometry })
         {
             return;
         }
@@ -233,7 +201,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         }
 
         var nodes = this.selectedItems.ToList();
-        var geometry = item.Asset;
         if (this.authoringProvider?.Invoke() is not { } authoring)
         {
             return;
@@ -247,7 +214,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
         // Update viewmodel display
         this.SelectedGeometry = geometry;
-        this.SelectedAssetName = item.Name;
+        this.SelectedAssetName = choice.Name;
         this.IsMixed = false;
         await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
     }
@@ -255,13 +222,13 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <summary>
     /// Applies the specified material assignment to all currently selected scene nodes.
     /// </summary>
-    /// <param name="item">The material picker item to apply.</param>
+    /// <param name="choice">The picked material, or the choice that clears the override.</param>
     /// <returns>A <see cref="Task"/> that completes when the operation has finished.</returns>
-    public async Task ApplyMaterialAsync(MaterialPickerItem item)
+    public async Task ApplyMaterialAsync(AssetChoice choice)
     {
         var picker = this.materialEdit;
         this.materialEdit = null;
-        if (!this.IsInputEnabled || item is not { IsEnabled: true } || picker is null
+        if (!this.IsInputEnabled || choice is not { IsEnabled: true } || picker is null
             || !this.IsCurrentSelection(picker.Nodes)
             || !ReferenceEquals(this.authoringProvider?.Invoke(), picker.Authoring)
             || this.projectContexts.ActiveProject is not { } project)
@@ -270,7 +237,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         }
 
         var nodeIds = picker.Nodes.ConvertAll(static node => node.Id);
-        var built = await MaterialSlotEdits.SetAsync(this.materialSlots, project, nodeIds, picker.Target, item.Asset).ConfigureAwait(true);
+        var built = await MaterialSlotEdits.SetAsync(this.materialSlots, project, nodeIds, picker.Target, choice.Asset).ConfigureAwait(true);
         var succeeded = built.Edit is { } edit && (await picker.Authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded;
         if (!this.IsCurrentSelection(picker.Nodes))
         {
@@ -279,7 +246,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
         if (succeeded)
         {
-            this.UpdateMaterialDisplay(item.Asset);
+            this.UpdateMaterialDisplay(choice.Asset);
         }
 
         await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
@@ -339,7 +306,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.disposed = true;
         this.slotRefresh?.Cancel();
         this.slotRefresh?.Dispose();
-        this.builtins.Changed -= this.OnBuiltinCatalogChanged;
         this.assetChangesSubscription?.Dispose();
         this.materialResultsSubscription?.Dispose();
         GC.SuppressFinalize(this);
@@ -350,45 +316,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <returns>The user-facing name.</returns>
     internal static string NameOf(AssetPath asset) => AssetFileTypes.RemoveSuffix(asset.Name);
 
-    private static AssetPickerItem CreateEngineItem(string name, AssetPath asset)
-        => new(
-            Name: name,
-            Asset: asset,
-            DisplayType: "Static Mesh",
-            DisplayPath: asset.VirtualPath,
-            Group: AssetPickerGroup.Engine,
-            IsEnabled: true,
-            ThumbnailModel: "\uF158");
-
-    private static MaterialPickerItem CreateNoMaterialItem()
-        => new(
-            Name: "Clear override",
-            Asset: null,
-            DisplayType: "Use the geometry default",
-            DisplayPath: "Geometry default",
-            Group: AssetPickerGroup.Engine,
-            IsEnabled: true,
-            ThumbnailModel: string.Empty);
-
-    private static MaterialPickerItem CreateEngineMaterialItem(string name, AssetPath asset)
-        => new(
-            Name: name,
-            Asset: asset,
-            DisplayType: "Material",
-            DisplayPath: asset.VirtualPath,
-            Group: AssetPickerGroup.Engine,
-            IsEnabled: true,
-            ThumbnailModel: "\uE790");
-
-    private static MaterialPickerItem CreateContentMaterialItem(AssetEntry asset)
-        => new(
-            Name: asset.DisplayName,
-            Asset: asset.Identity,
-            DisplayType: $"Material · {AssetStatusText.ForEntry(asset)}",
-            DisplayPath: (asset.DescriptorPath ?? asset.CookedPath)?.FullPath ?? asset.Identity.VirtualPath,
-            Group: AssetPickerGroup.Content,
-            IsEnabled: asset.IsSelectable,
-            ThumbnailModel: "\uE8B9");
+    private static AssetChoice ClearMaterialChoice { get; } = new("Clear override", Asset: null, "Use the geometry default", "Geometry default", IsEnabled: true, Glyph: string.Empty);
 
     private bool IsCurrentSelection(List<SceneNode> nodes)
         => !this.disposed && this.selectedItems?.Count == nodes.Count
@@ -407,9 +335,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
     // Lists the materials the slot accepts, keeping the one assigned now even when it is gone.
     private void ApplyContentMaterials()
-    {
-        this.ReplaceContentMaterialItems(AssetRule.For(AssetKind.Material).Apply(this.latestMaterialAssets, this.IsMaterialMixed ? null : this.SelectedMaterial));
-    }
+        => this.MaterialChoices.Update(AssetRule.For(AssetKind.Material).Apply(this.latestMaterialAssets, this.IsMaterialMixed ? null : this.SelectedMaterial));
 
     private void UpdateMaterialDisplay(AssetPath? material)
     {
@@ -419,7 +345,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     }
 
     private string ResolveMaterialDisplayName(AssetPath material)
-        => this.contentMaterialItemsByKey.TryGetValue(material, out var item) ? item.Name : NameOf(material);
+        => this.MaterialChoices.Find(material)?.Name ?? NameOf(material);
 
     // Use the shared WinUI dispatcher helpers to handle shutdown / exceptions robustly.
     private void DispatchOnUi(Action action)
@@ -435,38 +361,6 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
                 CancellationToken.None,
                 TaskContinuationOptions.ExecuteSynchronously,
                 TaskScheduler.Default);
-
-    private void ReplaceContentMaterialItems(IReadOnlyList<AssetEntry> materials)
-    {
-        var existing = this.contentMaterialItems.ToDictionary(static row => row.Item.Asset!);
-        this.contentMaterialItemsByKey.Clear();
-        var index = 0;
-        foreach (var material in materials.OrderBy(static m => m.DisplayName, StringComparer.OrdinalIgnoreCase))
-        {
-            var item = CreateContentMaterialItem(material);
-            var key = material.Identity;
-            if (existing.TryGetValue(key, out var row))
-            {
-                row.Update(item);
-                if (!ReferenceEquals(this.contentMaterialItems[index], row))
-                {
-                    this.contentMaterialItems.Move(this.contentMaterialItems.IndexOf(row), index);
-                }
-            }
-            else
-            {
-                this.contentMaterialItems.Insert(index, new(item));
-            }
-
-            this.contentMaterialItemsByKey[key] = item;
-            index++;
-        }
-
-        while (this.contentMaterialItems.Count > index)
-        {
-            this.contentMaterialItems.RemoveAt(this.contentMaterialItems.Count - 1);
-        }
-    }
 
     partial void OnIsMixedChanged(bool value)
     {

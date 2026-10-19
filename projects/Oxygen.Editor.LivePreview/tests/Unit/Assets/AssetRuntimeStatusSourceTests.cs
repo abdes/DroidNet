@@ -103,7 +103,7 @@ public sealed class AssetRuntimeStatusSourceTests
     private static FakeEngine CreateEngine()
     {
         var engine = new FakeEngine();
-        engine.ContentStatus = new(engine.World.RunId, 1, RuntimeContentState.Mounted, [new("C:/Project/.cooked/Content", "Content")]);
+        engine.ContentStatus = new(engine.World.RunId, 1, RuntimeContentState.Mounted, [new("C:/Project/.cooked/Content", RuntimeCookedRootKind.LooseFolder)]);
         return engine;
     }
 

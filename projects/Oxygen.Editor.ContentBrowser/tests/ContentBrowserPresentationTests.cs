@@ -210,7 +210,7 @@ public sealed class ContentBrowserPresentationTests
         _ = AssetStatusText.GetToneForText("Unsaved changes").Should().Be("Caution");
         _ = AssetStatusText.GetToneForText("Overridden").Should().Be("Caution");
         _ = AssetStatusText.GetToneForText("ERR").Should().Be("Critical");
-        _ = AssetStatusText.GetToneForText("Built-in").Should().Be("Neutral");
+        _ = AssetStatusText.GetToneForText("Engine").Should().Be("Neutral");
     }
 
     /// <summary>Sizes read like File Explorer's.</summary>

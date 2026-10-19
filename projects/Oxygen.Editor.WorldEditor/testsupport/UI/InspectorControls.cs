@@ -9,6 +9,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
+using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
@@ -17,7 +18,6 @@ using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Inspector.Geometry;
 using Windows.Foundation;
 using NumberBox = DroidNet.Controls.NumberBox;
 
@@ -226,7 +226,7 @@ internal static class InspectorControls
         }
     }
 
-    internal static async Task PickAssetAsync(SplitButton owner, string name, bool material, CancellationToken cancellationToken)
+    internal static async Task PickAssetAsync(SplitButton owner, string name, CancellationToken cancellationToken)
     {
         var flyout = (Flyout)owner.Flyout;
         flyout.AreOpenCloseAnimationsEnabled = false;
@@ -243,7 +243,7 @@ internal static class InspectorControls
                 {
                 }).ConfigureAwait(true);
                 cancellationToken.ThrowIfCancellationRequested();
-                choice = flyout.Content.FindDescendant<Button>(button => material ? button.DataContext is MaterialPickerRow row && string.Equals(row.Item.Name, name, StringComparison.Ordinal) : button.DataContext is AssetPickerRow asset && string.Equals(asset.Item.Name, name, StringComparison.Ordinal));
+                choice = flyout.Content.FindDescendant<Button>(button => string.Equals(AutomationProperties.GetName(button), name, StringComparison.Ordinal));
             }
 
             _ = choice.IsEnabled.Should().BeTrue();

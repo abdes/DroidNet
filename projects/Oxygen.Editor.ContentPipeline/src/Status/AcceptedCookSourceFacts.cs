@@ -62,10 +62,7 @@ internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProven
             }
         }
 
-        return new(sources.ToImmutable(), [], [], issues.ToImmutable())
-        {
-            BuiltinOwners = publication.BuiltinOwners,
-        };
+        return new(sources.ToImmutable(), [], issues.ToImmutable());
     }
 
     private async Task<CookSourceFacts> ReadSourceAsync(ContentCookInput input, CancellationToken cancellationToken)

@@ -18,6 +18,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.World.Inspection;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
@@ -48,10 +49,10 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
             };
             var high = low with
             {
-                RootFolderPath = projects.ActiveProject!.ProjectRoot.Combine(".cooked").Combine("Content"),
+                ContainerPath = projects.ActiveProject!.ProjectRoot.Combine(".cooked").Combine("Content"),
                 AssetKey = new(3, 4),
             };
-            var effective = new AssetEntry(asset, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, asset.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: high.RootFolderPath.Combine("Shared.omat"), AssetGuid: null, [], IsSelectable: true)
+            var effective = new AssetEntry(asset, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, asset.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: high.ContainerPath.Combine("Shared.omat"), AssetGuid: null, [], IsSelectable: true)
             {
                 CookedMetadata = high,
                 OverriddenCookedSources = [low],
@@ -93,9 +94,9 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         }
     });
 
-    /// <summary>Cooked and built-in entries open inspection instead of silently doing nothing or selecting a same-named authored scene.</summary>
+    /// <summary>Cooked and engine entries open inspection instead of silently doing nothing or selecting a same-named authored scene.</summary>
     /// <param name="kind">The asset type.</param>
-    /// <param name="builtin">Whether the asset is engine-provided.</param>
+    /// <param name="engine">Whether the asset is packaged in the engine content pak.</param>
     /// <returns>The asynchronous browser invocation regression.</returns>
     [TestMethod]
     [DataRow(AssetKind.Material, false)]
@@ -104,7 +105,7 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
     [DataRow(AssetKind.Texture, false)]
     [DataRow(AssetKind.Material, true)]
     [DataRow(AssetKind.Geometry, true)]
-    public Task CookedAssetOpeningUsesReadOnlyInspection(AssetKind kind, bool builtin) => EnqueueAsync(async () =>
+    public Task CookedAssetOpeningUsesReadOnlyInspection(AssetKind kind, bool engine) => EnqueueAsync(async () =>
     {
         var extension = kind switch
         {
@@ -113,13 +114,13 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
             AssetKind.Geometry => "ogeo",
             _ => "otex",
         };
-        var uri = builtin ? AssetPath.Generated.Combine(kind == AssetKind.Material ? "Materials/Default" : "BasicShapes/Cube") : AssetPath.Parse("/Library/Main." + extension);
-        var item = new AssetEntry(uri, "Main", kind, builtin ? AssetState.Generated : AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.NotMounted, uri.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
+        var uri = engine ? (kind == AssetKind.Material ? EngineAssets.DefaultMaterial : EngineAssets.BasicShape("Cube")) : AssetPath.Parse("/Library/Main." + extension);
+        var item = new AssetEntry(uri, "Main", kind, engine ? AssetState.Packaged : AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.NotMounted, uri.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
         using var items = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
         var provider = CreateQueryProvider(items);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState();
-        using var layout = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
+        using var layout = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var layoutView = new ListLayoutView
         {
@@ -136,7 +137,7 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         });
         messenger.Register<OpenMaterialRequestMessage>(listener, (_, _) => sourceOpens++);
         messenger.Register<OpenSceneRequestMessage>(listener, (_, _) => sourceOpens++);
-        using var browser = CreateBuiltinBrowserModel(provider.Object, projects, state, layout, layoutView, messenger);
+        using var browser = CreateBrowserModel(provider.Object, projects, state, layout, layoutView, messenger);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         browser.LoadContent(layout, "right");
         await LoadTestContentAsync(layoutView).ConfigureAwait(true);
@@ -149,17 +150,17 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         _ = sourceOpens.Should().Be(0);
     });
 
-    /// <summary>A built-in without a project copy has useful read-only information and no meaningless validation action.</summary>
+    /// <summary>A packaged engine asset has useful read-only information and no meaningless validation action.</summary>
     /// <param name="geometry">Whether to inspect the engine cube or default material.</param>
-    /// <returns>The asynchronous built-in document regression.</returns>
+    /// <returns>The asynchronous packaged-asset document regression.</returns>
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public Task UncopiedBuiltinInspectionShowsEngineInformation(bool geometry) => EnqueueAsync(async () =>
+    public Task PackagedEngineAssetInspectionShowsEngineInformation(bool geometry) => EnqueueAsync(async () =>
     {
         var projects = CreateQueryProject();
-        var uri = AssetPath.Generated.Combine(geometry ? "BasicShapes/Cube" : "Materials/Default");
-        var item = new AssetEntry(uri, geometry ? "Cube" : "Default", geometry ? AssetKind.Geometry : AssetKind.Material, AssetState.Generated, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
+        var uri = geometry ? EngineAssets.BasicShape("Cube") : EngineAssets.DefaultMaterial;
+        var item = new AssetEntry(uri, geometry ? "Cube" : "Default", geometry ? AssetKind.Geometry : AssetKind.Material, AssetState.Packaged, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
         using var items = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
         var provider = CreateQueryProvider(items);
         _ = provider.Setup(value => value.ResolveAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(item);
@@ -184,31 +185,11 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         await model.InspectAsync(scope).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.AssetInformationVisibility.Should().Be(Visibility.Visible);
-        _ = model.StatusText.Should().Be("Built-in");
+        _ = model.StatusText.Should().Be(item.PackagedBadge);
         _ = model.ValidationVisibility.Should().Be(Visibility.Collapsed);
         AssertIdleInspectionCommands(view, Visibility.Collapsed);
-        _ = view.FindDescendant<AssetInformationView>()!.ViewModel!.Description.Should().Contain("No separate cooking is needed");
+        _ = view.FindDescendant<AssetInformationView>()!.ViewModel!.Description.Should().Contain("read-only");
         pipeline.VerifyNoOtherCalls();
-        var copyUri = AssetPath.Parse(geometry ? "/Content/Geometry/Cube.ogeo" : "/Content/Materials/Default.omat");
-        var copy = item with
-        {
-            Identity = copyUri,
-            BuiltinOrigin = uri,
-        };
-        items.OnNext([item, copy]);
-        var cookedKind = geometry ? ContentCookAssetKind.Geometry : ContentCookAssetKind.Material;
-        var physicalRoot = projects.ActiveProject!.ProjectRoot.Combine(".cooked").Combine("Content").FullPath;
-        var inspection = new CookInspectionResult(physicalRoot, Succeeded: true, SourceIdentity: Guid.NewGuid(), [new(copyUri.VirtualPath, cookedKind)], [], []);
-        var outputRoot = new CookedRootReport("Content", IsPresent: true, inspection, Validation: null, [new(copyUri, uri, [])]);
-        var report = new CookedOutputReport(projects.ActiveProject.ProjectId, uri, DateTimeOffset.UtcNow, [outputRoot]);
-        _ = pipeline.Setup(value => value.InspectCookedOutputAsync(uri, It.IsAny<CancellationToken>(), It.IsAny<bool>(), projects.ActiveProject)).ReturnsAsync(report);
-        await model.RefreshCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-        _ = model.ScopedAsset!.CookedCompanions.Should().ContainSingle();
-        _ = model.Assets.Should().ContainSingle();
-        _ = model.AssetInformationVisibility.Should().Be(Visibility.Collapsed);
-        _ = model.ValidationVisibility.Should().Be(Visibility.Visible);
-        await WaitForRenderAsync().ConfigureAwait(true);
-        AssertIdleInspectionCommands(view, Visibility.Visible);
     });
 
     private static void AssertIdleInspectionCommands(CookedInspectionView view, Visibility validation)

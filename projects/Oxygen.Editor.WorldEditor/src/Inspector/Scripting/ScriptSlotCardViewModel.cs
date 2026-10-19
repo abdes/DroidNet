@@ -7,9 +7,11 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Scripting;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Scripting;
 
@@ -44,8 +46,8 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
     /// <summary>Gets the slot identity.</summary>
     public Guid SlotId => this.Slot.Id;
 
-    /// <summary>Gets the scripts the slot can run.</summary>
-    public ObservableCollection<ScriptAssetChoice> ScriptChoices => this.Owner.ScriptChoices;
+    /// <summary>Gets the scripts the slot can run, grouped as Engine, Packages and Content.</summary>
+    public AssetPickerModel ScriptChoices => this.Owner.ScriptChoices;
 
     /// <summary>Gets one field per declared parameter.</summary>
     public ObservableCollection<ScriptParameterFieldViewModel> Fields { get; } = [];
@@ -57,9 +59,9 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
     [ObservableProperty]
     public partial string Title { get; private set; } = "No script";
 
-    /// <summary>Gets or sets the picked script.</summary>
+    /// <summary>Gets the script picker's text: the script name, or <c>Pick a script</c>.</summary>
     [ObservableProperty]
-    public partial ScriptAssetChoice? SelectedScript { get; set; }
+    public partial string ScriptText { get; private set; } = "Pick a script";
 
     /// <summary>Gets the missing script's path when the slot refers to a script that no longer exists.</summary>
     [ObservableProperty]
@@ -154,6 +156,14 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
     internal Task SetValueAsync(ScriptParameter parameter, ScriptValue? value)
         => this.Owner.EditAsync(slots => ScriptSlotEdits.SetValue(slots, this.SlotId, parameter, value));
 
+    /// <summary>Makes the slot run another script; picking its current script changes nothing.</summary>
+    /// <param name="script">The picked script.</param>
+    /// <returns>The completion of the undoable edit.</returns>
+    internal Task SetScriptAsync(AssetPath script)
+        => script == this.Slot.Script
+            ? Task.CompletedTask
+            : this.Owner.EditAsync(slots => ScriptSlotEdits.SetScript(slots, this.SlotId, script));
+
     /// <summary>Removes one value, so the parameter takes its declared default or the stale value is gone.</summary>
     /// <param name="name">The parameter name.</param>
     /// <returns>The completion of the undoable edit.</returns>
@@ -171,18 +181,10 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
         this.declarations = declared;
         this.CanMoveUp = index > 0;
         this.CanMoveDown = index < count - 1;
-        this.updating = true;
-        try
-        {
-            this.SelectedScript = slot.Script is { } script ? this.ScriptChoices.FirstOrDefault(choice => choice.Asset == script) : null;
-        }
-        finally
-        {
-            this.updating = false;
-        }
-
-        this.Title = this.SelectedScript?.Name ?? (slot.Script is { } uri ? Path.GetFileNameWithoutExtension(uri.VirtualPath) : "No script");
-        this.MissingScriptText = slot.Script is { } missing && this.SelectedScript is null && declared.Origin == ScriptDeclarationOrigin.Unknown
+        var picked = slot.Script is { } script ? this.ScriptChoices.Find(script) : null;
+        this.Title = picked?.Name ?? (slot.Script is { } uri ? Path.GetFileNameWithoutExtension(uri.VirtualPath) : "No script");
+        this.ScriptText = slot.Script is null ? "Pick a script" : this.Title;
+        this.MissingScriptText = slot.Script is { } missing && picked is null && declared.Origin == ScriptDeclarationOrigin.Unknown
             ? "Missing: " + missing.VirtualPath
             : string.Empty;
         if (!this.inOrderSession)
@@ -217,14 +219,6 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
         var severity = problem.Severity == ScriptProblemSeverity.Error ? "Error" : "Warning";
         var line = problem.Line is { } number ? string.Create(CultureInfo.CurrentCulture, $", line {number}") : string.Empty;
         return string.Create(CultureInfo.CurrentCulture, $"{severity} {problem.Code}{line}: {problem.Message}");
-    }
-
-    partial void OnSelectedScriptChanged(ScriptAssetChoice? value)
-    {
-        if (!this.updating && value is not null && value.Asset != this.Slot.Script)
-        {
-            _ = this.Owner.EditAsync(slots => ScriptSlotEdits.SetScript(slots, this.SlotId, value.Asset));
-        }
     }
 
     partial void OnExecutionOrderChanged(double value)

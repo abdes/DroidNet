@@ -37,8 +37,7 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState();
-        var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
-        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
+        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
         // Navigation completes after the first snapshot; with no view loaded yet there is no frame to wait for.
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         model.SelectedAsset = items[^1];
@@ -89,9 +88,8 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState();
-        var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
-        using var list = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
-        using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
+        using var list = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var listView = new ListLayoutView
         {
@@ -146,9 +144,8 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState();
-        var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
-        using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
-        using var table = new DetailsLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
+        using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        using var table = new DetailsLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
         await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var tileView = new TilesLayoutView { ViewModel = tiles };
         await LoadTestContentAsync(tileView).ConfigureAwait(true);
@@ -191,9 +188,8 @@ public sealed partial class BrowserSelectionTests : DroidNet.Tests.VisualUserInt
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState();
-        var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
-        using var list = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
-        using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
+        using var list = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var listView = new ListLayoutView
         {

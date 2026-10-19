@@ -55,7 +55,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private bool isDisposed;
     private bool isApplyingBaseColor;
     private bool isClosing;
-    private IReadOnlyList<MaterialTextureChoice> availableTextureChoices = [];
+    private IReadOnlyList<AssetEntry> availableTextures = [];
     private double normalScale = 1.0;
     private double occlusionStrength = 1.0;
 
@@ -545,7 +545,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             foreach (var channel in this.TextureChannels)
             {
                 _ = source.TextureReferences.TryGetValue(channel.Channel, out var virtualPath);
-                channel.Refresh(this.availableTextureChoices, virtualPath);
+                channel.Refresh(this.availableTextures, virtualPath);
             }
 
             this.IsDirty = this.document.IsDirty;

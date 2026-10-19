@@ -42,7 +42,7 @@ internal static class SharedSourceStatusScenario
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var cooked = await service.CookAssetAsync(source, testContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, cooked.Diagnostics.Select(static issue => issue.Message)));
         _ = cooked.CookedAssets.Count(static asset => asset.Kind == ContentCookAssetKind.Geometry).Should().Be(meshCount);

@@ -14,6 +14,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -25,10 +26,10 @@ public sealed partial class SceneDescriptorGeneratorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>An explicit builtin material uses its native identity even without builtin geometry.</summary>
+    /// <summary>An engine material override is referenced by its engine path and cooks no input.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task AuthoredGeometryWithDefaultOverrideUsesCatalogMaterialPath()
+    public async Task AuthoredGeometryWithEngineMaterialOverrideReferencesEngineMaterial()
     {
         using var workspace = new DescriptorWorkspace();
         var scene = CreateScene();
@@ -42,99 +43,16 @@ public sealed partial class SceneDescriptorGeneratorTests
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
             Target = new(geometryUri, Guid.NewGuid(), new string('a', 64)),
-            Material = AssetPath.Generated.Combine("Materials/Default"),
+            Material = EngineAssets.DefaultMaterial,
         });
         _ = node.AddComponent(geometry);
         scene.RootNodes.Add(node);
-        var provider = new BuiltinCatalogFixture();
-        var catalog = await provider.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(provider));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Diagnostics.Should().BeEmpty();
         var descriptor = JsonNode.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false))!;
-        _ = descriptor["renderables"]![0]!["material_overrides"]![0]!["material_ref"]!.GetValue<string>().Should().Be(catalog.DefaultMaterial.VirtualPath);
-        _ = result.Dependencies.Should().ContainSingle(input => input.AssetUri == AssetPath.Generated.Combine("Materials/Default"));
-    }
-
-    /// <summary>Preserves every native descriptor field, including thin bounds and default material parameters.</summary>
-    /// <returns>The test task.</returns>
-    [TestMethod]
-    public async Task AllBuiltinContributionsPreserveNativePayloadsAndIdentity()
-    {
-        using var workspace = new DescriptorWorkspace();
-        var provider = new BuiltinCatalogFixture();
-        var catalog = await provider.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var service = new ProceduralGeometryDescriptorService(provider);
-
-        var inputs = await service.EnsureDescriptorsAsync(CreateScope(workspace), catalog.AuthoringGeometries.Select(static item => item.AssetUri).ToArray(), this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = inputs.Should().HaveCount(11);
-        foreach (var definition in catalog.AuthoringGeometries)
-        {
-            var input = inputs.Single(input => input.AssetUri == definition.AssetUri);
-            _ = input.OutputVirtualPath.Should().Be(definition.Contribution.VirtualPath);
-            var written = JsonNode.Parse(await File.ReadAllTextAsync(input.SourceAbsolutePath.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-            _ = JsonNode.DeepEquals(written, JsonNode.Parse(definition.Contribution.Descriptor.GetRawText())).Should().BeTrue(definition.Name);
-        }
-
-        var material = inputs.Single(static input => input.Kind == ContentCookAssetKind.Material);
-        var materialJson = JsonNode.Parse(await File.ReadAllTextAsync(material.SourceAbsolutePath.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-        _ = JsonNode.DeepEquals(materialJson, JsonNode.Parse(catalog.DefaultMaterial.Descriptor.GetRawText())).Should().BeTrue();
-        _ = catalog.Find(AssetPath.Generated.Combine("BasicShapes/IcoSphere"))!.CanonicalName.Should().Be("IcoSphere");
-        _ = catalog.Find(AssetPath.Generated.Combine("BasicShapes/ArrowGizmo")).Should().BeNull();
-    }
-
-    /// <summary>Does not fabricate a descriptor or default material for an unknown engine name.</summary>
-    /// <returns>The test task.</returns>
-    [TestMethod]
-    public async Task UnknownBuiltinHasNoFabricatedCookContribution()
-    {
-        using var workspace = new DescriptorWorkspace();
-        var service = new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture());
-
-        var inputs = await service.EnsureDescriptorsAsync(CreateScope(workspace), [AssetPath.Generated.Combine("BasicShapes/Unknown")], this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = inputs.Should().BeEmpty();
-        _ = Directory.Exists(Path.Combine(workspace.Root, ".pipeline")).Should().BeFalse();
-    }
-
-    /// <summary>Writes deterministic basic-shape descriptors and their material dependencies.</summary>
-    /// <returns>The test task.</returns>
-    [TestMethod]
-    public async Task EnsureDescriptorsAsyncShouldWriteDeterministicDescriptorsForSupportedBasicShapes()
-    {
-        using var workspace = new DescriptorWorkspace();
-        var scope = CreateScope(workspace);
-        var service = new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture());
-
-        var inputs = await service.EnsureDescriptorsAsync(
-            scope,
-            [
-                AssetPath.Generated.Combine("BasicShapes/Cube"),
-                AssetPath.Generated.Combine("BasicShapes/Sphere"),
-                AssetPath.Generated.Combine("BasicShapes/Plane"),
-            ],
-            this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = inputs.Should().HaveCount(4);
-        _ = inputs.Should().Contain(input => input.OutputVirtualPath == "/Content/Materials/OxygenEditor_Default.omat");
-        _ = inputs.Should().Contain(input => input.OutputVirtualPath == "/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
-        _ = inputs.Should().Contain(input => input.OutputVirtualPath == "/Content/Geometry/Engine_Generated_BasicShapes_Sphere.ogeo");
-        _ = inputs.Should().Contain(input => input.OutputVirtualPath == "/Content/Geometry/Engine_Generated_BasicShapes_Plane.ogeo");
-
-        var cubeDescriptor = Path.Combine(workspace.Root, ".pipeline", "Geometry", "Engine_Generated_BasicShapes_Cube.ogeo.json");
-        var sphereDescriptor = Path.Combine(workspace.Root, ".pipeline", "Geometry", "Engine_Generated_BasicShapes_Sphere.ogeo.json");
-        var planeDescriptor = Path.Combine(workspace.Root, ".pipeline", "Geometry", "Engine_Generated_BasicShapes_Plane.ogeo.json");
-
-        _ = File.Exists(cubeDescriptor).Should().BeTrue();
-        _ = File.Exists(sphereDescriptor).Should().BeTrue();
-        _ = File.Exists(planeDescriptor).Should().BeTrue();
-        _ = File.Exists(Path.Combine(workspace.Root, ".pipeline", "Materials", "OxygenEditor_Default.omat.json")).Should().BeTrue();
-        _ = (await File.ReadAllTextAsync(cubeDescriptor, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Contain("\"generator\": \"Cube\"");
-        _ = (await File.ReadAllTextAsync(sphereDescriptor, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Contain("\"generator\": \"Sphere\"");
-        _ = (await File.ReadAllTextAsync(planeDescriptor, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Contain("\"generator\": \"Plane\"");
-        _ = (await File.ReadAllTextAsync(cubeDescriptor, this.TestContext.CancellationToken).ConfigureAwait(false)).Should()
-            .Contain("\"material_ref\": \"/Content/Materials/OxygenEditor_Default.omat\"");
+        _ = descriptor["renderables"]![0]!["material_overrides"]![0]!["material_ref"]!.GetValue<string>().Should().Be(EngineAssets.DefaultMaterial.VirtualPath);
+        _ = result.Dependencies.Should().BeEmpty();
     }
 
     /// <summary>Emits the supported scene fields and geometry/material dependencies.</summary>
@@ -151,14 +69,12 @@ public sealed partial class SceneDescriptorGeneratorTests
         var geometry = new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
+            Geometry = EngineAssets.BasicShape("Cube"),
         };
-        var catalogProvider = new BuiltinCatalogFixture();
-        var catalog = await catalogProvider.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var slots = catalog.Find(geometry.Geometry)!.MaterialSlots;
+        var slotId = Guid.Parse("146b1397-c3e0-bc20-fce3-c55e470b4086");
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
-            Target = new(geometry.Geometry, slots.Slots[0].SlotId, slots.LayoutRevision),
+            Target = new(geometry.Geometry, slotId, new string('a', 64)),
             Material = AssetPath.Parse("/Content/Materials/Red.omat"),
         });
         _ = node.AddComponent(geometry);
@@ -178,26 +94,16 @@ public sealed partial class SceneDescriptorGeneratorTests
         });
         scene.RootNodes.Add(node);
 
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
         _ = result.DescriptorVirtualPath.Should().Be("/Content/Scenes/Main.oscene");
         _ = File.Exists(result.DescriptorPath).Should().BeTrue();
-        _ = File.Exists(Path.Combine(
-            workspace.Root,
-            ".pipeline",
-            "Geometry",
-            "Engine_Generated_BasicShapes_Cube.ogeo.json")).Should().BeTrue();
-        _ = result.Dependencies.Should().OnlyContain(input => input.Role == ContentCookInputRole.GeneratedDescriptor);
-        _ = result.Dependencies.Should().Contain(input =>
-            input.AssetUri == AssetPath.Generated.Combine("BasicShapes/Cube")
-            && input.OutputVirtualPath == "/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
-        _ = result.Dependencies.Should().Contain(input =>
-            input.OutputVirtualPath == "/Content/Materials/OxygenEditor_Default.omat");
+        _ = result.Dependencies.Should().BeEmpty();
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-        AssertSupportedSceneDescriptor(document.RootElement, slots.Slots[0].SlotId);
+        AssertSupportedSceneDescriptor(document.RootElement, slotId);
     }
 
     /// <summary>Emits orthographic framing as size, retained ratio and aspect mode, without diagnostics.</summary>
@@ -220,7 +126,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         });
         scene.RootNodes.Add(node);
 
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
@@ -278,7 +184,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
         var savedScene = await RoundTripSavedSceneAsync(scene).ConfigureAwait(false);
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
@@ -314,11 +220,11 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
+            Geometry = EngineAssets.BasicShape("Cube"),
         });
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Light", CastsShadows = false });
         scene.RootNodes.Add(node);
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
@@ -342,7 +248,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
+            Geometry = EngineAssets.BasicShape("Cube"),
         });
         scene.RootNodes.Add(node);
         scene.SetEnvironment(new SceneEnvironmentData
@@ -366,7 +272,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             },
         });
 
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
@@ -409,7 +315,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         });
         scene.RootNodes.Add(foggy);
 
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
@@ -435,7 +341,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
+            Geometry = EngineAssets.BasicShape("Cube"),
         });
         scene.RootNodes.Add(node);
         scene.SetEnvironment(new SceneEnvironmentData
@@ -452,7 +358,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             },
         });
 
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
@@ -481,7 +387,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
+            Geometry = EngineAssets.BasicShape("Cube"),
         });
         scene.RootNodes.Add(node);
         scene.SetEnvironment(new SceneEnvironmentData
@@ -493,7 +399,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             },
         });
 
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().NotContain(diagnostic => diagnostic.Code == ContentPipelineDiagnosticCodes.SceneUnsupportedField);
@@ -517,7 +423,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         });
         scene.RootNodes.Add(node);
 
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
@@ -536,7 +442,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
 
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -560,7 +466,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var scene = CreateScene();
         scene.RootNodes.Add(new SceneNode(scene) { Name = "Root" });
         scene.SetEnvironment(new SceneEnvironmentData { AtmosphereEnabled = atmosphereEnabled });
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Diagnostics.Should().BeEmpty();
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -643,7 +549,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var scope = CreateScope(workspace);
         var scene = CreateScene();
         scene.RootNodes.Add(new SceneNode(scene) { Name = "Root" });
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         foreach (var toneMapper in Enum.GetValues<ToneMappingMode>())
         {
             foreach (var metering in Enum.GetValues<MeteringMode>())
@@ -700,7 +606,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var scope = CreateScope(workspace);
         var scene = CreateScene();
         scene.RootNodes.Add(new SceneNode(scene) { Name = "Root" });
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var backdrop = AssetPath.Parse("/Content/Textures/Backdrop.otex");
         var light = AssetPath.Parse("/Content/Textures/Light.otex");
         scene.SetEnvironment(new SceneEnvironmentData
@@ -776,7 +682,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var scope = CreateScope(workspace);
         var scene = CreateScene();
         scene.SetEnvironment(scene.Environment with { SkyAtmosphere = new SkyAtmosphereEnvironmentData { AerialPerspectiveStartDepthMeters = value } });
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var issue = result.Diagnostics.Single();
@@ -802,7 +708,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var scene = CreateScene();
         scene.RootNodes.Add(new SceneNode(scene) { Name = "Node" });
         scene.SetEnvironment(scene.Environment with { SkyAtmosphere = new SkyAtmosphereEnvironmentData { AerialPerspectiveStartDepthMeters = value } });
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Diagnostics.Should().NotContain(static issue => issue.Severity == DiagnosticSeverity.Error);
         using var descriptor = System.Text.Json.JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
@@ -845,7 +751,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var savedScene = await RoundTripSavedSceneAsync(scene).ConfigureAwait(false);
         _ = savedScene.References.Scripts.Should().Equal(scene.References.Scripts);
         _ = savedScene.References.PhysicsSidecars.Should().Equal(scene.References.PhysicsSidecars);
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(savedScene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Diagnostics.Should().BeEmpty();
@@ -885,7 +791,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         {
             Scripts = [AssetPath.Parse("/Content/Scripts/NotAScript.omat")],
         });
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
 
         var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -902,7 +808,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scene = CreateScene();
         scene.SetReferences(new SceneReferencesData { ExtraAssets = [path] });
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
 
         var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -983,7 +889,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = root.GetProperty("version").GetInt32().Should().Be(13);
         _ = root.GetProperty("name").GetString().Should().Be("Main");
         _ = root.GetProperty("renderables")[0].GetProperty("geometry_ref").GetString()
-            .Should().Be("/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo");
+            .Should().Be(EngineAssets.BasicShape("Cube").VirtualPath);
         var assignments = root.GetProperty("renderables")[0].GetProperty("material_overrides");
         _ = assignments.GetArrayLength().Should().Be(1);
         _ = assignments[0].GetProperty("slot_id").GetGuid().Should().Be(slotId);

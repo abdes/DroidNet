@@ -16,7 +16,6 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
@@ -80,7 +79,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="assetProvider">The shared asset identity and availability feed.</param>
     /// <param name="scenePreview">The engine preview, which reports the fields still waiting for the engine.</param>
     /// <param name="selectionService">The authoritative document selection owner, used to hydrate the typed context at startup.</param>
-    /// <param name="builtins">The shared native catalog for engine choices.</param>
     /// <param name="materialSlots">The current native geometry slot inventories.</param>
     /// <param name="projectContexts">The active project lifetime.</param>
     /// <param name="interaction">The shared editor lock owner.</param>
@@ -100,7 +98,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         IAssetFeed assetProvider,
         IScenePreview scenePreview,
         ISceneSelectionService selectionService,
-        IBuiltinCatalogDiscovery builtins,
         IGeometryMaterialSlotProvider materialSlots,
         IProjectContextService projectContexts,
         ILoggerFactory? loggerFactory = null,
@@ -128,7 +125,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.propertyEditorFactories = InspectorEditorFactory.Create(
             hosting,
             assetProvider,
-            builtins,
             materialSlots,
             projectContexts,
             loggerFactory,

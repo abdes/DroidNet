@@ -5,12 +5,12 @@
 using System.Security.Cryptography;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
-using Moq;
-using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Assets.Persistence;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 using Oxygen.Testing;
 using Testably.Abstractions;
@@ -36,11 +36,11 @@ public sealed class CookedLibraryCatalogTests
         var rows = fixture.Reduce(records);
         _ = rows.Where(static row => row.Kind == AssetKind.Material).Should().ContainSingle();
         var effective = rows.Single(static row => row.Kind == AssetKind.Material);
-        _ = effective.CookedMetadata!.RootFolderPath.Should().Be(fixture.ProjectOutput);
+        _ = effective.CookedMetadata!.ContainerPath.Should().Be(fixture.ProjectOutput);
         _ = effective.OverriddenCookedSources.Should().HaveCount(2);
         var library = fixture.LibraryCopy(effective, fixture.First);
         _ = library.DisplayPath.Should().Be("/First/payloads/shared.bin");
-        _ = library.CookedMetadata!.RootFolderPath.Should().Be(fixture.First);
+        _ = library.CookedMetadata!.ContainerPath.Should().Be(fixture.First);
         _ = library.PrimaryBadge.Should().Be("Overridden");
         _ = library.PrimaryBadgeTooltip.Should().Contain("project output");
         _ = library.DescriptorPath.Should().BeNull();
@@ -61,10 +61,10 @@ public sealed class CookedLibraryCatalogTests
         fixture.Publish(fixture.FirstRoot, fixture.ProjectRoot, fixture.SecondRoot);
         await catalog.UsePublicationAsync(fixture.Publication.Lease(), this.TestContext.CancellationToken).ConfigureAwait(false);
         var current = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = SharedMaterial(current).Cooked!.RootFolderPath.Should().Be(fixture.Second);
+        _ = SharedMaterial(current).Cooked!.ContainerPath.Should().Be(fixture.Second);
         using var restarted = fixture.CreateCatalog();
         var afterRestart = await restarted.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = SharedMaterial(afterRestart).Cooked!.RootFolderPath.Should().Be(fixture.Second);
+        _ = SharedMaterial(afterRestart).Cooked!.ContainerPath.Should().Be(fixture.Second);
         var effective = fixture.Reduce(afterRestart).Single(static row => row.Kind == AssetKind.Material);
         _ = fixture.LibraryCopy(effective, fixture.Second).IsCookedSourceOverridden.Should().BeFalse();
     }
@@ -123,11 +123,7 @@ public sealed class CookedLibraryCatalogTests
 
         public AssetCatalog CreateCatalog()
         {
-            var builtins = new Mock<IBuiltinCatalogDiscovery>();
-            var snapshot = new BuiltinCatalogSnapshot(Catalog: null, IsLastKnown: false, Notice: null);
-            _ = builtins.SetupGet(value => value.Snapshot).Returns(snapshot);
-            _ = builtins.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(snapshot);
-            return new(this.Projects, this.storage, builtins.Object, this.Publication);
+            return new(this.Projects, this.storage, new EngineContentPakFixture(), this.Publication);
         }
 
         public IReadOnlyList<AssetEntry> Reduce(IReadOnlyList<AssetRecord> records)
@@ -139,7 +135,7 @@ public sealed class CookedLibraryCatalogTests
         /// <returns>The library's own row.</returns>
         public AssetEntry LibraryCopy(AssetEntry effective, FileSystemPath library)
         {
-            var source = effective.OverriddenCookedSources.Prepend(effective.CookedMetadata!).Single(metadata => metadata.RootFolderPath == library);
+            var source = effective.OverriddenCookedSources.Prepend(effective.CookedMetadata!).Single(metadata => metadata.ContainerPath == library);
             return AssetIdentity.FromCookedSource(effective, source, this.Projects.ActiveProject!);
         }
 

@@ -7,6 +7,7 @@ using System.Globalization;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
@@ -43,27 +44,23 @@ public sealed class AssetInformationTests
         _ = published.Description.Should().Contain("Saved inputs have changed").And.Contain("Previously cooked content remains available");
     }
 
-    /// <summary>Engine recipe defaults do not claim that a project has already emitted a cooked copy.</summary>
+    /// <summary>A packaged asset is read-only: it has no source, and its information says so without implying a cook.</summary>
     [TestMethod]
-    public void BuiltinInformationOnlyShowsProvenProjectCopies()
+    public void PackagedInformationIsReadOnlyAndHasNoSource()
     {
-        var builtin = CreateAsset() with
+        var packaged = CreateAsset() with
         {
-            Identity = AssetPath.Generated.Combine("Materials/Default"),
+            Identity = EngineAssets.DefaultMaterial,
             DisplayName = "Default",
-            PrimaryState = AssetState.Generated,
-            Generated = new("Default", "material", AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat"), GeneratedAssetCategory.Standard),
+            PrimaryState = AssetState.Packaged,
             SourcePath = null,
             DescriptorPath = null,
             CookStatus = null,
         };
-        _ = builtin.Information.Facts.Should().ContainSingle().Which.Should().Be(new AssetInformationFact("Origin", "Oxygen built-in"));
-        var copy = builtin with { Identity = AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat"), BuiltinOrigin = builtin.Identity };
-        var grouped = AssetIdentity.GroupBuiltins([builtin, copy]).Single();
-        _ = grouped.Information.Facts.Should().ContainSingle(fact => fact.Label == "Project copy").Which.Value.Should().Be(copy.Identity.VirtualPath);
-        _ = grouped.Information.Description.Should().Contain("No separate cooking is needed");
+        _ = packaged.Information.Facts.Should().ContainSingle().Which.Should().Be(new AssetInformationFact("Source", "Packaged · read-only"));
+        _ = packaged.CanCook.Should().BeFalse();
+        _ = packaged.PackagedBadge.Should().Be("Engine");
     }
-
     /// <summary>Cooked-only assets expose source unavailability without falsely reporting an authored cook requirement.</summary>
     [TestMethod]
     public void CookedOnlyInformationExplainsReadOnlySourceAndNativeFailure()

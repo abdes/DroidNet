@@ -7,6 +7,7 @@
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:local="using:Oxygen.Editor.World.Inspector.Scripting"
+    xmlns:pickers="using:Oxygen.Editor.Pickers"
     xmlns:ui="using:CommunityToolkit.WinUI">
     <UserControl.Resources>
         <ResourceDictionary>
@@ -325,27 +326,22 @@
                         Grid.Column="1"
                         Style="{StaticResource ScriptFieldLabel}"
                         Text="{x:Bind Label}" />
-                    <ComboBox
+                    <DropDownButton
                         Grid.Column="2"
                         HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Left"
                         AutomationProperties.Name="{x:Bind Label}"
-                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                        ItemsSource="{x:Bind AssetChoices}"
-                        PlaceholderText="None"
-                        SelectedItem="{x:Bind SelectedAsset, Mode=TwoWay}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate x:DataType="local:ScriptAssetChoice">
-                                <StackPanel>
-                                    <TextBlock Text="{x:Bind Name}" />
-                                    <TextBlock
-                                        FontSize="11"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Text="{x:Bind Path}"
-                                        TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
+                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}">
+                        <TextBlock Text="{x:Bind ReferenceText, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                        <DropDownButton.Flyout>
+                            <Flyout Opening="OnAssetFlyoutOpening" Placement="BottomEdgeAlignedLeft">
+                                <pickers:AssetPicker
+                                    Width="320"
+                                    ChoiceInvoked="OnAssetChoiceInvoked"
+                                    Model="{x:Bind AssetChoices}" />
+                            </Flyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
                     <Button
                         Grid.Column="3"
                         AutomationProperties.Name="Clear"
@@ -585,27 +581,23 @@
                                         <ColumnDefinition Width="Auto" />
                                     </Grid.ColumnDefinitions>
                                     <TextBlock Style="{StaticResource ScriptFieldLabel}" Text="Script" />
-                                    <ComboBox
+                                    <DropDownButton
                                         Grid.Column="1"
                                         HorizontalAlignment="Stretch"
+                                        HorizontalContentAlignment="Left"
                                         AutomationProperties.Name="Script"
-                                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
-                                        ItemsSource="{x:Bind ScriptChoices}"
-                                        PlaceholderText="Pick a script"
-                                        SelectedItem="{x:Bind SelectedScript, Mode=TwoWay}">
-                                        <ComboBox.ItemTemplate>
-                                            <DataTemplate x:DataType="local:ScriptAssetChoice">
-                                                <StackPanel>
-                                                    <TextBlock Text="{x:Bind Name}" />
-                                                    <TextBlock
-                                                        FontSize="11"
-                                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                        Text="{x:Bind Path}"
-                                                        TextTrimming="CharacterEllipsis" />
-                                                </StackPanel>
-                                            </DataTemplate>
-                                        </ComboBox.ItemTemplate>
-                                    </ComboBox>
+                                        IsEnabled="{x:Bind CanEdit, Mode=OneWay}">
+                                        <TextBlock Text="{x:Bind ScriptText, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                        <DropDownButton.Flyout>
+                                            <Flyout Opening="OnScriptFlyoutOpening" Placement="BottomEdgeAlignedLeft">
+                                                <pickers:AssetPicker
+                                                    Width="320"
+                                                    ChoiceInvoked="OnScriptChoiceInvoked"
+                                                    EmptyText="No scripts yet. Create one with New Script."
+                                                    Model="{x:Bind ScriptChoices}" />
+                                            </Flyout>
+                                        </DropDownButton.Flyout>
+                                    </DropDownButton>
                                     <Button
                                         Grid.Column="2"
                                         AutomationProperties.Name="New Script"

@@ -64,10 +64,6 @@ public sealed partial class AssetCookStatusReader
 
         var fingerprints = graph.Assets.ToDictionary(static input => input.AssetUri,
             input => CookIncrementalPlanner.Fingerprint(input, producer, graph.Files, graph));
-        foreach (var builtin in CookIncrementalPlan.Builtins(graph))
-        {
-            fingerprints[builtin] = CookIncrementalPlanner.GeneratedFingerprint(builtin, producer);
-        }
 
         var currentProducts = previous.Products.Where(product => fingerprints.TryGetValue(product.SourceUri, out var fingerprint)
             && string.Equals(fingerprint, product.ReuseFingerprint, StringComparison.Ordinal))

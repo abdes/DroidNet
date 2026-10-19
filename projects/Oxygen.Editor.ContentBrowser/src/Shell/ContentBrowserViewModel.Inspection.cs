@@ -56,11 +56,11 @@ public sealed partial class ContentBrowserViewModel
     }
 
     private static bool IsCookedOnly(AssetEntry item)
-        => item.SourcePath is null && item.DescriptorPath is null && !item.IsBuiltin;
+        => item.SourcePath is null && item.DescriptorPath is null && !item.IsPackaged;
 
     private static AssetPath? LibraryFolder(ProjectContext project, AssetEntry item)
         => item.CookedMetadata is { } source
-            && project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == source.RootFolderPath) is { } library
+            && project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == source.ContainerPath) is { } library
             && AssetPath.TryCreate(library.Name, source.DescriptorRelativePath, out var location)
                 ? location.Parent
                 : null;
@@ -107,6 +107,6 @@ public sealed partial class ContentBrowserViewModel
 
         layout.SelectedAsset = items[0];
         layout.RevealSelection();
-        return layout.SelectedAsset is { } selected && AssetIdentity.Represents(selected, items[0].Identity);
+        return layout.SelectedAsset is { } selected && selected.Identity == items[0].Identity;
     }
 }

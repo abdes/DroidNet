@@ -16,7 +16,6 @@
 #include <EditorModule/EditorCommand.h>
 #include <EditorModule/SceneAssetRequests.h>
 
-#include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/GeometryAsset.h>
 
 namespace oxygen::interop::module {
@@ -36,20 +35,8 @@ void SetGeometryCommand::Execute(CommandContext &context) {
   }
   auto complete = context.AssetRequests->BeginGeometry(
       node_, assetUri_, std::move(failure_callback_), std::move(success_callback_));
-  std::shared_ptr<const oxygen::data::GeometryAsset> geometry;
   try {
-
-    if (oxygen::data::IsBuiltinGeometryUri(assetUri_)) {
-      geometry = oxygen::data::ResolveBuiltinGeometry(assetUri_);
-      if (!geometry) {
-        throw std::invalid_argument("Unknown or invalid built-in geometry: " +
-                                    assetUri_);
-      }
-    } else {
-      context.AssetRequests->LoadGeometry(assetUri_, complete);
-      return;
-    }
-    complete(std::move(geometry), {});
+    context.AssetRequests->LoadGeometry(assetUri_, complete);
   } catch (const std::exception &ex) {
     complete({}, ex.what());
   } catch (...) {

@@ -17,9 +17,11 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 /// <param name="projects">The active project.</param>
 /// <param name="files">The atomic file store.</param>
 /// <param name="projectManager">Reads the saved project configuration.</param>
+/// <param name="engineContent">The engine content pak, the lowest library beneath the declared ones.</param>
 /// <param name="logger">Records recovery of interrupted project changes.</param>
 public sealed partial class CookPublicationService(IContentCookCoordinator coordinator, IProjectContextService projects,
-    IAtomicFileStore files, IProjectManagerService projectManager, Microsoft.Extensions.Logging.ILogger<CookPublicationService>? logger = null)
+    IAtomicFileStore files, IProjectManagerService projectManager, IEngineContentPak engineContent,
+    Microsoft.Extensions.Logging.ILogger<CookPublicationService>? logger = null)
     : ICookPublicationReader
 {
     private readonly Lock sync = new();
@@ -61,7 +63,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
                     }
 
                     using var baseline = await this.AcquireForOperationAsync(operation, token).ConfigureAwait(false);
-                    using var libraries = await CookedLibraryReadSet.AcquireAsync(project, token).ConfigureAwait(false);
+                    using var libraries = await CookedLibraryReadSet.AcquireAsync(project, engineContent, token).ConfigureAwait(false);
                     var document = BuildMetadataDocument(operation, project, baseline, libraries, droppedRoots: ImmutableHashSet<string>.Empty);
                     if ((baseline.Document is { } current
                             && string.Equals(current.MountConfigurationIdentity, document.MountConfigurationIdentity, StringComparison.Ordinal)
@@ -103,7 +105,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
     {
         coordinator.VerifyWriter(operation);
         using var baseline = await this.AcquireForOperationAsync(operation, cancellationToken).ConfigureAwait(false);
-        using var libraries = await CookedLibraryReadSet.AcquireAsync(next, cancellationToken).ConfigureAwait(false);
+        using var libraries = await CookedLibraryReadSet.AcquireAsync(next, engineContent, cancellationToken).ConfigureAwait(false);
         var document = BuildMetadataDocument(operation, next, baseline, libraries, droppedRoots: ImmutableHashSet<string>.Empty);
         var transaction = await CookPublicationTransaction.ReserveAsync(operation, baseline, [], files, projectManager, cancellationToken).ConfigureAwait(false);
         var projectChange = new CookPublicationJournal.ProjectConfiguration(ProjectInfo.ToJson(expected), ProjectInfo.ToJson(desired));

@@ -17,13 +17,11 @@ public sealed class PreviewCookTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Preview demand cannot silently become a whole-scene cook or cook a built-in.</summary>
+    /// <summary>Preview demand cannot silently become a whole-scene cook.</summary>
     /// <param name="identity">The non-authorable preview scope.</param>
     /// <returns>The asynchronous scope regression.</returns>
     [TestMethod]
     [DataRow("/Content/Scenes/Main.oscene.json")]
-    [DataRow("/Engine/Generated/BasicShapes/Cylinder")]
-    [DataRow("/Engine/Generated/Materials/Default")]
     [DataRow("/Content/Models/Source.fbx")]
     public async Task PreviewDemandRejectsNonAssetScopes(string identity)
     {

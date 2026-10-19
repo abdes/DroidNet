@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -35,29 +36,31 @@ public sealed partial class AssetIdentityReducerTests
         _ = reducer.Reduce(records, project, scope).Single().PrimaryState.Should().Be(AssetState.Descriptor);
     }
 
-    /// <summary>Native generated assets are usable before cooking and retain canonical provenance.</summary>
+    /// <summary>An asset of the engine content pak is read-only, selectable and keeps its engine identity.</summary>
     [TestMethod]
-    public void GeneratedRecordsRetainTheirEngineIdentityBeforeCooking()
+    public void PackagedRecordsRetainTheirEngineIdentity()
     {
         using var workspace = new TempWorkspace();
-        var record = new AssetRecord(AssetPath.Parse("/Engine/Generated/BasicShapes/IcoSphere"))
+        var identity = EngineAssets.BasicShape("IcoSphere");
+        var pak = FileSystemPath.From(workspace.SourcePath("engine.pak"));
+        var record = new AssetRecord(identity)
         {
-            Generated = new("IcoSphere", "oxygen.geometry-descriptor.v1", AssetPath.Parse("/Content/Geometry/Engine_Generated_BasicShapes_IcoSphere.ogeo"), GeneratedAssetCategory.Standard),
+            Cooked = new CookedAssetMetadata(pak, DescriptorRelativePath: null, Guid.CreateVersion7(), new(1, 2), AssetType: 2, DescriptorSize: 1, DescriptorSha256: null) { VirtualPath = identity },
         };
         var rows = Reduce(workspace, [record]);
         _ = rows.Should().ContainSingle();
         var row = rows[0];
-        _ = row.PrimaryState.Should().Be(AssetState.Generated);
+        _ = row.PrimaryState.Should().Be(AssetState.Packaged);
         _ = row.Kind.Should().Be(AssetKind.Geometry);
-        _ = row.Identity.Should().Be(record.Identity);
-        _ = row.AliasDescription.Should().BeEmpty();
+        _ = row.Identity.Should().Be(identity);
+        _ = row.Origin.Should().Be(AssetOrigin.Engine);
         _ = row.IsSelectable.Should().BeTrue();
+        _ = row.CookedMetadata!.ContainerPath.Should().Be(pak);
         _ = row.CookedPath.Should().BeNull();
         _ = row.SourcePath.Should().BeNull();
+        _ = row.DescriptorPath.Should().BeNull();
         _ = row.DiagnosticCodes.Should().BeEmpty();
-
     }
-
     [TestMethod]
     public void ReduceWhenDescriptorAndOutputExistRequiresFreshnessProof()
     {

@@ -38,12 +38,19 @@ value struct PropertyValueEntry {
   float Value;
 };
 
-//! Complete-set content admission with optional project-mount identity.
-public
-value struct CookedRootBindingManaged {
-  String ^ Path;
-  String ^ ProjectMount;
-};
+  //! How the engine reads a cooked content source.
+  public enum class CookedRootKindManaged : System::Byte {
+    //! A loose cooked root directory.
+    LooseFolder,
+    //! A pak file.
+    PakFile,
+  };
+
+  //! One cooked content source of a mount set.
+  public value struct CookedRootManaged {
+    System::String^ Path;
+    CookedRootKindManaged Kind;
+  };
 
   //! Native scene background values observed at the mutation boundary.
   //! Stored component values and resolved LOD-zero assets for a native node.
@@ -137,8 +144,7 @@ value struct CookedRootBindingManaged {
       float autoExposureTransitionDistanceEv,
       cli::array<ExposureCompensationKeyManaged>
         ^ autoExposureCompensationCurve,
-      String ^ exposureMaskCookedRoot, String ^ exposureMaskDescriptorPath,
-      String ^ exposureMaskProjectMount, float bloomIntensity,
+      String ^ exposureMaskPath, float bloomIntensity,
       float bloomThreshold, float saturation, float contrast,
       float vignetteIntensity, float displayGamma, FogEnvironmentManaged fog,
       SkySphereEnvironmentManaged skySphere,
@@ -199,7 +205,7 @@ value struct CookedRootBindingManaged {
 
     // Asset management
     System::Threading::Tasks::Task
-      ^ ReplaceCookedRootsAsync(array<CookedRootBindingManaged> ^ bindings);
+      ^ ReplaceCookedRootsAsync(array<CookedRootManaged> ^ roots);
     System::Threading::Tasks::Task^ SetCookedContentPausedAsync(bool paused);
 
     // (All APIs are GUID-based; no scene names are accepted)

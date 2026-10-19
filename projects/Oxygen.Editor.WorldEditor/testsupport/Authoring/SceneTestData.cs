@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
@@ -35,7 +36,7 @@ internal static class SceneTestData
     internal static GeometryComponent CreateInspectorGeometry(string name = "Geometry") => new()
     {
         Name = name,
-        Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
+        Geometry = EngineAssets.BasicShape("Cube"),
     };
 
     internal static SceneNode AddNumericNode(Scene scene, float value)

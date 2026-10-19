@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Security.Cryptography;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 
 namespace Oxygen.Editor.ContentPipeline.Incremental;
 

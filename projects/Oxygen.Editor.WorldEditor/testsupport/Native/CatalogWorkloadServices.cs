@@ -2,12 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Config;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
-using Moq;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
@@ -28,13 +25,9 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
         this.Runs = new ContentCookCoordinator(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), processRunner ?? new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
         this.Scopes = new ProjectCookScopeProvider(this.Storage);
-        this.Publication = new(this.Runs, this.Projects, files, new ProjectManagerService(this.Storage, atomicFiles: files));
+        this.Publication = new(this.Runs, this.Projects, files, new ProjectManagerService(this.Storage, atomicFiles: files), this.EngineContent);
         this.Mounts = new();
-        this.Pipeline = new ContentPipelineService(this.Projects, this.Runs, this.Scopes, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, this.Documents, this.compatibility, files, this.Publication);
-        var paths = new Mock<IPathFinder>();
-        _ = paths.SetupGet(value => value.LocalAppState).Returns(fixture.ProjectRoot.Combine(".state").FullPath);
-        _ = paths.SetupGet(value => value.Temp).Returns(fixture.ProjectRoot.Combine(".temp").FullPath);
-        this.Builtins = new BuiltinCatalogDiscovery(api, files, paths.Object, NullLogger<BuiltinCatalogDiscovery>.Instance, this.compatibility);
+        this.Pipeline = new ContentPipelineService(this.Projects, this.Runs, this.Scopes, new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, this.Documents, this.compatibility, files, this.Publication, this.EngineContent);
     }
 
     public ProjectContextService Projects { get; }
@@ -53,11 +46,10 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
 
     public CookedContentMountService Mounts { get; }
 
-    public BuiltinCatalogDiscovery Builtins { get; }
+    public EngineContentPak EngineContent { get; } = EngineContentPak.Installed();
 
     public void Dispose()
     {
-        this.Builtins.Dispose();
         this.Runs.Dispose();
         this.compatibility.Dispose();
     }

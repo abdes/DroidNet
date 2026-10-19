@@ -4,7 +4,7 @@
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
-internal sealed class CapturingEngineContentPipelineApi(CookValidationResult validation, CookInspectionResult inspection, NativeImportResult? importResult = null) : IEngineContentPipelineApi, IBuiltinGeometryCatalogProvider
+internal sealed class CapturingEngineContentPipelineApi(CookValidationResult validation, CookInspectionResult inspection, NativeImportResult? importResult = null) : IEngineContentPipelineApi
 {
     private readonly CookInspectionResult inspected = inspection with
     {
@@ -28,10 +28,6 @@ internal sealed class CapturingEngineContentPipelineApi(CookValidationResult val
     public string? ValidatedRoot { get; private set; }
 
     public Task<Import.NativeSourceAnalysisReport> AnalyzeSourcesAsync(ContentSourceAnalysisExecution execution, CancellationToken cancellationToken) => this.SourceAnalysis(execution, cancellationToken);
-
-    public Task<BuiltinGeometryCatalog> GetBuiltinGeometryCatalogAsync(string projectRoot, string mountName, CancellationToken cancellationToken,
-        Managed.Core.Compatibility.NativeArtifactLease? artifacts = null)
-        => new BuiltinCatalogFixture().GetBuiltinGeometryCatalogAsync(projectRoot, mountName, cancellationToken, artifacts);
 
     public async Task<NativeImportResult> ImportAsync(
         ContentImportExecution execution,

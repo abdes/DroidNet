@@ -15,35 +15,24 @@ internal sealed partial class CookSourceAnalyzer
     /// <summary>Projects output repairs from accepted snapshot bytes without another source-analysis pass.</summary>
     /// <param name="inputs">Scene sources whose generated descriptors need rebuilding.</param>
     /// <param name="snapshot">The accepted saved-input snapshot.</param>
-    /// <param name="existingGeneratedSources">Generated sources already available to this cook.</param>
     /// <param name="cancellationToken">Cancels descriptor preparation.</param>
-    /// <returns>The prepared scene descriptors, generated inputs and diagnostics.</returns>
+    /// <returns>The prepared scene descriptors, their captured inputs and diagnostics.</returns>
     internal async Task<CookSourceFrontier> PrepareCapturedScenesAsync(
         IReadOnlyList<ContentCookInput> inputs,
         CookInputSnapshot snapshot,
-        IReadOnlyList<ContentCookInput> existingGeneratedSources,
         CancellationToken cancellationToken)
     {
         _ = Directory.CreateDirectory(this.root);
-        foreach (var source in existingGeneratedSources)
-        {
-            this.builtins[source.AssetUri] = source;
-        }
-
-        var existingPaths = existingGeneratedSources.Select(static input => input.SourceAbsolutePath).ToHashSet();
         var prepared = new List<PreparedSource>();
         foreach (var input in inputs)
         {
             prepared.Add(await this.PrepareAsync(input, cancellationToken, snapshot).ConfigureAwait(false));
         }
 
-        var generated = prepared.SelectMany(static source => source.Scene!.Dependencies)
-            .Where(input => input.Role == ContentCookInputRole.GeneratedDescriptor && !existingPaths.Contains(input.SourceAbsolutePath))
-            .DistinctBy(static input => input.AssetUri).ToImmutableArray();
         var diagnostics = prepared.SelectMany(static source => source.Scene!.Diagnostics).ToImmutableArray();
         if (diagnostics.Any(static issue => issue.Severity >= Oxygen.Managed.Core.Diagnostics.DiagnosticSeverity.Error))
         {
-            return new([], [], [], diagnostics);
+            return new([], [], diagnostics);
         }
 
         var descriptors = prepared.Select(source => this.Rebase(source.Input with
@@ -51,16 +40,12 @@ internal sealed partial class CookSourceAnalyzer
             SourceAbsolutePath = FileSystemPath.From(source.Scene!.DescriptorPath),
             Role = ContentCookInputRole.GeneratedDescriptor,
         }));
-        var captured = await CookInputSnapshotCapture.CaptureGeneratedAsync(descriptors.Concat(generated), cancellationToken).ConfigureAwait(false);
+        var captured = await CookInputSnapshotCapture.CaptureGeneratedAsync(descriptors, cancellationToken).ConfigureAwait(false);
         return new(
             [.. prepared.Select(static source => new CookSourceFacts(source.Input, [], [], source.ManagedFiles) { Job = source.Job, Scene = source.Scene })],
-            generated,
             captured,
             diagnostics);
     }
-
-    private ImmutableDictionary<string, AssetPath> AcceptedBuiltinOwners()
-        => previous?.BuiltinOwners ?? ImmutableDictionary<string, AssetPath>.Empty;
 
     private async Task<Dictionary<AssetPath, CookSourceFacts>> ReadReusableFactsAsync(IReadOnlyList<ContentCookInput> inputs, CancellationToken cancellationToken)
     {

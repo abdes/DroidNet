@@ -26,10 +26,11 @@ public sealed class PreviewCookTests
     [TestCategory("NativeContent")]
     public async Task PreviewMaterialSharesSavedScopeWithoutIncludingDirtyConsumingScene()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
-        var pipeline = CreateIncrementalService(workspace, CreateRecordingApi(compatibility), compatibility);
+        var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var materialUri = AssetPath.Parse("/Content/Materials/Blue.omat.json");
         var scenePath = Path.Combine(workspace.Root, "Content", "Scenes", "Main.oscene.json");
         var scene = SavedState(scenePath) with { IsDirty = true };
@@ -58,7 +59,7 @@ public sealed class PreviewCookTests
     [TestCategory("NativeContent")]
     public async Task PreviewGeometryCooksItsUncookedMaterialDependency()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: false);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();

@@ -21,9 +21,9 @@ internal sealed partial class ScenePreview
     // failure is attributed to a texture only when the edit loads exactly one.
     private static string? SoleEnvironmentTexture(RuntimeSetEnvironment environment)
     {
-        RuntimeTextureReference?[] textures = [environment.AutoExposureMeteringMask, environment.SkySphereCubemap, environment.SkyLightCubemap];
-        var loaded = textures.OfType<RuntimeTextureReference>().ToArray();
-        return loaded.Length == 1 ? loaded[0].Asset.ToUriString() : null;
+        AssetPath?[] textures = [environment.AutoExposureMeteringMask, environment.SkySphereCubemap, environment.SkyLightCubemap];
+        var loaded = textures.OfType<AssetPath>().ToArray();
+        return loaded.Length == 1 ? loaded[0].ToUriString() : null;
     }
 
     private void ObserveWorld(IRuntimeWorldCommands commands)

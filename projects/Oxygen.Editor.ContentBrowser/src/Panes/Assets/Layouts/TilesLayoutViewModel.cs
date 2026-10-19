@@ -1,11 +1,10 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
@@ -17,16 +16,14 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 /// <param name="projectContextService">The active project context service.</param>
 /// <param name="contentBrowserState">The content-browser state.</param>
 /// <param name="hostingContext">The hosting context.</param>
-/// <param name="builtins">The engine catalog availability.</param>
 /// <param name="scripts">The script analysis, which shows script problems in each row's status.</param>
 public partial class TilesLayoutViewModel(
     IAssetFeed assetProvider,
     IProjectContextService projectContextService,
     ContentBrowserState contentBrowserState,
     HostingContext hostingContext,
-    IBuiltinCatalogDiscovery builtins,
     Scripts.IScriptAnalysisService? scripts = null)
-    : AssetsLayoutViewModel(assetProvider, projectContextService, contentBrowserState, hostingContext, builtins, scripts)
+    : AssetsLayoutViewModel(assetProvider, projectContextService, contentBrowserState, hostingContext, scripts)
 {
     /// <summary>
     /// Invokes the item.

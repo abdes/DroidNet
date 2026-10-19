@@ -10,9 +10,13 @@ using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Assets.Persistence;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
+using Oxygen.Testing;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Mounting;
@@ -130,6 +134,32 @@ public sealed class CookedContentMountTests
         File.WriteAllBytes(Path.Combine(fixture.First, "Materials", "Shared.omat"), [9]);
     }
 
+    /// <summary>A declared pak is a library: its catalog identity is published, it mounts as a pak by that identity, and a replaced pak is refused.</summary>
+    /// <returns>The asynchronous pak library regression.</returns>
+    [TestMethod]
+    public async Task DeclaredPakMountsByItsCatalogIdentity()
+    {
+        using var fixture = new MountFixture();
+        var pak = fixture.WritePak("Props.pak", Guid.CreateVersion7(), digestByte: 0xA1);
+        var project = fixture.Project with { PakFileMounts = [new("Props", FileSystemPath.From(pak.Path))] };
+        using var reader = await fixture.CaptureAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var root = reader.Roots.Single(static root => root.Name == "Props");
+        _ = root.Container.Should().Be(CookPublicationRootContainer.PakFile);
+        _ = root.SourceKey.Should().Be(pak.Document.SourceIdentity);
+        _ = root.IndexSha256.Should().Be(pak.Document.CatalogDigest);
+        using (var mounts = await fixture.Service.PrepareAsync(project, reader, this.TestContext.CancellationToken).ConfigureAwait(false))
+        {
+            _ = mounts.Roots.Should().Contain(pak.Path);
+            Action replace = () => File.WriteAllBytes(pak.Path, [0]);
+            _ = replace.Should().Throw<IOException>("a mounted pak is held open for shared reading");
+        }
+
+        _ = fixture.WritePak("Props.pak", pak.Document.SourceIdentity, digestByte: 0xB2);
+        Func<Task> stale = () => fixture.Service.PrepareAsync(project, reader, this.TestContext.CancellationToken);
+        _ = await stale.Should().ThrowAsync<CookedLibraryChangedException>().ConfigureAwait(false);
+    }
+
     private sealed partial class MountFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-CookedMounts-");
@@ -166,7 +196,7 @@ public sealed class CookedContentMountTests
 
         public async Task<CookPublicationReadLease> CaptureAsync(ProjectContext project, CancellationToken token)
         {
-            using var libraries = await CookedLibraryReadSet.AcquireAsync(project, token).ConfigureAwait(false);
+            using var libraries = await CookedLibraryReadSet.AcquireAsync(project, new EngineContentPakFixture(), token).ConfigureAwait(false);
             var index = await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, token).ConfigureAwait(false);
             var roots = libraries.OrderBindings([new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, LibraryPath: null)]);
             var document = new CookPublicationDocument(
@@ -188,6 +218,15 @@ public sealed class CookedContentMountTests
         }
 
         public void RecookFirst() => _ = this.WriteRoot("First", 4);
+
+        public (string Path, PakDocument Document) WritePak(string name, Guid identity, byte digestByte)
+        {
+            var path = Path.Combine(this.directory.FullName, name);
+            var document = new PakDocument(1, identity, Convert.ToHexString(Enumerable.Repeat(digestByte, 32).ToArray()), [new(new AssetKey(1, 2), 1, "/Props/Materials/Rock.omat", 0, 16)]);
+            using var stream = File.Create(path);
+            PakFixture.Write(stream, document);
+            return (path, document);
+        }
 
         public void Dispose() => this.directory.Delete(recursive: true);
 

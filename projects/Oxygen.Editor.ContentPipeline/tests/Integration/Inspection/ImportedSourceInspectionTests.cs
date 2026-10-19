@@ -25,12 +25,12 @@ public sealed class ImportedSourceInspectionTests
     [TestCategory("NativeContent")]
     public async Task ImportedSourceInspectionFollowsItsOutputMount()
     {
-        using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
+        using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(workspace, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var cooked = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue();
         var expected = cooked.CookedAssets.Select(static asset => asset.VirtualPath).ToArray();

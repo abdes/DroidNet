@@ -27,12 +27,12 @@ public sealed class CookedLibraryResolutionTests
     [TestCategory("NativeContent")]
     public async Task SceneCookUsesDeclaredCookedLibraryGeometry()
     {
-        using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
-        using var consumer = new CookWorkspace();
+        using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(library, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var imported = await CreateService(library, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var imported = await CreateService(library, new SceneDescriptorGenerator(), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = imported.IsPublished.Should().BeTrue();
         var geometry = imported.CookedAssets.First(static output => output.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
         var root = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -40,7 +40,7 @@ public sealed class CookedLibraryResolutionTests
         consumer.Activate(context);
         AddGeometryNode(consumer, geometry, "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
         var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var indexed = imported.Inspection!.Assets.Single(asset => asset.VirtualPath == geometry.VirtualPath);
         var descriptorPath = Path.Combine(root, indexed.DescriptorRelativePath!);
@@ -64,7 +64,7 @@ public sealed class CookedLibraryResolutionTests
         var model = System.Text.Json.Nodes.JsonNode.Parse(await File.ReadAllTextAsync(modelPath, this.TestContext.CancellationToken).ConfigureAwait(false))!;
         model["materials"]![0]!["pbrMetallicRoughness"]!["roughnessFactor"] = 0.1;
         await File.WriteAllTextAsync(modelPath, model.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = (await CreateService(library, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
+        _ = (await CreateService(library, new SceneDescriptorGenerator(), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         _ = await library.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.OutOfDate);
         var updated = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -82,9 +82,9 @@ public sealed class CookedLibraryResolutionTests
     [TestCategory("NativeContent")]
     public async Task SceneCookFollowsSavedLibraryPriority()
     {
-        using var older = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
-        using var newer = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
-        using var consumer = new CookWorkspace();
+        using var older = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var newer = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
@@ -92,7 +92,7 @@ public sealed class CookedLibraryResolutionTests
         foreach (var library in new[] { older, newer })
         {
             var source = await WriteCrossMountModelAsync(library, this.TestContext.CancellationToken).ConfigureAwait(false);
-            var result = await CreateService(library, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
+            var result = await CreateService(library, new SceneDescriptorGenerator(), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.IsPublished.Should().BeTrue();
             geometry = result.CookedAssets.First(static output => output.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
         }
@@ -102,7 +102,7 @@ public sealed class CookedLibraryResolutionTests
         AddGeometryNode(consumer, geometry!, "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
-        var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
         var first = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
         _ = first.InputSnapshot!.CookedDependencies.Select(static dependency => dependency.SourceName).Distinct(StringComparer.Ordinal).Should().ContainSingle().Which.Should().Be("Newer");

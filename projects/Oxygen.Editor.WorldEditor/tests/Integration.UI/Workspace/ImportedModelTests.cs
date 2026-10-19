@@ -48,7 +48,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         timeout.CancelAfter(TimeSpan.FromSeconds(120));
         using var services = new CatalogWorkloadServices(fixture);
         var imported = libraryOnly ? await CreateImportedLibraryAsync(fixture, services, format, timeout.Token).ConfigureAwait(true) : null;
-        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.Builtins, services.Publication);
+        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
         using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
         await using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
@@ -61,7 +61,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         else
         {
             using var publication = await services.Publication.AcquireForMountAsync(services.Projects.ActiveProject!, timeout.Token).ConfigureAwait(true);
-            var bindings = publication.Roots.Zip(publication.RootPaths, static (root, path) => new Oxygen.Editor.Runtime.Engine.RuntimeCookedRoot(path, root.Owner == CookPublicationRootOwner.Project ? root.Name : null)).ToArray();
+            var bindings = publication.RootPaths.Select(static path => new Oxygen.Editor.Runtime.Engine.RuntimeCookedRoot(path)).ToArray();
             var mounts = await services.Mounts.PrepareAsync(services.Projects.ActiveProject!, publication, timeout.Token).ConfigureAwait(true);
             await fixture.Runtime.RefreshProjectCookedRootsAsync(bindings, mounts).ConfigureAwait(true);
         }
@@ -73,7 +73,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         AssertImportedAssetInformation(geometryRow!, libraryOnly);
         AssertImportedAssetInformation(materialRow!, libraryOnly);
         using var demand = fixture.CreateImportedAssetDemand(services, provider);
-        using var host = fixture.CreateInspectorHost([fixture.Source.RootNodes[0]], provider, services.Builtins, services.Pipeline);
+        using var host = fixture.CreateInspectorHost([fixture.Source.RootNodes[0]], provider, services.Pipeline);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
         while (model.IsMaterialSlotLoading)
@@ -137,7 +137,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         var geometryButton = (SplitButton)await FindInspectorControlAsync(scroller, () => view.FindDescendant<SplitButton>(button => string.Equals(button.Name, "AssetSplitButton", StringComparison.Ordinal)), "Geometry", cancellationToken).ConfigureAwait(true);
         await DismissImportedAssetPickerAsync(geometryButton, cancellationToken).ConfigureAwait(true);
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
-        await PickAssetAsync(geometryButton, geometry.DisplayName, material: false, cancellationToken).ConfigureAwait(true);
+        await PickAssetAsync(geometryButton, geometry.DisplayName, cancellationToken).ConfigureAwait(true);
         var selected = await WaitForNodeAsync(fixture, node.Id, static value => value.IndexCount == 3, cancellationToken).ConfigureAwait(true);
         _ = selected.GeometryKey.Should().Be(ImportedNativeKey(geometry));
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
@@ -151,7 +151,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         var materialButton = (SplitButton)await FindInspectorControlAsync(scroller, () => view.FindDescendant<SplitButton>(button => string.Equals(button.Name, "MaterialSplitButton", StringComparison.Ordinal)), "Material", cancellationToken).ConfigureAwait(true);
         await DismissImportedAssetPickerAsync(materialButton, cancellationToken).ConfigureAwait(true);
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
-        await PickAssetAsync(materialButton, material.DisplayName, material: true, cancellationToken).ConfigureAwait(true);
+        await PickAssetAsync(materialButton, material.DisplayName, cancellationToken).ConfigureAwait(true);
         _ = fixture.Document.History.UndoStack.Should().HaveCount(2, "the enabled picker must apply an authored material edit");
         _ = ReadMaterialAsset(node).Should().Be(material.Identity);
         var assigned = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, cancellationToken).ConfigureAwait(true);

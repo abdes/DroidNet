@@ -27,7 +27,7 @@ internal sealed class CapturingSceneDescriptorGenerator(IReadOnlyList<Diagnostic
             await beforeGenerate(cancellationToken).ConfigureAwait(false);
         }
 
-        var result = await new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()))
+        var result = await new SceneDescriptorGenerator()
             .GenerateAsync(scene, scope, cancellationToken).ConfigureAwait(false);
         return result with { Diagnostics = [.. result.Diagnostics, .. diagnostics] };
     }

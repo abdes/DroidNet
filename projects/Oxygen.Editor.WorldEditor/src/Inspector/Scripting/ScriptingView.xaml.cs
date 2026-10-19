@@ -6,6 +6,7 @@ using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.World.SceneExplorer;
 
 namespace Oxygen.Editor.World.Inspector.Scripting;
@@ -14,7 +15,7 @@ namespace Oxygen.Editor.World.Inspector.Scripting;
 [ViewModel(typeof(ScriptingViewModel))]
 public sealed partial class ScriptingView
 {
-    private Flyout? openNodeFlyout;
+    private Flyout? openFlyout;
 
     /// <summary>Initializes a new instance of the <see cref="ScriptingView"/> class.</summary>
     public ScriptingView() => this.InitializeComponent();
@@ -96,7 +97,7 @@ public sealed partial class ScriptingView
         _ = args;
         if (sender is Flyout { Target.DataContext: ScriptParameterFieldViewModel field } flyout)
         {
-            this.openNodeFlyout = flyout;
+            this.openFlyout = flyout;
             field.NodeQuery = string.Empty;
             field.RefreshNodeChoices();
         }
@@ -108,8 +109,48 @@ public sealed partial class ScriptingView
             && args.ClickedItem is ScriptNodeChoice node)
         {
             field.SelectNode(node);
-            this.openNodeFlyout?.Hide();
-            this.openNodeFlyout = null;
+            this.openFlyout?.Hide();
+            this.openFlyout = null;
+        }
+    }
+
+    private void OnScriptFlyoutOpening(object? sender, object args)
+    {
+        _ = args;
+        if (sender is Flyout { Target.DataContext: ScriptSlotCardViewModel card } flyout)
+        {
+            this.openFlyout = flyout;
+            card.ScriptChoices.SearchText = string.Empty;
+        }
+    }
+
+    private async void OnScriptChoiceInvoked(object? sender, AssetChoice choice)
+    {
+        if (sender is FrameworkElement { DataContext: ScriptSlotCardViewModel card } && choice.Asset is { } script)
+        {
+            this.openFlyout?.Hide();
+            this.openFlyout = null;
+            await card.SetScriptAsync(script).ConfigureAwait(true);
+        }
+    }
+
+    private void OnAssetFlyoutOpening(object? sender, object args)
+    {
+        _ = args;
+        if (sender is Flyout { Target.DataContext: ScriptParameterFieldViewModel field } flyout)
+        {
+            this.openFlyout = flyout;
+            field.AssetChoices.SearchText = string.Empty;
+        }
+    }
+
+    private void OnAssetChoiceInvoked(object? sender, AssetChoice choice)
+    {
+        if (sender is FrameworkElement { DataContext: ScriptParameterFieldViewModel field } && choice.Asset is { } asset)
+        {
+            field.SelectAsset(asset);
+            this.openFlyout?.Hide();
+            this.openFlyout = null;
         }
     }
 

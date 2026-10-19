@@ -28,13 +28,7 @@ public sealed partial class BackdropSectionViewModel : ObservableObject, IDispos
     {
         this.EditOwner = owner;
         this.Cubemaps = new(cubeTextures, observerScheduler);
-        this.Cubemaps.PropertyChanged += (_, args) =>
-        {
-            if (string.Equals(args.PropertyName, nameof(CubemapPickerModel.FilteredRows), StringComparison.Ordinal))
-            {
-                this.OnPropertyChanged(nameof(this.CubemapDisplayName));
-            }
-        };
+        this.Cubemaps.ChoicesUpdated += (_, _) => this.OnPropertyChanged(nameof(this.CubemapDisplayName));
     }
 
     /// <summary>Gets or sets the backdrop as a segment index: 0 atmosphere, 1 cubemap, 2 solid color, -1 none.</summary>

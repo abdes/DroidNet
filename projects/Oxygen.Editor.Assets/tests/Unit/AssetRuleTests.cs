@@ -8,6 +8,7 @@ using Moq;
 using Oxygen.Editor.Assets.Materials;
 using Oxygen.Editor.Assets.TestSupport;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -84,23 +85,24 @@ public sealed class AssetRuleTests
     }
 
     [TestMethod]
-    public void AKeptAssignmentNeverAddsAnotherKindOrABuiltin()
+    public void AKeptAssignmentNeverAddsAnotherKindOrAnInternalEngineAsset()
     {
         var crate = AssetPath.Parse("/Content/Geometry/Crate.ogeo");
-        var builtin = Entry(AssetPath.Parse("/Engine/Materials/Default.omat"), AssetState.Generated);
-        var assets = new[] { Entry(Wood), Entry(crate, kind: AssetKind.Geometry), builtin };
+        var internalMaterial = Entry(EngineAssets.Internal.Combine("Materials/Gizmo.omat"), AssetState.Packaged);
+        var assets = new[] { Entry(Wood), Entry(crate, kind: AssetKind.Geometry), internalMaterial };
 
-        _ = AssetRule.For(AssetKind.Material).Apply(assets, crate, builtin.Identity).Should().ContainSingle().Which.Identity.Should().Be(Wood);
+        _ = AssetRule.For(AssetKind.Material).Apply(assets, crate, internalMaterial.Identity).Should().ContainSingle().Which.Identity.Should().Be(Wood);
     }
 
     [TestMethod]
-    public void BuiltinsAreNotOffered()
+    public void EngineInternalAssetsAreNotOfferedButGeneratedOnesAre()
     {
-        var builtin = Entry(AssetPath.Parse("/Engine/Materials/Default.omat"), AssetState.Generated);
+        var generated = Entry(EngineAssets.DefaultMaterial, AssetState.Packaged);
+        var internalMaterial = Entry(EngineAssets.Internal.Combine("Materials/Gizmo.omat"), AssetState.Packaged);
 
-        _ = AssetRule.For(AssetKind.Material).Apply([Entry(Wood), builtin]).Should().ContainSingle().Which.Identity.Should().Be(Wood);
+        _ = AssetRule.For(AssetKind.Material).Apply([Entry(Wood), generated, internalMaterial]).Select(static asset => asset.Identity)
+            .Should().BeEquivalentTo([Wood, generated.Identity]);
     }
-
     [TestMethod]
     public void ACookedReferenceIsOfferedOnlyAssetsWithCookedOutput()
     {

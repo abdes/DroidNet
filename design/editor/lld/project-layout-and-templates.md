@@ -46,32 +46,33 @@ This LLD does not own:
 
 ## 3. Architecture Links
 
-- `ARCHITECTURE.md`: game-project filesystem contract, asset identity,
-  content workflow, and save/cook/mount phase separation.
+- `ARCHITECTURE.md`: game-project filesystem contract, asset identity, content
+  workflow, and save/cook/mount phase separation.
 - `DESIGN.md`: save, descriptor generation, cook, catalog refresh, and mount
   refresh are distinct phases.
 - `PROJECT-LAYOUT.md`: repository source-module placement rules. This LLD does
   not use `PROJECT-LAYOUT.md` for user-created project folders.
-- [Oxygen rules](../../oxygen/RULES.md): cooked output is derived and not edited as authoring data; asset
-  references preserve authoring intent.
+- [Oxygen rules](../../oxygen/RULES.md): cooked output is derived and not edited
+  as authoring data; asset references preserve authoring intent.
 - `project-services.md`: project manifest services, active project context,
   authoring roots, local folder mounts, and cook-scope facts.
-- `content-browser-asset-identity.md`: browser projection of source,
-  descriptor, cooked, missing, and broken states.
+- `content-browser-asset-identity.md`: browser projection of source, descriptor,
+  cooked, missing, and broken states.
 - `content-pipeline.md`: import/cook output paths and cooked index policy.
 
 ## 4. Project Layout Contract
 
 The layout below is the V0.1 project contract. New predefined templates, new
-project creation, new authored asset creation, and Content Browser defaults
-must follow it.
+project creation, new authored asset creation, and Content Browser defaults must
+follow it.
 
 A folder under the project root is not authored content unless it is:
 
 - under a declared `AuthoringMounts` entry.
 - under a declared `LocalFolderMounts` entry.
 
-Project configuration and derived output are explicitly not authored asset roots.
+Project configuration and derived output are explicitly not authored asset
+roots.
 
 ## 5. Target Design
 
@@ -136,8 +137,8 @@ Folder requirements:
 | `.oxygen/`                    | No                                          | No                                      | Editor metadata workflow creates                           | Editor-local metadata | No                      |
 
 Predefined template validation fails with a `ProjectTemplate` diagnostic when a
-folder marked `Required in template payload` is missing. After project
-creation, first-use auto-creation of a missing kind folder is allowed only as a
+folder marked `Required in template payload` is missing. After project creation,
+first-use auto-creation of a missing kind folder is allowed only as a
 user-visible `ProjectContentRoots` warning that restores the required folder
 before writing the new asset.
 
@@ -155,7 +156,8 @@ asset:///Content/Scenes/<SceneName>.oscene.json
 Rules:
 
 - `*.oscene.json` is the editor-authored scene source document.
-- `*.oscene` is runtime output inside a generation selected by `.cooked/head.json`.
+- `*.oscene` is runtime output inside a generation selected by
+  `.cooked/head.json`.
 - top-level `Scenes/` is not part of the V0.1 project layout.
 - scene create, scene open, scene save, starter-scene template payloads, and
   Content Browser scene rows use `Content/Scenes/*.oscene.json`.
@@ -197,8 +199,8 @@ Rules:
 
 `Project.oxy` contains:
 
-`SchemaVersion = 1` inherits the ED-M01 V0.1 project manifest baseline. This
-LLD adds the concrete layout and template rules that must be satisfied by that
+`SchemaVersion = 1` inherits the ED-M01 V0.1 project manifest baseline. This LLD
+adds the concrete layout and template rules that must be satisfied by that
 manifest version.
 
 | Field               | Required | Rule                                                                  |
@@ -210,6 +212,7 @@ manifest version.
 | `Thumbnail`         | No       | Project/template preview path when available.                         |
 | `AuthoringMounts`   | Yes      | Project-relative authoring mounts. Must include `Content -> Content`. |
 | `LocalFolderMounts` | No       | Absolute external authored content mounts. Empty when not used.       |
+| `PakFileMounts`     | No       | Absolute `.pak` files mounted read-only as cooked libraries.          |
 
 `Project.oxy` must not persist:
 
@@ -246,9 +249,8 @@ Rules:
 - paths under `.cooked`, `.imported`, `.build`, or `.oxygen` are rejected.
 - mount names are unique case-insensitively across authoring and local mounts.
 - mount names match `^[A-Za-z][A-Za-z0-9_-]{0,63}$`.
-- reserved mount names are rejected case-insensitively:
-  `Engine`, `Project`, `Config`, `Derived`, `Cooked`, `Imported`, `Build`,
-  `Packages`, `Oxygen`.
+- reserved mount names are rejected case-insensitively: `Engine`, `Project`,
+  `Config`, `Derived`, `Cooked`, `Imported`, `Build`, `Packages`, `Oxygen`.
 - `Content` is required and maps to `Content`.
 - changing a mount name changes asset identity and requires an explicit
   project-wide reference update.
@@ -284,6 +286,31 @@ Local mount identity example:
 ```text
 asset:///StudioLibrary/Characters/Hero.ogeo.json
 ```
+
+### Pak File Mounts
+
+`PakFileMounts` are pak files the project mounts read-only as cooked libraries,
+next to local folders in the cooked content order (kind `PakFile`).
+
+```json
+"PakFileMounts": [
+  { "Name": "Props", "AbsolutePath": "D:\\Studio\\Paks\\Props.pak" }
+]
+```
+
+Rules:
+
+- paths are absolute and name `.pak` files; runtimes and the Player tell a pak
+  from a loose root by that extension.
+- a mount name is a label unique among all the project's mounts; a pak's assets
+  keep the virtual paths the pak records, and the Content Browser shows them
+  under the mount name.
+- paks are never creation targets; cooks reference their assets without copying
+  them.
+- a missing pak file fails project validation (`InvalidContentRoots`).
+
+The engine content pak is not declared: every project mounts the SDK's
+`engine.pak` beneath all other content.
 
 ### Default Creation Targets
 
@@ -334,10 +361,10 @@ index:  <ProjectRoot>/.cooked/generations/<SourceKey>/container.index.bin
 
 Rules:
 
-- `.cooked/generations/<SourceKey>/container.index.bin` is the loose cooked index for that
-  mount.
-- `.cooked/generations/<SourceKey>/...` paths are display/diagnostic facts, not persisted
-  authored identities.
+- `.cooked/generations/<SourceKey>/container.index.bin` is the loose cooked
+  index for that mount.
+- `.cooked/generations/<SourceKey>/...` paths are display/diagnostic facts, not
+  persisted authored identities.
 - `.imported` contains import intermediate output.
 - `.build` contains build/package output.
 - `.oxygen` contains editor-local project metadata or cache.
@@ -380,8 +407,8 @@ row represents a cooked artifact from `.cooked`.
 ## 6. Ownership
 
 The table lists positive ownership. Forbidden ownership edges are defined in
-[Dependency Rules](#13-dependency-rules); consumers must not infer authoring roots
-or target folders outside the project layout policy.
+[Dependency Rules](#13-dependency-rules); consumers must not infer authoring
+roots or target folders outside the project layout policy.
 
 | Owner                           | Responsibility                                                                                 |
 | ------------------------------- | ---------------------------------------------------------------------------------------------- |
@@ -479,21 +506,21 @@ Create-from-template performs:
 
 1. Validate `Template.json`.
 2. Verify target folder does not exist or exists and has no filesystem entries.
-3. Verify `SourceFolder` does not contain `Project.oxy`; reject the template
-   if it does.
+3. Verify `SourceFolder` does not contain `Project.oxy`; reject the template if
+   it does.
 4. Copy template payload except `Template.json` to the target project folder.
 5. Verify the required folder skeleton exists.
 6. Generate a new non-empty project `Id`.
-7. Write `Project.oxy` with the new id, user-selected name, category,
-   thumbnail, `AuthoringMounts`, and `LocalFolderMounts`.
+7. Write `Project.oxy` with the new id, user-selected name, category, thumbnail,
+   `AuthoringMounts`, and `LocalFolderMounts`.
 8. Validate the created project manifest and mounts.
 9. Activate the project through the normal project activation path.
 10. If `StarterScene.OpenOnCreate` is true, request opening that scene document.
 
 When `StarterScene` is absent or `OpenOnCreate` is false, project activation
-completes with an empty workspace; no scene document is opened and no
-diagnostic is emitted. Predefined built-in V0.1 templates require
-`StarterScene` and use `OpenOnCreate = true`.
+completes with an empty workspace; no scene document is opened and no diagnostic
+is emitted. Predefined built-in V0.1 templates require `StarterScene` and use
+`OpenOnCreate = true`.
 
 Accepted empty project target:
 
@@ -539,15 +566,15 @@ public sealed record AuthoringTarget(
 
 Rules:
 
-- `ProjectContext` supplies the active project root, authoring mounts, and
-  local folder mounts.
+- `ProjectContext` supplies the active project root, authoring mounts, and local
+  folder mounts.
 - `AssetKind` maps to the kind folders in the default creation target table.
 - `ContentBrowserSelection` is optional and contains the selected root/folder
   identity from Content Browser, never a raw cooked path.
 - `ResolveCreateTarget` applies the matrix in
   [Default Creation Targets](#default-creation-targets).
-- `FallbackReason` is set when the resolver ignores a selected folder because
-  it is not an authored target for the requested kind.
+- `FallbackReason` is set when the resolver ignores a selected folder because it
+  is not an authored target for the requested kind.
 
 Required consumers:
 
@@ -628,8 +655,8 @@ Layout-related failures use existing project/content domains:
 - `Oxygen.Editor.Runtime` consumes cooked-root mount policy; it must not own
   authoring layout.
 - `Oxygen.Editor.Interop` must not know project layout policy.
-- `Oxygen.Managed.Assets` owns reusable URI/catalog primitives but must not own editor
-  project-template workflow.
+- `Oxygen.Managed.Assets` owns reusable URI/catalog primitives but must not own
+  editor project-template workflow.
 
 ## 14. Validation Gates
 
@@ -642,11 +669,11 @@ Project layout/template work is complete when these checks pass:
    ids. Predefined templates do not ship `Project.oxy`.
 3. Built-in template validation fails when `SourceFolder` contains
    `Project.oxy`.
-4. Creating each predefined template creates every folder marked required in
-   the folder requirements table.
-5. Built-in template validation fails when `Template.json` omits
-   `TemplateId`, `Category`, `DisplayName`, `Description`, `Icon`,
-   `Preview`, `SourceFolder`, `AuthoringMounts`, or `StarterScene`.
+4. Creating each predefined template creates every folder marked required in the
+   folder requirements table.
+5. Built-in template validation fails when `Template.json` omits `TemplateId`,
+   `Category`, `DisplayName`, `Description`, `Icon`, `Preview`, `SourceFolder`,
+   `AuthoringMounts`, or `StarterScene`.
 6. Built-in template validation fails when required `Icon` or `Preview` media
    paths do not exist in the template payload.
 7. Mount validation rejects rooted authoring paths, `..` authoring paths,
@@ -656,19 +683,20 @@ Project layout/template work is complete when these checks pass:
    mount names.
 9. Scene create resolves to `Content/Scenes/<Name>.oscene.json` and
    `asset:///Content/Scenes/<Name>.oscene.json`.
-10. Material create at project root resolves to `Content/Materials/<Name>.omat.json`
-    and `asset:///Content/Materials/<Name>.omat.json`.
+10. Material create at project root resolves to
+    `Content/Materials/<Name>.omat.json` and
+    `asset:///Content/Materials/<Name>.omat.json`.
 11. Create actions under an extra authoring mount resolve to that mount's
     asset-kind folder and URI.
 12. Create actions under a local mount use that mount only when the local mount
-    is explicitly selected as the creation target; otherwise they resolve to
-    the default `Content` asset-kind folder.
+    is explicitly selected as the creation target; otherwise they resolve to the
+    default `Content` asset-kind folder.
 13. Content Browser shows authoring, local, config, packages, cooked, imported,
     and build roots with the required labels.
 14. `Content/SourceMedia` rows reduce to source/importable state, not cooked
     state.
-15. The selected generation's `container.index.bin` is displayed as derived output and is
-    never persisted as an authored asset identity.
+15. The selected generation's `container.index.bin` is displayed as derived
+    output and is never persisted as an authored asset identity.
 
 ## 15. Open Issues
 
@@ -683,15 +711,17 @@ retaining Project.oxy, Content/SourceMedia, authored descriptors/import settings
 and Config. Absolute local mounts are nonportable and reported as dependencies;
 the release fixture uses project-relative mounts.
 
-Input snapshots and source-recovery files live beneath `.build/cook/<OperationId>`.
-Native output is cooked directly into fresh `.cooked/generations/<SourceKey>` roots;
-one atomic head selects an immutable publication. The
+Input snapshots and source-recovery files live beneath
+`.build/cook/<OperationId>`. Native output is cooked directly into fresh
+`.cooked/generations/<SourceKey>` roots; one atomic head selects an immutable
+publication. The
 [content-pipeline transaction](content-pipeline.md#16-saved-inputs-and-publication-transaction)
-owns layout, recovery and automatic reclamation. Interrupted transactions recover
-before project validation and mounting. ED-M08 evidence
-lives under its explicit owned `EvidenceRoot`, defaulting to repository
-`artifacts/ed-m08/runs/<operation-id>/`; it is not inferred from the project layout.
-The [standalone qualification contract](standalone-runtime-validation.md#5-ownership-build-isolation-and-dependency-direction)
+owns layout, recovery and automatic reclamation. Interrupted transactions
+recover before project validation and mounting. ED-M08 evidence lives under its
+explicit owned `EvidenceRoot`, defaulting to repository
+`artifacts/ed-m08/runs/<operation-id>/`; it is not inferred from the project
+layout. The
+[standalone qualification contract](standalone-runtime-validation.md#5-ownership-build-isolation-and-dependency-direction)
 owns development build staging, evidence containment and protocol manifests.
 Templates ship neither cooked products nor qualification artifacts. Ordinary
 native compatibility checks each capability's actual dependencies and producer

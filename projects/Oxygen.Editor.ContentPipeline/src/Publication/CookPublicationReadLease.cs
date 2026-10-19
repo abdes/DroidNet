@@ -53,8 +53,8 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
     /// <returns>The selected generation path, or null when that mount has no cooked output.</returns>
     public FileSystemPath? FindProjectRoot(string mount) => this.state.ProjectRoots.GetValueOrDefault(mount);
 
-    /// <summary>Creates a fixed catalog after matching one index opening to its captured root binding.</summary>
-    /// <param name="root">A root from this publication.</param>
+    /// <summary>Creates a fixed catalog of a loose root after matching one index opening to its captured root binding.</summary>
+    /// <param name="root">A loose root from this publication.</param>
     /// <param name="cancellationToken">Cancels reading the index; payloads are not hashed.</param>
     /// <returns>A catalog whose records remain tied to this publication.</returns>
     /// <exception cref="CookedLibraryChangedException">A library root's index was replaced after this publication was captured.</exception>
@@ -63,9 +63,9 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
         CookPublicationRoot root, CancellationToken cancellationToken)
     {
         using var retained = this.Retain();
-        if (!this.Roots.Contains(root) || this.UnavailableRoots.Contains(root))
+        if (!this.Roots.Contains(root) || this.UnavailableRoots.Contains(root) || root.Container != CookPublicationRootContainer.LooseFolder)
         {
-            throw new InvalidDataException("The catalog root is not available in this publication.");
+            throw new InvalidDataException("The catalog root is not an available loose root of this publication.");
         }
 
         var path = root.ResolvePath(this.ProjectRoot.FullPath);
@@ -113,7 +113,9 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
         {
             foreach (var root in this.Roots.Where(root => !this.UnavailableRoots.Contains(root)))
             {
-                catalogs.Add(await this.CreateCatalogAsync(root, cancellationToken).ConfigureAwait(false));
+                catalogs.Add(root.Container == CookPublicationRootContainer.PakFile
+                    ? await this.CreatePakCatalogAsync(root, cancellationToken).ConfigureAwait(false)
+                    : await this.CreateCatalogAsync(root, cancellationToken).ConfigureAwait(false));
             }
 
             return catalogs;
@@ -248,6 +250,19 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
 
             throw;
         }
+    }
+
+    // A pak's catalog is immutable once read; the publication recorded the identity and catalog digest it must match.
+    private async Task<Oxygen.Managed.Assets.Catalog.Pak.PakAssetCatalog> CreatePakCatalogAsync(CookPublicationRoot root, CancellationToken cancellationToken)
+    {
+        var path = FileSystemPath.From(root.ResolvePath(this.ProjectRoot.FullPath));
+        using var pak = await PakReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
+        if (pak.Document.SourceIdentity != root.SourceKey || !string.Equals(pak.Document.CatalogDigest, root.IndexSha256, StringComparison.OrdinalIgnoreCase))
+        {
+            throw CookedLibraryChangedException.ForChangedRoot(root, path.FullPath, pak.Document.SourceIdentity, pak.Document.CatalogDigest);
+        }
+
+        return new(pak.Document, path);
     }
 
     private sealed class SharedState

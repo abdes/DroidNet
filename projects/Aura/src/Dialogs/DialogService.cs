@@ -90,20 +90,12 @@ public sealed class DialogService : IDialogService
         => this.PickFolderAsync(picker, (WindowId?)ownerWindowId, cancellationToken);
 
     /// <inheritdoc/>
-    public async Task<string?> PickFileAsync(FilePickerSpec picker, WindowId ownerWindowId, CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(picker);
-        cancellationToken.ThrowIfCancellationRequested();
-        var owner = this.ResolveOwnerWindow(ownerWindowId);
-        return await owner.DispatcherQueue.EnqueueAsync(async () =>
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var nativePicker = CreateFilePicker(picker, owner.Id);
-            var file = await nativePicker.PickSingleFileAsync();
-            cancellationToken.ThrowIfCancellationRequested();
-            return file?.Path;
-        }).ConfigureAwait(false);
-    }
+    public Task<string?> PickFileAsync(FilePickerSpec picker, CancellationToken cancellationToken = default)
+        => this.PickFileAsync(picker, ownerWindowId: null, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<string?> PickFileAsync(FilePickerSpec picker, WindowId ownerWindowId, CancellationToken cancellationToken = default)
+        => this.PickFileAsync(picker, (WindowId?)ownerWindowId, cancellationToken);
 
     internal static FolderPicker CreateFolderPicker(FolderPickerSpec spec, WindowId ownerWindowId)
     {
@@ -366,6 +358,21 @@ public sealed class DialogService : IDialogService
         {
             _ = DialogGate.Release();
         }
+    }
+
+    private async Task<string?> PickFileAsync(FilePickerSpec picker, WindowId? ownerWindowId, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(picker);
+        cancellationToken.ThrowIfCancellationRequested();
+        var owner = this.ResolveOwnerWindow(ownerWindowId);
+        return await owner.DispatcherQueue.EnqueueAsync(async () =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            var nativePicker = CreateFilePicker(picker, owner.Id);
+            var file = await nativePicker.PickSingleFileAsync();
+            cancellationToken.ThrowIfCancellationRequested();
+            return file?.Path;
+        }).ConfigureAwait(false);
     }
 
     private async Task<string?> PickFolderAsync(FolderPickerSpec spec, WindowId? ownerWindowId, CancellationToken cancellationToken)

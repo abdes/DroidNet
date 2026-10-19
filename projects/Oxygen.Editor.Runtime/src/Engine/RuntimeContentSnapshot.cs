@@ -21,7 +21,17 @@ public sealed record RuntimeContentSnapshot(Guid RunId, long Revision, RuntimeCo
     public ImmutableArray<string> Roots { get; } = [.. Bindings.Select(static root => root.Path)];
 }
 
-/// <summary>An accepted native root with its project-owned logical mount, if any.</summary>
-/// <param name="Path">The physical container root.</param>
-/// <param name="ProjectMount">The logical authoring mount; null for an external library.</param>
-public sealed record RuntimeCookedRoot(string Path, string? ProjectMount = null);
+/// <summary>How the engine reads a cooked content source.</summary>
+public enum RuntimeCookedRootKind
+{
+    /// <summary>A loose cooked root directory.</summary>
+    LooseFolder,
+
+    /// <summary>A pak file.</summary>
+    PakFile,
+}
+
+/// <summary>An accepted native cooked content source.</summary>
+/// <param name="Path">The physical container: a root directory or a pak file.</param>
+/// <param name="Kind">How the engine reads the container.</param>
+public sealed record RuntimeCookedRoot(string Path, RuntimeCookedRootKind Kind);

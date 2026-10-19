@@ -52,10 +52,7 @@ internal sealed class PublicationPreview(
             {
                 if (isCurrent() && this.IsRuntimeAvailable)
                 {
-                    var publication = mounts.Publication;
-                    var bindings = publication.Roots.Zip(
-                        publication.RootPaths,
-                        static (root, path) => new RuntimeCookedRoot(path, root.Owner == CookPublicationRootOwner.Project ? root.Name : null)).ToArray();
+                    var bindings = RuntimeBindings.Of(mounts.Publication);
                     pending = null;
                     await engine.RefreshProjectCookedRootsAsync(bindings, mounts, keepPaused: true).ConfigureAwait(true);
                 }

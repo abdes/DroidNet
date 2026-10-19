@@ -5,6 +5,7 @@
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Inspector.Presentation;
@@ -38,13 +39,10 @@ public sealed partial class BackdropSectionView
         registry.Field("SkySphereTint", this.TintCard);
     }
 
-    private void CubemapItem_Click(object sender, RoutedEventArgs args)
+    private void OnCubemapChoiceInvoked(object? sender, AssetChoice choice)
     {
-        if (sender is FrameworkElement { DataContext: AssetPickerRow row })
-        {
-            this.ViewModel?.SetCubemap(row.Item.Asset);
-            this.CubemapFlyout.Hide();
-        }
+        this.ViewModel?.SetCubemap(choice.Asset);
+        this.CubemapFlyout.Hide();
     }
 
     private void ClearCubemap_Click(object sender, RoutedEventArgs args) => this.ViewModel?.SetCubemap(cubemap: null);

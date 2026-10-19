@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
@@ -16,7 +17,7 @@ internal static class NativeSceneData
         {
             Name = shape,
         };
-        _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Generated.Combine($"BasicShapes/{shape}") });
+        _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape(shape) });
         scene.RootNodes.Add(node);
     }
 

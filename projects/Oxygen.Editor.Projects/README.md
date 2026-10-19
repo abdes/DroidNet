@@ -2,28 +2,35 @@
 
 ## Overview
 
-The **Oxygen.Editor.Projects** module provides workspace and project file management for the Oxygen Editor. It handles loading and saving project metadata (`Project.oxy`), discovering scene files, and orchestrating persistence of editor world scenes to disk.
+The **Oxygen.Editor.Projects** module provides workspace and project file
+management for the Oxygen Editor. It handles loading and saving project metadata
+(`Project.oxy`), discovering scene files, and orchestrating persistence of
+editor world scenes to disk.
 
-This module sits **above** the `Oxygen.Editor.World` domain model, providing file I/O, project lifecycle management, and workspace-level operations.
+This module sits **above** the `Oxygen.Editor.World` domain model, providing
+file I/O, project lifecycle management, and workspace-level operations.
 
 ## Purpose
 
 The Projects module exists to:
 
 1. **Manage Project Manifest** - Load and save `Project.oxy` (project metadata)
-2. **Persist Scenes** - Serialize/deserialize world scenes to/from scene JSON files
-3. **Track Project Metadata** - Project name, category, thumbnail, last-used time, mount points
+2. **Persist Scenes** - Serialize/deserialize world scenes to/from scene JSON
+   files
+3. **Track Project Metadata** - Project name, category, thumbnail, last-used
+   time, mount points
 4. **Provide Lifecycle APIs** - High-level service for project operations
-5. **Enable Multi-Scene Projects** - Discover and manage scene files within a project folder
+5. **Enable Multi-Scene Projects** - Discover and manage scene files within a
+   project folder
 
 ## Technology Stack
 
-| Technology | Version | Purpose |
-| ---------- | ------- | ------- |
-| **.NET** | 9.0 (Windows 10.0.26100.0) | Target framework |
-| **C#** | 13 (preview) | Language with nullable reference types |
-| **System.Linq.Async** | Latest | Async LINQ operations |
-| **Microsoft.Extensions.Logging** | Latest | Logging abstractions |
+| Technology                       | Version                    | Purpose                                |
+| -------------------------------- | -------------------------- | -------------------------------------- |
+| **.NET**                         | 9.0 (Windows 10.0.26100.0) | Target framework                       |
+| **C#**                           | 13 (preview)               | Language with nullable reference types |
+| **System.Linq.Async**            | Latest                     | Async LINQ operations                  |
+| **Microsoft.Extensions.Logging** | Latest                     | Logging abstractions                   |
 
 ## Architecture
 
@@ -64,12 +71,12 @@ graph TB
 
 ### Core Components
 
-| Component | Purpose | Key Responsibilities |
-| --------- | ------- | -------------------- |
-| **`ProjectManagerService`** | High-level project API | Create, open, save, close projects |
-| **`Project`** | Workspace model | Metadata, scene references, serialization |
-| **`ProjectInfo`** | Project metadata | Name, version, author, timestamps |
-| **`IProjectManagerService`** | Service interface | Abstraction for DI and testing |
+| Component                    | Purpose                | Key Responsibilities                      |
+| ---------------------------- | ---------------------- | ----------------------------------------- |
+| **`ProjectManagerService`**  | High-level project API | Create, open, save, close projects        |
+| **`Project`**                | Workspace model        | Metadata, scene references, serialization |
+| **`ProjectInfo`**            | Project metadata       | Name, version, author, timestamps         |
+| **`IProjectManagerService`** | Service interface      | Abstraction for DI and testing            |
 
 ## Core Concepts
 
@@ -91,12 +98,15 @@ Project.oxy            ← Project manifest (metadata + mount points)
 
 - Project-wide metadata (name, version, author)
 - Unique project ID (GUID)
-- Authoring mount points (`AuthoringMounts`: `Name` + project-relative `RelativePath`)
+- Authoring mount points (`AuthoringMounts`: `Name` + project-relative
+  `RelativePath`)
 
 Notes:
 
-- Scene files are **discovered** by enumerating the `Scenes/` folder (currently `*.scene`). They are not listed in `Project.oxy`.
-- `AuthoringMounts` are persisted in `Project.oxy` and define project-local authoring mounts (e.g., `Content -> Content/`).
+- Scene files are **discovered** by enumerating the `Scenes/` folder (currently
+  `*.scene`). They are not listed in `Project.oxy`.
+- `AuthoringMounts` are persisted in `Project.oxy` and define project-local
+  authoring mounts (e.g., `Content -> Content/`).
 
 ### Project Lifecycle
 
@@ -170,16 +180,25 @@ stateDiagram-v2
 - `Name` - Project display name
 - `Category` - Project category identifier
 - `Thumbnail` - Optional project thumbnail path
-- `AuthoringMounts` - Authoring mounts (`Name` + project-relative `RelativePath`)
+- `AuthoringMounts` - Authoring mounts (`Name` + project-relative
+  `RelativePath`)
+- `LocalFolderMounts` - Optional cooked library folders (`Name` +
+  `AbsolutePath`)
+- `PakFileMounts` - Optional pak files mounted read-only as cooked libraries
+  (`Name` + `AbsolutePath` of a `.pak` file)
+- `CookedContentOrder` - Optional library priority, lowest first; kinds are
+  `ProjectOutput`, `LocalFolder` and `PakFile`
 
 **Compatibility:**
 
-- If `AuthoringMounts` is missing/empty, the loader defaults it to a single mount: `Content -> Content`.
+- If `AuthoringMounts` is missing/empty, the loader defaults it to a single
+  mount: `Content -> Content`.
 
 ### Scene File Format
 
-Scene files are JSON and are serialized/deserialized by `Oxygen.Editor.World.Serialization.SceneSerializer`.
-This module treats scenes as **lazy-loaded**:
+Scene files are JSON and are serialized/deserialized by
+`Oxygen.Editor.World.Serialization.SceneSerializer`. This module treats scenes
+as **lazy-loaded**:
 
 - Project load discovers scene files and loads minimal scene metadata.
 - `LoadSceneAsync` loads the full scene graph (nodes/components).
@@ -227,7 +246,8 @@ await service.SaveSceneAsync(loaded!);
 
 ### Service Pattern
 
-`ProjectManagerService` provides high-level facade over file I/O and serialization
+`ProjectManagerService` provides high-level facade over file I/O and
+serialization
 
 ### Repository Pattern
 
@@ -246,7 +266,8 @@ All I/O operations are async for UI responsiveness
 ### Project References
 
 - **`Oxygen.Editor.World`** - Domain models (Scene, SceneNode, etc.)
-- **`DroidNet.Storage`** - File system abstractions (`IStorageProvider`, `IFolder`, `IDocument`)
+- **`DroidNet.Storage`** - File system abstractions (`IStorageProvider`,
+  `IFolder`, `IDocument`)
 
 ### NuGet Packages
 
@@ -267,12 +288,12 @@ All I/O operations are async for UI responsiveness
 
 Common exceptions:
 
-| Exception | Cause | Mitigation |
-| --------- | ----- | ---------- |
-| **FileNotFoundException** | Project/scene file missing | Validate paths, handle gracefully |
-| **JsonException** | Malformed JSON, missing required fields | Validate project files, repair if possible |
-| **UnauthorizedAccessException** | Insufficient permissions | Check file system permissions |
-| **IOException** | File locked, disk full | Retry logic, user notification |
+| Exception                       | Cause                                   | Mitigation                                 |
+| ------------------------------- | --------------------------------------- | ------------------------------------------ |
+| **FileNotFoundException**       | Project/scene file missing              | Validate paths, handle gracefully          |
+| **JsonException**               | Malformed JSON, missing required fields | Validate project files, repair if possible |
+| **UnauthorizedAccessException** | Insufficient permissions                | Check file system permissions              |
+| **IOException**                 | File locked, disk full                  | Retry logic, user notification             |
 
 ## Validation
 
@@ -329,8 +350,10 @@ Unit tests in this module use mocks around `DroidNet.Storage` abstractions.
 
 ## Related Documentation
 
-- [Oxygen.Editor.World](../Oxygen.Editor.World/README.md) - Domain models for scenes
-- [Oxygen.Editor.Runtime](../Oxygen.Editor.Runtime/README.md) - Engine integration
+- [Oxygen.Editor.World](../Oxygen.Editor.World/README.md) - Domain models for
+  scenes
+- [Oxygen.Editor.Runtime](../Oxygen.Editor.Runtime/README.md) - Engine
+  integration
 - [DroidNet.Storage](../DroidNet.Storage/) - File system abstractions
 
 ## License

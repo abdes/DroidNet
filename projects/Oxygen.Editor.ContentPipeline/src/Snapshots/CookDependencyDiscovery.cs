@@ -56,7 +56,6 @@ internal sealed class CookDependencyDiscovery(
         private readonly Dictionary<AssetPath, ImmutableArray<AssetPath>> nativeReferences = [];
         private readonly Dictionary<AssetPath, ImmutableArray<CookedDependencySnapshot>> cookedDependencies = [];
         private readonly Dictionary<AssetPath, HashSet<string>> fileDependencies = [];
-        private readonly HashSet<AssetPath> builtins = [];
         private readonly HashSet<AssetPath> published = [];
         private readonly HashSet<AssetPath> importedReferences = [];
         private readonly Queue<ContentCookInput> pending = new();
@@ -66,9 +65,7 @@ internal sealed class CookDependencyDiscovery(
         private readonly Dictionary<AssetPath, ContentImportJob> jobs = [];
         private readonly Dictionary<AssetPath, CookSourceFacts> sourceFacts = [];
         private readonly HashSet<AssetPath> requiresAnalysis = [];
-        private readonly Dictionary<AssetPath, ContentCookInput> generatedSources = [];
         private readonly Dictionary<string, NativeCapturedInput> generatedInputs = [with(StringComparer.OrdinalIgnoreCase)];
-        private readonly Dictionary<string, AssetPath> builtinOwners = [with(StringComparer.Ordinal)];
         private readonly Dictionary<string, ContentCookInput> bufferOwners = [with(StringComparer.Ordinal)];
         private readonly Dictionary<AssetPath, ImmutableArray<AssetPath>> resourceDependencies = [];
 
@@ -104,20 +101,6 @@ internal sealed class CookDependencyDiscovery(
                 this.pending.Clear();
                 var analyzed = await analyzer.ReadAsync(frontier, cancellationToken).ConfigureAwait(false);
                 this.diagnostics.AddRange(analyzed.Diagnostics);
-                foreach (var (path, owner) in analyzed.BuiltinOwners)
-                {
-                    this.builtinOwners[path] = owner;
-                }
-
-                foreach (var source in analyzed.GeneratedSources)
-                {
-                    this.generatedSources[source.AssetUri] = source;
-                    if (source.OutputVirtualPath is { } path)
-                    {
-                        this.builtinOwners[path] = source.AssetUri;
-                    }
-                }
-
                 foreach (var input in analyzed.GeneratedInputs)
                 {
                     this.generatedInputs[input.LogicalPath] = input;
@@ -147,7 +130,6 @@ internal sealed class CookDependencyDiscovery(
                 [.. this.files.Values.OrderBy(static input => input.RelativePath, StringComparer.Ordinal)],
                 this.dependencies.ToImmutableDictionary(),
                 this.fileDependencies.ToImmutableDictionary(static pair => pair.Key, static pair => pair.Value.Order(StringComparer.Ordinal).ToImmutableArray()),
-                [.. this.builtins.Order()],
                 [.. this.published.Order()],
                 [.. this.diagnostics])
             {
@@ -157,7 +139,6 @@ internal sealed class CookDependencyDiscovery(
                 CookedDependencies = this.cookedDependencies.ToImmutableDictionary(),
                 SceneDescriptors = this.scenes.ToImmutableDictionary(),
                 NativeJobs = this.jobs.ToImmutableDictionary(),
-                GeneratedSources = [.. this.generatedSources.Values],
                 GeneratedInputs = [.. this.generatedInputs.Values],
                 SourceFacts = this.sourceFacts.ToImmutableDictionary(),
                 SourcesNeedingAnalysis = this.requiresAnalysis.ToImmutableHashSet(),
@@ -262,22 +243,10 @@ internal sealed class CookDependencyDiscovery(
             this.dependencies[input.AssetUri] = [.. resolved.Order()];
         }
 
-        // A reference is an asset's identity. It resolves to a built-in, a cooked asset the cook publishes as it is, or
-        // the project source that cooks into it.
+        // A reference is an asset's identity. It resolves to a cooked asset the cook publishes as it is (a library asset,
+        // including the engine content pak's), or the project source that cooks into it.
         private AssetPath ResolveReference(AssetPath uri)
         {
-            if (this.builtinOwners.TryGetValue(uri.VirtualPath, out var generated))
-            {
-                _ = this.builtins.Add(generated);
-                return generated;
-            }
-
-            if (uri.IsSameOrInside(AssetPath.Generated))
-            {
-                _ = this.builtins.Add(uri);
-                return uri;
-            }
-
             if (preferCookedReference?.Invoke(uri) == true)
             {
                 _ = this.published.Add(uri);

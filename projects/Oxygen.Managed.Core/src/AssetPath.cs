@@ -42,9 +42,6 @@ public sealed class AssetPath : IEquatable<AssetPath>, IComparable<AssetPath>
     /// <summary>Gets the mount of the project's content, <c>/Content</c>.</summary>
     public static AssetPath Content { get; } = Create("Content");
 
-    /// <summary>Gets the folder of the assets the engine generates, <c>/Engine/Generated</c>.</summary>
-    public static AssetPath Generated { get; } = Engine.Combine("Generated");
-
     /// <summary>Gets the comparison that treats paths differing only in case as equal, to refuse case-only siblings.</summary>
     public static IEqualityComparer<AssetPath> CaseFolded { get; } = new CaseFoldedComparer();
 
@@ -68,9 +65,6 @@ public sealed class AssetPath : IEquatable<AssetPath>, IComparable<AssetPath>
 
     /// <summary>Gets the folder that holds this path, or <see langword="null"/> for a mount.</summary>
     public AssetPath? Parent => this.IsMount ? null : new(this.VirtualPath[..this.VirtualPath.LastIndexOf('/')], this.MountLength);
-
-    /// <summary>Gets a value indicating whether this path names an asset the engine generates, below <see cref="Generated"/>.</summary>
-    public bool IsGenerated => this.VirtualPath.Length > Generated.VirtualPath.Length && this.IsSameOrInside(Generated);
 
     /// <summary>Gets a value indicating whether this path ends with the <see cref="AuthoringSuffix"/> of a source.</summary>
     public bool HasAuthoringSuffix => this.Name.EndsWith(AuthoringSuffix, StringComparison.Ordinal)

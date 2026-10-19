@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
@@ -80,7 +81,7 @@ public sealed partial class NativeLoopCleanupTests
         Send(new RuntimeAttachDirectionalLight(node, 1000f, 0.01f, Vector3.One, AffectsWorld: true, Mobility: 0, CastsShadows: true, ShadowBias: 0, ShadowNormalBias: 0, ContactShadows: false, ShadowResolutionHint: 0, ExposureCompensation: 0, AtmosphereLightSlot: 1, UsePerPixelAtmosphereTransmittance: true, AtmosphereDiskLuminanceScaleRgb: Vector3.One, CascadeCount: 4, SplitMode: 0, MaxShadowDistance: 1000f, CascadeDistances: new Vector4(50, 150, 400, 1000), DistributionExponent: 2, TransitionFraction: 0.1f, DistanceFadeoutFraction: 0.1f));
         var expected = ObservedNodeProperties();
         Send(new RuntimeSetProperties(node, expected));
-        Send(new RuntimeSetGeometry(node, "asset:///Engine/Generated/BasicShapes/Cube"));
+        Send(new RuntimeSetGeometry(node, EngineAssets.BasicShape("Cube").VirtualPath));
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(5));
         RuntimeNodeObservation observed;

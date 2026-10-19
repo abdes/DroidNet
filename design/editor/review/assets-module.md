@@ -18,15 +18,15 @@ inspector and the problems panel.
 
 It composes four inputs into one entry per logical asset:
 
-1. the project, library and built-in catalogs, read through the content
+1. the project, library and engine content catalogs, read through the content
    pipeline's published cooked content;
 2. cook freshness and cook activity, from the content pipeline;
 3. live authoring state of open documents, from the cook document registry;
 4. the preview's acknowledged state, through the `IAssetRuntimeStatusSource`
    port, which LivePreview implements.
 
-It applies the identity rules once (built-in grouping, cooked companions,
-aliases, library overrides), so no consumer re-derives them.
+It applies the identity rules once (cooked companions, aliases, library
+overrides), so no consumer re-derives them.
 
 It does not own how assets are browsed (folders, query, sort, layouts, rows),
 how they are created, moved or deleted (ContentPipeline), how they are opened
@@ -64,7 +64,7 @@ how they are created, moved or deleted (ContentPipeline), how they are opened
 Oxygen.Editor.Assets              AssetCatalog, IAssetPublicationTarget, IAssetFeed, AssetFeed,
                                   AssetFeedExtensions, AssetRule, AssetEntry, AssetKind, AssetKinds,
                                   AssetState, AssetRuntimeAvailability, AssetCookActivity,
-                                  VerifiedBuiltinSource, AssetIdentity, AssetStatusText, AssetInformation,
+                                  AssetOrigin, AssetIdentity, AssetStatusText, AssetInformation,
                                   AssetInformationFact
 Oxygen.Editor.Assets.Materials    MaterialPreviewColor
 Oxygen.Editor.Assets.Runtime      IAssetRuntimeStatusSource, AssetRuntimeStatus, AssetRuntimeRequest,
@@ -75,7 +75,7 @@ Oxygen.Editor.Assets.Runtime      IAssetRuntimeStatusSource, AssetRuntimeStatus,
 | ------------------------------ | ------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
 | `IAssetFeed`, `AssetFeed`      | `IContentBrowserAssetProvider`, `ContentBrowserAssetProvider` | `Items`, `RefreshAsync(CancellationToken)`, `ResolveAsync(Uri, CancellationToken)`          |
 | `AssetEntry`                   | `ContentBrowserAssetItem`                                     | One logical asset; still carries display properties (section 10)                            |
-| `AssetIdentity`                | `AssetIdentityGrouping`, `CookedLibraryProjection.Create`     | `GroupBuiltins`, `Represents`, `FromCookedSource`: every identity rule in one place         |
+| `AssetIdentity`                | `AssetIdentityGrouping`, `CookedLibraryProjection.Create`     | `FromCookedSource`: every identity rule in one place                                        |
 | `AssetKinds`                   | `AssetIdentityReducer.GetCookedKind`                          | `FromCookedType`; the explorer and the scripting inspector classify cooked types with it    |
 | `AssetCatalog`                 | `ProjectAssetCatalog`                                         | The asset catalog (section 6); readers depend on `IAssetCatalog` from Oxygen.Managed.Assets |
 | `IAssetPublicationTarget`      | new                                                           | `UsePublicationAsync`: publication owners hand the catalog the publication they accepted    |
@@ -85,20 +85,19 @@ Oxygen.Editor.Assets.Runtime      IAssetRuntimeStatusSource, AssetRuntimeStatus,
 | `IAssetRuntimeStatusSource`    | new                                                           | Section 5                                                                                   |
 
 The reducer is internal: the feed creates it, and no consumer needs another. So
-are the catalog's parts: `BuiltinAssetCatalog` (the engine's built-ins as an
-`IAssetCatalog`), `AssetCatalogSnapshot` (records together with the publication
-they were read from) and `IAssetCatalogReader` (what the feed reads from the
-catalog, which its unit tests fake). The feed and catalog implementations are
-public so that the composition root, and tests at that level, can construct
-them, as ContentPipeline's services are today. Registration stays in the
-workspace until Phase 3 gives every subsystem its registration module; an
-Assets-specific registration shape now would pre-empt it.
+are the catalog's parts: `AssetCatalogSnapshot` (records together with the
+publication they were read from) and `IAssetCatalogReader` (what the feed reads
+from the catalog, which its unit tests fake). The feed and catalog
+implementations are public so that the composition root, and tests at that
+level, can construct them, as ContentPipeline's services are today. Registration
+stays in the workspace until Phase 3 gives every subsystem its registration
+module; an Assets-specific registration shape now would pre-empt it.
 
-Names say what the feed holds. It includes engine built-ins and mounted
+Names say what the feed holds. It includes the engine content and mounted
 libraries, not only the project's own assets, so it is `IAssetFeed` of
 `AssetEntry` and the catalog is `AssetCatalog`; `Project` names only what is
 relative to the project. `AssetEntry` shares its simple name with the cooked
-index record `Oxygen.Managed.Assets.Persistence.LooseCooked.V3.AssetEntry`; only
+index record `Oxygen.Managed.Assets.Persistence.LooseCooked.AssetEntry`; only
 persistence code imports that namespace.
 
 ### What a property accepts
@@ -129,13 +128,14 @@ feed.Assets(AssetRule.For(AssetKind.Geometry), keeping: node.Geometry)
 AssetRule.ForCooked(AssetKind.InputAction).Apply(assets);
 ```
 
-A rule never offers an asset whose file is missing or broken, or one of the
-engine's built-ins: the pickers show those in a group of their own, read from
-the built-in catalog. `AssetRule.Apply(assets, keeping)` orders the accepted
-assets by name and keeps the property's current assignments: an assigned asset
-whose file is missing or broken is listed as it is, and one no catalog knows is
-listed as missing (`AssetEntry.Missing`). It never lists an asset of another
-kind, or a built-in. Facts a picker shows beside an asset are small readers over
+A rule never offers an asset whose file is missing or broken, or an
+engine-internal one under `/Engine/Internal`. Engine and pak assets are offered
+like the project's; the shared `AssetPicker` groups them as Engine, Packages and
+Content. `AssetRule.Apply(assets, keeping)` orders the accepted assets by name
+and keeps the property's current assignments: an assigned asset whose file is
+missing or broken is listed as it is, and one no catalog knows is listed as
+missing (`AssetEntry.Missing`). It never lists an asset of another kind, or an
+engine-internal one. Facts a picker shows beside an asset are small readers over
 an entry: `MaterialPreviewColor.TryRead` in Assets, and the texture descriptor
 readers (`TextureSourceAssetImporter.ReadCubeDescriptor`, `HasSourceImage`) in
 ContentPipeline, which owns that format. The status beside a name is
@@ -175,8 +175,8 @@ public sealed record AssetRuntimeStatus(
 public sealed record AssetRuntimeRequest(string AssetPath, bool? Succeeded, string? Reason = null);
 ```
 
-- The availability rule (kinds, built-ins, last-known catalogs, mounted roots,
-  failed and pending requests) is in the feed and tested with a fake source.
+- The availability rule (kinds, packaged assets, mounted roots, failed and
+  pending requests) is in the feed and tested with a fake source.
 - The adapter, `AssetRuntimeStatusSource`, only translates: it filters requests
   by run and project, extracts each request's asset path, maps the content state
   (a run without an id, and failed content, are `Unavailable`) and raises
@@ -254,7 +254,7 @@ catalog reports a change to it (`IMaterialDocumentService` and
 
 ```text
 Oxygen.Editor.Assets
-  -> Oxygen.Editor.ContentPipeline   publication read side, cook status, cook runs, cook documents, builtin discovery
+  -> Oxygen.Editor.ContentPipeline   publication read side, cook status, cook runs, cook documents, engine content pak
   -> Oxygen.Editor.Projects          ProjectContext, IProjectContextService (until Phase 4)
   -> Oxygen.Editor.World             project and scene model types
   -> Oxygen.Managed.Assets           catalogs, records, material authoring

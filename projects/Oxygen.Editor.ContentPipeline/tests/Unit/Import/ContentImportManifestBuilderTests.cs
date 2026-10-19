@@ -126,7 +126,7 @@ public sealed class ContentImportManifestBuilderTests
         var scope = CreateScope(workspace) with
         {
             InputDependencies = System.Collections.Immutable.ImmutableDictionary<AssetPath, System.Collections.Immutable.ImmutableArray<AssetPath>>.Empty
-                .Add(AssetPath.Generated.Combine("BasicShapes/Cube"), [AssetPath.Parse("/Content/Materials/Red.omat.json")]),
+                .Add(AssetPath.Parse("/Content/Geometry/Cube.ogeo"), [AssetPath.Parse("/Content/Materials/Red.omat.json")]),
         };
         var sceneDescriptorPath = Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json");
         var sceneDescriptor = new SceneDescriptorGenerationResult(
@@ -135,7 +135,7 @@ public sealed class ContentImportManifestBuilderTests
             "/Content/Scenes/Main.oscene",
             [
                 CreateMaterialInput(workspace, "Content/Materials/Red.omat.json"),
-                CreateGeometryInput(workspace, ".pipeline/Geometry/Engine_Generated_BasicShapes_Cube.ogeo.json"),
+                CreateGeometryInput(workspace, ".pipeline/Geometry/Cube.ogeo.json"),
             ],
             Diagnostics: []);
 
@@ -219,36 +219,6 @@ public sealed class ContentImportManifestBuilderTests
             ".pipeline/Scenes/Main.oscene.json");
     }
 
-    /// <summary>
-    /// The default material staged both by the scene's analysis and by the cook's builtins is one input, cooked from
-    /// the cook's copy.
-    /// </summary>
-    [TestMethod]
-    public void BuildSceneManifestsCookAGeneratedInputStagedTwiceOnce()
-    {
-        using var workspace = new ManifestWorkspace();
-        var material = new ContentCookInput(
-            AssetPath.Generated.Combine("Materials/Default"),
-            ContentCookAssetKind.Material,
-            "Content",
-            ".build/cook/op/builtins/.pipeline/Materials/OxygenEditor_Default.omat.json",
-            FileSystemPath.From(Path.Combine(workspace.Root, "builtins", "OxygenEditor_Default.omat.json")),
-            "/Content/Materials/OxygenEditor_Default.omat",
-            ContentCookInputRole.GeneratedDescriptor);
-        var scope = CreateScope(workspace) with { Inputs = [.. CreateScope(workspace).Inputs, material] };
-        var sceneDescriptor = new SceneDescriptorGenerationResult(
-            AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
-            Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json"),
-            "/Content/Scenes/Main.oscene",
-            [material with { SourceRelativePath = ".build/cook/op/analysis/scene/.pipeline/Materials/OxygenEditor_Default.omat.json" }],
-            Diagnostics: []);
-
-        var manifest = new ContentImportManifestBuilder().BuildSceneManifests(scope, [sceneDescriptor]);
-
-        _ = manifest.Jobs.Where(static job => string.Equals(job.Type, "material-descriptor", StringComparison.Ordinal)).Should().ContainSingle()
-            .Which.Source.Should().Be(material.SourceRelativePath);
-    }
-
     private static ContentCookInput CreateMaterialInput(ManifestWorkspace workspace, string sourceRelativePath)
         => new(
             AssetPath.Parse("/" + sourceRelativePath.Replace('\\', '/')),
@@ -261,12 +231,12 @@ public sealed class ContentImportManifestBuilderTests
 
     private static ContentCookInput CreateGeometryInput(ManifestWorkspace workspace, string sourceRelativePath)
         => new(
-            AssetPath.Generated.Combine("BasicShapes/Cube"),
+            AssetPath.Parse("/Content/Geometry/Cube.ogeo"),
             ContentCookAssetKind.Geometry,
             "Content",
             sourceRelativePath,
             FileSystemPath.From(Path.Combine(workspace.Root, sourceRelativePath.Replace('\\', Path.DirectorySeparatorChar))),
-            "/Content/Geometry/Engine_Generated_BasicShapes_Cube.ogeo",
+            "/Content/Geometry/Cube.ogeo",
             ContentCookInputRole.GeneratedDescriptor);
 
     private static ContentCookScope CreateScope(ManifestWorkspace workspace)

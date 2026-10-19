@@ -9,6 +9,7 @@ using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Nodes;
@@ -29,7 +30,7 @@ public static class SceneNodeTemplates
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetPath.Generated.Combine($"BasicShapes/{name}"),
+            Geometry = EngineAssets.BasicShape(name),
         });
         return Finish(node, placement);
     }

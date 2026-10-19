@@ -10,9 +10,9 @@ namespace Oxygen.Editor.Assets;
 public enum AssetState
 {
     /// <summary>
-    /// Generated editor/engine asset.
+    /// Asset inside a pak, such as the engine content pak: read-only, with no source to edit or cook.
     /// </summary>
-    Generated,
+    Packaged,
 
     /// <summary>
     /// Source asset.

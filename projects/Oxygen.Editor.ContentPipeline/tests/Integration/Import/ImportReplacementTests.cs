@@ -40,7 +40,7 @@ public sealed class ImportReplacementTests
     [DataRow("repair dependency conflict")]
     public async Task ReplacementPublishesSourceAndOutputTogether(string failure)
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var external = Directory.CreateTempSubdirectory("OxygenReplacement-");
         try
         {
@@ -78,7 +78,7 @@ public sealed class ImportReplacementTests
             var runner = new FailImportBatchRunner { Fail = false };
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var publication = workspace.Publication;
-            var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility, publication);
+            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility, publication);
             var first = repair
                 ? await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)
                 : await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -159,7 +159,7 @@ public sealed class ImportReplacementTests
     [DataRow("dirty during cook")]
     public async Task ReplacementConflictsPreserveSourceAndOutput(string conflict)
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var external = Directory.CreateTempSubdirectory("OxygenReplacementConflict-");
         try
         {
@@ -167,7 +167,7 @@ public sealed class ImportReplacementTests
             using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var runner = new ContextLeaseRunner();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
             _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
             var before = ReadOutputIdentities(workspace.Root).ToDictionary(static item => item.Key, static item => item.Value.hash, StringComparer.Ordinal);
             var primary = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/model.gltf");
@@ -220,14 +220,14 @@ public sealed class ImportReplacementTests
     [TestCategory("NativeContent")]
     public async Task FbxReplacementPublishesTheNewSourceUnderTheSameOutputs()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var external = Directory.CreateTempSubdirectory("OxygenFbxReplacement-");
         try
         {
             var source = await WriteRetainedModelAsync(workspace, "Model", "fbx", this.TestContext.CancellationToken).ConfigureAwait(false);
             using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility, workspace.Publication);
+            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility, workspace.Publication);
             var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = first.IsPublished.Should().BeTrue();
 
@@ -252,7 +252,7 @@ public sealed class ImportReplacementTests
     [TestMethod]
     public async Task ReplacementReviewPreservesUnownedFiles()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         _ = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var notes = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/Model/notes.txt");
         await File.WriteAllTextAsync(notes, "unrelated work", this.TestContext.CancellationToken).ConfigureAwait(false);

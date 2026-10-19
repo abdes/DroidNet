@@ -16,7 +16,7 @@ public sealed class CookedContentOrderingTests
     public void DefaultOrderPlacesNewLibrariesImmediatelyBelowProjectOutput()
     {
         LocalFolderMount[] folders = [new("Older", FileSystemPath.From(@"C:\Older")), new("Newer", FileSystemPath.From(@"C:\Newer"))];
-        _ = CookedContentOrdering.Resolve(folders, []).Should().Equal(new CookedContentSource[]
+        _ = CookedContentOrdering.Resolve(folders, [], []).Should().Equal(new CookedContentSource[]
         {
             new(CookedContentSourceKind.LocalFolder, "Older"), new(CookedContentSourceKind.LocalFolder, "Newer"), new(CookedContentSourceKind.ProjectOutput),
         });
@@ -31,7 +31,7 @@ public sealed class CookedContentOrderingTests
             LocalFolderMounts = [new("Base", FileSystemPath.From(@"C:\Base")), new("Override", FileSystemPath.From(@"C:\Override")), new("New", FileSystemPath.From(@"C:\New"))],
             CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Override")],
         };
-        info.CookedContentOrder = CookedContentOrdering.Resolve(info.LocalFolderMounts, info.CookedContentOrder).ToList();
+        info.CookedContentOrder = CookedContentOrdering.Resolve(info).ToList();
         var json = ProjectInfo.ToJson(info);
         _ = json.Should().Contain("\"Kind\": \"ProjectOutput\"");
         var restored = ProjectInfo.FromJson(json);
@@ -41,6 +41,44 @@ public sealed class CookedContentOrderingTests
         {
             new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.LocalFolder, "New"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Override"),
         });
+    }
+
+    /// <summary>Pak files are libraries like folders: they join the order below project output and round-trip through the manifest.</summary>
+    [TestMethod]
+    public void PakFilesJoinTheOrderAndRoundTripThroughTheManifest()
+    {
+        var info = new ProjectInfo("Paks", Category.Games)
+        {
+            LocalFolderMounts = [new("Folder", FileSystemPath.From(@"C:\Folder"))],
+            PakFileMounts = [new("Props", FileSystemPath.From(@"C:\Paks\Props.pak"))],
+        };
+        info.CookedContentOrder = CookedContentOrdering.Resolve(info).ToList();
+
+        var restored = ProjectInfo.FromJson(ProjectInfo.ToJson(info));
+        restored.Location = @"C:\Paks";
+
+        _ = info.CookedContentOrder.Should().Equal(new CookedContentSource[]
+        {
+            new(CookedContentSourceKind.LocalFolder, "Folder"), new(CookedContentSourceKind.PakFile, "Props"), new(CookedContentSourceKind.ProjectOutput),
+        });
+        _ = restored.PakFileMounts.Should().Equal(info.PakFileMounts);
+        _ = ProjectContext.FromProjectInfo(restored).PakFileMounts.Should().Equal(info.PakFileMounts);
+        _ = CookedContentOrdering.Resolve(restored).Should().Equal(info.CookedContentOrder);
+    }
+
+    /// <summary>A mount name identifies one library, and the saved order must name each library with its own kind.</summary>
+    [TestMethod]
+    public void LibrariesAreIdentifiedByNameAndKind()
+    {
+        LocalFolderMount[] folders = [new("Props", FileSystemPath.From(@"C:\Props"))];
+        PakFileMount[] paks = [new("Props", FileSystemPath.From(@"C:\Props.pak"))];
+        PakFileMount[] pak = [new("Pak", FileSystemPath.From(@"C:\Pak.pak"))];
+
+        Action shared = () => _ = CookedContentOrdering.Resolve(folders, paks, []);
+        Action mislabeled = () => _ = CookedContentOrdering.Resolve([], pak, [new(CookedContentSourceKind.LocalFolder, "Pak")]);
+
+        _ = shared.Should().Throw<InvalidDataException>();
+        _ = mislabeled.Should().Throw<InvalidDataException>();
     }
 
     /// <summary>Malformed order entries are reported rather than changing precedence silently.</summary>
@@ -59,7 +97,7 @@ public sealed class CookedContentOrderingTests
             2 => [new((CookedContentSourceKind)99)],
             _ => [new(CookedContentSourceKind.ProjectOutput, "Invalid")],
         };
-        Action resolve = () => _ = CookedContentOrdering.Resolve([], order);
+        Action resolve = () => _ = CookedContentOrdering.Resolve([], [], order);
         _ = resolve.Should().Throw<InvalidDataException>();
     }
 }

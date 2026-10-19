@@ -386,14 +386,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
     private static void RegisterContentServices(IContainer childContainer)
     {
-        childContainer.RegisterDelegate<Oxygen.Editor.ContentPipeline.Discovery.IBuiltinCatalogDiscovery>(
-            resolver => new Oxygen.Editor.ContentPipeline.Discovery.BuiltinCatalogDiscovery(
-                resolver.Resolve<Oxygen.Editor.ContentPipeline.IBuiltinGeometryCatalogProvider>(),
-                resolver.Resolve<DroidNet.Storage.IAtomicFileStore>(),
-                resolver.Resolve<DroidNet.Config.IPathFinder>(),
-                resolver.Resolve<Microsoft.Extensions.Logging.ILogger<Oxygen.Editor.ContentPipeline.Discovery.BuiltinCatalogDiscovery>>(),
-                resolver.Resolve<Oxygen.Managed.Core.Compatibility.INativeCompatibilityService>(Oxygen.Managed.Core.Compatibility.EditorNativeCompatibilityService.CookingServiceKey)),
-            Reuse.Singleton);
         childContainer.Register<AssetCatalog>(Reuse.Singleton);
         childContainer.RegisterMapping<IAssetCatalog, AssetCatalog>();
         childContainer.RegisterMapping<IAssetFolderSource, AssetCatalog>();

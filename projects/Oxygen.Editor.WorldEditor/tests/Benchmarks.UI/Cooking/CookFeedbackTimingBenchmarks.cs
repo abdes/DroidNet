@@ -34,8 +34,7 @@ public sealed partial class CookFeedbackTimingBenchmarks : DroidNet.Tests.Visual
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(3));
         using var services = new CatalogWorkloadServices(fixture);
-        var builtins = (await services.Builtins.GetAsync(timeout.Token).ConfigureAwait(true)).Catalog!;
-        await SeedCatalogWorkloadAsync(fixture, services.Projects.ActiveProject!, services.Pipeline, builtins, timeout.Token).ConfigureAwait(true);
+        await SeedCatalogWorkloadAsync(fixture, services.Projects.ActiveProject!, services.Pipeline, timeout.Token).ConfigureAwait(true);
         var material = WorkloadMaterialAsset(0);
         var source = fixture.ProjectRoot.Combine(WorkloadMaterialPath(0)).FullPath;
         using var model = fixture.CreateTimingCookingPanel(services);

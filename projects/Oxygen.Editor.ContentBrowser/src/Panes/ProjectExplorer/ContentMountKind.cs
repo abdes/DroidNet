@@ -15,4 +15,10 @@ public enum ContentMountKind
 
     /// <summary>A cooked library folder outside the project; read-only.</summary>
     LocalLibrary,
+
+    /// <summary>A pak file; read-only.</summary>
+    PakLibrary,
+
+    /// <summary>The SDK's engine content pak, beneath every other mount; always mounted and read-only.</summary>
+    EngineContent,
 }

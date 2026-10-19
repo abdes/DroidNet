@@ -23,12 +23,6 @@ internal static class AssetReferenceRules
                 return "A scene reference is empty.";
             }
 
-            // Engine-generated assets, such as the built-in shapes and the default material, have no file.
-            if (reference.IsGenerated)
-            {
-                continue;
-            }
-
             try
             {
                 _ = ContentPipelinePaths.ToNativeDescriptorPath(reference, expectedSuffix);

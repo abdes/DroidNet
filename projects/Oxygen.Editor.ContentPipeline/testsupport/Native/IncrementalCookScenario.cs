@@ -5,10 +5,12 @@
 using System.Security.Cryptography;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -20,7 +22,7 @@ internal static class IncrementalCookScenario
 {
     internal static RecordingNativeApi CreateRecordingApi(INativeCompatibilityService compatibility) => new(new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility));
 
-    internal static ContentPipelineService CreateIncrementalService(CookWorkspace workspace, RecordingNativeApi api, INativeCompatibilityService compatibility) => CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+    internal static ContentPipelineService CreateIncrementalService(CookWorkspace workspace, RecordingNativeApi api, INativeCompatibilityService compatibility) => CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
 
     internal static void AssertCookSucceeded(ContentCookResult result) => _ = result.Status.Should().BeOneOf([OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings], string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.TechnicalMessage ?? diagnostic.Message)));
 
@@ -37,29 +39,29 @@ internal static class IncrementalCookScenario
         return document.Roots.Where(static root => root.Owner == global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootOwner.Project).SelectMany(root => Directory.EnumerateFiles(root.ResolvePath(projectRoot), "*", SearchOption.AllDirectories).Where(static path => !string.Equals(Path.GetFileName(path), global::Oxygen.Editor.ContentPipeline.Publication.CookedGeneration.MarkerFileName, StringComparison.Ordinal)).Select(path => (Key: root.Name + "/" + Path.GetRelativePath(root.ResolvePath(projectRoot), path).Replace('\\', '/'), Path: path))).ToDictionary(static file => file.Key, static file => (Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(file.Path))), File.GetLastWriteTimeUtc(file.Path)), StringComparer.Ordinal);
     }
 
-    internal static async Task PrepareIncrementalSceneAsync(CookWorkspace workspace)
+    internal static async Task PrepareIncrementalSceneAsync(CookWorkspace workspace, ICookedGeometryInspector inspector)
     {
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         var node = new SceneNode(workspace.Scene) { Name = "Cube" };
-        var geometry = new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Generated.Combine("BasicShapes/Cube") };
-        geometry.OverrideSlots.Add(await CreateBuiltinMaterialSlotAsync(
-            workspace, geometry, AssetPath.Parse("/Content/Materials/Blue.omat")).ConfigureAwait(false));
+        var geometry = new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") };
+        geometry.OverrideSlots.Add(await CreateEngineMaterialSlotAsync(
+            workspace, inspector, geometry.Geometry, AssetPath.Parse("/Content/Materials/Blue.omat")).ConfigureAwait(false));
         _ = node.AddComponent(geometry);
         workspace.Scene.RootNodes.Add(node);
         workspace.Scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
     }
 
-    internal static async Task<MaterialsSlot> CreateBuiltinMaterialSlotAsync(CookWorkspace workspace, GeometryComponent geometry, AssetPath material, CancellationToken cancellationToken = default)
+    // Reads the slot of a single-slot engine geometry from the workspace's engine content pak, as the inspector does.
+    internal static async Task<MaterialsSlot> CreateEngineMaterialSlotAsync(CookWorkspace workspace, ICookedGeometryInspector inspector, AssetPath geometry, AssetPath material, CancellationToken cancellationToken = default)
     {
-        var catalog = await new BuiltinCatalogFixture().GetBuiltinGeometryCatalogAsync(
-            workspace.Root, "Content", cancellationToken).ConfigureAwait(false);
-        var geometryAsset = geometry.Geometry;
-        var inventory = (catalog.Find(geometryAsset)
-            ?? throw new InvalidOperationException("The native fixture has no matching builtin geometry.")).MaterialSlots;
+        var report = await inspector.InspectGeometryAsync(
+            Path.Combine(workspace.Root, ".build", "inspection"), workspace.EngineContent.Path.FullPath, geometry.VirtualPath, cancellationToken).ConfigureAwait(false);
+        var inventory = report.SingleOrDefault(geometry)
+            ?? throw new InvalidOperationException("The engine content pak has no geometry " + geometry.VirtualPath + ".");
         return new MaterialsSlot
         {
-            Target = new(geometryAsset, inventory.Slots.Single().SlotId, inventory.LayoutRevision),
+            Target = new(geometry, inventory.Slots.Single().SlotId, inventory.LayoutRevision),
             Material = material,
         };
     }

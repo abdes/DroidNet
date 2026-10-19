@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Interop;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Runtime.Tests;
@@ -54,7 +55,7 @@ public sealed partial class NativeLoopCleanupTests
             {
                 await runner.WaitForEngineReadyAsync().WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
                 var transport = new NativeRuntimeCommandTransport(context);
-                await transport.ReplaceCookedRootsAsync((cookedRoots ?? []).Select(static path => new RuntimeCookedRoot(path)).ToArray()).ConfigureAwait(false);
+                await transport.ReplaceCookedRootsAsync((cookedRoots ?? []).Select(static path => new RuntimeCookedRoot(path, RuntimeCookedRootKind.LooseFolder)).ToArray()).ConfigureAwait(false);
                 _ = commands.BeginRun(transport, loop);
                 await check(commands).ConfigureAwait(false);
             }
@@ -93,7 +94,7 @@ public sealed partial class NativeLoopCleanupTests
         _ = failure.Message.Should().NotBeNullOrWhiteSpace();
         _ = commands.IsCurrentAssetRequest(failure.Request).Should().BeTrue();
         _ = commands.IsCurrentAssetFailure(failure).Should().BeTrue();
-        var replacement = request with { OperationId = Guid.NewGuid(), Command = new RuntimeSetGeometry(nodeId, "asset:///Engine/Generated/BasicShapes/Cube") };
+        var replacement = request with { OperationId = Guid.NewGuid(), Command = new RuntimeSetGeometry(nodeId, EngineAssets.BasicShape("Cube").VirtualPath) };
         _ = commands.Execute(replacement, this.TestContext.CancellationToken).Status.Should().Be(RuntimeCommandStatus.Accepted);
         await this.WaitForAppliedAssetAsync(commands, replacement).ConfigureAwait(false);
         _ = commands.IsCurrentAssetFailure(failure).Should().BeFalse();
@@ -107,7 +108,7 @@ public sealed partial class NativeLoopCleanupTests
                 inventory.GeometryUri.VirtualPath,
                 slot.SlotId,
                 inventory.LayoutRevision,
-                "asset:///Engine/Generated/Materials/Default",
+                EngineAssets.DefaultMaterial.VirtualPath,
                 MaterialSlotAssignmentIntent.ObservedEdit));
         _ = commands.Execute(material, this.TestContext.CancellationToken).Status.Should().Be(RuntimeCommandStatus.Accepted);
         await this.WaitForAppliedAssetAsync(commands, material).ConfigureAwait(false);
@@ -124,15 +125,15 @@ public sealed partial class NativeLoopCleanupTests
                 new ContentPipelineProcessRunner(),
                 NullLogger<ImportToolContentPipelineApi>.Instance,
                 compatibility);
-            var catalog = await api.GetBuiltinGeometryCatalogAsync(root.FullName, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-            return catalog.Find(AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"))!.MaterialSlots;
+            var cube = EngineAssets.BasicShape("Cube");
+            var report = await api.InspectGeometryAsync(root.FullName, EngineContentPak.Installed().Path.FullPath, cube.VirtualPath, this.TestContext.CancellationToken).ConfigureAwait(false);
+            return report.SingleOrDefault(cube) ?? throw new InvalidOperationException("The engine content pak has no cube geometry.");
         }
         finally
         {
             root.Delete(recursive: true);
         }
     }
-
     private async Task WaitForAppliedAssetAsync(RuntimeCommandDispatcher commands, RuntimeWorldRequest request)
     {
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);

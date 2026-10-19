@@ -44,42 +44,7 @@ public sealed partial class GeometryViewModel
         var previousGeometry = selectedGeometry is null ? null : this.latestAssets.Find(selectedGeometry);
         var currentGeometry = selectedGeometry is null ? null : assets.Find(selectedGeometry);
         this.latestAssets = assets;
-        var geometries = AssetRule.For(AssetKind.Geometry).Apply(assets, selectedGeometry);
-        var wanted = geometries.Select(static asset => asset.Identity).ToHashSet();
-        foreach (var removed in this.contentItemsByKey.Keys.Where(key => !wanted.Contains(key)).ToArray())
-        {
-            _ = this.contentItems.Remove(this.contentItemsByKey[removed]);
-            _ = this.contentItemsByKey.Remove(removed);
-        }
-
-        for (var index = 0; index < geometries.Count; index++)
-        {
-            var asset = geometries[index];
-            var item = new AssetPickerItem(
-                asset.DisplayName,
-                asset.Identity,
-                "Geometry · " + asset.PrimaryBadge,
-                asset.DisplayPath,
-                AssetPickerGroup.Content,
-                asset.IsSelectable,
-                "\uF158");
-            if (this.contentItemsByKey.TryGetValue(asset.Identity, out var row))
-            {
-                row.Update(item);
-                if (this.contentItems.IndexOf(row) != index)
-                {
-                    this.contentItems.Move(this.contentItems.IndexOf(row), index);
-                }
-            }
-            else
-            {
-                row = new(item);
-                this.contentItemsByKey.Add(asset.Identity, row);
-                this.contentItems.Insert(index, row);
-            }
-        }
-
-        this.ApplyBuiltinCatalog();
+        this.GeometryChoices.Update(AssetRule.For(AssetKind.Geometry).Apply(assets, selectedGeometry));
         if (previousGeometry?.CookedMetadata != currentGeometry?.CookedMetadata
             || previousGeometry?.EffectiveCookedSource != currentGeometry?.EffectiveCookedSource
             || previousGeometry?.CookStatus?.Freshness != currentGeometry?.CookStatus?.Freshness
@@ -96,16 +61,4 @@ public sealed partial class GeometryViewModel
 
     private string ResolveGeometryDisplayName(AssetPath geometry)
         => this.latestAssets.Find(geometry)?.DisplayName ?? geometry.Name;
-
-    private string BuiltinAvailability(AssetPath uri)
-    {
-        var asset = this.latestAssets.FirstOrDefault(item => item.Identity == uri);
-        return asset?.RuntimeAvailability switch
-        {
-            AssetRuntimeAvailability.Unavailable or AssetRuntimeAvailability.NotMounted => " · Preview unavailable",
-            AssetRuntimeAvailability.Updating => " · Updating preview",
-            AssetRuntimeAvailability.Failed => " · Preview issue",
-            _ => string.Empty,
-        };
-    }
 }

@@ -13,8 +13,9 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal sealed partial class CookWorkspace : IDisposable
 {
-    public CookWorkspace(IReadOnlyList<ProjectMountPoint>? authoringMounts = null)
+    public CookWorkspace(IReadOnlyList<ProjectMountPoint>? authoringMounts = null, IEngineContentPak? engineContent = null)
     {
+        this.EngineContent = engineContent ?? new EngineContentPakFixture();
         this.Root = Path.Combine(Path.GetTempPath(), "oxygen-content-pipeline-service-tests", Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(Path.Combine(this.Root, "Content", "Scenes"));
         Directory.CreateDirectory(Path.Combine(this.Root, "Content", "Materials"));
@@ -27,7 +28,7 @@ internal sealed partial class CookWorkspace : IDisposable
         this.ProjectContext = ProjectContext.FromProject(this.Project);
         this.Activate(this.ProjectContext);
         this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
-        this.Publication = new(this.CookCoordinator, this.ContextService, this.Files, this.Manager);
+        this.Publication = new(this.CookCoordinator, this.ContextService, this.Files, this.Manager, this.EngineContent);
         this.Scene = new Scene { Name = "Main" };
         var producer = Path.Combine(this.Root, "producer.bin");
         File.WriteAllText(producer, "fixed test producer");
@@ -41,6 +42,9 @@ internal sealed partial class CookWorkspace : IDisposable
     public ProjectManagerService Manager { get; } = new(new DroidNet.Storage.Native.NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
 
     public CookPublicationService Publication { get; }
+
+    /// <summary>Gets the engine content pak beneath the workspace's libraries: a declared fixture, or the installed pak for native cooks.</summary>
+    public IEngineContentPak EngineContent { get; }
 
     public Project Project { get; }
 

@@ -31,7 +31,7 @@ public sealed class ImportWorkflowTests
     [TestCategory("NativeContent")]
     public async Task ImportWorkflowRetainsAndPublishesAsOneRun()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var external = Directory.CreateTempSubdirectory("OxygenExternalModel-");
         try
         {
@@ -39,7 +39,7 @@ public sealed class ImportWorkflowTests
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), source);
             using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
             _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
@@ -75,13 +75,13 @@ public sealed class ImportWorkflowTests
     [TestCategory("NativeContent")]
     public async Task ImportWorkflowKeepsProjectSourceIdentity()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var path = Path.Combine(workspace.Root, "Content/SourceMedia/DCC/model.fbx");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.fbx"), path);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
         _ = result.RetainedSourceUri.Should().Be(AssetPath.Parse("/Content/SourceMedia/DCC/model.fbx"));
@@ -94,7 +94,7 @@ public sealed class ImportWorkflowTests
     [TestCategory("NativeContent")]
     public async Task ImportFailureRetriesRetainedSourceWithoutRecopying()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var external = Directory.CreateTempSubdirectory("OxygenFailedImport-");
         try
         {
@@ -103,7 +103,7 @@ public sealed class ImportWorkflowTests
             using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var runner = new FailImportBatchRunner();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = result.RetainedSourceUri.Should().NotBeNull();
@@ -130,7 +130,7 @@ public sealed class ImportWorkflowTests
     [DataRow("fbx")]
     public async Task TexturedImportFailureRetriesWithoutTheOriginalFiles(string format)
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var external = Directory.CreateTempSubdirectory("OxygenFailedTexturedImport-");
         try
         {
@@ -141,7 +141,7 @@ public sealed class ImportWorkflowTests
             using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var runner = new FailImportBatchRunner();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Triangle", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = result.RetainedSourceUri.Should().NotBeNull();
@@ -196,7 +196,7 @@ public sealed class ImportWorkflowTests
     [TestCategory("NativeContent")]
     public async Task ImportSettingsFailureRetriesWithoutOriginalSource()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var external = Directory.CreateTempSubdirectory("OxygenImportSettingsFailure-");
         try
         {
@@ -209,14 +209,15 @@ public sealed class ImportWorkflowTests
                 workspace.ContextService,
                 workspace.CookCoordinator,
                 new FixedCookScopeProvider(workspace.Root),
-                new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)),
+                new SceneDescriptorGenerator(),
                 new ContentImportManifestBuilder(),
                 new ContentImportManifestValidator(),
                 api,
                 workspace.Documents,
                 compatibility,
                 files,
-                workspace.Publication);
+                workspace.Publication,
+                workspace.EngineContent);
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = result.RetainedSourceUri.Should().NotBeNull();
@@ -241,7 +242,7 @@ public sealed class ImportWorkflowTests
     [TestCategory("NativeContent")]
     public async Task ImportResumesAfterSaveWithoutRepeatingSourceRetention()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var external = Directory.CreateTempSubdirectory("OxygenImportResume-");
         try
         {
@@ -261,7 +262,7 @@ public sealed class ImportWorkflowTests
             };
             using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
             var pending = service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken);
             var operationId = await blocked.Task.WaitAsync(TimeSpan.FromSeconds(15), this.TestContext.CancellationToken).ConfigureAwait(false);
             File.Delete(source);

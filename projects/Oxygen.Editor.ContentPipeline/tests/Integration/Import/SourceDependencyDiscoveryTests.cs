@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -32,7 +33,7 @@ public sealed class SourceDependencyDiscoveryTests
     [TestMethod]
     public async Task DiscoveryIncludesTransitiveMaterialAndBufferInputsOnce()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var geometryAsset = AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo");
         var geometrySource = AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo.json");
         var materialSource = AssetPath.Parse("/Content/Materials/Red.omat.json");
@@ -55,7 +56,6 @@ public sealed class SourceDependencyDiscoveryTests
         _ = graph.Files.Should().ContainSingle(input => input.RelativePath == "Content/Geometry/AuthoredCube.ogeo.json.import.json" && !input.IsAbsent);
         _ = graph.Files.Should().ContainSingle(input => input.RelativePath == "Content/Materials/Red.omat.json.import.json" && input.IsAbsent);
         _ = graph.PublishedReferences.Should().BeEmpty();
-        _ = graph.Builtins.Should().BeEmpty();
 
         var capture = new CookInputSnapshotCapture(workspace.Documents, workspace.CookCoordinator);
         var result = await workspace.CookCoordinator.RunAsync(
@@ -78,7 +78,7 @@ public sealed class SourceDependencyDiscoveryTests
     [TestMethod]
     public async Task DiscoveryTracksTypedSceneReferencesAsCookedOutputs()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
         var scriptOutputUri = AssetPath.Parse("/Content/Scripts/Orbit.oscript");
         var actionOutputUri = AssetPath.Parse("/Content/Input/Jump.oiact");
@@ -107,7 +107,7 @@ public sealed class SourceDependencyDiscoveryTests
         _ = graph.NativeReferences[sceneUri].Should().BeEquivalentTo(typedReferences);
         _ = graph.PublishedReferences.Should().BeEquivalentTo(typedReferences);
 
-        using var missingOutputs = await CookedLibraryReadSet.AcquireAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var missingOutputs = await CookedLibraryReadSet.AcquireAsync(workspace.ProjectContext, workspace.EngineContent, this.TestContext.CancellationToken).ConfigureAwait(false);
         var missingDiagnostics = missingOutputs.Apply(graph).Diagnostics
             .Where(static issue => issue.Code == "asset_cook.library_reference_missing")
             .ToArray();
@@ -116,12 +116,14 @@ public sealed class SourceDependencyDiscoveryTests
 
         using var projectOutputs = await CookedLibraryReadSet.AcquireAsync(
             workspace.ProjectContext,
+            workspace.EngineContent,
             this.TestContext.CancellationToken,
             knownOutputs: typedReferences).ConfigureAwait(false);
         _ = projectOutputs.Apply(graph).Diagnostics.Should().BeEmpty();
 
         using var sourceOnly = await CookedLibraryReadSet.AcquireAsync(
             workspace.ProjectContext,
+            workspace.EngineContent,
             this.TestContext.CancellationToken,
             knownOutputs: [AssetPath.Parse("/Content/Scripts/Orbit.lua")]).ConfigureAwait(false);
         _ = sourceOnly.Apply(graph).Diagnostics
@@ -133,7 +135,7 @@ public sealed class SourceDependencyDiscoveryTests
     [TestMethod]
     public async Task DiscoveryAndCaptureRetryWhenOptionalSettingsAppear()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var input = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Materials/Red.omat.json"), ContentCookInputRole.Primary);
         var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
@@ -175,7 +177,7 @@ public sealed class SourceDependencyDiscoveryTests
     [TestMethod]
     public async Task DirtyDependencyBlocksDiscoveryButDirtyConsumerDoesNot()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: false);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var material = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Materials/Red.omat.json"), ContentCookInputRole.Primary);
@@ -198,21 +200,20 @@ public sealed class SourceDependencyDiscoveryTests
     /// <summary>Cooked references remain distinct from source inputs and cannot be claimed fresh by discovery.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
-    public async Task DiscoverySeparatesPublishedReferencesAndEngineRecipes()
+    public async Task DiscoveryTreatsEngineContentAsPublishedReference()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var published = AssetPath.Parse("/Content/Geometry/Published.ogeo");
-        var builtin = AssetPath.Generated.Combine("BasicShapes/Cylinder");
+        var engine = EngineAssets.BasicShape("Cylinder");
         AddGeometryNode(workspace, published, "Published");
-        AddGeometryNode(workspace, builtin, "Builtin");
+        AddGeometryNode(workspace, engine, "Engine");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var scene = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Scenes/Main.oscene.json"), ContentCookInputRole.Primary);
 
         var graph = await new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents)).DiscoverAsync(workspace.ProjectContext, [scene], this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = graph.Assets.Should().ContainSingle();
-        _ = graph.PublishedReferences.Should().Equal(published);
-        _ = graph.Builtins.Should().Equal(builtin);
+        _ = graph.PublishedReferences.Should().BeEquivalentTo([published, engine]);
     }
 
     /// <summary>Cooking an authored geometry discovers its saved material before the first native cook.</summary>
@@ -224,12 +225,12 @@ public sealed class SourceDependencyDiscoveryTests
     [DataRow(true)]
     public async Task AuthoredGeometryCookIncludesUncookedMaterialDependency(bool sceneCook)
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: false);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
 
         if (sceneCook)
         {
@@ -256,7 +257,7 @@ public sealed class SourceDependencyDiscoveryTests
     [TestMethod]
     public async Task GeometryMediaOutsideProjectFailsDiscovery()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: true);
         const string source = "Content/Geometry/AuthoredCube.ogeo.json";
         var descriptor = JsonNode.Parse(workspace.ReadText(source))!;
@@ -272,7 +273,7 @@ public sealed class SourceDependencyDiscoveryTests
     [TestMethod]
     public async Task GeometryAbsoluteRetainedMediaIsDiscovered()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: true);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         const string source = "Content/Geometry/AuthoredCube.ogeo.json";
@@ -293,7 +294,7 @@ public sealed class SourceDependencyDiscoveryTests
     [TestMethod]
     public async Task MaterialDiscoveryIncludesIndependentTexturesImagesAndLibraryReferences()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         const string source = "Content/Materials/Channels.omat.json";
         workspace.WriteText(source, """
             { "name":"Channels", "textures": {
@@ -339,7 +340,7 @@ public sealed class SourceDependencyDiscoveryTests
     [TestMethod]
     public async Task MissingMaterialTextureFailsBeforeNativeImport()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         const string source = "Content/Materials/Red.omat.json";
         workspace.WriteMaterial(source, "Red");
         var material = JsonNode.Parse(workspace.ReadText(source))!;
@@ -365,7 +366,7 @@ public sealed class SourceDependencyDiscoveryTests
     [TestMethod]
     public async Task FolderDiscoveryReportsIndependentAssetErrorsTogether()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteText("Content/Materials/First.omat.json", "invalid first");
         workspace.WriteText("Content/Materials/Second.omat.json", "invalid second");
         var api = CreateSuccessfulApi(workspace, NativeSourceFactsFixture.AnalyzeAsync);

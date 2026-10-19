@@ -32,9 +32,13 @@ public sealed class ImportExecutionPathTests
         var source = manifest.Jobs.Single().AttributedSource;
         var capturedPath = Path.Combine(inputRoot, source);
         Directory.CreateDirectory(Path.GetDirectoryName(capturedPath)!);
-        var catalog = JsonNode.Parse(await File.ReadAllTextAsync(Path.Combine(AppContext.BaseDirectory, "Fixtures", "BuiltinGeometryCatalog.json"), this.TestContext.CancellationToken).ConfigureAwait(false))!;
-        var descriptor = catalog["default_material"]!["descriptor"]!;
-        descriptor["name"] = "Red";
+        var descriptor = JsonNode.Parse("""
+            {
+              "name": "Red",
+              "alpha_mode": "opaque",
+              "parameters": { "base_color": [1, 0, 0, 1], "metalness": 0, "roughness": 0.5, "double_sided": false }
+            }
+            """)!;
         var savedJson = descriptor.ToJsonString();
         await File.WriteAllTextAsync(capturedPath, savedJson, this.TestContext.CancellationToken).ConfigureAwait(false);
 

@@ -31,6 +31,5 @@ internal static class AssetQueryMatcher
 
     // Search text is what a user typed into a search box, so it matches without regard to case.
     private static bool MatchesSearch(AssetRecord record, string term)
-        => record.Identity.VirtualPath.Contains(term, StringComparison.OrdinalIgnoreCase)
-            || record.Generated?.CanonicalName.Contains(term, StringComparison.OrdinalIgnoreCase) == true;
+        => record.Identity.VirtualPath.Contains(term, StringComparison.OrdinalIgnoreCase);
 }

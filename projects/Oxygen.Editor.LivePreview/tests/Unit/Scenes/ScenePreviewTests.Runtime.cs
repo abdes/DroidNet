@@ -9,6 +9,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
@@ -114,7 +115,7 @@ public sealed partial class ScenePreviewTests
         var node = new SceneNode(built) { Name = "Saved geometry" };
         built.RootNodes.Add(node);
         var target = new MaterialSlotTarget(
-            AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"),
+            EngineAssets.BasicShape("Cube"),
             Guid.Parse("10000000-0000-0000-0000-000000000001"),
             new string('a', 64));
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };

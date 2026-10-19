@@ -25,7 +25,7 @@ public sealed class ProjectAssetKeyTests
     [TestCategory("NativeContent")]
     public async Task ProjectKeyCacheTracksNamesWithoutRecooking()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Shared.omat.json", "Shared");
         workspace.WriteText("Content/Scripts/Spin.oscript.json", "{}");
         workspace.WriteText("Content/Input/Jump.oiact.json", "{}");
@@ -75,7 +75,7 @@ public sealed class ProjectAssetKeyTests
     [DataRow(true)]
     public async Task ProjectKeyCacheRejectsCorruptionAndWrongCandidates(bool wrongPaths)
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Shared.omat.json", "Shared");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();

@@ -45,17 +45,11 @@ public sealed partial class MaterialEditorViewModel
         if (!this.isDisposed)
         {
             this.AssetStatus = items.Find(this.document.File.Asset);
-            this.availableTextureChoices = AssetRule.For(AssetKind.Texture).Apply(items)
-                .Where(static item => item.DescriptorPath is { } descriptorPath && TextureSourceAssetImporter.HasSourceImage(descriptorPath.FullPath))
-                .Select(static item => new MaterialTextureChoice(
-                    item.Identity.VirtualPath,
-                    item.DisplayName,
-                    IsAvailable: true))
-                .DistinctBy(static choice => choice.VirtualPath, StringComparer.Ordinal)
-                .ToArray();
+            this.availableTextures = [.. AssetRule.For(AssetKind.Texture).Apply(items)
+                .Where(static item => item.DescriptorPath is { } descriptorPath && TextureSourceAssetImporter.HasSourceImage(descriptorPath.FullPath))];
             foreach (var channel in this.TextureChannels)
             {
-                channel.Refresh(this.availableTextureChoices, channel.SelectedVirtualPath);
+                channel.Refresh(this.availableTextures, channel.SelectedVirtualPath);
             }
 
         }

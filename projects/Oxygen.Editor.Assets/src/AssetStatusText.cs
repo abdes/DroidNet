@@ -12,13 +12,12 @@ public static class AssetStatusText
 {
     /// <summary>Returns the status an asset list shows beside an asset's name.</summary>
     /// <param name="asset">The asset.</param>
-    /// <returns>Built-in, the cook status, or the asset's state badge when it has no cook status.</returns>
+    /// <returns>The packaged badge, the cook status, or the asset's state badge when it has no cook status.</returns>
     public static string ForEntry(AssetEntry asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
         var state = asset.PrimaryState is AssetState.Broken or AssetState.Missing ? asset.PrimaryState : asset.DerivedState ?? asset.PrimaryState;
-        return asset.Generated?.IsLastKnown == true ? "Preview unavailable"
-            : asset.IsBuiltin ? "Built-in"
+        return asset.IsPackaged ? asset.PackagedBadge
             : GetText(asset.CookStatus, asset.CookActivity, runtimeAvailability: asset.RuntimeAvailability) ?? AssetEntry.GetBadge(state);
     }
 

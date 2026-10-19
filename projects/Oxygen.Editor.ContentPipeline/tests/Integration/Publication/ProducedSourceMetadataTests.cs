@@ -173,7 +173,6 @@ public sealed class ProducedSourceMetadataTests
             ImmutableDictionary<AssetPath,
             ImmutableArray<string>>.Empty.Add(uri, [update.RelativePath]),
             [],
-            [],
             []);
         var accepted = CookProducedSourceFile.ExpectedInputs(consumed, [update]);
         const string producer = "native-producer";

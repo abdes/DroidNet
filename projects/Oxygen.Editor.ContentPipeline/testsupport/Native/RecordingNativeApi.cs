@@ -2,20 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
-internal sealed class RecordingNativeApi(ImportToolContentPipelineApi native) : IEngineContentPipelineApi, IBuiltinGeometryCatalogProvider
+internal sealed class RecordingNativeApi(ImportToolContentPipelineApi native) : IEngineContentPipelineApi, ICookedGeometryInspector
 {
     public List<ContentImportExecution> Imported { get; } = [];
 
     public List<ContentSourceAnalysisExecution> Analyzed { get; } = [];
 
     public List<global::Oxygen.Editor.ContentPipeline.Inspection.CookedOutputRemoval> Removed { get; } = [];
-
-    public int CatalogRequests { get; private set; }
 
     public bool FailNextImport { get; set; }
 
@@ -54,9 +53,6 @@ internal sealed class RecordingNativeApi(ImportToolContentPipelineApi native) : 
 
     public Task<CookValidationResult> ValidateLooseCookedRootAsync(string cookedRoot, CancellationToken cancellationToken) => native.ValidateLooseCookedRootAsync(cookedRoot, cancellationToken);
 
-    public Task<BuiltinGeometryCatalog> GetBuiltinGeometryCatalogAsync(string projectRoot, string mountName, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
-    {
-        this.CatalogRequests++;
-        return native.GetBuiltinGeometryCatalogAsync(projectRoot, mountName, cancellationToken, artifacts);
-    }
+    public Task<CookedGeometryReport> InspectGeometryAsync(string operationRoot, string cookedRoot, string virtualPath, CancellationToken cancellationToken, NativeArtifactLease? artifacts = null)
+        => native.InspectGeometryAsync(operationRoot, cookedRoot, virtualPath, cancellationToken, artifacts);
 }

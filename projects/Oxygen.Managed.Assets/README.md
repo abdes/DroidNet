@@ -7,20 +7,21 @@ Start with [catalogs](#catalogs), [authoring](#authoring) or
 ## Catalogs
 
 `IAssetCatalog` provides scoped enumeration and change notifications. Providers
-cover authoring files, engine-generated assets and native loose cooked indexes.
-The Content Browser combines their records with project mount order and cooking
-status.
+cover authoring files, loose cooked indexes and paks, including the engine's
+`engine.pak`. The Content Browser combines their records with project mount
+order and cooking status.
 
 ```csharp
 var scope = new AssetQueryScope(
-    Roots: [new Uri("asset:///Content/Textures/")],
+    Roots: [AssetPath.Parse("/Content/Textures")],
     Traversal: AssetQueryTraversal.Descendants);
 var results = await catalog.QueryAsync(new AssetQuery(scope, SearchText: "wood"));
 ```
 
-Project assets use `asset:///Content/...`; generated engine assets use
-`asset:///Engine/Generated/...`. Preserve these identities when selecting,
-referencing or displaying assets.
+Assets are identified by their virtual path (`AssetPath`), file type included:
+`/Content/Materials/Wood.omat` for project content,
+`/Engine/Generated/BasicShapes/Cube.ogeo` for engine content. Preserve these
+identities when selecting, referencing or displaying assets.
 
 ## Authoring
 
@@ -38,11 +39,14 @@ naming. Binary runtime formats are owned by native Data and Content.
 
 ## Cooked metadata
 
-[The v3 index reader](src/Persistence/LooseCooked/V3/README.md) supplies catalog
-metadata without launching a tool. It reads the current native format only;
-recook content when the format changes. Catalog metadata preserves each asset's
-opaque native reference-table locator and counts without interpreting the block.
+[The loose index reader](src/Persistence/LooseCooked/README.md) and
+[the pak reader](src/Persistence/Pak/README.md) supply catalog metadata without
+launching a tool. They read the current native formats only; recook or repack
+content when a format changes. `CookedAssetMetadata` names the asset's container
+(a loose cooked root or a pak file); the descriptor file and its digest exist
+only in a loose root. Catalog metadata preserves each asset's opaque native
+reference-table locator and counts without interpreting the block.
 
 Native Cooker owns binary production. Native Content and Inspector own complete
-cooked-root integrity verification. Reading an index for display does not verify
-its payload files or make the content ready for publication.
+cooked-container integrity verification. Reading an index or a pak for display
+does not verify its payload files or make the content ready for publication.

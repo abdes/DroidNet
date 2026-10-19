@@ -7,6 +7,7 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Oxygen.Editor.Pickers;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -18,6 +19,7 @@ public sealed partial class MaterialEditorView
 {
     private MaterialEditorViewModel? pickOwner;
     private MaterialEditorViewModel? statusOwner;
+    private Flyout? openTextureFlyout;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="MaterialEditorView"/> class.
@@ -134,6 +136,26 @@ public sealed partial class MaterialEditorView
         if (this.pickOwner is { } owner && ReferenceEquals(owner, this.ViewModel))
         {
             owner.SetBaseColor(args.Color);
+        }
+    }
+
+    private void OnTextureFlyoutOpening(object? sender, object args)
+    {
+        _ = args;
+        if (sender is Flyout { Target.DataContext: MaterialTextureChannel channel } flyout)
+        {
+            this.openTextureFlyout = flyout;
+            channel.Choices.SearchText = string.Empty;
+        }
+    }
+
+    private void OnTextureChoiceInvoked(object? sender, AssetChoice choice)
+    {
+        if (sender is FrameworkElement { DataContext: MaterialTextureChannel channel })
+        {
+            channel.SelectedVirtualPath = choice.Asset?.VirtualPath;
+            this.openTextureFlyout?.Hide();
+            this.openTextureFlyout = null;
         }
     }
 

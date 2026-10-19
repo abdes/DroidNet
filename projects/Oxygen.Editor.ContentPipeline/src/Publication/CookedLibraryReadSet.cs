@@ -11,6 +11,8 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Catalog.LooseCooked;
+using Oxygen.Managed.Assets.Catalog.Pak;
+using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -35,47 +37,32 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
 
     /// <summary>Reads library indexes and protects the full container inputs without starting a native worker.</summary>
     /// <param name="project">The project declaring the ordered libraries.</param>
+    /// <param name="engineContent">The engine content pak, the lowest library beneath the declared ones.</param>
     /// <param name="cancellationToken">Cancels acquisition and hashing.</param>
     /// <param name="resolveImported">Resolves retained project owners of imported outputs.</param>
     /// <param name="knownOutputs">Previously identified imported project output names.</param>
     /// <returns>The selected library readers and lookup facts.</returns>
-    public static async Task<CookedLibraryReadSet> AcquireAsync(ProjectContext project, CancellationToken cancellationToken, Func<AssetPath, ContentCookInput?>? resolveImported = null, IReadOnlyCollection<AssetPath>? knownOutputs = null)
+    public static async Task<CookedLibraryReadSet> AcquireAsync(ProjectContext project, IEngineContentPak engineContent, CancellationToken cancellationToken, Func<AssetPath, ContentCookInput?>? resolveImported = null, IReadOnlyCollection<AssetPath>? knownOutputs = null)
     {
-        var result = new CookedLibraryReadSet { order = CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder), projectRoot = project.ProjectRoot.FullPath, project = project, resolveImported = resolveImported, knownProjectOutputs = knownOutputs ?? [] };
+        ArgumentNullException.ThrowIfNull(engineContent);
+        var result = new CookedLibraryReadSet { order = CookedContentOrdering.Resolve(project), projectRoot = project.ProjectRoot.FullPath, project = project, resolveImported = resolveImported, knownProjectOutputs = knownOutputs ?? [] };
         try
         {
-            foreach (var source in result.order.Where(static source => source.Kind == CookedContentSourceKind.LocalFolder))
+            await result.AddEngineContentAsync(engineContent, cancellationToken).ConfigureAwait(false);
+            foreach (var source in result.order)
             {
-                var mount = project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
-                var path = mount.Root.FullPath;
-                if (!File.Exists(Path.Combine(path, "container.index.bin")))
+                switch (source.Kind)
                 {
-                    continue;
-                }
-
-                CookOutputReadLease? files = null;
-                try
-                {
-                    CookOutputLease.RejectReparsePoint(path);
-                    files = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
-                    var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
-                    using var catalog = new LooseCookedIndexAssetCatalog(index.Index, mount.Root);
-                    var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
-                    var fingerprint = index.Fingerprint;
-                    var metadata = await CookedDependencyCache.ReadAsync(project.ProjectRoot.FullPath, fingerprint, records, cancellationToken).ConfigureAwait(false);
-                    result.roots.Add(new(mount.Name, path, records, fingerprint, files) { SourceKey = index.Index.SourceGuid, Dependencies = metadata });
-                    files = null;
-                }
-                catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
-                {
-                    result.failures.Add((mount.Name, failure.Message));
-                }
-                finally
-                {
-                    if (files is not null)
-                    {
-                        await files.DisposeAsync().ConfigureAwait(false);
-                    }
+                    case CookedContentSourceKind.LocalFolder:
+                        await result.AddLooseFolderAsync(project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal)), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case CookedContentSourceKind.PakFile:
+                        await result.AddPakFileAsync(project.PakFileMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal)), cancellationToken).ConfigureAwait(false);
+                        break;
+                    case CookedContentSourceKind.ProjectOutput:
+                        break;
+                    default:
+                        throw new InvalidDataException("Content priority names an unknown source kind.");
                 }
             }
 
@@ -213,13 +200,15 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         var requested = graph.NativeReferences.Values.SelectMany(static values => values).Concat(graph.PublishedReferences).Distinct();
         var priority = this.order.Select((source, index) => (source, index)).ToArray();
         var projectPriority = priority.Single(static item => item.source.Kind == CookedContentSourceKind.ProjectOutput).index;
+        const int EnginePriority = -1;
         foreach (var uri in requested)
         {
             var match = this.roots.AsEnumerable().Reverse().Select(root => (root, record: root.Assets.FirstOrDefault(record => record.Identity == uri))).FirstOrDefault(static item => item.record is not null);
             var owned = HasProjectOwner(graph, uri) || this.knownProjectOutputs.Contains(uri);
             if (match.record?.Cooked is { } asset)
             {
-                var libraryPriority = priority.Single(item => string.Equals(item.source.Name, match.root.Name, StringComparison.Ordinal)).index;
+                var libraryPriority = match.root.IsEngineContent ? EnginePriority
+                    : priority.Single(item => string.Equals(item.source.Name, match.root.Name, StringComparison.Ordinal)).index;
                 if (owned && projectPriority > libraryPriority)
                 {
                     continue;
@@ -259,10 +248,14 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
         }
     }
 
+    /// <summary>Orders the native lookup roots from lowest to highest priority, the engine content pak first.</summary>
+    /// <param name="projectRoots">The operation's staged and reusable project roots.</param>
+    /// <returns>The roots native cooks resolve references against.</returns>
     public IReadOnlyList<string> OrderRoots(IEnumerable<string> projectRoots)
     {
-        var paths = this.order.SelectMany(source => source.Kind == CookedContentSourceKind.ProjectOutput ? projectRoots.Order(StringComparer.Ordinal)
-            : this.roots.Where(root => string.Equals(root.Name, source.Name, StringComparison.Ordinal)).Select(static root => root.Path));
+        var declared = this.order.SelectMany(source => source.Kind == CookedContentSourceKind.ProjectOutput ? projectRoots.Order(StringComparer.Ordinal)
+            : this.roots.Where(root => !root.IsEngineContent && string.Equals(root.Name, source.Name, StringComparison.Ordinal)).Select(static root => root.Path));
+        var paths = this.roots.Where(static root => root.IsEngineContent).Select(static root => root.Path).Concat(declared);
         return paths.Reverse().DistinctBy(FileSystemPath.From).Reverse().ToArray();
     }
 
@@ -272,9 +265,10 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <returns>The asynchronous validation.</returns>
     public async Task ValidateNativeAsync(IEngineContentPipelineApi native, CancellationToken cancellationToken)
     {
-        foreach (var root in this.roots)
+        // The engine content pak is an SDK artifact: the cooking artifact lease verifies its bytes.
+        foreach (var root in this.roots.Where(static root => root.Reader is not null))
         {
-            var inventory = await root.Reader.ReadInventoryAsync(native, cancellationToken).ConfigureAwait(false);
+            var inventory = await root.Reader!.ReadInventoryAsync(native, cancellationToken).ConfigureAwait(false);
             var result = inventory.ToValidation(root.Path);
             if (!result.Succeeded)
             {
@@ -290,7 +284,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     {
         foreach (var root in this.roots)
         {
-            _ = root.Reader.GetFiles();
+            _ = root.Reader?.GetFiles();
         }
     }
 
@@ -299,7 +293,8 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     {
         foreach (var root in this.roots)
         {
-            root.Reader.Dispose();
+            root.Reader?.Dispose();
+            root.PakLease?.Dispose();
         }
     }
 
@@ -325,9 +320,9 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
             {
                 result.AddRange(owned);
             }
-            else if (this.roots.FirstOrDefault(root => string.Equals(root.Name, source.Name, StringComparison.Ordinal)) is { } library)
+            else if (this.roots.FirstOrDefault(root => !root.IsEngineContent && string.Equals(root.Name, source.Name, StringComparison.Ordinal)) is { } library)
             {
-                result.Add(new(CookPublicationRootOwner.Library, library.Name, library.SourceKey, library.Fingerprint, library.Path));
+                result.Add(new(CookPublicationRootOwner.Library, library.Name, library.SourceKey, library.Fingerprint, library.Path) { Container = library.Container });
             }
         }
 
@@ -420,9 +415,104 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <param name="Asset">The asset's index entry.</param>
     public sealed record PreferredLibraryAsset(string CookedRoot, AssetRecord Asset);
 
-    private sealed record Root(string Name, string Path, IReadOnlyList<AssetRecord> Assets, string Fingerprint, CookOutputReadLease Reader)
+    // Every runtime mounts the engine content pak as its permanent base, so it never joins publication bindings.
+    private async Task AddEngineContentAsync(IEngineContentPak engineContent, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var document = await engineContent.ReadAsync(cancellationToken).ConfigureAwait(false);
+            var root = await this.CreatePakRootAsync(AssetPath.Engine.Mount, engineContent.Path, document, cancellationToken).ConfigureAwait(false);
+            this.roots.Add(root with { IsEngineContent = true });
+        }
+        catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            this.failures.Add((AssetPath.Engine.Mount, failure.Message));
+        }
+    }
+
+    // A declared folder without an index holds no cooked library yet and is skipped.
+    private async Task AddLooseFolderAsync(LocalFolderMount mount, CancellationToken cancellationToken)
+    {
+        var path = mount.Root.FullPath;
+        if (!File.Exists(Path.Combine(path, "container.index.bin")))
+        {
+            return;
+        }
+
+        CookOutputReadLease? files = null;
+        try
+        {
+            CookOutputLease.RejectReparsePoint(path);
+            files = await CookOutputReadLease.AcquireAsync(path, cancellationToken).ConfigureAwait(false);
+            var index = await CookedIndexSnapshot.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+            using var catalog = new LooseCookedIndexAssetCatalog(index.Index, mount.Root);
+            var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
+            var fingerprint = index.Fingerprint;
+            var metadata = await CookedDependencyCache.ReadAsync(this.projectRoot, fingerprint, records, cancellationToken).ConfigureAwait(false);
+            this.roots.Add(new(mount.Name, path, records, fingerprint, files) { SourceKey = index.Index.SourceGuid, Dependencies = metadata });
+            files = null;
+        }
+        catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            this.failures.Add((mount.Name, failure.Message));
+        }
+        finally
+        {
+            if (files is not null)
+            {
+                await files.DisposeAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    // The engine verifies a pak's integrity when it mounts it; the lease keeps its bytes fixed until then.
+    private async Task AddPakFileAsync(PakFileMount mount, CancellationToken cancellationToken)
+    {
+        PakReadLease? lease = null;
+        try
+        {
+            lease = await PakReadLease.AcquireAsync(mount.Path, cancellationToken).ConfigureAwait(false);
+            var root = await this.CreatePakRootAsync(mount.Name, mount.Path, lease.Document, cancellationToken).ConfigureAwait(false);
+            this.roots.Add(root with { Container = CookPublicationRootContainer.PakFile, PakLease = lease });
+            lease = null;
+        }
+        catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            this.failures.Add((mount.Name, failure.Message));
+        }
+        finally
+        {
+            lease?.Dispose();
+        }
+    }
+
+    // A pak's catalog digest identifies its content; its dependencies come from the native report, as for folders.
+    private async Task<Root> CreatePakRootAsync(string name, FileSystemPath path, PakDocument document, CancellationToken cancellationToken)
+    {
+        var catalog = new PakAssetCatalog(document, path);
+        var records = await catalog.QueryAsync(new(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
+        var metadata = await CookedDependencyCache.ReadAsync(this.projectRoot, document.CatalogDigest, records, cancellationToken).ConfigureAwait(false);
+        return new(name, path.FullPath, records, document.CatalogDigest, Reader: null) { SourceKey = document.SourceIdentity, Dependencies = metadata };
+    }
+
+    /// <summary>One library: a declared loose cooked folder, a declared pak file, or the engine content pak.</summary>
+    /// <param name="Name">The library's name: a declared mount, or the engine mount.</param>
+    /// <param name="Path">The physical container.</param>
+    /// <param name="Assets">The assets the container lists.</param>
+    /// <param name="Fingerprint">The container's content identity.</param>
+    /// <param name="Reader">The protected files of a loose folder; null for a pak.</param>
+    private sealed record Root(string Name, string Path, IReadOnlyList<AssetRecord> Assets, string Fingerprint, CookOutputReadLease? Reader)
     {
         public required Guid SourceKey { get; init; }
+
+        /// <summary>Gets a value indicating whether this is the engine content pak, beneath every declared library.</summary>
+        public bool IsEngineContent { get; init; }
+
+        /// <summary>Gets how the library stores its content.</summary>
+        public CookPublicationRootContainer Container { get; init; } = CookPublicationRootContainer.LooseFolder;
+
+        /// <summary>Gets the shared read handle of a declared pak file; null for folders and for the engine content pak, which the cooking artifact lease protects.</summary>
+        public PakReadLease? PakLease { get; init; }
 
         public CookedDependencyReport? Dependencies { get; set; }
     }

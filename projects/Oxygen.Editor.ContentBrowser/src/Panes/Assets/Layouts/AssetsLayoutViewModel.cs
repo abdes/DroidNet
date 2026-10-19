@@ -10,7 +10,6 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
@@ -24,17 +23,14 @@ public abstract partial class AssetsLayoutViewModel(
     IProjectContextService projectContextService,
     ContentBrowserState contentBrowserState,
     HostingContext hostingContext,
-    IBuiltinCatalogDiscovery builtins,
     Scripts.IScriptAnalysisService? scripts = null) : ObservableObject, IRoutingAware, IDisposable
 {
     private readonly IAssetFeed assetProvider = assetProvider;
     private readonly IProjectContextService projectContextService = projectContextService;
     private readonly ContentBrowserState contentBrowserState = contentBrowserState;
     private readonly HostingContext hostingContext = hostingContext;
-    private readonly IBuiltinCatalogDiscovery builtins = builtins;
 
     private IDisposable? subscription;
-    private IDisposable? builtinChanges;
     private IDisposable? scriptChanges;
     private bool disposed;
     private Task? initialization;
@@ -84,12 +80,6 @@ public abstract partial class AssetsLayoutViewModel(
 
     /// <summary>Gets the source-navigation action visibility in an empty derived view.</summary>
     public Visibility BrowseSourceVisibility => !this.Query.IsActive && this.IsCookedScope() ? Visibility.Visible : Visibility.Collapsed;
-
-    /// <summary>Gets the catalog availability notice when the current scope includes engine assets.</summary>
-    public string? BuiltinCatalogNotice => this.IncludesEngineChoices() ? this.builtins.Snapshot.Notice : null;
-
-    /// <summary>Gets a value indicating whether the current scope needs a catalog notice.</summary>
-    public bool HasBuiltinCatalogNotice => !string.IsNullOrEmpty(this.BuiltinCatalogNotice);
 
     /// <summary>Gets the shared result order, tile size and view.</summary>
     public AssetBrowserPresentation Presentation => this.contentBrowserState.Presentation;
@@ -254,7 +244,7 @@ public abstract partial class AssetsLayoutViewModel(
     {
         var row = this.SelectedRow;
         if (this.disposed || !ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this)
-            || row is null || this.pendingReveal is null || !AssetIdentity.Represents(row.Item, this.pendingReveal))
+            || row is null || this.pendingReveal is null || row.Item.Identity != this.pendingReveal)
         {
             return null;
         }
@@ -275,7 +265,6 @@ public abstract partial class AssetsLayoutViewModel(
             {
                 _ = this.initialSnapshotCompletion?.TrySetCanceled();
                 this.subscription?.Dispose();
-                this.builtinChanges?.Dispose();
                 this.scriptChanges?.Dispose();
                 this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
                 this.Query.Changed -= this.OnQueryChanged;
@@ -297,7 +286,7 @@ public abstract partial class AssetsLayoutViewModel(
     protected void OnItemInvoked(AssetEntry item)
     {
         if (!this.disposed && ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this)
-            && this.Assets.FirstOrDefault(row => AssetIdentity.Represents(row.Item, item.Identity)) is { } current)
+            && this.Assets.FirstOrDefault(row => row.Item.Identity == item.Identity) is { } current)
         {
             this.ItemInvoked?.Invoke(this, new AssetsViewItemInvokedEventArgs(current.Item));
         }
@@ -305,7 +294,6 @@ public abstract partial class AssetsLayoutViewModel(
 
     private static bool HasCookedProjection(AssetEntry asset)
         => asset.PrimaryState is AssetState.Cooked
-           || (asset.BuiltinOrigin is not null && asset.IsCookedOnly)
            || asset.DerivedState is AssetState.Cooked or AssetState.Stale
            || (asset.PrimaryState is AssetState.Broken && asset.IsCookedOnly);
 
@@ -331,16 +319,10 @@ public abstract partial class AssetsLayoutViewModel(
         var firstSnapshot = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         this.initialSnapshotCompletion = firstSnapshot;
         this.subscription?.Dispose();
-        this.builtinChanges?.Dispose();
         this.scriptChanges?.Dispose();
         this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
         this.Query.Changed -= this.OnQueryChanged;
         this.Presentation.SortChanged -= this.OnQueryChanged;
-        this.builtinChanges = Observable.FromEventPattern(
-                handler => this.builtins.Changed += handler,
-                handler => this.builtins.Changed -= handler)
-            .ObserveOn(this.hostingContext.DispatcherScheduler)
-            .Subscribe(_ => this.NotifyBuiltinStatus());
         this.scriptChanges = scripts?.Changes
             .ObserveOn(this.hostingContext.DispatcherScheduler)
             .Subscribe(this.OnScriptAnalyzed);
@@ -382,7 +364,6 @@ public abstract partial class AssetsLayoutViewModel(
         if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
         {
             this.ReplaceItems(this.latestItems);
-            this.NotifyBuiltinStatus();
         }
     }
 
@@ -401,7 +382,7 @@ public abstract partial class AssetsLayoutViewModel(
         var existing = this.Assets.ToDictionary(static row => row.Item.Identity);
         var scopedItems = this.projectContextService.ActiveProject is { } project
             ? CookedLibraryFolders.ForFolders(items, project, this.contentBrowserState.SelectedFolders) : items;
-        var inScope = AssetIdentity.GroupBuiltins(scopedItems.Where(this.IsInSelectedFolders)).ToArray();
+        var inScope = scopedItems.Where(this.IsInSelectedFolders).ToArray();
         this.scopeCount = inScope.Length;
         var visible = this.Presentation.Sort(inScope.Where(this.Query.Matches));
         this.isReplacingRows = true;
@@ -443,7 +424,7 @@ public abstract partial class AssetsLayoutViewModel(
     }
 
     private AssetBrowserRow? FindRow(AssetPath identity)
-        => this.Assets.FirstOrDefault(row => AssetIdentity.Represents(row.Item, identity));
+        => this.Assets.FirstOrDefault(row => row.Item.Identity == identity);
 
     private void PublishSelection()
     {
@@ -509,23 +490,4 @@ public abstract partial class AssetsLayoutViewModel(
             HasCookedProjection(asset),
             this.projectCookedFolders);
 
-    [RelayCommand]
-    private async Task RetryBuiltinCatalogAsync()
-    {
-        _ = await this.builtins.RefreshAsync(CancellationToken.None).ConfigureAwait(true);
-        await this.RefreshAsync().ConfigureAwait(true);
-    }
-
-    private bool IncludesEngineChoices()
-        => this.contentBrowserState.SelectedFolders.Count == 0
-            || this.contentBrowserState.SelectedFolders.Any(static folder => folder.IsSameOrInside(AssetPath.Engine));
-
-    private void NotifyBuiltinStatus()
-    {
-        if (!this.disposed)
-        {
-            this.OnPropertyChanged(nameof(this.BuiltinCatalogNotice));
-            this.OnPropertyChanged(nameof(this.HasBuiltinCatalogNotice));
-        }
-    }
 }

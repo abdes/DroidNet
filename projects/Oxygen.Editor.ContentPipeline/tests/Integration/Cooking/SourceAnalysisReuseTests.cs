@@ -7,6 +7,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
@@ -20,20 +21,22 @@ public sealed class SourceAnalysisReuseTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>A newly changed scene and a cached scene repair share one generated builtin source.</summary>
+    /// <summary>A newly changed scene and a cached scene repair share engine geometry without generating descriptors.</summary>
     /// <returns>The mixed-frontier native verification.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
-    public async Task MixedFreshAndCachedSceneRepairSharesBuiltinDescriptors()
+    public async Task MixedFreshAndCachedSceneRepairReadsEngineGeometryFromPak()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var second = new Scene { Name = "Second" };
         var node = new SceneNode(second) { Name = "OtherCube" };
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
-            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
+            Geometry = EngineAssets.BasicShape("Cube"),
         });
         second.RootNodes.Add(node);
         var source = File.Create(Path.Combine(workspace.Root, "Content", "Scenes", "Second.oscene.json"));
@@ -42,8 +45,6 @@ public sealed class SourceAnalysisReuseTests
             await Oxygen.Editor.World.Serialization.SceneSerializer.SerializeAsync(source, second).ConfigureAwait(false);
         }
 
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
-        var api = CreateRecordingApi(compatibility);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(first);
@@ -59,7 +60,7 @@ public sealed class SourceAnalysisReuseTests
         AssertCookSucceeded(repaired);
         _ = api.Analyzed.SelectMany(static execution => execution.Jobs).Should().NotContain(job => job.AttributedSource.Contains("Second", StringComparison.Ordinal));
         _ = api.Imported.SelectMany(static execution => execution.Manifest.Jobs).Where(static job => string.Equals(job.Type, "geometry-descriptor", StringComparison.Ordinal))
-            .Should().ContainSingle();
+            .Should().BeEmpty();
     }
 
     /// <summary>Repairing an unchanged scene's output does not launch another source-analysis worker.</summary>
@@ -68,10 +69,10 @@ public sealed class SourceAnalysisReuseTests
     [TestCategory("NativeContent")]
     public async Task CorruptSceneDescriptorReusesSourceFacts()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var first = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         AssertCookSucceeded(first);
@@ -96,30 +97,30 @@ public sealed class SourceAnalysisReuseTests
     [TestCategory("NativeContent")]
     public async Task DeferredSceneProjectionUsesCapturedBytes()
     {
-        using var workspace = new CookWorkspace();
-        await PrepareIncrementalSceneAsync(workspace).ConfigureAwait(false);
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         const string relative = "Content/Scenes/Main.oscene.json";
         workspace.WriteText(".build/captured/" + relative, workspace.ReadText(relative));
         workspace.Scene.RootNodes[0].Name = "EditedAfterCapture";
         await workspace.WriteSceneAsync(relative).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var operation = new ContentCookOperation(Guid.NewGuid(), workspace.ProjectContext, 1);
         var verified = await compatibility.VerifyAsync(operation.OperationId, this.TestContext.CancellationToken).ConfigureAwait(false);
         var artifacts = verified.Artifacts ?? throw new InvalidOperationException("The native test artifacts are unavailable.");
         await using var lifetime = artifacts.ConfigureAwait(false);
-        var api = CreateRecordingApi(compatibility);
         var analyzer = new CookSourceAnalyzer(
             operation,
             artifacts,
             api,
             new ContentImportManifestBuilder(),
-            new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)),
+            new SceneDescriptorGenerator(),
             new FixedCookScopeProvider(workspace.Root),
             new CookDocumentRegistry());
         var input = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Scenes/Main.oscene.json"), ContentCookInputRole.Primary);
         var snapshot = new CookInputSnapshot(operation, Path.Combine(workspace.Root, ".build", "captured"), artifacts.Fingerprint, "captured-scene-test", [], []);
 
-        var prepared = await analyzer.PrepareCapturedScenesAsync([input], snapshot, [], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var prepared = await analyzer.PrepareCapturedScenesAsync([input], snapshot, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = prepared.Diagnostics.Should().BeEmpty();
         var descriptor = await File.ReadAllTextAsync(prepared.Sources.Single().Scene!.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false);

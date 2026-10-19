@@ -12,6 +12,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -86,7 +87,7 @@ public sealed partial class ScenePreviewTests
         var built = fixture.Documents.NewScene();
         var cube = new SceneNode(built) { Name = "Cube" };
         built.RootNodes.Add(cube);
-        var target = new MaterialSlotTarget(AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+        var target = new MaterialSlotTarget(EngineAssets.BasicShape("Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
         geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = AssetPath.Parse("/Content/Materials/Red.omat") });
         cube.Components.Add(geometry);
@@ -107,7 +108,7 @@ public sealed partial class ScenePreviewTests
         var built = fixture.Documents.NewScene();
         var node = new SceneNode(built) { Name = "Crate" };
         built.RootNodes.Add(node);
-        node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Parse("/Engine/Generated/BasicShapes/Cube") });
+        node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") });
         var document = await fixture.OpenAsync(built).ConfigureAwait(false);
         _ = await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.Requests.Clear();

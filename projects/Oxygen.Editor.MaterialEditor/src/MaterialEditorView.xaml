@@ -8,6 +8,7 @@
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
     xmlns:local="using:Oxygen.Editor.MaterialEditor"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:pickers="using:Oxygen.Editor.Pickers"
     xmlns:ui="using:CommunityToolkit.WinUI"
     x:Name="MaterialEditorRoot"
     mc:Ignorable="d">
@@ -226,12 +227,22 @@
                                             <ColumnDefinition Width="*" />
                                         </Grid.ColumnDefinitions>
                                         <TextBlock VerticalAlignment="Center" Text="{x:Bind DisplayName}" />
-                                        <ComboBox
+                                        <DropDownButton
                                             Grid.Column="1"
-                                            DisplayMemberPath="DisplayName"
-                                            ItemsSource="{x:Bind Choices, Mode=OneWay}"
-                                            SelectedValue="{x:Bind SelectedVirtualPath, Mode=TwoWay}"
-                                            SelectedValuePath="VirtualPath" />
+                                            HorizontalAlignment="Stretch"
+                                            HorizontalContentAlignment="Left"
+                                            AutomationProperties.Name="{x:Bind DisplayName}">
+                                            <TextBlock Text="{x:Bind SelectedText, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                            <DropDownButton.Flyout>
+                                                <Flyout Opening="OnTextureFlyoutOpening" Placement="BottomEdgeAlignedLeft">
+                                                    <pickers:AssetPicker
+                                                        Width="320"
+                                                        ChoiceInvoked="OnTextureChoiceInvoked"
+                                                        EmptyText="Import an image to list it here."
+                                                        Model="{x:Bind Choices}" />
+                                                </Flyout>
+                                            </DropDownButton.Flyout>
+                                        </DropDownButton>
                                     </Grid>
                                     <TextBlock
                                         Foreground="{ThemeResource SystemFillColorCriticalBrush}"

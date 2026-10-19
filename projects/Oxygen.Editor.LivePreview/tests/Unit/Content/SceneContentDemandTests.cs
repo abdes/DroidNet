@@ -18,6 +18,7 @@ using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Tests.Content;
@@ -201,7 +202,7 @@ public sealed partial class SceneContentDemandTests
             var built = this.Documents.NewScene();
             var node = new SceneNode(built) { Name = "Cube" };
             built.RootNodes.Add(node);
-            node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Parse("/Engine/Generated/BasicShapes/Cube") });
+            node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") });
             var document = await this.Documents.OpenAsync(built).ConfigureAwait(false);
             await Task.Yield();
             return (document, built);

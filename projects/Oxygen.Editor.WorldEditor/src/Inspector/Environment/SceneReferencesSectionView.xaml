@@ -4,7 +4,8 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
-    xmlns:editorcontrols="using:Oxygen.Editor.Controls">
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:pickers="using:Oxygen.Editor.Pickers">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
@@ -52,30 +53,20 @@
 
             <editorcontrols:PropertyCard PropertyName="Script">
                 <StackPanel Spacing="5">
-                    <ComboBox
-                        HorizontalAlignment="Stretch"
-                        AutomationProperties.Name="Script reference asset"
-                        IsEnabled="{Binding CanEdit}"
-                        ItemsSource="{x:Bind ViewModel.ScriptCandidates, Mode=OneWay}"
-                        SelectedItem="{x:Bind ViewModel.SelectedScript, Mode=TwoWay}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel>
-                                    <TextBlock Text="{Binding DisplayName}" />
-                                    <TextBlock
-                                        FontSize="11"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Text="{Binding DisplayPath}"
-                                        TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button
+                    <DropDownButton
                         HorizontalAlignment="Right"
-                        Click="AddScript_Click"
+                        AutomationProperties.Name="Add script reference"
                         Content="Add Script"
-                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" />
+                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}">
+                        <DropDownButton.Flyout>
+                            <Flyout x:Name="AddScriptFlyout" Placement="BottomEdgeAlignedRight">
+                                <pickers:AssetPicker
+                                    Width="320"
+                                    ChoiceInvoked="OnScriptChoiceInvoked"
+                                    Model="{x:Bind ViewModel.ScriptChoices}" />
+                            </Flyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
                     <ItemsControl ItemsSource="{x:Bind ViewModel.Scripts, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -106,30 +97,20 @@
 
             <editorcontrols:PropertyCard PropertyName="Input Action">
                 <StackPanel Spacing="5">
-                    <ComboBox
-                        HorizontalAlignment="Stretch"
-                        AutomationProperties.Name="Input action reference asset"
-                        IsEnabled="{Binding CanEdit}"
-                        ItemsSource="{x:Bind ViewModel.InputActionCandidates, Mode=OneWay}"
-                        SelectedItem="{x:Bind ViewModel.SelectedInputAction, Mode=TwoWay}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel>
-                                    <TextBlock Text="{Binding DisplayName}" />
-                                    <TextBlock
-                                        FontSize="11"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Text="{Binding DisplayPath}"
-                                        TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button
+                    <DropDownButton
                         HorizontalAlignment="Right"
-                        Click="AddInputAction_Click"
+                        AutomationProperties.Name="Add input action reference"
                         Content="Add Input Action"
-                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" />
+                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}">
+                        <DropDownButton.Flyout>
+                            <Flyout x:Name="AddInputActionFlyout" Placement="BottomEdgeAlignedRight">
+                                <pickers:AssetPicker
+                                    Width="320"
+                                    ChoiceInvoked="OnInputActionChoiceInvoked"
+                                    Model="{x:Bind ViewModel.InputActionChoices}" />
+                            </Flyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
                     <ItemsControl ItemsSource="{x:Bind ViewModel.InputActions, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
@@ -160,30 +141,20 @@
 
             <editorcontrols:PropertyCard PropertyName="Physics Sidecar">
                 <StackPanel Spacing="5">
-                    <ComboBox
-                        HorizontalAlignment="Stretch"
-                        AutomationProperties.Name="Physics sidecar reference asset"
-                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"
-                        ItemsSource="{x:Bind ViewModel.PhysicsSidecarCandidates, Mode=OneWay}"
-                        SelectedItem="{x:Bind ViewModel.SelectedPhysicsSidecar, Mode=TwoWay}">
-                        <ComboBox.ItemTemplate>
-                            <DataTemplate>
-                                <StackPanel>
-                                    <TextBlock Text="{Binding DisplayName}" />
-                                    <TextBlock
-                                        FontSize="11"
-                                        Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                        Text="{Binding DisplayPath}"
-                                        TextTrimming="CharacterEllipsis" />
-                                </StackPanel>
-                            </DataTemplate>
-                        </ComboBox.ItemTemplate>
-                    </ComboBox>
-                    <Button
+                    <DropDownButton
                         HorizontalAlignment="Right"
-                        Click="AddPhysicsSidecar_Click"
+                        AutomationProperties.Name="Add physics sidecar reference"
                         Content="Add Physics Sidecar"
-                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}" />
+                        IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}">
+                        <DropDownButton.Flyout>
+                            <Flyout x:Name="AddPhysicsSidecarFlyout" Placement="BottomEdgeAlignedRight">
+                                <pickers:AssetPicker
+                                    Width="320"
+                                    ChoiceInvoked="OnPhysicsSidecarChoiceInvoked"
+                                    Model="{x:Bind ViewModel.PhysicsSidecarChoices}" />
+                            </Flyout>
+                        </DropDownButton.Flyout>
+                    </DropDownButton>
                     <ItemsControl ItemsSource="{x:Bind ViewModel.PhysicsSidecars, Mode=OneWay}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>

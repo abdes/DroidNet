@@ -34,6 +34,8 @@ public sealed class NativeArtifactInventoryTests
         var root = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"));
         var inventory = NativeArtifactInventory.CreateCooking(new(Path.Combine(root, "Editor"), Path.Combine(root, "Engine"), "Debug"));
         _ = inventory.Should().Contain(item => item.Id == NativeArtifactInventory.ImportToolId);
+        var enginePak = Path.Combine(root, "Engine", "share", "oxygen", "engine.pak");
+        _ = inventory.Should().Contain(item => item.Id == NativeArtifactInventory.EngineContentPakId && item.FullPath == enginePak);
         _ = inventory.Should().Contain(item => item.Id == "editor/Schemas/oxygen.scene-descriptor.schema.json");
         _ = inventory.Should().Contain(item => item.Id == "editor/Schemas/oxygen.import-manifest.schema.json");
         _ = inventory.Should().Contain(item => item.Id == "editor/Schemas/oxygen.scene-source-inspection.schema.json");

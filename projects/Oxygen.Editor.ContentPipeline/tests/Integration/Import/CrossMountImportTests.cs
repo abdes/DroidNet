@@ -29,7 +29,7 @@ public sealed class CrossMountImportTests
     [DataRow(true)]
     public async Task SceneCookOrdersCrossMountMaterialGeometryAndScene(bool interleaved)
     {
-        using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
+        using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: false);
         var geometryPath = Path.Combine(workspace.Root, "Content/Geometry/AuthoredCube.ogeo.json");
         var descriptor = JsonNode.Parse(await File.ReadAllTextAsync(geometryPath, this.TestContext.CancellationToken).ConfigureAwait(false))!;
@@ -49,7 +49,7 @@ public sealed class CrossMountImportTests
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var result = await service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.CookedAssets.Should().HaveCount(3);
@@ -68,20 +68,20 @@ public sealed class CrossMountImportTests
     [DataRow(true)]
     public async Task SceneCookResolvesImportedGeometryAcrossMounts(bool existingOutput)
     {
-        using var original = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
-        using var clean = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
+        using var original = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var clean = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(original, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await WriteCrossMountModelAsync(clean, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var sourceService = CreateService(original, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var sourceService = CreateService(original, new SceneDescriptorGenerator(), api, compatibility);
         var imported = await sourceService.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = imported.IsPublished.Should().BeTrue();
         var workspace = existingOutput ? original : clean;
         var geometry = imported.CookedAssets.First(static asset => asset.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
         AddGeometryNode(workspace, geometry, "Imported mesh");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var result = await service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.CookedAssets.Concat(result.ReusedAssets).Should().Contain(asset => asset.CookedAssetUri == geometry);

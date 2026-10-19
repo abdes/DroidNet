@@ -231,31 +231,21 @@ Native references contain neither `asset:///` nor an authoring `.json` suffix.
 Opaque native keys come from engine inspection/identity APIs, not a second
 managed hash implementation.
 
-### 7.4 Procedural Geometry Descriptors
+### 7.4 Engine Content References
 
-Generated/editor procedural geometry references, such as basic shapes, are
-resolved before scene cook:
+Engine content (the basic shapes, the default material and engine-internal
+assets) lives in the SDK's engine content pak, `share/oxygen/engine.pak`, under
+`/Engine`. A scene reference to it is a library reference like any other:
 
-```csharp
-public interface IProceduralGeometryDescriptorService
-{
-    Task<IReadOnlyList<ContentCookInput>> EnsureDescriptorsAsync(
-        ContentCookScope scope,
-        IReadOnlyList<Uri> geometryUris,
-        CancellationToken cancellationToken);
-}
-```
-
-Rules:
-
-- authored scene files keep the geometry asset URI.
-- Use derived procedural geometry descriptors under
-  `<ProjectRoot>/.pipeline/Geometry/<StableName>.ogeo.json` and adds
-  `geometry-descriptor` jobs to the manifest for those descriptors.
-- generated descriptors are derived files and are not shown as authored user
-  files unless the Content Browser already presents them as generated assets.
-- a scene renderable must not silently cook with an all-zero geometry key.
-- missing or unsupported geometry produces a failed scene cook diagnostic.
+- authored scene files keep the asset path, file type included, such as
+  `/Engine/Generated/BasicShapes/Cube.ogeo`.
+- the native scene descriptor names that path; the engine pak is the first
+  native context root, so the cook resolves the reference without copying the
+  asset into the project, and the publication never binds the engine pak because
+  every runtime mounts it beneath the project's content.
+- no editor-side descriptor is generated for engine content.
+- a scene renderable must not silently cook with an all-zero geometry key; an
+  unresolved reference fails the scene cook with a diagnostic.
 
 ### 7.5 Import Manifest
 
@@ -317,15 +307,15 @@ Mount layout rules:
 
 Required job type mapping:
 
-| Input                                                 | Manifest job type                 |
-| ----------------------------------------------------- | --------------------------------- |
-| scalar material descriptor `*.omat.json`              | `material-descriptor`             |
-| procedural/imported geometry descriptor `*.ogeo.json` | `geometry-descriptor`             |
-| generated native scene descriptor                     | `scene-descriptor`                |
-| glTF/GLB source media import                          | `gltf`                            |
-| FBX source media import                               | `fbx`                             |
-| texture source or descriptor                          | `texture` or `texture-descriptor` |
-| input source `*.input.json` or `*.input-action.json`  | `input` (section 24)              |
+| Input                                                | Manifest job type                 |
+| ---------------------------------------------------- | --------------------------------- |
+| scalar material descriptor `*.omat.json`             | `material-descriptor`             |
+| authored/imported geometry descriptor `*.ogeo.json`  | `geometry-descriptor`             |
+| generated native scene descriptor                    | `scene-descriptor`                |
+| glTF/GLB source media import                         | `gltf`                            |
+| FBX source media import                              | `fbx`                             |
+| texture source or descriptor                         | `texture` or `texture-descriptor` |
+| input source `*.input.json` or `*.input-action.json` | `input` (section 24)              |
 
 Scene jobs depend on the material and geometry jobs needed by their renderables.
 Folder/project cook generates a manifest and validates it against the native
@@ -453,7 +443,6 @@ Persisted authored truth:
 Derived artifacts:
 
 - native scene descriptors generated from editor scenes.
-- generated procedural geometry descriptors.
 - import manifests.
 - `.cooked/generations/<SourceKey>/` runtime containers.
 - `.cooked/publications/<OperationId>.json` and the atomic `.cooked/head.json`.
@@ -483,19 +472,19 @@ slots, project manifests, or recent documents.
 
 Operation kinds:
 
-| Operation                       | Producer                               | Domain            |
-| ------------------------------- | -------------------------------------- | ----------------- |
-| `Content.Descriptor.Generate`   | scene/procedural descriptor generators | `ContentPipeline` |
-| `Content.Manifest.Generate`     | manifest builder                       | `ContentPipeline` |
-| `Content.Import`                | content pipeline / engine API adapter  | `AssetImport`     |
-| `Content.Cook.Asset`            | content pipeline                       | `AssetCook`       |
-| `Content.Cook.Scene`            | content pipeline                       | `AssetCook`       |
-| `Content.Cook.Folder`           | content pipeline                       | `AssetCook`       |
-| `Content.Cook.Project`          | content pipeline                       | `AssetCook`       |
-| `Content.CookedOutput.Inspect`  | inspect adapter                        | `ContentPipeline` |
-| `Content.CookedOutput.Validate` | validation adapter                     | `ContentPipeline` |
-| `Content.Catalog.Refresh`       | catalog refresh adapter                | `AssetIdentity`   |
-| `Runtime.CookedRoot.Refresh`    | workspace/runtime integration          | `AssetMount`      |
+| Operation                       | Producer                              | Domain            |
+| ------------------------------- | ------------------------------------- | ----------------- |
+| `Content.Descriptor.Generate`   | scene descriptor generator            | `ContentPipeline` |
+| `Content.Manifest.Generate`     | manifest builder                      | `ContentPipeline` |
+| `Content.Import`                | content pipeline / engine API adapter | `AssetImport`     |
+| `Content.Cook.Asset`            | content pipeline                      | `AssetCook`       |
+| `Content.Cook.Scene`            | content pipeline                      | `AssetCook`       |
+| `Content.Cook.Folder`           | content pipeline                      | `AssetCook`       |
+| `Content.Cook.Project`          | content pipeline                      | `AssetCook`       |
+| `Content.CookedOutput.Inspect`  | inspect adapter                       | `ContentPipeline` |
+| `Content.CookedOutput.Validate` | validation adapter                    | `ContentPipeline` |
+| `Content.Catalog.Refresh`       | catalog refresh adapter               | `AssetIdentity`   |
+| `Runtime.CookedRoot.Refresh`    | workspace/runtime integration         | `AssetMount`      |
 
 Failure mapping:
 
@@ -503,7 +492,7 @@ Failure mapping:
 | ------------------------------------------------------------------------ | ----------------- | --------------------------------------------------------- |
 | scene descriptor generation failed                                       | `ContentPipeline` | `OXE.CONTENTPIPELINE.SCENE.DescriptorGenerationFailed`    |
 | required authored scene value cannot be represented; publication blocked | `ContentPipeline` | `OXE.CONTENTPIPELINE.SCENE.UnsupportedField`              |
-| procedural geometry descriptor failed                                    | `ContentPipeline` | `OXE.CONTENTPIPELINE.GEOMETRY.DescriptorGenerationFailed` |
+| scene geometry reference cannot be normalized                            | `ContentPipeline` | `OXE.CONTENTPIPELINE.GEOMETRY.DescriptorGenerationFailed` |
 | manifest generation failed                                               | `ContentPipeline` | `OXE.CONTENTPIPELINE.MANIFEST.GenerationFailed`           |
 | source path missing                                                      | `AssetImport`     | `OXE.ASSETIMPORT.SourceMissing`                           |
 | importer returned diagnostics                                            | `AssetImport`     | `OXE.ASSETIMPORT.ImportFailed`                            |
@@ -546,8 +535,8 @@ The following production paths require regression coverage:
 1. `Cook Current Scene` generates a native `oxygen.scene` descriptor from the
    editor scene with transform, geometry, material slot, perspective camera,
    directional light, and supported environment data.
-2. procedural geometry references needed by the scene produce descriptor/key
-   inputs or fail with visible diagnostics.
+2. engine content references needed by the scene resolve through the engine
+   content pak or fail with visible diagnostics.
 3. cooking the current scene cooks its referenced V0.1 material and geometry
    dependencies or reports which dependency blocked the cook.
 4. cooked output contains `.cooked/generations/<SourceKey>/container.index.bin`
@@ -1077,85 +1066,45 @@ the request's cancellation token. A failed termination throws
 adapter retains input until that task finishes. The project coordinator must
 likewise retain its operation gate and staging until this drain completes.
 
-## 19. One Procedural Asset Authority
+## 19. One Engine Content Authority
 
-Use one supported engine/content procedural-definition capability shared by live
-resolution and cooking. The engine owns immutable recipe/version data, generator
-parameters, computed bounds, default material semantics and deterministic
-identity mapping. Editor project policy supplies the selected virtual
-mount/output scope, not duplicate generator defaults. A definition yields the
-live asset and schema-valid cook contribution through the same engine-owned
-generation helpers. The cooker remains the native format authority.
+The engine owns its built-in content and ships it cooked. The engine build's
+`oxygen-engine-content` target cooks a loose `/Engine` root (procedural geometry
+descriptors with engine-owned recipes, bounds from the generated meshes, and the
+default material) and packs it with PakTool into `engine.pak`, with a browse
+index and its own source key. The editor neither reconstructs geometry nor
+copies material defaults.
 
-`Oxygen.Data` exposes the built-in catalog, canonical URI/descriptor identity,
-and cached geometry resolution. Its procedural parameter defaults are shared by
-direct mesh factories, binary-parameter generation and the descriptor importer.
-Bounds come from the generated mesh, and material parameters come from
-`MaterialAsset::CreateDefault`. `Oxygen.Cooker` emits the schema-valid
-descriptor contributions and the catalog artifact consumed by the editor. The
-editor supplies the project output mount; it does not reconstruct geometry or
-material defaults.
+The canonical ten-shape palette is Cube, Sphere, Capsule, Cylinder, Cone, Plane,
+Quad, IcoSphere, Torus and SubdividedCube, under
+`/Engine/Generated/BasicShapes`; the default material is
+`/Engine/Generated/Materials/Default.omat`. Tool-only assets such as the arrow
+gizmo live under `/Engine/Internal`, which pickers hide by folder.
+`EngineAssets` (Managed.Assets) names these paths for editor code.
 
-The canonical ten-shape palette is: Cube, Sphere, Capsule, Cylinder, Cone,
-Plane, Quad, IcoSphere, Torus and SubdividedCube. SubdividedCube is advanced
-creation; ArrowGizmo is an internal tool resource. IcoSphere has one canonical
-API, catalog and generator identity, with no duplicate resolution path. Useful
-former scene uses of tool-only geometry migrate to ordinary geometry; no
-compatibility shim remains.
+The editor reads `engine.pak` through `IEngineContentPak`:
 
-Capsule must join the same native definition/generation/cook authority, not an
-editor-only primitive. The engine-owned catalog distinguishes canonical
-authoring choices from internal tools, and the editor consumes that metadata
-rather than duplicating name lists. Metric, centred, Z-up defaults are specified
-in the property-inspector Geometry contract. Apply them through shared native
-recipes and migrate useful old recipe intent; keep API/schema prose aligned with
-generated buffers. This adds no raw generator-parameter editor. Future additions
-require explicit catalog and qualification updates.
+- the asset catalog lists its assets as Packaged assets with the Engine badge;
+  the Content Browser shows it as the read-only `Engine` root.
+- it is the lowest cooked library and the first native context root; the cooking
+  artifact inventory leases and verifies it like the tools and schemas, so its
+  content identity joins the cook fingerprint.
+- the preview mounts it beneath the project's content; a missing pak is reported
+  loudly and leaves `/Engine` references unresolved without failing the engine.
 
-SetGeometryCommand registers the native request generation and resolves
-canonical built-ins through Oxygen.Data. Browser and picker choices use the
-native catalog's canonical authoring classification, including advanced
-SubdividedCube; managed catalogs and resolvers require supplied metadata rather
-than constructing recipes.
-
-Discovery retains the complete native catalog under the editor's derived
-`cache/builtins/<configuration>` state directory. SDK identity changes refresh
-the snapshot; an unavailable SDK uses the last valid snapshot with the
-last-known/preview-unavailable notice. Invalid metadata cannot replace the
-cache. Query output uses temporary storage, and catalog discovery never
-publishes cooked project output. The strict native provider remains the cook
-recipe source.
-
-Direct factories, parameter-driven generation and descriptor import use the same
-engine-owned defaults. Compare effective definitions and generated output; the
-editor does not copy constants into a competing recipe.
-
-SetGeometryCommand calls the supported resolver through the runtime adapter and
-preserves request generation/completion acceptance. It owns no independent
-generator selection/defaults/cache policy or manually maintained format fields.
-ProceduralGeometryDescriptorService consumes the same definition/cook
-contribution; it no longer owns independent parameters, bounds or
-default-material constants. No explicit cook is required for initial procedural
-preview. Instance overrides are authored assignments over the shared defaults,
-with the SlotId contract below.
-
-For every exposed shape compare live/cooked identity mapping, bounds, topology,
-vertex attributes, default material and explicit overrides using supported
-engine APIs. Save/reopen preserves its URI and values. Include
-thin/zero-thickness bounds and sphere segment defaults. ED-M08 records actual
-loaded/visual parity separately; source implementation and unit tests alone do
-not establish rendered equivalence.
+Geometry slot inventories of engine shapes come from the native Inspector
+`geometries` report on `engine.pak`, as for any cooked geometry, so engine
+shapes have inventories without a project cook.
 
 Required regression: assign Cylinder to a scene node, explicitly save, then Cook
-Current Scene and Cook Project. Both succeed and preserve the authored identity;
-repeat for every canonical authoring generator, including Capsule. Test
-useful-content migration separately; no legacy alias is a release gate. Every
-offered choice must work; do not downgrade a failed required cook to a
-successful warning or hide a required choice to evade qualification. Failure
-diagnostics carry captured scene identity, node ID/path/name, geometry identity,
-and saved revision, and can navigate to the matching current node. If the node
-has been renamed/deleted since capture, explain that relationship instead of
-selecting a different node with a similar display name.
+Current Scene and Cook Project. Both succeed, preserve the authored identity and
+reference the engine asset without a project copy; repeat for every canonical
+shape. Every offered choice must work; do not downgrade a failed required cook
+to a successful warning or hide a required choice to evade qualification.
+Failure diagnostics carry captured scene identity, node ID/path/name, geometry
+identity, and saved revision, and can navigate to the matching current node. If
+the node has been renamed/deleted since capture, explain that relationship
+instead of selecting a different node with a similar display name.
 
 ## 20. Canonical Material-Slot Identity And Reimport
 
@@ -1195,9 +1144,8 @@ selects the winning project/library source, retains publication and file
 readers, and obtains typed inventory through native Inspector
 `geometries --virtual-path`. Project output must pass the shared freshness
 checks before and after inspection; uncooked, stale or missing output yields no
-current inventory. Project replacement cancels the request. Builtin catalog v3
-supplies native inventories before cooking, using the authored builtin identity;
-its separate descriptor maps that identity to the cooked contribution. No
+current inventory. Project replacement cancels the request. Engine geometry is
+read from `engine.pak` the same way, so its inventory exists before any cook. No
 managed code decodes geometry bytes or hashes slots.
 
 Canonical scene assignments contain GeometryUri, SlotId, MaterialUri and the

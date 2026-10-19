@@ -19,5 +19,6 @@
     </ItemGroup>
     <ItemGroup>
         <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testsupport\LooseCookedIndexFixture.cs" Link="LooseCookedIndexFixture.cs" />
+        <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testsupport\PakFixture.cs" Link="PakFixture.cs" />
     </ItemGroup>
 </Project>

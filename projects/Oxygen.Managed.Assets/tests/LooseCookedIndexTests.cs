@@ -5,7 +5,8 @@
 using System.Buffers.Binary;
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Assets.Persistence;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 
 namespace Oxygen.Managed.Assets.Tests;
 
@@ -84,6 +85,7 @@ public sealed class LooseCookedIndexTests
     [TestMethod]
     [DataRow(1)]
     [DataRow(2)]
+    [DataRow(3)]
     [DataRow(65535)]
     public void Read_WithUnsupportedVersion_ShouldThrow(int version)
     {
@@ -92,7 +94,7 @@ public sealed class LooseCookedIndexTests
         BinaryPrimitives.WriteUInt16LittleEndian(stream.GetBuffer().AsSpan(8, 2), checked((ushort)version));
         stream.Position = 0;
         Action read = () => _ = LooseCookedIndex.Read(stream);
-        _ = read.Should().Throw<NotSupportedException>();
+        _ = read.Should().Throw<InvalidDataException>();
     }
 
     [TestMethod]
@@ -105,7 +107,7 @@ public sealed class LooseCookedIndexTests
         stream.GetBuffer()[16 + byteOffset] = checked((byte)value);
         stream.Position = 0;
         Action read = () => _ = LooseCookedIndex.Read(stream);
-        _ = read.Should().Throw<InvalidDataException>().WithMessage("*UUIDv7*");
+        _ = read.Should().Throw<InvalidDataException>();
     }
 
     [TestMethod]
@@ -140,7 +142,7 @@ public sealed class LooseCookedIndexTests
         stream.Position = 0;
 
         Action read = () => _ = LooseCookedIndex.Read(stream);
-        _ = read.Should().Throw<InvalidDataException>().WithMessage("*does not match v3 size*");
+        _ = read.Should().Throw<InvalidDataException>();
     }
 
     [TestMethod]
@@ -212,9 +214,48 @@ public sealed class LooseCookedIndexTests
 
         using var readStream = new MemoryStream(bytes, writable: false);
         Action act = () => _ = LooseCookedIndex.Read(readStream);
-        _ = act.Should().Throw<InvalidDataException>()
-            .WithMessage("*File records must start after the end of the asset entries*");
+        _ = act.Should().Throw<InvalidDataException>();
     }
+
+    [TestMethod]
+    public void Read_TextureDescriptor_ShouldKeepItsVirtualPath()
+    {
+        var texture = TextureDescriptor("/Content/Textures/Sky.otex");
+        var doc = CreateSampleDocument() with { Files = [texture] };
+
+        using var ms = new MemoryStream();
+        Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
+        ms.Position = 0;
+
+        var file = LooseCookedIndex.Read(ms).Files.Should().ContainSingle().Subject;
+        _ = file.Kind.Should().Be(FileKind.TextureDescriptor);
+        _ = file.VirtualPath.Should().Be("/Content/Textures/Sky.otex");
+    }
+
+    [TestMethod]
+    [DataRow(FileKind.TextureDescriptor, null)]
+    [DataRow(FileKind.Auxiliary, "/Content/Textures/Sky.otex")]
+    [DataRow(FileKind.TextureDescriptor, "/Content/Materials/Wood.mat")]
+    public void Read_WithInvalidFileVirtualPath_ShouldThrow(FileKind kind, string? virtualPath)
+    {
+        var file = TextureDescriptor(virtualPath) with { Kind = kind };
+        var doc = CreateSampleDocument() with { Files = [file] };
+
+        using var ms = new MemoryStream();
+        Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
+        ms.Position = 0;
+
+        Action read = () => _ = LooseCookedIndex.Read(ms);
+        _ = read.Should().Throw<InvalidDataException>();
+    }
+
+    private static FileRecord TextureDescriptor(string? virtualPath)
+        => new(
+            Kind: FileKind.TextureDescriptor,
+            RelativePath: "Textures/Sky.otex",
+            Size: 51,
+            Sha256: System.Security.Cryptography.SHA256.HashData("texture"u8),
+            VirtualPath: virtualPath);
 
     private static Document CreateSampleDocument()
     {

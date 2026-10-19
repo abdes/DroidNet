@@ -15,12 +15,6 @@ namespace Oxygen.Editor.ContentPipeline.Incremental;
 /// <param name="Products">The source fingerprints responsible for produced assets.</param>
 internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<CookProvenance.Root> Roots, ImmutableArray<CookProvenance.Product> Products)
 {
-    /// <summary>Gets accepted native builtin output identities for source dependency resolution.</summary>
-    internal ImmutableDictionary<string, AssetPath> BuiltinOwners => this.Products
-        .Where(static product => product.SourceUri.IsGenerated)
-        .SelectMany(static product => product.Outputs.Select(output => KeyValuePair.Create(output.Asset.VirtualPath, product.SourceUri)))
-        .ToImmutableDictionary(StringComparer.Ordinal);
-
     internal bool IsValid(ProjectContext project)
     {
         if (this.ProjectId != project.ProjectId || this.Roots.IsDefault || this.Products.IsDefault

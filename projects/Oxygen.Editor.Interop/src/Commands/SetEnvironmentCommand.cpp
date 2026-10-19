@@ -435,21 +435,18 @@ namespace oxygen::interop::module {
     };
     auto sources = EnvironmentTextureSources {};
     sources.at(static_cast<std::size_t>(EnvironmentTextureSlot::kMeteringMask))
-      = { .locator = post_process_.auto_exposure_metering_mask,
-          .project_mount = post_process_.auto_exposure_metering_mask_mount };
+      = { .virtual_path = post_process_.auto_exposure_metering_mask };
     sources.at(
       static_cast<std::size_t>(EnvironmentTextureSlot::kSkySphereCubemap))
-      = { .locator = sky_.sky_sphere.cubemap.locator,
-          .project_mount = sky_.sky_sphere.cubemap.project_mount };
+      = { .virtual_path = sky_.sky_sphere.cubemap.virtual_path };
     sources.at(static_cast<std::size_t>(EnvironmentTextureSlot::kSkyLightCubemap))
-      = { .locator = sky_.sky_light.cubemap.locator,
-          .project_mount = sky_.sky_light.cubemap.project_mount };
+      = { .virtual_path = sky_.sky_light.cubemap.virtual_path };
     if (context.AssetRequests) {
       context.AssetRequests->SetEnvironmentTextures(*context.Scene,
         std::move(sources), std::move(apply), std::move(failure_callback_),
         std::move(success_callback_));
     } else if (std::ranges::any_of(sources,
-                 [](const auto& source) { return source.locator.has_value(); })) {
+                 [](const auto& source) { return source.virtual_path.has_value(); })) {
       throw std::logic_error(
         "Environment textures require scene asset request state");
     } else {

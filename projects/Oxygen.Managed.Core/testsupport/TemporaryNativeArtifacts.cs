@@ -60,6 +60,11 @@ internal sealed partial class TemporaryNativeArtifacts : INativeCompatibilitySer
             nativeFiles.Add(new(NativeArtifactInventory.ImportToolId, tool));
         }
 
+        if (File.Exists(installation.EngineContentPakPath))
+        {
+            nativeFiles.Add(new(NativeArtifactInventory.EngineContentPakId, installation.EngineContentPakPath));
+        }
+
         foreach (var id in new[] { NativeArtifactInventory.SourceAnalysisSchemaId, NativeArtifactInventory.CapturedInputsSchemaId })
         {
             nativeFiles.Add(new(id, Path.Combine(installation.SchemaDirectory, Path.GetFileName(id))));

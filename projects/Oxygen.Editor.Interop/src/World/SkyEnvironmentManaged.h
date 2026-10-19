@@ -9,20 +9,13 @@
 
 namespace Oxygen::Interop::World {
 
-//! A cooked cube texture: a null descriptor path binds none. A project mount
-//! resolves the cooked root through the mount's current generation.
-public value struct CubemapReferenceManaged {
-  System::String^ CookedRoot;
-  System::String^ DescriptorRelativePath;
-  System::String^ ProjectMount;
-};
-
 //! Authored Sky Sphere backdrop, in the editor scene model's units.
 public value struct SkySphereEnvironmentManaged {
   bool Enabled;
   //! SkySphereSource: 0 cubemap, 1 solid color.
   int Source;
-  CubemapReferenceManaged Cubemap;
+  //! Virtual path of the cooked cube texture descriptor; null binds none.
+  System::String^ CubemapPath;
   System::Numerics::Vector3 SolidColorRgb;
   //! Calibrated upward illuminance in lux; zero keeps the imported radiance.
   float IlluminanceLux;
@@ -36,7 +29,8 @@ public value struct SkyLightEnvironmentManaged {
   bool Enabled;
   //! SkyLightSource: 0 captured scene, 1 specified cubemap.
   int Source;
-  CubemapReferenceManaged Cubemap;
+  //! Virtual path of the cooked cube texture descriptor; null binds none.
+  System::String^ CubemapPath;
   //! Calibrated upward illuminance of the cubemap in lux; zero keeps it raw.
   float CubemapIlluminanceLux;
   float Intensity;

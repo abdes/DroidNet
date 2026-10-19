@@ -14,18 +14,18 @@ namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Inspector;
 [TestClass]
 public sealed partial class GeometrySynchronizationTests : DroidNet.Tests.VisualUserInterfaceTests
 {
-    private static readonly string[] BuiltinShapes = ["Cube", "SubdividedCube", "Sphere", "IcoSphere", "Capsule", "Plane", "Cylinder", "Cone", "Torus", "Quad"];
+    private static readonly string[] EngineShapes = ["Cube", "SubdividedCube", "Sphere", "IcoSphere", "Capsule", "Plane", "Cylinder", "Cone", "Torus", "Quad"];
 
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Every engine built-in resolves with drawable buffers and retains its URI across Save/reopen.</summary>
+    /// <summary>Every engine basic shape resolves with drawable buffers and retains its URI across Save/reopen.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
-    public Task BuiltinGeometriesResolveAndReopenThroughNativeRuntime() => EnqueueAsync(async () =>
+    public Task EngineGeometriesResolveAndReopenThroughNativeRuntime() => EnqueueAsync(async () =>
     {
         var fixture = new NativeSceneFixture(automatic: false, static scene =>
         {
-            foreach (var shape in BuiltinShapes)
+            foreach (var shape in EngineShapes)
             {
                 AddGeometryNode(scene, shape);
             }

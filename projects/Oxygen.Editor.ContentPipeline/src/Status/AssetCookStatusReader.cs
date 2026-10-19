@@ -23,10 +23,12 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <param name="documents">The open documents, whose unsaved changes the status reports.</param>
 /// <param name="publication">The committed metadata verifier.</param>
 /// <param name="nativeCompatibility">The current cooking producer identity.</param>
+/// <param name="engineContent">The engine content pak, the lowest library engine references resolve through.</param>
 public sealed partial class AssetCookStatusReader(
     ICookDocumentRegistry documents,
     CookPublicationService publication,
-    INativeCompatibilityService nativeCompatibility) : IAssetCookStatusReader
+    INativeCompatibilityService nativeCompatibility,
+    IEngineContentPak engineContent) : IAssetCookStatusReader
 {
     /// <inheritdoc />
     public event EventHandler? Changed
@@ -72,12 +74,9 @@ public sealed partial class AssetCookStatusReader(
         const bool metadataUnavailable = false;
 
         var requested = assetUris.Distinct().ToArray();
-        var builtinOrigins = ResolveBuiltinOutputOrigins(project, prior);
-        var requests = requested.Select(uri => (Requested: uri, Source: builtinOrigins.GetValueOrDefault(uri, uri))).ToArray();
-        var builtins = requests.Select(static item => item.Source).Where(IsBuiltinIdentity).Distinct().ToImmutableArray();
         var imports = await ImportedSourceIndex.ReadAsync(project, CookSavedSourceReader.ReadFileAsync, prior, cancellationToken).ConfigureAwait(false);
-        var resolved = requests.Where(item => !IsBuiltinIdentity(item.Source))
-            .Select(item => (item.Requested, Resolution: imports.ResolveOutputFacts(project, item.Source, ContentCookInputRole.Primary)))
+        var resolved = requested
+            .Select(uri => (Requested: uri, Resolution: imports.ResolveOutputFacts(project, uri, ContentCookInputRole.Primary)))
             .Select(item => (item.Requested, item.Resolution, Input: ResolveInput(project, item.Requested, item.Resolution)))
             .ToArray();
 
@@ -86,9 +85,8 @@ public sealed partial class AssetCookStatusReader(
         var unresolved = resolved.Select(static item => item.Input.Unresolved).OfType<AssetCookStatus>().ToArray();
         var mapped = resolved.Where(static item => item.Input.Input is not null).Select(static item => (item.Requested, item.Resolution)).ToArray();
         var inputs = resolved.Select(static item => item.Input.Input).OfType<ContentCookInput>().ToArray();
-        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, cancellationToken, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
+        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, engineContent, cancellationToken, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
         var graph = await CreateDependencyDiscovery(project, prior, imports, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
-        graph = graph with { Builtins = [.. graph.Builtins.Union(builtins)] };
         graph = libraries.Apply(graph);
         var validGraph = WithCompleteAssets(graph);
         var producer = prior.Products.IsEmpty ? NativeProducerObservation.Unknown : nativeCompatibility.Observation;
@@ -107,8 +105,6 @@ public sealed partial class AssetCookStatusReader(
             metadataUnavailable,
             changed));
         var states = inputs.Select((input, index) => MapImportedStatus(mapped[index].Requested, mapped[index].Resolution, sourceStatuses[input.AssetUri]))
-            .Concat(requests.Where(item => IsBuiltinIdentity(item.Source)).Select(item =>
-                CreateBuiltinStatus(item.Source, products, plan, prior.Products.IsEmpty || producer.Fingerprint is not null, metadataUnavailable) with { AssetUri = item.Requested }))
             .Concat(unresolved)
             .Select(state => state with { OutputRoots = snapshot.ProjectRoots }).ToArray();
         return prior.Products.IsEmpty || producer.Revision == nativeCompatibility.Observation.Revision ? states

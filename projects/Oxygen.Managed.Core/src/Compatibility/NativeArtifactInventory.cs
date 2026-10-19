@@ -16,6 +16,9 @@ public static class NativeArtifactInventory
     /// <summary>The native import tool.</summary>
     public const string ImportToolId = "engine/bin/Oxygen.Cooker.ImportTool.exe";
 
+    /// <summary>The engine content pak, which holds the <c>/Engine</c> assets cooks reference.</summary>
+    public const string EngineContentPakId = "engine/share/oxygen/engine.pak";
+
     /// <summary>The native source-analysis report schema.</summary>
     public const string SourceAnalysisSchemaId = "engine/schemas/oxygen.source-analysis.schema.json";
 
@@ -39,6 +42,7 @@ public static class NativeArtifactInventory
     {
         var files = NativeLibraries(installation);
         files[ImportToolId] = new(ImportToolId, Path.Combine(installation.EngineRoot, "bin", "Oxygen.Cooker.ImportTool.exe"));
+        files[EngineContentPakId] = new(EngineContentPakId, installation.EngineContentPakPath);
         foreach (var name in new[] { "oxygen.scene-descriptor.schema.json", "oxygen.material-descriptor.schema.json", "oxygen.geometry-descriptor.schema.json", "oxygen.import-manifest.schema.json", "oxygen.buffer-container.schema.json", "oxygen.scene-source-inspection.schema.json", "oxygen.source-analysis.schema.json", "oxygen.captured-inputs.schema.json", "oxygen.name.schema.json" })
         {
             AddSchema("engine/schemas/" + name, Path.Combine(installation.SchemaDirectory, name));

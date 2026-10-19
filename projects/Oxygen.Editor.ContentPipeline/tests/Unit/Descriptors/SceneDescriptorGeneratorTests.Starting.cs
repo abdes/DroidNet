@@ -80,7 +80,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var camera = AddNode(scene, "Gameplay", camera: true);
         scene.SetStartingCamera(camera.Id);
         _ = scene.RootNodes.Remove(camera);
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
 
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -133,7 +133,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var scene = CreateScene();
         _ = AddNode(scene, "Camera", camera: true);
         scene.SetStartingInputContexts([new StartingInputContextData(AssetPath.Parse("/Content/Input/Vehicle.oimap"))]);
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
 
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -164,7 +164,7 @@ public sealed partial class SceneDescriptorGeneratorTests
 
     private async Task<JsonDocument> GenerateDescriptorAsync(DescriptorWorkspace workspace, Scene scene)
     {
-        var generator = new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(new BuiltinCatalogFixture()));
+        var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Diagnostics.Should().BeEmpty();
         return JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));

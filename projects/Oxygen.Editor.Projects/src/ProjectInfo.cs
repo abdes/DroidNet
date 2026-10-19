@@ -111,6 +111,9 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
     public IList<LocalFolderMount> LocalFolderMounts { get; set; } = [];
 
     /// <inheritdoc />
+    public IList<PakFileMount> PakFileMounts { get; set; } = [];
+
+    /// <inheritdoc />
     public IList<CookedContentSource> CookedContentOrder { get; set; } = [];
 
     /// <inheritdoc />
@@ -189,6 +192,7 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
             Thumbnail = projectInfo.Thumbnail,
             AuthoringMounts = [.. projectInfo.AuthoringMounts],
             LocalFolderMounts = [.. projectInfo.LocalFolderMounts],
+            PakFileMounts = [.. projectInfo.PakFileMounts],
             CookedContentOrder = [.. projectInfo.CookedContentOrder],
             DefaultSceneId = projectInfo.DefaultSceneId,
             Settings = projectInfo.Settings,
@@ -221,6 +225,8 @@ public class ProjectInfo : IProjectInfo, IEquatable<ProjectInfo?>
         public IList<ProjectMountPoint> AuthoringMounts { get; init; } = [];
 
         public IList<LocalFolderMount> LocalFolderMounts { get; init; } = [];
+
+        public IList<PakFileMount> PakFileMounts { get; init; } = [];
 
         public IList<CookedContentSource> CookedContentOrder { get; init; } = [];
 

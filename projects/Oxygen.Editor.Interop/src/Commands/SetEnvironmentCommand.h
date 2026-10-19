@@ -64,8 +64,8 @@ namespace oxygen::interop::module {
     float auto_exposure_black_influence = 0.0F;
     float auto_exposure_transition_distance_ev = engine::kDefaultExposureTransitionDistance;
     std::vector<scene::ExposureCompensationKey> auto_exposure_compensation_curve;
-    std::optional<content::TextureResourceLocator> auto_exposure_metering_mask;
-    std::optional<std::wstring> auto_exposure_metering_mask_mount;
+    //! Virtual path of the cooked metering-mask texture; none meters fully.
+    std::optional<std::string> auto_exposure_metering_mask;
     float bloom_intensity = 0.0F;
     float bloom_threshold = 1.0F;
     float saturation = 1.0F;
@@ -110,11 +110,10 @@ namespace oxygen::interop::module {
     bool visible_in_real_time_sky_captures = true;
   };
 
-  //! A cooked cube texture an environment system binds; no locator binds none.
+  //! A cooked cube texture an environment system binds, by the virtual path
+  //! of its texture descriptor; no path binds none.
   struct CubemapSource {
-    std::optional<content::TextureResourceLocator> locator;
-    //! Project mount whose current cooked root replaces the locator's root.
-    std::optional<std::wstring> project_mount;
+    std::optional<std::string> virtual_path;
   };
 
   //! Authored Sky Sphere backdrop. Defaults match the native system except

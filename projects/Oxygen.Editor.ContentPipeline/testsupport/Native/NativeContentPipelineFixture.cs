@@ -26,23 +26,26 @@ internal sealed partial class NativeContentPipelineFixture : IDisposable
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
         var storage = new NativeStorageProvider(new RealFileSystem());
         var files = new NativeAtomicFileStore(new RealFileSystem());
+        var engineContent = EngineContentPak.Installed();
         this.Publication = new Oxygen.Editor.ContentPipeline.Publication.CookPublicationService(
             coordinator,
             context,
             files,
-            new ProjectManagerService(storage, atomicFiles: files));
+            new ProjectManagerService(storage, atomicFiles: files),
+            engineContent);
         this.Pipeline = new ContentPipelineService(
             context,
             coordinator,
             new ProjectCookScopeProvider(storage),
-            new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)),
+            new SceneDescriptorGenerator(),
             new ContentImportManifestBuilder(),
             new ContentImportManifestValidator(),
             api,
             documents,
             this.compatibility,
             files,
-            this.Publication);
+            this.Publication,
+            engineContent);
     }
 
     /// <summary>Gets the production pipeline for fixture operations.</summary>

@@ -16,15 +16,30 @@ public sealed partial class ContentPriorityViewModel : ObservableObject
     /// <param name="project">The accepted project configuration.</param>
     public ContentPriorityViewModel(ProjectContext project)
     {
-        foreach (var source in CookedContentOrdering.Resolve(project.LocalFolderMounts, project.CookedContentOrder).Reverse())
+        foreach (var source in CookedContentOrdering.Resolve(project).Reverse())
         {
-            var library = source.Kind == CookedContentSourceKind.LocalFolder ? project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.OrdinalIgnoreCase)) : null;
-            if (library is not null && !File.Exists(Path.Combine(library.Root.FullPath, "container.index.bin")))
+            switch (source.Kind)
             {
-                continue;
-            }
+                case CookedContentSourceKind.LocalFolder:
+                    var folder = project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
 
-            this.Sources.Add(new(source, library?.Name ?? "Project output", library?.Root.FullPath ?? Path.Combine(project.ProjectRoot.FullPath, ".cooked")));
+                    // A folder without an index holds no cooked content to order yet.
+                    if (File.Exists(Path.Combine(folder.Root.FullPath, "container.index.bin")))
+                    {
+                        this.Sources.Add(new(source, folder.Name, folder.Root.FullPath));
+                    }
+
+                    break;
+                case CookedContentSourceKind.PakFile:
+                    var pak = project.PakFileMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
+                    this.Sources.Add(new(source, pak.Name, pak.Path.FullPath));
+                    break;
+                case CookedContentSourceKind.ProjectOutput:
+                    this.Sources.Add(new(source, "Project output", Path.Combine(project.ProjectRoot.FullPath, ".cooked")));
+                    break;
+                default:
+                    throw new InvalidDataException("Content priority names an unknown source kind.");
+            }
         }
 
         this.SelectedSource = this.Sources.FirstOrDefault();

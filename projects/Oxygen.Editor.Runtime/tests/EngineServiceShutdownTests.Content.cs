@@ -22,10 +22,10 @@ public sealed partial class EngineServiceShutdownTests
         await using var lifetime = service.ConfigureAwait(false);
         var previous = new ContentReader();
         var current = new ContentReader();
-        await service.RefreshProjectCookedRootsAsync([new("old", "Content")], previous).ConfigureAwait(false);
+        await service.RefreshProjectCookedRootsAsync([new("old", RuntimeCookedRootKind.LooseFolder)], previous).ConfigureAwait(false);
         var acknowledgement = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = Mock.Get(native.Commands).Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>())).Returns(acknowledgement.Task);
-        var refresh = service.RefreshProjectCookedRootsAsync([new("new", "Content")], current, keepPaused: true);
+        var refresh = service.RefreshProjectCookedRootsAsync([new("new", RuntimeCookedRootKind.LooseFolder)], current, keepPaused: true);
         try
         {
             _ = refresh.IsCompleted.Should().BeFalse();
@@ -57,10 +57,10 @@ public sealed partial class EngineServiceShutdownTests
         await using var lifetime = service.ConfigureAwait(false);
         var previous = new ContentReader();
         var current = new ContentReader();
-        await service.RefreshProjectCookedRootsAsync([new("old", "Content")], previous).ConfigureAwait(false);
+        await service.RefreshProjectCookedRootsAsync([new("old", RuntimeCookedRootKind.LooseFolder)], previous).ConfigureAwait(false);
         var failed = canceled ? Task.FromCanceled(new CancellationToken(canceled: true)) : Task.FromException(new InvalidOperationException("Refresh failed"));
         _ = Mock.Get(native.Commands).Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>())).Returns(failed);
-        var refresh = () => service.RefreshProjectCookedRootsAsync([new("new", "Content")], current);
+        var refresh = () => service.RefreshProjectCookedRootsAsync([new("new", RuntimeCookedRootKind.LooseFolder)], current);
         _ = await refresh.Should().ThrowAsync<Exception>().ConfigureAwait(false);
         _ = previous.DisposeCount.Should().Be(0);
         _ = current.DisposeCount.Should().Be(0);
@@ -92,7 +92,7 @@ public sealed partial class EngineServiceShutdownTests
         var service = Create(new FakeEngineSession());
         await using var lifetime = service.ConfigureAwait(false);
         var reader = new ContentReader();
-        _ = await ThrowsAsync<InvalidOperationException>(() => service.RefreshProjectCookedRootsAsync([new("root", "Content")], reader)).ConfigureAwait(false);
+        _ = await ThrowsAsync<InvalidOperationException>(() => service.RefreshProjectCookedRootsAsync([new("root", RuntimeCookedRootKind.LooseFolder)], reader)).ConfigureAwait(false);
         _ = reader.DisposeCount.Should().Be(1);
     }
 
@@ -105,7 +105,7 @@ public sealed partial class EngineServiceShutdownTests
         var reader = new ContentReader();
         var acknowledgement = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = Mock.Get(native.Commands).Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>())).Returns(acknowledgement.Task);
-        var refresh = service.RefreshProjectCookedRootsAsync([new("root", "Content")], reader);
+        var refresh = service.RefreshProjectCookedRootsAsync([new("root", RuntimeCookedRootKind.LooseFolder)], reader);
         var shutdown = service.ShutdownAsync().AsTask();
         try
         {
@@ -132,7 +132,7 @@ public sealed partial class EngineServiceShutdownTests
         var reader = new ContentReader();
         var acknowledgement = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = Mock.Get(native.Commands).Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>())).Returns(acknowledgement.Task);
-        var refresh = service.RefreshProjectCookedRootsAsync([new("root", "Content")], reader);
+        var refresh = service.RefreshProjectCookedRootsAsync([new("root", RuntimeCookedRootKind.LooseFolder)], reader);
         native.Loop.SetResult();
         _ = await ThrowsAsync<InvalidOperationException>(() => refresh.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken)).ConfigureAwait(false);
         acknowledgement.SetCanceled(this.TestContext.CancellationToken);
@@ -153,9 +153,9 @@ public sealed partial class EngineServiceShutdownTests
         await using var lifetime = service.ConfigureAwait(false);
         var failed = new ContentReader { Fail = true };
         var other = new ContentReader();
-        await service.RefreshProjectCookedRootsAsync([new("old", "Content")], failed).ConfigureAwait(false);
+        await service.RefreshProjectCookedRootsAsync([new("old", RuntimeCookedRootKind.LooseFolder)], failed).ConfigureAwait(false);
         _ = Mock.Get(native.Commands).Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>())).Returns(Task.FromException(new InvalidOperationException("Refresh failed")));
-        _ = await ThrowsAsync<InvalidOperationException>(() => service.RefreshProjectCookedRootsAsync([new("new", "Content")], other)).ConfigureAwait(false);
+        _ = await ThrowsAsync<InvalidOperationException>(() => service.RefreshProjectCookedRootsAsync([new("new", RuntimeCookedRootKind.LooseFolder)], other)).ConfigureAwait(false);
         _ = await ThrowsAsync<AggregateException>(() => service.ShutdownAsync().AsTask()).ConfigureAwait(false);
         _ = native.HasContext.Should().BeFalse();
         _ = service.State.Should().Be(EngineServiceState.Faulted);

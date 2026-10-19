@@ -130,8 +130,7 @@ public sealed partial class ContentPipelineService
         Dictionary<string, CookSnapshotInput> expectedFiles,
         Dictionary<AssetPath, ContentCookInput> sourceInputs)
     {
-        var dependencies = graph.Dependencies.TryGetValue(source.Key, out var discovered) ? discovered
-            : ProceduralGeometryDescriptorService.IsGeneratedBasicShape(source.Key) ? [ProceduralGeometryDescriptorService.DefaultMaterial] : ImmutableArray<AssetPath>.Empty;
+        var dependencies = graph.Dependencies.GetValueOrDefault(source.Key, []);
         return new(source.Key, fingerprint, dependencies, [.. source.Select(asset => new CookProvenance.Output(asset, root.Mount))])
         {
             SourceInput = sourceInputs.GetValueOrDefault(source.Key),
@@ -156,52 +155,6 @@ public sealed partial class ContentPipelineService
         };
     }
 
-    private static bool IsGeneratedSource(AssetPath uri)
-        => uri.IsGenerated;
-
-    private async Task<IReadOnlyList<ContentCookInput>> PrepareMissingBuiltinsAsync(
-        ContentCookOperation operation,
-        CookInputSnapshot snapshot,
-        CookDependencyGraph graph,
-        CookIncrementalPlan plan,
-        IReadOnlyList<ContentCookInput> dirtyInputs,
-        NativeArtifactLease artifacts,
-        CookTargetKind targetKind,
-        CancellationToken cancellationToken)
-    {
-        var covered = dirtyInputs.Where(static input => input.Kind == ContentCookAssetKind.Scene)
-            .SelectMany(input => graph.SceneDescriptors.GetValueOrDefault(input.AssetUri)?.Dependencies ?? [])
-            .Select(static input => input.AssetUri).ToHashSet();
-
-        var missing = CookIncrementalPlan.Builtins(graph).Where(uri => !plan.Reusable.ContainsKey(uri) && !covered.Contains(uri)).ToHashSet();
-        if (missing.Count == 0)
-        {
-            return [];
-        }
-
-        var retained = graph.GeneratedSources.Where(input => missing.Remove(input.AssetUri)).ToArray();
-        if (missing.Count == 0)
-        {
-            return retained;
-        }
-
-        if (this.engineContentPipelineApi is not IBuiltinGeometryCatalogProvider catalog)
-        {
-            throw new InvalidOperationException("The native builtin catalog is unavailable.");
-        }
-
-        var scope = this.CreateScope(operation.Project, graph.Assets, targetKind) with
-        {
-            Snapshot = snapshot,
-            Artifacts = artifacts,
-            PreparationRoot = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N"), "builtins"),
-        };
-        var generated = await new ProceduralGeometryDescriptorService(catalog).EnsureDescriptorsAsync(scope, [.. missing], cancellationToken).ConfigureAwait(false);
-        return missing.Any(uri => !generated.Any(input => input.AssetUri == uri))
-            ? throw new InvalidDataException("A required generated asset is absent from the native catalog.")
-            : [.. retained, .. generated.Select(input => input with { SourceRelativePath = Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, input.SourceAbsolutePath.FullPath).Replace('\\', '/') })];
-    }
-
     private async Task<ContentCookResult> ExecuteIncrementalCookAsync(ContentCookOperation operation, CookPublicationReadLease baseline, Func<IReadOnlyList<ContentCookScope>> resolveScopes, CookTargetKind targetKind, NativeArtifactLease artifacts, CookProvenance previous, Import.ImportedSourceIndex imports, CancellationToken cancellationToken)
     {
         var mounts = operation.Project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount))
@@ -210,13 +163,12 @@ public sealed partial class ContentPipelineService
         var repair = CookRootRepair.Create(baseline, previous, mounts, inventories, imports.IsRelocated);
         resolveScopes = this.ExpandRepairScopes(operation, resolveScopes, repair, imports, targetKind);
         var knownOutputs = imports.KnownOutputs.Concat(baseline.ProjectOutputPaths.Select(AssetPath.Parse)).Distinct().ToArray();
-        var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, cancellationToken, uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency), knownOutputs).ConfigureAwait(false);
+        var libraries = await CookedLibraryReadSet.AcquireAsync(operation.Project, this.engineContent, cancellationToken, uri => imports.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency), knownOutputs).ConfigureAwait(false);
         try
         {
             await libraries.ValidateNativeAsync(this.engineContentPipelineApi, cancellationToken).ConfigureAwait(false);
             var (snapshot, graph) = await this.CaptureScopesAsync(operation, resolveScopes, artifacts, previous, imports, libraries, cancellationToken).ConfigureAwait(false);
-            graph = graph with { Builtins = [.. graph.Builtins.Union(repair.Sources.Where(IsGeneratedSource))] };
-            var captured = graph.Assets.Select(static input => input.AssetUri).Concat(graph.Builtins).ToHashSet();
+            var captured = graph.Assets.Select(static input => input.AssetUri).ToHashSet();
             if (!repair.Sources.All(captured.Contains))
             {
                 throw new InvalidDataException("Not all sources required to rebuild the damaged content were captured.");
@@ -318,14 +270,6 @@ public sealed partial class ContentPipelineService
             graph = await this.PrepareMissingScenesAsync(operation, artifacts, snapshot, graph, missingScenes, cancellationToken).ConfigureAwait(false);
         }
 
-        var generated = await this.PrepareMissingBuiltinsAsync(operation, snapshot, graph, plan, dirtyInputs, artifacts, targetKind, cancellationToken).ConfigureAwait(false);
-        dirtyInputs.AddRange(generated);
-        var admittedGenerated = graph.GeneratedInputs.Select(static input => FileSystemPath.From(input.LogicalPath)).ToHashSet();
-        graph = graph with
-        {
-            GeneratedInputs = [.. graph.GeneratedInputs, .. await CookInputSnapshotCapture.CaptureGeneratedAsync(
-                generated.Where(input => !admittedGenerated.Contains(input.SourceAbsolutePath)), cancellationToken).ConfigureAwait(false)],
-        };
         return await this.CookStagedAsync(operation, baseline, resolveScopes, targetKind, artifacts, previous, snapshot, graph, libraries, inventories, repair, plan, dirtyInputs, cancellationToken).ConfigureAwait(false);
     }
 
@@ -425,7 +369,7 @@ public sealed partial class ContentPipelineService
                 this.sceneDescriptorGenerator,
                 this.cookScopeProvider,
                 cookDocuments)
-            .PrepareCapturedScenesAsync(missingScenes, snapshot, graph.GeneratedSources, cancellationToken).ConfigureAwait(false);
+            .PrepareCapturedScenesAsync(missingScenes, snapshot, cancellationToken).ConfigureAwait(false);
         if (HasError(prepared.Diagnostics))
         {
             throw new CookInputDiscoveryException(prepared.Diagnostics);
@@ -435,7 +379,6 @@ public sealed partial class ContentPipelineService
         {
             SceneDescriptors = graph.SceneDescriptors.SetItems(prepared.Sources.Select(static source => KeyValuePair.Create(source.Input.AssetUri, source.Scene!))),
             NativeJobs = graph.NativeJobs.SetItems(prepared.Sources.Select(static source => KeyValuePair.Create(source.Input.AssetUri, source.Job!))),
-            GeneratedSources = [.. graph.GeneratedSources, .. prepared.GeneratedSources],
             GeneratedInputs = [.. graph.GeneratedInputs, .. prepared.GeneratedInputs],
         };
     }
@@ -457,7 +400,7 @@ public sealed partial class ContentPipelineService
         {
             var requested = resolveScopes();
             var included = requested.SelectMany(static scope => scope.Inputs).Select(static input => input.AssetUri).ToHashSet();
-            var additional = repair.Sources.Where(uri => !IsGeneratedSource(uri) && !included.Contains(uri)).Select(uri =>
+            var additional = repair.Sources.Where(uri => !included.Contains(uri)).Select(uri =>
             {
                 var repairScope = this.CreateScope(
                     operation.Project,

@@ -3,13 +3,14 @@
 Status: current contract.
 
 Read [ownership](#6-ownership), [identities and catalogs](#7-data-contracts),
-[native production](#76-importcook-contracts) and [validation](#14-validation-gates).
+[native production](#76-importcook-contracts) and
+[validation](#14-validation-gates).
 
 ## 1. Purpose
 
-Define the reusable `Oxygen.Managed.Assets` primitives used by the editor for asset
-identity, references, catalogs, material descriptors, import, cooked outputs,
-and loose cooked indexes.
+Define the reusable `Oxygen.Managed.Assets` primitives used by the editor for
+asset identity, references, catalogs, material descriptors, import, cooked
+outputs, and loose cooked indexes.
 
 This LLD is deliberately not a content-browser or content-pipeline design. It
 defines the reusable data/model/tooling layer those editor features consume.
@@ -36,8 +37,8 @@ defines the reusable data/model/tooling layer those editor features consume.
 
 - `ARCHITECTURE.md`: asset identity, content pipeline, diagnostics, and data
   contract rules.
-- `PROJECT-LAYOUT.md`: `Oxygen.Managed.Assets` owns reusable asset/cook primitives;
-  editor projects own workflows and UI.
+- `PROJECT-LAYOUT.md`: `Oxygen.Managed.Assets` owns reusable asset/cook
+  primitives; editor projects own workflows and UI.
 - `material-editor.md`: consumes material source, material cook, and material
   identity primitives.
 - `content-browser-asset-identity.md`: consumes catalog/query/reference
@@ -49,8 +50,8 @@ defines the reusable data/model/tooling layer those editor features consume.
 `Oxygen.Managed.Assets` supplies typed references, source and cooked catalogs,
 material authoring records/readers/writers, and a current-format loose-index
 metadata reader. Material authoring lives in `Authoring/Materials`; native
-`Oxygen.Cooker` owns import, resource conversion, binary descriptors, indexes and
-PAKs. The editor invokes native producers through ContentPipeline.
+`Oxygen.Cooker` owns import, resource conversion, binary descriptors, indexes
+and PAKs. The editor invokes native producers through ContentPipeline.
 
 The managed layer does not decode textures or models, write cooked binaries, or
 provide a second runtime loader. Native Content owns loading and residency.
@@ -118,9 +119,9 @@ objects:
 - clearing `Asset` must preserve `Uri` so missing references survive
   save/reopen.
 
-ED-M05 geometry material assignment persists
-`AssetReference<MaterialAsset>` URI only. Picker-only fields such as thumbnail,
-descriptor path, and cooked path must not be serialized into scene data.
+ED-M05 geometry material assignment persists `AssetReference<MaterialAsset>` URI
+only. Picker-only fields such as thumbnail, descriptor path, and cooked path
+must not be serialized into scene data.
 
 ### 7.3 Catalog Contracts
 
@@ -164,16 +165,17 @@ public sealed record AssetChange(
 | `Updated`         | same identity, changed metadata/content.               |
 | `Relocated`       | identity changed; `PreviousUri` carries the old value. |
 
-Catalogs do not compute user-facing `AssetState`, `AssetKind`, or runtime
-mount availability; they provide records and changes.
+Catalogs do not compute user-facing `AssetState`, `AssetKind`, or runtime mount
+availability; they provide records and changes.
 `content-browser-asset-identity.md` defines state enrichment.
 
 ### 7.4 Catalog Identity Limits
 
 `AssetRecord.Uri` selects a source descriptor, cooked asset, engine recipe or
-mounted source file. Optional `Generated`, `Cooked` and `OverriddenCookedSources`
-metadata describe the producer or indexed representation. Cooked metadata comes
-from native index records, not filename guesses.
+mounted source file. Optional `Generated`, `Cooked` and
+`OverriddenCookedSources` metadata describe the producer or indexed
+representation. Cooked metadata comes from native index records, not filename
+guesses.
 
 Catalog records do not carry browser badges, dirty state, operation progress or
 runtime mount state. Editor adapters combine those facts with `ProjectContext`
@@ -202,11 +204,12 @@ Supported scalar fields:
 - `OcclusionTexture.Strength` when an occlusion texture ref exists
 
 Texture references remain authored virtual identities. Native cooking resolves
-them to resource-table entries; managed authoring does not allocate those entries.
+them to resource-table entries; managed authoring does not allocate those
+entries.
 
-Material round-trip preserves every `MaterialSource` field not edited by
-ED-M05, including texture-reference payloads. Scalar editing must replace only
-the edited immutable record branch and leave unedited descriptor data intact.
+Material round-trip preserves every `MaterialSource` field not edited by ED-M05,
+including texture-reference payloads. Scalar editing must replace only the
+edited immutable record branch and leave unedited descriptor data intact.
 
 ### 7.6 Import/Cook Contracts
 
@@ -215,10 +218,11 @@ native ImportTool, Inspector and PakTool. Native schemas, codecs and validators
 are authoritative. Tools return structured diagnostics, progress and inventory;
 the editor presents those facts and owns publication and source provenance.
 
-The managed V2 index reader exposes catalog metadata and rejects obsolete formats.
-Mandatory native file/asset digests support full validation at cook boundaries;
-ordinary catalog reads and mounts use metadata admission. The [content pipeline
-contract](content-pipeline.md) owns freshness, verification and repair policy.
+The managed V2 index reader exposes catalog metadata and rejects obsolete
+formats. Mandatory native file/asset digests support full validation at cook
+boundaries; ordinary catalog reads and mounts use metadata admission. The
+[content pipeline contract](content-pipeline.md) owns freshness, verification
+and repair policy.
 
 Texture descriptors are resource sidecars, not keyed Script assets. A named
 texture's native `virtual_path` fixes its descriptor location under the mount.
@@ -229,16 +233,16 @@ same capture, cooking, error/progress and publication workflow as other inputs.
 
 ## 8. Commands, Services, Or Adapters
 
-`Oxygen.Managed.Assets` primitives are not user commands. They are called by editor
-services:
+`Oxygen.Managed.Assets` primitives are not user commands. They are called by
+editor services:
 
-| Consumer                         | Primitive used                                                                                   |
-| -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| Material document service        | `MaterialSourceReader`, `MaterialSourceWriter`, `MaterialSource`.                                |
-| Material picker                  | `IAssetCatalog`, `AssetQuery`, `AssetRecord`, `AssetChange`, `AssetChangeKind`.                  |
-| Content browser identity reducer | `IAssetCatalog`, `AssetRecord`, `AssetUriHelper`, `AssetChange`, `AssetQueryScope`.              |
-| Content pipeline                 | Material source records, asset URIs and current index metadata; native APIs produce cooked data. |
-| Geometry material slot command   | `AssetReference<MaterialAsset>` and `IAssetCatalog` resolution.                                  |
+| Consumer                       | Primitive used                                                                                     |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| Material document service      | `MaterialSourceReader`, `MaterialSourceWriter`, `MaterialSource`.                                  |
+| Asset catalog (Editor.Assets)  | `IAssetCatalog`, `PakAssetCatalog`, `AssetQuery`, `AssetRecord`, `AssetChange`, `AssetChangeKind`. |
+| Asset identity reducer         | `AssetRecord`, `CookedAssetMetadata`, `AssetFileTypes`.                                            |
+| Content pipeline               | Material source records, asset URIs and current index metadata; native APIs produce cooked data.   |
+| Geometry material slot command | `AssetReference<MaterialAsset>` and `IAssetCatalog` resolution.                                    |
 
 Adapters may be introduced in editor projects, but the underlying primitive
 contracts stay in `Oxygen.Managed.Assets`.
@@ -277,7 +281,8 @@ V0.1 persistence behavior:
 
 ## 11. Live Sync / Cook / Runtime Behavior
 
-`Oxygen.Managed.Assets` does not start runtime, mount roots, or call native interop.
+`Oxygen.Managed.Assets` does not start runtime, mount roots, or call native
+interop.
 
 Runtime-relevant behavior:
 
@@ -311,17 +316,18 @@ Concrete ED-M05 diagnostic codes are allocated in
 
 Allowed:
 
-- `Oxygen.Managed.Assets` may depend on `Oxygen.Managed.Core` and shared storage/schema support.
+- `Oxygen.Managed.Assets` may depend on `Oxygen.Managed.Core` and shared
+  storage/schema support.
 - editor projects may depend on `Oxygen.Managed.Assets` primitives.
 
 Forbidden:
 
 - `Oxygen.Managed.Assets` must not depend on WinUI.
 - `Oxygen.Managed.Assets` must not depend on `Oxygen.Editor.*`.
-- `Oxygen.Managed.Assets` must not call `Oxygen.Editor.Interop` or engine runtime
-  services.
-- primitives must not persist editor UI state, picker state, or operation
-  result history.
+- `Oxygen.Managed.Assets` must not call `Oxygen.Editor.Interop` or engine
+  runtime services.
+- primitives must not persist editor UI state, picker state, or operation result
+  history.
 
 ## 14. Validation Gates
 
@@ -342,8 +348,9 @@ Forbidden:
 ## 15. Closed V0.1 Decisions
 
 AssetRecord carries identity and producer/index metadata; ContentBrowser owns
-user-facing state enrichment and runtime availability overlays. URI identity
-and missing-reference preservation remain the contract; file rename/move repair
-UI is outside V0.1. ContentPipeline owns native import/source regeneration and publication;
-[ED-M08](../plan/ED-M08-runtime-parity-and-standalone-validation.md) owns current
-workflow qualification.
+user-facing state enrichment and runtime availability overlays. URI identity and
+missing-reference preservation remain the contract; file rename/move repair UI
+is outside V0.1. ContentPipeline owns native import/source regeneration and
+publication;
+[ED-M08](../plan/ED-M08-runtime-parity-and-standalone-validation.md) owns
+current workflow qualification.

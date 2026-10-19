@@ -22,6 +22,7 @@ public sealed class NativeShaderConfigurationTests
         var config = NativeEngineSession.CreateConfig(settings, editorCVarsArchivePath: null, fixture.RuntimeLibrary);
         _ = config.Engine.PathFinder.ShaderLibraryPath.Should().Be(fixture.Archive);
         _ = config.Renderer.PathFinder.ShaderLibraryPath.Should().Be(fixture.Archive);
+        _ = config.Engine.PathFinder.EngineContentPakPath.Should().Be(fixture.Installation.EngineContentPakPath);
         _ = settings.Engine.PathFinder.ShaderLibraryPath.Should().BeNull();
         _ = settings.Renderer.PathFinder.ShaderLibraryPath.Should().BeNull();
     }

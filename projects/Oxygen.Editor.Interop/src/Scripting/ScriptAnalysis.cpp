@@ -27,6 +27,7 @@
 #pragma managed
 
 #include <Scripting/ScriptAnalysis.h>
+#include <Utils/Utf8Marshaling.h>
 
 namespace Oxygen::Interop::Scripting {
 
@@ -34,24 +35,11 @@ namespace {
 
   namespace native = oxygen::scripting;
 
-  auto ToUtf8(String ^ text) -> std::string
-  {
-    if (String::IsNullOrEmpty(text)) {
-      return {};
-    }
-    const auto bytes = System::Text::Encoding::UTF8->GetBytes(text);
-    const pin_ptr<Byte> pinned = &bytes[0];
-    return std::string(reinterpret_cast<const char*>(pinned),
-      static_cast<std::size_t>(bytes->Length));
-  }
+  using oxygen::interop::ToUtf8;
 
   auto ToManaged(const std::string& text) -> String ^
   {
-    if (text.empty()) {
-      return String::Empty;
-    }
-    return gcnew String(text.data(), 0, static_cast<int>(text.size()),
-      System::Text::Encoding::UTF8);
+    return oxygen::interop::FromUtf8(text);
   }
 
   auto ToManaged(const std::optional<double>& value) -> Nullable<double>

@@ -9,11 +9,13 @@ using System.Text.Json;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.ContentPipeline.Discovery;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog.FileSystem;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Catalog.Pak;
+using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
@@ -35,7 +37,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
 {
     private readonly IProjectContextService projectContextService;
     private readonly IStorageProvider storage;
-    private readonly IBuiltinCatalogDiscovery builtins;
+    private readonly IEngineContentPak engineContent;
     private readonly ICookPublicationReader publication;
     private readonly ILogger logger;
     private readonly Lock stateLock = new();
@@ -63,19 +65,19 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     /// <summary>Initializes a new instance of the <see cref="AssetCatalog"/> class.</summary>
     /// <param name="projectContextService">The active project context.</param>
     /// <param name="storage">The storage provider for indexed folders.</param>
-    /// <param name="builtins">The engine-owned discovery catalog.</param>
+    /// <param name="engineContent">The engine content pak, whose assets every project references.</param>
     /// <param name="publication">Reads the project's publication and the catalogs of its cooked roots.</param>
     /// <param name="logger">Records failures of the catalog's observers.</param>
     public AssetCatalog(
         IProjectContextService projectContextService,
         IStorageProvider storage,
-        IBuiltinCatalogDiscovery builtins,
+        IEngineContentPak engineContent,
         ICookPublicationReader publication,
         ILogger<AssetCatalog>? logger = null)
     {
         this.projectContextService = projectContextService;
         this.storage = storage;
-        this.builtins = builtins;
+        this.engineContent = engineContent;
         this.publication = publication;
         this.logger = (ILogger?)logger ?? NullLogger.Instance;
         this.lifetimeToken = this.lifetime.Token;
@@ -544,13 +546,27 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     [SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "PrepareCatalogAsync owns each child catalog through Registration and disposes it on preparation failure.")]
     private async Task PrepareAuthoredCatalogsAsync(ProjectContext project, ICookPublicationReadLease? selected, List<Registration> candidates, Dictionary<Registration, IReadOnlyList<AssetRecord>> kept)
     {
-        candidates.Add(await this.PrepareCatalogAsync(new BuiltinAssetCatalog(this.builtins)).ConfigureAwait(false));
+        if (await this.TryPrepareEngineContentAsync().ConfigureAwait(false) is { } engine)
+        {
+            candidates.Add(engine);
+        }
+
         candidates.Add(await this.PrepareFolderAsync(project, ProjectFiles.Mount, project.ProjectRoot, kept, GetFoldersOfOtherCatalogs(project)).ConfigureAwait(false));
 
         foreach (var mount in project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)))
         {
             this.lifetimeToken.ThrowIfCancellationRequested();
             candidates.Add(await this.PrepareFolderAsync(project, mount.Name, project.ProjectRoot.Combine(mount.RelativePath), kept).ConfigureAwait(false));
+        }
+
+        // Pak files are browsable before the project publishes; a publication catalogs the ones it selects.
+        foreach (var mount in project.PakFileMounts.Where(mount => selected?.Roots.Any(root =>
+            root.Owner == CookPublicationRootOwner.Library && string.Equals(root.Name, mount.Name, StringComparison.Ordinal)) != true))
+        {
+            if (await this.TryPreparePakAsync(mount).ConfigureAwait(false) is { } pak)
+            {
+                candidates.Add(pak);
+            }
         }
 
         // Preserve authored-folder browsing for external folders without cooked content.
@@ -585,6 +601,40 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
             this.logger)).ConfigureAwait(false);
         registration.Folder = folder;
         return registration;
+    }
+
+    // The engine content pak is read-only: its catalog never changes, so it is read once per installation.
+    private async Task<Registration?> TryPrepareEngineContentAsync()
+    {
+        PakDocument document;
+        try
+        {
+            document = await this.engineContent.ReadAsync(this.lifetimeToken).ConfigureAwait(false);
+        }
+        catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            this.LogEngineContentUnavailable(this.engineContent.Path, failure);
+            return null;
+        }
+
+        return await this.PrepareCatalogAsync(new PakAssetCatalog(document, this.engineContent.Path), isCooked: true).ConfigureAwait(false);
+    }
+
+    // A pak the project mounts is read-only too; one that cannot be read lists nothing and is reported.
+    private async Task<Registration?> TryPreparePakAsync(PakFileMount mount)
+    {
+        PakDocument document;
+        try
+        {
+            document = await PakIndex.ReadFileAsync(mount.Path, this.lifetimeToken).ConfigureAwait(false);
+        }
+        catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            this.LogPakUnavailable(mount.Name, mount.Path, failure);
+            return null;
+        }
+
+        return await this.PrepareCatalogAsync(new PakAssetCatalog(document, mount.Path), isCooked: true).ConfigureAwait(false);
     }
 
     private async Task<Registration> PrepareCatalogAsync(IAssetCatalog catalog, bool isCooked = false)

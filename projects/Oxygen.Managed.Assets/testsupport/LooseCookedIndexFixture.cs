@@ -4,7 +4,8 @@
 
 using System.Buffers.Binary;
 using System.Text;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Assets.Persistence;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 
 namespace Oxygen.Testing;
 
@@ -40,6 +41,7 @@ internal static class LooseCookedIndexFixture
         foreach (var file in document.Files)
         {
             _ = Add(file.RelativePath);
+            _ = Add(file.VirtualPath);
         }
 
         var header = new byte[LooseCookedIndex.HeaderSize];
@@ -94,7 +96,8 @@ internal static class LooseCookedIndexFixture
             BinaryPrimitives.WriteUInt16LittleEndian(entry, (ushort)file.Kind);
             BinaryPrimitives.WriteUInt64LittleEndian(entry.AsSpan(2), file.Size);
             BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(10), offsets[file.RelativePath]);
-            file.Sha256.Span.CopyTo(entry.AsSpan(14));
+            BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(14), offsets[file.VirtualPath ?? string.Empty]);
+            file.Sha256.Span.CopyTo(entry.AsSpan(18));
             destination.Write(entry);
         }
 

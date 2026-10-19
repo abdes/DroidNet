@@ -13,6 +13,7 @@ using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
+using LooseCookedFileKinds = Oxygen.Managed.Assets.Persistence.LooseCooked.FileKindExtensions;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -41,13 +42,15 @@ public sealed partial class ContentPipelineService(
     ICookDocumentRegistry cookDocuments,
     INativeCompatibilityService nativeCompatibility,
     DroidNet.Storage.IAtomicFileStore files,
-    Publication.CookPublicationService publication) : IContentPipelineService
+    Publication.CookPublicationService publication,
+    IEngineContentPak engineContent) : IContentPipelineService
 {
     /// <summary>The code of the Info diagnostic that names a moved or deleted source whose cooked output a cook removes.</summary>
     internal const string OutputRetiredCode = "asset_cook.output_retired";
 
     private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility;
     private readonly Publication.CookPublicationService publication = publication ?? throw new ArgumentNullException(nameof(publication));
+    private readonly IEngineContentPak engineContent = engineContent ?? throw new ArgumentNullException(nameof(engineContent));
 
     private readonly IProjectContextService projectContextService = projectContextService ?? throw new ArgumentNullException(nameof(projectContextService));
     private readonly IContentCookCoordinator cookCoordinator = cookCoordinator ?? throw new ArgumentNullException(nameof(cookCoordinator));
@@ -274,10 +277,7 @@ public sealed partial class ContentPipelineService(
             foreach (var input in scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.Texture))
             {
                 var virtualPath = input.OutputVirtualPath ?? throw new InvalidDataException("A texture requires an explicit output identity.");
-                var prefix = AssetPath.Create(input.MountName).VirtualPath + "/";
-                var relative = virtualPath.StartsWith(prefix, StringComparison.Ordinal) ? virtualPath[prefix.Length..]
-                    : throw new InvalidDataException("Texture output is outside its mount.");
-                var descriptor = inventory.Resources.SingleOrDefault(resource => string.Equals(resource.Kind, "texture", StringComparison.Ordinal) && string.Equals(resource.DescriptorPath, relative, StringComparison.Ordinal))
+                var descriptor = inventory.Resources.SingleOrDefault(resource => string.Equals(resource.Kind, "texture", StringComparison.Ordinal) && string.Equals(resource.VirtualPath, virtualPath, StringComparison.Ordinal))
                     ?? throw new InvalidDataException($"Native cooking did not produce texture '{virtualPath}'.");
                 result.Add(new(input.AssetUri, AssetPath.Parse(virtualPath), ContentCookAssetKind.Texture, input.MountName, virtualPath)
                 {
@@ -409,7 +409,7 @@ public sealed partial class ContentPipelineService(
 
     private static ContentCookResult WithAuxiliaryFiles(ContentCookResult validated, ContentCookScope scope, NativeImportResult importResult)
     {
-        var resources = validated.NativeInventory?.Files.Where(static file => file.Value.Kind == Oxygen.Managed.Assets.Persistence.LooseCooked.V3.FileKind.Auxiliary)
+        var resources = validated.NativeInventory?.Files.Where(static file => file.Value.Kind is { } kind && LooseCookedFileKinds.IsPathKeyed(kind))
             .Select(static file => file.Key).ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
         return validated with
         {

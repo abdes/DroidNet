@@ -61,10 +61,10 @@ internal sealed partial record CookProvenance
             return false;
         }
 
+        // Every product has an authored source; engine assets come from the engine content pak, never a cook.
         if (product.SourceInput is not { } source)
         {
-            return product.SourceFiles.IsEmpty && product.DeclaredOutputs.IsEmpty && product.NativeReferences.IsEmpty
-                && product.SourceUri.IsGenerated;
+            return false;
         }
 
         if (source.AssetUri != product.SourceUri || !Enum.IsDefined(source.Kind) || !Enum.IsDefined(source.Role)

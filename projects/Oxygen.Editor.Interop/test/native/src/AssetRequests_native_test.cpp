@@ -14,6 +14,7 @@
 #include <optional>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <thread>
 #include <unordered_map>
 #include <unordered_set>
@@ -28,7 +29,6 @@
 #include <EditorModule/SceneAssetRequests.h>
 #include <EditorModule/ThreadSafeQueue.h>
 
-#include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
@@ -54,32 +54,37 @@ void Require(bool condition, const char* message)
   }
 }
 
+constexpr auto kCube = std::string_view { "/Engine/Generated/BasicShapes/Cube.ogeo" };
+
 auto TestSlotId(std::size_t index) -> oxygen::data::MaterialSlotId
 {
   return oxygen::data::MaterialSlotId::FromStableIdentity(
     "asset-request-test/declaration-" + std::to_string(index));
 }
 
+//! A two-slot geometry; `single_slot` keeps only the first slot.
 auto MakeGeometry(const std::string& name,
-  Requests::Material material = oxygen::data::MaterialAsset::CreateDefault())
-  -> Requests::Geometry
+  Requests::Material material = oxygen::data::MaterialAsset::CreateDefault(),
+  const bool single_slot = false) -> Requests::Geometry
 {
   auto [vertices, indices] = *oxygen::data::MakeCubeMeshAsset();
   oxygen::data::pak::geometry::MeshViewDesc view {};
   view.vertex_count = static_cast<uint32_t>(vertices.size());
   view.index_count = static_cast<uint32_t>(indices.size());
-  auto mesh = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, name)
-                .WithVertices(vertices)
-                .WithIndices(indices)
-                .BeginSubMesh("first", material)
-                .WithMaterialSlotId(TestSlotId(0U))
-                .WithMeshView(view)
-                .EndSubMesh()
-                .BeginSubMesh("second", material)
-                .WithMaterialSlotId(TestSlotId(1U))
-                .WithMeshView(view)
-                .EndSubMesh()
-                .Build();
+  auto builder = oxygen::data::MeshBuilder(oxygen::data::LodIndex {}, name);
+  builder.WithVertices(vertices)
+    .WithIndices(indices)
+    .BeginSubMesh("first", material)
+    .WithMaterialSlotId(TestSlotId(0U))
+    .WithMeshView(view)
+    .EndSubMesh();
+  if (!single_slot) {
+    builder.BeginSubMesh("second", material)
+      .WithMaterialSlotId(TestSlotId(1U))
+      .WithMeshView(view)
+      .EndSubMesh();
+  }
+  auto mesh = builder.Build();
   oxygen::data::pak::geometry::GeometryAssetDesc desc {};
   desc.lod_count = 1;
   std::vector<std::shared_ptr<oxygen::data::Mesh>> meshes;
@@ -103,11 +108,16 @@ struct Fixture {
   Requests::Geometry b = MakeGeometry("/b");
   Requests::Material red = MakeMaterial("/red");
   Requests::Material blue = MakeMaterial("/blue");
+  //! The engine Cube: an ordinary asset with one material slot, cached.
+  Requests::Geometry cube = MakeGeometry(std::string(kCube),
+    oxygen::data::MaterialAsset::CreateDefault(), true);
   std::vector<Requests::GeometryCompletion> geometry_loads;
   std::vector<Requests::MaterialCompletion> material_loads;
   std::vector<Requests::TextureCompletion> texture_loads;
-  std::vector<oxygen::content::TextureResourceLocator> texture_locators;
-  std::unordered_map<std::string, Requests::Geometry> geometry_cache;
+  std::vector<std::string> texture_paths;
+  std::unordered_map<std::string, Requests::Geometry> geometry_cache {
+    { std::string(kCube), cube },
+  };
   std::unordered_map<std::string, Requests::Material> material_cache;
   std::vector<std::string> diagnostics;
   std::unordered_map<oxygen::scene::NodeHandle, std::string> geometry_uris;
@@ -140,9 +150,9 @@ struct Fixture {
       [this](const std::string& message) { diagnostics.push_back(message); },
       [this](
         const std::string& uri, bool) { return !unavailable.contains(uri); },
-      [this](const oxygen::content::TextureResourceLocator& locator,
+      [this](const std::string& virtual_path,
         Requests::TextureCompletion complete) {
-        texture_locators.push_back(locator);
+        texture_paths.push_back(virtual_path);
         texture_loads.push_back(std::move(complete));
       });
   }
@@ -167,10 +177,7 @@ struct Fixture {
       geometry_uri = found == geometry_uris.end() ? "initial" : found->second;
     }
     auto geometry = a;
-    if (const auto builtin
-      = oxygen::data::ResolveBuiltinGeometry(geometry_uri)) {
-      geometry = builtin;
-    } else if (const auto found = geometry_cache.find(geometry_uri);
+    if (const auto found = geometry_cache.find(geometry_uri);
       found != geometry_cache.end()) {
       geometry = found->second;
     }
@@ -248,7 +255,7 @@ void MaterialOrdering(bool reverse)
   Require(f.CurrentMaterial() == f.blue, "latest material did not win");
 }
 
-void CachedAndProceduralReplacement()
+void CachedReplacement()
 {
   Fixture f;
   f.Geometry("A");
@@ -259,18 +266,18 @@ void CachedAndProceduralReplacement()
   f.Drain();
   Require(f.Geometry() == f.b, "cached replacement overwritten");
   f.Geometry("A");
-  f.Geometry("asset:///Engine/Generated/BasicShapes/Cube");
+  f.Geometry(std::string(kCube));
   f.Drain();
   auto cube = f.Geometry();
-  Require(cube && cube != f.a && cube != f.b, "procedural mesh missing");
+  Require(cube == f.cube, "cached engine geometry missing");
   f.geometry_loads[1](f.a, {});
   f.Drain();
-  Require(f.Geometry() == cube, "procedural replacement overwritten");
+  Require(f.Geometry() == cube, "cached engine geometry overwritten");
   f.Geometry("A");
-  f.Geometry("asset:///Engine/Generated/BasicShapes/Cube");
+  f.Geometry(std::string(kCube));
   f.geometry_loads[2](f.a, {});
   f.Drain();
-  Require(f.Geometry() == cube, "cached procedural replacement overwritten");
+  Require(f.Geometry() == cube, "cached engine geometry replaced again");
 }
 
 void CachedMaterialAndClear()
@@ -375,10 +382,10 @@ void FailedIntentSupersedesOlderSuccess()
   Fixture f;
   f.Attach();
   f.Geometry("A");
-  f.Geometry("asset:///Engine/Generated/BasicShapes/Unknown");
+  f.Geometry("throw");
   f.geometry_loads[0](f.b, {});
   f.Drain();
-  Require(f.Geometry() == f.a, "failed procedural intent revived older load");
+  Require(f.Geometry() == f.a, "failed geometry intent revived older load");
   f.Material("red");
   f.Material("throw");
   f.material_loads[0](f.red, {});
@@ -461,7 +468,7 @@ void RemovedSlotDoesNotReviveOverride()
   f.Drain();
   Require(f.CurrentMaterial(SubmeshIndex { 1U }) == f.red,
     "initial slot override missing");
-  f.Geometry("asset:///Engine/Generated/BasicShapes/Cube");
+  f.Geometry(std::string(kCube));
   f.Drain();
   f.Geometry("B");
   f.geometry_loads[0](f.b, {});
@@ -645,7 +652,7 @@ void RefreshDoesNotReviveClearedOrRemovedSlots()
   f.material_cache["red"] = f.red;
   f.Material("red", 1);
   f.Drain();
-  f.Geometry("asset:///Engine/Generated/BasicShapes/Cube");
+  f.Geometry(std::string(kCube));
   f.Drain();
   f.geometry_cache["B"] = f.b;
   f.Geometry("B");
@@ -885,7 +892,7 @@ void MaterialRecoversAfterGeometryFailure(bool material_first)
 void FailedReplacementDoesNotValidateSlotsAgainstPreviousGeometry()
 {
   Fixture f;
-  f.Geometry("asset:///Engine/Generated/BasicShapes/Cube");
+  f.Geometry(std::string(kCube));
   f.Drain();
   const auto previous_geometry = f.Geometry();
   Require(
@@ -970,7 +977,7 @@ void LatestMaterialIntentWinsAfterGeometryFailure()
 void ConfirmedInvalidSlotRequiresNewExplicitAssignment()
 {
   Fixture f;
-  f.Geometry("asset:///Engine/Generated/BasicShapes/Cube");
+  f.Geometry(std::string(kCube));
   f.Drain();
   f.material_cache["red"] = f.red;
   uint64_t failed_generation = 0;
@@ -1173,13 +1180,16 @@ auto MakeMaskTexture() -> Requests::Texture
     descriptor, std::move(bytes));
 }
 
-auto MaskSources(oxygen::content::TextureResourceLocator locator,
-  std::optional<std::wstring> mount = {}) -> EnvironmentTextureSources
+auto MaskSources(std::string virtual_path) -> EnvironmentTextureSources
 {
   auto sources = EnvironmentTextureSources {};
-  sources.front() = { .locator = std::move(locator),
-    .project_mount = std::move(mount) };
+  sources.front() = { .virtual_path = std::move(virtual_path) };
   return sources;
+}
+
+auto TexturePath(const std::string_view name) -> std::string
+{
+  return "/Content/Textures/" + std::string(name);
 }
 
 void ExposureMaskRequestsAreAtomicAndLatestWins()
@@ -1192,9 +1202,7 @@ void ExposureMaskRequestsAreAtomicAndLatestWins()
     auto post = PostProcessParams {};
     post.manual_exposure_ev = ev;
     if (descriptor) {
-      post.auto_exposure_metering_mask
-        = oxygen::content::TextureResourceLocator { .cooked_root = "C:/Cooked",
-            .descriptor_relative_path = descriptor };
+      post.auto_exposure_metering_mask = TexturePath(descriptor);
     }
     auto command = SetEnvironmentCommand(SkyAtmosphereParams {}, post);
     command.SetFailureCallback(
@@ -1254,12 +1262,9 @@ void ExposureMaskRequestsRespectPauseAndSceneLifetime()
   Fixture f;
   const auto texture = MakeMaskTexture();
   auto applied = 0;
-  const auto locator
-    = oxygen::content::TextureResourceLocator { .cooked_root = "C:/Cooked",
-        .descriptor_relative_path = "Mask.otex" };
   f.requests->SuspendLoads();
-  f.requests->SetEnvironmentTextures(
-    *f.scene, MaskSources(locator), [&](auto&, const auto&) { ++applied; });
+  f.requests->SetEnvironmentTextures(*f.scene, MaskSources(TexturePath("Mask.otex")),
+    [&](auto&, const auto&) { ++applied; });
   Require(f.texture_loads.empty(), "suspended mask request started a load");
   f.requests->ResumeLoads(*f.scene);
   Require(
@@ -1268,71 +1273,6 @@ void ExposureMaskRequestsRespectPauseAndSceneLifetime()
   f.requests.reset();
   complete(oxygen::content::ResourceKey { 41U }, texture, {});
   Require(applied == 0, "mask completion escaped its scene session lifetime");
-}
-
-void ExposureMaskFollowsOwnedGenerationsAndRollback()
-{
-  Fixture f;
-  using oxygen::interop::module::CookedRootBinding;
-  auto roots = [](const char* path) {
-    return std::make_shared<const std::vector<CookedRootBinding>>(
-      std::vector<CookedRootBinding> {
-        { .path = path, .project_mount = L"CONTENT" },
-      });
-  };
-  const auto first = roots("C:/Project/generation-a");
-  const auto next = roots("C:/Project/generation-b");
-  const auto texture = MakeMaskTexture();
-  oxygen::content::ResourceKey applied {};
-  f.requests->SetCookedRoots(first);
-  f.requests->SetEnvironmentTextures(*f.scene,
-    MaskSources(
-      oxygen::content::TextureResourceLocator {
-        .cooked_root = first->front().path,
-        .descriptor_relative_path = "Mask.otex" },
-      L"CONTENT"),
-    [&](auto&, const auto& keys) { applied = keys.front(); });
-  f.texture_loads.back()(oxygen::content::ResourceKey { 41U }, texture, {});
-  f.requests->Drain(*f.scene);
-  Require(applied == oxygen::content::ResourceKey { 41U },
-    "initial mask did not apply");
-
-  f.requests->SetCookedRoots(next);
-  f.requests->Refresh(*f.scene);
-  Require(f.texture_locators.back().cooked_root == next->front().path,
-    "mask refresh replayed a retired generation");
-  f.texture_loads.back()({}, {}, "new generation failed");
-  f.requests->Drain(*f.scene);
-  Require(
-    !f.requests->RefreshError().empty(), "mask failure did not reject refresh");
-  Require(applied == oxygen::content::ResourceKey { 41U },
-    "failed refresh changed the accepted mask");
-
-  f.requests->SetCookedRoots(first);
-  f.requests->Refresh(*f.scene);
-  Require(f.texture_locators.back().cooked_root == first->front().path,
-    "rollback did not resolve the previous generation");
-  f.texture_loads.back()(oxygen::content::ResourceKey { 41U }, texture, {});
-  f.requests->Drain(*f.scene);
-  Require(
-    f.requests->RefreshError().empty(), "rollback retained a stale mask error");
-
-  f.requests->SetCookedRoots(next);
-  f.requests->Refresh(*f.scene);
-  f.texture_loads.back()(oxygen::content::ResourceKey { 42U }, texture, {});
-  f.requests->Drain(*f.scene);
-  Require(applied == oxygen::content::ResourceKey { 42U },
-    "replacement mask did not apply");
-
-  f.requests->SetEnvironmentTextures(*f.scene,
-    MaskSources(oxygen::content::TextureResourceLocator {
-      .cooked_root = "C:/External", .descriptor_relative_path = "Mask.otex" }),
-    [&](auto&, const auto& keys) { applied = keys.front(); });
-  f.requests->SetCookedRoots(first);
-  f.requests->Refresh(*f.scene);
-  Require(f.texture_locators.back().cooked_root
-      == std::filesystem::path("C:/External"),
-    "project replacement redirected an explicit external locator");
 }
 
 // Both sky cubemaps load before the edit applies; a failed one rejects it. An
@@ -1347,12 +1287,9 @@ void SkyCubemapsApplyTogetherOrNotAtAll()
     auto sky = SkyParams {};
     sky.sky_sphere.enabled = true;
     sky.sky_sphere.intensity = intensity;
-    sky.sky_sphere.cubemap.locator = oxygen::content::TextureResourceLocator {
-      .cooked_root = "C:/Cooked", .descriptor_relative_path = "Backdrop.otex" };
+    sky.sky_sphere.cubemap.virtual_path = TexturePath("Backdrop.otex");
     sky.sky_light.source = 1;
-    sky.sky_light.cubemap.locator = oxygen::content::TextureResourceLocator {
-      .cooked_root = "C:/Cooked",
-      .descriptor_relative_path = light_descriptor };
+    sky.sky_light.cubemap.virtual_path = TexturePath(light_descriptor);
     auto command = SetEnvironmentCommand(
       SkyAtmosphereParams {}, PostProcessParams {}, FogParams {}, sky);
     command.SetFailureCallback(
@@ -1414,8 +1351,7 @@ void AppliedSkyCubemapStaysResidentUntilReplaced()
     auto sky = SkyParams {};
     sky.sky_sphere.enabled = true;
     if (descriptor != nullptr) {
-      sky.sky_sphere.cubemap.locator = oxygen::content::TextureResourceLocator {
-        .cooked_root = "C:/Cooked", .descriptor_relative_path = descriptor };
+      sky.sky_sphere.cubemap.virtual_path = TexturePath(descriptor);
     }
     auto command = SetEnvironmentCommand(
       SkyAtmosphereParams {}, PostProcessParams {}, FogParams {}, sky);
@@ -1445,9 +1381,6 @@ auto RunScenario(int scenario) -> const char*
       break;
     case 43:
       AppliedSkyCubemapStaysResidentUntilReplaced();
-      break;
-    case 41:
-      ExposureMaskFollowsOwnedGenerationsAndRollback();
       break;
     case 38:
       RetainedMaterialIdentitySurvivesInventoryRevisionChange();
@@ -1527,7 +1460,7 @@ auto RunScenario(int scenario) -> const char*
       MaterialOrdering(true);
       break;
     case 4:
-      CachedAndProceduralReplacement();
+      CachedReplacement();
       break;
     case 5:
       CachedMaterialAndClear();
@@ -1632,10 +1565,6 @@ public:
     Check(34);
   }
 
-  [TestMethod] void ExposureMaskTracksProjectGenerationsAndRollback() {
-    Check(41);
-  }
-
   [TestMethod] void SkyCubemapsApplyTogetherOrNotAtAll() {
     Check(42);
   }
@@ -1720,7 +1649,7 @@ public:
     Check(3);
   }
 
-  [TestMethod] void CachedAndProceduralGeometryWins() { Check(4); }
+  [TestMethod] void CachedGeometryWins() { Check(4); }
 
     [TestMethod] void CachedMaterialAndClearWin()
   {

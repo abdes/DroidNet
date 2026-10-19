@@ -415,7 +415,10 @@ public static partial class Program
 
     private static void RegisterAssetServices(IContainer container)
     {
-        container.Register<IProceduralGeometryDescriptorService, ProceduralGeometryDescriptorService>(Reuse.Singleton);
+        // The SDK's engine content pak: the /Engine assets every project references, read from the installation.
+        container.RegisterDelegate<IEngineContentPak>(
+            _ => EngineContentPak.Installed(),
+            Reuse.Singleton);
         container.Register<ISceneDescriptorGenerator, SceneDescriptorGenerator>(Reuse.Singleton);
         container.Register<IContentImportManifestBuilder, ContentImportManifestBuilder>(Reuse.Singleton);
         container.Register<IContentImportManifestValidator, ContentImportManifestValidator>(Reuse.Singleton);
@@ -433,7 +436,6 @@ public static partial class Program
             resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey)),
             Reuse.Singleton);
         container.RegisterMapping<IEngineContentPipelineApi, ImportToolContentPipelineApi>();
-        container.RegisterMapping<IBuiltinGeometryCatalogProvider, ImportToolContentPipelineApi>();
         container.Register<ContentCookCoordinator>(Reuse.Singleton);
         container.RegisterMapping<IContentCookCoordinator, ContentCookCoordinator>();
         container.RegisterMapping<ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();
@@ -450,7 +452,8 @@ public static partial class Program
             resolver.Resolve<ContentPipeline.Snapshots.ICookDocumentRegistry>(),
             resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey),
             resolver.Resolve<IAtomicFileStore>(),
-            resolver.Resolve<ContentPipeline.Publication.CookPublicationService>()),
+            resolver.Resolve<ContentPipeline.Publication.CookPublicationService>(),
+            resolver.Resolve<IEngineContentPak>()),
             Reuse.Singleton);
         container.RegisterDelegate(
             resolver => (ContentPipeline.Inspection.IGeometryMaterialSlotProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);

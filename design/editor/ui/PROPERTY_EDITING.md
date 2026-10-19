@@ -2,27 +2,42 @@
 
 ## Transform Input
 
-- A number or arithmetic expression such as `90/2` assigns one absolute value to every selected target.
-- `+=2` and `-=2` apply an offset to each target's value captured when text editing began. `*2`, `/2`, `*=2` and `/=2` multiply or divide each target's captured value.
-- Relative text remains a draft until commit. Enter commits the selected targets as one Transform history entry; Escape changes neither the scene nor history.
-- The edit is all-or-nothing. Non-finite results, division by zero, and values rejected by any selected target's Transform validation are not applied.
+- A number or arithmetic expression such as `90/2` assigns one absolute value to
+  every selected target.
+- `+=2` and `-=2` apply an offset to each target's value captured when text
+  editing began. `*2`, `/2`, `*=2` and `/=2` multiply or divide each target's
+  captured value.
+- Relative text remains a draft until commit. Enter commits the selected targets
+  as one Transform history entry; Escape changes neither the scene nor history.
+- The edit is all-or-nothing. Non-finite results, division by zero, and values
+  rejected by any selected target's Transform validation are not applied.
 
 ## Ownership
 
-`NumberBox` parses arithmetic and carries the raw text through validation and commit events so `TransformViewModel` can distinguish relative operations. The Transform view model reads and writes values through the canonical Transform descriptors and submits target-specific edits through `EditPropertiesForTargetsAsync`; the scene command service owns validation, synchronization, dirty state and history.
+`NumberBox` parses arithmetic and carries the raw text through validation and
+commit events so `TransformViewModel` can distinguish relative operations. The
+Transform view model reads and writes values through the canonical Transform
+descriptors and submits target-specific edits through
+`EditPropertiesForTargetsAsync`; the scene command service owns validation,
+synchronization, dirty state and history.
 
 ## Numeric Control Presentation
 
-- Labels are optional. An empty label or `LabelPosition=None` consumes no label space.
-- Compact left labels sit inside the field border; the label uses its measured content width and the value editor fills the remaining width.
-- Horizontal scrubbing starts on a visible label, never on the value region. Clicking the value enters text editing.
-- A pointer press outside the NumberBox ends text editing even when the target cannot take focus. Valid drafts commit; invalid drafts cancel.
-- Wheel input is left to the containing scroll view. Vector labels may override text (`X/Y/Z` or `R/G/B`) and foreground brushes independently.
+- Labels are optional. An empty label or `LabelPosition=None` consumes no label
+  space.
+- Compact left labels sit inside the field border; the label uses its measured
+  content width and the value editor fills the remaining width.
+- Horizontal scrubbing starts on a visible label, never on the value region.
+  Clicking the value enters text editing.
+- A pointer press outside the NumberBox ends text editing even when the target
+  cannot take focus. Valid drafts commit; invalid drafts cancel.
+- Wheel input is left to the containing scroll view. Vector labels may override
+  text (`X/Y/Z` or `R/G/B`) and foreground brushes independently.
 
 ## Responsive Property Rows
 
-`Oxygen.Editor.Controls.PropertyCard` owns `Layout=Auto/Inline/Stacked`.
-Auto measures the available card width, not the window: a shared 124-DIP
+`Oxygen.Editor.Controls.PropertyCard` owns `Layout=Auto/Inline/Stacked`. Auto
+measures the available card width, not the window: a shared 124-DIP
 `LabelWidth`, a 12-DIP gap, and `EditorMinimumWidth` (128 for scalars, 248 for
 XYZ), plus the measured prefix, qualifier and leading accessory footprint.
 System text scaling and larger measured editors increase the required width.
@@ -38,16 +53,16 @@ compositions retain their own labels and the card header.
 
 `Qualifier`, `Prefix`, and `LeadingContent` are shared presenters, not numeric
 text. Scalar qualifiers stay beside the input in both layouts. Compound
-qualifiers follow the complete inline vector or move to the right of the
-stacked header. RGB colors and dimensionless RGB multipliers explicitly use
-Stacked; colors supply a swatch through LeadingContent, multipliers do not.
-An empty prefix, accessory or qualifier consumes no column gap.
+qualifiers follow the complete inline vector or move to the right of the stacked
+header. RGB colors and dimensionless RGB multipliers explicitly use Stacked;
+colors supply a swatch through LeadingContent, multipliers do not. An empty
+prefix, accessory or qualifier consumes no column gap.
 
 Inspector vectors opt into `VectorBox.AutoStackComponents`. When full-width
-channels still cannot preserve their usable widths, they become vertical
-without replacing editors, changing channel order, or ending transactions.
-The color swatch remains at the top of the value region. Each channel's
-automation name identifies its property, channel and shared annotation.
+channels still cannot preserve their usable widths, they become vertical without
+replacing editors, changing channel order, or ending transactions. The color
+swatch remains at the top of the value region. Each channel's automation name
+identifies its property, channel and shared annotation.
 
 `PropertiesExpander.HeaderActions` hosts independent reset actions before the
 native disclosure. The native header, icon, wrapping description, expansion
@@ -63,7 +78,11 @@ headers, not selection toggles elsewhere in the Inspector.
 
 ## Cursor Feedback
 
-Keep the horizontal scrub cursor change tied to a pressed/active drag, not hover alone. Microsoft recommends visual hover feedback instead of using a cursor as hover feedback; use a label hover treatment to teach the scrub affordance. The drag handle is the visible label, so `SizeWestEast` is shown once the drag begins.
+Keep the horizontal scrub cursor change tied to a pressed/active drag, not hover
+alone. Microsoft recommends visual hover feedback instead of using a cursor as
+hover feedback; use a label hover treatment to teach the scrub affordance. The
+drag handle is the visible label, so `SizeWestEast` is shown once the drag
+begins.
 
 Native labels emphasize their existing foreground through opacity only, from
 0.85 normally to 1 during hover or drag. Font weight, size and geometry remain
@@ -71,8 +90,8 @@ unchanged, and compact channel labels retain their RGB/axis brushes.
 
 ## Background Color
 
-The Background card uses a Color / Linear RGB header above one compact row:
-a display-converted swatch and three equally sized, bordered numeric fields with
+The Background card uses a Color / Linear RGB header above one compact row: a
+display-converted swatch and three equally sized, bordered numeric fields with
 colored R/G/B labels. Numeric values remain linear; the swatch picker converts
 between display sRGB and linear authoring values. Reset restores the scene
 model's default black background through the normal scene command path as one
@@ -86,27 +105,28 @@ values.
 
 ## Model and View Boundary
 
-Environment and Directional Light property models expose linear `Vector3`
-colors and accept linear authoring edits. Views convert picker sRGB values
-before submitting edits and create display colors and swatch brushes through
+Environment and Directional Light property models expose linear `Vector3` colors
+and accept linear authoring edits. Views convert picker sRGB values before
+submitting edits and create display colors and swatch brushes through
 `InspectorRgbPresentation`. Exposure-curve preview points are projected from
 authored keys by the view's `InspectorCurvePresentation`, not the model.
 
 Shared field diagnostics expose `HasError`; views convert that boolean to
-visibility with the standard converter. Models do not construct UI objects
-to report validation errors.
+visibility with the standard converter. Models do not construct UI objects to
+report validation errors.
 
 Environment browsing uses explicit `EnvironmentFieldCatalog` metadata and a
-view-owned `InspectorSearchModel`. Stable presentation keys distinguish the scene
-cards from their canonical authored `PropertyId`s. Matching, applicability and
-temporary expansion restoration are headless presentation policy; XAML declares
-the sections, disclosures and applicability notes. The view binds registered
-fields and retains focus/BringIntoView adapters; it neither searches realized
-control text nor wraps card content at runtime. Applicability notes remain
-separate from command diagnostics. Section views register their own controls with
-`InspectorSceneFieldRegistry`; the host composes views rather than accessing child
-namescopes to construct layout. Aerial Start realization, scrolling and focus live
-in the Sky section, with acknowledgement only after focus succeeds.
+view-owned `InspectorSearchModel`. Stable presentation keys distinguish the
+scene cards from their canonical authored `PropertyId`s. Matching, applicability
+and temporary expansion restoration are headless presentation policy; XAML
+declares the sections, disclosures and applicability notes. The view binds
+registered fields and retains focus/BringIntoView adapters; it neither searches
+realized control text nor wraps card content at runtime. Applicability notes
+remain separate from command diagnostics. Section views register their own
+controls with `InspectorSceneFieldRegistry`; the host composes views rather than
+accessing child namescopes to construct layout. Aerial Start realization,
+scrolling and focus live in the Sky section, with acknowledgement only after
+focus succeeds.
 
 `EnvironmentViewModel` owns scene identity and five stable child models:
 Background, Sky Atmosphere, Exposure, Atmosphere Lights and Post Processing.
@@ -122,45 +142,51 @@ PropertyCard/NumberBox diagnostic panel. Its property card directly recognizes
 the NumberBox's native caption, and the consumer supplies its existing scoped
 card/numeric styles. The control forwards the original edit and validation event
 arguments; the owning models and edit coordinators still protect targets,
-validate related values and submit commands. Aerial Start retains its specialized
-validation/focus composition.
+validate related values and submit commands. Aerial Start retains its
+specialized validation/focus composition.
 
-WorldEditor's `InspectorRgbField` shares color and multiplier composition. Colors
-use the existing display conversion and captured-owner gesture helper; multipliers
-never expose a color picker. `ExposureCompensationCurveEditorViewModel` owns stable
-key rows, finite/increasing-EV validation and add/remove policy while borrowing the
-Exposure section's shared scene command, gesture and diagnostic owner. Its view receives the
-parent-owned instance and creates the preview points. Geometry and material flyouts
-share `AssetPickerContent` with typed templates; catalog services, stable rows and
-captured assignment targets remain in Geometry's model. Texture picker presentation
-remains separate because its row layout differs. Refactoring qualification is tracked in
+WorldEditor's `InspectorRgbField` shares color and multiplier composition.
+Colors use the existing display conversion and captured-owner gesture helper;
+multipliers never expose a color picker.
+`ExposureCompensationCurveEditorViewModel` owns stable key rows,
+finite/increasing-EV validation and add/remove policy while borrowing the
+Exposure section's shared scene command, gesture and diagnostic owner. Its view
+receives the parent-owned instance and creates the preview points. Every
+asset-assigning flyout (geometry, material slots, cubemaps, the metering mask,
+scene references, script slots, script asset parameters and material texture
+channels) uses the shared `AssetPicker` of
+[`Oxygen.Editor.Pickers`](../../../projects/Oxygen.Editor.Pickers/README.md),
+which groups choices as Engine, Packages and Content; each owner's model decides
+what the property accepts, keeps the assigned value and captures assignment
+targets. Refactoring qualification is tracked in
 [the inspector maintenance plan](../plan/inspector-refactoring.md), separately
 from the historical verification below.
 
-Camera binds directly to typed `PropertyBinding<float>` state instead of duplicate
-observable value/mixed fields. Disposable `InspectorBindingRegistration<T>` routes
-requests, guards model-refresh echoes and detaches subscriptions. Light's scalar
-adapters read their binding state directly; degree/radian and integer-count
-conversions remain explicit, as do per-target color/multiplier channel edits.
-`DirectionalLightShadowsView` uses the same Light model, and
-`DirectionalLightOrientation` owns pure Z-up / emitted-forward -Y conversion.
+Camera binds directly to typed `PropertyBinding<float>` state instead of
+duplicate observable value/mixed fields. Disposable
+`InspectorBindingRegistration<T>` routes requests, guards model-refresh echoes
+and detaches subscriptions. Light's scalar adapters read their binding state
+directly; degree/radian and integer-count conversions remain explicit, as do
+per-target color/multiplier channel edits. `DirectionalLightShadowsView` uses
+the same Light model, and `DirectionalLightOrientation` owns pure Z-up /
+emitted-forward -Y conversion.
 
-`TransformEditController` owns captured targets, relative expressions, wheel-idle
-work, edit serialization, pending completion and terminal disposal. Transform's
-model retains field values, mixed states and source diagnostics. The host uses
-`InspectorEditorFactory` with its existing scoped dependencies and preserves cached
-editor instances; `InspectorSelectionObserver` owns component/material-slot
-subscriptions and suppresses queued callbacks from old selections.
+`TransformEditController` owns captured targets, relative expressions,
+wheel-idle work, edit serialization, pending completion and terminal disposal.
+Transform's model retains field values, mixed states and source diagnostics. The
+host uses `InspectorEditorFactory` with its existing scoped dependencies and
+preserves cached editor instances; `InspectorSelectionObserver` owns
+component/material-slot subscriptions and suppresses queued callbacks from old
+selections.
 
 Shared Editor.Controls is the sole PropertyCard/PropertiesExpander authority.
 WorldEditor's Generic resources reference that owner; the unused local controls,
 templates and theme dictionary are retired.
 
-Exposure asset notifications use an injected reactive `IScheduler`.
-Inspector composition supplies the existing hosting dispatcher scheduler;
-standalone models use immediate delivery without acquiring a WinUI dispatcher.
-Disposing the model cancels queued asset notifications and removes the feed
-subscription.
+Exposure asset notifications use an injected reactive `IScheduler`. Inspector
+composition supplies the existing hosting dispatcher scheduler; standalone
+models use immediate delivery without acquiring a WinUI dispatcher. Disposing
+the model cancels queued asset notifications and removes the feed subscription.
 
 ## Verification
 
@@ -175,12 +201,11 @@ Headless verification passes 90 color/history, scheduling, diagnostics and
 scene-command cases without initializing WinUI, including all six
 `ColorHistoryTests` cases. Native Inspector coverage includes real Background,
 Ground Albedo and Directional Light picker events, plus exposure-curve updates
-and undo.
-Native pointer coverage exercises scalar caption dragging, one-step history,
-undo/redo and Escape cancellation for Camera, Directional Light and Environment;
-shared scalar rows retain the same drag label through responsive reflow and can
-drag again after unloading/reloading. Light/Dark disclosures repeatedly expand
-and collapse with the correct glyph. Hover/pressed regressions verify unchanged
-font metrics and geometry for external and compact labels at enlarged text sizes.
-Complete workspace visual acceptance and a native Comfortable-density selector
-are outside this focused evidence.
+and undo. Native pointer coverage exercises scalar caption dragging, one-step
+history, undo/redo and Escape cancellation for Camera, Directional Light and
+Environment; shared scalar rows retain the same drag label through responsive
+reflow and can drag again after unloading/reloading. Light/Dark disclosures
+repeatedly expand and collapse with the correct glyph. Hover/pressed regressions
+verify unchanged font metrics and geometry for external and compact labels at
+enlarged text sizes. Complete workspace visual acceptance and a native
+Comfortable-density selector are outside this focused evidence.

@@ -10,6 +10,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Projects;
@@ -122,7 +123,7 @@ public sealed partial class PreviewSessionTests
             var files = new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
             var manager = new Mock<IProjectManagerService>();
             _ = manager.Setup(value => value.LoadProjectInfoAsync(this.directory.FullName)).ReturnsAsync((IProjectInfo?)info);
-            var publication = new CookPublicationService(this.coordinator, this.projects, files, manager.Object);
+            var publication = new CookPublicationService(this.coordinator, this.projects, files, manager.Object, new EngineContentPakFixture());
             _ = this.Catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>()))
                 .Returns(() => this.FailCatalog ? Task.FromException(new IOException("The catalog could not read the publication.")) : Task.CompletedTask);
             var publisher = new Mock<IOperationResultPublisher>();

@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Slots;
@@ -39,11 +40,11 @@ internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTes
         _ = model.MaterialSlots.Should().OnlyHaveUniqueItems(static slot => slot.DisplayName);
         model.SelectedMaterialSlot = model.MaterialSlots.Single(slot => slot.Target.SlotId == second.SlotId);
         await model.RefreshMaterialPickerAsync().ConfigureAwait(true);
-        await model.ApplyMaterialAsync(new("Trim", fixture.MaterialAsset, "Material", fixture.MaterialAsset.VirtualPath, AssetPickerGroup.Content, IsEnabled: true, ThumbnailModel: string.Empty)).ConfigureAwait(true);
+        await model.ApplyMaterialAsync(new AssetChoice("Trim", fixture.MaterialAsset, "Material", fixture.MaterialAsset.VirtualPath, IsEnabled: true, Glyph: string.Empty)).ConfigureAwait(true);
         _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Single(slot => slot.Target.SlotId == second.SlotId).Material.Should().Be(fixture.MaterialAsset);
         _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Single(slot => slot.Target.SlotId == first.SlotId).Material.Should().Be(AssetPath.Parse("/Content/Materials/Body.omat"));
         await model.RefreshMaterialPickerAsync().ConfigureAwait(true);
-        await model.ApplyMaterialAsync(new("Clear override", Asset: null, "Geometry default", "Geometry default", AssetPickerGroup.Engine, IsEnabled: true, ThumbnailModel: string.Empty)).ConfigureAwait(true);
+        await model.ApplyMaterialAsync(new AssetChoice("Clear override", Asset: null, "Geometry default", "Geometry default", IsEnabled: true, Glyph: string.Empty)).ConfigureAwait(true);
         _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle().Which.Target.SlotId.Should().Be(first.SlotId);
         _ = model.SelectedMaterialName.Should().Be("Geometry default");
     });

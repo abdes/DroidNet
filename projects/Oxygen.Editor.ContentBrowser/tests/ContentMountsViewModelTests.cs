@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using DroidNet.Aura.Dialogs;
 using Moq;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
@@ -17,16 +18,19 @@ public sealed class ContentMountsViewModelTests
 {
     public TestContext TestContext { get; set; } = null!;
 
+    private static IEngineContentPak EnginePak { get; } = Mock.Of<IEngineContentPak>(pak => pak.Path == FileSystemPath.From("C:/SDK/share/oxygen/engine.pak"));
+
     /// <summary>Every mount is listed with its kind; the project's content cannot be renamed or unmounted.</summary>
     [TestMethod]
     public void ListsMountsWithKindsAndProtectsProjectContent()
     {
-        var model = new ContentMountsViewModel(CreateProject(), Mock.Of<IDialogService>());
+        var model = CreateModel(CreateProject());
 
         _ = model.Mounts.Select(static row => (row.Name, row.KindLabel)).Should().Equal(
             ("Content", "Project source"),
             ("Cooked", "Derived output"),
-            ("Studio library", "Local library"));
+            ("Studio library", "Local library"),
+            ("Engine", "Engine content"));
         var content = model.Mounts[0];
         _ = content.UnmountCommand.CanExecute(parameter: null).Should().BeFalse();
         _ = content.RenameCommand.CanExecute(parameter: null).Should().BeFalse();
@@ -38,7 +42,7 @@ public sealed class ContentMountsViewModelTests
     [TestMethod]
     public void AddingRefusesDuplicatesAndInvalidNames()
     {
-        var model = new ContentMountsViewModel(CreateProject(), Mock.Of<IDialogService>());
+        var model = CreateModel(CreateProject());
 
         model.SelectedKind = "Cooked";
         model.AddMountCommand.Execute(parameter: null);
@@ -47,7 +51,7 @@ public sealed class ContentMountsViewModelTests
         model.SelectedKind = "Imported";
         model.AddMountCommand.Execute(parameter: null);
         _ = model.HasError.Should().BeFalse();
-        _ = model.Mounts[^1].Should().BeEquivalentTo(new { Name = "Imported", RelativePath = ".imported", IsNew = true, Kind = ContentMountKind.Derived });
+        _ = model.Mounts[^2].Should().BeEquivalentTo(new { Name = "Imported", RelativePath = ".imported", IsNew = true, Kind = ContentMountKind.Derived });
 
         model.SelectedKind = ContentMountsViewModel.LocalFolderKind;
         model.NewMountName = "studio library";
@@ -63,7 +67,7 @@ public sealed class ContentMountsViewModelTests
     [TestMethod]
     public void MountNamesFollowTheMountRuleAndLibrariesAreLabels()
     {
-        var model = new ContentMountsViewModel(CreateProject(), Mock.Of<IDialogService>());
+        var model = CreateModel(CreateProject());
 
         _ = model.ValidateName("Cooked Output", ContentMountKind.Derived).Should().Be(VirtualPathError.InvalidMountName.ToMessage());
         _ = model.ValidateName(".published", ContentMountKind.Derived).Should().Be(VirtualPathError.InvalidMountName.ToMessage());
@@ -75,7 +79,7 @@ public sealed class ContentMountsViewModelTests
     [TestMethod]
     public void RenameValidatesBeforeApply()
     {
-        var model = new ContentMountsViewModel(CreateProject(), Mock.Of<IDialogService>());
+        var model = CreateModel(CreateProject());
         var cooked = model.Mounts[1];
 
         cooked.RenameCommand.Execute(parameter: null);
@@ -95,7 +99,7 @@ public sealed class ContentMountsViewModelTests
     public void AppliedRowsRebuildProjectMounts()
     {
         var project = CreateProject();
-        var model = new ContentMountsViewModel(project, Mock.Of<IDialogService>());
+        var model = CreateModel(project);
         model.Mounts[2].UnmountCommand.Execute(parameter: null);
         model.Mounts[1].RenameCommand.Execute(parameter: null);
         model.Mounts[1].NameDraft = "Published";
@@ -125,6 +129,81 @@ public sealed class ContentMountsViewModelTests
             library.Delete();
         }
     }
+
+    /// <summary>The engine content is listed last and stays: it cannot be renamed or unmounted.</summary>
+    [TestMethod]
+    public void EngineContentIsAFixedLowestMount()
+    {
+        var engine = CreateModel(CreateProject()).Mounts[^1];
+
+        _ = engine.Kind.Should().Be(ContentMountKind.EngineContent);
+        _ = engine.Path.Should().Be(EnginePak.Path.FullPath);
+        _ = engine.IsLocked.Should().BeTrue();
+        _ = engine.HasActions.Should().BeFalse();
+        _ = engine.RenameCommand.CanExecute(parameter: null).Should().BeFalse();
+        _ = engine.UnmountCommand.CanExecute(parameter: null).Should().BeFalse();
+    }
+
+    /// <summary>A pak file is a library: only an existing .pak file mounts, above the engine content, and Apply declares it, never the engine content.</summary>
+    [TestMethod]
+    public void PakFilesMountAsLibrariesAboveTheEngineContent()
+    {
+        var project = CreateProject();
+        var model = CreateModel(project);
+        var folder = Directory.CreateTempSubdirectory("cb-pak-");
+        try
+        {
+            var pak = Path.Combine(folder.FullName, "Props.pak");
+            var other = Path.Combine(folder.FullName, "Props.bin");
+            File.WriteAllText(pak, "pak");
+            File.WriteAllText(other, "not a pak");
+            model.SelectedKind = ContentMountsViewModel.PakFileKind;
+            model.NewMountName = "Props";
+
+            model.NewMountPath = other;
+            model.AddMountCommand.Execute(parameter: null);
+            _ = model.HasError.Should().BeTrue();
+
+            model.NewMountPath = pak;
+            model.AddMountCommand.Execute(parameter: null);
+            _ = model.HasError.Should().BeFalse(model.ErrorMessage);
+            _ = model.Mounts.Select(static row => row.Kind).TakeLast(2).Should().Equal(ContentMountKind.PakLibrary, ContentMountKind.EngineContent);
+
+            var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
+            ProjectLayoutViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
+
+            _ = candidate.PakFileMounts.Should().Equal(new PakFileMount("Props", FileSystemPath.From(pak)));
+            _ = candidate.AuthoringMounts.Select(static mount => mount.Name).Concat(candidate.LocalFolderMounts.Select(static mount => mount.Name))
+                .Should().NotContain(AssetPath.Engine.Mount);
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>A renamed pak keeps its place in the content priority.</summary>
+    [TestMethod]
+    public void RenamedPakKeepsItsPriority()
+    {
+        var project = CreateProject() with
+        {
+            PakFileMounts = [new("Props", FileSystemPath.From("D:/Paks/Props.pak"))],
+            CookedContentOrder = [new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.PakFile, "Props")],
+        };
+        var model = CreateModel(project);
+        var pak = model.Mounts.Single(static row => row.Kind == ContentMountKind.PakLibrary);
+        pak.RenameCommand.Execute(parameter: null);
+        pak.NameDraft = "Rocks";
+        _ = model.Validate().Should().BeTrue();
+
+        var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
+        ProjectLayoutViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
+
+        _ = candidate.CookedContentOrder.Should().Equal(new CookedContentSource(CookedContentSourceKind.ProjectOutput), new CookedContentSource(CookedContentSourceKind.PakFile, "Rocks"));
+    }
+
+    private static ContentMountsViewModel CreateModel(ProjectContext project) => new(project, Mock.Of<IDialogService>(), EnginePak);
 
     private static ProjectContext CreateProject() => new()
     {

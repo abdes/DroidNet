@@ -30,7 +30,7 @@ public sealed class TexturedModelImportTests
     [DataRow("fbx")]
     public async Task TexturedModelImportRetainsItsImageAndReimports(string extension)
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var original = Path.Combine(workspace.Root, "incoming");
         _ = Directory.CreateDirectory(original);
         var primary = Path.Combine(original, "model." + extension);
@@ -39,7 +39,7 @@ public sealed class TexturedModelImportTests
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", imageName), Path.Combine(original, imageName));
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var pipeline = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var pipeline = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var request = new SceneImportRequest(workspace.ProjectContext, primary, "Textured", AssetPath.Parse("/Content/Models"));
 
         var imported = await pipeline.ImportSourceAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);

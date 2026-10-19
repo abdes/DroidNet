@@ -21,11 +21,7 @@ public sealed partial class NativeLoopCleanupTests
         try
         {
             var cookedRoot = await this.CookExposureMaskAsync(directory.FullName).ConfigureAwait(false);
-            var descriptor = Directory.EnumerateFiles(cookedRoot, "*.otex", SearchOption.AllDirectories).Single();
-            var reference = new RuntimeTextureReference(
-                AssetPath.Parse("/Content/Textures/Meter.otex"),
-                cookedRoot,
-                Path.GetRelativePath(cookedRoot, descriptor));
+            var reference = AssetPath.Parse("/Content/Textures/Meter.otex");
             await this.RunNativeCommandsAsync(commands => this.CheckCookedExposureMaskAsync(commands, reference), [cookedRoot]).ConfigureAwait(false);
         }
         finally
@@ -63,7 +59,7 @@ public sealed partial class NativeLoopCleanupTests
         return cookedRoot;
     }
 
-    private async Task CheckCookedExposureMaskAsync(RuntimeCommandDispatcher commands, RuntimeTextureReference reference)
+    private async Task CheckCookedExposureMaskAsync(RuntimeCommandDispatcher commands, AssetPath reference)
     {
         var target = new RuntimeSceneTarget(commands.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = (await commands.ActivateSceneAsync(Guid.NewGuid(), target, "Cooked mask", this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();

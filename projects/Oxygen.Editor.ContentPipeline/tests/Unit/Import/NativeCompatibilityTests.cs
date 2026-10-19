@@ -17,31 +17,20 @@ public sealed class NativeCompatibilityTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Changed tool bytes block both native import and catalog discovery.</summary>
-    /// <param name="catalog">Whether to exercise catalog discovery.</param>
+    /// <summary>Changed tool bytes block native import.</summary>
     /// <returns>The asynchronous compatibility test.</returns>
     [TestMethod]
-    [DataRow(false)]
-    [DataRow(true)]
-    public async Task MismatchedToolNeverLaunchesWorker(bool catalog)
+    public async Task MismatchedToolNeverLaunchesWorker()
     {
         using var workspace = new ImportAdapterWorkspace();
         await File.WriteAllTextAsync(workspace.ToolPath, "Changed after compatibility", this.TestContext.CancellationToken).ConfigureAwait(false);
         var runner = new CapturingRunner(new(0, string.Empty, string.Empty));
         var api = new ImportToolContentPipelineApi(new FixedToolLocator(workspace.ToolPath), runner, NullLogger<ImportToolContentPipelineApi>.Instance, workspace.Compatibility);
-        if (catalog)
-        {
-            Func<Task> discover = () => api.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken);
-            var failure = await discover.Should().ThrowAsync<NativeCompatibilityException>().ConfigureAwait(false);
-            _ = failure.Which.Diagnostics.Should().ContainSingle(item => item.Code == NativeCompatibilityDiagnosticCodes.ArtifactMismatch);
-        }
-        else
-        {
-            var result = await api.ImportAsync(CreateExecution(workspace, CreateManifest(workspace)), this.TestContext.CancellationToken).ConfigureAwait(false);
-            _ = result.Succeeded.Should().BeFalse();
-            _ = result.Diagnostics.Should().ContainSingle(item => item.Code == NativeCompatibilityDiagnosticCodes.ArtifactMismatch);
-        }
 
+        var result = await api.ImportAsync(CreateExecution(workspace, CreateManifest(workspace)), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Succeeded.Should().BeFalse();
+        _ = result.Diagnostics.Should().ContainSingle(item => item.Code == NativeCompatibilityDiagnosticCodes.ArtifactMismatch);
         _ = runner.Request.Should().BeNull();
     }
 

@@ -4,6 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:pickers="using:Oxygen.Editor.Pickers"
     xmlns:seg="using:CommunityToolkit.WinUI.Controls"
     xmlns:ui="using:CommunityToolkit.WinUI">
     <UserControl.Resources>
@@ -62,48 +63,23 @@
                                 <ColumnDefinition Width="*" />
                                 <ColumnDefinition Width="Auto" />
                             </Grid.ColumnDefinitions>
-                            <Button
+                            <DropDownButton
                                 HorizontalAlignment="Stretch"
-                                Content="{x:Bind ViewModel.CubemapDisplayName, Mode=OneWay}"
+                                HorizontalContentAlignment="Left"
                                 IsEnabled="{x:Bind ViewModel.EditOwner.IsInputEnabled, Mode=OneWay}"
                                 Tag="Cubemap"
                                 ToolTipService.ToolTip="Choose the backdrop cubemap">
-                                <Button.Flyout>
+                                <TextBlock Text="{x:Bind ViewModel.CubemapDisplayName, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                <DropDownButton.Flyout>
                                     <Flyout x:Name="CubemapFlyout">
-                                        <StackPanel Width="320" Spacing="6">
-                                            <TextBox PlaceholderText="Search cube textures…" Text="{x:Bind ViewModel.Cubemaps.SearchText, Mode=TwoWay}" />
-                                            <TextBlock
-                                                FontSize="12"
-                                                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                Text="Import an image with the Cube shape to list it here."
-                                                TextWrapping="Wrap" />
-                                            <ItemsRepeater ItemsSource="{x:Bind ViewModel.Cubemaps.FilteredRows, Mode=OneWay}">
-                                                <ItemsRepeater.Layout>
-                                                    <StackLayout Spacing="2" />
-                                                </ItemsRepeater.Layout>
-                                                <ItemsRepeater.ItemTemplate>
-                                                    <DataTemplate>
-                                                        <Button
-                                                            HorizontalAlignment="Stretch"
-                                                            HorizontalContentAlignment="Left"
-                                                            Click="CubemapItem_Click"
-                                                            IsEnabled="{Binding Item.IsEnabled, Mode=OneWay}"
-                                                            ToolTipService.ToolTip="{Binding Item.DisplayPath, Mode=OneWay}">
-                                                            <StackPanel>
-                                                                <TextBlock Text="{Binding Item.Name, Mode=OneWay}" />
-                                                                <TextBlock
-                                                                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                                                                    Text="{Binding Item.DisplayPath, Mode=OneWay}"
-                                                                    TextTrimming="CharacterEllipsis" />
-                                                            </StackPanel>
-                                                        </Button>
-                                                    </DataTemplate>
-                                                </ItemsRepeater.ItemTemplate>
-                                            </ItemsRepeater>
-                                        </StackPanel>
+                                        <pickers:AssetPicker
+                                            Width="320"
+                                            ChoiceInvoked="OnCubemapChoiceInvoked"
+                                            EmptyText="Import an image with the Cube shape to list it here."
+                                            Model="{x:Bind ViewModel.Cubemaps.Choices}" />
                                     </Flyout>
-                                </Button.Flyout>
-                            </Button>
+                                </DropDownButton.Flyout>
+                            </DropDownButton>
                             <Button
                                 Grid.Column="1"
                                 Click="ClearCubemap_Click"

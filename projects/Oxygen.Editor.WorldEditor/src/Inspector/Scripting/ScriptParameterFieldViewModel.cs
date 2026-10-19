@@ -9,6 +9,7 @@ using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Scripting;
 using Oxygen.Managed.Core;
@@ -71,8 +72,8 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
     /// <summary>Gets a value indicating whether a color parameter has alpha: a <c>vec4</c> color.</summary>
     public bool HasAlpha => this.Dimension == 4;
 
-    /// <summary>Gets the assets an asset parameter accepts.</summary>
-    public ObservableCollection<ScriptAssetChoice> AssetChoices { get; } = [];
+    /// <summary>Gets the assets an asset parameter accepts, grouped as Engine, Packages and Content.</summary>
+    public AssetPickerModel AssetChoices { get; } = new(static asset => AssetChoice.For(asset, asset.TypeDisplayName, "\uE8A5"));
 
     /// <summary>Gets the nodes a node parameter offers for the current search.</summary>
     public ObservableCollection<ScriptNodeChoice> NodeChoices { get; } = [];
@@ -97,10 +98,6 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
     /// <summary>Gets or sets the chosen option of a string parameter with options.</summary>
     [ObservableProperty]
     public partial string? SelectedOption { get; set; }
-
-    /// <summary>Gets or sets the chosen asset.</summary>
-    [ObservableProperty]
-    public partial ScriptAssetChoice? SelectedAsset { get; set; }
 
     /// <summary>Gets or sets the first component of a vector, or the red channel of a linear color.</summary>
     [ObservableProperty]
@@ -167,6 +164,14 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
     /// <param name="choice">The node, or null for none.</param>
     public void SelectNode(ScriptNodeChoice? choice)
         => this.Commit(choice is null ? null : ScriptValue.FromNode(choice.Id));
+
+    /// <summary>Picks the referenced asset.</summary>
+    /// <param name="asset">The asset.</param>
+    public void SelectAsset(AssetPath asset)
+    {
+        ArgumentNullException.ThrowIfNull(asset);
+        this.Commit(ScriptValue.FromAsset(asset));
+    }
 
     /// <summary>Accepts nodes dragged from the Scene Explorer; the first one of this scene is referenced.</summary>
     /// <param name="nodes">The dragged node identities.</param>
@@ -327,14 +332,6 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
         }
     }
 
-    partial void OnSelectedAssetChanged(ScriptAssetChoice? value)
-    {
-        if (!this.updating && value is not null)
-        {
-            this.Commit(ScriptValue.FromAsset(value.Asset));
-        }
-    }
-
     partial void OnNodeQueryChanged(string value)
     {
         _ = value;
@@ -424,9 +421,9 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
                     break;
                 case ScriptFieldKind.Asset:
                     var asset = shown?.Asset;
-                    this.SelectedAsset = asset is null ? null : this.AssetChoices.FirstOrDefault(choice => choice.Asset == asset);
-                    this.IsReferenceMissing = asset is not null && this.SelectedAsset is null;
-                    this.ReferenceText = asset is null ? "None" : this.SelectedAsset?.Name ?? ("Missing: " + asset.VirtualPath);
+                    var picked = asset is null ? null : this.AssetChoices.Find(asset);
+                    this.IsReferenceMissing = asset is not null && picked is null;
+                    this.ReferenceText = asset is null ? "None" : picked?.Name ?? ("Missing: " + asset.VirtualPath);
                     break;
                 case ScriptFieldKind.Node:
                     var node = shown?.NodeId;
@@ -444,22 +441,7 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
         }
     }
 
-    private void RefreshAssetChoices()
-    {
-        this.updating = true;
-        try
-        {
-            this.AssetChoices.Clear();
-            foreach (var choice in this.card.Owner.FindAssets(this.Parameter.AssetType))
-            {
-                this.AssetChoices.Add(choice);
-            }
-        }
-        finally
-        {
-            this.updating = false;
-        }
-    }
+    private void RefreshAssetChoices() => this.AssetChoices.Update(this.card.Owner.FindAssets(this.Parameter.AssetType));
 
     private void SetError(string message) => this.ErrorText = message;
 }

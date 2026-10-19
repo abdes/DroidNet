@@ -6,6 +6,7 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Pickers;
 
 namespace Oxygen.Editor.World.Inspector.Environment;
 
@@ -16,28 +17,24 @@ public sealed partial class SceneReferencesSectionView
     /// <summary>Initializes a new instance of the <see cref="SceneReferencesSectionView"/> class.</summary>
     public SceneReferencesSectionView() => this.InitializeComponent();
 
-    private async void AddScript_Click(object sender, RoutedEventArgs args)
-    {
-        if (this.ViewModel is { } model)
-        {
-            await model.AssignAsync(AssetKind.Script);
-        }
-    }
+    private async void OnScriptChoiceInvoked(object? sender, AssetChoice choice)
+        => await this.AddReferenceAsync(AssetKind.Script, choice, this.AddScriptFlyout);
 
-    private async void AddInputAction_Click(object sender, RoutedEventArgs args)
-    {
-        if (this.ViewModel is { } model)
-        {
-            await model.AssignAsync(AssetKind.InputAction);
-        }
-    }
+    private async void OnInputActionChoiceInvoked(object? sender, AssetChoice choice)
+        => await this.AddReferenceAsync(AssetKind.InputAction, choice, this.AddInputActionFlyout);
 
-    private async void AddPhysicsSidecar_Click(object sender, RoutedEventArgs args)
+    private async void OnPhysicsSidecarChoiceInvoked(object? sender, AssetChoice choice)
+        => await this.AddReferenceAsync(AssetKind.PhysicsScene, choice, this.AddPhysicsSidecarFlyout);
+
+    private async Task AddReferenceAsync(AssetKind kind, AssetChoice choice, Flyout flyout)
     {
-        if (this.ViewModel is { } model)
+        if (choice.Asset is not { } asset || this.ViewModel is not { } model)
         {
-            await model.AssignAsync(AssetKind.PhysicsScene);
+            return;
         }
+
+        flyout.Hide();
+        await model.AssignAsync(kind, asset);
     }
 
     private async void AddExtraAsset_Click(object sender, RoutedEventArgs args)

@@ -23,35 +23,11 @@
 #include <EditorModule/ThreadSafeQueue.h>
 
 #include <Oxygen/Content/IAssetLoader.h>
-#include <Oxygen/Data/BuiltinGeometry.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/TextureResource.h>
 
 namespace oxygen::interop::module {
 namespace {
-
-  auto VirtualPath(std::string_view uri, bool material) -> std::string
-  {
-    if (uri.starts_with("asset:")) {
-      uri.remove_prefix(6);
-    }
-    while (!uri.empty() && uri.front() == '/') {
-      uri.remove_prefix(1);
-    }
-    auto path = "/" + std::string(uri);
-    if (material && path.ends_with(".omat.json")) {
-      path.resize(path.size() - 5);
-    }
-    return path;
-  }
-
-  auto GeometryIdentity(std::string_view uri) -> std::string
-  {
-    if (const auto builtin = data::ResolveBuiltinGeometryIdentity(uri)) {
-      return builtin->asset_uri;
-    }
-    return VirtualPath(uri, false);
-  }
 
   auto EnvironmentTextureLabel(const std::size_t slot) -> const char*
   {
@@ -66,20 +42,11 @@ namespace {
     return "Environment texture";
   }
 
-  //! Whether two sources name the same cooked texture. A project-mount source
-  //! takes its cooked root from the mount when it loads, so the mount, not the
-  //! root, identifies it.
+  //! Whether two sources name the same cooked texture.
   [[nodiscard]] auto IsSameTexture(const EnvironmentTextureSource& left,
     const EnvironmentTextureSource& right) -> bool
   {
-    if (!left.locator || !right.locator
-      || left.project_mount != right.project_mount
-      || left.locator->descriptor_relative_path
-        != right.locator->descriptor_relative_path) {
-      return false;
-    }
-    return left.project_mount.has_value()
-      || left.locator->cooked_root == right.locator->cooked_root;
+    return left.virtual_path && left.virtual_path == right.virtual_path;
   }
 
 } // namespace
@@ -113,7 +80,7 @@ struct SceneAssetRequests::State {
     [[nodiscard]] auto HasSources() const -> bool
     {
       return std::ranges::any_of(
-        sources, [](const auto& source) { return source.locator.has_value(); });
+        sources, [](const auto& source) { return source.virtual_path.has_value(); });
     }
     [[nodiscard]] auto IsPending() const -> bool
     {
@@ -160,7 +127,6 @@ struct SceneAssetRequests::State {
   Diagnostic diagnostic;
   AssetAvailability available;
   TextureLoader texture_loader;
-  std::shared_ptr<const std::vector<CookedRootBinding>> roots;
   EnvironmentRequest environment;
   std::shared_ptr<ThreadSafeQueue<EnvironmentCompletion>> environment_inbox
     = std::make_shared<ThreadSafeQueue<EnvironmentCompletion>>();
@@ -209,7 +175,7 @@ SceneAssetRequests::SceneAssetRequests(
   : SceneAssetRequests(
       [&loader, &resolver](
         const std::string& uri, GeometryCompletion complete) {
-        const auto key = resolver.ResolveAssetKey(VirtualPath(uri, false));
+        const auto key = resolver.ResolveAssetKey(uri);
         if (!key) {
           complete({}, "asset path could not be resolved");
         } else if (auto cached = loader.GetGeometryAsset(*key)) {
@@ -224,12 +190,7 @@ SceneAssetRequests::SceneAssetRequests(
       },
       [&loader, &resolver](
         const std::string& uri, MaterialCompletion complete) {
-        const auto path = VirtualPath(uri, true);
-        if (path == "/Engine/Generated/Materials/Default") {
-          complete(data::MaterialAsset::CreateDefault(), {});
-          return;
-        }
-        const auto key = resolver.ResolveAssetKey(path);
+        const auto key = resolver.ResolveAssetKey(uri);
         if (!key) {
           complete({}, "asset path could not be resolved");
         } else if (auto cached = loader.GetMaterialAsset(*key)) {
@@ -243,17 +204,13 @@ SceneAssetRequests::SceneAssetRequests(
         }
       },
       [](const std::string& message) { LOG_F(ERROR, "{}", message); },
-      [&resolver](const std::string& uri, bool material) {
-        const auto path = VirtualPath(uri, material);
-        return (material && path == "/Engine/Generated/Materials/Default")
-          || resolver.ResolveAssetKey(path).has_value();
+      [&resolver](const std::string& uri, bool /*material*/) {
+        return resolver.ResolveAssetKey(uri).has_value();
       },
-      [&loader](const content::TextureResourceLocator& locator,
-        TextureCompletion complete) {
-        const auto key = loader.ResolveTextureResourceKey(locator);
+      [&loader](const std::string& virtual_path, TextureCompletion complete) {
+        const auto key = loader.ResolveTextureResourceKey(virtual_path);
         if (!key) {
-          complete({}, {},
-            "texture descriptor is unavailable in its mounted cooked source");
+          complete({}, {}, "texture is not in the mounted content");
           return;
         }
         loader.StartLoadTexture(
@@ -285,7 +242,7 @@ auto SceneAssetRequests::BeginGeometry(scene::NodeHandle node,
   SuccessCallback on_success) -> GeometryCompletion
 {
   auto& target = state_->targets[node];
-  if (GeometryIdentity(target.geometry_uri) != GeometryIdentity(uri)) {
+  if (target.geometry_uri != uri) {
     target.slots.clear();
   }
   const auto generation = ++state_->generation;
@@ -341,8 +298,7 @@ void SceneAssetRequests::QueueMaterial(scene::NodeHandle node,
   const auto generation = ++state_->generation;
   auto& node_target = state_->targets[node];
   const auto slot_id = target.slot_id;
-  if (GeometryIdentity(node_target.geometry_uri)
-    != GeometryIdentity(target.geometry_uri)) {
+  if (node_target.geometry_uri != target.geometry_uri) {
     state_->Report(node, uri.value_or("geometry default"),
       "material slot target belongs to a different geometry", false, generation,
       on_failure, slot_id);
@@ -424,23 +380,7 @@ void SceneAssetRequests::State::LoadEnvironmentTexture(const std::size_t slot)
     }
   };
   try {
-    if (source.project_mount) {
-      const CookedRootBinding* binding = nullptr;
-      if (roots) {
-        const auto found = std::ranges::find_if(*roots,
-          [&](const auto& root) { return root.project_mount == source.project_mount; });
-        if (found != roots->end()) {
-          binding = std::addressof(*found);
-        }
-      }
-      if (!binding) {
-        throw std::runtime_error(fmt::format(
-          "The {}'s project content mount is unavailable.",
-          EnvironmentTextureLabel(slot)));
-      }
-      source.locator->cooked_root = binding->path;
-    }
-    texture_loader(*source.locator, complete);
+    texture_loader(*source.virtual_path, complete);
   } catch (const std::exception& error) {
     complete({}, {}, error.what());
   } catch (...) {
@@ -466,7 +406,7 @@ void SceneAssetRequests::State::SettleEnvironment(
   for (std::size_t slot = 0; slot < kEnvironmentTextureSlotCount; ++slot) {
     if (!request.status.at(slot).error.empty()) {
       errors.push_back(fmt::format("{} '{}': {}", EnvironmentTextureLabel(slot),
-        request.sources.at(slot).locator->descriptor_relative_path.generic_string(),
+        *request.sources.at(slot).virtual_path,
         request.status.at(slot).error));
     }
   }
@@ -524,7 +464,7 @@ void SceneAssetRequests::SetEnvironmentTextures(scene::Scene& scene,
     const auto& source = request.sources.at(slot);
     const auto reuse = status.accepted.get() != 0U
       && IsSameTexture(source, request.accepted_sources.at(slot));
-    status.pending = source.locator.has_value() && !reuse;
+    status.pending = source.virtual_path.has_value() && !reuse;
     status.error.clear();
     if (reuse) {
       request.loaded.at(slot) = status.accepted;
@@ -552,11 +492,6 @@ auto SceneAssetRequests::InspectEnvironmentTexture(
   return state_->environment.status.at(static_cast<std::size_t>(slot));
 }
 
-void SceneAssetRequests::SetCookedRoots(
-  std::shared_ptr<const std::vector<CookedRootBinding>> roots) noexcept
-{
-  state_->roots = std::move(roots);
-}
 
 void SceneAssetRequests::Refresh(scene::Scene& scene)
 {
@@ -578,7 +513,6 @@ void SceneAssetRequests::Refresh(scene::Scene& scene)
       continue;
     }
     if (!target.geometry_uri.empty()
-      && !data::IsBuiltinGeometryUri(target.geometry_uri)
       && state_->CanRefresh(target.geometry_uri, false)) {
       auto complete = BeginGeometry(handle, target.geometry_uri,
         target.geometry_failure, target.geometry_success);
@@ -731,8 +665,7 @@ auto SceneAssetRequests::Drain(scene::Scene& scene) -> bool
         continue;
       }
       slot.apply = false;
-      const bool same_target = GeometryIdentity(target.geometry_uri)
-          == GeometryIdentity(slot.target.geometry_uri)
+      const bool same_target = target.geometry_uri == slot.target.geometry_uri
         && slot.geometry_generation == target.geometry_generation;
       const bool revision_valid = slot.accepted_geometry
         ? *slot.accepted_geometry == geometry->GetAssetKey()

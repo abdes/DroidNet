@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
@@ -31,19 +32,19 @@ public sealed class AssetBrowserQueryTests
         _ = query.FilterLabel.Should().Be("Filter (4)");
     }
 
-    /// <summary>Engine-owned assets never appear as needing a standalone cook.</summary>
+    /// <summary>A packaged engine asset is found by the Engine status and never by a cook status.</summary>
     [TestMethod]
-    public void BuiltinOwnershipOverridesSyntheticCookFreshness()
+    public void EnginePackagedAssetsMatchOnlyTheEngineStatus()
     {
-        var asset = CreateAsset("Default", AssetKind.Material, AssetCookFreshness.NeedsCooking) with { PrimaryState = AssetState.Generated };
+        var asset = CreateAsset("Default", AssetKind.Material, AssetCookFreshness.NeedsCooking) with { Identity = EngineAssets.DefaultMaterial, PrimaryState = AssetState.Packaged, CookStatus = null };
         var query = new AssetBrowserQuery();
         Select(query.StatusOptions, "Needs cooking");
         _ = query.Matches(asset).Should().BeFalse();
         query.ClearFiltersCommand.Execute(parameter: null);
-        Select(query.StatusOptions, "Built-in");
+        Select(query.StatusOptions, "Engine");
         _ = query.Matches(asset).Should().BeTrue();
+        _ = query.Matches(CreateAsset("Blue", AssetKind.Material, AssetCookFreshness.Current)).Should().BeFalse();
     }
-
     /// <summary>Problems include invalid source, damaged output and native failure, independently of an older usable cook.</summary>
     [TestMethod]
     public void ProblemsAndProgressFollowCurrentSharedFacts()
@@ -91,16 +92,6 @@ public sealed class AssetBrowserQueryTests
         Select(query.StatusOptions, "Not imported");
         _ = query.Matches(model).Should().BeTrue();
         _ = query.Matches(model with { ImportSource = model.Identity }).Should().BeFalse();
-    }
-
-    /// <summary>Searching a grouped built-in also matches the path of its cooked copy.</summary>
-    [TestMethod]
-    public void SearchMatchesTheCookedCopyOfAGroupedBuiltin()
-    {
-        var origin = CreateAsset("Default", AssetKind.Material, AssetCookFreshness.Current) with { PrimaryState = AssetState.Generated, CookStatus = null };
-        var copy = origin with { Identity = AssetPath.Parse("/Content/Materials/OxygenEditor_Default.omat"), DisplayPath = "/Content/Materials/OxygenEditor_Default.omat", BuiltinOrigin = origin.Identity };
-        var grouped = origin with { CookedCompanions = [copy] };
-        _ = new AssetBrowserQuery { SearchText = "OxygenEditor_Default" }.Matches(grouped).Should().BeTrue();
     }
 
     private static void Select(IReadOnlyList<AssetFilterOption> options, string label)

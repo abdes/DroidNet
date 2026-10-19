@@ -29,7 +29,7 @@ public sealed class NestedDescriptorCookTests
     [TestCategory("NativeContent")]
     public async Task NestedDescriptorsPreservePathsAndDistinctMaterialIdentities()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         const string first = "Content/Materials/A/Shared.omat.json";
         const string second = "Content/Materials/B/Shared.omat.json";
         const string geometry = "Content/Meshes/Props/AuthoredCube.ogeo.json";
@@ -44,7 +44,7 @@ public sealed class NestedDescriptorCookTests
         File.Delete(original);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var geometryUri = AssetPath.Parse("/" + geometry[..^5]);
         _ = (await service.CookAssetAsync(geometryUri, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var inventory = await service.ReadAsync(workspace.ProjectContext, geometryUri, this.TestContext.CancellationToken).ConfigureAwait(false);

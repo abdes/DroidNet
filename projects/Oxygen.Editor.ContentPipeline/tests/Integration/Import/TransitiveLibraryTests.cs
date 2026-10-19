@@ -34,8 +34,8 @@ public sealed class TransitiveLibraryTests
     [TestCategory("NativeContent")]
     public async Task CookedGeometryDiscoversProjectMaterialOverride(bool projectWins, bool materialLibraryMounted, bool prewarm)
     {
-        using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
-        using var consumer = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
+        using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var consumer = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         const string material = "Art/Materials/Shared.omat.json";
         library.WriteMaterial(material, "Shared");
         consumer.WriteMaterial(material, "Project shared");
@@ -47,7 +47,7 @@ public sealed class TransitiveLibraryTests
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var producer = CreateService(library, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var producer = CreateService(library, new SceneDescriptorGenerator(), api, compatibility);
         _ = (await producer.CookAssetAsync(geometry, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var context = consumer.ProjectContext with
         {
@@ -59,7 +59,7 @@ public sealed class TransitiveLibraryTests
         consumer.Activate(context);
         AddGeometryNode(consumer, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
         var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
         if (prewarm)
         {
@@ -98,8 +98,8 @@ public sealed class TransitiveLibraryTests
     [TestCategory("NativeContent")]
     public async Task CookedGeometryTracksItsSeparateMaterialLibrary()
     {
-        using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
-        using var consumer = new CookWorkspace();
+        using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         const string material = "Art/Materials/Shared.omat.json";
         library.WriteMaterial(material, "Shared");
         WriteAuthoredGeometry(library, withBuffer: false);
@@ -110,7 +110,7 @@ public sealed class TransitiveLibraryTests
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var producer = CreateService(library, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var producer = CreateService(library, new SceneDescriptorGenerator(), api, compatibility);
         var exported = await producer.CookAssetAsync(geometry, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = exported.IsPublished.Should().BeTrue();
         var context = consumer.ProjectContext with
@@ -120,7 +120,7 @@ public sealed class TransitiveLibraryTests
         consumer.Activate(context);
         AddGeometryNode(consumer, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
         var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var cooked = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, cooked.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));

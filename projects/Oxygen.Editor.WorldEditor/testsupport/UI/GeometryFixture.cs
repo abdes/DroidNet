@@ -7,6 +7,7 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
@@ -20,7 +21,7 @@ internal sealed class GeometryFixture : IDisposable
         this.Geometry = new()
         {
             Name = "Geometry",
-            Geometry = AssetPath.Generated.Combine("BasicShapes/Cube"),
+            Geometry = EngineAssets.BasicShape("Cube"),
         };
         _ = this.Authoring.Node.AddComponent(this.Geometry);
         var geometry = CreateStatusAsset(0) with

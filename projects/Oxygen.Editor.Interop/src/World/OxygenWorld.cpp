@@ -61,6 +61,7 @@
 #include <World/FogEnvironmentConversion.h>
 #include <World/OxygenWorld.h>
 #include <World/SkyEnvironmentConversion.h>
+#include <Utils/Utf8Marshaling.h>
 
 using namespace System::Threading::Tasks;
 
@@ -756,8 +757,7 @@ namespace Oxygen::Interop::World {
     float autoExposureSpotMeterRadius, float autoExposureBlackInfluence,
     float autoExposureTransitionDistanceEv,
     cli::array<ExposureCompensationKeyManaged> ^ autoExposureCompensationCurve,
-    String ^ exposureMaskCookedRoot, String ^ exposureMaskDescriptorPath,
-    String ^ exposureMaskProjectMount, float bloomIntensity,
+    String ^ exposureMaskPath, float bloomIntensity,
     float bloomThreshold, float saturation, float contrast,
     float vignetteIntensity, float displayGamma, FogEnvironmentManaged fog,
     SkySphereEnvironmentManaged skySphere, SkyLightEnvironmentManaged skyLight,
@@ -830,20 +830,11 @@ namespace Oxygen::Interop::World {
         .metered_ev = key.MeteredEv, .compensation_ev = key.CompensationEv,
       });
     }
-    if (exposureMaskCookedRoot != nullptr || exposureMaskDescriptorPath != nullptr) {
-      if (String::IsNullOrWhiteSpace(exposureMaskCookedRoot)
-        || String::IsNullOrWhiteSpace(exposureMaskDescriptorPath)) {
-        throw gcnew ArgumentException("An exposure mask requires both a cooked source and a relative descriptor path.");
+    if (exposureMaskPath != nullptr) {
+      if (String::IsNullOrWhiteSpace(exposureMaskPath)) {
+        throw gcnew ArgumentException("An exposure mask requires a texture virtual path.", "exposureMaskPath");
       }
-      post_process.auto_exposure_metering_mask = oxygen::content::TextureResourceLocator {
-        .cooked_root = std::filesystem::path(msclr::interop::marshal_as<std::wstring>(exposureMaskCookedRoot)),
-        .descriptor_relative_path = std::filesystem::path(msclr::interop::marshal_as<std::wstring>(exposureMaskDescriptorPath)),
-      };
-      if (exposureMaskProjectMount != nullptr) {
-        post_process.auto_exposure_metering_mask_mount
-          = msclr::interop::marshal_as<std::wstring>(
-            exposureMaskProjectMount->ToUpperInvariant());
-      }
+      post_process.auto_exposure_metering_mask = oxygen::interop::ToUtf8(exposureMaskPath);
     }
     post_process.bloom_intensity = bloomIntensity;
     post_process.bloom_threshold = bloomThreshold;
@@ -1201,10 +1192,10 @@ namespace Oxygen::Interop::World {
 
   Task
     ^ OxygenWorld::ReplaceCookedRootsAsync(
-      array<CookedRootBindingManaged> ^ bindings)
+      array<CookedRootManaged> ^ roots)
   {
-    if (bindings == nullptr) {
-      throw gcnew System::ArgumentNullException("bindings");
+    if (roots == nullptr) {
+      throw gcnew System::ArgumentNullException("roots");
     }
     auto native_ctx = context_->NativePtr();
     if (!native_ctx || !native_ctx->engine) {
@@ -1214,24 +1205,22 @@ namespace Oxygen::Interop::World {
     if (!editor_module) {
       throw gcnew System::InvalidOperationException("The editor module is unavailable.");
     }
-    std::vector<oxygen::interop::module::CookedRootBinding> roots;
-    roots.reserve(static_cast<std::size_t>(bindings->Length));
-    for each (CookedRootBindingManaged binding in bindings) {
-      if (String::IsNullOrWhiteSpace(binding.Path)) {
+    std::vector<oxygen::content::ContentMount> native_roots;
+    native_roots.reserve(static_cast<std::size_t>(roots->Length));
+    for each (CookedRootManaged root in roots) {
+      if (String::IsNullOrWhiteSpace(root.Path)) {
         throw gcnew System::ArgumentException(
-          "A cooked root needs an absolute path.", "bindings");
+          "A cooked root needs an absolute path.", "roots");
       }
-      roots.push_back({
-        .path = std::filesystem::path(
-          msclr::interop::marshal_as<std::wstring>(binding.Path)),
-        .project_mount = binding.ProjectMount == nullptr
-          ? std::nullopt
-          : std::optional(msclr::interop::marshal_as<std::wstring>(
-              binding.ProjectMount->ToUpperInvariant())),
+      native_roots.push_back({
+        .kind = root.Kind == CookedRootKindManaged::PakFile
+          ? oxygen::content::ContentMount::Kind::kPakFile
+          : oxygen::content::ContentMount::Kind::kLooseCookedRoot,
+        .path = msclr::interop::marshal_as<std::wstring>(root.Path),
       });
     }
     auto completion = gcnew TaskCompletionSource<bool>(TaskCreationOptions::RunContinuationsAsynchronously);
-    editor_module->get().ReplaceCookedRoots(std::move(roots),
+    editor_module->get().ReplaceCookedRoots(std::move(native_roots),
       MakeCookedRootsCallback(completion));
     return completion->Task;
   }

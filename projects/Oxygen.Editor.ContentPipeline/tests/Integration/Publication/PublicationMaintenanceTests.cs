@@ -128,5 +128,5 @@ public sealed class PublicationMaintenanceTests
 
     private static CookPublicationService MaintenanceService(IAtomicFileStore files)
         => new(Mock.Of<IContentCookCoordinator>(), Mock.Of<IProjectContextService>(), files,
-            new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: files));
+            new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: files), new EngineContentPakFixture());
 }

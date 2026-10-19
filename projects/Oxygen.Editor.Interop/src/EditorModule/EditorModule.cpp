@@ -102,6 +102,31 @@ namespace oxygen::interop::module {
       surfaces.clear();
     }
 
+    //! Resolver over the same sources the loader mounts: the engine content
+    //! pak beneath the cooked roots and pak files, so later mounts override it.
+    auto MakePathResolver(const PathFinder& paths, const CookedRootSet& roots)
+      -> std::unique_ptr<content::VirtualPathResolver>
+    {
+      auto resolver = std::make_unique<content::VirtualPathResolver>();
+      if (const auto pak = paths.EngineContentPakPath();
+        std::filesystem::is_regular_file(pak)) {
+        resolver->AddPakFile(pak);
+      }
+      if (roots) {
+        for (const auto& mount : *roots) {
+          switch (mount.kind) {
+          case content::ContentMount::Kind::kPakFile:
+            resolver->AddPakFile(mount.path);
+            break;
+          case content::ContentMount::Kind::kLooseCookedRoot:
+            resolver->AddLooseCookedRoot(mount.path);
+            break;
+          }
+        }
+      }
+      return resolver;
+    }
+
     //! Whether the scene's height fog renders in the main pass, the rule the
     //! runtime shell applies.
     auto IsHeightFogRequested(const scene::Scene* scene) -> bool {
@@ -377,7 +402,7 @@ namespace oxygen::interop::module {
 
     if (!path_resolver_) {
       LOG_F(INFO, "Initializing VirtualPathResolver on engine thread");
-      path_resolver_ = std::make_unique<oxygen::content::VirtualPathResolver>();
+      path_resolver_ = MakePathResolver(engine_->GetPathFinder(), {});
       roots_dirty_ = true;
     }
 
@@ -1470,7 +1495,6 @@ namespace oxygen::interop::module {
 
     asset_requests_ = std::make_unique<SceneAssetRequests>(
       *asset_loader_, *path_resolver_);
-    asset_requests_->SetCookedRoots(active_roots_);
 
     auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
     (void)environment
@@ -1743,23 +1767,12 @@ namespace oxygen::interop::module {
       if (!platform || !platform->HasThreads()) {
         throw std::logic_error("Content mount preparation requires platform workers");
       }
-      auto next_resolver = co_await platform->Threads().Run([paths = roots] {
-        auto next = std::make_unique<content::VirtualPathResolver>();
-        if (paths) {
-          for (const auto& binding : *paths) {
-            next->AddLooseCookedRoot(binding.path);
-          }
-        }
-        return next;
-      });
-      std::vector<std::filesystem::path> paths;
-      if (roots) {
-        paths.reserve(roots->size());
-        for (const auto& root : *roots) {
-          paths.push_back(root.path);
-        }
-      }
-      auto prepared = co_await asset_loader_->PrepareLooseCookedRootsAsync(std::move(paths));
+      auto next_resolver = co_await platform->Threads().Run(
+        [finder = engine_->GetPathFinder(), roots] {
+          return MakePathResolver(finder, roots);
+        });
+      auto prepared = co_await asset_loader_->PrepareMountsAsync(
+        roots ? *roots : std::vector<content::ContentMount> {});
       co_await asset_loader_->WaitForPendingLoadsAsync();
       std::lock_guard lock(roots_mutex_);
       if (revision != roots_revision_) {
@@ -1767,10 +1780,6 @@ namespace oxygen::interop::module {
       }
       retirement.emplace(asset_loader_->CommitPreparedMounts(std::move(prepared)));
       path_resolver_->Swap(*next_resolver);
-      active_roots_ = roots;
-      if (asset_requests_) {
-        asset_requests_->SetCookedRoots(active_roots_);
-      }
       superseded = std::move(active_roots_completion_);
       active_roots_completion_ = std::move(complete);
     } catch (const co::TaskCancelledException&) {
@@ -1789,10 +1798,10 @@ namespace oxygen::interop::module {
     co_return true;
   }
 
-  void EditorModule::ReplaceCookedRoots(std::vector<CookedRootBinding> roots,
+  void EditorModule::ReplaceCookedRoots(std::vector<content::ContentMount> roots,
     std::function<void(bool, std::string)> complete)
   {
-    auto bindings = std::make_shared<const std::vector<CookedRootBinding>>(
+    auto bindings = std::make_shared<const std::vector<content::ContentMount>>(
       std::move(roots));
     std::function<void(bool, std::string)> superseded;
     {

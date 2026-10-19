@@ -8,6 +8,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -41,17 +42,17 @@ public sealed partial class ScenePreviewTests
         _ = result.Diagnostics.Should().ContainSingle().Which.Domain.Should().Be(FailureDomain.LiveSync);
     }
 
-    /// <summary>Mask requests keep their source mount and report failures against the scene.</summary>
+    /// <summary>Mask requests name the texture by its identity and report failures against the scene.</summary>
     /// <param name="mount">The authored source mount.</param>
     /// <returns>The synchronization check.</returns>
     [TestMethod]
     [DataRow("Content")]
     [DataRow("Lighting")]
-    public async Task ExposureMaskUsesItsMountAndPublishesSceneScopedFailure(string mount)
+    public async Task ExposureMaskUsesItsIdentityAndPublishesSceneScopedFailure(string mount)
     {
         using var fixture = new PreviewFixture();
         var generation = Path.Combine(@"C:\LivePreviewTests", ".cooked", "generations", Guid.NewGuid().ToString("N"));
-        fixture.Engine.ContentStatus = new RuntimeContentSnapshot(Guid.NewGuid(), 1, RuntimeContentState.Mounted, [new(generation, mount)]);
+        fixture.Engine.ContentStatus = new RuntimeContentSnapshot(Guid.NewGuid(), 1, RuntimeContentState.Mounted, [new(generation, RuntimeCookedRootKind.LooseFolder)]);
         var current = true;
         fixture.World.IsCurrentFailure = _ => current;
         var built = fixture.Documents.NewScene("Masked scene");
@@ -64,7 +65,7 @@ public sealed partial class ScenePreviewTests
 
         var request = fixture.Requests.Should().ContainSingle(value => value.Command is RuntimeSetEnvironment).Subject;
         var environment = (RuntimeSetEnvironment)request.Command;
-        _ = environment.AutoExposureMeteringMask.Should().Be(new RuntimeTextureReference(mask, generation, "Textures/Meter.otex") { ProjectMount = mount });
+        _ = environment.AutoExposureMeteringMask.Should().Be(mask);
         var failure = new RuntimeAssetLoadFailedEventArgs(request, 71, "Texture could not be loaded");
         fixture.World.RaiseAssetLoadFailed(failure);
         current = false;
@@ -83,7 +84,7 @@ public sealed partial class ScenePreviewTests
     {
         var node = new SceneNode(scene) { Name = "Cube with a missing material" };
         scene.RootNodes.Add(node);
-        var target = new MaterialSlotTarget(AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+        var target = new MaterialSlotTarget(EngineAssets.BasicShape("Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
         geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = AssetPath.Parse("/Content/Materials/Missing.omat") });
         node.Components.Add(geometry);

@@ -25,13 +25,7 @@ public sealed partial class SkyLightSectionViewModel : ObservableObject, IDispos
     {
         this.EditOwner = owner;
         this.Cubemaps = new(cubeTextures, observerScheduler);
-        this.Cubemaps.PropertyChanged += (_, args) =>
-        {
-            if (string.Equals(args.PropertyName, nameof(CubemapPickerModel.FilteredRows), StringComparison.Ordinal))
-            {
-                this.OnPropertyChanged(nameof(this.CubemapDisplayName));
-            }
-        };
+        this.Cubemaps.ChoicesUpdated += (_, _) => this.OnPropertyChanged(nameof(this.CubemapDisplayName));
     }
 
     [ObservableProperty]

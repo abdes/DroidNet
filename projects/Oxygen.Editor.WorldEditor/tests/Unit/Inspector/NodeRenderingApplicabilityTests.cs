@@ -7,6 +7,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
@@ -47,7 +48,7 @@ public sealed class NodeRenderingApplicabilityTests
     public void Section_ShowsShadowFlagsOnlyWhenEverySelectedNodeHasGeometry()
     {
         using var fixture = new SceneAuthoringFixture();
-        var cube = CreateNode(fixture, "Cube", new GeometryComponent { Name = "Geometry", Geometry = AssetPath.Generated.Combine("BasicShapes/Cube") });
+        var cube = CreateNode(fixture, "Cube", new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") });
         var light = CreateNode(fixture, "Lamp", new PointLightComponent { Name = "Point Light", Range = 10f });
         var camera = CreateNode(fixture, "Camera", new PerspectiveCamera { Name = "Camera" });
         using var model = new NodeRenderingViewModel();

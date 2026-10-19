@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Text.Json.Nodes;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
@@ -20,16 +19,15 @@ internal static class DependencyScenario
 
     internal static void WriteAuthoredGeometry(CookWorkspace workspace, bool withBuffer)
     {
-        var catalog = JsonNode.Parse(File.ReadAllText(Path.Combine(AppContext.BaseDirectory, "Fixtures", "BuiltinGeometryCatalog.json")))!;
-        var descriptor = catalog["geometries"]![0]!["descriptor"]!;
-        descriptor["name"] = "AuthoredCube";
-        descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/Content/Materials/Red.omat";
+        // A procedural cube authored in the project, with one material slot.
+        var buffers = withBuffer ? ""","buffers":[{"uri":"mesh.bin","virtual_path":"/Content/Buffers/Mesh.obuf"}]""" : string.Empty;
         if (withBuffer)
         {
-            descriptor["buffers"] = JsonNode.Parse("""[{"uri":"mesh.bin","virtual_path":"/Content/Buffers/Mesh.obuf"}]""");
             workspace.WriteText("Content/Geometry/mesh.bin", "saved buffer bytes");
         }
 
-        workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json", descriptor.ToJsonString());
+        workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json", """
+            {"$schema":"oxygen.geometry-descriptor.v1","name":"AuthoredCube","bounds":{"min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},"lods":[{"name":"LOD0","mesh_type":"procedural","bounds":{"min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},"procedural":{"generator":"Cube","mesh_name":"Cube","params":{}},"submeshes":[{"name":"Main","material_ref":"/Content/Materials/Red.omat","slot_id":"146b1397-c3e0-bc20-fce3-c55e470b4086","views":[{"view_ref":"__all__"}]}]}]
+            """ + buffers + "}");
     }
 }

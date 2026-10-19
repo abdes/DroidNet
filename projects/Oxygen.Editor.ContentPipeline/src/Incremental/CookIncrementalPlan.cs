@@ -47,12 +47,4 @@ internal sealed record CookIncrementalPlan(
 
     /// <summary>Gets a value indicating whether every requested product can be reused and no output is removed.</summary>
     public bool IsUpToDate => this.Fingerprints.Keys.All(this.Reusable.ContainsKey) && this.Removals.IsEmpty;
-
-    /// <summary>Gets the required generated identities, including the native default material.</summary>
-    /// <param name="graph">The captured dependency graph.</param>
-    /// <returns>The engine recipe closure.</returns>
-    public static ImmutableArray<AssetPath> Builtins(CookDependencyGraph graph)
-        => graph.Builtins.Any(ProceduralGeometryDescriptorService.IsGeneratedBasicShape)
-            ? [.. graph.Builtins.Append(ProceduralGeometryDescriptorService.DefaultMaterial).Distinct()]
-            : graph.Builtins;
 }

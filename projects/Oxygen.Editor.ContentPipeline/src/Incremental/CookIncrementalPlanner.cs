@@ -45,10 +45,6 @@ internal static class CookIncrementalPlanner
         IReadOnlySet<string>? rebuiltRoots = null, IReadOnlySet<AssetPath>? removedSources = null)
     {
         var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, producer, inputs, graph));
-        foreach (var builtin in CookIncrementalPlan.Builtins(graph))
-        {
-            fingerprints = fingerprints.SetItem(builtin, GeneratedFingerprint(builtin, producer));
-        }
 
         var sharedRoots = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
         var validOutputs = new HashSet<(string root, string path)>();
@@ -103,12 +99,6 @@ internal static class CookIncrementalPlanner
             RemovedSources = removedSources?.ToImmutableHashSet() ?? [],
         };
     }
-
-    /// <summary>Builds an engine-generated product identity from its recipe owner and producer.</summary>
-    /// <param name="source">The stable engine identity.</param>
-    /// <param name="producer">The engine/tool/generator content identity.</param>
-    /// <returns>The deterministic fingerprint.</returns>
-    public static string GeneratedFingerprint(AssetPath source, string producer) => Hash(new { Version = 1, Source = source.ToUriString(), Producer = producer });
 
     internal static string Fingerprint(ContentCookInput input, string producer, IReadOnlyList<CookSnapshotInput> inputs, CookDependencyGraph graph)
     {

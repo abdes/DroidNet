@@ -8,6 +8,7 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Managed.Core;
 
@@ -25,6 +26,7 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
 {
     private readonly IObservable<IReadOnlyList<CubeTextureAsset>>? cubeTextures;
     private readonly IScheduler observerScheduler;
+    private IReadOnlyDictionary<AssetPath, bool> storesRadiance = new Dictionary<AssetPath, bool>();
     private IDisposable? assetSubscription;
     private bool disposed;
 
@@ -35,28 +37,21 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     {
         this.cubeTextures = cubeTextures;
         this.observerScheduler = observerScheduler;
+        this.Choices = new(this.Describe);
     }
 
-    /// <summary>Gets or sets the search text that filters the listed cubemaps.</summary>
-    [ObservableProperty]
-    public partial string SearchText { get; set; } = string.Empty;
+    /// <summary>Raised after the offered cube textures change, so that a referenced texture's name can change.</summary>
+    public event EventHandler? ChoicesUpdated;
 
-    /// <summary>Gets the listed cube textures in display order.</summary>
-    public ObservableCollection<AssetPickerRow> Rows { get; } = [];
-
-    /// <summary>Gets the cube textures matching the search text.</summary>
-    public IReadOnlyList<AssetPickerRow> FilteredRows => string.IsNullOrWhiteSpace(this.SearchText)
-        ? this.Rows.ToArray()
-        : this.Rows.Where(row => row.Item.Name.Contains(this.SearchText, StringComparison.OrdinalIgnoreCase)
-            || row.Item.DisplayPath.Contains(this.SearchText, StringComparison.OrdinalIgnoreCase)).ToArray();
+    /// <summary>Gets the cube textures the picker offers, grouped as Engine, Packages and Content.</summary>
+    public AssetPickerModel Choices { get; }
 
     /// <summary>Gets the display name of a cubemap reference.</summary>
     /// <param name="cubemap">The referenced cube texture, or null for none.</param>
     /// <returns>The texture's name, its file name when unlisted, or "None".</returns>
     public string DisplayName(AssetPath? cubemap)
         => cubemap is null ? "None"
-            : this.Rows.FirstOrDefault(row => row.Item.Asset == cubemap)?.Item.Name
-                ?? Path.GetFileNameWithoutExtension(cubemap.Name);
+            : this.Choices.Find(cubemap)?.Name ?? Path.GetFileNameWithoutExtension(cubemap.Name);
 
     /// <inheritdoc />
     public void Dispose()
@@ -99,8 +94,6 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
         this.assetSubscription = this.cubeTextures.ObserveOn(this.observerScheduler).Subscribe(this.UpdateRows);
     }
 
-    partial void OnSearchTextChanged(string value) => this.OnPropertyChanged(nameof(this.FilteredRows));
-
     private void UpdateRows(IReadOnlyList<CubeTextureAsset> cubemaps)
     {
         if (this.disposed)
@@ -108,33 +101,12 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
             return;
         }
 
-        var wanted = cubemaps.Select(static entry => entry.Asset.Identity).ToHashSet();
-        foreach (var removed in this.Rows.Where(row => !wanted.Contains(row.Item.Asset)).ToArray())
-        {
-            _ = this.Rows.Remove(removed);
-        }
-
-        for (var index = 0; index < cubemaps.Count; index++)
-        {
-            var (asset, storesRadiance) = cubemaps[index];
-            // Lighting accepts only float radiance; an LDR cube can still be shown.
-            var kind = storesRadiance ? "Cube texture · " : "LDR cube texture, display only · ";
-            var item = new AssetPickerItem(asset.DisplayName, asset.Identity, kind + asset.PrimaryBadge, asset.DisplayPath, AssetPickerGroup.Content, asset.IsSelectable, "");
-            var row = this.Rows.FirstOrDefault(candidate => candidate.Item.Asset == asset.Identity);
-            if (row is null)
-            {
-                this.Rows.Insert(Math.Min(index, this.Rows.Count), new(item));
-                continue;
-            }
-
-            row.Update(item);
-            var currentIndex = this.Rows.IndexOf(row);
-            if (currentIndex != index)
-            {
-                this.Rows.Move(currentIndex, Math.Min(index, this.Rows.Count - 1));
-            }
-        }
-
-        this.OnPropertyChanged(nameof(this.FilteredRows));
+        this.storesRadiance = cubemaps.ToDictionary(static entry => entry.Asset.Identity, static entry => entry.StoresRadiance);
+        this.Choices.Update([.. cubemaps.Select(static entry => entry.Asset)]);
+        this.ChoicesUpdated?.Invoke(this, EventArgs.Empty);
     }
+
+    // Lighting accepts only float radiance; an LDR cube can still be shown.
+    private AssetChoice Describe(AssetEntry asset)
+        => AssetChoice.For(asset, this.storesRadiance.GetValueOrDefault(asset.Identity) ? "Cube texture" : "LDR cube texture, display only", "\uE7C3");
 }

@@ -9,6 +9,7 @@ using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
@@ -201,6 +202,40 @@ public partial class ProjectLayoutViewModel
             this.LogMountRestoreFailure(exception, name);
         }
     }
+
+    // The engine content is listed first, its folders relative to /Engine; a declared pak's folders are its assets'
+    // whole virtual paths, under the pak's mount name. A pak that cannot be read is reported and left out.
+    private async Task MountPaksAsync(ProjectRootTreeItemAdapter root, IProjectInfo projectInfo)
+    {
+        try
+        {
+            var engine = await engineContent.ReadAsync(CancellationToken.None).ConfigureAwait(true);
+            var below = AssetPath.Engine.VirtualPath + "/";
+            _ = root.MountPak(new(AssetPath.Engine.Mount, engineContent.Path, engine.Assets
+                .Where(asset => asset.VirtualPath.StartsWith(below, StringComparison.Ordinal))
+                .Select(asset => asset.VirtualPath[below.Length..])));
+        }
+        catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
+        {
+            this.LogPakMountFailure(failure, AssetPath.Engine.Mount, engineContent.Path);
+        }
+
+        foreach (var mount in projectInfo.PakFileMounts)
+        {
+            try
+            {
+                var pak = await PakIndex.ReadFileAsync(mount.Path, CancellationToken.None).ConfigureAwait(true);
+                _ = root.MountPak(new(mount.Name, mount.Path, pak.Assets.Select(static asset => asset.VirtualPath.TrimStart('/'))) { IsExpanded = mount.IsExpanded });
+            }
+            catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException)
+            {
+                this.LogPakMountFailure(failure, mount.Name, mount.Path);
+            }
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Pak mount '{Name}' ('{Path}') could not be read; the Content Browser does not show it.")]
+    private partial void LogPakMountFailure(Exception exception, string name, FileSystemPath path);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Failed to restore folder mount {Name}.")]
     private partial void LogMountRestoreFailure(Exception exception, string name);

@@ -12,13 +12,18 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal static class CatalogWorkload
 {
-    internal static async Task SeedCatalogWorkloadAsync(NativeSceneFixture fixture, ProjectContext project, ContentPipelineService pipeline, BuiltinGeometryCatalog builtins, CancellationToken cancellationToken)
+    private static readonly string[] EngineShapeNames = ["Cube", "SubdividedCube", "Sphere", "IcoSphere", "Capsule", "Plane", "Cylinder", "Cone", "Torus", "Quad"];
+
+    internal static AssetPath[] EngineGeometries { get; } = [.. EngineShapeNames.Select(EngineAssets.BasicShape)];
+
+    internal static async Task SeedCatalogWorkloadAsync(NativeSceneFixture fixture, ProjectContext project, ContentPipelineService pipeline, CancellationToken cancellationToken)
     {
         var request = new SceneImportRequest(project, Path.Combine(AppContext.BaseDirectory, "Fixtures/static_scalar_triangle.gltf"), "Triangle", AssetPath.Parse("/Content/Models"));
         var imported = await pipeline.ImportSourceAsync(request, cancellationToken).ConfigureAwait(true);
@@ -49,19 +54,25 @@ internal static class CatalogWorkload
         }
 
         var scene = fixture.Source;
-        var inventories = builtins.AuthoringGeometries.ToDictionary(static definition => definition.AssetUri, static definition => definition.MaterialSlots);
+        var inventories = new Dictionary<AssetPath, GeometryMaterialSlotMetadata>();
+        foreach (var shape in EngineGeometries)
+        {
+            var shapeSlots = await ((IGeometryMaterialSlotProvider)pipeline).ReadAsync(project, shape, cancellationToken).ConfigureAwait(true);
+            _ = shapeSlots.Should().NotBeNull();
+            inventories.Add(shape, shapeSlots!);
+        }
+
         var importedSlots = await ((IGeometryMaterialSlotProvider)pipeline).ReadAsync(project, mesh, cancellationToken).ConfigureAwait(true);
         _ = importedSlots.Should().NotBeNull();
         inventories.Add(mesh, importedSlots!);
-        SeedCatalogWorkloadScene(scene, builtins, mesh, inventories);
+        SeedCatalogWorkloadScene(scene, mesh, inventories);
         await fixture.SaveSceneChangedInMemoryAsync(cancellationToken).ConfigureAwait(true);
         var cooked = await pipeline.CookProjectAsync(cancellationToken).ConfigureAwait(true);
         _ = cooked.IsPublished.Should().BeTrue(DescribeWorkloadCook(cooked));
     }
 
-    internal static void SeedCatalogWorkloadScene(Scene scene, BuiltinGeometryCatalog builtins, AssetPath mesh, IReadOnlyDictionary<AssetPath, GeometryMaterialSlotMetadata> inventories)
+    internal static void SeedCatalogWorkloadScene(Scene scene, AssetPath mesh, IReadOnlyDictionary<AssetPath, GeometryMaterialSlotMetadata> inventories)
     {
-        var authoringGeometries = builtins.AuthoringGeometries.ToArray();
         for (var index = 0; index < 98; index++)
         {
             var node = new SceneNode(scene)
@@ -71,7 +82,7 @@ internal static class CatalogWorkload
                 CastsShadows = true,
                 ReceivesShadows = true,
             };
-            var geometryUri = index >= 90 ? mesh : authoringGeometries[index % authoringGeometries.Length].AssetUri;
+            var geometryUri = index >= 90 ? mesh : EngineGeometries[index % EngineGeometries.Length];
             var geometry = new GeometryComponent
             {
                 Name = "Geometry",

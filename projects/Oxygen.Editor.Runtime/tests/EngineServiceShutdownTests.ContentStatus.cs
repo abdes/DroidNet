@@ -33,11 +33,11 @@ public sealed partial class EngineServiceShutdownTests
         };
         var transport = Mock.Get(native.Commands);
         _ = transport.Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>())).Returns(acknowledgement.Task);
-        var roots = new[] { new RuntimeCookedRoot("published", "Content") };
+        var roots = new[] { new RuntimeCookedRoot("published", RuntimeCookedRootKind.LooseFolder) };
         var refresh = service.RefreshProjectCookedRootsAsync(roots, keepPaused: true);
         try
         {
-            roots[0] = new("later mutation", "Content");
+            roots[0] = new("later mutation", RuntimeCookedRootKind.LooseFolder);
             await updating.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = refresh.IsCompleted.Should().BeFalse();
             _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Updating);
@@ -49,7 +49,6 @@ public sealed partial class EngineServiceShutdownTests
         }
 
         await refresh.ConfigureAwait(false);
-        _ = service.ContentStatus.Bindings.Single().ProjectMount.Should().Be("Content");
         _ = service.ContentStatus.Roots.Should().Equal("published");
         _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Updating);
         await service.ResumeCookedContentAsync().ConfigureAwait(false);
@@ -66,16 +65,16 @@ public sealed partial class EngineServiceShutdownTests
         var native = new FakeEngineSession();
         var service = await this.StartAsync(native).ConfigureAwait(false);
         await using var lifetime = service.ConfigureAwait(false);
-        await service.RefreshProjectCookedRootsAsync([new("previous", "Content")]).ConfigureAwait(false);
+        await service.RefreshProjectCookedRootsAsync([new("previous", RuntimeCookedRootKind.LooseFolder)]).ConfigureAwait(false);
         var transport = Mock.Get(native.Commands);
         _ = transport.Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>())).Returns(Task.FromException(new InvalidOperationException("Native mount rejected")));
-        _ = await ThrowsAsync<InvalidOperationException>(() => service.RefreshProjectCookedRootsAsync([new("replacement", "Content")])).ConfigureAwait(false);
+        _ = await ThrowsAsync<InvalidOperationException>(() => service.RefreshProjectCookedRootsAsync([new("replacement", RuntimeCookedRootKind.LooseFolder)])).ConfigureAwait(false);
         var failed = service.ContentStatus;
         _ = failed.State.Should().Be(RuntimeContentState.Failed);
         _ = failed.Roots.Should().Equal("previous");
         _ = failed.Reason.Should().Be("Native mount rejected");
         _ = transport.Setup(value => value.ReplaceCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>())).Returns(Task.CompletedTask);
-        await service.RefreshProjectCookedRootsAsync([new("previous", "Content")]).ConfigureAwait(false);
+        await service.RefreshProjectCookedRootsAsync([new("previous", RuntimeCookedRootKind.LooseFolder)]).ConfigureAwait(false);
         _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);
         _ = service.ContentStatus.Roots.Should().Equal("previous");
         _ = service.ContentStatus.Revision.Should().BeGreaterThan(failed.Revision);
@@ -90,7 +89,7 @@ public sealed partial class EngineServiceShutdownTests
         var native = new FakeEngineSession();
         var service = await this.StartAsync(native).ConfigureAwait(false);
         await using var lifetime = service.ConfigureAwait(false);
-        await service.RefreshProjectCookedRootsAsync([new("published", "Content")]).ConfigureAwait(false);
+        await service.RefreshProjectCookedRootsAsync([new("published", RuntimeCookedRootKind.LooseFolder)]).ConfigureAwait(false);
         native.Loop.SetResult();
         _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Unavailable);
         _ = service.ContentStatus.Roots.Should().BeEmpty();
@@ -114,7 +113,7 @@ public sealed partial class EngineServiceShutdownTests
                 _ = mounted.TrySetResult();
             }
         };
-        await service.RefreshProjectCookedRootsAsync([new("published", "Content")]).ConfigureAwait(false);
+        await service.RefreshProjectCookedRootsAsync([new("published", RuntimeCookedRootKind.LooseFolder)]).ConfigureAwait(false);
         await mounted.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = revisions.Should().BeInAscendingOrder().And.OnlyHaveUniqueItems();
         _ = service.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);

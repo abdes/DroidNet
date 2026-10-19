@@ -26,16 +26,16 @@ The ownership contracts are defined in the
 ## Explicit workflow stages
 
 [ContentPipelineService](src/ContentPipelineService.cs) exposes current-scene,
-asset, folder, and project cook operations. The stages keep failures attributable
-to the operation that produced them.
+asset, folder, and project cook operations. The stages keep failures
+attributable to the operation that produced them.
 
-| Stage                     | Implementation                                                                                                                                 | Purpose                                                                                 |
-| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
-| Scope                     | Project context and cook-scope provider                                                                                                        | Identify authored inputs and destination roots.                                         |
-| Descriptors               | [SceneDescriptorGenerator](src/SceneDescriptorGenerator.cs), [ProceduralGeometryDescriptorService](src/ProceduralGeometryDescriptorService.cs) | Translate authoring data and referenced generated assets into native descriptors.       |
-| Manifest                  | [ContentImportManifestBuilder](src/ContentImportManifestBuilder.cs), [ContentImportManifestValidator](src/ContentImportManifestValidator.cs)   | Build and validate the bounded import request.                                          |
-| Execution                 | [IEngineContentPipelineApi](src/IEngineContentPipelineApi.cs)                                                                                  | Isolate orchestration from the native execution adapter.                                |
-| Inspection and validation | Native Inspector inventory under `CookOutputReadLease`                                                                                         | Verify files once per protected opening and derive structured results from that report. |
+| Stage                     | Implementation                                                                                                                               | Purpose                                                                                 |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| Scope                     | Project context and cook-scope provider                                                                                                      | Identify authored inputs and destination roots.                                         |
+| Descriptors               | [SceneDescriptorGenerator](src/SceneDescriptorGenerator.cs)                                                                                  | Translate authored scenes into native descriptors; engine content is referenced as is.  |
+| Manifest                  | [ContentImportManifestBuilder](src/ContentImportManifestBuilder.cs), [ContentImportManifestValidator](src/ContentImportManifestValidator.cs) | Build and validate the bounded import request.                                          |
+| Execution                 | [IEngineContentPipelineApi](src/IEngineContentPipelineApi.cs)                                                                                | Isolate orchestration from the native execution adapter.                                |
+| Inspection and validation | Native Inspector inventory under `CookOutputReadLease`                                                                                       | Verify files once per protected opening and derive structured results from that report. |
 
 The manifest execution path stops on manifest, import, or inspection failure,
 accumulates stage diagnostics, and includes output validation in the final
@@ -51,7 +51,8 @@ manifest and invokes the installed native ImportTool through
 [ContentPipelineProcessRunner](src/ContentPipelineProcessRunner.cs) passes
 structured arguments to the Windows worker, which starts `CreateProcessW` under
 an owned Job Object without shell execution. It drains standard output and error
-concurrently, preserving argument boundaries and avoiding serial pipe-read stalls.
+concurrently, preserving argument boundaries and avoiding serial pipe-read
+stalls.
 
 Cancellation stops the owned worker tree and drains both output readers before
 releasing its input and tool leases. Failed termination retains ownership until
@@ -77,6 +78,14 @@ cached only after full verification of the protected library opening. Normal
 mount preparation checks index metadata, membership and sizes, and does not
 populate dependency caches from unverified payloads.
 
+Pak libraries are immutable: the engine content pak (`IEngineContentPak`, always
+the lowest library) and the pak files a project declares. A pak's catalog digest
+is its fingerprint, a shared read handle (`PakReadLease`) keeps its bytes fixed
+while a cook or runtime uses it, and the engine verifies its integrity when it
+mounts it. Publication roots record whether a library is a loose folder or a
+pak, and mount preparation refuses a pak whose identity or digest changed since
+publication.
+
 Damage to shared data triggers **Rebuilding affected content**. The service
 captures all affected sources and rebuilds an empty candidate root. Missing
 sources or unowned auxiliary files produce specific diagnostics; failed repair
@@ -91,7 +100,8 @@ exercise the installed native tools, real worker processes and filesystem
 publication/recovery. [Benchmarks](tests/Benchmarks) retain large-workload
 measurements separately from routine correctness checks.
 
-See the [test guide](tests/README.md) for project selection and fixture ownership.
+See the [test guide](tests/README.md) for project selection and fixture
+ownership.
 
 Keep source-level tests, real tool execution, cooked-root validation, and
 standalone/visual validation distinct. Current workflow evidence belongs in

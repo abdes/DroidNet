@@ -31,14 +31,14 @@ public sealed class ReferenceLeaseTests
     [DataRow(true, true)]
     public async Task ReusedCrossMountRootsStayLeasedThroughNativeWork(bool terminationFailure, bool foreignLibrary)
     {
-        using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
-        using var foreignConsumer = new CookWorkspace();
+        using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
+        using var foreignConsumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(workspace, this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var runner = new ContextLeaseRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
         var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
         var geometry = first.CookedAssets.First(static asset => asset.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
@@ -46,7 +46,7 @@ public sealed class ReferenceLeaseTests
         if (foreignLibrary)
         {
             consumer.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(workspace.CookedRoot("Art")))] });
-            service = CreateService(consumer, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+            service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
         }
 
         AddGeometryNode(consumer, geometry, "Mesh");

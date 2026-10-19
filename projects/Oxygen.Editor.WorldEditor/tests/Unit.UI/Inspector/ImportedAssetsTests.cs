@@ -48,8 +48,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentBrowserState();
-        var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
-        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), builtins);
+        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
         using var details = new AssetDetailsViewModel(state, Mock.Of<IAssetShell>());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
@@ -91,7 +90,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
     {
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateImportedSourceRow(configured: false)]);
         var provider = CreateQueryProvider(updates);
-        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, new Oxygen.Testing.BuiltinCatalogDiscoveryFixture(), Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
+        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
         var view = new GeometryView
         {
             ViewModel = geometry,
@@ -99,15 +98,15 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        var content = geometry.Groups.Single(static group => string.Equals(group.Key, "Content", StringComparison.Ordinal));
-        _ = content.Items.Should().BeEmpty();
+        _ = geometry.GeometryChoices.Groups.Should().NotContain(static group => group.Origin == AssetOrigin.Content);
         var source = CreateImportedSourceRow(configured: true);
         var outputs = CreateImportedOutputRows(source);
         updates.OnNext([source, .. outputs]);
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = content.Items.Should().ContainSingle().Which.Item.Asset.Should().Be(outputs.Single(static item => item.Kind == AssetKind.Geometry).Identity);
+        var content = geometry.GeometryChoices.Groups.Single(static group => group.Origin == AssetOrigin.Content);
+        _ = content.Rows.Should().ContainSingle().Which.Choice.Asset.Should().Be(outputs.Single(static item => item.Kind == AssetKind.Geometry).Identity);
         var material = outputs.Single(static item => item.Kind == AssetKind.Material).Identity;
-        _ = content.Items.Should().NotContain(row => row.Item.Asset == material || row.Item.Asset == source.Identity);
+        _ = content.Rows.Should().NotContain(row => row.Choice.Asset == material || row.Choice.Asset == source.Identity);
     });
 
     /// <summary>The existing Cook menu offers source navigation and reimport for a selected imported output.</summary>
@@ -136,13 +135,13 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         });
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.ReimportSourceAsync(source.Identity, projects.ActiveProject!, It.IsAny<CancellationToken>())).ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
-        using var layout = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting(), new Oxygen.Testing.BuiltinCatalogDiscoveryFixture());
+        using var layout = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
         var layoutView = new TilesLayoutView
         {
             ViewModel = layout,
         };
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
-        using var browser = CreateBuiltinBrowserModel(provider.Object, projects, state, layout, layoutView, messenger, pipeline.Object);
+        using var browser = CreateBrowserModel(provider.Object, projects, state, layout, layoutView, messenger, pipeline.Object);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         browser.LoadContent(layout, "right");
         var view = new AssetsView

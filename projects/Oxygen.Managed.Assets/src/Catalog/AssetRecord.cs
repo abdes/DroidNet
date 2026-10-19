@@ -16,9 +16,6 @@ namespace Oxygen.Managed.Assets.Catalog;
 /// <param name="Identity">The asset's identity.</param>
 public sealed record AssetRecord(AssetPath Identity)
 {
-    /// <summary>Gets engine recipe metadata when this row represents a generated asset.</summary>
-    public GeneratedAssetMetadata? Generated { get; init; }
-
     /// <summary>Gets indexed cooked identity, type and location without inferring them from the virtual filename.</summary>
     public CookedAssetMetadata? Cooked { get; init; }
 

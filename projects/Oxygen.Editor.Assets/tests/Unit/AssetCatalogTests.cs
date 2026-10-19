@@ -9,8 +9,8 @@ using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Discovery;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -323,7 +323,7 @@ public sealed class AssetCatalogTests
             _ = observedFiles.Setup(value => value.ReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .Returns((string path, CancellationToken token) => this.ReadOverride?.Invoke(path, token) ?? files.ReadAsync(path, token));
             this.Publication = new(Mock.Of<IContentCookCoordinator>(), this.context.Object, observedFiles.Object,
-                new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: files));
+                new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: files), new EngineContentPakFixture());
             this.SetProjectAvailable(available: true);
             _ = this.storage.Setup(value => value.Normalize(It.IsAny<string>())).Returns(string.Empty);
             _ = this.storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>()))
@@ -352,12 +352,7 @@ public sealed class AssetCatalogTests
 
         public AssetCatalog CreateCatalog()
         {
-            var empty = new BuiltinCatalogSnapshot(Catalog: null, IsLastKnown: false, Notice: null);
-            var discovery = new Mock<IBuiltinCatalogDiscovery>();
-            _ = discovery.SetupGet(value => value.Snapshot).Returns(empty);
-            _ = discovery.Setup(value => value.GetAsync(It.IsAny<CancellationToken>())).ReturnsAsync(empty);
-            _ = discovery.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).ReturnsAsync(empty);
-            return new(this.context.Object, this.storage.Object, discovery.Object, this.Publication);
+            return new(this.context.Object, this.storage.Object, new EngineContentPakFixture(), this.Publication);
         }
 
         public void SetProjectAvailable(bool available)

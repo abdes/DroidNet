@@ -54,9 +54,14 @@ internal sealed class AssetIdentityReducer
     {
         try
         {
-            var root = metadata.RootFolderPath;
-            var path = root.Combine(metadata.DescriptorRelativePath);
-            return !Path.IsPathRooted(metadata.DescriptorRelativePath) && path != root && path.IsSameOrInside(root) ? path : null;
+            if (metadata.DescriptorRelativePath is not { } descriptor)
+            {
+                return null;
+            }
+
+            var root = metadata.ContainerPath;
+            var path = root.Combine(descriptor);
+            return !Path.IsPathRooted(descriptor) && path != root && path.IsSameOrInside(root) ? path : null;
         }
         catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
         {
@@ -75,15 +80,16 @@ internal sealed class AssetIdentityReducer
             : name;
     }
 
-    private static AssetEntry CreateGeneratedItem(AssetRecord selected, GeneratedAssetMetadata recipe)
+    // A pak holds its descriptors inside the file: the asset is read-only and has nothing to cook.
+    private static AssetEntry CreatePackagedItem(AssetPath identity, AssetRecord selected)
         => new(
-            Identity: selected.Identity,
-            DisplayName: selected.Name,
-            Kind: AssetKinds.FromFileName(recipe.CookedVirtualPath.Name),
-            PrimaryState: AssetState.Generated,
+            Identity: identity,
+            DisplayName: GetDisplayName(identity),
+            Kind: AssetKinds.FromCookedType(selected.Cooked!.AssetType),
+            PrimaryState: AssetState.Packaged,
             DerivedState: null,
             RuntimeAvailability: AssetRuntimeAvailability.Unknown,
-            DisplayPath: selected.Identity.VirtualPath,
+            DisplayPath: identity.VirtualPath,
             SourcePath: null,
             DescriptorPath: null,
             CookedPath: null,
@@ -91,7 +97,8 @@ internal sealed class AssetIdentityReducer
             DiagnosticCodes: [],
             IsSelectable: true)
         {
-            Generated = recipe,
+            CookedMetadata = selected.Cooked,
+            OverriddenCookedSources = selected.OverriddenCookedSources,
         };
 
     private static bool IsIncluded(AssetEntry item, bool includeMissing)
@@ -100,7 +107,7 @@ internal sealed class AssetIdentityReducer
     private static bool StateIncluded(AssetState state, bool includeMissing)
         => state switch
         {
-            AssetState.Generated or AssetState.Source or AssetState.Descriptor or AssetState.Cooked or AssetState.Stale or AssetState.Broken => true,
+            AssetState.Packaged or AssetState.Source or AssetState.Descriptor or AssetState.Cooked or AssetState.Stale or AssetState.Broken => true,
             AssetState.Missing => includeMissing,
             _ => false,
         };
@@ -119,7 +126,7 @@ internal sealed class AssetIdentityReducer
 
     private static string GetDisplayPath(AssetRecord selected, ProjectContext project)
     {
-        var local = selected.Cooked is { } cooked ? project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == cooked.RootFolderPath) : null;
+        var local = selected.Cooked is { DescriptorRelativePath: not null } cooked ? project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == cooked.ContainerPath) : null;
         return local is not null ? "/" + local.Name + "/" + selected.Cooked!.DescriptorRelativePath : selected.Identity.VirtualPath;
     }
 
@@ -143,9 +150,9 @@ internal sealed class AssetIdentityReducer
             return null;
         }
 
-        if (selected.Generated is { } recipe)
+        if (selected == cooked && cooked.Cooked is { IsPackaged: true })
         {
-            return CreateGeneratedItem(selected, recipe);
+            return CreatePackagedItem(identity, cooked);
         }
 
         var sourcePath = source is null ? null : TryResolveSourcePath(project, source.Identity);

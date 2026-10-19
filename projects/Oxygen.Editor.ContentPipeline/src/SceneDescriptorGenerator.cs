@@ -22,8 +22,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>
 /// Generates native Oxygen scene descriptors from editor scene documents.
 /// </summary>
-/// <param name="proceduralGeometryDescriptors">The generated geometry descriptor service.</param>
-public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescriptorService proceduralGeometryDescriptors) : ISceneDescriptorGenerator
+public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
 {
     private const int NativeSceneDescriptorVersion = 13;
     private const double MaximumExposureLogLuminance = 32;
@@ -31,9 +30,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         EditorSchemaCatalog.LoadFromDirectory(Path.Combine(
             Path.GetDirectoryName(typeof(EditorSchemaCatalog).Assembly.Location) ?? AppContext.BaseDirectory,
             "Schemas")));
-
-    private readonly IProceduralGeometryDescriptorService proceduralGeometryDescriptors = proceduralGeometryDescriptors
-        ?? throw new ArgumentNullException(nameof(proceduralGeometryDescriptors));
 
     /// <inheritdoc />
     public async Task<SceneDescriptorGenerationResult> GenerateAsync(
@@ -101,21 +97,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
             return new(sceneInput.AssetUri, descriptorPath, descriptorVirtualPath, Dependencies: [], diagnostics);
         }
 
-        var generatedGeometryUris = scene.AllNodes
-            .SelectMany(static node => node.Components.OfType<GeometryComponent>())
-            .Select(static geometry => geometry.Geometry)
-            .Where(ProceduralGeometryDescriptorService.IsGeneratedBasicShape)
-            .Concat(scene.AllNodes.SelectMany(static node => node.Components.OfType<GeometryComponent>())
-                .SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>())
-                .Select(static slot => slot.Material)
-                .Where(IsDefaultMaterial)
-                .Select(static _ => ProceduralGeometryDescriptorService.DefaultMaterial))
-            .Distinct()
-            .ToArray();
-        var generatedGeometryInputs = await this.proceduralGeometryDescriptors
-            .EnsureDescriptorsAsync(scope, generatedGeometryUris, cancellationToken)
-            .ConfigureAwait(false);
-
         var nodes = new List<NativeSceneNode>();
         var renderables = new List<NativeRenderable>();
         var cameras = new List<NativePerspectiveCamera>();
@@ -125,7 +106,7 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         var spotLights = new List<NativeSpotLight>();
         var localFogVolumes = new List<NativeLocalFogVolume>();
         var materialRefs = new SortedSet<string>(StringComparer.Ordinal);
-        var dependencyInputs = new List<ContentCookInput>(generatedGeometryInputs);
+        var dependencyInputs = new List<ContentCookInput>();
         foreach (var (textureUri, label) in EnvironmentTextures(scene.Environment))
         {
             var textureInput = CookInputResolver.IsAuthoringUri(scope.Project, textureUri)
@@ -359,10 +340,10 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
 
         void AddRenderable(SceneNode node, int nodeIndex, GeometryComponent geometry)
         {
-            string? geometryRef;
+            string geometryRef;
             try
             {
-                geometryRef = ResolveGeometryRef(geometry.Geometry, generatedGeometryInputs);
+                geometryRef = ContentPipelinePaths.ToNativeDescriptorPath(geometry.Geometry, AssetFileTypes.Geometry);
             }
             catch (ArgumentException ex)
             {
@@ -371,18 +352,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                     DiagnosticSeverity.Error,
                     ContentPipelineDiagnosticCodes.GeometryDescriptorGenerationFailed,
                     $"Scene node `{node.Name}` references geometry `{geometry.Geometry}` that cannot be normalized: {ex.Message}",
-                    descriptorPath,
-                    descriptorVirtualPath));
-                return;
-            }
-
-            if (geometryRef is null)
-            {
-                diagnostics.Add(CreateDiagnostic(
-                    operationId,
-                    DiagnosticSeverity.Error,
-                    ContentPipelineDiagnosticCodes.GeometryDescriptorGenerationFailed,
-                    $"Scene node `{node.Name}` references unsupported geometry `{geometry.Geometry}`.",
                     descriptorPath,
                     descriptorVirtualPath));
                 return;
@@ -405,10 +374,10 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                     return;
                 }
 
-                string? materialRef;
+                string materialRef;
                 try
                 {
-                    materialRef = ResolveMaterialRef(slot.Material, generatedGeometryInputs);
+                    materialRef = ContentPipelinePaths.ToNativeDescriptorPath(slot.Material, AssetFileTypes.Material);
                 }
                 catch (ArgumentException exception)
                 {
@@ -417,18 +386,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
                         DiagnosticSeverity.Error,
                         ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
                         $"Scene node '{node.Name}' references invalid material '{slot.Material}': {exception.Message}",
-                        descriptorPath,
-                        descriptorVirtualPath));
-                    return;
-                }
-
-                if (materialRef is null)
-                {
-                    diagnostics.Add(CreateDiagnostic(
-                        operationId,
-                        DiagnosticSeverity.Error,
-                        ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                        $"Scene node '{node.Name}' references material '{slot.Material}', which has no cooked input.",
                         descriptorPath,
                         descriptorVirtualPath));
                     return;
@@ -451,16 +408,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         var folder = Path.GetDirectoryName(sceneInput.SourceRelativePath) ?? string.Empty;
         return Path.Combine(scope.PreparationRoot ?? scope.InputRoot, ".pipeline", "Scenes", folder, Path.GetFileName(sceneInput.SourceRelativePath));
     }
-
-    private static string? ResolveGeometryRef(AssetPath geometryUri, IReadOnlyList<ContentCookInput> generatedGeometryInputs)
-        => ProceduralGeometryDescriptorService.IsGeneratedBasicShape(geometryUri)
-            ? generatedGeometryInputs.FirstOrDefault(input => input.AssetUri == geometryUri)?.OutputVirtualPath
-            : ContentPipelinePaths.ToNativeDescriptorPath(geometryUri, AssetFileTypes.Geometry);
-
-    private static string? ResolveMaterialRef(AssetPath materialUri, IReadOnlyList<ContentCookInput> generatedInputs)
-        => IsDefaultMaterial(materialUri)
-            ? generatedInputs.FirstOrDefault(static input => IsDefaultMaterial(input.AssetUri))?.OutputVirtualPath
-            : ContentPipelinePaths.ToNativeDescriptorPath(materialUri, AssetFileTypes.Material);
 
     private static NativeReferences? CreateNativeReferences(
         Oxygen.Editor.World.Serialization.SceneReferencesData references,
@@ -523,9 +470,6 @@ public sealed partial class SceneDescriptorGenerator(IProceduralGeometryDescript
         => perspective.Count == 0 && orthographic.Count == 0
             ? null
             : new NativeCameras(perspective.Count == 0 ? null : perspective, orthographic.Count == 0 ? null : orthographic);
-
-    private static bool IsDefaultMaterial(AssetPath? uri)
-        => uri == ProceduralGeometryDescriptorService.DefaultMaterial;
 
     private static NativeLightCommon ToCommon(LightComponent light)
         => new(

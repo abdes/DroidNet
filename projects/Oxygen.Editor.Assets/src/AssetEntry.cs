@@ -34,19 +34,13 @@ public sealed record AssetEntry(
     public FileSystemPath? ImportSourcePath { get; init; }
 
     /// <summary>Gets a value indicating whether explicit reimport can target the retained model.</summary>
-    public bool CanReimport => this.ImportSource is not null && !this.IsBuiltin;
-
-    /// <summary>Gets the engine-provided recipe and identity mapping for generated assets.</summary>
-    public GeneratedAssetMetadata? Generated { get; init; }
+    public bool CanReimport => this.ImportSource is not null;
 
     /// <summary>Gets the indexed native identity and physical origin of the cooked representation.</summary>
     public CookedAssetMetadata? CookedMetadata { get; init; }
 
     /// <summary>Gets the indexed sources masked by the resolved native asset.</summary>
     public IReadOnlyList<CookedAssetMetadata> OverriddenCookedSources { get; init; } = [];
-
-    /// <summary>Gets verified engine origins for physical representations, including overridden project copies.</summary>
-    public IReadOnlyList<VerifiedBuiltinSource> VerifiedBuiltinSources { get; init; } = [];
 
     /// <summary>Gets the effective source when this row explicitly displays a library's own representation.</summary>
     public CookedAssetMetadata? EffectiveCookedSource { get; init; }
@@ -56,13 +50,7 @@ public sealed record AssetEntry(
 
     /// <summary>Gets a value indicating whether ordinary assignments resolve to a different source than this displayed library copy.</summary>
     public bool IsCookedSourceOverridden => this.CookedMetadata is { } displayed && this.EffectiveCookedSource is { } effective
-        && (displayed.AssetKey != effective.AssetKey || displayed.RootFolderPath != effective.RootFolderPath);
-
-    /// <summary>Gets the engine identity that produced a verified project copy, when this is such a copy.</summary>
-    public AssetPath? BuiltinOrigin { get; init; }
-
-    /// <summary>Gets verified cooked representations grouped with this logical built-in in discovery views.</summary>
-    public IReadOnlyList<AssetEntry> CookedCompanions { get; init; } = [];
+        && (displayed.AssetKey != effective.AssetKey || displayed.ContainerPath != effective.ContainerPath);
 
     /// <summary>Gets supplemental information from this snapshot without starting discovery, loading or cooking.</summary>
     public AssetInformation Information => AssetInformation.FromAsset(this);
@@ -70,28 +58,24 @@ public sealed record AssetEntry(
     /// <summary>Gets the native availability explanation, independently of source and publication status.</summary>
     public string? RuntimeReason { get; init; }
 
-    /// <summary>Gets a value indicating whether this is engine-provided content rather than authored source.</summary>
-    public bool IsBuiltin => this.Generated is not null || this.PrimaryState == AssetState.Generated;
+    /// <summary>Gets a value indicating whether the asset is inside a pak, such as the engine content pak: read-only content cooks reference without copying.</summary>
+    public bool IsPackaged => this.PrimaryState == AssetState.Packaged;
 
     /// <summary>
-    /// Gets a value indicating whether the asset exists only as cooked content: it has no authored source or descriptor
-    /// and is not an engine recipe, such as a library asset or a project's copy of a built-in.
+    /// Gets a value indicating whether the asset exists only as loose cooked content: it has no authored source or
+    /// descriptor and is not in a pak, such as a library asset.
     /// </summary>
-    public bool IsCookedOnly => this.SourcePath is null && this.DescriptorPath is null && !this.Identity.IsGenerated
+    public bool IsCookedOnly => this.SourcePath is null && this.DescriptorPath is null && !this.IsPackaged
         && this.PrimaryState is not AssetState.Missing;
 
     /// <summary>Gets a value indicating whether this selection owns an authored cook input.</summary>
-    public bool CanCook => !this.IsBuiltin && (this.DescriptorPath is not null || this.ImportSource is not null) && this.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture;
+    public bool CanCook => (this.DescriptorPath is not null || this.ImportSource is not null) && this.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture;
 
     /// <summary>Gets the shared saved-input and publication facts, independently of runtime availability.</summary>
     public AssetCookStatus? CookStatus { get; init; }
 
     /// <summary>Gets the applicable queued, active or most recent cook.</summary>
     public AssetCookActivity? CookActivity { get; init; }
-
-    /// <summary>Gets the relationship to another name for the same native generator.</summary>
-    public string AliasDescription => this.Generated is { } recipe && !string.Equals(recipe.CanonicalName, this.DisplayName, StringComparison.Ordinal)
-        ? $"Alias of {recipe.CanonicalName}" : string.Empty;
 
     /// <summary>Gets the user-facing asset type.</summary>
     public string TypeDisplayName => this.Kind switch
@@ -104,29 +88,28 @@ public sealed record AssetEntry(
     };
 
     /// <summary>Gets the primary asset-state badge.</summary>
-    public string PrimaryBadge => this.IsCookedSourceOverridden ? "Overridden" : this.Generated?.IsLastKnown == true ? "Preview unavailable"
-        : this.IsBuiltin ? "Built-in" : this.Kind == AssetKind.ForeignSource && this.ImportSource is null ? "Not imported"
+    public string PrimaryBadge => this.IsCookedSourceOverridden ? "Overridden"
+        : this.IsPackaged ? this.PackagedBadge : this.Kind == AssetKind.ForeignSource && this.ImportSource is null ? "Not imported"
         : AssetStatusText.GetText(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability) ?? GetBadge(this.PrimaryState);
 
     /// <summary>Gets a concise explanation of engine ownership or the current authored status.</summary>
     public string PrimaryBadgeTooltip => this.IsCookedSourceOverridden
         ? "Scene assignments use " + this.EffectiveCookedSourceName + " instead of this copy."
-        : this.IsBuiltin
-        ? this.Generated?.IsLastKnown == true ? "Built-in asset from the last-known Oxygen catalog. Preview unavailable."
-            : "Built-in asset provided by Oxygen. No separate cooking is needed." + (this.RuntimeReason is null ? string.Empty : " Preview: " + this.RuntimeReason)
+        : this.IsPackaged
+        ? $"Packaged in {this.CookedMetadata?.ContainerPath.Name}: read-only, and cooks reference it without copying it."
+            + (this.RuntimeReason is null ? string.Empty : " Preview: " + this.RuntimeReason)
         : this.Kind == AssetKind.ForeignSource && this.ImportSource is null ? "Import this model to create usable geometry, materials and scenes."
         : AssetStatusText.GetDescription(this.CookStatus, this.CookActivity, runtimeAvailability: this.RuntimeAvailability, runtimeReason: this.RuntimeReason);
 
-    /// <summary>Gets the optional cooked-state badge.</summary>
-    public string? DerivedBadge => this.IsBuiltin && this.Generated?.IsLastKnown != true
-        ? this.RuntimeAvailability switch
-        {
-            AssetRuntimeAvailability.Unavailable => "Preview unavailable",
-            AssetRuntimeAvailability.Updating => "Updating preview",
-            AssetRuntimeAvailability.Failed => "Preview issue",
-            _ => null,
-        }
-        : this.CookStatus is null && this.DerivedState is { } state ? GetBadge(state) : null;
+    /// <summary>
+    /// Gets where the asset comes from: the engine content pak (the <c>/Engine</c> mount, even while its pak is
+    /// missing), a user pak, or the project's content.
+    /// </summary>
+    public AssetOrigin Origin => this.Identity.IsSameOrInside(AssetPath.Engine) ? AssetOrigin.Engine
+        : this.IsPackaged ? AssetOrigin.Package : AssetOrigin.Content;
+
+    /// <summary>Gets the badge of a packaged asset: Engine for the engine content pak, Pak for any other pak.</summary>
+    public string PackagedBadge => this.Origin == AssetOrigin.Engine ? "Engine" : "Pak";
 
     /// <summary>Gets a value indicating whether the asset has diagnostics.</summary>
     public bool HasDiagnostics => this.DiagnosticCodes.Count > 0;
@@ -162,7 +145,7 @@ public sealed record AssetEntry(
     public static string GetBadge(AssetState state)
         => state switch
         {
-            AssetState.Generated => "Built-in",
+            AssetState.Packaged => "Packaged",
             AssetState.Source => "SRC",
             AssetState.Descriptor => "DESC",
             AssetState.Cooked => "Cooked",

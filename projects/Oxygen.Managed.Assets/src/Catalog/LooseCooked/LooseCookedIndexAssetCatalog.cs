@@ -7,7 +7,8 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DroidNet.Storage;
 using Oxygen.Managed.Assets.Catalog.FileSystem;
-using Oxygen.Managed.Assets.Persistence.LooseCooked.V3;
+using Oxygen.Managed.Assets.Persistence;
+using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Catalog.LooseCooked;
@@ -16,9 +17,8 @@ namespace Oxygen.Managed.Assets.Catalog.LooseCooked;
 /// A catalog provider backed by a runtime-compatible loose cooked index (<c>container.index.bin</c>).
 /// </summary>
 /// <remarks>
-/// This provider enumerates keyed assets from the current v3 index.
-/// It maps native <c>VirtualPath</c> values (e.g. <c>/Content/Materials/Wood.omat</c>)
-/// to canonical asset URIs (e.g. <c>asset:///Content/Materials/Wood.omat</c>).
+/// This provider enumerates the keyed assets of the current index, identified by the native
+/// virtual paths it records (e.g. <c>/Content/Materials/Wood.omat</c>).
 /// </remarks>
 public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAssetCatalog, IDisposable
 {
@@ -247,34 +247,17 @@ public sealed class LooseCookedIndexAssetCatalog : IAssetCatalog, IRefreshableAs
 
     private static IReadOnlyDictionary<AssetPath, AssetRecord> CreateEntries(Document document, FileSystemPath root)
     {
-        var next = new Dictionary<AssetPath, AssetRecord>();
+        var records = new CookedAssetRecords();
         foreach (var entry in document.Assets)
         {
-            if (string.IsNullOrWhiteSpace(entry.VirtualPath))
+            records.Add(entry.VirtualPath ?? string.Empty, identity => new(root, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span))
             {
-                continue;
-            }
-
-            if (!AssetPath.TryParse(entry.VirtualPath, out var identity) || identity.IsMount)
-            {
-                throw new InvalidDataException($"The cooked index lists '{entry.VirtualPath}', which is not the virtual path of an asset.");
-            }
-
-            var record = new AssetRecord(identity)
-            {
-                Cooked = new(root, entry.DescriptorRelativePath, document.SourceGuid, entry.AssetKey, entry.AssetType, entry.DescriptorSize, Convert.ToHexString(entry.DescriptorSha256.Span))
-                {
-                    VirtualPath = identity,
-                    References = entry.References,
-                },
-            };
-            if (!next.TryAdd(identity, record))
-            {
-                throw new InvalidDataException($"Cooked index contains duplicate virtual path '{entry.VirtualPath}'.");
-            }
+                VirtualPath = identity,
+                References = entry.References,
+            });
         }
 
-        return next;
+        return records.Records;
     }
 
     private sealed class NoopFileSystemCatalogEventSource : IFileSystemCatalogEventSource

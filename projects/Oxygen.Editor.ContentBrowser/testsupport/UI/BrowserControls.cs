@@ -5,7 +5,11 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
+using DroidNet.Aura.Dialogs;
+using DroidNet.Aura.Windowing;
 using DroidNet.Controls;
+using DroidNet.Mvvm;
+using DroidNet.Mvvm.Converters;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -23,6 +27,35 @@ namespace Oxygen.Editor.ContentBrowser.TestSupport;
 
 internal sealed class BrowserControls : DroidNet.Tests.VisualUserInterfaceTests
 {
+    /// <summary>Creates the assets pane over a layout whose view the pane shows.</summary>
+    /// <param name="provider">The asset feed.</param>
+    /// <param name="projects">The active project.</param>
+    /// <param name="state">The browser state.</param>
+    /// <param name="layout">The layout view model.</param>
+    /// <param name="layoutView">The view the layout resolves to.</param>
+    /// <param name="messenger">The messenger the pane sends requests on.</param>
+    /// <param name="pipeline">The content pipeline; a mock when null.</param>
+    /// <returns>The pane, which the caller disposes.</returns>
+    internal static AssetsViewModel CreateBrowserModel(IAssetFeed provider, IProjectContextService projects, ContentBrowserState state, object layout, object layoutView, IMessenger messenger, IContentPipelineService? pipeline = null)
+    {
+        var locator = new Mock<IViewLocator>();
+        _ = locator.Setup(value => value.ResolveView(layout)).Returns(layoutView);
+        return new AssetsViewModel(
+            Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
+            new ViewModelToView(locator.Object),
+            state,
+            projects,
+            pipeline ?? Mock.Of<IContentPipelineService>(),
+            provider,
+            Mock.Of<IOperationResultPublisher>(),
+            Mock.Of<IStatusReducer>(),
+            Mock.Of<DroidNet.Storage.IStorageProvider>(),
+            messenger,
+            Mock.Of<IDialogService>(),
+            Mock.Of<IWindowManagerService>(),
+            Mock.Of<IAssetShell>());
+    }
+
     internal static void AssertBrowserRowState(ListViewBase selector, AssetBrowserRow row, Control container, object? focus, double offset, AssetsLayoutViewModel model, AssetEntry expected)
     {
         _ = selector.SelectedItem.Should().BeSameAs(row);
@@ -72,12 +105,5 @@ internal sealed class BrowserControls : DroidNet.Tests.VisualUserInterfaceTests
         {
             flyout.Hide();
         }
-    }
-
-    internal static AssetsViewModel CreateBuiltinBrowserModel(IAssetFeed provider, ProjectContextService projects, ContentBrowserState state, AssetsLayoutViewModel layout, FrameworkElement layoutView, IMessenger? messenger = null, IContentPipelineService? pipeline = null)
-    {
-        var locator = new Mock<DroidNet.Mvvm.IViewLocator>();
-        _ = locator.Setup(value => value.ResolveView(layout)).Returns(layoutView);
-        return new AssetsViewModel(Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(), new DroidNet.Mvvm.Converters.ViewModelToView(locator.Object), state, projects, pipeline ?? Mock.Of<IContentPipelineService>(), provider, Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), Mock.Of<DroidNet.Storage.IStorageProvider>(), messenger ?? new StrongReferenceMessenger(), Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(), Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>(), Mock.Of<IAssetShell>());
     }
 }

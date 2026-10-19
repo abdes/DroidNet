@@ -11,7 +11,9 @@ using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
@@ -23,7 +25,7 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Status updates keep the focused geometry button and do not create duplicate built-in choices.</summary>
+    /// <summary>Status updates keep the focused geometry button and do not create duplicate engine choices.</summary>
     /// <returns>The asynchronous rendered-picker regression.</returns>
     [TestMethod]
     public Task GeometryPickerSharesStatusWithoutReplacingItsFocusedChoice() => EnqueueAsync(async () =>
@@ -34,20 +36,17 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
             DisplayName = "Custom",
             Kind = AssetKind.Geometry,
         };
-        var builtins = new Oxygen.Testing.BuiltinCatalogDiscoveryFixture();
-        var engine = builtins.Snapshot.Catalog!.CreateCatalogRecords()[0];
         var copy = asset with
         {
-            Identity = engine.Generated!.CookedVirtualPath,
-            Generated = engine.Generated,
-            BuiltinOrigin = engine.Identity,
-            PrimaryState = AssetState.Generated,
+            Identity = EngineAssets.BasicShape("Cube"),
+            DisplayName = "Cube",
+            PrimaryState = AssetState.Packaged,
         };
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([asset, copy]);
         var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var model = new GeometryViewModel(CreateStatusHosting(), provider.Object, builtins, Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
+        using var model = new GeometryViewModel(CreateStatusHosting(), provider.Object, Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
         {
             IsExpanded = true,
         };
@@ -58,9 +57,12 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        var content = model.Groups.Single(group => string.Equals(group.Key, "Content", StringComparison.Ordinal));
-        var row = content.Items.Should().ContainSingle().Subject;
-        _ = row.Item.Asset.Should().Be(asset.Identity);
+        var content = model.GeometryChoices.Groups.Single(group => group.Origin == AssetOrigin.Content);
+        var row = content.Rows.Should().ContainSingle().Subject;
+        _ = row.Choice.Asset.Should().Be(asset.Identity);
+        var engine = model.GeometryChoices.Groups.Single(group => group.Origin == AssetOrigin.Engine);
+        var engineRow = engine.Rows.Should().ContainSingle().Subject;
+        _ = engineRow.Choice.Asset.Should().Be(copy.Identity);
         var owner = (SplitButton)view.FindName("AssetSplitButton");
         var flyout = (Flyout)owner.Flyout;
         flyout.AreOpenCloseAnimationsEnabled = false;
@@ -71,10 +73,10 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
             var button = ((FrameworkElement)flyout.Content).FindDescendant<Button>(candidate => ReferenceEquals(candidate.DataContext, row))!;
             updates.OnNext([asset with { CookActivity = new(Guid.NewGuid(), CookRunState.Queued) }, copy]);
             await WaitForRenderAsync().ConfigureAwait(true);
-            _ = content.Items.Should().ContainSingle().Which.Should().BeSameAs(row);
+            _ = content.Rows.Should().ContainSingle().Which.Should().BeSameAs(row);
             _ = button.DataContext.Should().BeSameAs(row);
             _ = button.FindDescendant<TextBlock>(label => string.Equals(label.Text, "Geometry · Queued", StringComparison.Ordinal)).Should().NotBeNull();
-            _ = model.Groups.Single(group => string.Equals(group.Key, "Engine", StringComparison.Ordinal)).Items.Select(choice => choice.Item.Asset).Should().BeEquivalentTo(builtins.Snapshot.Catalog!.AuthoringGeometries.Select(definition => definition.AssetUri));
+            _ = engine.Rows.Should().ContainSingle().Which.Should().BeSameAs(engineRow);
         }
         finally
         {

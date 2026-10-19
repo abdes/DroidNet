@@ -48,7 +48,7 @@ public sealed class ScriptCookTests
     [TestCategory("NativeContent")]
     public async Task CookCurrentScenePublishesItsScriptsAndSlots()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var slot = AddScriptedNodes(workspace, out var target)
             .WithOverride("speed", ScriptValue.FromFloat(2.5f))
             .WithOverride("target", ScriptValue.FromNode(target.Id));
@@ -81,7 +81,7 @@ public sealed class ScriptCookTests
     [TestCategory("NativeContent")]
     public async Task CookCurrentSceneFailsForAStaleValueAndPointsAtIt()
     {
-        using var workspace = new CookWorkspace();
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var slot = AddScriptedNodes(workspace, out _).WithOverride("jump_height", ScriptValue.FromFloat(3f));
         await this.WriteSceneAsync(workspace, slot).ConfigureAwait(false);
         var service = CreateNativeService(workspace, out var compatibility);
@@ -101,8 +101,8 @@ public sealed class ScriptCookTests
     [TestCategory("NativeContent")]
     public async Task ALibraryScriptReportsItsCookedDeclarations()
     {
-        using var library = new CookWorkspace();
-        using var consumer = new CookWorkspace();
+        using var library = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        using var consumer = new CookWorkspace(engineContent: EngineContentPak.Installed());
         await this.WriteSceneAsync(library, AddScriptedNodes(library, out _)).ConfigureAwait(false);
         var producer = CreateNativeService(library, out var compatibility);
         using (compatibility)
@@ -131,7 +131,7 @@ public sealed class ScriptCookTests
     {
         compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        return CreateService(workspace, new SceneDescriptorGenerator(new ProceduralGeometryDescriptorService(api)), api, compatibility);
+        return CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
     }
 
     private static ScriptSlot AddScriptedNodes(CookWorkspace workspace, out SceneNode target)

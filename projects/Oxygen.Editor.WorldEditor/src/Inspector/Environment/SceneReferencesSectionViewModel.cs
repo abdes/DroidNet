@@ -9,6 +9,7 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
 using Oxygen.Editor.World.Inspector.Presentation;
@@ -47,25 +48,16 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     }
 
     [ObservableProperty]
-    public partial AssetEntry? SelectedScript { get; set; }
-
-    [ObservableProperty]
-    public partial AssetEntry? SelectedInputAction { get; set; }
-
-    [ObservableProperty]
-    public partial AssetEntry? SelectedPhysicsSidecar { get; set; }
-
-    [ObservableProperty]
     public partial string ExtraAssetText { get; set; } = string.Empty;
 
-    /// <summary>Gets assignable script assets.</summary>
-    public ObservableCollection<AssetEntry> ScriptCandidates { get; } = [];
+    /// <summary>Gets the script assets the scene can reference, grouped as Engine, Packages and Content.</summary>
+    public AssetPickerModel ScriptChoices { get; } = new(static asset => AssetChoice.For(asset, "Script", "\uE943"));
 
-    /// <summary>Gets assignable input action assets.</summary>
-    public ObservableCollection<AssetEntry> InputActionCandidates { get; } = [];
+    /// <summary>Gets the input action assets the scene can reference, grouped as Engine, Packages and Content.</summary>
+    public AssetPickerModel InputActionChoices { get; } = new(static asset => AssetChoice.For(asset, "Input action", "\uE765"));
 
-    /// <summary>Gets assignable physics scene assets.</summary>
-    public ObservableCollection<AssetEntry> PhysicsSidecarCandidates { get; } = [];
+    /// <summary>Gets the physics scene assets the scene can reference, grouped as Engine, Packages and Content.</summary>
+    public AssetPickerModel PhysicsSidecarChoices { get; } = new(static asset => AssetChoice.For(asset, "Physics sidecar", "\uE945"));
 
     /// <summary>Gets the scene's script references, including unavailable entries.</summary>
     public ObservableCollection<SceneReferenceRow> Scripts { get; } = [];
@@ -169,25 +161,20 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         });
     }
 
-    /// <summary>Adds the currently selected asset to its matching typed reference collection.</summary>
+    /// <summary>Adds a picked asset to its matching typed reference collection.</summary>
     /// <param name="kind">The typed collection to update.</param>
+    /// <param name="asset">The picked asset; one the collection does not accept is ignored.</param>
     /// <returns>The completion of the undoable and persisted edit.</returns>
-    public Task AssignAsync(AssetKind kind)
+    public Task AssignAsync(AssetKind kind, AssetPath asset)
     {
-        var selected = kind switch
-        {
-            AssetKind.Script => this.SelectedScript,
-            AssetKind.InputAction => this.SelectedInputAction,
-            AssetKind.PhysicsScene => this.SelectedPhysicsSidecar,
-            _ => null,
-        };
-
-        if (selected is null || selected.Kind != kind || !selected.IsSelectable || !this.CanEdit)
+        ArgumentNullException.ThrowIfNull(asset);
+        var picked = this.assets.FirstOrDefault(candidate => candidate.Identity == asset);
+        if (picked is null || !AssetRule.ForCooked(kind).Accepts(picked) || !this.CanEdit)
         {
             return Task.CompletedTask;
         }
 
-        return this.ApplyAsync(this.WithTypedReference(this.scene!.References, kind, selected.Identity, add: true));
+        return this.ApplyAsync(this.WithTypedReference(this.scene!.References, kind, asset, add: true));
     }
 
     /// <summary>Removes an existing typed reference without discarding unresolved references.</summary>
@@ -386,28 +373,10 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         this.assets.Clear();
         this.assets.AddRange(value);
         this.SetCatalogNotice(string.Empty);
-        this.UpdateCandidates(AssetKind.Script, this.ScriptCandidates, this.SelectedScript, item => this.SelectedScript = item);
-        this.UpdateCandidates(AssetKind.InputAction, this.InputActionCandidates, this.SelectedInputAction, item => this.SelectedInputAction = item);
-        this.UpdateCandidates(AssetKind.PhysicsScene, this.PhysicsSidecarCandidates, this.SelectedPhysicsSidecar, item => this.SelectedPhysicsSidecar = item);
+        this.ScriptChoices.Update(AssetRule.ForCooked(AssetKind.Script).Apply(this.assets));
+        this.InputActionChoices.Update(AssetRule.ForCooked(AssetKind.InputAction).Apply(this.assets));
+        this.PhysicsSidecarChoices.Update(AssetRule.ForCooked(AssetKind.PhysicsScene).Apply(this.assets));
         this.RefreshFromScene();
-    }
-
-    private void UpdateCandidates(
-        AssetKind kind,
-        ObservableCollection<AssetEntry> destination,
-        AssetEntry? selected,
-        Action<AssetEntry?> setSelected)
-    {
-        var candidates = AssetRule.ForCooked(kind).Apply(this.assets);
-        destination.Clear();
-        foreach (var asset in candidates)
-        {
-            destination.Add(asset);
-        }
-
-        setSelected(selected is null
-            ? null
-            : candidates.FirstOrDefault(candidate => candidate.Identity == selected.Identity));
     }
 
     private void RefreshFromScene()

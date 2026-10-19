@@ -4,7 +4,7 @@
 
 using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
-using Oxygen.Editor.World.Inspector.Controls;
+using Oxygen.Editor.Pickers;
 
 namespace Oxygen.Editor.World.Inspector.Geometry;
 
@@ -22,29 +22,17 @@ public partial class GeometryView
         this.InitializeComponent();
     }
 
-    private async void OnPickerItemClicked(object? sender, AssetPickerItemInvokedEventArgs e)
+    private async void OnGeometryChoiceInvoked(object? sender, AssetChoice choice)
     {
-        Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling picker item click.");
-
-        if (e.Asset is not { } row)
-        {
-            return;
-        }
-
-        await this.ViewModel.ApplyAssetAsync(row.Item).ConfigureAwait(true);
+        Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling a geometry choice.");
+        await this.ViewModel.ApplyAssetAsync(choice).ConfigureAwait(true);
         this.AssetPickerFlyout.Hide();
     }
 
-    private async void OnMaterialPickerItemClicked(object? sender, AssetPickerItemInvokedEventArgs e)
+    private async void OnMaterialChoiceInvoked(object? sender, AssetChoice choice)
     {
-        Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling material picker item click.");
-
-        if (e.Material is not { } row)
-        {
-            return;
-        }
-
-        await this.ViewModel.ApplyMaterialAsync(row.Item).ConfigureAwait(true);
+        Debug.Assert(this.ViewModel is not null, "ViewModel should not be null when handling a material choice.");
+        await this.ViewModel.ApplyMaterialAsync(choice).ConfigureAwait(true);
         this.MaterialPickerFlyout.Hide();
     }
 

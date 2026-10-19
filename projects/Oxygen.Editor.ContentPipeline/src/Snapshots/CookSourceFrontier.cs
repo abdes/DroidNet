@@ -12,10 +12,5 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 /// <summary>Native facts and operation-owned generated inputs for a dependency frontier.</summary>
 internal sealed record CookSourceFrontier(
     ImmutableArray<CookSourceFacts> Sources,
-    ImmutableArray<ContentCookInput> GeneratedSources,
     ImmutableArray<NativeCapturedInput> GeneratedInputs,
-    ImmutableArray<DiagnosticRecord> Diagnostics)
-{
-    /// <summary>Gets the authored owners of generated built-in descriptors.</summary>
-    public ImmutableDictionary<string, AssetPath> BuiltinOwners { get; init; } = ImmutableDictionary<string, AssetPath>.Empty;
-}
+    ImmutableArray<DiagnosticRecord> Diagnostics);

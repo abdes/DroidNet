@@ -7,8 +7,8 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
@@ -45,23 +45,6 @@ public sealed class GeometryMetadataTests
         _ = read.Should().Throw<InvalidDataException>();
     }
 
-    /// <summary>New builtin nodes receive native inventory without cooking a project.</summary>
-    /// <returns>The asynchronous metadata query.</returns>
-    [TestMethod]
-    public async Task BuiltinGeometryMetadataIsAvailableBeforeCooking()
-    {
-        using var workspace = new CookWorkspace();
-        var catalog = await new BuiltinCatalogFixture().GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
-        _ = api.As<IBuiltinGeometryCatalogProvider>().Setup(value => value.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", It.IsAny<CancellationToken>(), It.IsAny<NativeArtifactLease>())).ReturnsAsync(catalog);
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
-        var uri = AssetPath.Parse("/Engine/Generated/BasicShapes/Cube");
-        var result = await pipeline.ReadAsync(workspace.ProjectContext, uri, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = result.Should().Be(catalog.Find(uri)!.MaterialSlots);
-        _ = workspace.CookCoordinator.Runs.Should().BeEmpty();
-        api.Verify(value => value.ImportAsync(It.IsAny<ContentImportExecution>(), It.IsAny<CancellationToken>()), Times.Never);
-    }
-
     /// <summary>Stale project identity cannot start a metadata query.</summary>
     /// <returns>The asynchronous request.</returns>
     [TestMethod]
@@ -72,33 +55,9 @@ public sealed class GeometryMetadataTests
         workspace.Activate(original with { ProjectId = Guid.NewGuid() });
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
-        var result = await pipeline.ReadAsync(original, AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var result = await pipeline.ReadAsync(original, EngineAssets.BasicShape("Cube"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Should().BeNull();
         api.VerifyNoOtherCalls();
-    }
-
-    /// <summary>Project changes cancel a pending native catalog request before it supplies an inventory.</summary>
-    /// <returns>The asynchronous lifetime regression.</returns>
-    [TestMethod]
-    public async Task GeometryMetadataCancelsOnProjectReplacement()
-    {
-        using var workspace = new CookWorkspace();
-        var original = workspace.ProjectContext;
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
-        _ = api.As<IBuiltinGeometryCatalogProvider>().Setup(value => value.GetBuiltinGeometryCatalogAsync(workspace.Root, "Content", It.IsAny<CancellationToken>(), It.IsAny<NativeArtifactLease>()))
-            .Returns(async (string _, string _, CancellationToken token, NativeArtifactLease _) =>
-            {
-                entered.SetResult();
-                await Task.Delay(Timeout.InfiniteTimeSpan, token).ConfigureAwait(false);
-                throw new InvalidOperationException("Canceled query unexpectedly resumed.");
-            });
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
-        var pending = pipeline.ReadAsync(original, AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"), this.TestContext.CancellationToken);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        workspace.Activate(original with { ProjectId = Guid.NewGuid() });
-        Func<Task> completion = async () => _ = await pending.ConfigureAwait(false);
-        _ = await completion.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
 
     private static string SlotReport() => """

@@ -30,46 +30,38 @@ internal sealed partial class CookSourceAnalyzer(
     CookProvenance? previous = null) : ICookSourceFactsProvider
 {
     private readonly string root = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N"), "analysis", Guid.NewGuid().ToString("N"));
-    private readonly Dictionary<AssetPath, ContentCookInput> builtins = [];
-    private BuiltinGeometryCatalog? catalog;
 
     /// <inheritdoc />
     public async Task<CookSourceFrontier> ReadAsync(IReadOnlyList<ContentCookInput> inputs, CancellationToken cancellationToken)
     {
         var reused = await this.ReadReusableFactsAsync(inputs, cancellationToken).ConfigureAwait(false);
-        var builtinOwners = this.AcceptedBuiltinOwners();
         if (reused.Count == inputs.Count)
         {
-            return new([.. reused.Values], [], [], []) { BuiltinOwners = builtinOwners };
+            return new([.. reused.Values], [], []);
         }
 
         _ = Directory.CreateDirectory(this.root);
-        var (prepared, generated, diagnostics) = await this.PrepareSourcesAsync(
+        var (prepared, diagnostics) = await this.PrepareSourcesAsync(
             inputs.Where(input => !reused.ContainsKey(input.AssetUri)),
             cancellationToken).ConfigureAwait(false);
         if (diagnostics.Any(static issue => issue.Severity >= DiagnosticSeverity.Error))
         {
-            return new([], [], [], diagnostics.ToImmutable());
+            return new([], [], diagnostics.ToImmutable());
         }
 
-        var generatedJobs = generated.Values.Select(input => recipes.BuildJob(this.Rebase(input), [])).ToArray();
         var execution = new ContentSourceAnalysisExecution(
             operation.OperationId,
             operation.Project.ProjectRoot.FullPath,
             this.root,
-            [.. prepared.Select(static source => source.Job), .. generatedJobs])
+            [.. prepared.Select(static source => source.Job)])
         { Artifacts = artifacts };
         var report = await native.AnalyzeSourcesAsync(execution, cancellationToken).ConfigureAwait(false);
         this.AddReportDiagnostics(report, prepared, diagnostics);
 
-        var generatedPaths = generated.Values.Select(static input => input.SourceAbsolutePath)
-            .Concat(prepared.Where(static source => source.Scene is not null).Select(static source => FileSystemPath.From(source.Scene!.DescriptorPath)))
-            .ToHashSet();
+        var generatedPaths = prepared.Where(static source => source.Scene is not null)
+            .Select(static source => FileSystemPath.From(source.Scene!.DescriptorPath)).ToHashSet();
         var analyzed = await this.CollectFactsAsync(reused, prepared, report, diagnostics, generatedPaths, cancellationToken).ConfigureAwait(false);
-        return new(analyzed, [.. generated.Values.Select(this.Rebase)], CaptureGeneratedInputs(report, generatedPaths), diagnostics.ToImmutable())
-        {
-            BuiltinOwners = builtinOwners,
-        };
+        return new(analyzed, CaptureGeneratedInputs(report, generatedPaths), diagnostics.ToImmutable());
     }
 
     // The descriptors native analysis read but the editor generated are captured from the analysis, not from disk.
@@ -102,12 +94,11 @@ internal sealed partial class CookSourceAnalyzer(
             return new NativeLogicalDependency(path, kind, ObjectPath: "scripting", Required: true);
         }) ?? [];
 
-    private async Task<(List<PreparedSource> Prepared, Dictionary<AssetPath, ContentCookInput> Generated, ImmutableArray<DiagnosticRecord>.Builder Diagnostics)> PrepareSourcesAsync(
+    private async Task<(List<PreparedSource> Prepared, ImmutableArray<DiagnosticRecord>.Builder Diagnostics)> PrepareSourcesAsync(
         IEnumerable<ContentCookInput> inputs,
         CancellationToken cancellationToken)
     {
         var prepared = new List<PreparedSource>();
-        var generated = new Dictionary<AssetPath, ContentCookInput>();
         var diagnostics = ImmutableArray.CreateBuilder<DiagnosticRecord>();
         foreach (var input in inputs)
         {
@@ -117,14 +108,10 @@ internal sealed partial class CookSourceAnalyzer(
             if (source.Scene is { } scene)
             {
                 diagnostics.AddRange(scene.Diagnostics);
-                foreach (var dependency in scene.Dependencies.Where(static item => item.Role == ContentCookInputRole.GeneratedDescriptor))
-                {
-                    generated[dependency.AssetUri] = dependency;
-                }
             }
         }
 
-        return (prepared, generated, diagnostics);
+        return (prepared, diagnostics);
     }
 
     // A job's own diagnostics, a dependency outside the project, and an analysis that did not complete.
@@ -235,7 +222,7 @@ internal sealed partial class CookSourceAnalyzer(
         return new(input, recipes.BuildJob(input, [], settings), managed.ToImmutable(), Scene: null) { Diagnostics = textureDiagnostics };
     }
 
-    // A scene is projected to the descriptor the engine cooks; its builtins are prepared once per analysis.
+    // A scene is projected to the descriptor the engine cooks.
     private async Task<PreparedSource> PrepareSceneAsync(
         ContentCookInput input,
         CookInputSnapshot? snapshot,
@@ -251,27 +238,13 @@ internal sealed partial class CookSourceAnalyzer(
         // A scene's name is its file name, whatever the file says; a scene a relocation renamed keeps its old name
         // inside the file until it is saved again.
         scene.Name = input.SourceAbsolutePath.Name[..^AssetFileTypes.SceneDescriptor.Length];
-        var hasBuiltins = scene.AllNodes.SelectMany(static node => node.Components.OfType<GeometryComponent>())
-            .Any(static geometry => geometry.Geometry.IsSameOrInside(AssetPath.Generated)
-                || geometry.OverrideSlots.OfType<Oxygen.Editor.World.Slots.MaterialsSlot>().Any(static slot => slot.Material.IsSameOrInside(AssetPath.Generated)));
-        if (hasBuiltins && this.catalog is null)
-        {
-            this.catalog = await ((IBuiltinGeometryCatalogProvider)native).GetBuiltinGeometryCatalogAsync(this.root, AssetPath.Content.Mount, cancellationToken, artifacts).ConfigureAwait(false);
-        }
-
         var scope = new ContentCookScope(operation.Project, scopes.CreateScope(operation.Project), [input], CookTargetKind.Asset)
         {
             Artifacts = artifacts,
             PreparationRoot = this.root,
-            BuiltinCatalog = this.catalog,
-            PreparedBuiltins = this.builtins,
         };
         var projection = await scenes.GenerateAsync(scene, scope, cancellationToken).ConfigureAwait(false);
         projection = projection with { Dependencies = [.. projection.Dependencies.Select(this.Rebase)] };
-        foreach (var builtin in projection.Dependencies.Where(static item => item.Role == ContentCookInputRole.GeneratedDescriptor))
-        {
-            this.builtins[builtin.AssetUri] = builtin;
-        }
 
         var projected = this.Rebase(input with { SourceAbsolutePath = FileSystemPath.From(projection.DescriptorPath), Role = ContentCookInputRole.GeneratedDescriptor });
         return new(input, recipes.BuildJob(projected, []), managed, projection);

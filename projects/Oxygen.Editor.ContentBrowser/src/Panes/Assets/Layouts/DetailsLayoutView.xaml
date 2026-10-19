@@ -37,15 +37,6 @@
             <RowDefinition Height="Auto" />
             <RowDefinition Height="*" />
         </Grid.RowDefinitions>
-        <InfoBar
-            IsClosable="False"
-            IsOpen="{x:Bind ViewModel.HasBuiltinCatalogNotice, Mode=OneWay}"
-            Message="{x:Bind ViewModel.BuiltinCatalogNotice, Mode=OneWay}"
-            Severity="Warning">
-            <InfoBar.ActionButton>
-                <Button Command="{x:Bind ViewModel.RetryBuiltinCatalogCommand}" Content="Retry" />
-            </InfoBar.ActionButton>
-        </InfoBar>
 
         <!--  Column headers sort by their field; a second click reverses the order.  -->
         <Grid

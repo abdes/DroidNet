@@ -46,6 +46,9 @@ public sealed record ProjectContext
     /// </summary>
     public required IReadOnlyList<LocalFolderMount> LocalFolderMounts { get; init; }
 
+    /// <summary>Gets the pak files the project mounts as read-only cooked libraries.</summary>
+    public IReadOnlyList<PakFileMount> PakFileMounts { get; init; } = [];
+
     /// <summary>Gets the saved source order, from lowest to highest priority.</summary>
     public IReadOnlyList<CookedContentSource> CookedContentOrder { get; init; } = [];
 
@@ -105,6 +108,7 @@ public sealed record ProjectContext
             Thumbnail = info.Thumbnail,
             AuthoringMounts = [.. info.AuthoringMounts],
             LocalFolderMounts = [.. info.LocalFolderMounts],
+            PakFileMounts = [.. info.PakFileMounts],
             CookedContentOrder = [.. info.CookedContentOrder],
             DefaultSceneId = info.DefaultSceneId,
             Settings = info.Settings,

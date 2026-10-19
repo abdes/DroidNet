@@ -13,7 +13,6 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 /// <param name="Files">Source, settings and media files with discovery hashes.</param>
 /// <param name="Dependencies">Direct asset dependencies, keyed by authored source identity.</param>
 /// <param name="FileDependencies">Saved file paths that directly affect each product's emitted data.</param>
-/// <param name="Builtins">Engine-provided identities whose recipes are supplied by the engine catalog.</param>
 /// <param name="PublishedReferences">Cooked-only references requiring published-output validation and leases.</param>
 /// <param name="Diagnostics">Input problems collected across independent assets; errors prevent capture and cooking.</param>
 public sealed record CookDependencyGraph(
@@ -21,7 +20,6 @@ public sealed record CookDependencyGraph(
     ImmutableArray<CookSnapshotInput> Files,
     ImmutableDictionary<AssetPath, ImmutableArray<AssetPath>> Dependencies,
     ImmutableDictionary<AssetPath, ImmutableArray<string>> FileDependencies,
-    ImmutableArray<AssetPath> Builtins,
     ImmutableArray<AssetPath> PublishedReferences,
     ImmutableArray<DiagnosticRecord> Diagnostics)
 {
@@ -47,9 +45,6 @@ public sealed record CookDependencyGraph(
     /// <summary>Gets the exact native recipes used during discovery.</summary>
     internal ImmutableDictionary<AssetPath, ContentImportJob> NativeJobs { get; init; }
         = ImmutableDictionary<AssetPath, ContentImportJob>.Empty;
-
-    /// <summary>Gets operation-owned builtin sources, separate from authored provenance.</summary>
-    internal ImmutableArray<ContentCookInput> GeneratedSources { get; init; } = [];
 
     /// <summary>Gets verified generated inputs for native execution.</summary>
     internal ImmutableArray<Import.NativeCapturedInput> GeneratedInputs { get; init; } = [];
