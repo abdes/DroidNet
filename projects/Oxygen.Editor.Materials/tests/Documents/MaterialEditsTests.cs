@@ -9,6 +9,7 @@ using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Materials.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Materials.Tests.Documents;
@@ -189,7 +190,7 @@ public sealed class MaterialEditsTests
         _ = saved.PbrMetallicRoughness.MetallicFactor.Should().Be(0.5f);
     }
 
-    /// <summary>Textures are assigned, replaced and cleared per channel; a bad channel or path is refused.</summary>
+    /// <summary>Textures are assigned, replaced and cleared per channel; a bad channel is refused.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task TexturesAreSetPerChannel()
@@ -197,13 +198,12 @@ public sealed class MaterialEditsTests
         using var materials = new MaterialDocuments();
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = materials.Edits.SetTexture(document, "base_color", "/Content/Textures/Bark.otex").Succeeded.Should().BeTrue();
-        _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be("/Content/Textures/Bark.otex");
+        _ = materials.Edits.SetTexture(document, "base_color", AssetPath.Parse("/Content/Textures/Bark.otex")).Succeeded.Should().BeTrue();
+        _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be(AssetPath.Parse("/Content/Textures/Bark.otex"));
         _ = materials.Edits.SetTexture(document, "base_color", null).Succeeded.Should().BeTrue();
         _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences.Should().NotContainKey("base_color");
 
-        _ = materials.Edits.SetTexture(document, "no_such_channel", "/Content/Textures/Bark.otex").Code.Should().Be(MaterialDiagnosticCodes.TextureChannelInvalid);
-        _ = materials.Edits.SetTexture(document, "base_color", "Textures/Bark.otex").Code.Should().Be(MaterialDiagnosticCodes.TexturePathInvalid);
+        _ = materials.Edits.SetTexture(document, "no_such_channel", AssetPath.Parse("/Content/Textures/Bark.otex")).Code.Should().Be(MaterialDiagnosticCodes.TextureChannelInvalid);
         _ = document.History.UndoStack.Should().HaveCount(2);
     }
 
@@ -214,14 +214,14 @@ public sealed class MaterialEditsTests
     {
         using var materials = new MaterialDocuments();
         var redirects = new Mock<IAssetRedirects>();
-        _ = redirects.Setup(value => value.Resolve(It.IsAny<string>())).Returns((string path) => path.Replace("/Bark.", "/Oak.", StringComparison.Ordinal));
+        _ = redirects.Setup(value => value.Resolve(It.IsAny<AssetPath>())).Returns((AssetPath texture) => AssetPath.Parse(texture.VirtualPath.Replace("/Bark.", "/Oak.", StringComparison.Ordinal)));
         var edits = new MaterialEdits(materials.Validation, redirects: redirects.Object);
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = edits.SetTexture(document, "base_color", "/Content/Textures/Bark.otex");
-        _ = edits.SetTexture(document, "base_color", "/Content/Textures/Stone.otex");
+        _ = edits.SetTexture(document, "base_color", AssetPath.Parse("/Content/Textures/Bark.otex"));
+        _ = edits.SetTexture(document, "base_color", AssetPath.Parse("/Content/Textures/Stone.otex"));
 
         _ = edits.Undo(document).Succeeded.Should().BeTrue();
 
-        _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be("/Content/Textures/Oak.otex");
+        _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be(AssetPath.Parse("/Content/Textures/Oak.otex"));
     }
 }

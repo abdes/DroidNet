@@ -12,11 +12,6 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// </summary>
 public interface IAssetRedirects
 {
-    /// <summary>Resolves a captured asset reference to the asset's current identity, keeping its form.</summary>
-    /// <param name="reference">An asset URI or a canonical virtual path.</param>
-    /// <returns>The current reference; the input when the asset did not move or still exists at that path.</returns>
-    public string Resolve(string reference);
-
     /// <summary>Resolves a captured asset to its current identity.</summary>
     /// <param name="reference">The asset's identity when it was captured.</param>
     /// <returns>The current identity; the input when the asset did not move or still exists at that path.</returns>

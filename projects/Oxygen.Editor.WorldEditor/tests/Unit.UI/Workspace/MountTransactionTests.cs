@@ -174,7 +174,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
                 DefaultSceneId = context.DefaultSceneId,
             };
             _ = (await this.manager.SaveProjectInfoAsync(info).ConfigureAwait(true)).Should().BeTrue();
-            var index = await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, CancellationToken.None).ConfigureAwait(true);
+            var index = (await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, CancellationToken.None).ConfigureAwait(true)).RequireCurrent(this.ProjectOutput);
             var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, context.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(context), [new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, LibraryPath: null)], [], CookInputs: null);
             var path = CookPublicationPaths.Document(context.ProjectRoot.FullPath, document.OperationId);
             Directory.CreateDirectory(Path.GetDirectoryName(path)!);

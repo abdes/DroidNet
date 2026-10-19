@@ -37,6 +37,6 @@ public static class DocumentRelocations
         }
 
         skipped = null;
-        return new DocumentRelocation(new DocumentFile(location.File, location.Identity), rewrite?.Written ?? document.Version, change.MapReference);
+        return new DocumentRelocation(new DocumentFile(location.File, location.Identity), rewrite?.Written ?? document.Version, change.MapAsset);
     }
 }

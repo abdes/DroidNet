@@ -52,7 +52,7 @@ public sealed partial class MaterialEditorViewModel
                     : item.CookedMetadata?.Texture is { Is2D: true })];
             foreach (var channel in this.TextureChannels)
             {
-                channel.Refresh(this.availableTextures, channel.SelectedVirtualPath);
+                channel.Refresh(this.availableTextures, channel.SelectedTexture);
             }
 
         }

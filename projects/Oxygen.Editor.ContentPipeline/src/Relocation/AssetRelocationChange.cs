@@ -27,15 +27,6 @@ public sealed class AssetRelocationChange
     /// <summary>Gets each rewritten file with its locations and the version the transaction wrote.</summary>
     public IReadOnlyList<RelocatedFile> RewrittenFiles { get; }
 
-    /// <summary>Maps an asset reference to its new identity, keeping its form.</summary>
-    /// <param name="reference">An asset URI or a canonical virtual path.</param>
-    /// <returns>The new reference, or null when the referenced asset did not move.</returns>
-    public string? MapReference(string reference)
-    {
-        ArgumentNullException.ThrowIfNull(reference);
-        return AuthoredReferenceFormat.MapReference(reference, this.map.MapIdentity);
-    }
-
     /// <summary>Maps an asset to its new identity.</summary>
     /// <param name="asset">The asset's identity.</param>
     /// <returns>The new identity, or null when the asset did not move.</returns>

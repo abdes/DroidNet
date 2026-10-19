@@ -136,7 +136,7 @@ public sealed class MaterialCookTests
             """, this.TestContext.CancellationToken).ConfigureAwait(false);
         var materialPath = Path.Combine(workspace.Root, "Content", "Materials", "Textured.omat.json");
         await WriteMaterialAsync(materialPath, CreateMaterial("Textured", metallicFactor: 0.0f, roughnessFactor: 0.6f)
-            .WithTextureReference("base_color", "/Content/Textures/Surface.otex")).ConfigureAwait(false);
+            .WithTextureReference("base_color", AssetPath.Parse("/Content/Textures/Surface.otex"))).ConfigureAwait(false);
         var service = CreateService(workspace);
         var request = new MaterialCookRequest(
             AssetPath.Parse("/Content/Materials/Textured.omat.json"),
@@ -168,7 +168,7 @@ public sealed class MaterialCookTests
         using var workspace = new MaterialWorkspace();
         var materialPath = Path.Combine(workspace.Root, "Content", "Materials", "Broken.omat.json");
         await WriteMaterialAsync(materialPath, CreateMaterial("Broken", metallicFactor: 0.0f, roughnessFactor: 0.5f)
-            .WithTextureReference("base_color", "/Content/Textures/Missing.otex")).ConfigureAwait(false);
+            .WithTextureReference("base_color", AssetPath.Parse("/Content/Textures/Missing.otex"))).ConfigureAwait(false);
         var service = CreateService(workspace);
 
         var result = await service.CookMaterialAsync(

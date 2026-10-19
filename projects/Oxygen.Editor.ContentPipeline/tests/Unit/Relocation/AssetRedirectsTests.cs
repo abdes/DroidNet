@@ -28,13 +28,11 @@ public sealed class AssetRedirectsTests
         _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await service.RelocateAsync(Move("/Content/Materials/B.omat.json", "/Content/Materials/C.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = redirects.Resolve("asset:///Content/Materials/A.omat").Should().Be("asset:///Content/Materials/C.omat");
-        _ = redirects.Resolve("/Content/Materials/A.omat").Should().Be("/Content/Materials/C.omat");
         _ = redirects.Resolve(AssetPath.Parse("/Content/Materials/A.omat")).Should().Be(AssetPath.Parse("/Content/Materials/C.omat"));
         _ = redirects.Resolve(AssetPath.Parse("/Content/Materials/Other.omat")).Should().Be(AssetPath.Parse("/Content/Materials/Other.omat"));
 
         _ = await service.RelocateAsync(second.Reverse, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = redirects.Resolve("asset:///Content/Materials/A.omat").Should().Be("asset:///Content/Materials/B.omat");
+        _ = redirects.Resolve(AssetPath.Parse("/Content/Materials/A.omat")).Should().Be(AssetPath.Parse("/Content/Materials/B.omat"));
     }
 
     /// <summary>A reference whose asset exists again at its old path is never redirected.</summary>
@@ -49,7 +47,7 @@ public sealed class AssetRedirectsTests
         _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
 
-        _ = redirects.Resolve("asset:///Content/Materials/A.omat").Should().Be("asset:///Content/Materials/A.omat");
+        _ = redirects.Resolve(AssetPath.Parse("/Content/Materials/A.omat")).Should().Be(AssetPath.Parse("/Content/Materials/A.omat"));
     }
 
     /// <summary>Deleted assets are reported, until something exists at that path again.</summary>
@@ -97,7 +95,6 @@ public sealed class AssetRedirectsTests
         _ = rewrite.Should().NotBeNull();
         _ = rewrite!.Written.Should().Be((await workspace.Files.ReadAsync(scene.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false)).Version);
         _ = followed.MapAsset(AssetPath.Parse("/Content/Materials/A.omat")).Should().Be(AssetPath.Parse("/Content/Materials/B.omat"));
-        _ = followed.MapReference("asset:///Content/Materials/A.omat").Should().Be("asset:///Content/Materials/B.omat");
         _ = followed.MapPath(workspace.FileOf("Content/Materials/A.omat.json")).Should().Be(workspace.FileOf("Content/Materials/B.omat.json"));
     }
 

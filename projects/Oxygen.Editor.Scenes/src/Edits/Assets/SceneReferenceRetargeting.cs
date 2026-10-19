@@ -100,17 +100,16 @@ internal static class SceneReferenceRetargeting
 
     /// <summary>Re-points scene references.</summary>
     /// <param name="references">The references.</param>
-    /// <param name="map">Returns the new reference, keeping its form, or null when it does not move.</param>
+    /// <param name="map">Returns the new identity, or null when the asset does not move.</param>
     /// <returns>The re-pointed references, or null when nothing changed.</returns>
-    internal static SceneReferencesData? Retarget(SceneReferencesData references, Func<AssetPath, AssetPath?> mapAsset, Func<string, string?> map)
+    internal static SceneReferencesData? Retarget(SceneReferencesData references, Func<AssetPath, AssetPath?> map)
     {
         ArgumentNullException.ThrowIfNull(references);
-        ArgumentNullException.ThrowIfNull(mapAsset);
         ArgumentNullException.ThrowIfNull(map);
         var changed = false;
-        IList<AssetPath> Uris(IList<AssetPath> values) => [.. values.Select(value =>
+        IList<AssetPath> Assets(IList<AssetPath> values) => [.. values.Select(value =>
         {
-            if (mapAsset(value) is not { } mapped)
+            if (map(value) is not { } mapped)
             {
                 return value;
             }
@@ -120,19 +119,10 @@ internal static class SceneReferenceRetargeting
         })];
         var result = references with
         {
-            Scripts = Uris(references.Scripts),
-            InputActions = Uris(references.InputActions),
-            PhysicsSidecars = Uris(references.PhysicsSidecars),
-            ExtraAssets = [.. references.ExtraAssets.Select(value =>
-            {
-                if (map(value) is not { } mapped)
-                {
-                    return value;
-                }
-
-                changed = true;
-                return mapped;
-            })],
+            Scripts = Assets(references.Scripts),
+            InputActions = Assets(references.InputActions),
+            PhysicsSidecars = Assets(references.PhysicsSidecars),
+            ExtraAssets = Assets(references.ExtraAssets),
         };
         return changed ? result : null;
     }

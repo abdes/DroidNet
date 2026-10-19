@@ -7,6 +7,7 @@ using DroidNet.Controls;
 using Moq;
 using Oxygen.Editor.Documents;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.MaterialEditor.Tests;
 
@@ -136,18 +137,18 @@ public sealed partial class MaterialEditorViewModelTests
     {
         using var materials = new MaterialDocuments();
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = materials.Edits.SetTexture(document, "base_color", "/Content/Textures/Bark.otex");
+        _ = materials.Edits.SetTexture(document, "base_color", AssetPath.Parse("/Content/Textures/Bark.otex"));
         _ = await document.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         using var editor = materials.EditorOf(document);
         File.Move(materials.PathOf("Wood"), materials.PathOf("Oak"));
 
         await document.FollowRelocationAsync(
-            new DocumentRelocation(materials.FileOf("Oak"), document.Version, static path => path.Replace("/Bark.", "/Oak.", StringComparison.Ordinal)),
+            new DocumentRelocation(materials.FileOf("Oak"), document.Version, static texture => AssetPath.Parse(texture.VirtualPath.Replace("/Bark.", "/Oak.", StringComparison.Ordinal))),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = editor.DisplayName.Should().Be("Oak");
         _ = editor.MaterialUriText.Should().Be(materials.FileOf("Oak").Asset.ToUriString());
-        _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be("/Content/Textures/Oak.otex");
+        _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be(AssetPath.Parse("/Content/Textures/Oak.otex"));
         _ = editor.IsDirty.Should().BeFalse();
     }
 

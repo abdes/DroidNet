@@ -37,31 +37,6 @@ public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
     }
 
     /// <inheritdoc/>
-    public string Resolve(string reference)
-    {
-        ArgumentNullException.ThrowIfNull(reference);
-        RelocationMap[] snapshot;
-        lock (this.sync)
-        {
-            if (this.relocations.Count == 0)
-            {
-                return reference;
-            }
-
-            snapshot = [.. this.relocations];
-        }
-
-        var resolved = AuthoredReferenceFormat.MapReference(reference, identity => this.ResolveIdentity(identity, snapshot));
-        if (resolved is null)
-        {
-            return reference;
-        }
-
-        this.LogRedirected(reference, resolved);
-        return resolved;
-    }
-
-    /// <inheritdoc/>
     public AssetPath Resolve(AssetPath reference)
     {
         ArgumentNullException.ThrowIfNull(reference);
@@ -76,7 +51,7 @@ public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
             return reference;
         }
 
-        this.LogRedirected(reference.ToString(), resolved.ToString());
+        this.LogRedirected(reference, resolved);
         return resolved;
     }
 

@@ -259,28 +259,28 @@ The model is `Material` in `Oxygen.Editor.Materials`, over the immutable
   `MaterialSourceReader`, then name the source from the file stem, as
   `Document.Title` does. A file that does not decode fails the open with the
   reader's message.
-- `MaterialContent : IDocumentContent` holds the `Material` and
-  the open gesture, if any. `HasEditsInProgress` is the open gesture;
-  `FinishEditsAsync` commits it as one history entry. `Capture` validates
-  against the engine schema (`MaterialSchemaValidator`; a refusal carries the
-  validator's message) and serializes with `MaterialSourceWriter`; `CaptureCopy`
-  renames the source to the copy's stem; `ApplyRelocation` maps texture
-  references through `MapReference`.
+- `MaterialContent : IDocumentContent` holds the `Material` and the open
+  gesture, if any. `HasEditsInProgress` is the open gesture; `FinishEditsAsync`
+  commits it as one history entry. `Capture` validates against the engine schema
+  (`MaterialSchemaValidator`; a refusal carries the validator's message) and
+  serializes with `MaterialSourceWriter`; `CaptureCopy` renames the source to
+  the copy's stem; `ApplyRelocation` maps texture references through `MapAsset`.
 - `MaterialEdits` applies scalar, texture and property-pipeline edits to a
   material `Document`: validate the edit (`MaterialDescriptors`, the texture
-  channel and virtual path rules) and the edited source (engine and merged
-  schema), replace the source, and record one change in `Document.History` whose
-  inverse restores the previous source. A rejected edit is published as an
-  operation result, as today. A gesture (`BeginEditSession`, previews, complete
-  or cancel) previews without recording and commits as one entry. The gesture is
-  a `MaterialGesture` held by the `MaterialContent`: the source before it began
-  is its snapshot, and a material has at most one gesture, so the keyed sessions
-  and property snapshots of `CommitGroupController` would only be converted back
-  to a `MaterialSource`. A new gesture, an edit or a capture commits the open
-  one first. Undo and redo validate the restored source first, and a source
-  captured before a relocation resolves its texture references through
-  `IAssetRedirects`, with today's warning for a texture that was deleted
-  meanwhile. `IMaterialPropertyEditService` folds into it.
+  channel rule; a texture is an `AssetPath`) and the edited source (engine and
+  merged schema), replace the source, and record one change in
+  `Document.History` whose inverse restores the previous source. A rejected edit
+  is published as an operation result, as today. A gesture (`BeginEditSession`,
+  previews, complete or cancel) previews without recording and commits as one
+  entry. The gesture is a `MaterialGesture` held by the `MaterialContent`: the
+  source before it began is its snapshot, and a material has at most one
+  gesture, so the keyed sessions and property snapshots of
+  `CommitGroupController` would only be converted back to a `MaterialSource`. A
+  new gesture, an edit or a capture commits the open one first. Undo and redo
+  validate the restored source first, and a source captured before a relocation
+  resolves its texture references through `IAssetRedirects`, with today's
+  warning for a texture that was deleted meanwhile.
+  `IMaterialPropertyEditService` folds into it.
 - Dirty follows the history's position (document-kinds decision 2), no longer a
   content comparison.
 - The material's `MaterialGuid` is derived from `Document.File.AssetUri` where

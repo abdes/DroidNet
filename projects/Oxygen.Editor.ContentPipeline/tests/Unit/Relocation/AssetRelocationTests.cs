@@ -569,7 +569,7 @@ public sealed class AssetRelocationTests
     public async Task MovingSceneToAnotherFolderRewritesTheScenesThatReferenceIt()
     {
         using var workspace = CreateContent();
-        _ = workspace.Write("Content/Levels/Lobby.oscene.json", """{ "Id": "0b0e6b8c-3c5a-4a0e-9a8f-1b1f2a3c4d5e", "Name": "Lobby", "RootNodes": [], "References": { "ExtraAssets": [ "/Content/Scenes/Main.oscene" ] } }""");
+        _ = workspace.Write("Content/Levels/Lobby.oscene.json", """{ "Id": "0b0e6b8c-3c5a-4a0e-9a8f-1b1f2a3c4d5e", "Name": "Lobby", "RootNodes": [], "References": { "ExtraAssets": [ "asset:///Content/Scenes/Main.oscene" ] } }""");
         var history = new HistoryKeeper(this);
 
         var plan = await workspace.Service.RelocateAsync(Move("/Content/Scenes/Main.oscene.json", "/Content/Levels/Start.oscene.json"), "Move", history, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -577,7 +577,7 @@ public sealed class AssetRelocationTests
         _ = workspace.Exists("Content/Scenes/Main.oscene.json").Should().BeFalse();
         _ = workspace.Exists("Content/Levels/Start.oscene.json").Should().BeTrue();
         _ = plan.Referrers.Should().Contain(AssetPath.Parse("/Content/Levels/Lobby.oscene.json"));
-        _ = workspace.ReadJson("Content/Levels/Lobby.oscene.json")["References"]!["ExtraAssets"]![0]!.GetValue<string>().Should().Be("/Content/Levels/Start.oscene");
+        _ = workspace.ReadJson("Content/Levels/Lobby.oscene.json")["References"]!["ExtraAssets"]![0]!.GetValue<string>().Should().Be("asset:///Content/Levels/Start.oscene");
         _ = history.UndoStack.Should().ContainSingle();
     }
 

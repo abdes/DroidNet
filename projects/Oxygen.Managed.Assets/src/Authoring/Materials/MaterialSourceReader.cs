@@ -7,6 +7,7 @@ using System.Numerics;
 using System.Text.Json;
 using Json.Schema;
 using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Managed.Assets.Authoring.Materials;
@@ -78,7 +79,7 @@ public static class MaterialSourceReader
             {
                 var binding = texture.Value;
                 var path = binding.GetProperty("virtual_path").GetString()!;
-                if (!MaterialSource.IsTexturePath(path))
+                if (!AssetPath.TryParse(path, out var texturePath) || texturePath.IsMount)
                 {
                     throw Problem(MaterialSourceCodes.TexturePathInvalid, $"The {texture.Name} texture '{path}' is not a canonical absolute virtual path below a mount point.");
                 }
@@ -194,16 +195,16 @@ public static class MaterialSourceReader
             : throw Problem(MaterialSourceCodes.NumberOutOfRange, $"The material parameter '{name}' does not fit a finite 32-bit float.");
     }
 
-    private static IReadOnlyDictionary<string, string> ReadTextureReferences(JsonElement textures)
+    private static IReadOnlyDictionary<string, AssetPath> ReadTextureReferences(JsonElement textures)
     {
-        var references = new Dictionary<string, string>(StringComparer.Ordinal);
+        var references = new Dictionary<string, AssetPath>(StringComparer.Ordinal);
         if (textures.ValueKind == JsonValueKind.Object)
         {
             foreach (var channel in MaterialSource.TextureChannels)
             {
                 if (textures.TryGetProperty(channel, out var binding))
                 {
-                    references.Add(channel, binding.GetProperty("virtual_path").GetString()!);
+                    references.Add(channel, AssetPath.Parse(binding.GetProperty("virtual_path").GetString()!));
                 }
             }
         }

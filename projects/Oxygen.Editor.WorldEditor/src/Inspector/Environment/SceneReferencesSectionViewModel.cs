@@ -201,8 +201,14 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         }
 
         var path = this.ExtraAssetText.Trim();
+        if (!AssetPath.TryParse(path, out var asset) || asset.IsMount)
+        {
+            this.SetErrorMessage($"Extra asset path '{path}' must be an absolute canonical virtual path.");
+            return;
+        }
+
         var references = current.References;
-        if (references.ExtraAssets.Contains(path, StringComparer.Ordinal))
+        if (references.ExtraAssets.Contains(asset))
         {
             this.SetErrorMessage($"Extra asset '{path}' is already referenced.");
             return;
@@ -213,7 +219,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             Scripts = [.. references.Scripts],
             InputActions = [.. references.InputActions],
             PhysicsSidecars = [.. references.PhysicsSidecars],
-            ExtraAssets = [.. references.ExtraAssets, path],
+            ExtraAssets = [.. references.ExtraAssets, asset],
         }).ConfigureAwait(true);
         if (this.ErrorMessage.Length == 0)
         {
@@ -221,12 +227,12 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         }
     }
 
-    /// <summary>Removes an additional native virtual path.</summary>
-    /// <param name="path">The path to remove.</param>
+    /// <summary>Removes an additional asset.</summary>
+    /// <param name="asset">The asset to remove.</param>
     /// <returns>The completion of the undoable and persisted edit.</returns>
-    public Task RemoveExtraAssetAsync(string path)
+    public Task RemoveExtraAssetAsync(AssetPath asset)
     {
-        ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(asset);
         if (!this.CanEdit || this.scene is not { } current)
         {
             return Task.CompletedTask;
@@ -237,7 +243,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             Scripts = [.. current.References.Scripts],
             InputActions = [.. current.References.InputActions],
             PhysicsSidecars = [.. current.References.PhysicsSidecars],
-            ExtraAssets = [.. current.References.ExtraAssets.Where(candidate => !string.Equals(candidate, path, StringComparison.Ordinal))],
+            ExtraAssets = [.. current.References.ExtraAssets.Where(candidate => candidate != asset)],
         });
     }
 
@@ -386,9 +392,9 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
         this.UpdateReferenceRows(AssetKind.InputAction, references.InputActions, this.InputActions);
         this.UpdateReferenceRows(AssetKind.PhysicsScene, references.PhysicsSidecars, this.PhysicsSidecars);
         this.ExtraAssets.Clear();
-        foreach (var path in references.ExtraAssets)
+        foreach (var asset in references.ExtraAssets)
         {
-            this.ExtraAssets.Add(new(path, this.CanEdit));
+            this.ExtraAssets.Add(new(asset, this.CanEdit));
         }
 
         this.OnPropertyChanged(nameof(this.SearchableContent));
@@ -483,5 +489,11 @@ public sealed record SceneReferenceRow(AssetKind Kind, AssetPath Asset, string D
     public string StatusText => this.IsUnavailable ? "Unavailable or wrong asset type" : "Resolved";
 }
 
-/// <summary>Displays an additional native virtual path with its current edit availability.</summary>
-public sealed record ExtraAssetRow(string Path, bool CanEdit);
+/// <summary>Displays an additional asset with its current edit availability.</summary>
+/// <param name="Asset">The asset.</param>
+/// <param name="CanEdit">Whether the row can be removed.</param>
+public sealed record ExtraAssetRow(AssetPath Asset, bool CanEdit)
+{
+    /// <summary>Gets the asset's virtual path, as the row shows it.</summary>
+    public string Path => this.Asset.VirtualPath;
+}

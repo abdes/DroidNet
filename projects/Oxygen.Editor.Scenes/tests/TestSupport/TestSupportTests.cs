@@ -87,7 +87,7 @@ public sealed class TestSupportTests
     }
 
     [TestMethod]
-    public void Redirects_FollowEveryMoveInBothOverloads()
+    public void Redirects_FollowEveryMove()
     {
         var redirects = new FakeAssetRedirects();
         redirects.Move(SampleScene.CubeGeometry, SampleScene.SphereGeometry);
@@ -95,9 +95,6 @@ public sealed class TestSupportTests
         redirects.Move(SampleScene.SphereGeometry, moved);
 
         _ = redirects.Resolve(SampleScene.CubeGeometry).Should().Be(moved);
-        _ = redirects.Resolve(SampleScene.CubeGeometry.VirtualPath).Should().Be(moved.VirtualPath);
-        _ = redirects.Resolve(SampleScene.CubeGeometry.ToUriString()).Should().Be(moved.ToUriString());
-        _ = redirects.Resolve("not a uri").Should().Be("not a uri");
     }
 
     // "A(A1 ...)" is a node with layout children, "F+(...)" an expanded folder, "G-(...)" a collapsed one.

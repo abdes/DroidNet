@@ -60,7 +60,7 @@ public sealed partial class SceneReferencesSectionView
     {
         if (sender is Button { Tag: ExtraAssetRow row } && this.ViewModel is { } model)
         {
-            await model.RemoveExtraAssetAsync(row.Path);
+            await model.RemoveExtraAssetAsync(row.Asset);
         }
     }
 

@@ -731,7 +731,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             ],
             InputActions = [AssetPath.Parse("/Content/Input/Jump.oiact")],
             PhysicsSidecars = [AssetPath.Parse("/Content/Physics/Main.opscene")],
-            ExtraAssets = ["/.cooked/Extras/Z.bin", "/.cooked/Extras/A.bin", "/.cooked/Extras/A.bin"],
+            ExtraAssets = [AssetPath.Parse("/Content/Extras/Z.bin"), AssetPath.Parse("/Content/Extras/A.bin"), AssetPath.Parse("/Content/Extras/A.bin")],
         });
         var node = new SceneNode(scene) { Name = "Authored mesh" };
         var geometryUri = AssetPath.Parse("/Content/Geometry/Imported.ogeo");
@@ -767,7 +767,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = references.GetProperty("physics_sidecars").EnumerateArray().Select(static path => path.GetString())
             .Should().Equal("/Content/Physics/Main.opscene");
         _ = references.GetProperty("extra_assets").EnumerateArray().Select(static path => path.GetString())
-            .Should().Equal("/.cooked/Extras/A.bin", "/.cooked/Extras/Z.bin");
+            .Should().Equal("/Content/Extras/A.bin", "/Content/Extras/Z.bin");
     }
 
     [TestMethod]
@@ -800,14 +800,11 @@ public sealed partial class SceneDescriptorGeneratorTests
     }
 
     [TestMethod]
-    [DataRow("/Content/../outside.bin")]
-    [DataRow("relative/path.bin")]
-    [DataRow("/Content//duplicate.bin")]
-    public async Task SceneReferenceWithNonCanonicalExtraPathFailsGeneration(string path)
+    public async Task SceneReferenceWithAMountAsExtraAssetFailsGeneration()
     {
         using var workspace = new DescriptorWorkspace();
         var scene = CreateScene();
-        scene.SetReferences(new SceneReferencesData { ExtraAssets = [path] });
+        scene.SetReferences(new SceneReferencesData { ExtraAssets = [AssetPath.Content] });
         var generator = new SceneDescriptorGenerator();
 
         var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Materials;
 
@@ -12,7 +13,8 @@ namespace Oxygen.Editor.Materials;
 /// </summary>
 /// <remarks>
 /// The source is immutable, so a history keeps earlier sources as snapshots and restores one with
-/// <see cref="Replace"/>. A material references its textures by virtual path, the form of the engine's descriptor.
+/// <see cref="Replace"/>. A material references its textures by identity; its file spells them as virtual paths, the form of the engine's
+/// descriptor.
 /// </remarks>
 public sealed class Material
 {
@@ -32,24 +34,21 @@ public sealed class Material
 
     /// <summary>Gets the code of the problem with a texture assignment, or <see langword="null"/> when it is valid.</summary>
     /// <param name="channel">The texture channel.</param>
-    /// <param name="virtualPath">The texture's path, or <see langword="null"/> to clear the channel.</param>
-    /// <returns><see cref="MaterialDiagnosticCodes.TextureChannelInvalid"/>, <see cref="MaterialDiagnosticCodes.TexturePathInvalid"/> or <see langword="null"/>.</returns>
-    public static string? CheckTexture(string? channel, string? virtualPath)
-        => !MaterialSource.IsTextureChannel(channel) ? MaterialDiagnosticCodes.TextureChannelInvalid
-            : virtualPath is not null && !MaterialSource.IsTexturePath(virtualPath) ? MaterialDiagnosticCodes.TexturePathInvalid
-            : null;
+    /// <returns><see cref="MaterialDiagnosticCodes.TextureChannelInvalid"/> or <see langword="null"/>.</returns>
+    public static string? CheckTexture(string? channel)
+        => MaterialSource.IsTextureChannel(channel) ? null : MaterialDiagnosticCodes.TextureChannelInvalid;
 
     /// <summary>Returns a source whose textures follow a relocation.</summary>
     /// <param name="source">The source to retarget, such as a history snapshot.</param>
-    /// <param name="map">The new path of a texture, or <see langword="null"/> when it did not move.</param>
+    /// <param name="map">The new identity of a texture, or <see langword="null"/> when it did not move.</param>
     /// <returns><paramref name="source"/> when no texture moved; otherwise the retargeted copy.</returns>
-    public static MaterialSource Retarget(MaterialSource source, Func<string, string?> map)
+    public static MaterialSource Retarget(MaterialSource source, Func<AssetPath, AssetPath?> map)
     {
         ArgumentNullException.ThrowIfNull(source);
         ArgumentNullException.ThrowIfNull(map);
-        foreach (var (channel, path) in source.TextureReferences)
+        foreach (var (channel, texture) in source.TextureReferences)
         {
-            if (map(path) is { } mapped && !string.Equals(mapped, path, StringComparison.Ordinal))
+            if (map(texture) is { } mapped && mapped != texture)
             {
                 source = source.WithTextureReference(channel, mapped);
             }

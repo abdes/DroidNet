@@ -116,7 +116,7 @@ public sealed class SceneContent : IDocumentContent, IDisposable
     private static IReadOnlyList<SceneChange> Relocate(Scene scene, DocumentRelocation relocation)
     {
         var nodes = scene.AllNodes.Where(node => SceneReferenceRetargeting.RetargetNode(node, relocation.MapAsset)).ToArray();
-        if (SceneReferenceRetargeting.Retarget(scene.References, relocation.MapAsset, relocation.MapReference) is { } references)
+        if (SceneReferenceRetargeting.Retarget(scene.References, relocation.MapAsset) is { } references)
         {
             scene.SetReferences(references);
         }

@@ -18,8 +18,8 @@ public sealed record SceneReferencesData
     /// <summary>Gets the scene's physics sidecar references.</summary>
     public IList<AssetPath> PhysicsSidecars { get; init; } = [];
 
-    /// <summary>Gets additional native virtual paths required by the scene.</summary>
-    public IList<string> ExtraAssets { get; init; } = [];
+    /// <summary>Gets additional assets the scene requires, which its cooked descriptor lists by virtual path.</summary>
+    public IList<AssetPath> ExtraAssets { get; init; } = [];
 
     /// <summary>Gets a value indicating whether the scene has no authored references.</summary>
     [System.Text.Json.Serialization.JsonIgnore]

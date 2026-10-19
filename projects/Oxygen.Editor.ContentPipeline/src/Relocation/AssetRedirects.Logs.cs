@@ -5,6 +5,7 @@
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
@@ -14,7 +15,7 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 public sealed partial class AssetRedirects
 {
     [LoggerMessage(Level = LogLevel.Information, Message = "Resolved the reference '{Captured}', captured before a rename or move, to its current identity '{Current}'.")]
-    private partial void LogRedirected(string captured, string current);
+    private partial void LogRedirected(AssetPath captured, AssetPath current);
 
     [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "The project changed; forgot {Count} recorded relocations and deletions.")]
     private static partial void LogCleared(ILogger logger, int count);

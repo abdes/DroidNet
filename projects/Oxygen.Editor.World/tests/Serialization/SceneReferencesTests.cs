@@ -45,7 +45,7 @@ public sealed class SceneReferencesTests
             _ = collection.Should().BeEmpty();
         }
 
-        var extraEdit = () => scene.References.ExtraAssets.Add("/Content/Extra.otex");
+        var extraEdit = () => scene.References.ExtraAssets.Add(AssetPath.Parse("/Content/Extra.otex"));
         _ = extraEdit.Should().Throw<NotSupportedException>();
         _ = scene.References.ExtraAssets.Should().BeEmpty();
     }
@@ -77,7 +77,7 @@ public sealed class SceneReferencesTests
             Scripts = [AssetPath.Parse("/Content/Scripts/Orbit.oscript.json")],
             InputActions = [AssetPath.Parse("/Content/Input/Jump.oiact")],
             PhysicsSidecars = [AssetPath.Parse("/Content/Physics/Main.opscene")],
-            ExtraAssets = ["/.cooked/Extras/lookup.bin"],
+            ExtraAssets = [AssetPath.Parse("/Content/Extras/lookup.bin")],
         };
         var scene = Scene.CreateAndHydrate(new SceneData
         {

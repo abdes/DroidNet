@@ -47,7 +47,7 @@ internal static class SceneTestSupport
             Scripts = [AssetPath.Parse("/Content/Scripts/Controller.oscript")],
             InputActions = [AssetPath.Parse("/Content/Input/Move.oiact")],
             PhysicsSidecars = [AssetPath.Parse("/Content/Physics/Colliders.opscene")],
-            ExtraAssets = ["/Content/Textures/Noise.otex"],
+            ExtraAssets = [AssetPath.Parse("/Content/Textures/Noise.otex")],
         });
         scene.SetStartingInputContexts([
             new StartingInputContextData(AssetPath.Parse("/Content/Input/Gameplay.oimap"), Priority: 1),

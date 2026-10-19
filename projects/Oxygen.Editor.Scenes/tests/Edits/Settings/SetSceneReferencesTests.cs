@@ -23,7 +23,7 @@ public sealed class SetSceneReferencesTests
     public static IEnumerable<TestDataRow<ReferencesCase>> InvalidReferences =>
     [
         new(new ReferencesCase(new SceneReferencesData { Scripts = [SampleScene.CubeGeometry] })) { DisplayName = "ScriptOfWrongType" },
-        new(new ReferencesCase(new SceneReferencesData { ExtraAssets = ["/Content/../Extra.bin"] })) { DisplayName = "ExtraPathNotCanonical" },
+        new(new ReferencesCase(new SceneReferencesData { ExtraAssets = [AssetPath.Content] })) { DisplayName = "ExtraAssetIsAMount" },
     ];
 
     [TestMethod]
@@ -74,6 +74,6 @@ public sealed class SetSceneReferencesTests
             Scripts = [SampleScene.MoveScript],
             InputActions = [AssetPath.Parse("/Content/Jump.oiact")],
             PhysicsSidecars = [AssetPath.Parse("/Content/World.opscene")],
-            ExtraAssets = ["/Content/Extra.bin"],
+            ExtraAssets = [AssetPath.Parse("/Content/Extra.bin")],
         };
 }

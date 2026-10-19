@@ -14,24 +14,24 @@ public sealed class MaterialTextureChannelTests
     [TestMethod]
     public void MissingAssignmentIsVisibleAndCanBeReplacedOrCleared()
     {
-        var changes = new List<string?>();
+        var changes = new List<AssetPath?>();
         var channel = new MaterialTextureChannel("base_color", "Base color", (_, path) => changes.Add(path));
         var available = CreateTexture(AssetPath.Parse("/Content/Textures/Available.otex"));
-        const string missing = "/Content/Textures/Missing.otex";
+        var missing = AssetPath.Parse("/Content/Textures/Missing.otex");
 
         channel.Refresh([available], missing);
 
         _ = channel.WarningVisibility.Should().Be(Microsoft.UI.Xaml.Visibility.Visible);
-        _ = channel.SelectedText.Should().EndWith(missing);
+        _ = channel.SelectedText.Should().EndWith(missing.VirtualPath);
         _ = channel.Choices.HasClear.Should().BeTrue();
         _ = channel.Choices.Find(available.Identity).Should().NotBeNull();
 
-        channel.SelectedVirtualPath = available.Identity.VirtualPath;
+        channel.SelectedTexture = available.Identity;
         _ = channel.WarningText.Should().BeEmpty();
         _ = channel.SelectedText.Should().Be(available.DisplayName);
-        channel.SelectedVirtualPath = null;
+        channel.SelectedTexture = null;
         _ = channel.WarningText.Should().BeEmpty();
-        _ = changes.Should().Equal(available.Identity.VirtualPath, null);
+        _ = changes.Should().Equal(available.Identity, null);
     }
 
     private static AssetEntry CreateTexture(AssetPath asset) => new(

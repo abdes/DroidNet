@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Materials.Tests;
 
@@ -33,18 +34,18 @@ public sealed class MaterialTests
     [TestMethod]
     public void Retarget_MovesOnlyTheMappedTextures()
     {
-        var retargeted = Material.Retarget(Oak, path => path.EndsWith("/Oak.otex", StringComparison.Ordinal) ? "/Content/Wood/Oak.otex" : null);
+        var retargeted = Material.Retarget(Oak, texture => texture.Name == "Oak.otex" ? AssetPath.Parse("/Content/Wood/Oak.otex") : null);
 
-        _ = retargeted.TextureReferences.Should().Equal(new Dictionary<string, string>(StringComparer.Ordinal)
+        _ = retargeted.TextureReferences.Should().Equal(new Dictionary<string, AssetPath>(StringComparer.Ordinal)
         {
-            ["base_color"] = "/Content/Wood/Oak.otex",
-            ["normal"] = "/Content/Textures/OakNormal.otex",
+            ["base_color"] = AssetPath.Parse("/Content/Wood/Oak.otex"),
+            ["normal"] = AssetPath.Parse("/Content/Textures/OakNormal.otex"),
         });
     }
 
     [TestMethod]
     public void Retarget_NothingMoved_ReturnsTheSameSource()
-        => _ = Material.Retarget(Oak, path => path).Should().BeSameAs(Oak);
+        => _ = Material.Retarget(Oak, texture => texture).Should().BeSameAs(Oak);
 
     [TestMethod]
     public void AreSame_ComparesWhatSavingWrites()
@@ -56,12 +57,9 @@ public sealed class MaterialTests
     }
 
     [TestMethod]
-    [DataRow("base_color", "/Content/Textures/Bark.otex", null)]
-    [DataRow("base_color", null, null)]
-    [DataRow("no_such_channel", "/Content/Textures/Bark.otex", MaterialDiagnosticCodes.TextureChannelInvalid)]
-    [DataRow(null, null, MaterialDiagnosticCodes.TextureChannelInvalid)]
-    [DataRow("base_color", "Textures/Bark.otex", MaterialDiagnosticCodes.TexturePathInvalid)]
-    [DataRow("base_color", "asset:///Content/Textures/Bark.otex", MaterialDiagnosticCodes.TexturePathInvalid)]
-    public void CheckTexture_ReturnsTheCodeOfTheProblem(string? channel, string? virtualPath, string? code)
-        => _ = Material.CheckTexture(channel, virtualPath).Should().Be(code);
+    [DataRow("base_color", null)]
+    [DataRow("no_such_channel", MaterialDiagnosticCodes.TextureChannelInvalid)]
+    [DataRow(null, MaterialDiagnosticCodes.TextureChannelInvalid)]
+    public void CheckTexture_ReturnsTheCodeOfTheProblem(string? channel, string? code)
+        => _ = Material.CheckTexture(channel).Should().Be(code);
 }

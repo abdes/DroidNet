@@ -70,11 +70,11 @@ public sealed record MaterialSource
     }
 
     /// <summary>
-    /// Gets the texture of each assigned channel, by its canonical absolute virtual path: the one place a material
-    /// holds its textures. Change it with <see cref="WithTextureReference"/>, which checks the channel and the path.
+    /// Gets the texture of each assigned channel: the one place a material holds its textures. Change it with
+    /// <see cref="WithTextureReference"/>, which checks the channel; the descriptor spells each one as its virtual path.
     /// </summary>
-    public IReadOnlyDictionary<string, string> TextureReferences { get; internal init; }
-        = FrozenDictionary<string, string>.Empty;
+    public IReadOnlyDictionary<string, AssetPath> TextureReferences { get; internal init; }
+        = FrozenDictionary<string, AssetPath>.Empty;
 
     /// <summary>Gets the normal-map scale, kept whether or not a normal texture is assigned.</summary>
     public float NormalScale { get; init; } = 1.0f;
@@ -112,40 +112,33 @@ public sealed record MaterialSource
     public static bool IsTextureChannel([NotNullWhen(true)] string? channel)
         => channel is not null && TextureChannels.Contains(channel, StringComparer.Ordinal);
 
-    /// <summary>
-    /// Gets a value indicating whether a path can name a material's texture: a canonical absolute virtual path below a
-    /// mount point, such as <c>/Content/Textures/Bark.otex</c>.
-    /// </summary>
-    /// <param name="virtualPath">The path.</param>
-    /// <returns><see langword="true"/> when the engine accepts the path in a texture binding.</returns>
-    public static bool IsTexturePath([NotNullWhen(true)] string? virtualPath)
-        => virtualPath is not null && VirtualPath.IsCanonical(virtualPath);
-
     /// <summary>Returns a copy of this material with one texture channel assigned or cleared.</summary>
     /// <param name="channel">One of <see cref="TextureChannels"/>.</param>
-    /// <param name="virtualPath">The texture's path (see <see cref="IsTexturePath"/>), or <see langword="null"/> to clear.</param>
+    /// <param name="texture">The texture, or <see langword="null"/> to clear the channel.</param>
     /// <returns>The updated immutable material snapshot.</returns>
-    /// <exception cref="ArgumentException"><paramref name="channel"/> or <paramref name="virtualPath"/> is not valid.</exception>
-    public MaterialSource WithTextureReference(string channel, string? virtualPath)
+    /// <exception cref="ArgumentException">
+    /// <paramref name="channel"/> is not a texture channel, or <paramref name="texture"/> is a mount.
+    /// </exception>
+    public MaterialSource WithTextureReference(string channel, AssetPath? texture)
     {
         if (!IsTextureChannel(channel))
         {
             throw new ArgumentException($"'{channel}' is not a material texture channel.", nameof(channel));
         }
 
-        if (virtualPath is not null && !IsTexturePath(virtualPath))
+        if (texture?.IsMount == true)
         {
-            throw new ArgumentException($"'{virtualPath}' is not a canonical absolute virtual path below a mount point.", nameof(virtualPath));
+            throw new ArgumentException($"'{texture}' is a mount, not a texture below one.", nameof(texture));
         }
 
-        var references = new Dictionary<string, string>(this.TextureReferences, StringComparer.Ordinal);
-        if (virtualPath is null)
+        var references = new Dictionary<string, AssetPath>(this.TextureReferences, StringComparer.Ordinal);
+        if (texture is null)
         {
             _ = references.Remove(channel);
         }
         else
         {
-            references[channel] = virtualPath;
+            references[channel] = texture;
         }
 
         return this with { TextureReferences = references.ToFrozenDictionary(StringComparer.Ordinal) };

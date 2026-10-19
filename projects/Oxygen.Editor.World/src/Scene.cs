@@ -235,7 +235,7 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
             Scripts = new List<AssetPath>(references.Scripts).AsReadOnly(),
             InputActions = new List<AssetPath>(references.InputActions).AsReadOnly(),
             PhysicsSidecars = new List<AssetPath>(references.PhysicsSidecars).AsReadOnly(),
-            ExtraAssets = new List<string>(references.ExtraAssets).AsReadOnly(),
+            ExtraAssets = new List<AssetPath>(references.ExtraAssets).AsReadOnly(),
         };
     }
 
@@ -248,5 +248,5 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
         => left.Scripts.SequenceEqual(right.Scripts)
             && left.InputActions.SequenceEqual(right.InputActions)
             && left.PhysicsSidecars.SequenceEqual(right.PhysicsSidecars)
-            && left.ExtraAssets.SequenceEqual(right.ExtraAssets, StringComparer.Ordinal);
+            && left.ExtraAssets.SequenceEqual(right.ExtraAssets);
 }

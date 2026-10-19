@@ -342,7 +342,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.ButtonAutomationPeer(add)
             .GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
         await scenario.Model.PendingEdits.ConfigureAwait(true);
-        _ = scenario.Fixture.Scene.References.ExtraAssets.Should().ContainSingle().Which.Should().Be(path);
+        _ = scenario.Fixture.Scene.References.ExtraAssets.Should().ContainSingle().Which.VirtualPath.Should().Be(path);
         _ = scenario.Fixture.Document.IsDirty.Should().BeTrue();
 
         var remove = await WaitForDescendantAsync(section, (Button button) => Equals(button.Content, "Remove"), "remove-extra-asset button", this.TestContext.CancellationToken).ConfigureAwait(true);

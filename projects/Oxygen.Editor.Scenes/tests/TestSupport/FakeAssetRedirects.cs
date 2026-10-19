@@ -8,8 +8,8 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 
 /// <summary>
-/// The project's asset moves and deletions. Both <see cref="Resolve(AssetPath)"/> overloads and <see cref="WasDeleted"/>
-/// read the same state, which a test may change between two edits.
+/// The project's asset moves and deletions. <see cref="Resolve"/> and <see cref="WasDeleted"/> read the same state, which
+/// a test may change between two edits.
 /// </summary>
 public sealed class FakeAssetRedirects : IAssetRedirects
 {
@@ -53,21 +53,6 @@ public sealed class FakeAssetRedirects : IAssetRedirects
 
             return current;
         }
-    }
-
-    /// <inheritdoc/>
-    public string Resolve(string reference)
-    {
-        ArgumentNullException.ThrowIfNull(reference);
-        var isUri = reference.StartsWith("asset:", StringComparison.Ordinal);
-        AssetPath? parsed;
-        if (!(isUri ? AssetPath.TryParseUri(reference, out parsed) : AssetPath.TryParse(reference, out parsed)))
-        {
-            return reference;
-        }
-
-        var resolved = this.Resolve(parsed);
-        return resolved == parsed ? reference : isUri ? resolved.ToUriString() : resolved.VirtualPath;
     }
 
     /// <inheritdoc/>

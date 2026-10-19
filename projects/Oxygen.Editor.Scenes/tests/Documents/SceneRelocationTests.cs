@@ -78,7 +78,7 @@ public sealed class SceneRelocationTests
 
     // The relocation moved one asset and left the scene file where it was.
     private static DocumentRelocation Relocation(Document document, AssetPath from, AssetPath to)
-        => new(document.File, document.Version, reference => string.Equals(reference, from.ToUriString(), StringComparison.Ordinal) ? to.ToUriString() : null);
+        => new(document.File, document.Version, asset => asset == from ? to : null);
 
     private static GeometryComponent GeometryOf(Document document, NodeId node)
         => SceneContent.Of(document).Scene.AllNodes.Single(candidate => candidate.Id == node).Components.OfType<GeometryComponent>().Single();

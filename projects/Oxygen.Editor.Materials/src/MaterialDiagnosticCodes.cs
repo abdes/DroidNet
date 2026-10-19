@@ -24,9 +24,6 @@ public static class MaterialDiagnosticCodes
     /// <summary>An edit names a texture channel the engine's schema does not have.</summary>
     public const string TextureChannelInvalid = DiagnosticCodes.MaterialPrefix + "Texture.ChannelInvalid";
 
-    /// <summary>An edit names a texture by a path that is not a canonical absolute virtual path below a mount point.</summary>
-    public const string TexturePathInvalid = DiagnosticCodes.MaterialPrefix + "Texture.PathInvalid";
-
     /// <summary>An undo or redo brought back a reference to a texture that was deleted since.</summary>
     public const string TextureRestoredDeleted = DiagnosticCodes.MaterialPrefix + "Texture.RestoredDeleted";
 }

@@ -153,7 +153,7 @@ public sealed partial class MaterialEditorView
     {
         if (sender is FrameworkElement { DataContext: MaterialTextureChannel channel })
         {
-            channel.SelectedVirtualPath = choice.Asset?.VirtualPath;
+            channel.SelectedTexture = choice.Asset;
             this.openTextureFlyout?.Hide();
             this.openTextureFlyout = null;
         }

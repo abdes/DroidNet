@@ -8,6 +8,7 @@ using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets.Tests;
 
@@ -127,7 +128,7 @@ public sealed class MaterialSourceTests
                 "roughness": {"virtual_path":"/Art/Surface.otex","uv_set":1}
             } }
             """u8);
-        _ = source.TextureReferences.Should().Contain("metallic", "/Art/Surface.otex").And.Contain("roughness", "/Art/Surface.otex");
+        _ = source.TextureReferences.Should().Contain("metallic", AssetPath.Parse("/Art/Surface.otex")).And.Contain("roughness", AssetPath.Parse("/Art/Surface.otex"));
         var output = MaterialSourceWriter.ToJson(source with { AlphaCutoff = 0.3f });
         _ = output["textures"]!["roughness"]!["uv_set"]!.GetValue<int>().Should().Be(1);
         _ = output["textures"]!["metallic"]!["uv_set"]!.GetValue<int>().Should().Be(0);
@@ -144,7 +145,7 @@ public sealed class MaterialSourceTests
             } }
             """u8);
 
-        var edited = source.WithTextureReference("base_color", "/Content/Textures/New.otex");
+        var edited = source.WithTextureReference("base_color", AssetPath.Parse("/Content/Textures/New.otex"));
         var output = MaterialSourceWriter.ToJson(edited);
 
         _ = output["textures"]!["base_color"]!["virtual_path"]!.GetValue<string>().Should().Be("/Content/Textures/New.otex");
@@ -152,7 +153,7 @@ public sealed class MaterialSourceTests
         _ = output["textures"]!["base_color"]!["uv_transform"]!["scale"]![0]!.GetValue<float>().Should().Be(2f);
         _ = output["textures"]!["normal"]!["virtual_path"]!.GetValue<string>().Should().Be("/Art/Normal.otex");
 
-        var cleared = edited.WithTextureReference("normal", virtualPath: null);
+        var cleared = edited.WithTextureReference("normal", texture: null);
         var clearedJson = MaterialSourceWriter.ToJson(cleared);
         _ = clearedJson["textures"]!.AsObject().ContainsKey("normal").Should().BeFalse();
         _ = clearedJson["textures"]!["base_color"]!["uv_set"]!.GetValue<int>().Should().Be(2);
@@ -167,6 +168,7 @@ public sealed class MaterialSourceTests
     [DataRow("{\"parameters\":{\"normal_scale\":1e100}}", MaterialSourceCodes.NumberOutOfRange)]
     [DataRow("{\"textures\":{\"normal\":{\"virtual_path\":\"asset:///Art/Normal.otex\"}}}", MaterialSourceCodes.TexturePathInvalid)]
     [DataRow("{\"textures\":{\"normal\":{\"virtual_path\":\"/Art/../Normal.otex\"}}}", MaterialSourceCodes.TexturePathInvalid)]
+    [DataRow("{\"textures\":{\"normal\":{\"virtual_path\":\"/Normal.otex\"}}}", MaterialSourceCodes.TexturePathInvalid)]
     public void InvalidOrRetiredSourceIsRejectedWithoutClamping(string json, string code)
     {
         Action read = () => MaterialSourceReader.Read(Encoding.UTF8.GetBytes(json));
@@ -201,23 +203,21 @@ public sealed class MaterialSourceTests
 
     [TestMethod]
     [DataRow("no_such_channel", "/Content/Textures/Bark.otex")]
-    [DataRow("base_color", "Textures/Bark.otex")]
     [DataRow("base_color", "/Bark.otex")]
-    [DataRow("base_color", "")]
-    public void WithTextureReference_InvalidChannelOrPath_ThrowsAndKeepsTheSource(string channel, string virtualPath)
+    public void WithTextureReference_InvalidChannelOrMount_ThrowsAndKeepsTheSource(string channel, string texture)
     {
         var source = MaterialSourceReader.Read("""{"textures":{"base_color":{"virtual_path":"/Content/Textures/Oak.otex"}}}"""u8);
 
-        var act = () => source.WithTextureReference(channel, virtualPath);
+        var act = () => source.WithTextureReference(channel, AssetPath.Parse(texture));
 
         _ = act.Should().Throw<ArgumentException>();
-        _ = source.TextureReferences.Should().Equal(new Dictionary<string, string>(StringComparer.Ordinal) { ["base_color"] = "/Content/Textures/Oak.otex" });
+        _ = source.TextureReferences.Should().Equal(new Dictionary<string, AssetPath>(StringComparer.Ordinal) { ["base_color"] = AssetPath.Parse("/Content/Textures/Oak.otex") });
     }
 
     [TestMethod]
     public void NormalScale_IsWrittenWhenANormalTextureIsAssigned()
     {
-        var source = MaterialSourceReader.Read("{}"u8).WithTextureReference("normal", "/Content/Textures/Normal.otex");
+        var source = MaterialSourceReader.Read("{}"u8).WithTextureReference("normal", AssetPath.Parse("/Content/Textures/Normal.otex"));
 
         var written = MaterialSourceWriter.ToJson(source);
 

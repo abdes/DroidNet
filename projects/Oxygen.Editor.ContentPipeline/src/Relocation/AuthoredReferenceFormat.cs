@@ -198,13 +198,6 @@ internal static class AuthoredReferenceFormat
         }
     }
 
-    /// <summary>Maps one reference value through an identity mapping, keeping its form.</summary>
-    /// <param name="value">An asset URI or a canonical virtual path.</param>
-    /// <param name="mapIdentity">Returns the new identity, or null when the identity does not move.</param>
-    /// <returns>The mapped reference, or null when the value is not a reference or does not move.</returns>
-    public static string? MapReference(string value, Func<AssetPath, AssetPath?> mapIdentity)
-        => TryParseIdentity(value, mounts: null, out var identity, out var isUri) && mapIdentity(identity) is { } mapped ? Format(mapped, isUri) : null;
-
     private static bool RewriteFileReferences(JsonNode? root, FileSystemPath path, RelocationMap map, FileSystemPath? targetPath = null)
     {
         if (root is not JsonObject descriptor)

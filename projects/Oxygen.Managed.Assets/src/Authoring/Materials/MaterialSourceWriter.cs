@@ -5,6 +5,7 @@
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Managed.Assets.Authoring.Materials;
@@ -104,14 +105,14 @@ public static class MaterialSourceWriter
         return original.GetSingle() != value;
     }
 
-    private static void ApplyTextureReferences(JsonObject descriptor, IReadOnlyDictionary<string, string> references)
+    private static void ApplyTextureReferences(JsonObject descriptor, IReadOnlyDictionary<string, AssetPath> references)
     {
         var textures = descriptor["textures"] is JsonObject original
             ? (JsonObject)original.DeepClone()
             : new JsonObject();
         foreach (var channel in MaterialSource.TextureChannels)
         {
-            if (!references.TryGetValue(channel, out var virtualPath))
+            if (!references.TryGetValue(channel, out var texture))
             {
                 _ = textures.Remove(channel);
                 continue;
@@ -119,11 +120,11 @@ public static class MaterialSourceWriter
 
             if (textures[channel] is JsonObject existing)
             {
-                existing["virtual_path"] = virtualPath;
+                existing["virtual_path"] = texture.VirtualPath;
             }
             else
             {
-                textures[channel] = new JsonObject { ["virtual_path"] = virtualPath };
+                textures[channel] = new JsonObject { ["virtual_path"] = texture.VirtualPath };
             }
         }
 

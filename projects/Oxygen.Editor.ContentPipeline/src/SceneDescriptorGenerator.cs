@@ -420,12 +420,12 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             var scripts = ResolveTypedReferences(references.Scripts, AssetFileTypes.Script);
             var inputActions = ResolveTypedReferences(references.InputActions, AssetFileTypes.InputAction);
             var physicsSidecars = ResolveTypedReferences(references.PhysicsSidecars, AssetFileTypes.PhysicsScene);
-            if (references.ExtraAssets.Any(static path => !VirtualPath.IsCanonical(path)))
+            if (references.ExtraAssets.Any(static asset => asset.IsMount))
             {
-                throw new InvalidDataException("Extra scene asset references must be absolute canonical virtual paths.");
+                throw new InvalidDataException("Extra scene asset references must name assets below a mount.");
             }
 
-            var extraAssets = new SortedSet<string>(references.ExtraAssets, StringComparer.Ordinal).ToArray();
+            var extraAssets = new SortedSet<string>(references.ExtraAssets.Select(static asset => asset.VirtualPath), StringComparer.Ordinal).ToArray();
             error = null;
 
             return scripts.Length == 0 && inputActions.Length == 0

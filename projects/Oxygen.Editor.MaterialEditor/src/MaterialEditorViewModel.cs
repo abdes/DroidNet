@@ -392,16 +392,16 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
     }
 
-    private void OnTextureSelectionChanged(MaterialTextureChannel channel, string? virtualPath)
+    private void OnTextureSelectionChanged(MaterialTextureChannel channel, AssetPath? texture)
     {
         if (!this.isLoading && !this.isClosing && !this.isDisposed && !this.isResolvingConflict && this.acceptsInput)
         {
-            _ = this.ApplyTextureReferenceAsync(channel, virtualPath);
+            _ = this.ApplyTextureReferenceAsync(channel, texture);
         }
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Globalization", "CA1308:Normalize strings to uppercase", Justification = "the channel name is lowered for display in a sentence, not normalized for comparison")]
-    private async Task ApplyTextureReferenceAsync(MaterialTextureChannel channel, string? virtualPath)
+    private async Task ApplyTextureReferenceAsync(MaterialTextureChannel channel, AssetPath? texture)
     {
         await this.editGate.WaitAsync(CancellationToken.None).ConfigureAwait(true);
         try
@@ -411,7 +411,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
                 return;
             }
 
-            var result = this.ApplyOwnEdit(() => this.edits.SetTexture(this.document, channel.Channel, virtualPath));
+            var result = this.ApplyOwnEdit(() => this.edits.SetTexture(this.document, channel.Channel, texture));
             this.RefreshFromDocument();
             this.StatusText = result.Succeeded
                 ? string.Empty
@@ -544,8 +544,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             this.DoubleSided = source.DoubleSided;
             foreach (var channel in this.TextureChannels)
             {
-                _ = source.TextureReferences.TryGetValue(channel.Channel, out var virtualPath);
-                channel.Refresh(this.availableTextures, virtualPath);
+                _ = source.TextureReferences.TryGetValue(channel.Channel, out var texture);
+                channel.Refresh(this.availableTextures, texture);
             }
 
             this.IsDirty = this.document.IsDirty;

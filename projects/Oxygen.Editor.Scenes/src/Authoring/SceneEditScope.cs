@@ -65,20 +65,6 @@ public sealed class SceneEditScope
         return resolved is null || resolved == reference ? null : resolved;
     }
 
-    /// <summary>Resolves a captured reference given as a URI or a virtual path, in the form the retargeting helpers take.</summary>
-    /// <param name="reference">The captured reference.</param>
-    /// <returns>The current reference, or <see langword="null"/> when it did not move.</returns>
-    public string? Moved(string reference)
-    {
-        if (this.Redirects is null)
-        {
-            return null;
-        }
-
-        var resolved = this.Redirects.Resolve(reference);
-        return string.Equals(resolved, reference, StringComparison.Ordinal) ? null : resolved;
-    }
-
     /// <summary>Warns about references the edit restores to assets this session deleted; they show as missing.</summary>
     /// <param name="restored">The references the edit wrote.</param>
     /// <param name="node">The node that holds them, or <see langword="null"/> for the scene's own references.</param>

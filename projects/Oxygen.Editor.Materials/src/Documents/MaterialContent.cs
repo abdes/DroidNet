@@ -65,7 +65,7 @@ public sealed class MaterialContent : IDocumentContent
     public void ApplyRelocation(DocumentRelocation relocation)
     {
         ArgumentNullException.ThrowIfNull(relocation);
-        var retargeted = Material.Retarget(this.Material.Source, relocation.MapReference);
+        var retargeted = Material.Retarget(this.Material.Source, relocation.MapAsset);
         this.Material.Replace(retargeted with { Name = DocumentKinds.TitleOf(this.kind, relocation.File.Path) });
     }
 

@@ -378,6 +378,6 @@ public sealed class DocumentTests : DocumentTestBase
         _ = this.ReadText("Oak").Should().Be("oak");
     }
 
-    private static Func<string, string?> Moves(Dictionary<AssetPath, AssetPath> moves)
-        => reference => moves.TryGetValue(AssetPath.ParseUri(reference), out var moved) ? moved.ToUriString() : null;
+    private static Func<AssetPath, AssetPath?> Moves(Dictionary<AssetPath, AssetPath> moves)
+        => reference => moves.GetValueOrDefault(reference);
 }

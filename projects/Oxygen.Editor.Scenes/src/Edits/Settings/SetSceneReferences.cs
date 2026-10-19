@@ -45,7 +45,7 @@ public sealed record SetSceneReferences : ISceneEdit
     {
         ArgumentNullException.ThrowIfNull(scope);
         var before = Copy(scope.Scene.References);
-        var references = Copy(SceneReferenceRetargeting.Retarget(this.References, scope.Moved, scope.Moved) ?? this.References);
+        var references = Copy(SceneReferenceRetargeting.Retarget(this.References, scope.Moved) ?? this.References);
         if (AreEqual(before, references))
         {
             return new SceneEditApplication.Applied(this, []);
@@ -71,8 +71,8 @@ public sealed record SetSceneReferences : ISceneEdit
             return SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, typed);
         }
 
-        return references.ExtraAssets.FirstOrDefault(static path => string.IsNullOrWhiteSpace(path) || !VirtualPath.IsCanonical(path)) is { } invalid
-            ? SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, $"Extra asset path '{invalid}' must be an absolute canonical virtual path.")
+        return references.ExtraAssets.Any(static asset => asset is null || asset.IsMount)
+            ? SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, "An extra asset must name an asset below a mount.")
             : null;
     }
 
@@ -89,5 +89,5 @@ public sealed record SetSceneReferences : ISceneEdit
         => left.Scripts.SequenceEqual(right.Scripts)
             && left.InputActions.SequenceEqual(right.InputActions)
             && left.PhysicsSidecars.SequenceEqual(right.PhysicsSidecars)
-            && left.ExtraAssets.SequenceEqual(right.ExtraAssets, StringComparer.Ordinal);
+            && left.ExtraAssets.SequenceEqual(right.ExtraAssets);
 }

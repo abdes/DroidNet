@@ -85,19 +85,19 @@ public sealed partial class MaterialEdits(
     /// </summary>
     /// <param name="document">A material document.</param>
     /// <param name="channel">The texture channel.</param>
-    /// <param name="virtualPath">The texture's canonical absolute virtual path, or <see langword="null"/> to clear it.</param>
+    /// <param name="texture">The texture, or <see langword="null"/> to clear the channel.</param>
     /// <returns>Whether the change was accepted, and the published failure when it was not.</returns>
-    public MaterialEditResult SetTexture(Document document, string channel, string? virtualPath)
+    public MaterialEditResult SetTexture(Document document, string channel, AssetPath? texture)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(channel);
         var content = ContentOf(document);
         content.Gesture?.Finish(commit: true);
-        if (Material.CheckTexture(channel, virtualPath) is { } code)
+        if (Material.CheckTexture(channel) is { } code)
         {
-            return this.Reject(document, code, $"The {channel} texture cannot be '{virtualPath}'.");
+            return this.Reject(document, code, $"The material has no {channel} texture channel.");
         }
 
-        var updated = content.Material.Source.WithTextureReference(channel, virtualPath);
+        var updated = content.Material.Source.WithTextureReference(channel, texture);
         if (this.ValidateEdited(document, updated) is { } invalid)
         {
             return invalid;
@@ -320,10 +320,10 @@ public sealed partial class MaterialEdits(
             return source;
         }
 
-        var resolved = Material.Retarget(source, path =>
+        var resolved = Material.Retarget(source, texture =>
         {
-            var current = redirects.Resolve(path);
-            return string.Equals(current, path, StringComparison.Ordinal) ? null : current;
+            var current = redirects.Resolve(texture);
+            return current == texture ? null : current;
         });
         if (!warn)
         {
@@ -331,13 +331,13 @@ public sealed partial class MaterialEdits(
         }
 
         // Warn only for textures the step brings back; one the material already shows as missing was reported before.
-        var shown = ContentOf(document).Material.Source.TextureReferences.Values.ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var shown = ContentOf(document).Material.Source.TextureReferences.Values.ToHashSet();
         var deleted = resolved.TextureReferences.Values
-            .Where(path => !shown.Contains(path) && AssetPath.TryParse(path, out var texture) && redirects.WasDeleted(texture))
-            .Distinct(StringComparer.OrdinalIgnoreCase).ToArray();
+            .Where(texture => !shown.Contains(texture) && redirects.WasDeleted(texture))
+            .Distinct().ToArray();
         if (deleted.Length != 0)
         {
-            var names = string.Join(", ", deleted.Select(Path.GetFileName));
+            var names = string.Join(", ", deleted.Select(static texture => texture.Name));
             this.LogRestoredDeletedTexture(document.Title, names);
             _ = this.Publish(
                 document,
