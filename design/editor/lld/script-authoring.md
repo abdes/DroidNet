@@ -31,7 +31,9 @@ this LLD owns the authoring workflow. Physics bindings are out of scope.
 
 REQ-005/006/007/017/043/044; GOAL-001/006. Architecture: the editor owns
 authoring, the engine owns execution, Interop exposes the analyzer
-([RULES](../../oxygen/RULES.md#ownership)). Related LLDs:
+([RULES](../../oxygen/RULES.md#ownership)). Module ownership of the script
+family (model, slot rules, facts, ports) is in
+[asset family modules](asset-family-modules.md). Related LLDs:
 [property inspector](property-inspector.md),
 [property pipeline](property-pipeline.md),
 [scene authoring model](scene-authoring-model.md),
@@ -68,9 +70,10 @@ output in the source file's folder, so `Content/Player/move.lua` cooks to
 one script, so renaming or moving the file is the ordinary relocation and
 rewrites the slots and overrides that refer to it. Two sources with the same
 stem in one folder (`move.lua` and `move.luau`) would produce the same virtual
-path; both show the error `OXE.SCRIPT.IDENTITY_COLLISION` and neither cooks
-until one is renamed. New Script, rename and move reject a name that would
-collide before writing.
+path. New Script, rename and move refuse a name that would collide before
+writing (`relocation.source_collision`); a pair made outside the editor is
+refused by the cook, both files named (`OXE.ASSETCOOK.IdentityCollision`,
+[asset identity](asset-identity.md#56-collisions)).
 
 **New Script** (Content Browser New menu, beside New Material; SD-9): a dialog
 asks for a name and a folder, prefilled with a free name and the folder being

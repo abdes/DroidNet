@@ -97,6 +97,21 @@ public sealed class ProducerCollisionTests : IDisposable
         _ = graph.Diagnostics.Should().BeEmpty();
     }
 
+    [TestMethod]
+    public async Task TwoFilesBesideEachOtherOfOneIdentityAreBothRefused()
+    {
+        _ = Directory.CreateDirectory(Path.Combine(this.root, "Content", "Player"));
+        File.WriteAllText(Path.Combine(this.root, "Content", "Player", "move.lua"), "return {}");
+        File.WriteAllText(Path.Combine(this.root, "Content", "Player", "move.luau"), "return {}");
+        var script = this.Input(AssetPath.Parse("/Content/Player/move.oscript"));
+
+        var graph = await new CookDependencyDiscovery(new Facts(new Dictionary<AssetPath, string>()))
+            .DiscoverAsync(this.project, [script], this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = graph.Diagnostics.Should().AllSatisfy(static diagnostic => diagnostic.Code.Should().Be(AssetCookDiagnosticCodes.IdentityCollision))
+            .And.Subject.Select(static diagnostic => Path.GetFileName(diagnostic.AffectedPath)).Should().BeEquivalentTo("move.lua", "move.luau");
+    }
+
     private ContentCookInput Input(AssetPath identity) => CookInputResolver.Resolve(this.project, identity, ContentCookInputRole.Primary);
 
     private CookProvenance Accepted(AssetPath source, string buffer)
@@ -112,17 +127,21 @@ public sealed class ProducerCollisionTests : IDisposable
                 },
             ]);
 
-    // Each geometry produces itself and one buffer.
+    // Each source produces itself, and a geometry one buffer.
     private sealed class Facts(IReadOnlyDictionary<AssetPath, string> buffers) : ICookSourceFactsProvider
     {
         public Task<CookSourceFrontier> ReadAsync(IReadOnlyList<ContentCookInput> inputs, CancellationToken cancellationToken)
             => Task.FromResult(new CookSourceFrontier([.. inputs.Select(this.Describe)], [], []));
 
         private CookSourceFacts Describe(ContentCookInput source)
-            => new(
-                source,
-                [new(source.AssetUri.VirtualPath, "geometry", "/", Required: true), new(buffers[source.AssetUri], "buffer", "/", Required: true)],
-                [],
-                [new(source.AssetUri, source.SourceAbsolutePath, source.SourceRelativePath, new string('A', 64))]);
+        {
+            List<NativeLogicalDependency> outputs = [new(source.AssetUri.VirtualPath, "asset", "/", Required: true)];
+            if (buffers.TryGetValue(source.AssetUri, out var buffer))
+            {
+                outputs.Add(new(buffer, "buffer", "/", Required: true));
+            }
+
+            return new(source, [.. outputs], [], [new(source.AssetUri, source.SourceAbsolutePath, source.SourceRelativePath, new string('A', 64))]);
+        }
     }
 }

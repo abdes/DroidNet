@@ -25,11 +25,6 @@ public static class ScriptDiagnosticCodes
     public const string AnalysisUnavailable = DiagnosticCodes.ScriptPrefix + "ANALYSIS_UNAVAILABLE";
 
     /// <summary>
-    /// Two script sources in one folder share a name, so they would cook to the same asset.
-    /// </summary>
-    public const string IdentityCollision = DiagnosticCodes.ScriptPrefix + "IDENTITY_COLLISION";
-
-    /// <summary>
     /// The project's script tooling files (<c>.luaurc</c>, type definitions, VS Code settings) could not be updated.
     /// </summary>
     public const string ToolingUpdateFailed = DiagnosticCodes.ScriptPrefix + "TOOLING_UPDATE_FAILED";

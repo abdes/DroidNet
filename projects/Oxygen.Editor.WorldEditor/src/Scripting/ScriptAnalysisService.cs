@@ -13,7 +13,6 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentBrowser.Scripts;
-using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
@@ -195,22 +194,6 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             .Where(path => !path.GetPathBelow(root).Split('/').Any(static segment => segment.StartsWith('.')));
     }
 
-    private static ScriptProblem CollisionProblem(FileSystemPath path, IReadOnlyList<string> collisions)
-    {
-        var name = path.Name;
-        var others = string.Join(", ", collisions);
-        var message = $"{name} and {others} cook to the same script; rename one of them";
-        return new ScriptProblem(
-            ScriptProblemSeverity.Error,
-            ScriptDiagnosticCodes.IdentityCollision,
-            message,
-            path.FullPath,
-            Line: null,
-            Column: null,
-            Rendered: $"error[{ScriptDiagnosticCodes.IdentityCollision}]: {message}\n --> {path}\n",
-            Explanation: "A script is identified by its folder and file name without the extension, so two sources such as move.lua and move.luau in one folder would produce the same asset. Neither is cooked until one is renamed or removed.");
-    }
-
     private static FileSystemPath? ToScriptPath(ProjectContext project, AssetPath path)
         => (AssetFileTypes.Is(path.Name, AssetFileCategory.Script) || AssetFileTypes.Is(path.Name, AssetFileCategory.Input))
             ? RelocationPaths.ToPhysical(project, path)
@@ -257,8 +240,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             return this.Find(path);
         }
 
-        var collisions = SourceCollisions.Find(path).Select(static other => other.Name).ToArray();
-        var hash = Convert.ToHexString(SHA256.HashData(bytes)) + "|" + string.Join('|', collisions);
+        var hash = Convert.ToHexString(SHA256.HashData(bytes));
         if (this.entries.TryGetValue(path, out var previous) && !force && string.Equals(previous.Hash, hash, StringComparison.Ordinal))
         {
             return previous.Snapshot;
@@ -270,11 +252,6 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         if (snapshot is null || (this.versions.TryGetValue(path, out var latest) && latest != version))
         {
             return this.Find(path);
-        }
-
-        if (collisions.Length > 0)
-        {
-            snapshot = snapshot with { Problems = [CollisionProblem(path, collisions), .. snapshot.Problems] };
         }
 
         this.entries[path] = new Entry(hash, snapshot, snapshot.ParametersOutOfDate ? previous?.LastValidParameters ?? [] : snapshot.Parameters);
@@ -444,11 +421,6 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         else
         {
             _ = Task.Run(() => this.AnalyzeChangedAsync(path));
-        }
-
-        foreach (var sibling in SourceCollisions.Find(path).Where(this.entries.ContainsKey))
-        {
-            _ = Task.Run(() => this.AnalyzeChangedAsync(sibling));
         }
     }
 

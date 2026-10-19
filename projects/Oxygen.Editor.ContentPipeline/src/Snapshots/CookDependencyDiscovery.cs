@@ -92,6 +92,13 @@ internal sealed class CookDependencyDiscovery(
             {
                 this.pending.Enqueue(input);
                 CookRunContext.Report(new(Asset: new(input.AssetUri, input.Kind, CookAssetState.Preparing)));
+
+                // Files beside each other that cook to one asset, such as a pair made outside the editor, are both
+                // refused: the identity has one source.
+                foreach (var other in SourceCollisions.Find(input.SourceAbsolutePath))
+                {
+                    this.ReportCollision(input.AssetUri.VirtualPath, input.SourceAbsolutePath, other);
+                }
             }
         }
 
@@ -253,19 +260,24 @@ internal sealed class CookDependencyDiscovery(
                     continue;
                 }
 
-                var other = Path.GetFileName(producer.SourceRelativePath);
-                ContentCookInput[] colliding = [producer, source.Input];
-                this.diagnostics.AddRange(colliding.Select(input => new DiagnosticRecord
-                {
-                    OperationId = Guid.Empty,
-                    Domain = FailureDomain.AssetCook,
-                    Severity = DiagnosticSeverity.Error,
-                    Code = AssetCookDiagnosticCodes.IdentityCollision,
-                    AffectedPath = input.SourceAbsolutePath.FullPath,
-                    AffectedVirtualPath = output.VirtualPath,
-                    Message = $"'{Path.GetFileName(source.Input.SourceRelativePath)}' and '{other}' both produce '{output.VirtualPath}'. Rename or remove one of them.",
-                }));
+                this.ReportCollision(output.VirtualPath, source.Input.SourceAbsolutePath, producer.SourceAbsolutePath);
             }
+        }
+
+        // Both sources of one identity are refused, each with the other named.
+        private void ReportCollision(string virtualPath, FileSystemPath first, FileSystemPath second)
+        {
+            FileSystemPath[] colliding = [first, second];
+            this.diagnostics.AddRange(colliding.Select(source => new DiagnosticRecord
+            {
+                OperationId = Guid.Empty,
+                Domain = FailureDomain.AssetCook,
+                Severity = DiagnosticSeverity.Error,
+                Code = AssetCookDiagnosticCodes.IdentityCollision,
+                AffectedPath = source.FullPath,
+                AffectedVirtualPath = virtualPath,
+                Message = $"'{first.Name}' and '{second.Name}' both produce '{virtualPath}'. Rename or remove one of them.",
+            }));
         }
 
         private AssetPath ResolveReference(AssetPath uri)
