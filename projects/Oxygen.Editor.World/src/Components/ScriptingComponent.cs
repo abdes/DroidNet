@@ -51,7 +51,7 @@ public sealed partial class ScriptingComponent : GameComponent
             ScriptValueKind.Vec2Value => "vec2",
             ScriptValueKind.Vec3Value => "vec3",
             ScriptValueKind.Vec4Value => "vec4",
-            ScriptValueKind.AssetValue => "asset",
+            ScriptValueKind.AssetValue => ScriptValueData.AssetType,
             ScriptValueKind.NodeValue => "node",
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown script value kind."),
         };
@@ -127,7 +127,7 @@ public sealed partial class ScriptingComponent : GameComponent
                 "vec2" => ScriptValue.FromVector(ScriptValueKind.Vec2Value, ReadVector(value, 2)),
                 "vec3" => ScriptValue.FromVector(ScriptValueKind.Vec3Value, ReadVector(value, 3)),
                 "vec4" => ScriptValue.FromVector(ScriptValueKind.Vec4Value, ReadVector(value, 4)),
-                "asset" => ScriptValue.FromAsset(AssetPath.TryParseUri(value.GetString(), out var asset) ? asset : throw new JsonException($"'{value.GetString()}' is not an asset URI.")),
+                ScriptValueData.AssetType => ScriptValue.FromAsset(AssetPath.TryParseUri(value.GetString(), out var asset) ? asset : throw new JsonException($"'{value.GetString()}' is not an asset URI.")),
                 "node" => ScriptValue.FromNode(NodeId.FromValue(Guid.Parse(value.GetString() ?? throw new JsonException(), CultureInfo.InvariantCulture))),
                 _ => throw new JsonException(),
             };

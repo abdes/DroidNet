@@ -307,7 +307,7 @@ internal static class AssetRelocationPlanner
                 renamed = AuthoredReferenceFormat.RenameInputProduct(renamed, rename);
             }
 
-            if ((AuthoredReferenceFormat.RewriteDescriptor(descriptor.Location, renamed, map, index.Mounts)
+            if ((AuthoredReferenceFormat.RewriteDescriptor(descriptor.Location, renamed, map)
                 ?? (ReferenceEquals(renamed, content) ? null : renamed)) is { } rewritten)
             {
                 edits.Add(new(descriptor.Location, map.MapPath(descriptor.Location), snapshot.Version, content, rewritten));

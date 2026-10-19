@@ -41,6 +41,9 @@ public sealed record ScriptSlotData
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ScriptValueData
 {
+    /// <summary>The <see cref="Type"/> of a value that is an asset reference, stored as an asset URI.</summary>
+    public const string AssetType = "asset";
+
     /// <summary>Gets the value type.</summary>
     public required string Type { get; init; }
 

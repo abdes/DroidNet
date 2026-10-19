@@ -17,16 +17,12 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// </summary>
 internal sealed class AuthoredReferenceIndex
 {
-    private AuthoredReferenceIndex(IReadOnlyList<string> mounts, IReadOnlyList<Descriptor> descriptors, IReadOnlyList<ImportSource> imports, IReadOnlyList<FileSystemPath> unreadable)
+    private AuthoredReferenceIndex(IReadOnlyList<Descriptor> descriptors, IReadOnlyList<ImportSource> imports, IReadOnlyList<FileSystemPath> unreadable)
     {
-        this.Mounts = mounts;
         this.Descriptors = descriptors;
         this.Imports = imports;
         this.Unreadable = unreadable;
     }
-
-    /// <summary>Gets the writable authoring mount names.</summary>
-    public IReadOnlyList<string> Mounts { get; }
 
     /// <summary>Gets every readable descriptor with its references.</summary>
     public IReadOnlyList<Descriptor> Descriptors { get; }
@@ -45,7 +41,6 @@ internal sealed class AuthoredReferenceIndex
     {
         ArgumentNullException.ThrowIfNull(project);
         var mounts = RelocationPaths.GetWritableMounts(project).ToArray();
-        var names = mounts.Select(static mount => mount.Name).ToArray();
         var descriptors = new List<Descriptor>();
         var imports = new List<ImportSource>();
         var unreadable = new List<FileSystemPath>();
@@ -74,7 +69,7 @@ internal sealed class AuthoredReferenceIndex
             {
                 if (isDescriptor)
                 {
-                    descriptors.Add(new(path, virtualPath, AssetFileTypes.ToIdentity(virtualPath), AuthoredReferenceFormat.ReadReferences(path, content, names)));
+                    descriptors.Add(new(path, virtualPath, AssetFileTypes.ToIdentity(virtualPath), AuthoredReferenceFormat.ReadReferences(path, content)));
                 }
                 else
                 {
@@ -93,7 +88,7 @@ internal sealed class AuthoredReferenceIndex
             }
         }
 
-        return new(names, descriptors, imports, unreadable);
+        return new(descriptors, imports, unreadable);
     }
 
     /// <summary>Finds the descriptors that reference an asset, or any asset inside a folder.</summary>

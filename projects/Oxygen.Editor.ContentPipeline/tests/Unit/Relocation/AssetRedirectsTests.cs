@@ -84,7 +84,7 @@ public sealed class AssetRedirectsTests
         var service = workspace.CreateService(redirects: null);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
         var scene = workspace.FileOf("Content/Scenes/Main.oscene.json");
-        _ = workspace.Write("Content/Scenes/Main.oscene.json", """{ "GeometryUri": "asset:///Content/Materials/A.omat" }""");
+        _ = workspace.Write("Content/Scenes/Main.oscene.json", """{ "RootNodes": [ { "Components": [ { "OverrideSlots": [ { "MaterialUri": "asset:///Content/Materials/A.omat" } ] } ] } ] }""");
         AssetRelocationChange? followed = null;
         using var registration = service.AddParticipant(new Participant(change => followed = change));
 

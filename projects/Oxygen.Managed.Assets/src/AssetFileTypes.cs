@@ -108,7 +108,11 @@ public static class AssetFileTypes
     [
         .. new AssetFileType[]
         {
-            new(InputFile, AssetFileCategory.Input, CookedExtension: null, AssetType.Unknown) { ProductExtensions = [InputAction, InputMappingContext] },
+            new(InputFile, AssetFileCategory.Input, CookedExtension: null, AssetType.Unknown)
+            {
+                ProductExtensions = [InputAction, InputMappingContext],
+                ReferenceFields = [new("contexts/*/mappings/*/action")],
+            },
             new(ImportSettings, AssetFileCategory.ImportSettings, CookedExtension: null, AssetType.Unknown),
             new(LuaScript, AssetFileCategory.Script, Script, AssetType.Script),
             new(LuauScript, AssetFileCategory.Script, Script, AssetType.Script),
@@ -128,7 +132,11 @@ public static class AssetFileTypes
             new(".bmp", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
             new(".hdr", AssetFileCategory.Image, CookedExtension: null, AssetType.Unknown),
         },
-        .. CookedAssets.Select(static entry => new AssetFileType(entry.Extension + DescriptorSuffix, AssetFileCategory.Descriptor, entry.Extension, entry.Type)),
+        .. CookedAssets.Select(static entry => new AssetFileType(entry.Extension + DescriptorSuffix, AssetFileCategory.Descriptor, entry.Extension, entry.Type)
+        {
+            IdentityField = entry.Extension is Material or Geometry or PhysicsMaterial or CollisionShape ? "virtual_path" : null,
+            ReferenceFields = DescriptorReferenceFields(entry.Extension),
+        }),
         .. CookedAssets.Select(static entry => new AssetFileType(entry.Extension, AssetFileCategory.Cooked, entry.Extension, entry.Type)),
     ];
 
@@ -272,4 +280,28 @@ public static class AssetFileTypes
         => Find(container.Name) is { Category: AssetFileCategory.Model } model
             ? model
             : Find(container.WithAuthoringSuffix().Name) is { Category: AssetFileCategory.Input } input ? input : null;
+
+    // The reference fields of the engine's descriptor schemas. Scenes are authored in the editor's own format, which
+    // names its fields where it is defined.
+    private static AssetReferenceField[] DescriptorReferenceFields(string extension) => extension switch
+    {
+        Material => [new("textures/*/virtual_path")],
+        Geometry =>
+        [
+            new("buffers/*/virtual_path"),
+            new("lods/*/buffers/*"),
+            new("lods/*/skinning/*"),
+            new("lods/*/submeshes/*/material_ref"),
+        ],
+        PhysicsScene =>
+        [
+            new("bindings/*/*/shape_ref"),
+            new("bindings/*/*/inner_shape_ref"),
+            new("bindings/*/*/material_ref"),
+            new("bindings/*/*/source_mesh_ref"),
+            new("bindings/*/*/collision_mesh_ref"),
+        ],
+        CollisionShape => [new("material_ref")],
+        _ => [],
+    };
 }

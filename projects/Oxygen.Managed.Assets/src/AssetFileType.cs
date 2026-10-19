@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Managed.Assets;
 
@@ -28,6 +29,15 @@ public sealed record AssetFileType(string Suffix, AssetFileCategory Category, st
     /// <see cref="FileKind.TextureDescriptor"/> for <c>.otex</c>; <see cref="FileKind.Unknown"/> otherwise.
     /// </summary>
     public FileKind CookedFileKind { get; init; }
+
+    /// <summary>
+    /// Gets the property of an authored JSON file that names the file's own identity, such as <c>virtual_path</c> in
+    /// a material descriptor; null when the file's path alone names it.
+    /// </summary>
+    public string? IdentityField { get; init; }
+
+    /// <summary>Gets the fields of an authored JSON file that reference other assets; empty when it references none.</summary>
+    public IReadOnlyList<AssetReferenceField> ReferenceFields { get; init; } = [];
 
     // Oxygen's suffixes end an asset's identity and match exactly; a foreign format matches in any case, as the cooker
     // detects it (.GLB, .PNG).

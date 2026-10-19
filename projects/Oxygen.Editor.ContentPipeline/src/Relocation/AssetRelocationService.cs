@@ -173,7 +173,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 }
 
                 coordinator.VerifyWriter(operation);
-                await this.WriteCopiesAsync(map, index.Mounts).ConfigureAwait(false);
+                await this.WriteCopiesAsync(map).ConfigureAwait(false);
                 this.Invalidate();
                 created = [.. map.Moves];
                 return copies;
@@ -413,7 +413,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             : throw new AssetRelocationException($"'{source}' does not exist as an authored file. Imported outputs belong to their model.");
     }
 
-    private async Task WriteCopiesAsync(RelocationMap map, IReadOnlyList<string> mounts)
+    private async Task WriteCopiesAsync(RelocationMap map)
     {
         var created = new List<string>();
         try
@@ -437,7 +437,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 foreach (var (source, target) in pairs)
                 {
                     var content = await File.ReadAllBytesAsync(source.FullPath, CancellationToken.None).ConfigureAwait(false);
-                    var bytes = AuthoredReferenceFormat.IsReferencingSource(source.FullPath) ? AuthoredReferenceFormat.RewriteCopy(source, target, content, map, mounts) : content;
+                    var bytes = AuthoredReferenceFormat.IsReferencingSource(source.FullPath) ? AuthoredReferenceFormat.RewriteCopy(source, target, content, map) : content;
                     _ = Directory.CreateDirectory(target.Parent!.FullPath);
                     _ = await files.WriteAsync(target.FullPath, bytes, FileVersion.Missing, CancellationToken.None).ConfigureAwait(false);
                     created.Add(target.FullPath);

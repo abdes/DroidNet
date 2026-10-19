@@ -56,6 +56,38 @@ public sealed class AssetRelocationTests
         _ = workspace.ReadJson("Content/Geometry/Box.ogeo.json")["lods"]![0]!["submeshes"]![0]!["material_ref"]!.GetValue<string>().Should().Be("/Content/Materials/Blue.omat");
     }
 
+    /// <summary>
+    /// A relocation rewrites the fields a format names as references, and leaves text that only looks like a path:
+    /// a node's name, a script's string parameter, or a field of a format that is not a reference.
+    /// </summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task RelocationRewritesReferenceFieldsAndLeavesText()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.Write("Content/Scenes/Named.oscene.json", """
+            { "Id": "0b0e6b8c-3c5a-4a0e-9a8f-1b1f2a3c4d5e", "Name": "Named",
+              "RootNodes": [ { "Name": "asset:///Content/Materials/Red.omat", "Components": [ { "$type": "Scripting", "Name": "Scripting", "Slots": [ {
+                "Id": "0f8fad5b-d9cb-469f-a165-70867728950e", "Script": "asset:///Content/Scripts/paint.oscript",
+                "Overrides": {
+                  "label": { "Type": "string", "Value": "asset:///Content/Materials/Red.omat" },
+                  "paint": { "Type": "asset", "Value": "asset:///Content/Materials/Red.omat" } } } ] } ] } ] }
+            """);
+        _ = workspace.Write("Content/Shapes/Box.ocshape.json", """
+            { "name": "/Content/Materials/Red.omat", "virtual_path": "/Content/Shapes/Box.ocshape", "shape_type": "box", "material_ref": "/Content/Materials/Red.opmat" }
+            """);
+
+        var plan = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = plan.Referrers.Should().Contain(AssetPath.Parse("/Content/Scenes/Named.oscene.json")).And.NotContain(AssetPath.Parse("/Content/Shapes/Box.ocshape.json"));
+        var slot = workspace.ReadJson("Content/Scenes/Named.oscene.json")["RootNodes"]![0]!;
+        _ = slot["Name"]!.GetValue<string>().Should().Be("asset:///Content/Materials/Red.omat", "a node's name is text");
+        var overrides = slot["Components"]![0]!["Slots"]![0]!["Overrides"]!;
+        _ = overrides["label"]!["Value"]!.GetValue<string>().Should().Be("asset:///Content/Materials/Red.omat", "a string parameter is text");
+        _ = overrides["paint"]!["Value"]!.GetValue<string>().Should().Be("asset:///Content/Materials/Blue.omat");
+        _ = workspace.ReadJson("Content/Shapes/Box.ocshape.json")["name"]!.GetValue<string>().Should().Be("/Content/Materials/Red.omat");
+    }
+
     /// <summary>A relocation undoes and redoes through the history it was recorded in.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]

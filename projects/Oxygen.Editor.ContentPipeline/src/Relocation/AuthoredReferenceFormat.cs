@@ -7,6 +7,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Assets.Authoring.Textures;
@@ -16,10 +17,11 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
 /// <summary>
-/// Reads and rewrites the asset references of authored files. Descriptor references are whole JSON string
-/// values naming an asset identity, either as an asset URI or as a canonical virtual path, each spelled by
-/// <see cref="AssetPath"/>; geometry buffers are file-relative paths; textures and import sidecars are read and written
-/// through their typed formats.
+/// Reads and rewrites the asset references of authored files. Each format names its reference fields
+/// (<see cref="AssetFileType.ReferenceFields"/>, <see cref="SceneReferenceFields"/>) and the field naming its own
+/// identity (<see cref="AssetFileType.IdentityField"/>); a reference is an asset URI or a canonical virtual path, each
+/// spelled by <see cref="AssetPath"/>, and any other string is left alone. Geometry buffers are file-relative paths;
+/// textures and import sidecars are read and written through their typed formats.
 /// </summary>
 internal static class AuthoredReferenceFormat
 {
@@ -42,32 +44,26 @@ internal static class AuthoredReferenceFormat
         => AssetFileTypes.Is(path, AssetFileCategory.ImportSettings)
             && AssetFileTypes.Is(path[..^AssetFileTypes.ImportSettings.Length], AssetFileCategory.Model);
 
-    /// <summary>Reads the asset identities a descriptor references.</summary>
+    /// <summary>Reads the asset identities a descriptor references in its reference fields.</summary>
     /// <param name="path">The descriptor.</param>
     /// <param name="content">The descriptor bytes.</param>
-    /// <param name="mounts">The authoring mount names that identify virtual paths.</param>
     /// <returns>The distinct referenced identities.</returns>
     /// <exception cref="JsonException">The descriptor is not JSON.</exception>
     /// <exception cref="AssetFormatException">The descriptor is a texture its reader refuses.</exception>
-    public static IReadOnlyList<AssetPath> ReadReferences(FileSystemPath path, ReadOnlyMemory<byte> content, IReadOnlyCollection<string> mounts)
+    public static IReadOnlyList<AssetPath> ReadReferences(FileSystemPath path, ReadOnlyMemory<byte> content)
     {
         if (IsTexture(path))
         {
-            return TextureSourceReader.Read(content.Span).VirtualPath is { } own ? [own] : [];
+            // A texture references no asset; reading it checks that it is one.
+            _ = TextureSourceReader.Read(content.Span);
+            return [];
         }
 
         var root = JsonNode.Parse(StripBom(content.Span));
-        var identities = new List<AssetPath>();
-        Visit(root, value =>
-        {
-            if (TryParseIdentity(value, mounts, out var identity, out _))
-            {
-                identities.Add(identity);
-            }
-
-            return null;
-        });
-        return [.. identities.Distinct()];
+        return [.. ReferenceFields(path).SelectMany(field => field.Select(root))
+            .Select(static node => TryParseReference(node.GetValue<string>(), out var identity, out _) ? identity : null)
+            .OfType<AssetPath>()
+            .Distinct()];
     }
 
     /// <summary>Renames an action or a mapping context inside its input source, keeping the rest of the file.</summary>
@@ -86,9 +82,8 @@ internal static class AuthoredReferenceFormat
     /// <param name="path">The descriptor's current location.</param>
     /// <param name="content">The descriptor bytes.</param>
     /// <param name="map">The relocation.</param>
-    /// <param name="mounts">The authoring mount names that identify virtual paths.</param>
     /// <returns>The rewritten bytes, or null when nothing changes.</returns>
-    public static byte[]? RewriteDescriptor(FileSystemPath path, ReadOnlyMemory<byte> content, RelocationMap map, IReadOnlyCollection<string> mounts)
+    public static byte[]? RewriteDescriptor(FileSystemPath path, ReadOnlyMemory<byte> content, RelocationMap map)
     {
         if (IsTexture(path))
         {
@@ -96,17 +91,7 @@ internal static class AuthoredReferenceFormat
         }
 
         var root = JsonNode.Parse(StripBom(content.Span));
-        var changed = false;
-        Visit(root, value =>
-        {
-            if (!TryParseIdentity(value, mounts, out var identity, out var isUri) || map.MapIdentity(identity) is not { } mapped)
-            {
-                return null;
-            }
-
-            changed = true;
-            return Format(mapped, isUri);
-        });
+        var changed = RewriteReferences(IdentityField(path).Concat(ReferenceFields(path)).SelectMany(field => field.Select(root)), map);
         changed |= RewriteFileReferences(root, path, map);
         return changed ? Serialize(root!, content.Span) : null;
     }
@@ -168,11 +153,10 @@ internal static class AuthoredReferenceFormat
     /// <param name="targetPath">The copy's location.</param>
     /// <param name="content">The original bytes.</param>
     /// <param name="map">Maps the original identity and copied companions to the copy's.</param>
-    /// <param name="mounts">The authoring mount names.</param>
     /// <returns>The copy's bytes.</returns>
     /// <exception cref="JsonException">The descriptor is not JSON.</exception>
     /// <exception cref="AssetFormatException">The descriptor is a texture its reader refuses.</exception>
-    public static byte[] RewriteCopy(FileSystemPath sourcePath, FileSystemPath targetPath, ReadOnlyMemory<byte> content, RelocationMap map, IReadOnlyCollection<string> mounts)
+    public static byte[] RewriteCopy(FileSystemPath sourcePath, FileSystemPath targetPath, ReadOnlyMemory<byte> content, RelocationMap map)
     {
         if (IsTexture(sourcePath))
         {
@@ -180,13 +164,7 @@ internal static class AuthoredReferenceFormat
         }
 
         var root = JsonNode.Parse(StripBom(content.Span));
-        var changed = false;
-        if (root is JsonObject descriptor && descriptor["virtual_path"] is JsonValue own && own.TryGetValue<string>(out var value)
-            && TryParseIdentity(value, mounts, out var identity, out var isUri) && map.MapIdentity(identity) is { } mapped)
-        {
-            descriptor["virtual_path"] = Format(mapped, isUri);
-            changed = true;
-        }
+        var changed = RewriteReferences(IdentityField(sourcePath).SelectMany(field => field.Select(root)), map);
 
         // A copied scene is a scene of its own: it takes a new identity, and the name of its file.
         if (root is JsonObject scene && targetPath.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal))
@@ -198,6 +176,30 @@ internal static class AuthoredReferenceFormat
 
         changed |= RewriteFileReferences(root, sourcePath, map, targetPath);
         return changed ? Serialize(root!, content.Span) : content.ToArray();
+    }
+
+    // The editor authors scenes in its own format; the engine's formats are described by their file types.
+    private static IReadOnlyList<AssetReferenceField> ReferenceFields(FileSystemPath path)
+        => path.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal)
+            ? SceneReferenceFields.All
+            : AssetFileTypes.Find(path.Name)?.ReferenceFields ?? [];
+
+    private static AssetReferenceField[] IdentityField(FileSystemPath path)
+        => AssetFileTypes.Find(path.Name)?.IdentityField is { } field ? [new(field)] : [];
+
+    private static bool RewriteReferences(IEnumerable<JsonValue> references, RelocationMap map)
+    {
+        var changed = false;
+        foreach (var node in references.ToArray())
+        {
+            if (TryParseReference(node.GetValue<string>(), out var identity, out var isUri) && map.MapIdentity(identity) is { } mapped)
+            {
+                node.ReplaceWith(JsonValue.Create(Format(mapped, isUri)));
+                changed = true;
+            }
+        }
+
+        return changed;
     }
 
     private static bool RewriteFileReferences(JsonNode? root, FileSystemPath path, RelocationMap map, FileSystemPath? targetPath = null)
@@ -272,53 +274,12 @@ internal static class AuthoredReferenceFormat
         return changed ? Serialize(TextureSourceWriter.ToJson(relocated), content.Span) : null;
     }
 
-    private static void Visit(JsonNode? node, Func<string, string?> rewrite)
-    {
-        switch (node)
-        {
-            case JsonObject value:
-                foreach (var name in value.Select(static property => property.Key).ToArray())
-                {
-                    if (value[name] is JsonValue leaf && leaf.TryGetValue<string>(out var text))
-                    {
-                        if (rewrite(text) is { } replaced)
-                        {
-                            value[name] = replaced;
-                        }
-                    }
-                    else
-                    {
-                        Visit(value[name], rewrite);
-                    }
-                }
-
-                break;
-            case JsonArray array:
-                for (var index = 0; index < array.Count; index++)
-                {
-                    if (array[index] is JsonValue leaf && leaf.TryGetValue<string>(out var text))
-                    {
-                        if (rewrite(text) is { } replaced)
-                        {
-                            array[index] = replaced;
-                        }
-                    }
-                    else
-                    {
-                        Visit(array[index], rewrite);
-                    }
-                }
-
-                break;
-        }
-    }
-
-    // A reference is an asset URI or a virtual path below one of the mounts, naming an asset rather than a mount.
-    private static bool TryParseIdentity(string value, IReadOnlyCollection<string>? mounts, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out AssetPath? identity, out bool isUri)
+    // A reference names an asset, as an asset URI or a virtual path; a mount is not an asset.
+    private static bool TryParseReference(string value, [System.Diagnostics.CodeAnalysis.NotNullWhen(true)] out AssetPath? identity, out bool isUri)
     {
         isUri = value.StartsWith(AssetPath.UriScheme + ":", StringComparison.OrdinalIgnoreCase);
         var parsed = isUri ? AssetPath.TryParseUri(value, out identity) : AssetPath.TryParse(value, out identity);
-        return parsed && !identity!.IsMount && mounts?.Contains(identity.Mount, StringComparer.Ordinal) != false;
+        return parsed && !identity!.IsMount;
     }
 
     private static string Format(AssetPath identity, bool isUri) => isUri ? identity.ToUriString() : identity.VirtualPath;
