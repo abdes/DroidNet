@@ -262,26 +262,24 @@ internal sealed class CookDependencyDiscovery(
                 return this.assets[script.SourceAbsolutePath].AssetUri;
             }
 
-            // An action or mapping context is named under its input source, which cooks it first.
-            if (AssetFileTypes.ContainerOf(uri) is { } container && CookInputResolver.IsAuthoringUri(project, container)
-                && CookInputResolver.HasProjectSource(project, container))
+            // A product is named under its container, which cooks it; the cook checks that a model still produces it.
+            if (resolveImported?.Invoke(uri) is { } owner)
             {
-                var source = CookInputResolver.Resolve(project, container, ContentCookInputRole.Dependency);
-                this.AddAsset(source);
-                return this.assets[source.SourceAbsolutePath].AssetUri;
+                _ = this.importedReferences.Add(uri);
+                this.AddAsset(owner);
+                return this.assets[owner.SourceAbsolutePath].AssetUri;
+            }
+
+            if (CookInputResolver.ResolveContainer(project, uri, ContentCookInputRole.Dependency) is { } container)
+            {
+                this.AddAsset(container);
+                return this.assets[container.SourceAbsolutePath].AssetUri;
             }
 
             if (AssetFileTypes.Find(uri.Name) is { Category: AssetFileCategory.Cooked, CookedExtension: AssetFileTypes.Script or AssetFileTypes.InputAction or AssetFileTypes.InputMappingContext or AssetFileTypes.PhysicsScene })
             {
                 _ = this.published.Add(uri);
                 return uri;
-            }
-
-            if (resolveImported?.Invoke(uri) is { } owner)
-            {
-                _ = this.importedReferences.Add(uri);
-                this.AddAsset(owner);
-                return this.assets[owner.SourceAbsolutePath].AssetUri;
             }
 
             if (!CookInputResolver.HasProjectSource(project, uri))

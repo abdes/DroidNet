@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
@@ -11,9 +10,8 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <summary>Resolves an imported model's products to the model that produces them.</summary>
 /// <remarks>
 /// A model's products are named under its identity (<c>/Content/Ship/Ship.glb/Paint.omat</c>), so the identity alone
-/// names the model that cooks a product: <see cref="AssetFileTypes.ContainerOf"/>. A model is imported when its import
-/// settings sit beside it; a model file without them produces nothing. Nothing authored can be named under a model,
-/// since the model is a file.
+/// names the model that cooks a product: <see cref="CookInputResolver.ResolveContainer"/>. Unlike an input source's
+/// products, the cook checks that the model still produces each one referenced, since a reimport can drop it.
 /// </remarks>
 internal static class ImportedOutputs
 {
@@ -26,26 +24,23 @@ internal static class ImportedOutputs
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(uri);
-        // A model in a cooked library is cooked by its library, not by this project.
-        if (AssetFileTypes.ContainerOf(uri) is not { } model || !AssetFileTypes.Is(model.Name, AssetFileCategory.Model)
-            || !project.AuthoringMounts.Any(mount => string.Equals(mount.Name, model.Mount, StringComparison.Ordinal)))
-        {
-            return null;
-        }
-
-        var source = CookInputResolver.Resolve(project, model, role);
-        return File.Exists(source.SourceAbsolutePath.FullPath + NativeSceneImportSettings.SidecarSuffix) ? source : null;
+        return CookInputResolver.ResolveContainer(project, uri, role) is { Kind: ContentCookAssetKind.ForeignSource } model ? model : null;
     }
 
-    /// <summary>Substitutes a requested product with its model, keeping the product as a required output.</summary>
+    /// <summary>Substitutes a requested product with its container; a model keeps the product as a required output.</summary>
     /// <param name="scope">The original requested scope.</param>
-    /// <returns>The scope with the model in place of a requested product.</returns>
+    /// <returns>The scope with the container in place of a requested product.</returns>
     public static ContentCookScope ResolveScope(ContentCookScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        return scope.TargetKind != CookTargetKind.Folder && scope.ScopeUri is { } requested
-            && ResolveOutput(scope.Project, requested, ContentCookInputRole.Primary) is { } source
+        if (scope.TargetKind == CookTargetKind.Folder || scope.ScopeUri is not { } requested
+            || CookInputResolver.ResolveContainer(scope.Project, requested, ContentCookInputRole.Primary) is not { } source)
+        {
+            return scope;
+        }
+
+        return source.Kind == ContentCookAssetKind.ForeignSource
             ? scope with { Inputs = [source], RequiredImportedOutputs = [requested] }
-            : scope;
+            : scope with { Inputs = [source] };
     }
 }

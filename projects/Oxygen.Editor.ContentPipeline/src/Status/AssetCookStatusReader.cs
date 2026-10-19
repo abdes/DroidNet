@@ -75,14 +75,14 @@ public sealed partial class AssetCookStatusReader(
 
         var requested = assetUris.Distinct().ToArray();
         var resolved = requested
-            .Select(uri => (Requested: uri, Model: ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Primary)))
-            .Select(item => (item.Requested, item.Model, Input: ResolveInput(project, item.Requested, item.Model)))
+            .Select(uri => (Requested: uri, Container: CookInputResolver.ResolveContainer(project, uri, ContentCookInputRole.Primary)))
+            .Select(item => (item.Requested, item.Container, Input: ResolveInput(project, item.Requested, item.Container)))
             .ToArray();
 
         // An asset that cannot be a cook input, such as one outside the project, is invalid on its own; the others
         // are read as usual.
         var unresolved = resolved.Select(static item => item.Input.Unresolved).OfType<AssetCookStatus>().ToArray();
-        var mapped = resolved.Where(static item => item.Input.Input is not null).Select(static item => (item.Requested, item.Model)).ToArray();
+        var mapped = resolved.Where(static item => item.Input.Input is not null).Select(static item => (item.Requested, item.Container)).ToArray();
         var inputs = resolved.Select(static item => item.Input.Input).OfType<ContentCookInput>().ToArray();
         using var libraries = await CookedLibraryReadSet.AcquireAsync(project, engineContent, cancellationToken, uri => ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. prior.ProducedAssets]).ConfigureAwait(false);
         var graph = await CreateDependencyDiscovery(project, prior, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
@@ -103,7 +103,7 @@ public sealed partial class AssetCookStatusReader(
             producer.Diagnostics,
             metadataUnavailable,
             changed));
-        var states = inputs.Select((input, index) => MapImportedStatus(mapped[index].Requested, mapped[index].Model, sourceStatuses[input.AssetUri]))
+        var states = inputs.Select((input, index) => MapProductStatus(mapped[index].Requested, mapped[index].Container, sourceStatuses[input.AssetUri]))
             .Concat(unresolved)
             .Select(state => state with { OutputRoots = snapshot.ProjectRoots }).ToArray();
         return prior.Products.IsEmpty || producer.Revision == nativeCompatibility.Observation.Revision ? states
@@ -111,11 +111,11 @@ public sealed partial class AssetCookStatusReader(
     }
 
     // The cook input of a requested asset, or, when it cannot be one, the asset's invalid status.
-    private static (ContentCookInput? Input, AssetCookStatus? Unresolved) ResolveInput(ProjectContext project, AssetPath requested, ContentCookInput? model)
+    private static (ContentCookInput? Input, AssetCookStatus? Unresolved) ResolveInput(ProjectContext project, AssetPath requested, ContentCookInput? container)
     {
-        if (model is not null)
+        if (container is not null)
         {
-            return (model, null);
+            return (container, null);
         }
 
         try
@@ -234,10 +234,10 @@ public sealed partial class AssetCookStatusReader(
         AffectedVirtualPath = input.AssetUri.VirtualPath,
     };
 
-    // A model's product reads its model's status, and is available when the model published it.
-    private static AssetCookStatus MapImportedStatus(AssetPath requested, ContentCookInput? model, AssetCookStatus status)
+    // A container's product reads its container's status, and is available when the container published it.
+    private static AssetCookStatus MapProductStatus(AssetPath requested, ContentCookInput? container, AssetCookStatus status)
     {
-        if (model is null)
+        if (container is null)
         {
             return status with { AssetUri = requested };
         }

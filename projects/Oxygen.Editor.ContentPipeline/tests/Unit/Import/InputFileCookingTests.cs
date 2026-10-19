@@ -93,6 +93,26 @@ public sealed class InputFileCookingTests : IDisposable
     }
 
     [TestMethod]
+    public void AProductResolvesToTheContainerItIsNamedUnder()
+    {
+        var project = this.CreateProject();
+        _ = this.Write("Gameplay/Player.input.json", Player);
+        _ = this.Write("Gameplay/Ship.glb", "model");
+
+        var source = CookInputResolver.ResolveContainer(project, AssetPath.Parse("/Content/Gameplay/Player.input/Jump.oiact"), ContentCookInputRole.Dependency);
+
+        _ = source!.AssetUri.Should().Be(AssetPath.Parse("/Content/Gameplay/Player.input"));
+        _ = source.Kind.Should().Be(ContentCookAssetKind.Input);
+        _ = source.Role.Should().Be(ContentCookInputRole.Dependency);
+        _ = CookInputResolver.ResolveContainer(project, AssetPath.Parse("/Content/Gameplay/Vehicle.input/Jump.oiact"), ContentCookInputRole.Dependency)
+            .Should().BeNull("no source of the project is named Vehicle.input");
+        _ = CookInputResolver.ResolveContainer(project, AssetPath.Parse("/Content/Gameplay/Ship.glb/Paint.omat"), ContentCookInputRole.Dependency)
+            .Should().BeNull("a model produces nothing until it is imported");
+        _ = CookInputResolver.ResolveContainer(project, AssetPath.Parse("/Content/Gameplay/Player.input"), ContentCookInputRole.Dependency)
+            .Should().BeNull("a container is not its own product");
+    }
+
+    [TestMethod]
     public void AContextTakesThePriorityItsSourceDeclares()
     {
         var project = this.CreateProject();

@@ -73,6 +73,27 @@ internal static class CookInputResolver
         return new(identity, kind, identity.Mount, relative, location.File, role);
     }
 
+    /// <summary>Resolves a container's product to the container that cooks it: a model's mesh or material
+    /// (<c>/Content/Ship/Ship.glb/Paint.omat</c>), or an input source's action or mapping context
+    /// (<c>/Content/Player.input/Jump.oiact</c>).</summary>
+    /// <param name="project">The owning project and mount declarations.</param>
+    /// <param name="uri">The product's identity.</param>
+    /// <param name="role">The container's role in the requested closure.</param>
+    /// <returns>The container's input, or null when the identity is not a product of a container with its source in
+    /// an authoring mount. A model produces nothing until it is imported, its import settings beside it.</returns>
+    public static ContentCookInput? ResolveContainer(ProjectContext project, AssetPath uri, ContentCookInputRole role)
+    {
+        if (AssetFileTypes.ContainerOf(uri) is not { } container || !HasAuthoringMount(project, container.Mount)
+            || !HasProjectSource(project, container))
+        {
+            return null;
+        }
+
+        var source = Resolve(project, container, role);
+        return source.Kind != ContentCookAssetKind.ForeignSource
+            || File.Exists(source.SourceAbsolutePath.FullPath + Import.NativeSceneImportSettings.SidecarSuffix) ? source : null;
+    }
+
     /// <summary>Resolves a script to its source: <c>/Content/Player/move.oscript</c> cooks from
     /// <c>Content/Player/move.lua</c> or <c>move.luau</c>.</summary>
     /// <param name="project">The owning project and mount declarations.</param>

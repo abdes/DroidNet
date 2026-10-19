@@ -123,6 +123,26 @@ public sealed class AssetCookStatusTests
     }
 
     /// <summary>
+    /// An action is named under its input source and reads the source's status under its own identity, rather than
+    /// being an asset the cook cannot resolve.
+    /// </summary>
+    /// <returns>The asynchronous container status regression.</returns>
+    [TestMethod]
+    public async Task AProductReadsItsContainersStatus()
+    {
+        using var project = new StatusProject();
+        await File.WriteAllTextAsync(Path.Combine(project.Root, "Content", "Player.input.json"), """{ "actions": [ { "name": "Jump", "type": "bool" } ] }""", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var jump = AssetPath.Parse("/Content/Player.input/Jump.oiact");
+
+        var status = (await project.CreateReader().ReadAsync(project.Project, [jump], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
+
+        _ = status.AssetUri.Should().Be(jump);
+        _ = status.Freshness.Should().Be(AssetCookFreshness.NeedsCooking);
+        _ = status.HasPublishedOutput.Should().BeFalse();
+        _ = status.Diagnostics.Should().BeEmpty();
+    }
+
+    /// <summary>
     /// A diagnostic names its asset by the virtual path the engine cooks, not by the escaped URI path, so an asset in a
     /// folder such as "New folder (2)" shows its real name and matches its asset.
     /// </summary>
