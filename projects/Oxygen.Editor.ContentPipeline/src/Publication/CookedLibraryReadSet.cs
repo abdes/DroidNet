@@ -34,11 +34,6 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <summary>Gets the declared libraries that could not be read; they are left out of every binding until they can be.</summary>
     public IReadOnlyList<UnreadableLibrary> Unreadable => this.unreadable;
 
-    /// <summary>Gets a value indicating whether cached dependencies name keys absent from every declared library index.</summary>
-    public bool HasUnresolvedAssetKeys => this.roots.Where(static root => root.Dependencies is not null)
-        .SelectMany(static root => root.Dependencies!.Assets.Values).SelectMany(static asset => asset.Dependencies)
-        .Any(key => this.FindKey(key).asset is null);
-
     /// <summary>Reads library indexes and protects the full container inputs without starting a native worker.</summary>
     /// <param name="project">The project declaring the ordered libraries.</param>
     /// <param name="engineContent">The engine content pak, the lowest library beneath the declared ones.</param>

@@ -4,7 +4,6 @@
 
 using AwesomeAssertions;
 using Moq;
-using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
@@ -14,7 +13,7 @@ using Oxygen.Editor.Assets.TestSupport;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
 
-/// <summary>Checks background library inspection independently of ordinary status projection.</summary>
+/// <summary>Checks that status projection reuses status snapshots instead of inspecting libraries.</summary>
 public sealed partial class AssetFeedTests
 {
     /// <summary>Unchanged refreshes reuse status, and new producer facts invalidate it without starting native inspection.</summary>
@@ -31,7 +30,6 @@ public sealed partial class AssetFeedTests
         var updated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var known = false;
         var statuses = new Mock<IAssetCookStatusReader>();
-        var metadata = statuses.As<ICookedLibraryMetadataService>();
         _ = statuses.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<AssetPath>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => [new AssetCookStatus(identity, known ? AssetCookFreshness.Current : AssetCookFreshness.Unknown, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
@@ -51,7 +49,5 @@ public sealed partial class AssetFeedTests
         known = true;
         statuses.Raise(value => value.Changed += null, EventArgs.Empty);
         await updated.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        metadata.Verify(value => value.RefreshLibraryMetadataAsync(It.IsAny<ProjectContext>(), It.IsAny<CancellationToken>()), Times.Never);
     }
 }

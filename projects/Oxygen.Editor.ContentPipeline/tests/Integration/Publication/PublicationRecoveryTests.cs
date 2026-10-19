@@ -128,7 +128,7 @@ public sealed class PublicationRecoveryTests
         var loaded = await CookPublicationTransaction.LoadAsync(project.Context, project.Operation.OperationId, project.Files, project.Manager, writer, this.TestContext.CancellationToken).ConfigureAwait(false);
         Func<Task> verify = async () =>
         {
-            using var catalog = await accepted.CreateCatalogAsync(accepted.Roots.Single(static root => root.Name == "Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
+            var catalog = await accepted.CreateCatalogAsync(accepted.Roots.Single(static root => root.Name == "Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
         };
         _ = await verify.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
     }

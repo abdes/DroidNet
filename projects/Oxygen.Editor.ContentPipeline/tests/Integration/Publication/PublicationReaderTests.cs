@@ -28,7 +28,7 @@ public sealed class PublicationReaderTests
         using var accepted = await transaction.PublishAsync(preview: null, project.Baseline, static () => { }, cancellation.Token).WaitAsync(cancellation.Token).ConfigureAwait(false);
         var oldRoot = reader.FindProjectRoot("Content")!.FullPath;
         _ = (reader.PublicationId == accepted.PublicationId).Should().BeFalse();
-        using var catalog = await reader.CreateCatalogAsync(reader.Roots.Single(static root => root.Name == "Content"), cancellation.Token).ConfigureAwait(false);
+        var catalog = await reader.CreateCatalogAsync(reader.Roots.Single(static root => root.Name == "Content"), cancellation.Token).ConfigureAwait(false);
         _ = File.ReadAllText(Path.Combine(oldRoot, "value.txt")).Should().Be("old:Content");
         using var claimed = CookedGeneration.TryClaim(oldRoot);
         _ = claimed.Should().BeNull();

@@ -24,15 +24,13 @@ public sealed class TransitiveLibraryTests
     /// <summary>A library geometry's material resolves through the project's saved source priority.</summary>
     /// <param name="projectWins">Whether project output has higher priority than the material library.</param>
     /// <param name="materialLibraryMounted">Whether a library index can name the dependent material.</param>
-    /// <param name="prewarm">Whether background metadata refresh runs before the first cook.</param>
     /// <returns>The asynchronous native priority regression.</returns>
     [TestMethod]
-    [DataRow(true, true, false)]
-    [DataRow(false, true, false)]
-    [DataRow(true, false, false)]
-    [DataRow(true, false, true)]
+    [DataRow(true, true)]
+    [DataRow(false, true)]
+    [DataRow(true, false)]
     [TestCategory("NativeContent")]
-    public async Task CookedGeometryDiscoversProjectMaterialOverride(bool projectWins, bool materialLibraryMounted, bool prewarm)
+    public async Task CookedGeometryDiscoversProjectMaterialOverride(bool projectWins, bool materialLibraryMounted)
     {
         using var library = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         using var consumer = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
@@ -61,11 +59,6 @@ public sealed class TransitiveLibraryTests
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         var service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
         var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
-        if (prewarm)
-        {
-            await this.VerifyBackgroundKeyLookupAsync(service, consumer, scene, runner).ConfigureAwait(false);
-        }
-
         var cooked = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, cooked.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         var materialUri = AssetPath.Parse("/" + material[..^5]);
@@ -135,28 +128,7 @@ public sealed class TransitiveLibraryTests
         _ = runner.Count.Should().Be(workers, "ordinary status reads must not start native inspection");
         _ = status.Single().Freshness.Should().NotBe(AssetCookFreshness.Current);
         _ = cooked.InputSnapshot!.CookedDependencies.Select(static input => input.SourceName).Should().Contain("Materials");
-        var runs = consumer.CookCoordinator.Runs.Count;
-        _ = (await service.RefreshLibraryMetadataAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
-        _ = consumer.CookCoordinator.Runs.Count.Should().Be(runs, "background inspection is not a cooking operation");
-        workers = runner.Count;
-        _ = (await service.RefreshLibraryMetadataAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeFalse();
-        _ = runner.Count.Should().Be(workers, "the verified library hash should reuse the cached report");
         _ = (await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
-    }
-
-    private async Task VerifyBackgroundKeyLookupAsync(ContentPipelineService service, CookWorkspace consumer, AssetPath scene, CountingSourceRunner runner)
-    {
-        var project = consumer.ContextService.ActiveProject!;
-        var workers = runner.Count;
-        var runs = consumer.CookCoordinator.Runs.Count;
-        _ = await service.ReadAsync(project, [scene], this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = runner.Count.Should().Be(workers);
-        _ = (await service.RefreshLibraryMetadataAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
-        _ = consumer.CookCoordinator.Runs.Count.Should().Be(runs);
-        workers = runner.Count;
-        _ = await service.ReadAsync(project, [scene], this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = (await service.RefreshLibraryMetadataAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeFalse();
-        _ = runner.Count.Should().Be(workers, "unchanged candidates and status reads must reuse native metadata");
     }
 }

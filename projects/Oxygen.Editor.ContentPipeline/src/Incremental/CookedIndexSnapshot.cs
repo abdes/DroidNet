@@ -92,7 +92,7 @@ internal sealed class CookedIndexSnapshot
 
     private static async Task<IReadOnlyList<AssetRecord>> BuildRecordsAsync(Document index, FileSystemPath root)
     {
-        using var catalog = new LooseCookedIndexAssetCatalog(index, root);
+        var catalog = new LooseCookedIndexAssetCatalog(index, root);
         return await catalog.QueryAsync(new(AssetQueryScope.All), CancellationToken.None).ConfigureAwait(false);
     }
 
