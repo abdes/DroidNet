@@ -361,6 +361,32 @@ public sealed class SourceDependencyDiscoveryTests
         _ = workspace.ReadText(source).Should().Be(material.ToJsonString());
     }
 
+    /// <summary>A texture that adds images through <c>sources</c> needs each of them, not only its primary image.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task MissingImageOfAMultiSourceTextureFailsBeforeNativeImport()
+    {
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        const string source = "Content/Materials/Red.omat.json";
+        workspace.WriteMaterial(source, "Red");
+        var material = JsonNode.Parse(workspace.ReadText(source))!;
+        material["textures"] = JsonNode.Parse("""{"base_color":{"virtual_path":"/Content/Textures/Red.otex"}}""");
+        workspace.WriteText(source, material.ToJsonString());
+        workspace.WriteText("Content/Textures/Red.otex.json", """{ "virtual_path": "/Content/Textures/Red.otex", "source": "Red.png", "sources": [ { "file": "Red_1.png", "layer": 1 } ] }""");
+        workspace.WriteText("Content/Textures/Red.png", "image");
+        var api = CreateSuccessfulApi(workspace, NativeSourceFactsFixture.AnalyzeAsync);
+        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
+
+        var result = await service.CookAssetAsync(AssetPath.Parse("/" + source[..^5]), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.Status.Should().Be(OperationStatus.Failed);
+        _ = result.Diagnostics.Should().ContainSingle(diagnostic =>
+            diagnostic.Code == "material.texture_reference_invalid"
+            && diagnostic.AffectedVirtualPath == "/Content/Materials/Red.omat.json"
+            && diagnostic.AffectedPath == Path.Combine(workspace.Root, "Content", "Textures", "Red_1.png"));
+        _ = api.ImportedManifest.Should().BeNull();
+    }
+
     /// <summary>Independent input errors are collected and scoped before native work can change output.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]

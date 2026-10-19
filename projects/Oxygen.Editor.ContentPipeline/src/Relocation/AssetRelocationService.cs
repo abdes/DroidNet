@@ -10,8 +10,10 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
@@ -295,7 +297,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         var scenes = isDirectory
             ? Directory.EnumerateFiles(path.FullPath, "*" + AssetFileTypes.SceneDescriptor, SearchOption.AllDirectories)
             : path.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal) ? [path.FullPath] : [];
-        if (scenes.FirstOrDefault(scene => AuthoredReferenceFormat.ReadSceneId(File.ReadAllBytes(scene)) == start) is { } found)
+        if (scenes.FirstOrDefault(scene => SceneSerializer.ReadId(File.ReadAllBytes(scene)) == start) is { } found)
         {
             throw new AssetRelocationException($"'{RelocationPaths.GetDisplayName(Path.GetFileName(found))}' is the project's start scene and cannot be deleted. Choose another start scene first.");
         }
@@ -442,7 +444,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 }
             }
         }
-        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException or StorageException or System.Text.Json.JsonException)
+        catch (Exception failure) when (failure is IOException or UnauthorizedAccessException or StorageException or System.Text.Json.JsonException or AssetFormatException)
         {
             this.LogCopyFailed(failure, created.Count);
             foreach (var path in created.AsEnumerable().Reverse())

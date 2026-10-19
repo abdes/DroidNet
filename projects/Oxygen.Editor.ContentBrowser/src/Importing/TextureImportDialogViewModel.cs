@@ -250,7 +250,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         {
             try
             {
-                return TextureSourceImportTarget.Resolve(this.CreateRequest()).VirtualPath;
+                return TextureSourceImportTarget.Resolve(this.CreateRequest()).VirtualPath.VirtualPath;
             }
             catch (ArgumentException)
             {

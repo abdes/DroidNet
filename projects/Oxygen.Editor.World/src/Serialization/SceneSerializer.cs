@@ -3,9 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Runtime.CompilerServices;
+using System.Text;
 using System.Text.Json;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -87,6 +89,31 @@ public static class SceneSerializer
         var data = scene.Dehydrate();
         await JsonSerializer.SerializeAsync(stream, data, SceneJsonContext.Default.SceneData)
             .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Reads the identity a scene file holds, without reading the scene.
+    /// </summary>
+    /// <param name="json">The scene file's bytes, with or without a UTF-8 byte order mark.</param>
+    /// <returns>The scene's id, or <see langword="null"/> when the bytes are not a scene with a non-empty id.</returns>
+    public static SceneId? ReadId(ReadOnlySpan<byte> json)
+    {
+        var content = json.StartsWith(Encoding.UTF8.Preamble) ? json[Encoding.UTF8.Preamble.Length..] : json;
+        try
+        {
+            using var document = JsonDocument.Parse(content.ToArray());
+            return document.RootElement.ValueKind == JsonValueKind.Object
+                && document.RootElement.TryGetProperty(nameof(SceneData.Id), out var id)
+                && id.ValueKind == JsonValueKind.String
+                && id.TryGetGuid(out var value)
+                && value != Guid.Empty
+                    ? SceneId.FromValue(value)
+                    : null;
+        }
+        catch (JsonException)
+        {
+            return null;
+        }
     }
 
     /// <summary>

@@ -97,6 +97,28 @@ public sealed class SceneSerializerTests
         AssertHeroNode(restored.RootNodes[1]);
     }
 
+    [TestMethod]
+    public async Task ReadId_OfASavedScene_IsTheScenesId()
+    {
+        var scene = SceneTestSupport.CreateCompleteScene();
+        var stream = new MemoryStream();
+        await using var lifetime = stream.ConfigureAwait(false);
+        await SceneSerializer.SerializeAsync(stream, scene).ConfigureAwait(false);
+
+        _ = SceneSerializer.ReadId(stream.ToArray()).Should().Be(scene.Id);
+        _ = SceneSerializer.ReadId([.. Encoding.UTF8.Preamble, .. stream.ToArray()]).Should().Be(scene.Id);
+    }
+
+    [TestMethod]
+    [DataRow("""{ "Name": "Main" }""")]
+    [DataRow("""{ "Id": "00000000-0000-0000-0000-000000000000" }""")]
+    [DataRow("""{ "Id": "not a guid" }""")]
+    [DataRow("""{ "Id": 42 }""")]
+    [DataRow("""[ "99999999-9999-9999-9999-999999999999" ]""")]
+    [DataRow("""{ "Id": """)]
+    public void ReadId_WithoutAnId_IsNull(string json)
+        => _ = SceneSerializer.ReadId(Encoding.UTF8.GetBytes(json)).Should().BeNull();
+
     private static void AssertCameraNode(SceneNode cameraNode)
     {
         _ = cameraNode.Name.Should().Be("Starting Camera Node");

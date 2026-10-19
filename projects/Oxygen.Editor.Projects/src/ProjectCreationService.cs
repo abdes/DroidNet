@@ -3,8 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text;
 using System.Text.Json;
 using DroidNet.Storage;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -20,7 +22,6 @@ public sealed class ProjectCreationService(
     IProjectValidationService validation) : IProjectCreationService
 {
     private const string TemplateManifestFileName = "Template.json";
-    private const string SceneIdPropertyName = "Id";
     private static readonly string[] RequiredTemplateFolders =
     [
         "Content",
@@ -162,28 +163,6 @@ public sealed class ProjectCreationService(
                     await folder.DeleteRecursiveAsync(cancellationToken).ConfigureAwait(false);
                     break;
             }
-        }
-    }
-
-    private static SceneId? TryReadSceneId(string sceneJson)
-    {
-        // The scene schema requires an identity; tolerate payloads without one so creation
-        // leaves the default unset instead of guessing an identity for the starter scene.
-        try
-        {
-            using var document = JsonDocument.Parse(sceneJson);
-            var root = document.RootElement;
-            return root.ValueKind == JsonValueKind.Object
-                && root.TryGetProperty(SceneIdPropertyName, out var idProperty)
-                && idProperty.ValueKind == JsonValueKind.String
-                && Guid.TryParse(idProperty.GetString(), out var sceneId)
-                && sceneId != Guid.Empty
-                ? SceneId.FromValue(sceneId)
-                : null;
-        }
-        catch (JsonException)
-        {
-            return null;
         }
     }
 
@@ -529,7 +508,8 @@ public sealed class ProjectCreationService(
         }
 
         var sceneJson = await sceneDocument.ReadAllTextAsync(cancellationToken).ConfigureAwait(false);
-        return TryReadSceneId(sceneJson);
+        // A starter scene without an identity leaves the start scene unset rather than guessing one.
+        return SceneSerializer.ReadId(Encoding.UTF8.GetBytes(sceneJson));
     }
 
     private async Task ValidateTemplateDescriptorAsync(

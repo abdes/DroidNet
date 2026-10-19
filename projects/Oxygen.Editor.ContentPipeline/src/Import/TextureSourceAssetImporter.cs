@@ -4,9 +4,10 @@
 
 using System.Globalization;
 using System.Text.Json;
-using System.Text.Json.Serialization;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Authoring.Textures;
+using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
@@ -62,6 +63,17 @@ public static class TextureSourceAssetImporter
             throw new IOException($"A texture asset named '{request.Name}' already exists in this folder.");
         }
 
+        // The descriptor is made first: settings it refuses leave no file behind.
+        var descriptor = new TextureSource(Path.GetFileName(target.ImagePath))
+        {
+            Name = request.Name,
+            VirtualPath = target.VirtualPath,
+            Intent = request.Intent,
+            ColorSpace = request.ColorSpace,
+            Format = request.Format,
+            Cube = CubeSettings(request.Cube),
+        };
+        var descriptorBytes = JsonSerializer.SerializeToUtf8Bytes(TextureSourceWriter.ToJson(descriptor), JsonOptions);
         Directory.CreateDirectory(Path.GetDirectoryName(target.ImagePath)!);
         var sources = request.Cube?.Layout == CubeLayout.SixFaces ? FindCubeFaces(request.SourcePath)! : [request.SourcePath];
         var imagesCreated = 0;
@@ -78,15 +90,6 @@ public static class TextureSourceAssetImporter
                 await source.CopyToAsync(image, cancellationToken).ConfigureAwait(false);
             }
 
-            var descriptor = new TextureDescriptor(
-                request.Name,
-                target.VirtualPath,
-                Path.GetFileName(target.ImagePath),
-                request.Intent,
-                request.ColorSpace,
-                request.Format,
-                CubeSettings.From(request.Cube));
-            var descriptorBytes = JsonSerializer.SerializeToUtf8Bytes(descriptor, JsonOptions);
             var output = new FileStream(target.DescriptorPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 4096, FileOptions.Asynchronous | FileOptions.SequentialScan);
             await using (output.ConfigureAwait(false))
             {
@@ -132,73 +135,19 @@ public static class TextureSourceAssetImporter
             : width * 4 == height * 3 ? CubeLayout.VerticalCross
             : null;
 
-    /// <summary>Gets whether a texture descriptor cooks a cube texture.</summary>
-    /// <param name="descriptorPath">The texture descriptor file.</param>
-    /// <returns><see langword="true"/> when its cube settings produce a cube texture.</returns>
-    public static bool IsCubeDescriptor(string descriptorPath) => ReadCubeDescriptor(descriptorPath) is not null;
-
     /// <summary>Reads what a cube texture descriptor cooks.</summary>
     /// <param name="descriptorPath">The texture descriptor file.</param>
-    /// <returns>The cube's storage, or <see langword="null"/> when the descriptor cooks no cube texture.</returns>
+    /// <returns>The cube's storage, or <see langword="null"/> when the descriptor cooks no cube texture or cannot be
+    /// read.</returns>
     public static CubeDescriptorInfo? ReadCubeDescriptor(string descriptorPath)
-    {
-        try
-        {
-            using var stream = File.OpenRead(descriptorPath);
-            using var document = JsonDocument.Parse(stream);
-            var root = document.RootElement;
-            if (!root.TryGetProperty("cube", out var cube) || cube.ValueKind != JsonValueKind.Object
-                || !(IsTrue(cube, "cubemap") || IsTrue(cube, "equirect_to_cube")
-                    || (cube.TryGetProperty("cube_layout", out var layout) && layout.ValueKind == JsonValueKind.String)))
-            {
-                return null;
-            }
+        => TryRead(descriptorPath) is { IsCube: true } texture ? new CubeDescriptorInfo(texture.StoresRadiance) : null;
 
-            var format = root.TryGetProperty("output", out var output) && output.ValueKind == JsonValueKind.Object
-                && output.TryGetProperty("format", out var value) && value.ValueKind == JsonValueKind.String
-                ? value.GetString()
-                : null;
-            return new CubeDescriptorInfo(StoresRadiance: format is "rgba16f" or "rgba32f");
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
-        {
-            return null;
-        }
-
-        static bool IsTrue(JsonElement cube, string name)
-            => cube.TryGetProperty(name, out var value) && value.ValueKind == JsonValueKind.True;
-    }
-
-    /// <summary>Checks whether a texture descriptor names a source image that exists beside it.</summary>
+    /// <summary>Checks whether every image a texture descriptor reads exists.</summary>
     /// <param name="descriptorPath">The texture descriptor file.</param>
-    /// <returns><see langword="true"/> when the descriptor's <c>source</c> is a relative path inside its folder and the file exists.</returns>
+    /// <returns><see langword="true"/> when the descriptor can be read and each of its images exists.</returns>
     public static bool HasSourceImage(string descriptorPath)
-    {
-        try
-        {
-            using var descriptor = JsonDocument.Parse(File.ReadAllBytes(descriptorPath));
-            if (!descriptor.RootElement.TryGetProperty("source", out var sourceValue)
-                || sourceValue.ValueKind != JsonValueKind.String
-                || string.IsNullOrWhiteSpace(sourceValue.GetString()))
-            {
-                return false;
-            }
-
-            var source = sourceValue.GetString()!;
-            if (Path.IsPathRooted(source) || source.Replace('\\', '/').Split('/').Any(static segment => segment is ".." or "." or ""))
-            {
-                return false;
-            }
-
-            var directory = FileSystemPath.From(descriptorPath).Parent!;
-            var sourcePath = directory.Combine(source);
-            return sourcePath != directory && sourcePath.IsSameOrInside(directory) && File.Exists(sourcePath.FullPath);
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException or ArgumentException)
-        {
-            return false;
-        }
-    }
+        => TryRead(descriptorPath) is { } texture
+            && texture.ResolveImages(FileSystemPath.From(descriptorPath)).All(static image => File.Exists(image.FullPath));
 
     /// <summary>Finds the six face files of a cube from any one of them, named as the cooker expects.</summary>
     /// <param name="path">One face image, such as <c>sky_px.hdr</c>, <c>sky_posx.hdr</c> or <c>sky_right.hdr</c>.</param>
@@ -268,44 +217,30 @@ public static class TextureSourceAssetImporter
         }
     }
 
-    private sealed record TextureDescriptor(
-        [property: JsonPropertyName("name")] string Name,
-        [property: JsonPropertyName("virtual_path")] string VirtualPath,
-        [property: JsonPropertyName("source")] string Source,
-        [property: JsonPropertyName("intent")] string Intent,
-        [property: JsonPropertyName("decode")] DecodeSettings Decode,
-        [property: JsonPropertyName("output")] OutputSettings Output,
-        [property: JsonPropertyName("cube"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] CubeSettings? Cube)
+    private static TextureSource? TryRead(string descriptorPath)
     {
-        public TextureDescriptor(string name, string virtualPath, string source, string intent, string colorSpace, string format, CubeSettings? cube)
-            : this(name, virtualPath, source, intent, new DecodeSettings(colorSpace), new OutputSettings(format), cube)
+        try
         {
+            return TextureSourceReader.Read(File.ReadAllBytes(descriptorPath));
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or AssetFormatException)
+        {
+            return null;
         }
     }
 
-    private sealed record CubeSettings(
-        [property: JsonPropertyName("cubemap"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? Cubemap,
-        [property: JsonPropertyName("equirect_to_cube"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] bool? EquirectToCube,
-        [property: JsonPropertyName("cube_face_size"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] int? FaceSize,
-        [property: JsonPropertyName("cube_layout"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)] string? Layout)
-    {
-        public static CubeSettings? From(TextureCubeImport? cube)
-            => cube?.Layout switch
-            {
-                null => null,
-                CubeLayout.Panorama => new(Cubemap: null, EquirectToCube: true, cube.FaceSize, Layout: null),
-                CubeLayout.HorizontalStrip => new(Cubemap: true, EquirectToCube: null, FaceSize: null, "hstrip"),
-                CubeLayout.VerticalStrip => new(Cubemap: true, EquirectToCube: null, FaceSize: null, "vstrip"),
-                CubeLayout.HorizontalCross => new(Cubemap: true, EquirectToCube: null, FaceSize: null, "hcross"),
-                CubeLayout.VerticalCross => new(Cubemap: true, EquirectToCube: null, FaceSize: null, "vcross"),
+    private static TextureCubeSettings? CubeSettings(TextureCubeImport? cube)
+        => cube?.Layout switch
+        {
+            null => null,
+            CubeLayout.Panorama => new() { EquirectToCube = true, FaceSize = cube.FaceSize },
+            CubeLayout.HorizontalStrip => new() { Cubemap = true, Layout = "hstrip" },
+            CubeLayout.VerticalStrip => new() { Cubemap = true, Layout = "vstrip" },
+            CubeLayout.HorizontalCross => new() { Cubemap = true, Layout = "hcross" },
+            CubeLayout.VerticalCross => new() { Cubemap = true, Layout = "vcross" },
 
-                // The cooker finds the other faces from the +X face's name.
-                CubeLayout.SixFaces => new(Cubemap: true, EquirectToCube: null, FaceSize: null, Layout: null),
-                _ => throw new ArgumentOutOfRangeException(nameof(cube), cube.Layout, "Unknown cube layout."),
-            };
-    }
-
-    private sealed record DecodeSettings([property: JsonPropertyName("color_space")] string ColorSpace);
-
-    private sealed record OutputSettings([property: JsonPropertyName("format")] string Format);
+            // The cooker finds the other faces from the +X face's name.
+            CubeLayout.SixFaces => new() { Cubemap = true },
+            _ => throw new ArgumentOutOfRangeException(nameof(cube), cube.Layout, "Unknown cube layout."),
+        };
 }

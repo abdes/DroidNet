@@ -6,6 +6,7 @@ using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
@@ -73,7 +74,7 @@ internal sealed class AuthoredReferenceIndex
             {
                 if (isDescriptor)
                 {
-                    descriptors.Add(new(path, virtualPath, AssetFileTypes.ToIdentity(virtualPath), AuthoredReferenceFormat.ReadReferences(content, names)));
+                    descriptors.Add(new(path, virtualPath, AssetFileTypes.ToIdentity(virtualPath), AuthoredReferenceFormat.ReadReferences(path, content, names)));
                 }
                 else
                 {
@@ -85,7 +86,7 @@ internal sealed class AuthoredReferenceIndex
                     }
                 }
             }
-            catch (Exception error) when (error is JsonException or InvalidDataException or InvalidOperationException)
+            catch (Exception error) when (error is JsonException or AssetFormatException or InvalidDataException or InvalidOperationException)
             {
                 // A file the editor cannot parse contributes no references; changes that run on the index report it.
                 unreadable.Add(path);

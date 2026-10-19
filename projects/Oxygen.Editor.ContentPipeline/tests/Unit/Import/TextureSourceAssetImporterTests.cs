@@ -105,10 +105,11 @@ public sealed class TextureSourceAssetImporterTests
     }
 
     [TestMethod]
-    [DataRow("""{ "output": { "format": "rgba16f" }, "cube": { "equirect_to_cube": true } }""", true, true)]
-    [DataRow("""{ "output": { "format": "rgba32f" }, "cube": { "cubemap": true, "cube_layout": "hcross" } }""", true, true)]
-    [DataRow("""{ "output": { "format": "rgba8_srgb" }, "cube": { "cubemap": true, "cube_layout": "hstrip" } }""", true, false)]
-    [DataRow("""{ "output": { "format": "rgba16f" } }""", false, false)]
+    [DataRow("""{ "source": "Sky.hdr", "output": { "format": "rgba16f" }, "cube": { "equirect_to_cube": true, "cube_face_size": 512 } }""", true, true)]
+    [DataRow("""{ "source": "Sky.hdr", "output": { "format": "rgba32f" }, "cube": { "cubemap": true, "cube_layout": "hcross" } }""", true, true)]
+    [DataRow("""{ "source": "Sky.png", "output": { "format": "rgba8_srgb" }, "cube": { "cubemap": true, "cube_layout": "hstrip" } }""", true, false)]
+    [DataRow("""{ "source": "Sky.hdr", "output": { "format": "rgba16f" } }""", false, false)]
+    [DataRow("""{ "output": { "format": "rgba16f" }, "cube": { "cubemap": true } }""", false, false)]
     public void ReadCubeDescriptorReportsWhetherTheCubeKeepsRadiance(string json, bool cube, bool storesRadiance)
     {
         var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N") + ".otex.json");
@@ -116,11 +117,42 @@ public sealed class TextureSourceAssetImporterTests
         try
         {
             _ = TextureSourceAssetImporter.ReadCubeDescriptor(path).Should().Be(cube ? new CubeDescriptorInfo(storesRadiance) : null);
-            _ = TextureSourceAssetImporter.IsCubeDescriptor(path).Should().Be(cube);
         }
         finally
         {
             File.Delete(path);
+        }
+    }
+
+    [TestMethod]
+    [DataRow(new[] { "Grass.png", "Rock.png" }, true)]
+    [DataRow(new[] { "Grass.png" }, false)]
+    [DataRow(new[] { "Rock.png" }, false)]
+    public void HasSourceImageNeedsEveryImageOfAMultiSourceTexture(string[] existing, bool expected)
+    {
+        var root = Path.Combine(Path.GetTempPath(), "OxygenTextureImport", Guid.NewGuid().ToString("N"));
+        var folder = Path.Combine(root, "Textures");
+        Directory.CreateDirectory(folder);
+        try
+        {
+            var descriptor = Path.Combine(folder, "Terrain.otex.json");
+            File.WriteAllText(descriptor, """{ "source": "Grass.png", "sources": [ { "file": "../Shared/Rock.png", "layer": 1 } ] }""");
+            if (existing.Contains("Grass.png"))
+            {
+                File.WriteAllBytes(Path.Combine(folder, "Grass.png"), [1]);
+            }
+
+            if (existing.Contains("Rock.png"))
+            {
+                Directory.CreateDirectory(Path.Combine(root, "Shared"));
+                File.WriteAllBytes(Path.Combine(root, "Shared", "Rock.png"), [2]);
+            }
+
+            _ = TextureSourceAssetImporter.HasSourceImage(descriptor).Should().Be(expected);
+        }
+        finally
+        {
+            Directory.Delete(root, recursive: true);
         }
     }
 

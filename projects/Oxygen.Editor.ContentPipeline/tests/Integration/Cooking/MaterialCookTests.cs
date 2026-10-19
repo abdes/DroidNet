@@ -187,10 +187,10 @@ public sealed class MaterialCookTests
             && diagnostic.Message.Contains("texture descriptor is missing", StringComparison.Ordinal));
     }
 
-    /// <summary>Invalid texture paths report the owning material and schema channel.</summary>
+    /// <summary>A material its reader refuses reports the reader's problem against the material.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
-    public async Task CookMaterialAsync_WhenTexturePathIsInvalid_ShouldReportMaterialAndChannel()
+    public async Task CookMaterialAsync_WhenTexturePathIsInvalid_ShouldReportTheMaterialProblem()
     {
         using var workspace = new MaterialWorkspace();
         var materialPath = Path.Combine(workspace.Root, "Content", "Materials", "Invalid.omat.json");
@@ -210,10 +210,8 @@ public sealed class MaterialCookTests
 
         _ = result.State.Should().Be(MaterialCookState.Failed);
         _ = result.Cook!.Diagnostics.Should().Contain(diagnostic =>
-            diagnostic.Code == "material.texture_reference_invalid"
-            && diagnostic.Message.Contains("/Content/Materials/Invalid.omat.json", StringComparison.Ordinal)
-            && diagnostic.Message.Contains("base_color", StringComparison.Ordinal)
-            && diagnostic.Message.Contains("valid virtual_path", StringComparison.Ordinal));
+            diagnostic.Code == MaterialSourceCodes.SchemaMismatch
+            && diagnostic.AffectedVirtualPath == "/Content/Materials/Invalid.omat.json");
     }
 
     private static MaterialCookService CreateService(MaterialWorkspace workspace)

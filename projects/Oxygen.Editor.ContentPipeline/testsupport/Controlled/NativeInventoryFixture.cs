@@ -26,10 +26,20 @@ internal static partial class NativeInventoryFixture
                 checked((ulong)bytes.Length), SHA256.HashData(bytes));
         }).ToArray();
         var descriptors = entries.Select(static entry => entry.DescriptorRelativePath).ToHashSet(StringComparer.Ordinal);
+
+        // A texture is a resource: its descriptor is a file record that carries the texture's virtual path.
+        var textures = assets.Where(static asset => asset.Kind == ContentCookAssetKind.Texture)
+            .ToDictionary(static asset => asset.DescriptorRelativePath ?? asset.VirtualPath.TrimStart('/'), static asset => asset.VirtualPath, StringComparer.Ordinal);
         var files = Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
             .Select(path => (Path: path, Relative: Path.GetRelativePath(root, path).Replace('\\', '/')))
             .Where(file => file.Relative is not ("container.index.bin" or ".generation.lock") && !descriptors.Contains(file.Relative))
-            .Select(file => { var bytes = File.ReadAllBytes(file.Path); return new FileRecord(FileKind.Auxiliary, file.Relative, checked((ulong)bytes.Length), SHA256.HashData(bytes)); }).ToArray();
+            .Select(file =>
+            {
+                var bytes = File.ReadAllBytes(file.Path);
+                return textures.TryGetValue(file.Relative, out var virtualPath)
+                    ? new FileRecord(FileKind.TextureDescriptor, file.Relative, checked((ulong)bytes.Length), SHA256.HashData(bytes), virtualPath)
+                    : new FileRecord(FileKind.Auxiliary, file.Relative, checked((ulong)bytes.Length), SHA256.HashData(bytes));
+            }).ToArray();
         using var index = File.Create(Path.Combine(root, "container.index.bin"));
         LooseCookedIndexFixture.Write(index, new Document(0, IndexFeatures.HasVirtualPaths | IndexFeatures.HasFileRecords, sourceKey ?? Guid.CreateVersion7(), entries, files));
     }
@@ -70,8 +80,8 @@ internal static partial class NativeInventoryFixture
             index_sha256 = Convert.ToHexStringLower(SHA256.HashData(indexBytes)),
             files = members.Select(static member => new { relative_path = member.Path, size = member.Size, sha256 = Convert.ToHexStringLower(member.Digest.Span), file_kind = member.Kind }),
             assets = index.Assets.Select(static asset => new { asset_key = asset.AssetKey.ToString(), asset_type = asset.AssetType, virtual_path = asset.VirtualPath, descriptor_relative_path = asset.DescriptorRelativePath }),
-            resources = index.Files.Where(static file => file.RelativePath.EndsWith(".otex", StringComparison.Ordinal))
-                .Select(file => new { kind = "texture", descriptor_relative_path = file.RelativePath, resource_index = issues.Count == 0 ? (uint?)1 : null }),
+            resources = index.Files.Where(static file => file.Kind == FileKind.TextureDescriptor)
+                .Select(file => new { kind = "texture", virtual_path = file.VirtualPath, descriptor_relative_path = file.RelativePath, resource_index = issues.Count == 0 ? (uint?)1 : null }),
             issues,
         });
     }

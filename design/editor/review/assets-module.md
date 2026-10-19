@@ -137,9 +137,9 @@ missing or broken is listed as it is, and one no catalog knows is listed as
 missing (`AssetEntry.Missing`). It never lists an asset of another kind, or an
 engine-internal one. Facts a picker shows beside an asset are small readers over
 an entry: `MaterialPreviewColor.TryRead` in Assets, and the texture descriptor
-readers (`TextureSourceAssetImporter.ReadCubeDescriptor`, `HasSourceImage`) in
-ContentPipeline, which owns that format. The status beside a name is
-`AssetStatusText.ForEntry`.
+facts (`TextureSourceAssetImporter.ReadCubeDescriptor`, `HasSourceImage`) in
+ContentPipeline, over the `TextureSourceReader` of Managed.Assets, which owns
+that format. The status beside a name is `AssetStatusText.ForEntry`.
 
 ## 4. What stays in the explorer
 

@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Text.Json;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -69,17 +69,12 @@ public static class SceneFiles
     /// <returns>The scene's id, or <see langword="null"/> when the file is not a readable scene.</returns>
     public static async Task<SceneId?> ReadIdAsync(FileSystemPath path, CancellationToken cancellationToken = default)
     {
+        ArgumentNullException.ThrowIfNull(path);
         try
         {
-            var stream = File.OpenRead(path.FullPath);
-            await using var lifetime = stream.ConfigureAwait(true);
-            using var document = await JsonDocument.ParseAsync(stream, cancellationToken: cancellationToken).ConfigureAwait(true);
-            return document.RootElement.ValueKind == JsonValueKind.Object
-                && document.RootElement.TryGetProperty("Id", out var id) && id.TryGetGuid(out var value)
-                    ? SceneId.FromValue(value)
-                    : null;
+            return SceneSerializer.ReadId(await File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(true));
         }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or JsonException)
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
             return null;
         }

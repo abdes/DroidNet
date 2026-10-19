@@ -8,17 +8,13 @@ using System.Text.Json;
 using Json.Schema;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Managed.Assets.Authoring.Materials;
 
 /// <summary>Reads the canonical engine material descriptor without legacy conversion.</summary>
 public static class MaterialSourceReader
 {
-    private const string MaterialSchemaFileName = "oxygen.material-descriptor.schema.json";
-    private const string NameSchemaFileName = "oxygen.name.schema.json";
-
-    private static readonly Lazy<JsonSchema> Schema = new(LoadSchema);
+    private static readonly Lazy<JsonSchema> Schema = new(static () => DescriptorFormat.LoadSchema("oxygen.material-descriptor.schema.json"));
 
     /// <summary>Reads schema-valid source while retaining all unedited native fields.</summary>
     /// <param name="jsonUtf8">Canonical UTF-8 descriptor bytes.</param>
@@ -28,7 +24,7 @@ public static class MaterialSourceReader
     /// </exception>
     public static MaterialSource Read(ReadOnlySpan<byte> jsonUtf8)
     {
-        using var document = Parse(jsonUtf8);
+        using var document = DescriptorFormat.Parse(jsonUtf8, MaterialSourceCodes.NotJson, "The material is not valid JSON.");
         var descriptor = document.RootElement;
         Validate(descriptor);
         var parameters = descriptor.TryGetProperty("parameters", out var values) ? values : default;
@@ -62,10 +58,10 @@ public static class MaterialSourceReader
         var evaluation = Schema.Value.Evaluate(descriptor, new EvaluationOptions { OutputFormat = OutputFormat.List });
         if (!evaluation.IsValid)
         {
-            throw Problem(
+            throw DescriptorFormat.Problem(
                 MaterialSourceCodes.SchemaMismatch,
                 "The material does not match the engine's material descriptor schema.",
-                string.Join(Environment.NewLine, SchemaErrors(evaluation)));
+                DescriptorFormat.Describe(evaluation));
         }
 
         if (descriptor.TryGetProperty("parameters", out var parameters))
@@ -81,7 +77,7 @@ public static class MaterialSourceReader
                 var path = binding.GetProperty("virtual_path").GetString()!;
                 if (!AssetPath.TryParse(path, out var texturePath) || texturePath.IsMount)
                 {
-                    throw Problem(MaterialSourceCodes.TexturePathInvalid, $"The {texture.Name} texture '{path}' is not a canonical absolute virtual path below a mount point.");
+                    throw DescriptorFormat.Problem(MaterialSourceCodes.TexturePathInvalid, $"The {texture.Name} texture '{path}' is not a canonical absolute virtual path below a mount point.");
                 }
 
                 if (binding.TryGetProperty("uv_transform", out var transform))
@@ -97,7 +93,7 @@ public static class MaterialSourceReader
         switch (value.ValueKind)
         {
             case JsonValueKind.Number when !value.TryGetSingle(out var number) || !float.IsFinite(number):
-                throw Problem(MaterialSourceCodes.NumberOutOfRange, "A material number does not fit a finite 32-bit float.");
+                throw DescriptorFormat.Problem(MaterialSourceCodes.NumberOutOfRange, "A material number does not fit a finite 32-bit float.");
             case JsonValueKind.Array:
                 foreach (var element in value.EnumerateArray())
                 {
@@ -115,72 +111,12 @@ public static class MaterialSourceReader
         }
     }
 
-    private static JsonDocument Parse(ReadOnlySpan<byte> jsonUtf8)
-    {
-        try
-        {
-            return JsonDocument.Parse(jsonUtf8.ToArray(), new JsonDocumentOptions
-            {
-                AllowTrailingCommas = true,
-                CommentHandling = JsonCommentHandling.Skip,
-            });
-        }
-        catch (JsonException exception)
-        {
-            var problem = new AssetProblem(DiagnosticSeverity.Error, MaterialSourceCodes.NotJson, "The material is not valid JSON.")
-            {
-                Line = (int?)(exception.LineNumber + 1),
-                Column = (int?)(exception.BytePositionInLine + 1),
-                Explanation = exception.Message,
-            };
-            throw new AssetFormatException(problem, exception);
-        }
-    }
-
-    private static AssetFormatException Problem(string code, string message, string? explanation = null)
-        => new(new AssetProblem(DiagnosticSeverity.Error, code, message) { Explanation = explanation });
-
-    private static IEnumerable<string> SchemaErrors(EvaluationResults evaluation)
-    {
-        foreach (var (keyword, error) in evaluation.Errors ?? new Dictionary<string, string>(StringComparer.Ordinal))
-        {
-            yield return $"{evaluation.InstanceLocation}: {keyword} {error}";
-        }
-
-        foreach (var detail in evaluation.Details ?? [])
-        {
-            foreach (var error in SchemaErrors(detail))
-            {
-                yield return error;
-            }
-        }
-    }
-
-    private static JsonSchema LoadSchema()
-    {
-        // The material schema references the shared name definition, embedded beside it.
-        var options = new BuildOptions();
-        options.SchemaRegistry.Fetch = static (uri, _) =>
-            string.Equals(Path.GetFileName(uri.LocalPath), NameSchemaFileName, StringComparison.Ordinal)
-                ? JsonSchema.FromText(ReadSchemaResource(NameSchemaFileName))
-                : null;
-        return JsonSchema.FromText(ReadSchemaResource(MaterialSchemaFileName), options);
-    }
-
-    private static string ReadSchemaResource(string fileName)
-    {
-        using var stream = typeof(MaterialSourceReader).Assembly.GetManifestResourceStream(fileName)
-            ?? throw new InvalidOperationException($"The engine schema '{fileName}' is missing.");
-        using var reader = new StreamReader(stream);
-        return reader.ReadToEnd();
-    }
-
     private static float Scalar(JsonElement parent, string name, float fallback)
     {
         var value = parent.ValueKind == JsonValueKind.Object && parent.TryGetProperty(name, out var property)
             ? property.GetSingle() : fallback;
         return float.IsFinite(value) ? value
-            : throw Problem(MaterialSourceCodes.NumberOutOfRange, $"The material parameter '{name}' does not fit a finite 32-bit float.");
+            : throw DescriptorFormat.Problem(MaterialSourceCodes.NumberOutOfRange, $"The material parameter '{name}' does not fit a finite 32-bit float.");
     }
 
     private static float[] Vector(JsonElement parent, string name, float[] fallback)
@@ -192,7 +128,7 @@ public static class MaterialSourceReader
 
         var result = property.EnumerateArray().Select(static item => item.GetSingle()).ToArray();
         return result.All(float.IsFinite) ? result
-            : throw Problem(MaterialSourceCodes.NumberOutOfRange, $"The material parameter '{name}' does not fit a finite 32-bit float.");
+            : throw DescriptorFormat.Problem(MaterialSourceCodes.NumberOutOfRange, $"The material parameter '{name}' does not fit a finite 32-bit float.");
     }
 
     private static IReadOnlyDictionary<string, AssetPath> ReadTextureReferences(JsonElement textures)

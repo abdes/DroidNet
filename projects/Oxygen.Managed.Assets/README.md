@@ -25,10 +25,14 @@ identities when selecting, referencing or displaying assets.
 
 ## Authoring
 
-`Authoring/Materials` owns material source models and JSON serialization. Scenes
-link to assets by URI only; this library has no asset object model. Native
-source inspection, import, texture cooking and packaging are coordinated by
-[Oxygen.Editor.ContentPipeline](../Oxygen.Editor.ContentPipeline/README.md)
+`Authoring/Materials` and `Authoring/Textures` own the material and texture
+descriptor models, `*.omat.json` and `*.otex.json`, with their readers and
+writers. Both check a descriptor against the engine schema embedded in this
+library and report problems by code (`MaterialSourceCodes`,
+`TextureSourceCodes`); every editor module reads these formats through them.
+Scenes link to assets by URI only; this library has no asset object model.
+Native source inspection, import, texture cooking and packaging are coordinated
+by [Oxygen.Editor.ContentPipeline](../Oxygen.Editor.ContentPipeline/README.md)
 through the shared native tools.
 
 Use the [content pipeline LLD](../../design/editor/lld/content-pipeline.md) for

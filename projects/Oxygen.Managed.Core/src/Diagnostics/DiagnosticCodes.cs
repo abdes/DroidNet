@@ -70,6 +70,11 @@ public static class DiagnosticCodes
     public const string MaterialPrefix = "OXE.MATERIAL.";
 
     /// <summary>
+    /// Texture authoring diagnostic code prefix.
+    /// </summary>
+    public const string TexturePrefix = "OXE.TEXTURE.";
+
+    /// <summary>
     /// Asset identity diagnostic code prefix.
     /// </summary>
     public const string AssetIdentityPrefix = "OXE.ASSETID.";

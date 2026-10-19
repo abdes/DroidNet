@@ -8,6 +8,8 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Managed.Assets;
+using Oxygen.Managed.Assets.Authoring.Textures;
+using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
@@ -15,8 +17,8 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// <summary>
 /// Reads and rewrites the asset references of authored files. Descriptor references are whole JSON string
 /// values naming an asset identity, either as an asset URI or as a canonical virtual path, each spelled by
-/// <see cref="AssetPath"/>; texture sources and geometry buffers are file-relative paths; import sidecars are typed
-/// settings.
+/// <see cref="AssetPath"/>; geometry buffers are file-relative paths; textures and import sidecars are read and written
+/// through their typed formats.
 /// </summary>
 internal static class AuthoredReferenceFormat
 {
@@ -40,11 +42,19 @@ internal static class AuthoredReferenceFormat
             && AssetFileTypes.Is(path[..^AssetFileTypes.ImportSettings.Length], AssetFileCategory.Model);
 
     /// <summary>Reads the asset identities a descriptor references.</summary>
+    /// <param name="path">The descriptor.</param>
     /// <param name="content">The descriptor bytes.</param>
     /// <param name="mounts">The authoring mount names that identify virtual paths.</param>
     /// <returns>The distinct referenced identities.</returns>
-    public static IReadOnlyList<AssetPath> ReadReferences(ReadOnlyMemory<byte> content, IReadOnlyCollection<string> mounts)
+    /// <exception cref="JsonException">The descriptor is not JSON.</exception>
+    /// <exception cref="AssetFormatException">The descriptor is a texture its reader refuses.</exception>
+    public static IReadOnlyList<AssetPath> ReadReferences(FileSystemPath path, ReadOnlyMemory<byte> content, IReadOnlyCollection<string> mounts)
     {
+        if (IsTexture(path))
+        {
+            return TextureSourceReader.Read(content.Span).VirtualPath is { } own ? [own] : [];
+        }
+
         var root = JsonNode.Parse(StripBom(content.Span));
         var identities = new List<AssetPath>();
         Visit(root, value =>
@@ -67,6 +77,11 @@ internal static class AuthoredReferenceFormat
     /// <returns>The rewritten bytes, or null when nothing changes.</returns>
     public static byte[]? RewriteDescriptor(FileSystemPath path, ReadOnlyMemory<byte> content, RelocationMap map, IReadOnlyCollection<string> mounts)
     {
+        if (IsTexture(path))
+        {
+            return RewriteTexture(path, map.MapPath(path), content, map);
+        }
+
         var root = JsonNode.Parse(StripBom(content.Span));
         var changed = false;
         Visit(root, value =>
@@ -122,29 +137,20 @@ internal static class AuthoredReferenceFormat
             : settings with { BundleRoot = bundleRoot, PrimaryRelativePath = primary, Files = [.. files], OutputDirectory = output };
     }
 
-    /// <summary>Reads a texture descriptor's relative image sources, resolved against its folder.</summary>
+    /// <summary>Reads the images a texture descriptor reads, resolved against its folder.</summary>
     /// <param name="path">The texture descriptor.</param>
     /// <param name="content">Its bytes.</param>
-    /// <returns>The absolute image paths; none when the descriptor cannot be parsed.</returns>
+    /// <returns>The absolute image paths; none when the descriptor cannot be read.</returns>
     public static IReadOnlyList<FileSystemPath> ReadTextureSources(FileSystemPath path, ReadOnlyMemory<byte> content)
     {
-        JsonNode? parsed;
         try
         {
-            parsed = JsonNode.Parse(StripBom(content.Span));
+            return TextureSourceReader.Read(content.Span).ResolveImages(path);
         }
-        catch (JsonException)
+        catch (AssetFormatException)
         {
             return [];
         }
-
-        if (parsed is not JsonObject root)
-        {
-            return [];
-        }
-
-        var folder = path.Parent!;
-        return [.. EnumerateFileReferences(root, path).Select(node => node.GetValue<string>()).Select(value => Path.IsPathRooted(value) ? FileSystemPath.From(value) : folder.Combine(value))];
     }
 
     /// <summary>Gives a copied descriptor its new identity and keeps its file-relative sources valid.</summary>
@@ -154,8 +160,15 @@ internal static class AuthoredReferenceFormat
     /// <param name="map">Maps the original identity and copied companions to the copy's.</param>
     /// <param name="mounts">The authoring mount names.</param>
     /// <returns>The copy's bytes.</returns>
+    /// <exception cref="JsonException">The descriptor is not JSON.</exception>
+    /// <exception cref="AssetFormatException">The descriptor is a texture its reader refuses.</exception>
     public static byte[] RewriteCopy(FileSystemPath sourcePath, FileSystemPath targetPath, ReadOnlyMemory<byte> content, RelocationMap map, IReadOnlyCollection<string> mounts)
     {
+        if (IsTexture(sourcePath))
+        {
+            return RewriteTexture(sourcePath, targetPath, content, map) ?? content.ToArray();
+        }
+
         var root = JsonNode.Parse(StripBom(content.Span));
         var changed = false;
         if (root is JsonObject descriptor && descriptor["virtual_path"] is JsonValue own && own.TryGetValue<string>(out var value)
@@ -177,24 +190,6 @@ internal static class AuthoredReferenceFormat
         return changed ? Serialize(root!, content.Span) : content.ToArray();
     }
 
-    /// <summary>Reads the identity a scene file holds.</summary>
-    /// <param name="content">The scene file's bytes.</param>
-    /// <returns>The scene's id, or <see langword="null"/> when the file holds none.</returns>
-    public static SceneId? ReadSceneId(ReadOnlyMemory<byte> content)
-    {
-        try
-        {
-            return JsonNode.Parse(StripBom(content.Span)) is JsonObject scene && scene["Id"] is JsonValue id
-                && id.TryGetValue<string>(out var text) && Guid.TryParse(text, out var parsed)
-                    ? SceneId.FromValue(parsed)
-                    : null;
-        }
-        catch (JsonException)
-        {
-            return null;
-        }
-    }
-
     private static bool RewriteFileReferences(JsonNode? root, FileSystemPath path, RelocationMap map, FileSystemPath? targetPath = null)
     {
         if (root is not JsonObject descriptor)
@@ -207,17 +202,7 @@ internal static class AuthoredReferenceFormat
         var changed = false;
         foreach (var node in EnumerateFileReferences(descriptor, path))
         {
-            var value = node.GetValue<string>();
-            var rooted = Path.IsPathRooted(value);
-            var absolute = rooted ? FileSystemPath.From(value) : folder.Combine(value);
-            var moved = map.MapPath(absolute);
-            if (!map.IsMoved(absolute) && newFolder == folder)
-            {
-                continue;
-            }
-
-            var replacement = rooted ? moved.FullPath : Path.GetRelativePath(newFolder.FullPath, moved.FullPath).Replace('\\', '/');
-            if (!string.Equals(replacement, value, StringComparison.Ordinal))
+            if (RelocateFile(node.GetValue<string>(), folder, newFolder, map) is { } replacement)
             {
                 node.ReplaceWith(JsonValue.Create(replacement));
                 changed = true;
@@ -227,23 +212,54 @@ internal static class AuthoredReferenceFormat
         return changed;
     }
 
-    private static JsonValue[] EnumerateFileReferences(JsonObject descriptor, FileSystemPath path)
+    // A file-relative reference keeps naming its file, wherever the file and the referring descriptor go.
+    private static string? RelocateFile(string value, FileSystemPath folder, FileSystemPath newFolder, RelocationMap map)
     {
-        var nodes = new List<JsonNode?>();
-        if (path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal))
+        var rooted = Path.IsPathRooted(value);
+        var absolute = rooted ? FileSystemPath.From(value) : folder.Combine(value);
+        if (!map.IsMoved(absolute) && newFolder == folder)
         {
-            nodes.Add(descriptor["source"]);
-            if (descriptor["sources"] is JsonArray sources)
-            {
-                nodes.AddRange(sources.OfType<JsonObject>().Select(static source => source["file"]));
-            }
-        }
-        else if (path.Name.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.Ordinal) && descriptor["buffers"] is JsonArray buffers)
-        {
-            nodes.AddRange(buffers.OfType<JsonObject>().Select(static buffer => buffer["uri"]));
+            return null;
         }
 
+        var moved = map.MapPath(absolute);
+        var replacement = rooted ? moved.FullPath : Path.GetRelativePath(newFolder.FullPath, moved.FullPath).Replace('\\', '/');
+        return string.Equals(replacement, value, StringComparison.Ordinal) ? null : replacement;
+    }
+
+    private static JsonValue[] EnumerateFileReferences(JsonObject descriptor, FileSystemPath path)
+    {
+        var nodes = path.Name.EndsWith(AssetFileTypes.GeometryDescriptor, StringComparison.Ordinal) && descriptor["buffers"] is JsonArray buffers
+            ? buffers.OfType<JsonObject>().Select(static buffer => buffer["uri"])
+            : [];
         return [.. nodes.OfType<JsonValue>().Where(static node => node.TryGetValue<string>(out var value) && !string.IsNullOrWhiteSpace(value))];
+    }
+
+    private static bool IsTexture(FileSystemPath path) => path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal);
+
+    // A texture follows its own identity and keeps its images, as the descriptor spells them, pointing at their files.
+    private static byte[]? RewriteTexture(FileSystemPath path, FileSystemPath target, ReadOnlyMemory<byte> content, RelocationMap map)
+    {
+        var texture = TextureSourceReader.Read(content.Span);
+        var folder = path.Parent!;
+        var newFolder = target.Parent!;
+        var changed = false;
+        string Relocate(string image)
+        {
+            var replacement = RelocateFile(image, folder, newFolder, map);
+            changed |= replacement is not null;
+            return replacement ?? image;
+        }
+
+        var virtualPath = texture.VirtualPath is { } own && map.MapIdentity(own) is { } mapped ? mapped : texture.VirtualPath;
+        changed |= virtualPath != texture.VirtualPath;
+        var relocated = texture with
+        {
+            VirtualPath = virtualPath,
+            Source = Relocate(texture.Source),
+            Sources = [.. texture.Sources.Select(mapping => mapping with { File = Relocate(mapping.File) })],
+        };
+        return changed ? Serialize(TextureSourceWriter.ToJson(relocated), content.Span) : null;
     }
 
     private static void Visit(JsonNode? node, Func<string, string?> rewrite)

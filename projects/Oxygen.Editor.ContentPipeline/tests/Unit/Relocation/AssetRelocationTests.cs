@@ -141,6 +141,26 @@ public sealed class AssetRelocationTests
         _ = moved["virtual_path"]!.GetValue<string>().Should().Be("/Content/Props/Shared/far.otex");
     }
 
+    /// <summary>Every image of a multi-source texture follows a move, and its settings stay.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task MovingMultiSourceTextureRewritesEveryImage()
+    {
+        using var workspace = CreateContent();
+        _ = workspace.Write("Content/Shared/layers.otex.json", """
+            { "virtual_path": "/Content/Shared/layers.otex", "source": "../Textures/Wood.png",
+              "sources": [ { "file": "../Textures/Wood.png", "layer": 1 } ], "mips": { "policy": "none" } }
+            """);
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Shared", "/Content/Textures/Shared"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var moved = workspace.ReadJson("Content/Textures/Shared/layers.otex.json");
+        _ = moved["source"]!.GetValue<string>().Should().Be("../Wood.png");
+        _ = moved["sources"]![0]!["file"]!.GetValue<string>().Should().Be("../Wood.png");
+        _ = moved["sources"]![0]!["layer"]!.GetValue<int>().Should().Be(1);
+        _ = moved["mips"]!["policy"]!.GetValue<string>().Should().Be("none");
+        _ = moved["virtual_path"]!.GetValue<string>().Should().Be("/Content/Textures/Shared/layers.otex");
+    }
+
     /// <summary>Renaming an output group rewrites the sidecar, moves real group folders and rewrites output references.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]

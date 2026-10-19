@@ -10,7 +10,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentPipeline.Import;
 
 /// <summary>A collision-checked filesystem target for a named texture asset.</summary>
-public sealed record TextureSourceImportTarget(string MountName, string VirtualPath, string ImagePath, string DescriptorPath, AssetPath AssetUri)
+public sealed record TextureSourceImportTarget(string MountName, AssetPath VirtualPath, string ImagePath, string DescriptorPath, AssetPath AssetUri)
 {
     /// <summary>Gets every image the import writes: the source image, or the six faces with the +X face first.</summary>
     public IReadOnlyList<string> ImagePaths { get; init; } = [ImagePath];
@@ -40,7 +40,7 @@ public sealed record TextureSourceImportTarget(string MountName, string VirtualP
         var descriptorName = request.Name + AssetFileTypes.TextureDescriptor;
         var descriptorPath = Path.Combine(physicalFolder, descriptorName);
         var folder = request.DestinationFolder;
-        return new(mount.Name, folder.Combine(request.Name + AssetFileTypes.Texture).VirtualPath, imagePaths[0], descriptorPath, folder.Combine(descriptorName)) { ImagePaths = imagePaths };
+        return new(mount.Name, folder.Combine(request.Name + AssetFileTypes.Texture), imagePaths[0], descriptorPath, folder.Combine(descriptorName)) { ImagePaths = imagePaths };
     }
 
     // The image, the name and the cook settings, before the destination is looked at.

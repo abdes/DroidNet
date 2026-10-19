@@ -30,6 +30,8 @@
                           LogicalName="oxygen.material-descriptor.schema.json" />
         <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.name.schema.json"
                           LogicalName="oxygen.name.schema.json" />
+        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.texture-descriptor.schema.json"
+                          LogicalName="oxygen.texture-descriptor.schema.json" />
     </ItemGroup>
 
     <ItemGroup>
