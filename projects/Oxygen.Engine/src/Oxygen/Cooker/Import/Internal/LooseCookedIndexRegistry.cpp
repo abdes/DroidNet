@@ -120,7 +120,7 @@ auto LooseCookedIndexRegistry::RegisterExternalFile(
 
 auto LooseCookedIndexRegistry::RegisterExternalTextureDescriptor(
   const std::filesystem::path& cooked_root, std::string_view relpath,
-  std::string_view virtual_path) -> void
+  std::string_view virtual_path, const LooseCookedProducer& producer) -> void
 {
   const auto key = NormalizeKey(cooked_root);
   const auto state = GetEntry(cooked_root);
@@ -131,7 +131,8 @@ auto LooseCookedIndexRegistry::RegisterExternalTextureDescriptor(
     entry.writer = std::make_unique<LooseCookedWriter>(cooked_root);
   }
 
-  entry.writer->RegisterExternalTextureDescriptor(relpath, virtual_path);
+  entry.writer->RegisterExternalTextureDescriptor(
+    relpath, virtual_path, producer);
   DLOG_F(INFO, "Texture descriptor '{}' ({}) registered for '{}'",
     std::string(relpath), std::string(virtual_path), key);
 }
@@ -140,7 +141,7 @@ auto LooseCookedIndexRegistry::RegisterExternalAssetDescriptor(
   const std::filesystem::path& cooked_root, const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
   std::string_view descriptor_relpath, const uint64_t descriptor_size,
-  const data::AssetReferences& references,
+  const data::AssetReferences& references, const LooseCookedProducer& producer,
   const std::optional<base::Sha256Digest>& descriptor_sha256) -> void
 {
   const auto storage_key = NormalizeKey(cooked_root);
@@ -153,7 +154,8 @@ auto LooseCookedIndexRegistry::RegisterExternalAssetDescriptor(
   }
 
   entry.writer->RegisterExternalAssetDescriptor(key, asset_type, virtual_path,
-    descriptor_relpath, descriptor_size, references, descriptor_sha256);
+    descriptor_relpath, descriptor_size, references, producer,
+    descriptor_sha256);
   DLOG_F(INFO, "Asset '{}' type={} relpath='{}' registered for '{}'",
     data::to_string(key), static_cast<uint32_t>(asset_type),
     std::string(descriptor_relpath), storage_key);

@@ -92,6 +92,7 @@ auto Inspection::LoadFromPak(const std::filesystem::path& pak_path) -> void
       .asset_type = static_cast<uint8_t>(entry.asset_type),
       .descriptor_sha256 = std::nullopt,
       .references = pak->ReadAssetReferences(entry.asset_key),
+      .source_path = {},
     };
     if (const auto path = paths.find(entry.asset_key); path != paths.end()) {
       out.virtual_path = path->second;
@@ -138,6 +139,9 @@ auto Inspection::LoadFromFile(const std::filesystem::path& index_path) -> void
     if (auto references = index.FindAssetReferences(key); references) {
       out.references = std::move(*references);
     }
+    if (const auto source = index.FindSourcePath(key); source) {
+      out.source_path = std::string(*source);
+    }
 
     if (const auto sha = index.FindDescriptorSha256(key); sha) {
       base::Sha256Digest digest = {};
@@ -156,6 +160,7 @@ auto Inspection::LoadFromFile(const std::filesystem::path& index_path) -> void
         .size = file.size,
         .sha256 = file.sha256,
         .virtual_path = file.virtual_path,
+        .source_path = file.source_path,
       });
     }
   }

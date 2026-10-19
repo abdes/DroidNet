@@ -171,7 +171,9 @@ NOLINT_TEST_F(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
   auto writer = content::import::LooseCookedWriter(loose_root);
   writer.SetSourceKey(MakeNonZeroSourceKey());
   writer.WriteAssetDescriptor(key, data::AssetType::kMaterial,
-    "/Game/Missing.omat", "Missing.omat", descriptor_bytes, *references);
+    "/Game/Missing.omat", "Missing.omat", descriptor_bytes, *references,
+    content::import::LooseCookedProducer {
+      .source = "/Game/Missing.omat.json", .completes = {} });
   ASSERT_EQ(writer.Finish().assets.size(), 1U);
 
   auto request = pak::PakBuildRequest {};

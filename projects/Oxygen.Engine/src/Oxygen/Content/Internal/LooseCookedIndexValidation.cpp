@@ -51,6 +51,7 @@ auto LooseCookedIndexImpl::GetFileInventory() const
       .sha256 = asset.descriptor_sha256,
       .kind = std::nullopt,
       .virtual_path = {},
+      .source_path = {},
     });
   }
   const auto string_at = [this](const uint32_t offset) -> std::string {
@@ -63,6 +64,7 @@ auto LooseCookedIndexImpl::GetFileInventory() const
       .sha256 = file.sha256,
       .kind = kind,
       .virtual_path = string_at(file.virtual_path_offset),
+      .source_path = string_at(file.source_path_offset),
     });
   };
   for (const auto& [kind, file] : kind_to_file_) {

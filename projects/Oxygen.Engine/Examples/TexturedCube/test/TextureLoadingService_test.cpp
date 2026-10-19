@@ -77,8 +77,7 @@ auto PublishTextures(const std::filesystem::path& root, const size_t count)
   auto writer = LooseCookedWriter(root);
   writer.RegisterExternalFile(FileKind::kTexturesTable, "textures.table");
   writer.RegisterExternalFile(FileKind::kTexturesData, "textures.data");
-  const auto result = writer.Finish();
-  EXPECT_EQ(result.collision_summary.file_collisions, 0U);
+  static_cast<void>(writer.Finish());
 }
 
 NOLINT_TEST_F(TextureLoadingServiceTest,

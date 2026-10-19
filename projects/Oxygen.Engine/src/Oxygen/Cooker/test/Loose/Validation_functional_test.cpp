@@ -36,7 +36,9 @@ NOLINT_TEST_F(ValidationTest, ValidateRootValidSucceeds)
   writer.WriteAssetDescriptor(
     oxygen::data::AssetKey::FromVirtualPath("/Content/test.omat"),
     oxygen::data::AssetType::kMaterial, "/Content/test.omat", "test.omat",
-    oxygen::data::MakeDescriptorBytes(descriptor), {});
+    oxygen::data::MakeDescriptorBytes(descriptor), {},
+    oxygen::content::import::LooseCookedProducer {
+      .source = "/Content/test.omat.json", .completes = {} });
   static_cast<void>(writer.Finish());
   EXPECT_NO_THROW({ ValidateRoot(TempDir()); });
 }

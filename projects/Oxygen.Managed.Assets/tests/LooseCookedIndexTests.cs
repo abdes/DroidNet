@@ -35,6 +35,7 @@ public sealed class LooseCookedIndexTests
         _ = read.Assets[0].DescriptorRelativePath.Should().Be(doc.Assets[0].DescriptorRelativePath);
         _ = read.Assets[0].VirtualPath.Should().Be(doc.Assets[0].VirtualPath);
         _ = read.Assets[0].AssetKey.Should().Be(doc.Assets[0].AssetKey);
+        _ = read.Assets[0].SourcePath.Should().Be("/Content/Materials/Wood.mat.json", "each entry records the source that produced it");
         _ = read.Assets[0].DescriptorSha256.Span.ToArray().Should().Equal(doc.Assets[0].DescriptorSha256.Span.ToArray());
         _ = read.Assets[0].References.ResourceCount.Should().Be(1);
         _ = read.Assets[0].References.KeyCount.Should().Be(1);
@@ -98,6 +99,7 @@ public sealed class LooseCookedIndexTests
     [DataRow(2)]
     [DataRow(3)]
     [DataRow(4)]
+    [DataRow(5)]
     [DataRow(65535)]
     public void Read_WithUnsupportedVersion_ShouldThrow(int version)
     {
@@ -150,7 +152,7 @@ public sealed class LooseCookedIndexTests
     {
         using var stream = new MemoryStream();
         Oxygen.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
-        BinaryPrimitives.WriteUInt32LittleEndian(stream.GetBuffer().AsSpan(60, 4), 65);
+        BinaryPrimitives.WriteUInt32LittleEndian(stream.GetBuffer().AsSpan(60, 4), 81);
         stream.Position = 0;
 
         Action read = () => _ = LooseCookedIndex.Read(stream);
@@ -261,6 +263,19 @@ public sealed class LooseCookedIndexTests
         _ = read.Should().Throw<InvalidDataException>();
     }
 
+    [TestMethod]
+    public void Read_AssetWithoutProducingSource_ShouldThrow()
+    {
+        using var ms = new MemoryStream();
+        Oxygen.Testing.LooseCookedIndexFixture.Write(ms, CreateSampleDocument());
+        var assetEntries = checked((int)BinaryPrimitives.ReadUInt64LittleEndian(ms.GetBuffer().AsSpan(48, 8)));
+        BinaryPrimitives.WriteUInt32LittleEndian(ms.GetBuffer().AsSpan(assetEntries + 25, 4), 0);
+        ms.Position = 0;
+
+        Action read = () => _ = LooseCookedIndex.Read(ms);
+        _ = read.Should().Throw<InvalidDataException>();
+    }
+
     private static FileRecord TextureDescriptor(string? virtualPath)
         => new(
             Kind: FileKind.TextureDescriptor,
@@ -291,6 +306,7 @@ public sealed class LooseCookedIndexTests
                     DescriptorSha256: shaA)
                 {
                     References = new(0, ResourceCount: 1, KeyCount: 1),
+                    SourcePath = "/Content/Materials/Wood.mat.json",
                 },
                 new AssetEntry(
                     AssetKey: new AssetKey(0x2122232425262728UL, 0x3132333435363738UL),

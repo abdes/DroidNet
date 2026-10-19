@@ -13,6 +13,7 @@
 #include <memory>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -38,6 +39,8 @@ struct LooseCookedAssetRecord final {
   uint64_t descriptor_size = 0;
   std::optional<base::Sha256Digest> descriptor_sha256 {};
   data::AssetReferences references;
+  //! Virtual path of the source that produced the asset.
+  std::string source_path;
 };
 
 //! Summary of one cooked file record written to disk.
@@ -49,20 +52,36 @@ struct LooseCookedFileRecord final {
   base::Sha256Digest sha256 {};
   //! Virtual path of a texture descriptor; empty for every other file.
   std::string virtual_path;
+  //! Virtual path of the source that produced a texture descriptor; empty for
+  //! every other file.
+  std::string source_path;
 };
 
-//! Collision decisions recorded while building/updating index records.
-struct LooseCookedCollisionSummary final {
-  //! Number of asset-key collisions encountered.
-  uint32_t asset_collisions = 0;
-  //! Number of file-kind collisions encountered.
-  uint32_t file_collisions = 0;
-  //! Number of collisions resolved by keeping existing entries.
-  uint32_t kept_existing = 0;
-  //! Number of collisions resolved by replacing existing entries.
-  uint32_t replaced_existing = 0;
-  //! Number of collisions rejected by policy.
-  uint32_t rejected = 0;
+//! Who produces an index entry with an identity.
+/*!
+ A source produces its assets. A sidecar completes an asset another job
+ produced, such as the scene whose scripts it binds, so what it emits is
+ produced by that asset's source.
+*/
+struct LooseCookedProducer final {
+  //! Virtual path of the producing source, such as `/Content/Ship/Ship.glb`.
+  //! For a sidecar, the producer of the asset it completes when this index
+  //! does not list that asset, as when it lives in another cooked root.
+  std::string source;
+  //! Virtual path of the asset a sidecar completes; empty otherwise. When the
+  //! index lists it, its producer produces the entry.
+  std::string completes;
+};
+
+//! An index entry refused because its identity belongs to another source.
+/*!
+ Raised when another source produces the same virtual path, or one differing
+ from it only in case, which a case-insensitive file system holds in one file.
+ The import reports it as `import.identity_collision`.
+*/
+class LooseCookedIdentityCollision final : public std::runtime_error {
+public:
+  using std::runtime_error::runtime_error;
 };
 
 //! Result of writing a loose cooked container.
@@ -75,7 +94,6 @@ struct LooseCookedWriteResult final {
   std::vector<LooseCookedFileRecord> files {};
   //! Container-relative paths of the files deleted by requested removals.
   std::vector<std::string> removed_files {};
-  LooseCookedCollisionSummary collision_summary {};
 };
 
 //! Write a loose cooked container root.
@@ -88,21 +106,20 @@ struct LooseCookedWriteResult final {
 
  It is designed to be used by importers (FBX/glTF) and other cook pipelines.
 
+ ### Identities
+
+ Every asset and texture descriptor records the source that produced it. A
+ source writing an identity it already produced replaces its entry. An
+ identity another source produced, or one differing from an existing identity
+ only in case, is refused with LooseCookedIdentityCollision. A source that
+ goes away has its outputs removed first (RemoveAssetDescriptor,
+ RemoveAuxiliaryFile), so a new source can then produce them.
+
  @note The on-disk schema is fixed by
    oxygen::data::loose_cooked::IndexHeader and related structs.
 */
 class LooseCookedWriter final {
 public:
-  //! Policy controlling how key/kind collisions are handled.
-  enum class CollisionPolicy : uint8_t {
-    //! Fail on conflicting overwrite attempts.
-    kError = 0,
-    //! Keep existing entry and warn.
-    kWarnKeepExisting,
-    //! Replace existing entry and warn.
-    kWarnReplace,
-  };
-
   //! Create a writer targeting `cooked_root`.
   OXGN_COOK_API explicit LooseCookedWriter(std::filesystem::path cooked_root);
   OXGN_COOK_API ~LooseCookedWriter();
@@ -119,9 +136,6 @@ public:
   //! Set the cook-defined content version recorded in the index header.
   OXGN_COOK_API auto SetContentVersion(uint16_t version) -> void;
 
-  //! Configure collision handling for duplicate asset/file entries.
-  OXGN_COOK_API auto SetCollisionPolicy(CollisionPolicy policy) -> void;
-
   //! Write an asset descriptor and update its index entry.
   /*!
    @param key Stable identity of the asset.
@@ -129,27 +143,21 @@ public:
    @param virtual_path Virtual path used by tooling/editors.
    @param descriptor_relpath Container-relative path for the descriptor file.
    @param bytes Descriptor bytes; must match the runtime loader schema.
+   @param references The asset's resource and key references.
+   @param producer The source that produces the asset.
 
-   ### Update Semantics
+   Existing index entries are preserved. The entry replaces one its source
+   produced before; see the class's identity rules.
 
-   If the cooked root already contains an index file, the writer MUST treat the
-   operation as an update:
-
-   - Existing index entries MUST be preserved unless explicitly replaced.
-   -
-   An asset is identified by its `key`. If an entry for `key` already exists,
-
-   collision handling is controlled by `SetCollisionPolicy()`.
-
-   @warning If updating an entry would create a conflicting virtual path
-    mapping, the writer MUST fail with a diagnostic (or throw).
-
+   @throw LooseCookedIdentityCollision if another source produces the
+     identity, or one differing from it only in case.
    @throw std::runtime_error on IO errors or invalid paths.
   */
   OXGN_COOK_API auto WriteAssetDescriptor(const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, std::span<const std::byte> bytes,
-    const data::AssetReferences& references) -> void;
+    const data::AssetReferences& references,
+    const LooseCookedProducer& producer) -> void;
 
   //! Write an arbitrary file and update its index record.
   /*!
@@ -160,18 +168,12 @@ public:
    @param relpath Container-relative path.
    @param bytes File bytes.
 
-   ### Update Semantics
+   Existing file records are preserved. A table or data file is identified by
+   its kind, and a root holds it at one path: writing it again replaces the
+   record, and writing it at another path is refused.
 
-   If the cooked root already contains an index file, the writer MUST treat the
-   operation as an update:
-
-   - Existing file records MUST be preserved unless explicitly replaced.
-   - A
-   file record is identified by its `kind`. If a record for `kind` already
-
-   exists, collision handling is controlled by `SetCollisionPolicy()`.
-
-   @throw std::runtime_error on IO errors or invalid paths.
+   @throw std::runtime_error on IO errors, invalid paths, or a second path for
+     the kind.
   */
   OXGN_COOK_API auto WriteFile(data::loose_cooked::FileKind kind,
     std::string_view relpath, std::span<const std::byte> bytes) -> void;
@@ -181,8 +183,7 @@ public:
    This is used when the data file was written directly (e.g., by
    append-only ResourceAppender) rather than through WriteFile().
    The file must already exist on disk at the given relpath. Re-registering
-   the same path refreshes its metadata without a collision warning; changing
-   the path associated with a kind still follows the collision policy.
+   the same path refreshes its metadata; a second path for a kind is refused.
    Finish measures external files again before publishing the index.
 
    @param kind The file kind to register.
@@ -194,15 +195,18 @@ public:
 
   //! Register an externally-written texture descriptor under its virtual path.
   /*!
-   Runtimes and tools resolve the texture by `virtual_path`; re-registering the
-   same descriptor path refreshes its record.
+   Runtimes and tools resolve the texture by `virtual_path`; its source
+   registering it again refreshes its record.
 
    @param relpath Container-relative path of the `.otex` descriptor.
    @param virtual_path Canonical virtual path of the descriptor.
+   @param producer The source that produces the texture.
+   @throw LooseCookedIdentityCollision if another source produces the
+     identity, or one differing from it only in case.
    @throw std::runtime_error if the file does not exist or a path is invalid.
   */
-  OXGN_COOK_API auto RegisterExternalTextureDescriptor(
-    std::string_view relpath, std::string_view virtual_path) -> void;
+  OXGN_COOK_API auto RegisterExternalTextureDescriptor(std::string_view relpath,
+    std::string_view virtual_path, const LooseCookedProducer& producer) -> void;
 
   //! Register an externally-written asset descriptor.
   /*!
@@ -217,9 +221,13 @@ public:
    @param descriptor_relpath Container-relative path for the descriptor file.
    @param descriptor_size Size of the descriptor bytes. If zero, the size will
      be read from disk.
+   @param references The asset's resource and key references.
+   @param producer The source that produces the asset.
    @param descriptor_sha256 Optional SHA-256 digest of the descriptor bytes.
      If absent, the writer computes the digest from the completed file.
 
+   @throw LooseCookedIdentityCollision if another source produces the
+     identity, or one differing from it only in case.
    @throw std::runtime_error if the file does not exist, paths are invalid, or
      metadata is inconsistent.
   */
@@ -227,6 +235,7 @@ public:
     data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, uint64_t descriptor_size,
     const data::AssetReferences& references,
+    const LooseCookedProducer& producer,
     std::optional<base::Sha256Digest> descriptor_sha256 = std::nullopt) -> void;
 
   //! Remove an asset's index entry and its descriptor file.

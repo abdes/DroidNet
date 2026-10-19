@@ -120,13 +120,6 @@ struct ImportPackagingSummary final {
   //! Dedup collision diagnostics emitted by resource emitters.
   uint32_t texture_dedup_collisions = 0;
   uint32_t buffer_dedup_collisions = 0;
-
-  //! Loose cooked index collision decisions at packaging time.
-  uint32_t index_asset_collisions = 0;
-  uint32_t index_file_collisions = 0;
-  uint32_t index_collisions_kept = 0;
-  uint32_t index_collisions_replaced = 0;
-  uint32_t index_collisions_rejected = 0;
 };
 
 //! Summary of an import to a cooked container.

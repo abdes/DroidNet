@@ -52,9 +52,6 @@ auto WriteUiTextureFixture(const std::filesystem::path& root) -> void
     data::loose_cooked::FileKind::kTexturesTable, "textures.table");
   writer.RegisterExternalFile(
     data::loose_cooked::FileKind::kTexturesData, "textures.data");
-  const auto result = writer.Finish();
-  if (result.collision_summary.file_collisions != 0) {
-    throw std::runtime_error("UI texture fixture has file collisions");
-  }
+  static_cast<void>(writer.Finish());
 }
 } // namespace oxygen::examples::testing

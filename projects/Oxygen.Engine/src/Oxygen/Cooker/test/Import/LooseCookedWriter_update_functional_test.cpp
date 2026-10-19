@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <filesystem>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -31,166 +32,237 @@ namespace fixtures = oxygen::content::test;
 
 namespace {
 
-  //! A material descriptor's file name.
-  auto MaterialFile(const std::string_view name) -> std::string
-  {
-    return std::string(name) + ".omat";
-  }
+  using oxygen::content::import::LooseCookedIdentityCollision;
+  using oxygen::content::import::LooseCookedProducer;
   using oxygen::content::import::LooseCookedWriter;
-  using oxygen::cooker::test::ScopedTempDir;
-  using CollisionPolicy
-    = oxygen::content::import::LooseCookedWriter::CollisionPolicy;
   using oxygen::content::lc::Inspection;
-  using oxygen::data::AssetKey;
+  using oxygen::cooker::test::ScopedTempDir;
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::FileKind;
 
-  NOLINT_TEST(
-    LooseCookedWriterUpdateTest, WriteAssetDescriptorSameKeyUpdatesEntry)
+  constexpr std::string_view kRed = "/.cooked/Materials/Red.omat";
+  constexpr std::string_view kRedSource = "/.cooked/Materials/Red.omat.json";
+  constexpr std::string_view kOtherSource = "/.cooked/Other/Red.omat.json";
+
+  auto Material() -> std::vector<std::byte>
+  {
+    return fixtures::MaterialDescriptor(
+      "bytes", fixtures::MaterialVariant::kPlain)
+      .bytes;
+  }
+
+  //! The only asset of an index, copied out of its inspection.
+  auto Asset(const Inspection& inspection) -> Inspection::AssetEntry
+  {
+    EXPECT_EQ(inspection.Assets().size(), 1U);
+    return inspection.Assets().front();
+  }
+
+  auto Inspect(const std::filesystem::path& cooked_root) -> Inspection
+  {
+    Inspection inspection;
+    inspection.LoadFromFile(cooked_root / "container.index.bin");
+    return inspection;
+  }
+
+  //! Each entry records the source that produced it.
+  NOLINT_TEST(LooseCookedWriterUpdateTest, IndexRecordsTheProducingSource)
   {
     const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_update";
+    const auto cooked_root = temp.Path() / "records_source";
+    const auto bytes = Material();
 
+    LooseCookedWriter writer(cooked_root);
+    writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x11),
+      AssetType::kMaterial, kRed, "Materials/Red.omat", bytes, {},
+      FromSource(std::string(kRedSource)));
+    (void)writer.Finish();
+
+    EXPECT_EQ(Asset(Inspect(cooked_root)).source_path, kRedSource);
+  }
+
+  //! A source cooking its asset again replaces its entry.
+  NOLINT_TEST(LooseCookedWriterUpdateTest, ASourceRecookingItsAssetReplacesIt)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "recook";
     const auto key = MakeFirstByteAssetKey(0x11);
-
     const auto first = fixtures::TexturedMaterialDescriptor("white",
       data::pak::core::kFallbackResourceIndex,
       fixtures::MaterialVariant::kWithShader);
-
-    {
-      LooseCookedWriter writer(cooked_root);
-      writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-        "/.cooked/Materials/" + MaterialFile("A"),
-        "Materials/" + MaterialFile("A"), first.bytes, first.references);
-      (void)writer.Finish();
-    }
-
     const auto second = fixtures::TexturedMaterialDescriptor(
       "error", data::pak::core::kErrorTextureResourceIndex);
 
     {
       LooseCookedWriter writer(cooked_root);
-      writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-        "/.cooked/Materials/" + MaterialFile("A"),
-        "Materials/" + MaterialFile("A2"), second.bytes, second.references);
+      writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
+        "Materials/Red.omat", first.bytes, first.references,
+        FromSource(std::string(kRedSource)));
+      (void)writer.Finish();
+    }
+    {
+      LooseCookedWriter writer(cooked_root);
+      writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
+        "Materials/Red2.omat", second.bytes, second.references,
+        FromSource(std::string(kRedSource)));
       (void)writer.Finish();
     }
 
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-
-    const auto assets = inspection.Assets();
-    const auto it = std::ranges::find_if(assets,
-      [&](const Inspection::AssetEntry& e) -> bool { return e.key == key; });
-
-    EXPECT_EQ(assets.size(), 1U);
-    ASSERT_NE(it, assets.end());
-    EXPECT_EQ(it->descriptor_relpath, "Materials/" + MaterialFile("A2"));
-    EXPECT_EQ(it->descriptor_size, second.bytes.size());
-    EXPECT_EQ(it->references, second.references);
-    EXPECT_EQ(it->descriptor_sha256, base::ComputeSha256(second.bytes));
+    const auto asset = Asset(Inspect(cooked_root));
+    EXPECT_EQ(asset.descriptor_relpath, "Materials/Red2.omat");
+    EXPECT_EQ(asset.references, second.references);
+    EXPECT_EQ(asset.descriptor_sha256, base::ComputeSha256(second.bytes));
   }
 
-  /*!
-   Scenario: An existing loose index contains a non-canonical AssetKey for the
-   same virtual path and descriptor relpath produced by a recook. Reopening the
-   cooked root with the native virtual-path-derived key must replace the stale
-   mapping instead of failing the index write.
-  */
-  NOLINT_TEST(LooseCookedWriterUpdateTest,
-    WriteAssetDescriptorSameVirtualPathAndRelPathReplacesLoadedStaleKey)
-  {
-    const ScopedTempDir temp;
-    const auto cooked_root
-      = temp.Path() / "loose_cooked_writer_recook_legacy_key";
-
-    const auto legacy_key = MakeFirstByteAssetKey(0x71);
-    const auto native_key = MakeFirstByteAssetKey(0x72);
-    const auto virtual_path
-      = std::string("/.cooked/Materials/") + MaterialFile("A");
-    const auto descriptor_relpath
-      = std::string("Materials/") + MaterialFile("A");
-
-    const auto first_bytes = fixtures::MaterialDescriptor(
-      "first_bytes", fixtures::MaterialVariant::kPlain)
-                               .bytes;
-    const auto recook_bytes = fixtures::MaterialDescriptor(
-      "recook_bytes", fixtures::MaterialVariant::kWithShader)
-                                .bytes;
-
-    {
-      LooseCookedWriter writer(cooked_root);
-      writer.WriteAssetDescriptor(legacy_key, AssetType::kMaterial,
-        virtual_path, descriptor_relpath, first_bytes, {});
-      (void)writer.Finish();
-    }
-
-    {
-      LooseCookedWriter writer(cooked_root);
-      writer.WriteAssetDescriptor(native_key, AssetType::kMaterial,
-        virtual_path, descriptor_relpath, recook_bytes, {});
-      const auto result = writer.Finish();
-      EXPECT_EQ(result.collision_summary.asset_collisions, 1U);
-      EXPECT_EQ(result.collision_summary.replaced_existing, 1U);
-      EXPECT_EQ(result.collision_summary.rejected, 0U);
-    }
-
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-
-    ASSERT_EQ(inspection.Assets().size(), 1U);
-    EXPECT_EQ(inspection.Assets().front().key, native_key);
-    EXPECT_EQ(inspection.Assets().front().virtual_path, virtual_path);
-    EXPECT_EQ(
-      inspection.Assets().front().descriptor_relpath, descriptor_relpath);
-    EXPECT_EQ(inspection.Assets().front().descriptor_size, recook_bytes.size());
-  }
-
+  //! A source's recook under another key replaces its entry at the identity.
   NOLINT_TEST(
-    LooseCookedWriterUpdateTest, WriteAssetDescriptorDuplicateVirtualPathThrows)
+    LooseCookedWriterUpdateTest, ASourceRecookingUnderAnotherKeyReplacesIt)
   {
     const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_conflict";
+    const auto cooked_root = temp.Path() / "recook_key";
+    const auto native_key = MakeFirstByteAssetKey(0x72);
+    const auto bytes = Material();
 
-    const auto key0 = MakeFirstByteAssetKey(0x11);
-    const auto key1 = MakeFirstByteAssetKey(0x22);
+    {
+      LooseCookedWriter writer(cooked_root);
+      writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x71),
+        AssetType::kMaterial, kRed, "Materials/Red.omat", bytes, {},
+        FromSource(std::string(kRedSource)));
+      (void)writer.Finish();
+    }
+    {
+      LooseCookedWriter writer(cooked_root);
+      writer.WriteAssetDescriptor(native_key, AssetType::kMaterial, kRed,
+        "Materials/Red.omat", bytes, {}, FromSource(std::string(kRedSource)));
+      (void)writer.Finish();
+    }
 
-    const auto bytes
-      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
-          .bytes;
+    EXPECT_EQ(Asset(Inspect(cooked_root)).key, native_key);
+  }
+
+  //! Another source producing an identity is refused, in one cook or later.
+  NOLINT_TEST(LooseCookedWriterUpdateTest, AnotherSourceOfAnIdentityIsRefused)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "other_source";
+    const auto key = MakeFirstByteAssetKey(0x11);
+    const auto bytes = Material();
+
+    {
+      LooseCookedWriter writer(cooked_root);
+      writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
+        "Materials/Red.omat", bytes, {}, FromSource(std::string(kRedSource)));
+      EXPECT_THROW(writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
+                     "Materials/Red.omat", bytes, {},
+                     FromSource(std::string(kOtherSource))),
+        LooseCookedIdentityCollision);
+      (void)writer.Finish();
+    }
 
     LooseCookedWriter writer(cooked_root);
-    writer.WriteAssetDescriptor(key0, AssetType::kMaterial,
-      "/.cooked/Materials/" + MaterialFile("A"),
-      "Materials/" + MaterialFile("A"), bytes, {});
-
-    try {
-      writer.WriteAssetDescriptor(key1, AssetType::kMaterial,
-        "/.cooked/Materials/" + MaterialFile("A"),
-        "Materials/" + MaterialFile("B"), bytes, {});
-      FAIL() << "Expected virtual path collision.";
-    } catch (const std::runtime_error& ex) {
-      const std::string message = ex.what();
-      EXPECT_THAT(
-        message, ::testing::HasSubstr("Conflicting virtual path mapping"));
-      EXPECT_THAT(message, ::testing::HasSubstr("WriteAssetDescriptor"));
-      EXPECT_THAT(message, ::testing::HasSubstr("incoming_key="));
-      EXPECT_THAT(message, ::testing::HasSubstr("existing_key="));
-    }
+    EXPECT_THROW(
+      writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
+        "Materials/Red.omat", bytes, {}, FromSource(std::string(kOtherSource))),
+      LooseCookedIdentityCollision);
+    EXPECT_EQ(Asset(Inspect(cooked_root)).source_path, kRedSource);
   }
 
-  NOLINT_TEST(LooseCookedWriterUpdateTest, WriteFileSameKindUpdatesEntry)
+  //! Identities differing only in case are one file on a case-insensitive file
+  //! system, so the second is refused whoever produces it.
+  NOLINT_TEST(
+    LooseCookedWriterUpdateTest, AnIdentityDifferingOnlyInCaseIsRefused)
   {
     const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_file_update";
+    const auto cooked_root = temp.Path() / "case_only";
+    const auto bytes = Material();
 
-    const std::vector<std::byte> bytes0 = {
-      std::byte { 0x01 },
-    };
-    const std::vector<std::byte> bytes1 = {
-      std::byte { 0xAA },
-      std::byte { 0xBB },
-    };
+    {
+      LooseCookedWriter writer(cooked_root);
+      writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x11),
+        AssetType::kMaterial, kRed, "Materials/Red.omat", bytes, {},
+        FromSource(std::string(kRedSource)));
+      (void)writer.Finish();
+    }
+
+    LooseCookedWriter writer(cooked_root);
+    EXPECT_THROW(writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x12),
+                   AssetType::kMaterial, "/.cooked/Materials/red.omat",
+                   "Materials/red2.omat", bytes, {},
+                   FromSource("/.cooked/Materials/red.omat.json")),
+      LooseCookedIdentityCollision);
+  }
+
+  //! A removed source's identity is free for another source.
+  NOLINT_TEST(
+    LooseCookedWriterUpdateTest, ARemovedSourcesIdentityIsFreeForAnother)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "removed_source";
+    const auto key = MakeFirstByteAssetKey(0x11);
+    const auto bytes = Material();
+
+    {
+      LooseCookedWriter writer(cooked_root);
+      writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
+        "Materials/Red.omat", bytes, {}, FromSource(std::string(kRedSource)));
+      (void)writer.Finish();
+    }
+    {
+      LooseCookedWriter remover(cooked_root);
+      remover.RemoveAssetDescriptor(kRed);
+      (void)remover.Finish();
+    }
+    {
+      LooseCookedWriter writer(cooked_root);
+      writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
+        "Materials/Red.omat", bytes, {}, FromSource(std::string(kOtherSource)));
+      (void)writer.Finish();
+    }
+
+    EXPECT_EQ(Asset(Inspect(cooked_root)).source_path, kOtherSource);
+  }
+
+  //! A sidecar completes an asset, which keeps its producer.
+  NOLINT_TEST(LooseCookedWriterUpdateTest, ASidecarKeepsTheProducerOfItsTarget)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "sidecar";
+    const auto key = MakeFirstByteAssetKey(0x11);
+    const auto bytes = Material();
+
+    {
+      LooseCookedWriter writer(cooked_root);
+      writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
+        "Materials/Red.omat", bytes, {}, FromSource(std::string(kRedSource)));
+      (void)writer.Finish();
+    }
+    {
+      LooseCookedWriter writer(cooked_root);
+      writer.WriteAssetDescriptor(key, AssetType::kMaterial, kRed,
+        "Materials/Red.omat", bytes, {},
+        LooseCookedProducer { .source = {}, .completes = std::string(kRed) });
+      (void)writer.Finish();
+    }
+
+    EXPECT_EQ(Asset(Inspect(cooked_root)).source_path, kRedSource);
+    LooseCookedWriter writer(cooked_root);
+    EXPECT_THROW(writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x12),
+                   AssetType::kMaterial, "/.cooked/Materials/Blue.omat",
+                   "Materials/Blue.omat", bytes, {},
+                   LooseCookedProducer { .source = {},
+                     .completes = "/.cooked/Scenes/None.oscene" }),
+      std::runtime_error);
+  }
+
+  //! A table or data file is written again at its path; another path for its
+  //! kind is refused.
+  NOLINT_TEST(LooseCookedWriterUpdateTest, AFileKindHasOnePath)
+  {
+    const ScopedTempDir temp;
+    const auto cooked_root = temp.Path() / "file_kind";
+    const std::vector<std::byte> bytes0 = { std::byte { 0x01 } };
+    const std::vector<std::byte> bytes1
+      = { std::byte { 0xAA }, std::byte { 0xBB } };
 
     {
       LooseCookedWriter writer(cooked_root);
@@ -201,257 +273,65 @@ namespace {
       (void)writer.Finish();
     }
 
-    {
-      LooseCookedWriter writer(cooked_root);
-      writer.WriteFile(
-        FileKind::kBuffersData, "Resources/buffers_v2.data", bytes1);
-      (void)writer.Finish();
-    }
-
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-
-    const auto files = inspection.Files();
-    const auto it
-      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) -> bool {
-          return e.kind == FileKind::kBuffersData;
-        });
-
-    EXPECT_EQ(files.size(), 2U);
-    ASSERT_NE(it, files.end());
-    EXPECT_EQ(it->relpath, "Resources/buffers_v2.data");
-    EXPECT_EQ(it->size, 2U);
-  }
-
-  //! Duplicate writes in one session overwrite by key/kind.
-  /*!
-   Scenario: Writes the same AssetKey and the same FileKind twice within a
-   single writer session. Verifies current overwrite semantics keep one entry
-   per key/kind with latest metadata.
-  */
-  NOLINT_TEST(LooseCookedWriterUpdateTest,
-    SameSessionDuplicateWritesKeepLatestMetadataPerKeyAndKind)
-  {
-    const ScopedTempDir temp;
-    const auto cooked_root
-      = temp.Path() / "loose_cooked_writer_same_session_overwrite";
-
-    const auto key = MakeFirstByteAssetKey(0x61);
-
-    const auto desc_a = fixtures::MaterialDescriptor(
-      "desc_a", fixtures::MaterialVariant::kPlain)
-                          .bytes;
-    const auto desc_b = fixtures::MaterialDescriptor(
-      "desc_b", fixtures::MaterialVariant::kWithShader)
-                          .bytes;
-    const std::vector<std::byte> file_a = {
-      std::byte { 0x02 },
-    };
-    const std::vector<std::byte> file_b = {
-      std::byte { 0x10 },
-      std::byte { 0x20 },
-      std::byte { 0x30 },
-    };
-
     LooseCookedWriter writer(cooked_root);
-    writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-      "/.cooked/Materials/" + MaterialFile("A"),
-      "Materials/" + MaterialFile("A"), desc_a, {});
-    writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-      "/.cooked/Materials/" + MaterialFile("A"),
-      "Materials/" + MaterialFile("B"), desc_b, {});
-
-    writer.WriteFile(
-      FileKind::kBuffersData, "Resources/buffers_a.data", file_a);
-    writer.WriteFile(
-      FileKind::kBuffersData, "Resources/buffers_b.data", file_b);
-    writer.WriteFile(
-      FileKind::kBuffersTable, "Resources/buffers.table", file_a);
-
+    writer.WriteFile(FileKind::kBuffersData, "Resources/buffers.data", bytes1);
+    EXPECT_THROW(writer.WriteFile(
+                   FileKind::kBuffersData, "Resources/buffers_v2.data", bytes1),
+      std::runtime_error);
     (void)writer.Finish();
 
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-
-    ASSERT_EQ(inspection.Assets().size(), 1U);
-    EXPECT_EQ(inspection.Assets().front().descriptor_relpath,
-      "Materials/" + MaterialFile("B"));
-    EXPECT_EQ(inspection.Assets().front().descriptor_size, desc_b.size());
-
+    const auto inspection = Inspect(cooked_root);
     const auto files = inspection.Files();
-    ASSERT_EQ(files.size(), 2U);
-    const auto it
-      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) -> bool {
-          return e.kind == FileKind::kBuffersData;
-        });
-    ASSERT_NE(it, files.end());
-    EXPECT_EQ(it->relpath, "Resources/buffers_b.data");
-    EXPECT_EQ(it->size, 3U);
-  }
-
-  NOLINT_TEST(
-    LooseCookedWriterUpdateTest, CollisionPolicyErrorRejectsFileOverwrite)
-  {
-    const ScopedTempDir temp;
-    const auto cooked_root
-      = temp.Path() / "loose_cooked_writer_collision_error";
-
-    const std::vector<std::byte> file_a = { std::byte { 0x01 } };
-    const std::vector<std::byte> file_b
-      = { std::byte { 0x02 }, std::byte { 0x03 } };
-
-    LooseCookedWriter writer(cooked_root);
-    writer.SetCollisionPolicy(CollisionPolicy::kError);
-    writer.WriteFile(
-      FileKind::kBuffersData, "Resources/buffers_a.data", file_a);
-    EXPECT_THROW(writer.WriteFile(
-                   FileKind::kBuffersData, "Resources/buffers_b.data", file_b),
-      std::runtime_error);
-    writer.WriteFile(
-      FileKind::kBuffersTable, "Resources/buffers.table", file_a);
-    const auto result = writer.Finish();
-    EXPECT_EQ(result.collision_summary.file_collisions, 1U);
-    EXPECT_EQ(result.collision_summary.kept_existing, 0U);
-    EXPECT_EQ(result.collision_summary.replaced_existing, 0U);
-    EXPECT_EQ(result.collision_summary.rejected, 1U);
-  }
-
-  NOLINT_TEST(
-    LooseCookedWriterUpdateTest, CollisionPolicyKeepExistingPreservesFirst)
-  {
-    const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_collision_keep";
-
-    const std::vector<std::byte> bytes_a = { std::byte { 0x01 } };
-    const std::vector<std::byte> bytes_b
-      = { std::byte { 0x10 }, std::byte { 0x20 } };
-
-    LooseCookedWriter writer(cooked_root);
-    writer.SetCollisionPolicy(CollisionPolicy::kWarnKeepExisting);
-    writer.WriteFile(
-      FileKind::kBuffersData, "Resources/buffers_a.data", bytes_a);
-    writer.WriteFile(
-      FileKind::kBuffersData, "Resources/buffers_b.data", bytes_b);
-    writer.WriteFile(
-      FileKind::kBuffersTable, "Resources/buffers.table", bytes_a);
-    const auto result = writer.Finish();
-    EXPECT_EQ(result.collision_summary.file_collisions, 1U);
-    EXPECT_EQ(result.collision_summary.kept_existing, 1U);
-    EXPECT_EQ(result.collision_summary.replaced_existing, 0U);
-    EXPECT_EQ(result.collision_summary.rejected, 0U);
-
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-    const auto files = inspection.Files();
-    const auto it
-      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) -> bool {
-          return e.kind == FileKind::kBuffersData;
-        });
-    ASSERT_NE(it, files.end());
-    EXPECT_EQ(it->relpath, "Resources/buffers_a.data");
-    EXPECT_EQ(it->size, 1U);
-  }
-
-  NOLINT_TEST(
-    LooseCookedWriterUpdateTest, CollisionPolicyReplaceOverwritesEntry)
-  {
-    const ScopedTempDir temp;
-    const auto cooked_root
-      = temp.Path() / "loose_cooked_writer_collision_replace";
-
-    const std::vector<std::byte> bytes_a = { std::byte { 0x01 } };
-    const std::vector<std::byte> bytes_b
-      = { std::byte { 0x10 }, std::byte { 0x20 } };
-
-    LooseCookedWriter writer(cooked_root);
-    writer.SetCollisionPolicy(CollisionPolicy::kWarnReplace);
-    writer.WriteFile(
-      FileKind::kBuffersData, "Resources/buffers_a.data", bytes_a);
-    writer.WriteFile(
-      FileKind::kBuffersData, "Resources/buffers_b.data", bytes_b);
-    writer.WriteFile(
-      FileKind::kBuffersTable, "Resources/buffers.table", bytes_a);
-    const auto result = writer.Finish();
-    EXPECT_EQ(result.collision_summary.file_collisions, 1U);
-    EXPECT_EQ(result.collision_summary.kept_existing, 0U);
-    EXPECT_EQ(result.collision_summary.replaced_existing, 1U);
-    EXPECT_EQ(result.collision_summary.rejected, 0U);
-
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-    const auto files = inspection.Files();
-    const auto it
-      = std::ranges::find_if(files, [](const Inspection::FileEntry& e) -> bool {
-          return e.kind == FileKind::kBuffersData;
-        });
-    ASSERT_NE(it, files.end());
-    EXPECT_EQ(it->relpath, "Resources/buffers_b.data");
-    EXPECT_EQ(it->size, 2U);
+    const auto data = std::ranges::find(
+      files, FileKind::kBuffersData, &Inspection::FileEntry::kind);
+    ASSERT_NE(data, files.end());
+    EXPECT_EQ(data->relpath, "Resources/buffers.data");
+    EXPECT_EQ(data->size, 2U);
   }
 
   NOLINT_TEST(
     LooseCookedWriterUpdateTest, FinishMergesNewAssetWithExistingAssets)
   {
     const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_merge_assets";
-
-    const auto key0 = MakeFirstByteAssetKey(0x10);
-    const auto key1 = MakeFirstByteAssetKey(0x20);
-
-    const auto bytes
-      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
-          .bytes;
+    const auto cooked_root = temp.Path() / "merge_assets";
+    const auto bytes = Material();
 
     {
       LooseCookedWriter writer(cooked_root);
-      writer.WriteAssetDescriptor(key0, AssetType::kMaterial,
-        "/.cooked/Materials/" + MaterialFile("A"),
-        "Materials/" + MaterialFile("A"), bytes, {});
+      writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x10),
+        AssetType::kMaterial, "/.cooked/Materials/A.omat", "Materials/A.omat",
+        bytes, {}, FromSource("/.cooked/Materials/A.omat.json"));
       (void)writer.Finish();
     }
-
     {
       LooseCookedWriter writer(cooked_root);
-      writer.WriteAssetDescriptor(key1, AssetType::kMaterial,
-        "/.cooked/Materials/" + MaterialFile("B"),
-        "Materials/" + MaterialFile("B"), bytes, {});
+      writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x20),
+        AssetType::kMaterial, "/.cooked/Materials/B.omat", "Materials/B.omat",
+        bytes, {}, FromSource("/.cooked/Materials/B.omat.json"));
       (void)writer.Finish();
     }
 
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-
-    EXPECT_EQ(inspection.Assets().size(), 2U);
+    EXPECT_EQ(Inspect(cooked_root).Assets().size(), 2U);
   }
 
   //! Every finalized descriptor has its exact content digest.
   NOLINT_TEST(LooseCookedWriterUpdateTest, FinishAlwaysEmitsDescriptorDigest)
   {
     const ScopedTempDir temp;
-    const auto cooked_root = temp.Path() / "loose_cooked_writer_no_sha";
-
-    const auto key = MakeFirstByteAssetKey(0x33);
-
-    const auto bytes
-      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
-          .bytes;
+    const auto cooked_root = temp.Path() / "digest";
+    const auto bytes = Material();
 
     LooseCookedWriter writer(cooked_root);
-    writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-      "/.cooked/Materials/" + MaterialFile("A"),
-      "Materials/" + MaterialFile("A"), bytes, {});
-
+    writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x33),
+      AssetType::kMaterial, kRed, "Materials/Red.omat", bytes, {},
+      FromSource(std::string(kRedSource)));
     (void)writer.Finish();
 
-    Inspection inspection;
-    inspection.LoadFromFile(cooked_root / "container.index.bin");
-
-    ASSERT_EQ(inspection.Assets().size(), 1U);
-    const auto& asset = inspection.Assets().front();
-    ASSERT_HAS_VALUE(asset.descriptor_sha256)
-      << "Expected descriptor sha256 to be present";
+    const auto asset = Asset(Inspect(cooked_root));
+    ASSERT_HAS_VALUE(asset.descriptor_sha256);
     EXPECT_EQ(*asset.descriptor_sha256, oxygen::base::ComputeSha256(bytes));
   }
+
 } // namespace
 
 } // namespace oxygen::content::testing

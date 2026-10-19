@@ -51,6 +51,7 @@ inline auto Load(AnyReader& reader, data::loose_cooked::AssetEntry& entry)
   CHECK_RESULT(reader.ReadInto(entry.asset_type));
   CHECK_RESULT(reader.ReadInto(entry.descriptor_relpath_offset));
   CHECK_RESULT(reader.ReadInto(entry.virtual_path_offset));
+  CHECK_RESULT(reader.ReadInto(entry.source_path_offset));
   CHECK_RESULT(reader.ReadInto(entry.descriptor_size));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span { entry.descriptor_sha256 })));
@@ -86,6 +87,7 @@ inline auto Load(AnyReader& reader, data::loose_cooked::FileRecord& record)
   CHECK_RESULT(reader.ReadInto(record.size));
   CHECK_RESULT(reader.ReadInto(record.relpath_offset));
   CHECK_RESULT(reader.ReadInto(record.virtual_path_offset));
+  CHECK_RESULT(reader.ReadInto(record.source_path_offset));
   CHECK_RESULT(
     reader.ReadBlobInto(std::as_writable_bytes(std::span { record.sha256 })));
   return {};

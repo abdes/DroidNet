@@ -202,6 +202,7 @@ struct AssetRef final {
   std::string descriptor_relpath;
   data::AssetReferences references;
   AssetType type = AssetType::kUnknown;
+  std::string source_path;
 };
 
 inline auto FindFirstAssetByType(const lc::Inspection& inspection,
@@ -217,6 +218,7 @@ inline auto FindFirstAssetByType(const lc::Inspection& inspection,
       .descriptor_relpath = entry.descriptor_relpath,
       .references = entry.references,
       .type = static_cast<AssetType>(entry.asset_type),
+      .source_path = entry.source_path,
     };
   }
   return std::nullopt;
@@ -279,6 +281,7 @@ inline auto MakeInflightSceneContext(const std::filesystem::path& cooked_root,
   return ImportRequest::InflightSceneContext {
     .scene_key = scene_asset.key,
     .virtual_path = scene_asset.virtual_path,
+    .source_path = scene_asset.source_path,
     .descriptor_relpath = scene_asset.descriptor_relpath,
     .descriptor_bytes = ReadBytes(cooked_root / scene_asset.descriptor_relpath),
     .references = scene_asset.references,

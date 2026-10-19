@@ -124,6 +124,8 @@ struct ImportRequest final {
   struct InflightSceneContext final {
     data::AssetKey scene_key;
     std::string virtual_path;
+    //! Virtual path of the source that produces the scene.
+    std::string source_path;
     std::string descriptor_relpath;
     std::vector<std::byte> descriptor_bytes;
     data::AssetReferences references;
@@ -308,6 +310,18 @@ struct ImportRequest final {
   */
   OXGN_COOK_NDAPI auto ModelProductVirtualPath(
     std::string_view name, std::string_view extension) const -> std::string;
+
+  //! The identity of the source the job cooks: its identity's folder and the
+  //! source file's name.
+  /*!
+   A source sits in the folder of what it cooks, so `Red.omat.json` cooking
+   `/Content/Materials/Red.omat` is `/Content/Materials/Red.omat.json`,
+   `Player.input.json` cooking `/Content/Player.input` is
+   `/Content/Player.input.json`, and a model is its own identity. The loose
+   cooked index records it as the producer of every entry the job writes.
+   Empty without an identity.
+  */
+  OXGN_COOK_NDAPI auto SourceVirtualPath() const -> std::string;
 
   //! The descriptor path of a texture job's identity, without emitting or
   //! reading files.

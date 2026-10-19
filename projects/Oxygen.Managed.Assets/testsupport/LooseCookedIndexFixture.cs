@@ -43,16 +43,21 @@ internal static class LooseCookedIndexFixture
             return offset;
         }
 
+        // Every asset and texture descriptor has a producing source; a fixture's defaults to a descriptor beside it.
+        static string? SourceOf(string? virtualPath, string? source) => source ?? (virtualPath is null ? null : virtualPath + ".json");
+
         foreach (var asset in document.Assets)
         {
             _ = Add(asset.DescriptorRelativePath);
             _ = Add(asset.VirtualPath);
+            _ = Add(SourceOf(asset.VirtualPath, asset.SourcePath));
         }
 
         foreach (var file in document.Files)
         {
             _ = Add(file.RelativePath);
             _ = Add(file.VirtualPath);
+            _ = Add(SourceOf(file.VirtualPath, file.SourcePath));
         }
 
         var header = new byte[LooseCookedIndex.HeaderSize];
@@ -84,8 +89,9 @@ internal static class LooseCookedIndexFixture
             entry[16] = asset.AssetType;
             BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(17), offsets[asset.DescriptorRelativePath]);
             BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(21), offsets[asset.VirtualPath ?? string.Empty]);
-            BinaryPrimitives.WriteUInt64LittleEndian(entry.AsSpan(25), asset.DescriptorSize);
-            asset.DescriptorSha256.Span.CopyTo(entry.AsSpan(33));
+            BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(25), offsets[SourceOf(asset.VirtualPath, asset.SourcePath) ?? string.Empty]);
+            BinaryPrimitives.WriteUInt64LittleEndian(entry.AsSpan(29), asset.DescriptorSize);
+            asset.DescriptorSha256.Span.CopyTo(entry.AsSpan(37));
             var references = asset.References;
             if (references.ResourceCount != 0 || references.KeyCount != 0)
             {
@@ -95,9 +101,9 @@ internal static class LooseCookedIndexFixture
                     + (references.KeyCount * 18UL));
             }
 
-            BinaryPrimitives.WriteUInt64LittleEndian(entry.AsSpan(65), references.Offset);
-            BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(73), references.ResourceCount);
-            BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(77), references.KeyCount);
+            BinaryPrimitives.WriteUInt64LittleEndian(entry.AsSpan(69), references.Offset);
+            BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(77), references.ResourceCount);
+            BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(81), references.KeyCount);
             destination.Write(entry);
         }
 
@@ -108,7 +114,8 @@ internal static class LooseCookedIndexFixture
             BinaryPrimitives.WriteUInt64LittleEndian(entry.AsSpan(2), file.Size);
             BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(10), offsets[file.RelativePath]);
             BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(14), offsets[file.VirtualPath ?? string.Empty]);
-            file.Sha256.Span.CopyTo(entry.AsSpan(18));
+            BinaryPrimitives.WriteUInt32LittleEndian(entry.AsSpan(18), offsets[SourceOf(file.VirtualPath, file.SourcePath) ?? string.Empty]);
+            file.Sha256.Span.CopyTo(entry.AsSpan(22));
             destination.Write(entry);
         }
 

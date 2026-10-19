@@ -187,6 +187,7 @@ namespace {
     uint64_t descriptor_size = 0;
     std::array<uint8_t, data::loose_cooked::kSha256Size> descriptor_sha256 = {};
     data::AssetReferences references;
+    std::string source_path;
   };
 
   struct StoredFile final {
@@ -197,6 +198,7 @@ namespace {
     bool updated = false;
     bool externally_written = false;
     std::string virtual_path;
+    std::string source_path;
   };
 
   //! Records keyed by path rather than by kind: a root holds many of them.
@@ -205,53 +207,12 @@ namespace {
     return kind == FileKind::kAuxiliary || kind == FileKind::kTextureDescriptor;
   }
 
-  [[nodiscard]] auto IsEquivalent(
-    const StoredAsset& lhs, const StoredAsset& rhs) -> bool
+  //! Identities that differ only in case are one file on a case-insensitive
+  //! file system, so the writer compares them folded.
+  [[nodiscard]] auto FoldIdentity(const std::string_view virtual_path)
+    -> std::string
   {
-    return lhs.key == rhs.key && lhs.asset_type == rhs.asset_type
-      && lhs.virtual_path == rhs.virtual_path
-      && lhs.descriptor_relpath == rhs.descriptor_relpath
-      && lhs.descriptor_size == rhs.descriptor_size
-      && lhs.descriptor_sha256 == rhs.descriptor_sha256
-      && lhs.references == rhs.references;
-  }
-
-  [[nodiscard]] auto IsEquivalent(const StoredFile& lhs, const StoredFile& rhs)
-    -> bool
-  {
-    return lhs.kind == rhs.kind && lhs.relpath == rhs.relpath
-      && lhs.size == rhs.size;
-  }
-
-  [[nodiscard]] auto BuildVirtualPathCollisionMessage(std::string_view context,
-    const StoredAsset& incoming, const data::AssetKey& existing_key,
-    const StoredAsset* existing) -> std::string
-  {
-    auto message = std::string(
-      "Conflicting virtual path mapping in loose cooked container");
-    message += ": context=";
-    message += context;
-    message += " virtual_path='";
-    message += incoming.virtual_path;
-    message += "' existing_key=";
-    message += data::to_string(existing_key);
-    message += " incoming_key=";
-    message += data::to_string(incoming.key);
-    message += " incoming_descriptor='";
-    message += incoming.descriptor_relpath;
-    message += "' incoming_type=";
-    message += std::to_string(static_cast<uint16_t>(incoming.asset_type));
-
-    if (existing != nullptr) {
-      message += " existing_descriptor='";
-      message += existing->descriptor_relpath;
-      message += "' existing_type=";
-      message += std::to_string(static_cast<uint16_t>(existing->asset_type));
-    } else {
-      message += " existing_descriptor=<missing-or-current-session>";
-    }
-
-    return message;
+    return content::FoldCase(virtual_path).value_or(std::string(virtual_path));
   }
 
   auto WriteBinaryFile(const std::filesystem::path& path,
@@ -318,142 +279,110 @@ struct LooseCookedWriter::Impl final {
     content_version_override_ = version;
   }
 
-  auto SetCollisionPolicy(const LooseCookedWriter::CollisionPolicy policy)
+  //! The producing source of a new entry: its own, or for a sidecar the
+  //! producer of the asset it completes.
+  [[nodiscard]] auto ResolveSource_(const LooseCookedProducer& producer) const
+    -> std::string
+  {
+    if (!producer.completes.empty()) {
+      if (const auto key = key_by_virtual_path_.find(producer.completes);
+        key != key_by_virtual_path_.end()) {
+        return assets_.at(key->second).source_path;
+      }
+      if (producer.source.empty()) {
+        throw std::runtime_error("Cannot complete an asset of unknown "
+                                 "producer: "
+          + producer.completes);
+      }
+    }
+    RequireCanonicalVirtualPath(producer.source);
+    return producer.source;
+  }
+
+  //! The source that produced an identity, if the index lists it.
+  [[nodiscard]] auto FindProducer_(const std::string& virtual_path) const
+    -> std::optional<std::string>
+  {
+    if (const auto key = key_by_virtual_path_.find(virtual_path);
+      key != key_by_virtual_path_.end()) {
+      return assets_.at(key->second).source_path;
+    }
+    if (const auto texture = texture_by_virtual_path_.find(virtual_path);
+      texture != texture_by_virtual_path_.end()) {
+      return files_.at(texture->second).source_path;
+    }
+    return std::nullopt;
+  }
+
+  //! Refuses an identity another source produced, or one differing from an
+  //! identity of the index only in case.
+  auto RequireOwnIdentity_(const std::string& virtual_path,
+    const std::string& source, const std::string_view context) const -> void
+  {
+    if (const auto spelled = path_by_folded_.find(FoldIdentity(virtual_path));
+      spelled != path_by_folded_.end() && spelled->second != virtual_path) {
+      throw LooseCookedIdentityCollision(std::string(context) + ": '"
+        + virtual_path + "' differs only in case from '" + spelled->second
+        + "'");
+    }
+    if (const auto producer = FindProducer_(virtual_path);
+      producer.has_value() && *producer != source) {
+      throw LooseCookedIdentityCollision(std::string(context) + ": '"
+        + virtual_path + "' is produced by '" + *producer + "', not by '"
+        + source + "'");
+    }
+  }
+
+  //! Lists an asset, replacing the entry its source produced before.
+  auto InsertAsset_(const StoredAsset& asset, const std::string_view context)
     -> void
   {
-    collision_policy_ = policy;
+    RequireOwnIdentity_(asset.virtual_path, asset.source_path, context);
+    if (const auto existing = assets_.find(asset.key); existing != assets_.end()
+      && existing->second.virtual_path != asset.virtual_path) {
+      throw std::runtime_error(std::string(context) + ": asset key "
+        + data::to_string(asset.key) + " names both '"
+        + existing->second.virtual_path + "' and '" + asset.virtual_path + "'");
+    }
+    if (const auto previous = key_by_virtual_path_.find(asset.virtual_path);
+      previous != key_by_virtual_path_.end() && previous->second != asset.key) {
+      assets_.erase(previous->second);
+    }
+    assets_.insert_or_assign(asset.key, asset);
+    key_by_virtual_path_.insert_or_assign(asset.virtual_path, asset.key);
+    path_by_folded_.insert_or_assign(
+      FoldIdentity(asset.virtual_path), asset.virtual_path);
   }
 
-  auto HandleAssetCollision_(const data::AssetKey& key,
-    const StoredAsset& existing, const StoredAsset& incoming,
-    std::string_view context) -> bool
+  auto ForgetAsset_(const data::AssetKey& key) -> void
   {
-    if (IsEquivalent(existing, incoming)) {
-      return true;
+    const auto asset = assets_.find(key);
+    if (asset == assets_.end()) {
+      return;
     }
-    ++collision_summary_.asset_collisions;
-    if (collision_policy_ == LooseCookedWriter::CollisionPolicy::kError) {
-      ++collision_summary_.rejected;
-      throw std::runtime_error(std::string(context)
-        + ": asset collision for key " + data::to_string(key));
-    }
-    if (collision_policy_
-      == LooseCookedWriter::CollisionPolicy::kWarnKeepExisting) {
-      ++collision_summary_.kept_existing;
-      LOG_F(WARNING,
-        "{}: asset collision for key {} policy=warn_keep_existing action=keep",
-        context, data::to_string(key));
-      return false;
-    }
-    ++collision_summary_.replaced_existing;
-    LOG_F(WARNING,
-      "{}: asset collision for key {} policy=warn_replace action=replace",
-      context, data::to_string(key));
-    return true;
+    key_by_virtual_path_.erase(asset->second.virtual_path);
+    path_by_folded_.erase(FoldIdentity(asset->second.virtual_path));
+    assets_.erase(asset);
   }
 
-  auto HandleFileCollision_(const FileKind kind, const StoredFile& existing,
-    const StoredFile& incoming, std::string_view context) -> bool
+  auto ForgetFile_(const std::string& relpath) -> void
   {
-    if (IsEquivalent(existing, incoming)
-      || (incoming.externally_written
-        && existing.relpath == incoming.relpath)) {
-      // Registering the new extent of the same externally written file is a
-      // metadata refresh. A collision changes which file owns this kind.
-      return true;
+    const auto file = files_.find(relpath);
+    if (file == files_.end()) {
+      return;
     }
-    ++collision_summary_.file_collisions;
-    if (collision_policy_ == LooseCookedWriter::CollisionPolicy::kError) {
-      ++collision_summary_.rejected;
-      throw std::runtime_error(std::string(context)
-        + ": file collision for kind "
-        + std::to_string(static_cast<uint16_t>(kind)));
+    if (!file->second.virtual_path.empty()) {
+      texture_by_virtual_path_.erase(file->second.virtual_path);
+      path_by_folded_.erase(FoldIdentity(file->second.virtual_path));
     }
-    if (collision_policy_
-      == LooseCookedWriter::CollisionPolicy::kWarnKeepExisting) {
-      ++collision_summary_.kept_existing;
-      LOG_F(WARNING,
-        "{}: file collision for kind={} policy=warn_keep_existing action=keep",
-        context, static_cast<uint16_t>(kind));
-      return false;
-    }
-    ++collision_summary_.replaced_existing;
-    LOG_F(WARNING,
-      "{}: file collision for kind={} policy=warn_replace action=replace",
-      context, static_cast<uint16_t>(kind));
-    return true;
-  }
-
-  auto HandleVirtualPathCollision(
-    const StoredAsset& incoming, std::string_view context) -> bool
-  {
-    const auto existing_key_it
-      = key_by_virtual_path_.find(incoming.virtual_path);
-    if (existing_key_it == key_by_virtual_path_.end()) {
-      return true;
-    }
-
-    const auto existing_key = existing_key_it->second;
-    if (existing_key == incoming.key) {
-      return true;
-    }
-
-    const auto existing_asset_it = assets_.find(existing_key);
-    if (existing_asset_it == assets_.end()
-      || !loaded_asset_keys_.contains(existing_key)) {
-      throw std::runtime_error(BuildVirtualPathCollisionMessage(
-        context, incoming, existing_key, nullptr));
-    }
-
-    const auto& existing = existing_asset_it->second;
-    if (existing.asset_type != incoming.asset_type
-      || existing.descriptor_relpath != incoming.descriptor_relpath) {
-      throw std::runtime_error(BuildVirtualPathCollisionMessage(
-        context, incoming, existing_key, &existing));
-    }
-
-    const auto already_replaced
-      = replaced_loaded_virtual_paths_.contains(incoming.virtual_path);
-
-    if (!already_replaced) {
-      ++collision_summary_.asset_collisions;
-    }
-    if (collision_policy_ == LooseCookedWriter::CollisionPolicy::kError) {
-      ++collision_summary_.rejected;
-      throw std::runtime_error(std::string(context)
-        + ": virtual path collision for " + incoming.virtual_path);
-    }
-    if (collision_policy_
-      == LooseCookedWriter::CollisionPolicy::kWarnKeepExisting) {
-      if (!already_replaced) {
-        ++collision_summary_.kept_existing;
-        LOG_F(WARNING,
-          "{}: virtual path collision for '{}' policy=warn_keep_existing "
-          "action=keep existing_key={} incoming_key={} descriptor='{}'",
-          context, incoming.virtual_path, data::to_string(existing_key),
-          data::to_string(incoming.key), incoming.descriptor_relpath);
-      }
-      return false;
-    }
-
-    if (!already_replaced) {
-      ++collision_summary_.replaced_existing;
-      LOG_F(WARNING,
-        "{}: virtual path collision for '{}' policy=warn_replace "
-        "action=replace existing_key={} incoming_key={} descriptor='{}'",
-        context, incoming.virtual_path, data::to_string(existing_key),
-        data::to_string(incoming.key), incoming.descriptor_relpath);
-      replaced_loaded_virtual_paths_.insert(incoming.virtual_path);
-    }
-    assets_.erase(existing_asset_it);
-    loaded_asset_keys_.erase(existing_key);
-    return true;
+    files_.erase(file);
   }
 
   auto WriteAssetDescriptor(const data::AssetKey& key,
     data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, std::span<const std::byte> bytes,
-    const data::AssetReferences& references) -> void
+    const data::AssetReferences& references,
+    const LooseCookedProducer& producer) -> void
   {
     RequireCanonicalVirtualPath(virtual_path);
     ValidateRelativePath(descriptor_relpath);
@@ -469,24 +398,16 @@ struct LooseCookedWriter::Impl final {
       .descriptor_size = bytes.size(),
       .descriptor_sha256 = CopyDigestOrZero(digest),
       .references = references,
+      .source_path = ResolveSource_(producer),
     };
 
-    if (!HandleVirtualPathCollision(record, "WriteAssetDescriptor")) {
-      return;
-    }
-
-    if (const auto existing_it = assets_.find(key); existing_it != assets_.end()
-      && !HandleAssetCollision_(
-        key, existing_it->second, record, "WriteAssetDescriptor")) {
-      return;
-    }
-
+    RequireOwnIdentity_(
+      record.virtual_path, record.source_path, "WriteAssetDescriptor");
     const auto path_on_disk
       = cooked_root_ / std::filesystem::path(descriptor_relpath);
     WriteBinaryFile(path_on_disk, bytes);
 
-    assets_.insert_or_assign(key, record);
-    key_by_virtual_path_.insert_or_assign(std::string(virtual_path), key);
+    InsertAsset_(record, "WriteAssetDescriptor");
     written_virtual_paths_.emplace(virtual_path);
   }
 
@@ -506,20 +427,20 @@ struct LooseCookedWriter::Impl final {
       .externally_written = false,
     };
 
-    if (StoreFile_(std::move(record), "WriteFile")) {
-      WriteBinaryFile(path_on_disk, bytes);
-    }
+    StoreFile_(std::move(record), "WriteFile");
+    WriteBinaryFile(path_on_disk, bytes);
   }
 
   auto RegisterExternalFile(const FileKind kind, std::string_view relpath,
-    std::string_view virtual_path = {}) -> void
+    std::string_view virtual_path = {}, std::string source_path = {}) -> void
   {
     ValidateRelativePath(relpath);
     if (kind == FileKind::kTextureDescriptor) {
       RequireCanonicalVirtualPath(virtual_path);
-    } else if (!virtual_path.empty()) {
-      throw std::runtime_error(
-        "RegisterExternalFile: only texture descriptors have virtual paths");
+      RequireCanonicalVirtualPath(source_path);
+    } else if (!virtual_path.empty() || !source_path.empty()) {
+      throw std::runtime_error("RegisterExternalFile: only texture descriptors "
+                               "have virtual paths and sources");
     }
 
     const auto path_on_disk = cooked_root_ / std::filesystem::path(relpath);
@@ -544,15 +465,24 @@ struct LooseCookedWriter::Impl final {
       .updated = true,
       .externally_written = true,
       .virtual_path = std::string(virtual_path),
+      .source_path = std::move(source_path),
     };
 
-    static_cast<void>(StoreFile_(std::move(record), "RegisterExternalFile"));
+    StoreFile_(std::move(record), "RegisterExternalFile");
+  }
+
+  auto RegisterExternalTextureDescriptor(std::string_view relpath,
+    std::string_view virtual_path, const LooseCookedProducer& producer) -> void
+  {
+    RegisterExternalFile(FileKind::kTextureDescriptor, relpath, virtual_path,
+      ResolveSource_(producer));
   }
 
   auto RegisterExternalAssetDescriptor(const data::AssetKey& key,
     const data::AssetType asset_type, std::string_view virtual_path,
     std::string_view descriptor_relpath, uint64_t descriptor_size,
     const data::AssetReferences& references,
+    const LooseCookedProducer& producer,
     std::optional<base::Sha256Digest> descriptor_sha256) -> void
   {
     RequireCanonicalVirtualPath(virtual_path);
@@ -607,20 +537,10 @@ struct LooseCookedWriter::Impl final {
       .descriptor_size = descriptor_size,
       .descriptor_sha256 = CopyDigestOrZero(descriptor_sha256),
       .references = references,
+      .source_path = ResolveSource_(producer),
     };
 
-    if (!HandleVirtualPathCollision(
-          record, "RegisterExternalAssetDescriptor")) {
-      return;
-    }
-
-    if (const auto existing_it = assets_.find(key); existing_it != assets_.end()
-      && !HandleAssetCollision_(
-        key, existing_it->second, record, "RegisterExternalAssetDescriptor")) {
-      return;
-    }
-    assets_.insert_or_assign(key, record);
-    key_by_virtual_path_.insert_or_assign(std::string(virtual_path), key);
+    InsertAsset_(record, "RegisterExternalAssetDescriptor");
     written_virtual_paths_.emplace(virtual_path);
   }
 
@@ -647,24 +567,13 @@ struct LooseCookedWriter::Impl final {
     auto current_assets = assets_;
     auto current_files = files_;
 
-    assets_.clear();
-    files_.clear();
-    key_by_virtual_path_.clear();
-    loaded_asset_keys_.clear();
-
     LoadExistingIndexIfPresent_();
 
     for (const auto& [key, asset] : current_assets) {
-      if (!HandleVirtualPathCollision(asset, "Finish.merge_assets")) {
-        continue;
+      static_cast<void>(key);
+      if (written_virtual_paths_.contains(asset.virtual_path)) {
+        InsertAsset_(asset, "Finish.merge_assets");
       }
-      if (const auto existing = assets_.find(key); existing != assets_.end()
-        && !HandleAssetCollision_(
-          key, existing->second, asset, "Finish.merge_assets")) {
-        continue;
-      }
-      assets_.insert_or_assign(key, asset);
-      key_by_virtual_path_.insert_or_assign(asset.virtual_path, key);
     }
 
     for (auto& [path, file] : current_files) {
@@ -678,7 +587,7 @@ struct LooseCookedWriter::Impl final {
           = std::filesystem::file_size(base::ToNativePath(physical_path));
         file.sha256 = base::ComputeFileSha256(physical_path);
       }
-      static_cast<void>(StoreFile_(std::move(file), "Finish.merge_files"));
+      StoreFile_(std::move(file), "Finish.merge_files");
     }
 
     auto removed_files = ApplyRemovals_(current_files);
@@ -702,7 +611,6 @@ struct LooseCookedWriter::Impl final {
       .source_key = source_key,
       .content_version = content_version,
       .removed_files = std::move(removed_files),
-      .collision_summary = collision_summary_,
     };
 
     out.assets.reserve(assets_.size());
@@ -716,6 +624,7 @@ struct LooseCookedWriter::Impl final {
         .descriptor_size = a.descriptor_size,
         .descriptor_sha256 = {},
         .references = a.references,
+        .source_path = a.source_path,
       };
 
       if (!IsAllZeros(a.descriptor_sha256)) {
@@ -736,6 +645,7 @@ struct LooseCookedWriter::Impl final {
         .size = f.size,
         .sha256 = f.sha256,
         .virtual_path = f.virtual_path,
+        .source_path = f.source_path,
       };
 
       out.files.push_back(std::move(rec));
@@ -768,9 +678,7 @@ private:
           + virtual_path);
       }
       auto descriptor = asset->second.descriptor_relpath;
-      loaded_asset_keys_.erase(key->second);
-      assets_.erase(asset);
-      key_by_virtual_path_.erase(key);
+      ForgetAsset_(asset->first);
       LOG_F(INFO, "Removed cooked asset '{}' ({})", virtual_path, descriptor);
       removed.push_back(std::move(descriptor));
     }
@@ -788,7 +696,7 @@ private:
           "Cannot remove an auxiliary file the index does not list: "
           + relpath);
       }
-      files_.erase(file);
+      ForgetFile_(relpath);
       LOG_F(INFO, "Removed cooked auxiliary file '{}'", relpath);
       removed.push_back(relpath);
     }
@@ -824,34 +732,58 @@ private:
       [kind](const auto& item) -> auto { return item.second.kind == kind; });
   }
 
-  auto StoreFile_(StoredFile file, const std::string_view context) -> bool
+  auto StoreFile_(StoredFile file, const std::string_view context) -> void
   {
     if (file.kind == FileKind::kTextureDescriptor
       && file.virtual_path.empty()) {
       throw std::runtime_error(
         "Texture descriptor records require a virtual path: " + file.relpath);
     }
-    const auto existing = IsPathKeyed(file.kind)
-      ? files_.find(file.relpath)
-      : std::ranges::find_if(files_, [&](const auto& item) -> auto {
-          return item.second.kind == file.kind;
-        });
-    if (existing != files_.end()) {
-      if (!HandleFileCollision_(file.kind, existing->second, file, context)) {
-        return false;
+    if (!IsPathKeyed(file.kind)) {
+      // A root holds one table or data file of each kind, at one path.
+      const auto existing
+        = std::ranges::find_if(files_, [&](const auto& item) -> auto {
+            return item.second.kind == file.kind;
+          });
+      if (existing != files_.end() && existing->first != file.relpath) {
+        throw std::runtime_error(std::string(context) + ": file kind "
+          + std::to_string(static_cast<uint16_t>(file.kind)) + " is at '"
+          + existing->first + "', not at '" + file.relpath + "'");
       }
-      if (existing->first != file.relpath) {
-        files_.erase(existing);
+    }
+    if (!file.virtual_path.empty()) {
+      RequireOwnIdentity_(file.virtual_path, file.source_path, context);
+      if (const auto previous
+        = texture_by_virtual_path_.find(file.virtual_path);
+        previous != texture_by_virtual_path_.end()
+        && previous->second != file.relpath) {
+        ForgetFile_(std::string(previous->second));
       }
+    }
+    if (const auto existing = files_.find(file.relpath);
+      existing != files_.end()
+      && existing->second.virtual_path != file.virtual_path) {
+      ForgetFile_(file.relpath);
+    }
+    if (!file.virtual_path.empty()) {
+      texture_by_virtual_path_.insert_or_assign(
+        file.virtual_path, file.relpath);
+      path_by_folded_.insert_or_assign(
+        FoldIdentity(file.virtual_path), file.virtual_path);
     }
     const auto path = file.relpath;
     files_.insert_or_assign(path, std::move(file));
-    return true;
   }
 
   //! Requires the index file lock.
   auto LoadExistingIndexIfPresent_() -> void
   {
+    assets_.clear();
+    files_.clear();
+    key_by_virtual_path_.clear();
+    texture_by_virtual_path_.clear();
+    path_by_folded_.clear();
+
     const auto index_path = IndexPath(cooked_root_);
     if (!std::filesystem::exists(base::ToNativePath(index_path))) {
       return;
@@ -878,9 +810,10 @@ private:
         const auto type_u8 = index.FindAssetType(key);
         const auto size = index.FindDescriptorSize(key);
         const auto sha = index.FindDescriptorSha256(key);
+        const auto source = index.FindSourcePath(key);
         auto references = index.FindAssetReferences(key);
 
-        if (!rel || !vpath || !type_u8 || !size || !references) {
+        if (!rel || !vpath || !type_u8 || !size || !source || !references) {
           continue;
         }
 
@@ -892,6 +825,7 @@ private:
           .descriptor_size = *size,
           .descriptor_sha256 = {},
           .references = std::move(*references),
+          .source_path = std::string(*source),
         };
 
         if (sha.has_value()) {
@@ -899,16 +833,14 @@ private:
             record.descriptor_sha256.begin());
         }
 
-        assets_.insert_or_assign(key, record);
-        key_by_virtual_path_.insert_or_assign(record.virtual_path, key);
-        loaded_asset_keys_.insert(key);
+        InsertAsset_(record, "Load");
       }
 
       for (const auto& file : index.GetFileInventory()) {
         if (!file.kind.has_value()) {
           continue; // Asset records are restored above.
         }
-        files_.emplace(file.relative_path,
+        StoreFile_(
           StoredFile {
             .kind = *file.kind,
             .relpath = file.relative_path,
@@ -917,7 +849,9 @@ private:
             .updated = false,
             .externally_written = false,
             .virtual_path = file.virtual_path,
-          });
+            .source_path = file.source_path,
+          },
+          "Load");
       }
 
       DLOG_F(INFO, "Loaded existing loose cooked index: assets={}, files={}",
@@ -1029,6 +963,7 @@ private:
       entry.asset_key = a.key;
       entry.descriptor_relpath_offset = strings.Add(a.descriptor_relpath);
       entry.virtual_path_offset = strings.Add(a.virtual_path);
+      entry.source_path_offset = strings.Add(a.source_path);
       entry.asset_type = static_cast<uint8_t>(a.asset_type);
       entry.descriptor_size = a.descriptor_size;
       static_assert(
@@ -1057,6 +992,7 @@ private:
         .size = file.size,
         .relpath_offset = strings.Add(file.relpath),
         .virtual_path_offset = strings.Add(file.virtual_path),
+        .source_path_offset = strings.Add(file.source_path),
         .sha256 = file.sha256,
       });
     }
@@ -1153,9 +1089,6 @@ private:
 
   std::filesystem::path cooked_root_;
 
-  LooseCookedWriter::CollisionPolicy collision_policy_
-    = LooseCookedWriter::CollisionPolicy::kWarnReplace;
-
   std::optional<data::SourceKey> source_key_override_;
   std::optional<uint16_t> content_version_override_;
 
@@ -1165,12 +1098,13 @@ private:
   std::unordered_map<data::AssetKey, StoredAsset> assets_;
   std::unordered_map<std::string, StoredFile> files_;
   std::unordered_map<std::string, data::AssetKey> key_by_virtual_path_;
-  std::unordered_set<data::AssetKey> loaded_asset_keys_;
-  std::unordered_set<std::string> replaced_loaded_virtual_paths_;
+  //! Texture descriptor identities and the paths of their records.
+  std::unordered_map<std::string, std::string> texture_by_virtual_path_;
+  //! Every identity of the index, folded for case, and its spelling.
+  std::unordered_map<std::string, std::string> path_by_folded_;
   std::unordered_set<std::string> written_virtual_paths_;
   std::set<std::string> removed_virtual_paths_;
   std::set<std::string> removed_auxiliary_files_;
-  LooseCookedCollisionSummary collision_summary_ {};
 };
 
 LooseCookedWriter::LooseCookedWriter(std::filesystem::path cooked_root)
@@ -1190,18 +1124,14 @@ auto LooseCookedWriter::SetContentVersion(const uint16_t version) -> void
   impl_->SetContentVersion(version);
 }
 
-auto LooseCookedWriter::SetCollisionPolicy(const CollisionPolicy policy) -> void
-{
-  impl_->SetCollisionPolicy(policy);
-}
-
 auto LooseCookedWriter::WriteAssetDescriptor(const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,
   std::string_view descriptor_relpath, const std::span<const std::byte> bytes,
-  const data::AssetReferences& references) -> void
+  const data::AssetReferences& references, const LooseCookedProducer& producer)
+  -> void
 {
-  impl_->WriteAssetDescriptor(
-    key, asset_type, virtual_path, descriptor_relpath, bytes, references);
+  impl_->WriteAssetDescriptor(key, asset_type, virtual_path, descriptor_relpath,
+    bytes, references, producer);
 }
 
 auto LooseCookedWriter::WriteFile(const FileKind kind, std::string_view relpath,
@@ -1217,20 +1147,22 @@ auto LooseCookedWriter::RegisterExternalFile(
 }
 
 auto LooseCookedWriter::RegisterExternalTextureDescriptor(
-  std::string_view relpath, std::string_view virtual_path) -> void
+  std::string_view relpath, std::string_view virtual_path,
+  const LooseCookedProducer& producer) -> void
 {
-  impl_->RegisterExternalFile(
-    FileKind::kTextureDescriptor, relpath, virtual_path);
+  impl_->RegisterExternalTextureDescriptor(relpath, virtual_path, producer);
 }
 
 auto LooseCookedWriter::RegisterExternalAssetDescriptor(
   const data::AssetKey& key, const data::AssetType asset_type,
   std::string_view virtual_path, std::string_view descriptor_relpath,
   const uint64_t descriptor_size, const data::AssetReferences& references,
+  const LooseCookedProducer& producer,
   std::optional<base::Sha256Digest> descriptor_sha256) -> void
 {
   impl_->RegisterExternalAssetDescriptor(key, asset_type, virtual_path,
-    descriptor_relpath, descriptor_size, references, descriptor_sha256);
+    descriptor_relpath, descriptor_size, references, producer,
+    descriptor_sha256);
 }
 
 auto LooseCookedWriter::RemoveAssetDescriptor(std::string_view virtual_path)

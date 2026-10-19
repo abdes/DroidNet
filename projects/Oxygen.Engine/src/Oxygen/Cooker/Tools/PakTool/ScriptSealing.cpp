@@ -718,7 +718,10 @@ namespace {
         = sealed == sealed_references.end() ? asset.references : sealed->second;
       writer.RegisterExternalAssetDescriptor(asset.key,
         static_cast<AssetType>(asset.asset_type), asset.virtual_path,
-        asset.descriptor_relpath, 0, references, *digest);
+        asset.descriptor_relpath, 0, references,
+        import::LooseCookedProducer {
+          .source = asset.source_path, .completes = {} },
+        *digest);
     }
 
     for (const auto& file : inspection.Files()) {
@@ -727,8 +730,10 @@ namespace {
         continue;
       }
       if (file.kind == data::loose_cooked::FileKind::kTextureDescriptor) {
-        writer.RegisterExternalTextureDescriptor(
-          file.relpath, file.virtual_path);
+        writer.RegisterExternalTextureDescriptor(file.relpath,
+          file.virtual_path,
+          import::LooseCookedProducer {
+            .source = file.source_path, .completes = {} });
       } else {
         writer.RegisterExternalFile(file.kind, file.relpath);
       }

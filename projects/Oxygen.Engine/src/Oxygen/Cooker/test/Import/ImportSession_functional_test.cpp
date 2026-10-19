@@ -105,10 +105,14 @@ protected:
   [[nodiscard]] auto MakeRequest(
     const std::string& source_name = "test.fbx") const -> ImportRequest
   {
-    return ImportRequest {
+    // The source's identity names the producer of everything the session
+    // registers.
+    auto request = ImportRequest {
       .source_path = TempDir() / source_name,
       .cooked_root = TempDir() / "cooked",
     };
+    request.asset_virtual_path = "/.cooked/" + source_name;
+    return request;
   }
 
   static auto MakeTestTexturePayload() -> CookedTexturePayload

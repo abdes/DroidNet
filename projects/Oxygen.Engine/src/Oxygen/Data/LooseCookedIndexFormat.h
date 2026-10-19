@@ -107,7 +107,9 @@ struct IndexHeader {
 static_assert(sizeof(IndexHeader) == 256);
 
 //! Asset directory entry.
-/*! Stores the runtime identity plus the descriptor-relative path.
+/*! Stores the runtime identity plus the descriptor-relative path, and the
+ identity of the source that produced the asset. A source re-cooking its own
+ asset replaces it; another source producing the same identity is refused.
  */
 #pragma pack(push, 1)
 struct AssetEntry {
@@ -117,6 +119,9 @@ struct AssetEntry {
   // Offsets are into the string table.
   uint32_t descriptor_relpath_offset = 0; // e.g. "assets/Materials/Dark.mat"
   uint32_t virtual_path_offset = 0; // e.g. "/Content/Materials/Dark.mat"
+  //! Virtual path of the producing source, e.g.
+  //! "/Content/Materials/Dark.omat.json".
+  uint32_t source_path_offset = 0;
 
   // Mandatory descriptor integrity; runtime hash verification is opt-in.
   SizeT descriptor_size = 0;
@@ -124,7 +129,7 @@ struct AssetEntry {
   pak::core::AssetReferenceTable references {};
 };
 #pragma pack(pop)
-static_assert(sizeof(AssetEntry) == 81);
+static_assert(sizeof(AssetEntry) == 85);
 
 //! Kind of a file record.
 enum class FileKind : uint16_t {
@@ -153,9 +158,12 @@ struct FileRecord {
   //! Offset into string table for the virtual path; only texture descriptors
   //! have one, every other record uses the empty string at offset 0.
   uint32_t virtual_path_offset = 0; // e.g. "/Content/Textures/Sky.otex"
+  //! Offset into string table for the virtual path of the source that produced
+  //! a texture descriptor; every other record uses the empty string.
+  uint32_t source_path_offset = 0; // e.g. "/Content/Ship/Ship.glb"
   std::array<uint8_t, kSha256Size> sha256 {};
 };
 #pragma pack(pop)
-static_assert(sizeof(FileRecord) == 50);
+static_assert(sizeof(FileRecord) == 54);
 
 } // namespace oxygen::data::loose_cooked

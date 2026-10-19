@@ -31,7 +31,7 @@ namespace {
     -> ImportRequest
   {
     auto request = ImportRequest {};
-    request.source_path = "inline://scene-descriptor";
+    request.source_path = "inline://scene.oscene.json";
     request.job_name = "DemoScene";
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";

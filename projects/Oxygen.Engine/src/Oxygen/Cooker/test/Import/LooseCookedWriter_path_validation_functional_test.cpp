@@ -73,14 +73,15 @@ namespace {
 
     switch (GetParam().target) {
     case PathTarget::kVirtualPath:
-      EXPECT_THROW(
-        writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-          std::string_view(GetParam().path), valid_relpath, bytes, {}),
+      EXPECT_THROW(writer.WriteAssetDescriptor(key, AssetType::kMaterial,
+                     std::string_view(GetParam().path), valid_relpath, bytes,
+                     {}, FromSource("/.cooked/Materials/A.omat.json")),
         std::runtime_error);
       break;
     case PathTarget::kDescriptorRelPath:
       EXPECT_THROW(writer.WriteAssetDescriptor(key, AssetType::kMaterial,
-                     valid_virtual_path, GetParam().path, bytes, {}),
+                     valid_virtual_path, GetParam().path, bytes, {},
+                     FromSource("/.cooked/Materials/A.omat.json")),
         std::runtime_error);
       break;
     case PathTarget::kFileRelPath:
@@ -141,46 +142,6 @@ namespace {
     [](const ::testing::TestParamInfo<BadPathCase>& info) -> std::string {
       return std::string(info.param.case_name);
     });
-
-  NOLINT_TEST(LooseCookedWriterPathValidationTest,
-    WriteAssetDescriptorDuplicateVirtualPathAcrossRunsThrows)
-  {
-    const ScopedTempDir temp;
-    const auto cooked_root
-      = temp.Path() / "loose_cooked_writer_conflict_across_runs";
-
-    const auto key0 = MakeFirstByteAssetKey(0x50);
-    const auto key1 = MakeFirstByteAssetKey(0x51);
-
-    const auto bytes
-      = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
-          .bytes;
-
-    {
-      LooseCookedWriter writer(cooked_root);
-      writer.WriteAssetDescriptor(key0, AssetType::kMaterial,
-        "/.cooked/Materials/" + MaterialFile("A"),
-        "Materials/" + MaterialFile("A"), bytes, {});
-      (void)writer.Finish();
-    }
-
-    LooseCookedWriter writer(cooked_root);
-    try {
-      writer.WriteAssetDescriptor(key1, AssetType::kMaterial,
-        "/.cooked/Materials/" + MaterialFile("A"),
-        "Materials/" + MaterialFile("B"), bytes, {});
-      FAIL() << "Expected virtual path collision.";
-    } catch (const std::runtime_error& ex) {
-      const std::string message = ex.what();
-      EXPECT_THAT(
-        message, ::testing::HasSubstr("Conflicting virtual path mapping"));
-      EXPECT_THAT(message, ::testing::HasSubstr("WriteAssetDescriptor"));
-      EXPECT_THAT(message,
-        ::testing::HasSubstr("existing_descriptor='Materials/A.omat'"));
-      EXPECT_THAT(message,
-        ::testing::HasSubstr("incoming_descriptor='Materials/B.omat'"));
-    }
-  }
 
 } // namespace
 

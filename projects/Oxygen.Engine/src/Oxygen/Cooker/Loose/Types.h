@@ -27,6 +27,8 @@ struct AssetEntry {
   uint8_t asset_type = 0;
   std::optional<base::Sha256Digest> descriptor_sha256;
   data::AssetReferences references;
+  //! Virtual path of the source that produced the asset; empty in a pak.
+  std::string source_path;
 };
 
 struct FileEntry {
@@ -36,6 +38,9 @@ struct FileEntry {
   base::Sha256Digest sha256 {};
   //! Virtual path of a texture descriptor; empty for every other file.
   std::string virtual_path;
+  //! Virtual path of the source that produced a texture descriptor; empty for
+  //! every other file.
+  std::string source_path;
 };
 
 } // namespace oxygen::content::lc

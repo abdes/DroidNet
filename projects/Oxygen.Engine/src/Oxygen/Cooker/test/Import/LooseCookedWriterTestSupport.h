@@ -8,7 +8,10 @@
 
 #include <array>
 #include <cstdint>
+#include <string>
+#include <utility>
 
+#include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 
 namespace oxygen::content::testing {
@@ -20,6 +23,13 @@ namespace oxygen::content::testing {
   auto bytes = std::array<uint8_t, oxygen::data::AssetKey::kSizeBytes> {};
   bytes.at(0) = seed;
   return oxygen::data::AssetKey::FromBytes(bytes);
+}
+
+//! The producer of an entry a source cooks.
+[[nodiscard]] inline auto FromSource(std::string source)
+  -> oxygen::content::import::LooseCookedProducer
+{
+  return { .source = std::move(source), .completes = {} };
 }
 
 } // namespace oxygen::content::testing

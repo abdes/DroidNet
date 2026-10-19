@@ -15,6 +15,7 @@
 #include <memory>
 #include <mutex>
 #include <optional>
+#include <ranges>
 #include <stdexcept>
 #include <string>
 #include <string_view>
@@ -27,6 +28,7 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/ObserverPtr.h>
 #include <Oxygen/Base/ScopeGuard.h>
+#include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Import/IAsyncFileWriter.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
@@ -139,19 +141,6 @@ namespace {
       } else if (diagnostic.code == "import.dedup_collision.buffer") {
         ++summary.buffer_dedup_collisions;
       }
-    }
-
-    if (write_result.has_value()) {
-      summary.index_asset_collisions
-        = write_result->collision_summary.asset_collisions;
-      summary.index_file_collisions
-        = write_result->collision_summary.file_collisions;
-      summary.index_collisions_kept
-        = write_result->collision_summary.kept_existing;
-      summary.index_collisions_replaced
-        = write_result->collision_summary.replaced_existing;
-      summary.index_collisions_rejected
-        = write_result->collision_summary.rejected;
     }
 
     return summary;
@@ -611,6 +600,42 @@ auto ImportSession::HasErrors() const noexcept -> bool
   return has_errors_;
 }
 
+// A sidecar completes its target scene, so the scene's source produces what it
+// emits: the cooked root's own record of the scene, or else the scene in flight
+// or in a context root, last root first as the sidecar resolves it. Every other
+// job's source produces its outputs.
+auto ImportSession::Producer() const -> LooseCookedProducer
+{
+  auto target = std::string {};
+  if (request_.options.scripting.import_kind
+    == ScriptingImportKind::kScriptingSidecar) {
+    target = request_.options.scripting.target_scene_virtual_path;
+  } else if (request_.physics.has_value()) {
+    target = request_.physics->target_scene_virtual_path;
+  } else {
+    return { .source = request_.SourceVirtualPath(), .completes = {} };
+  }
+
+  for (const auto& scene : request_.inflight_scene_contexts) {
+    if (scene.virtual_path == target) {
+      return { .source = scene.source_path, .completes = target };
+    }
+  }
+  for (const auto& root : std::views::reverse(request_.cooked_context_roots)) {
+    const auto index_path = root / "container.index.bin";
+    if (!std::filesystem::exists(base::ToNativePath(index_path))) {
+      continue;
+    }
+    const auto index = lc::LooseCookedIndex::LoadFromFile(index_path);
+    if (const auto key = index.FindAssetKeyByVirtualPath(target)) {
+      if (const auto source = index.FindSourcePath(*key)) {
+        return { .source = std::string(*source), .completes = target };
+      }
+    }
+  }
+  return { .source = {}, .completes = target };
+}
+
 auto ImportSession::Finalize() -> co::Co<ImportReport>
 {
   const auto started = std::chrono::steady_clock::now();
@@ -801,13 +826,14 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         cooked_root_, physics_table_rel, request_.source_path.string());
     }
 
+    const auto producer = Producer();
     if (asset_emitter_.has_value()) {
       const auto& records = (*asset_emitter_)->Records();
       report.outputs.reserve(report.outputs.size() + records.size());
       for (const auto& rec : records) {
         index_registry_->RegisterExternalAssetDescriptor(cooked_root_, rec.key,
           rec.asset_type, rec.virtual_path, rec.descriptor_relpath,
-          rec.descriptor_size, rec.references, rec.descriptor_sha256);
+          rec.descriptor_size, rec.references, producer, rec.descriptor_sha256);
         report.outputs.push_back({
           .path = rec.descriptor_relpath,
           .size_bytes = rec.descriptor_size,
@@ -830,7 +856,7 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
             cooked_root_, FileKind::kAuxiliary, rec.relpath);
         } else {
           index_registry_->RegisterExternalTextureDescriptor(
-            cooked_root_, rec.relpath, rec.virtual_path);
+            cooked_root_, rec.relpath, rec.virtual_path, producer);
           report.products.push_back({
             .virtual_path = rec.virtual_path,
             .descriptor_relpath = rec.relpath,
@@ -943,18 +969,12 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     LOG_F(INFO,
       "Packaging summary: success={} outputs={} index_written={} "
       "diagnostics(info/warn/error)={}/{}/{} "
-      "dedup(texture/buffer)={}/{} index_collisions(assets/files/keep/replace/"
-      "reject)={}/{}/{}/{}/{}",
+      "dedup(texture/buffer)={}/{}",
       report.success, report.packaging.outputs_written,
       report.packaging.index_written, report.packaging.diagnostics_info,
       report.packaging.diagnostics_warning, report.packaging.diagnostics_error,
       report.packaging.texture_dedup_collisions,
-      report.packaging.buffer_dedup_collisions,
-      report.packaging.index_asset_collisions,
-      report.packaging.index_file_collisions,
-      report.packaging.index_collisions_kept,
-      report.packaging.index_collisions_replaced,
-      report.packaging.index_collisions_rejected);
+      report.packaging.buffer_dedup_collisions);
 
     DLOG_F(INFO,
       "Finalize complete: {} materials, {} geometry, {} scenes, {} scripts, "
@@ -962,6 +982,16 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       report.materials_written, report.geometry_written, report.scenes_written,
       report.scripts_written, report.scripting_components_written,
       report.script_slots_written, report.script_params_written);
+  } catch (const LooseCookedIdentityCollision& ex) {
+    report.success = false;
+    report.diagnostics.push_back({
+      .severity = ImportSeverity::kError,
+      .code = "import.identity_collision",
+      .message = ex.what(),
+      .source_path = request_.source_path.string(),
+      .object_path = {},
+    });
+    LOG_F(ERROR, "Refused index entry: {}", ex.what());
   } catch (const std::exception& ex) {
     report.success = false;
     report.diagnostics.push_back({

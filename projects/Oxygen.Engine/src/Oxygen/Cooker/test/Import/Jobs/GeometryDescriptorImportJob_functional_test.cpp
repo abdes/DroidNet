@@ -174,7 +174,9 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
   material_desc.header.version = data::pak::render::kMaterialAssetVersion;
   writer.WriteAssetDescriptor(library_key, data::AssetType::kMaterial,
     "/.cooked/Materials/new.omat", "Materials/new.omat",
-    data::MakeDescriptorBytes(material_desc), {});
+    data::MakeDescriptorBytes(material_desc), {},
+    content::import::LooseCookedProducer {
+      .source = "/.cooked/Materials/new.omat.json", .completes = {} });
   static_cast<void>(writer.Finish());
   WriteText(cooked_root / "Materials/new.omat", "new material");
   for (const auto own_wins : { true, false }) {

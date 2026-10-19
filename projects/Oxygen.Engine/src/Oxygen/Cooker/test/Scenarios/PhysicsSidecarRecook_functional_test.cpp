@@ -232,7 +232,7 @@ namespace {
     };
 
     auto request = ImportRequest {};
-    request.source_path = "inline://scene-descriptor";
+    request.source_path = "inline://scene.oscene.json";
     request.job_name = std::string(scene_name);
     request.asset_virtual_path = std::string(kSceneVirtualPath);
     request.cooked_root = cooked_root;
@@ -256,7 +256,7 @@ namespace {
     };
 
     auto request = ImportRequest {};
-    request.source_path = "inline://physics-material";
+    request.source_path = "inline://material.opmat.json";
     request.job_name = "ground.physics-material";
     request.asset_virtual_path = std::string(kMaterialVirtualPath);
     request.cooked_root = cooked_root;
@@ -298,7 +298,7 @@ namespace {
     };
 
     auto request = ImportRequest {};
-    request.source_path = "inline://collision-shape";
+    request.source_path = "inline://shape.ocshape.json";
     request.job_name = "chassis-compound";
     request.asset_virtual_path = std::string(kShapeVirtualPath);
     request.cooked_root = cooked_root;
@@ -681,7 +681,9 @@ namespace {
           },
         },
         {})
-        .value());
+        .value(),
+      content::import::LooseCookedProducer {
+        .source = std::string(virtual_path) + ".json", .completes = {} });
     (void)writer.Finish();
 
     const auto layout = LooseCookedLayout {};

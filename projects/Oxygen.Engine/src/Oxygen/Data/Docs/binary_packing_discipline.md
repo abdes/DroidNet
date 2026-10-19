@@ -195,10 +195,10 @@ deduplicated and sorted by target kind, key and expected type; conflicting types
 for the same target are invalid.
 
 The PAK directory remains 64 bytes by consuming 16 bytes of its existing
-reserve. The loose asset entry grows from 65 to 81 bytes. Reference blocks are
-index data, not new per-asset sidecar files. The existing index/file integrity
-boundary covers them; descriptor digests continue to cover descriptor bytes
-alone.
+reserve. The loose asset entry carries the reference-block locator. Reference
+blocks are index data, not new per-asset sidecar files. The existing index/file
+integrity boundary covers them; descriptor digests continue to cover descriptor
+bytes alone.
 
 ### Complete field inventory
 

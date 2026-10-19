@@ -194,6 +194,7 @@ NOLINT_TEST_F(
   entry.asset_key = key;
   entry.descriptor_relpath_offset = off_desc;
   entry.virtual_path_offset = off_vpath;
+  entry.source_path_offset = off_vpath;
   entry.asset_type = 0;
   entry.descriptor_size = 3;
 
@@ -473,6 +474,7 @@ NOLINT_TEST_F(
   entry.asset_key = key;
   entry.descriptor_relpath_offset = off_desc;
   entry.virtual_path_offset = off_vpath;
+  entry.source_path_offset = off_vpath;
   entry.asset_type = 0;
   entry.descriptor_size = 0;
 
@@ -536,6 +538,7 @@ NOLINT_TEST_F(
   entry.asset_key = key;
   entry.descriptor_relpath_offset = off_desc;
   entry.virtual_path_offset = off_vpath;
+  entry.source_path_offset = off_vpath;
   entry.asset_type = 0;
   entry.descriptor_size = 0;
 
@@ -602,6 +605,7 @@ NOLINT_TEST_F(
   entry.asset_key = key;
   entry.descriptor_relpath_offset = off_desc;
   entry.virtual_path_offset = off_vpath;
+  entry.source_path_offset = off_vpath;
   entry.asset_type = 0;
   entry.descriptor_size = 0;
   std::ranges::copy(
@@ -666,6 +670,7 @@ NOLINT_TEST_F(
   entry.asset_key = key;
   entry.descriptor_relpath_offset = off_desc;
   entry.virtual_path_offset = off_vpath;
+  entry.source_path_offset = off_vpath;
   entry.asset_type = 0;
   entry.descriptor_size = 0;
 
@@ -853,6 +858,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDuplicateAssetKeyThrows)
   a.asset_key = key;
   a.descriptor_relpath_offset = off_desc;
   a.virtual_path_offset = off_vpath_a;
+  a.source_path_offset = off_vpath_a;
   a.asset_type = 0;
   a.descriptor_size = 0;
 
@@ -860,6 +866,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootDuplicateAssetKeyThrows)
   b.asset_key = key;
   b.descriptor_relpath_offset = off_desc_b;
   b.virtual_path_offset = off_vpath_b;
+  b.source_path_offset = off_vpath_b;
   b.asset_type = 0;
   b.descriptor_size = 0;
 
@@ -935,6 +942,7 @@ NOLINT_TEST_F(
   a.asset_key = key_a;
   a.descriptor_relpath_offset = off_desc_a;
   a.virtual_path_offset = off_vpath_1;
+  a.source_path_offset = off_vpath_1;
   a.asset_type = 0;
   a.descriptor_size = 0;
 
@@ -942,6 +950,7 @@ NOLINT_TEST_F(
   b.asset_key = key_b;
   b.descriptor_relpath_offset = off_desc_b;
   b.virtual_path_offset = off_vpath_2;
+  b.source_path_offset = off_vpath_2;
   b.asset_type = 0;
   b.descriptor_size = 0;
 
@@ -1041,6 +1050,7 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootTableWithoutDataThrows)
   asset_entry.asset_key = key;
   asset_entry.descriptor_relpath_offset = off_desc;
   asset_entry.virtual_path_offset = off_vpath;
+  asset_entry.source_path_offset = off_vpath;
   asset_entry.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
   asset_entry.descriptor_size
     = oxygen::data::MakeDescriptorBytes(material_desc).size();
@@ -1519,6 +1529,7 @@ NOLINT_TEST_F(
   entry.asset_key = key;
   entry.descriptor_relpath_offset = off_desc;
   entry.virtual_path_offset = off_vpath;
+  entry.source_path_offset = off_vpath;
   entry.asset_type = static_cast<uint8_t>(AssetType::kMaterial);
   entry.descriptor_size
     = oxygen::data::MakeDescriptorBytes(material_desc).size();

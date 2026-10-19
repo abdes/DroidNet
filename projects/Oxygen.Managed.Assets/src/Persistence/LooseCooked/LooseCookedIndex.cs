@@ -13,10 +13,10 @@ namespace Oxygen.Managed.Assets.Persistence.LooseCooked;
 public static class LooseCookedIndex
 {
     public const int HeaderSize = 256;
-    public const int AssetEntrySize = 81;
-    public const int FileRecordSize = 50;
+    public const int AssetEntrySize = 85;
+    public const int FileRecordSize = 54;
     public const int Sha256Size = 32;
-    public const ushort Version = 5;
+    public const ushort Version = 6;
 
     private static readonly byte[] HeaderMagic = Encoding.ASCII.GetBytes("OXLCIDX\0");
 
@@ -161,12 +161,13 @@ public static class LooseCookedIndex
                 var assetType = entry[16];
                 var descriptorOffset = BinaryPrimitives.ReadUInt32LittleEndian(entry.Slice(17, 4));
                 var virtualOffset = BinaryPrimitives.ReadUInt32LittleEndian(entry.Slice(21, 4));
-                var descriptorSize = BinaryPrimitives.ReadUInt64LittleEndian(entry.Slice(25, 8));
-                var sha = entry.Slice(33, Sha256Size).ToArray();
+                var sourcePath = ReadString(stringTable, BinaryPrimitives.ReadUInt32LittleEndian(entry.Slice(25, 4)));
+                var descriptorSize = BinaryPrimitives.ReadUInt64LittleEndian(entry.Slice(29, 8));
+                var sha = entry.Slice(37, Sha256Size).ToArray();
                 var references = new AssetReferenceTable(
-                    BinaryPrimitives.ReadUInt64LittleEndian(entry.Slice(65, 8)),
-                    BinaryPrimitives.ReadUInt32LittleEndian(entry.Slice(73, 4)),
-                    BinaryPrimitives.ReadUInt32LittleEndian(entry.Slice(77, 4)));
+                    BinaryPrimitives.ReadUInt64LittleEndian(entry.Slice(69, 8)),
+                    BinaryPrimitives.ReadUInt32LittleEndian(entry.Slice(77, 4)),
+                    BinaryPrimitives.ReadUInt32LittleEndian(entry.Slice(81, 4)));
                 assets.Add(new AssetEntry(
                     key,
                     ReadString(stringTable, descriptorOffset),
@@ -174,7 +175,10 @@ public static class LooseCookedIndex
                     assetType,
                     descriptorSize,
                     sha)
-                { References = references });
+                {
+                    References = references,
+                    SourcePath = sourcePath.Length == 0 ? null : sourcePath,
+                });
             }
         }
         finally
@@ -206,12 +210,14 @@ public static class LooseCookedIndex
                 var size = BinaryPrimitives.ReadUInt64LittleEndian(record.Slice(2, 8));
                 var pathOffset = BinaryPrimitives.ReadUInt32LittleEndian(record.Slice(10, 4));
                 var virtualPath = ReadString(stringTable, BinaryPrimitives.ReadUInt32LittleEndian(record.Slice(14, 4)));
+                var sourcePath = ReadString(stringTable, BinaryPrimitives.ReadUInt32LittleEndian(record.Slice(18, 4)));
                 files.Add(new(
                     kind,
                     ReadString(stringTable, pathOffset),
                     size,
-                    record.Slice(18, Sha256Size).ToArray(),
-                    virtualPath.Length == 0 ? null : virtualPath));
+                    record.Slice(22, Sha256Size).ToArray(),
+                    virtualPath.Length == 0 ? null : virtualPath,
+                    sourcePath.Length == 0 ? null : sourcePath));
             }
         }
         finally
@@ -240,6 +246,11 @@ public static class LooseCookedIndex
             {
                 throw new InvalidDataException($"The cooked index contains a missing or duplicate virtual path: {asset.VirtualPath}.");
             }
+
+            if (string.IsNullOrEmpty(asset.SourcePath))
+            {
+                throw new InvalidDataException($"The cooked index records no producing source for {asset.VirtualPath}.");
+            }
         }
 
         foreach (var file in document.Files)
@@ -252,6 +263,7 @@ public static class LooseCookedIndex
             }
 
             if ((file.Kind == FileKind.TextureDescriptor) != (file.VirtualPath is not null)
+                || (file.VirtualPath is not null) != (file.SourcePath is not null)
                 || (file.VirtualPath is not null && !virtualPaths.Add(file.VirtualPath)))
             {
                 throw new InvalidDataException($"The cooked index contains a missing, unexpected or duplicate file virtual path: {file.RelativePath}.");

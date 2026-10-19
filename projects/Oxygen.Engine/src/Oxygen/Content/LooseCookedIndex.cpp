@@ -73,6 +73,12 @@ auto LooseCookedIndex::FindDescriptorSha256(
   return impl_->FindDescriptorSha256(key);
 }
 
+auto LooseCookedIndex::FindSourcePath(const data::AssetKey& key) const noexcept
+  -> std::optional<std::string_view>
+{
+  return impl_->FindSourcePath(key);
+}
+
 auto LooseCookedIndex::FindVirtualPath(const data::AssetKey& key) const noexcept
   -> std::optional<std::string_view>
 {

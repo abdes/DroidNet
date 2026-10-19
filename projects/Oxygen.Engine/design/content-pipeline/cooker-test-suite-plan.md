@@ -1271,7 +1271,7 @@ behaviour:
 | New file                                                      | Tests (current lines)                                                                                                                  |
 | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
 | `LooseCookedWriter_identity_functional_test.cpp`              | source key and content version preservation (:353-446)                                                                                 |
-| `LooseCookedWriter_update_functional_test.cpp`                | same-key/kind updates and collision policies (:130-283, :447-705)                                                                      |
+| `LooseCookedWriter_update_functional_test.cpp`                | producing source per entry: same-source replacement, other-source and case-only refusal, sidecar producer, one path per file kind      |
 | `LooseCookedWriter_path_validation_functional_test.cpp`       | `BadVirtualPathTest` + the absolute, backslash, `..` and colon tests (:745-963). Fold the four tests into the existing `TEST_P` table. |
 | `LooseCookedWriter_file_pairs_functional_test.cpp`            | buffers, textures and physics pairs (:285-352) as one `TEST_P` over the kind                                                           |
 | `LooseCookedWriter_external_registration_functional_test.cpp` | :965-1021. These tests currently sit **outside** the anonymous namespace; put them inside it.                                          |

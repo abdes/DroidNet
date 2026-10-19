@@ -157,6 +157,9 @@ public:
         = AppendString(strings, pending_asset.descriptor_relpath);
       entry.virtual_path_offset
         = AppendString(strings, pending_asset.virtual_path);
+      // Every entry has a producing source; a descriptor's sits beside it.
+      entry.source_path_offset
+        = AppendString(strings, pending_asset.virtual_path + ".json");
       entry.asset_type = pending_asset.asset_type;
       entry.descriptor_size = pending_asset.descriptor_size;
       std::copy_n(pending_asset.descriptor_sha256.begin(),
@@ -173,6 +176,10 @@ public:
       record.relpath_offset = AppendString(strings, pending_file.relpath);
       record.virtual_path_offset
         = AppendString(strings, pending_file.virtual_path);
+      record.source_path_offset = AppendString(strings,
+        pending_file.virtual_path.empty()
+          ? std::string {}
+          : pending_file.virtual_path + ".json");
       record.size = pending_file.size;
       record.sha256 = pending_file.sha256;
       file_records.push_back(record);

@@ -136,7 +136,7 @@ namespace {
           + document.at("name").get<std::string>() + ".oscene";
       }
       auto request = ImportRequest {};
-      request.source_path = "inline://scene-descriptor";
+      request.source_path = "inline://scene.oscene.json";
       request.asset_virtual_path = std::move(asset_virtual_path);
       request.cooked_root = cooked_root;
       request.loose_cooked_layout.virtual_mount_root = "/.cooked";
@@ -621,7 +621,9 @@ namespace {
     writer.WriteAssetDescriptor(key, type, "/Art/Geometry/Mesh.ogeo",
       type == data::AssetType::kGeometry ? "Geometry/Mesh.ogeo"
                                          : "Materials/Wrong.omat",
-      fixture.bytes, fixture.references);
+      fixture.bytes, fixture.references,
+      content::import::LooseCookedProducer {
+        .source = "/Art/Geometry/Mesh.ogeo.json", .completes = {} });
     static_cast<void>(writer.Finish());
   }
 
@@ -1289,12 +1291,15 @@ namespace {
       auto writer = LooseCookedWriter(loose);
       writer.WriteAssetDescriptor(data::AssetKey::FromVirtualPath(kEngineCube),
         data::AssetType::kGeometry, kEngineCube,
-        "Generated/BasicShapes/Cube.ogeo", geometry.bytes, geometry.references);
+        "Generated/BasicShapes/Cube.ogeo", geometry.bytes, geometry.references,
+        content::import::LooseCookedProducer {
+          .source = std::string(kEngineCube) + ".json", .completes = {} });
       writer.WriteAssetDescriptor(
         data::AssetKey::FromVirtualPath(kEngineDefault),
         data::AssetType::kMaterial, kEngineDefault,
-        "Generated/Materials/Default.omat", material.bytes,
-        material.references);
+        "Generated/Materials/Default.omat", material.bytes, material.references,
+        content::import::LooseCookedProducer {
+          .source = std::string(kEngineDefault) + ".json", .completes = {} });
       static_cast<void>(writer.Finish());
     }
     const auto pak_path = work / "engine.pak";

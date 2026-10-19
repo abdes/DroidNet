@@ -489,14 +489,18 @@ auto LooseCookedIndexImpl::ReadAssetEntries(IndexLoadContext& context) -> void
 
     ValidateStringOffset(context.header, entry.descriptor_relpath_offset);
     ValidateStringOffset(context.header, entry.virtual_path_offset);
+    ValidateStringOffset(context.header, entry.source_path_offset);
 
     const auto descriptor_rel = ExtractNullTerminatedString(
       context.stored_table, entry.descriptor_relpath_offset);
     const auto virtual_path = ExtractNullTerminatedString(
       context.stored_table, entry.virtual_path_offset);
+    const auto source_path = ExtractNullTerminatedString(
+      context.stored_table, entry.source_path_offset);
 
     ValidateRelativePath(descriptor_rel);
     RequireCanonicalVirtualPath(virtual_path);
+    RequireCanonicalVirtualPath(source_path);
     if (!context.unique_file_paths.insert(descriptor_rel).second) {
       throw std::runtime_error("Duplicate content path in loose cooked index");
     }
@@ -523,6 +527,7 @@ auto LooseCookedIndexImpl::ReadAssetEntries(IndexLoadContext& context) -> void
     AssetInfo info {
       .descriptor_relpath_offset = entry.descriptor_relpath_offset,
       .virtual_path_offset = entry.virtual_path_offset,
+      .source_path_offset = entry.source_path_offset,
       .descriptor_size = entry.descriptor_size,
       .asset_type = entry.asset_type,
       .descriptor_sha256 = {},
@@ -610,22 +615,27 @@ auto LooseCookedIndexImpl::ReadFileRecords(IndexLoadContext& context) -> void
     }
 
     ValidateStringOffset(context.header, record.virtual_path_offset);
+    ValidateStringOffset(context.header, record.source_path_offset);
     const auto virtual_path = ExtractNullTerminatedString(
       context.stored_table, record.virtual_path_offset);
+    const auto source_path = ExtractNullTerminatedString(
+      context.stored_table, record.source_path_offset);
     if (record.kind == FileKind::kTextureDescriptor) {
       RequireCanonicalVirtualPath(virtual_path);
+      RequireCanonicalVirtualPath(source_path);
       if (!context.unique_virtual_paths.insert(virtual_path).second) {
         throw std::runtime_error(
           "Duplicate virtual path in loose cooked index file records");
       }
-    } else if (!virtual_path.empty()) {
-      throw std::runtime_error(
-        "Only texture descriptor records may have a virtual path");
+    } else if (!virtual_path.empty() || !source_path.empty()) {
+      throw std::runtime_error("Only texture descriptor records may have a "
+                               "virtual path and a source");
     }
 
     FileInfo info {
       .relpath_offset = record.relpath_offset,
       .virtual_path_offset = record.virtual_path_offset,
+      .source_path_offset = record.source_path_offset,
       .size = record.size,
       .sha256 = record.sha256,
     };
@@ -725,6 +735,23 @@ auto LooseCookedIndexImpl::FindDescriptorSha256(
 
   return std::span<const uint8_t, data::loose_cooked::kSha256Size>(
     it->second.descriptor_sha256);
+}
+
+auto LooseCookedIndexImpl::FindSourcePath(
+  const data::AssetKey& key) const noexcept -> std::optional<std::string_view>
+{
+  const auto it = key_to_asset_info_.find(key);
+  if (it == key_to_asset_info_.end()) {
+    return std::nullopt;
+  }
+
+  try {
+    const auto table
+      = std::string_view(string_storage_.data(), string_storage_.size());
+    return ExtractNullTerminatedString(table, it->second.source_path_offset);
+  } catch (...) {
+    return std::nullopt;
+  }
 }
 
 auto LooseCookedIndexImpl::FindVirtualPath(

@@ -88,7 +88,8 @@ namespace {
       LooseCookedWriter writer(old_root);
       writer.SetSourceKey(old_key);
       writer.WriteAssetDescriptor(asset_key, AssetType::kMaterial,
-        "/Content/Materials/kept.omat", "Materials/kept.omat", bytes, {});
+        "/Content/Materials/kept.omat", "Materials/kept.omat", bytes, {},
+        FromSource("/Content/Materials/kept.omat.json"));
       static_cast<void>(writer.Finish());
     }
     std::filesystem::copy(

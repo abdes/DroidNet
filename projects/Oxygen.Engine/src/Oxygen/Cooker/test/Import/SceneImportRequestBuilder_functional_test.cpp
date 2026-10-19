@@ -76,6 +76,23 @@ NOLINT_TEST_F(
     errors.str(), testing::HasSubstr("requires retained material-slot"));
 }
 
+//! A job's source sits in the folder of what it cooks: the index records it as
+//! the producer of the job's entries.
+NOLINT_TEST_F(SceneImportRequestBuilderTest, TheSourceSitsBesideWhatItCooks)
+{
+  auto request = oxygen::content::import::ImportRequest {};
+  request.source_path = Path("anywhere") / "Red.omat.json";
+  request.asset_virtual_path = "/Content/Materials/Red.omat";
+  EXPECT_EQ(request.SourceVirtualPath(), "/Content/Materials/Red.omat.json");
+
+  request.source_path = Path("anywhere") / "Player.input.json";
+  request.asset_virtual_path = "/Content/Player.input";
+  EXPECT_EQ(request.SourceVirtualPath(), "/Content/Player.input.json");
+
+  request.asset_virtual_path.clear();
+  EXPECT_TRUE(request.SourceVirtualPath().empty());
+}
+
 //! A model request carries the model's identity, which names its scene.
 NOLINT_TEST_F(SceneImportRequestBuilderTest, CarriesTheModelIdentity)
 {
@@ -85,6 +102,8 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, CarriesTheModelIdentity)
   ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_EQ(request->asset_virtual_path, "/.cooked/model.gltf");
   EXPECT_EQ(request->GetSceneName(), "model");
+  EXPECT_EQ(request->SourceVirtualPath(), "/.cooked/model.gltf")
+    << "a model is its own source";
   EXPECT_EQ(request->ModelProductVirtualPath(
               request->GetSceneName(), oxygen::data::kSceneDescriptorExtension),
     "/.cooked/model.gltf/model.oscene");

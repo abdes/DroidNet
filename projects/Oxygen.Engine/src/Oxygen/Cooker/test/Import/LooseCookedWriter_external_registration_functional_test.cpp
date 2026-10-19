@@ -28,10 +28,8 @@ namespace oxygen::content::testing {
 namespace {
 
   using oxygen::content::import::LooseCookedWriter;
-  using oxygen::cooker::test::ScopedTempDir;
-  using CollisionPolicy
-    = oxygen::content::import::LooseCookedWriter::CollisionPolicy;
   using oxygen::content::lc::Inspection;
+  using oxygen::cooker::test::ScopedTempDir;
   using oxygen::data::AssetType;
   using oxygen::data::loose_cooked::FileKind;
 
@@ -49,7 +47,6 @@ namespace {
     }
     auto stale_writer = LooseCookedWriter(root);
     auto refreshed_writer = LooseCookedWriter(root);
-    refreshed_writer.SetCollisionPolicy(CollisionPolicy::kError);
     {
       auto stream = serio::FileStream<>(
         root / "buffers.data", std::ios::out | std::ios::trunc);
@@ -59,8 +56,8 @@ namespace {
     }
     refreshed_writer.RegisterExternalFile(
       FileKind::kBuffersData, "buffers.data");
-    EXPECT_EQ(refreshed_writer.Finish().collision_summary.file_collisions, 0U);
-    EXPECT_EQ(stale_writer.Finish().collision_summary.file_collisions, 0U);
+    static_cast<void>(refreshed_writer.Finish());
+    static_cast<void>(stale_writer.Finish());
     Inspection inspection;
     inspection.LoadFromRoot(root);
     const auto files = inspection.Files();
@@ -84,9 +81,10 @@ namespace {
       ASSERT_TRUE(stream.Flush());
     }
     import::LooseCookedWriter writer(root);
-    EXPECT_THROW(writer.RegisterExternalAssetDescriptor(
-                   MakeFirstByteAssetKey(1U), data::AssetType::kMaterial,
-                   "/test/invalid.omat", "invalid.omat", 1U, {}),
+    EXPECT_THROW(
+      writer.RegisterExternalAssetDescriptor(MakeFirstByteAssetKey(1U),
+        data::AssetType::kMaterial, "/test/invalid.omat", "invalid.omat", 1U,
+        {}, FromSource("/test/invalid.omat.json")),
       std::runtime_error);
     EXPECT_FALSE(std::filesystem::exists(root / "container.index.bin"));
     EXPECT_TRUE(writer.Finish().assets.empty());

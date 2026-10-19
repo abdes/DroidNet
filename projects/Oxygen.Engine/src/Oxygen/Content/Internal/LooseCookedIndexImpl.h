@@ -34,6 +34,7 @@ public:
   struct AssetInfo {
     uint32_t descriptor_relpath_offset = 0;
     uint32_t virtual_path_offset = 0;
+    uint32_t source_path_offset = 0;
     uint64_t descriptor_size = 0;
     uint8_t asset_type = 0;
     std::array<uint8_t, data::loose_cooked::kSha256Size> descriptor_sha256 = {};
@@ -90,6 +91,9 @@ public:
 
   OXGN_CNTT_NDAPI auto FindAssetType(const data::AssetKey& key) const noexcept
     -> std::optional<uint8_t>;
+  //! Virtual path of the source that produced the asset.
+  OXGN_CNTT_NDAPI auto FindSourcePath(const data::AssetKey& key) const noexcept
+    -> std::optional<std::string_view>;
   OXGN_CNTT_NDAPI auto HasKeyReferences(
     const data::AssetKey& key) const noexcept -> bool;
   OXGN_CNTT_NDAPI auto FindAssetReferences(const data::AssetKey& key) const
@@ -141,6 +145,7 @@ private:
   struct FileInfo {
     uint32_t relpath_offset = 0;
     uint32_t virtual_path_offset = 0;
+    uint32_t source_path_offset = 0;
     uint64_t size = 0;
     base::Sha256Digest sha256 {};
   };

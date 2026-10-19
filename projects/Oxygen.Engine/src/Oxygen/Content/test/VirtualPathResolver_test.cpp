@@ -86,6 +86,7 @@ auto WriteSingleAssetIndex(const std::filesystem::path& cooked_root,
   entry.asset_key = key;
   entry.descriptor_relpath_offset = off_desc;
   entry.virtual_path_offset = off_vpath;
+  entry.source_path_offset = off_vpath;
   entry.asset_type = 0;
   entry.descriptor_size = 0;
   std::ranges::copy(oxygen::base::ComputeSha256({}), entry.descriptor_sha256);

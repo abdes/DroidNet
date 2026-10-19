@@ -265,6 +265,8 @@ public:
   OXGN_COOK_NDAPI auto DrainAndRetire() -> co::Co<>;
 
 private:
+  [[nodiscard]] auto Producer() const -> LooseCookedProducer;
+
   ImportRequest request_;
   observer_ptr<IAsyncFileReader> file_reader_;
   observer_ptr<IAsyncFileReader> cooked_reader_;

@@ -61,9 +61,11 @@ namespace {
       = fixtures::MaterialDescriptor("bytes", fixtures::MaterialVariant::kPlain)
           .bytes;
     writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x11),
-      AssetType::kMaterial, VirtualPath("A"), DescriptorPath("A"), bytes, {});
+      AssetType::kMaterial, VirtualPath("A"), DescriptorPath("A"), bytes, {},
+      FromSource(VirtualPath("A") + ".json"));
     writer.WriteAssetDescriptor(MakeFirstByteAssetKey(0x22),
-      AssetType::kMaterial, VirtualPath("B"), DescriptorPath("B"), bytes, {});
+      AssetType::kMaterial, VirtualPath("B"), DescriptorPath("B"), bytes, {},
+      FromSource(VirtualPath("B") + ".json"));
     static_cast<void>(writer.Finish());
   }
 
@@ -152,7 +154,7 @@ namespace {
       AssetType::kMaterial, VirtualPath("A"), DescriptorPath("A"),
       fixtures::MaterialDescriptor("again", fixtures::MaterialVariant::kPlain)
         .bytes,
-      {});
+      {}, FromSource(VirtualPath("A") + ".json"));
     writer.RemoveAssetDescriptor(VirtualPath("A"));
 
     EXPECT_THROW(static_cast<void>(writer.Finish()), std::runtime_error);

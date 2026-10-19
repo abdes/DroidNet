@@ -52,6 +52,18 @@ auto ImportRequest::ModelProductVirtualPath(const std::string_view name,
   return path;
 }
 
+auto ImportRequest::SourceVirtualPath() const -> std::string
+{
+  const auto slash = asset_virtual_path.rfind('/');
+  if (slash == std::string::npos || slash == 0) {
+    return {};
+  }
+  const auto name = source_path.filename().u8string();
+  auto path = asset_virtual_path.substr(0, slash + 1);
+  path.append(name.begin(), name.end());
+  return path;
+}
+
 auto ImportRequest::GetTextureDescriptorRelPath() const -> std::string
 {
   auto relative = std::string {};

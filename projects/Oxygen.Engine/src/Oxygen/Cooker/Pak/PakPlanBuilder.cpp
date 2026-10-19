@@ -1183,6 +1183,7 @@ auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
         .asset_type = static_cast<uint8_t>(entry.asset_type),
         .descriptor_sha256 = *digest,
         .references = pak_file->ReadAssetReferences(entry.asset_key),
+        .source_path = {},
       });
       descriptor_offsets.emplace(entry.asset_key, entry.desc_offset);
     }

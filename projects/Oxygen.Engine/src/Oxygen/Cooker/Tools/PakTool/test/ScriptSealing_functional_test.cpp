@@ -135,7 +135,9 @@ protected:
     const auto virtual_path = std::string("/.cooked/rooted.oscript");
     writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
       AssetType::kScript, virtual_path, "rooted.oscript",
-      oxygen::data::MakeDescriptorBytes(descriptor, strings), {});
+      oxygen::data::MakeDescriptorBytes(descriptor, strings), {},
+      oxygen::content::import::LooseCookedProducer {
+        .source = "/Content/rooted.lua", .completes = {} });
     static_cast<void>(writer.Finish());
     PakBuildRequest request {};
     request.mode = BuildMode::kFull;
@@ -188,7 +190,9 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   writer.SetContentVersion(7);
   writer.WriteAssetDescriptor(script_key, AssetType::kScript,
     script_virtual_path, script_relpath,
-    oxygen::data::MakeDescriptorBytes(descriptor, strings), {});
+    oxygen::data::MakeDescriptorBytes(descriptor, strings), {},
+    oxygen::content::import::LooseCookedProducer {
+      .source = "/Content/script.lua", .completes = {} });
   static_cast<void>(writer.Finish());
 
   auto request = PakBuildRequest {};

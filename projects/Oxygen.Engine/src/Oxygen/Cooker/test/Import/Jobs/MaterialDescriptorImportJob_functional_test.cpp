@@ -87,7 +87,7 @@ namespace {
       std::string_view job_name = "woodfloor007") -> ImportRequest
     {
       auto request = ImportRequest {};
-      request.source_path = "inline://material-descriptor";
+      request.source_path = "inline://woodfloor007.omat.json";
       request.job_name = std::string(job_name);
       request.asset_virtual_path = std::string(asset_virtual_path);
       request.cooked_root = cooked_root;
@@ -116,6 +116,40 @@ namespace {
     EXPECT_EQ(report->materials_written, 0U);
     EXPECT_TRUE(HasDiagnosticCode(
       report->diagnostics, "import.asset_virtual_path_missing"));
+  }
+
+  //! A source cooking its material again replaces it; another source cooking
+  //! the same identity is refused, and the index keeps the first one's.
+  NOLINT_TEST_F(
+    MaterialDescriptorImportJobTest, AnotherSourceOfTheIdentityIsRefused)
+  {
+    const auto cooked_root = TempDir() / "identity_collision";
+    std::filesystem::create_directories(cooked_root);
+    const auto from = [&](std::string_view file) -> ImportRequest {
+      auto request = MakeRequest(cooked_root, R"({ "name": "woodfloor007" })");
+      request.source_path = TempDir() / file;
+      return request;
+    };
+
+    const auto first = Import(from("woodfloor007.omat.json"));
+    const auto again = Import(from("woodfloor007.omat.json"));
+    const auto other = Import(from("Woodfloor007.omat.json"));
+
+    ASSERT_HAS_VALUE(first);
+    ASSERT_HAS_VALUE(again);
+    ASSERT_HAS_VALUE(other);
+    EXPECT_TRUE(first->success);
+    EXPECT_TRUE(again->success) << "a source re-cooking its asset replaces it";
+    EXPECT_FALSE(other->success);
+    EXPECT_TRUE(
+      HasDiagnosticCode(other->diagnostics, "import.identity_collision"));
+    const auto index = lc::LooseCookedIndex::LoadFromRoot(cooked_root);
+    const auto key
+      = index.FindAssetKeyByVirtualPath("/.cooked/Materials/woodfloor007.omat");
+    ASSERT_HAS_VALUE(key);
+    EXPECT_EQ(index.FindSourcePath(*key),
+      std::optional<std::string_view>(
+        "/.cooked/Materials/woodfloor007.omat.json"));
   }
 
   NOLINT_TEST_F(MaterialDescriptorImportJobTest,

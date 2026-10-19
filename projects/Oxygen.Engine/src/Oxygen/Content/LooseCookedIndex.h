@@ -38,6 +38,9 @@ struct FileIntegrity final {
   std::optional<data::loose_cooked::FileKind> kind {};
   //! Virtual path of a texture descriptor; empty for every other file.
   std::string virtual_path;
+  //! Virtual path of the source that produced a texture descriptor; empty for
+  //! every other file.
+  std::string source_path;
 };
 
 enum class IntegrityFailure : uint8_t {
@@ -87,6 +90,9 @@ public:
     -> std::optional<std::string_view>;
   OXGN_CNTT_NDAPI auto FindAssetType(const data::AssetKey& key) const noexcept
     -> std::optional<uint8_t>;
+  //! Virtual path of the source that produced the asset.
+  OXGN_CNTT_NDAPI auto FindSourcePath(const data::AssetKey& key) const noexcept
+    -> std::optional<std::string_view>;
   //! Decode one asset's inventory without loading descriptor/resource payloads.
   OXGN_CNTT_NDAPI auto FindAssetReferences(const data::AssetKey& key) const
     -> std::optional<data::AssetReferences>;
