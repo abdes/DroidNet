@@ -2,6 +2,8 @@
 
 Status: `final V0.1 settings contract`
 
+Last Updated: 2026-10-20 01:32
+
 ## 1. Purpose
 
 Define where V0.1 scene, workspace, preview and startup settings live, how they
@@ -103,6 +105,36 @@ local entries during an open document's undo lifetime; prune unresolved IDs when
 loading a saved scene into a fresh document lifetime. Reject a stored project-ID
 mismatch even if its path-based settings scope is reused by a different project.
 
+A node is editor-hidden when it, or any actual scene ancestor, is in the scene's
+hidden set; logical Explorer folders never contribute. One mask applies to every
+editing viewport of the active scene and takes effect no later than the next
+presented frame, ordered after the world commands that precede it. Capture,
+thumbnail and standalone validation views are never masked. Viewport picking
+skips editor-hidden nodes; Scene Explorer selection of them works, and a
+selected hidden node shows its transform gizmo at its world transform.
+
+The engine applies the mask during scene preparation. The editor sends a
+revisioned full snapshot of the explicitly hidden root IDs for the active scene
+activation (`RuntimeSetEditingViewHiddenNodes`, exposed with
+`IRuntimeWorldCommands.SupportsEditingViewMask`); Interop's `EditorModule`
+queues it in order with the world commands, resolves authored IDs to
+`NodeHandle`s through the node registry, retains unresolved IDs, and gives the
+editing views of that scene one immutable hidden-root snapshot with its revision
+through `ScenePrepContext`. `ScenePrepPipeline::PrepareView` resolves the
+descendant closure once per frame when the set is non-empty and skips matching
+nodes: they emit no render items, no depth and no shadow-caster sources for that
+view. A node created or reparented under a hidden root is hidden on the next
+frame without a new snapshot. While the runtime reports no mask support, the eye
+keeps its state and persistence and logs a warning that viewport suppression is
+pending.
+
+This matches editor viewport hiding in other engines (Unreal's `bHiddenEd` and
+Hide Selected remove the actor and its shadows from the editor viewport without
+touching runtime visibility or dirtying the level). A scene-graph tag or
+component would leak transient editor state into captures and the game; late
+filtering in mesh processors would plumb exclusion lists through every pass; a
+full snapshot avoids delta drift across panes.
+
 Controlled qualification views omit workspace masks and restore the current
 valid editing mask on return. Their opt-in adapters do not save a temporary
 profile, camera ratio or Hide state. Qualification EvidenceRoot is an explicit
@@ -157,7 +189,7 @@ history or cooked output.
 `PlaySessionSettingsService` owns the typed `WorldEditor/PlaySession` setting
 with `SettingScope.Application`: player window width and height, VSync, and
 frame cap (off or frames per second). The Play split button's dropdown edits it
-([script authoring](script-authoring.md#play-button)); each edit is saved at
+([script authoring](script-authoring.md#play-control)); each edit is saved at
 once and restored when the editor starts. Values are written into the next
 player launch file only. A stored value outside its range restores its default.
 Nothing is written to scene documents, history or cooked output.

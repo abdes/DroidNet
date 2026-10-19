@@ -4,17 +4,20 @@ Status: `design approved (ED-M09.1, 2026-10-11)`; identity rewritten to the
 input source contract (2026-10-19); delivered by
 [ED-M09](../plan/ED-M09-input-authoring.md).
 
+Last Updated: 2026-10-20 01:32
+
 Summary: users author input actions and input mapping contexts in input sources,
 the engine's `*.input.json` files, from the Content Browser and two focused
 editors. An input source is a container, like a folder: each action and context
 it declares is an asset named under the source
 (`/Content/Input/Player.input/Jump.oiact`), and the Content Browser shows the
-source with its assets inside it. A context lists its mappings in evaluation
-order, grouped by action; each mapping binds one keyboard or mouse input,
-captured by pressing it or picked from a list, and carries an ordered list of
-triggers edited as typed cards. A mapping names an action of its own source by
-name and an action of another source by its path. Renaming an action or a
-context, and renaming or moving a source, retarget every source, scene and
+source; showing its assets inside it is
+[#80](https://github.com/abdes/DroidNet/issues/80). A context lists its mappings
+in evaluation order, grouped by action; each mapping binds one keyboard or mouse
+input, captured by pressing it or picked from a list, and carries an ordered
+list of triggers edited as typed cards. A mapping names an action of its own
+source by name and an action of another source by its path. Renaming an action
+or a context, and renaming or moving a source, retarget every source, scene and
 script that refers to them. Hand-written sources open in the same editors. Save
 cooks; Play runs the result. The engine owns the input model, the format and the
 cooker ([input cooking architecture][input-cooking]); the identity of input
@@ -52,7 +55,9 @@ GOAL-001/006.
 ## 3. Architecture Links
 
 The editor owns authoring, the engine owns execution and the cooked format
-([RULES](../../oxygen/RULES.md#ownership)). Related LLDs:
+([RULES](../../oxygen/RULES.md#ownership)). Module ownership of the input family
+is in [asset family modules](asset-family-modules.md); identities, references
+and collisions in [asset identity](asset-identity.md). Related LLDs:
 [documents and commands](documents-and-commands.md),
 [property pipeline](property-pipeline.md),
 [content browser identity](content-browser-asset-identity.md) (rows, pickers,
@@ -152,16 +157,17 @@ is previewed live in editor viewports: input runs in Play.
 
 ## 6. Ownership
 
-| Owner                                   | Responsibility                                                                                                                                                                                                                                                         |
-| --------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor.InputEditor` (new, IQ-8) | Input documents, commands, history, save, conflicts, relocation participant, action and context editors, key selector and capture session.                                                                                                                             |
-| `Oxygen.Managed.Assets`                 | Immutable `InputSource` model, schema-validated reader with positions, and canonical writer, including product renames with their local references.                                                                                                                    |
-| `Oxygen.Editor.Schemas`                 | Engine input schemas plus `oxygen.input.editor.schema.json` overlay: labels, units, steps, defaults for new items, conditional visibility.                                                                                                                             |
-| `Oxygen.Editor.ContentBrowser`          | The source as a container row with its actions and contexts inside, creation commands, details and referrers, pickers.                                                                                                                                                 |
-| `Oxygen.Editor.ContentPipeline`         | Input jobs named by their source, `depends_on` and context roots from path references, a product's declaration from its identity, product renames and moves in relocation, retirement of outputs a source no longer declares, cooker diagnostics mapped to properties. |
-| `Oxygen.Editor.Runtime`                 | One key translation table (`VirtualKey` and pointer input to engine key identity), shared by the viewport bridge and key capture.                                                                                                                                      |
-| WorldEditor / scripting (ED-M08.10)     | Script parameter and Play-section pickers and their persistence; unchanged by this LLD except the touch points in IQ-10.                                                                                                                                               |
-| Engine (Input, Content, Cooker, Data)   | Value types, slots, triggers, schemas, cooking, hydration and runtime behavior.                                                                                                                                                                                        |
+| Owner                                   | Responsibility                                                                                                                                                                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `Oxygen.Editor.InputEditor` (new, IQ-8) | Input documents, commands, history, save, conflicts, relocation participant, action and context editors, key selector and capture session.                                                                                           |
+| `Oxygen.Editor.Input`                   | The input family module: `InputContainer` with its `InputAction` and `InputMappingContext`, input rules and starting context priorities, input facts (`IInputSources`), templates ([asset family modules](asset-family-modules.md)). |
+| `Oxygen.Managed.Assets`                 | Immutable `InputSource` model, schema-validated reader with positions, and canonical writer, including product renames with their local references.                                                                                  |
+| `Oxygen.Editor.Schemas`                 | Engine input schemas plus `oxygen.input.editor.schema.json` overlay: labels, units, steps, defaults for new items, conditional visibility.                                                                                           |
+| `Oxygen.Editor.ContentBrowser`          | The source as one row (its actions and contexts inside it: [#80](https://github.com/abdes/DroidNet/issues/80)), creation commands, details and referrers, pickers.                                                                   |
+| `Oxygen.Editor.ContentPipeline`         | Input jobs named by their source, `depends_on` and context roots from path references, product renames and moves in relocation, retirement of outputs a source no longer declares, cooker diagnostics mapped to properties.          |
+| `Oxygen.Editor.Runtime`                 | One key translation table (`VirtualKey` and pointer input to engine key identity), shared by the viewport bridge and key capture.                                                                                                    |
+| WorldEditor / scripting (ED-M08.10)     | Script parameter and Play-section pickers and their persistence; unchanged by this LLD except the touch points in IQ-10.                                                                                                             |
+| Engine (Input, Content, Cooker, Data)   | Value types, slots, triggers, schemas, cooking, hydration and runtime behavior.                                                                                                                                                      |
 
 The editor does not write cooked input, simulate triggers or define input
 semantics. Fields exist only where the engine reads them.
@@ -745,4 +751,4 @@ request; the user interface items await the owner at ED-M09.1.
 [findings]: ../plan/ED-M09-input-authoring.md#findings-from-the-analysis
 [input-cooking]: ../../../projects/Oxygen.Engine/design/content-pipeline/input-cooking-architecture.md
 [player-start]: ../../../projects/Oxygen.Engine/design/runtime-core/scene-instantiation-and-player.md#scene-start-state
-[aid]: ../review/asset-identity.md#1-contract
+[aid]: asset-identity.md#5-target-design

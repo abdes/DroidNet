@@ -1,10 +1,15 @@
 # ED-M08.F1 — Descriptor-local reference format
 
-Status: **validated — closed on 2026-10-06; format cutover, editor reference authoring, PAK delivery and origin/cache evidence complete within the approved closure scope**
+Status: **validated — closed on 2026-10-06; format cutover, editor reference
+authoring, PAK delivery and origin/cache evidence complete within the approved
+closure scope**
 
-**Summary:** replace descriptor-specific packaging rewrites with native reference
-tables. Follow [scope](#scope), [delivery](#delivery) and [acceptance](#acceptance).
-Execute after [M08.1.9](ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
+Last Updated: 2026-10-20 01:32
+
+**Summary:** replace descriptor-specific packaging rewrites with native
+reference tables. Follow [scope](#scope), [delivery](#delivery) and
+[acceptance](#acceptance). Execute after
+[M08.1.9](ED-M08-runtime-parity-and-standalone-validation.md#m081-remaining-increments)
 and before M08.2. Existing M08.2–M08.8 identifiers remain unchanged.
 
 | Outcome                                                                                                                                                                       | Remaining                                  | Evidence                                                                                                                                                                                                                                                                                                                                         |
@@ -15,8 +20,8 @@ and before M08.2. Existing M08.2–M08.8 identifiers remain unchanged.
 
 By user decision on 2026-10-06, final managed/UI qualification and load-cost
 measurement do not block F1 closure. Existing failures and unrun checks remain
-recorded; removing a gate does not turn them into passes.
-The remaining cook/package and origin/cache gates now pass, as recorded in
+recorded; removing a gate does not turn them into passes. The remaining
+cook/package and origin/cache gates now pass, as recorded in
 [closure verification](#closure-verification). There is no remaining F1 blocker.
 This document and the implementation ledger are the final closure record.
 
@@ -24,92 +29,92 @@ This document and the implementation ledger are the final closure record.
    and focused-tested.** Scene files now have backward-compatible serialized
    reference collections, and descriptor generation emits the native v10
    `materials`, `scripts`, `input_actions`, `input_mapping_contexts`,
-   `physics_sidecars` and `extra_assets` arrays. Typed references are authored as
-   already-cooked project/library outputs; F1 does not infer or schedule source
-   recipes. Physics-scene/sidecar pairing remains native package-planner
+   `physics_sidecars` and `extra_assets` arrays. Typed references are authored
+   as already-cooked project/library outputs; F1 does not infer or schedule
+   source recipes. Physics-scene/sidecar pairing remains native package-planner
    validation. Focused descriptor, legacy-compatibility, extension-validation,
    cooked-reference discovery, catalog, serialization, inspector scope/binding,
    and an editor-to-native cooked-library dependency-closure test pass. The
-   InspectorBindingTests passes 37/37, and the extra-asset add/remove interaction
-   passes 1/1. The native-pointer numeric-caption rows remain unqualified: five rows lost
-   test-window foreground and two Environment rows failed caption hit-testing.
-   Reference snapshots are now read-only for newly created scenes and scenes
-   loaded without a references field, as well as populated references. Regression
-   cases for both empty paths were added; they are not executed under the user's
-   no-test-rerun instruction. The recorded test counts predate this correction.
-   User mounting qualification exposed dropped default-scene metadata in mount
-   edits. Browser candidates and publication baselines now retain that setting,
-   preserving the full configuration conflict check. Regression coverage was
-   extended; the browser preservation cases now pass 2/2. The WorldEditor mount
-   transaction cases have not been executed.
-   The user confirms successful mounting, correctly typed reference addition,
-   dirty state, removal, Undo/Redo, Extra Assets, unavailable assets after losing
-   a mount and resolution after remounting. Save/reopen of authored references
-   is not inferred from these checks. Cook/package qualification is separately
-   recorded below.
-   Live mount-tree presentation exposed a disposed singleton explorer being
-   reused after outlet replacement. Explorer views and models are now transient
-   and outlet-owned; shell Refresh targets the displayed explorer. Focused browser
-   regressions pass 7/7, including rendered local-folder mounting before/after
-   outlet replacement and refresh discovering a new folder without restart.
-   The user confirmed the correction in the editor on 2026-10-06; the live
-   mount-tree item is validated and closed.
+   InspectorBindingTests passes 37/37, and the extra-asset add/remove
+   interaction passes 1/1. The native-pointer numeric-caption rows remain
+   unqualified: five rows lost test-window foreground and two Environment rows
+   failed caption hit-testing. Reference snapshots are now read-only for newly
+   created scenes and scenes loaded without a references field, as well as
+   populated references. Regression cases for both empty paths were added; they
+   are not executed under the user's no-test-rerun instruction. The recorded
+   test counts predate this correction. User mounting qualification exposed
+   dropped default-scene metadata in mount edits. Browser candidates and
+   publication baselines now retain that setting, preserving the full
+   configuration conflict check. Regression coverage was extended; the browser
+   preservation cases now pass 2/2. The WorldEditor mount transaction cases have
+   not been executed. The user confirms successful mounting, correctly typed
+   reference addition, dirty state, removal, Undo/Redo, Extra Assets,
+   unavailable assets after losing a mount and resolution after remounting.
+   Save/reopen of authored references is not inferred from these checks.
+   Cook/package qualification is separately recorded below. Live mount-tree
+   presentation exposed a disposed singleton explorer being reused after outlet
+   replacement. Explorer views and models are now transient and outlet-owned;
+   shell Refresh targets the displayed explorer. Focused browser regressions
+   pass 7/7, including rendered local-folder mounting before/after outlet
+   replacement and refresh discovering a new folder without restart. The user
+   confirmed the correction in the editor on 2026-10-06; the live mount-tree
+   item is validated and closed.
 2. **Cook/package and dependency/cache qualification.** Final managed/UI
-   qualification is non-blocking by user decision. ContentPipeline Unit and Integration
-   test projects build. Focused descriptor tests pass 40/40; typed-reference
-   discovery and the editor-to-native dependency-closure cook pass 1/1 each;
-   material-texture integration tests pass 2/2; ContentBrowser tests pass 151/151;
-   WorldEditor Unit tests pass 405/405; World tests pass 77/77; and
-   InspectorBindingTests pass 37/37. The extra-asset UI interaction passes 1/1.
-   Seven native-pointer caption rows remain unqualified: five foreground failures
-   and two Environment caption hit-testing failures; do not treat those as
-   verified interaction results. Native `RejectsInvalidPhysicsScenePairs` and
+   qualification is non-blocking by user decision. ContentPipeline Unit and
+   Integration test projects build. Focused descriptor tests pass 40/40;
+   typed-reference discovery and the editor-to-native dependency-closure cook
+   pass 1/1 each; material-texture integration tests pass 2/2; ContentBrowser
+   tests pass 151/151; WorldEditor Unit tests pass 405/405; World tests pass
+   77/77; and InspectorBindingTests pass 37/37. The extra-asset UI interaction
+   passes 1/1. Seven native-pointer caption rows remain unqualified: five
+   foreground failures and two Environment caption hit-testing failures; do not
+   treat those as verified interaction results. Native
+   `RejectsInvalidPhysicsScenePairs` and
    `PatchIncludesBothMembersOfPhysicsScenePair` tests cover pair rejection and
    patch completeness; `RejectsInvalidAssetReferenceGraphs` covers native
    missing/type-mismatched asset dependencies. A focused native-backed scene
    cook verifies the editor-to-native typed-reference boundary. The user's saved
    Main scene with Lantern geometry and Examples script/input references was
    packaged and loaded from the PAK in RenderScene. Existing procedural-cube,
-   scalar-material, texture-binding and identity tests establish the origin/cache
-   gate without a new Lantern import or new test implementation.
-3. **Load cost — non-blocking.** Removed from F1 closure criteria by user decision
-   on 2026-10-06. No measurement or numeric budget is claimed. Shader evaluation
-   and rendering hot paths must still retain their intended behavior.
+   scalar-material, texture-binding and identity tests establish the
+   origin/cache gate without a new Lantern import or new test implementation.
+3. **Load cost — non-blocking.** Removed from F1 closure criteria by user
+   decision on 2026-10-06. No measurement or numeric budget is claimed. Shader
+   evaluation and rendering hot paths must still retain their intended behavior.
 4. **Ordered-layer acceptance evidence — covered by existing native tests.**
-   [`DeterministicPlanningPreservesDeclaredLayerPriority`](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/test/Pak/PakPlanBuilder_test.cpp)
+   [`DeterministicPlanningPreservesDeclaredLayerPriority`](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/test/Pak/PakPlanBuilder_functional_test.cpp)
    verifies that reversing conflicting inputs changes the winner.
-   [`IncrementalPatchRevertsReplacementAndPreservesDeletion`](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/test/Pak/PakPlanBuilder_test.cpp)
+   [`IncrementalPatchRevertsReplacementAndPreservesDeletion`](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/test/Pak/PakPlanBuilder_patch_functional_test.cpp)
    verifies that flattening the ordered layers preserves effective content,
    including a replacement and deletion.
-5. **Closure record — complete.** The approved scope decisions, prior test counts,
-   cutover state and final qualification evidence are recorded here and in
-   [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md).
+5. **Closure record — complete.** The approved scope decisions, prior test
+   counts, cutover state and final qualification evidence are recorded here and
+   in [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md).
 
 ## Closure verification
 
 ### Saved Main scene to PAK to RenderScene
 
 On 2026-10-06, packaged the user's existing `F1 Validation` project's saved Main
-scene; no authoring data was changed and no import or recook was repeated.
-The active publication was `3103a36b-936d-465e-be89-7e57fa84c5ed`, selecting project
-generation `01a110fc92667a08bc3429af1b8d0821` and the mounted Examples main library.
-Main's authored JSON SHA-256 was
+scene; no authoring data was changed and no import or recook was repeated. The
+active publication was `3103a36b-936d-465e-be89-7e57fa84c5ed`, selecting project
+generation `01a110fc92667a08bc3429af1b8d0821` and the mounted Examples main
+library. Main's authored JSON SHA-256 was
 `8c433d5bfca6dfe98b9a5a6b0524deced33ec6fc7861c28f22b65ff1df7077f3`.
 
 The existing installed Release SDK PakTool packaged both roots, with external
-script sealing against `Examples/Content`. Result:
-158 assets, 65 resources, zero warnings/errors. This deliberately packages the
-whole Examples library, not a minimal stripped distribution. PakDump reads Main
-as scene v10, key `0c81ea40-a71f-3b14-0c57-8882d9be88c9`, with three Lantern
-renderables and the authored environment.
+script sealing against `Examples/Content`. Result: 158 assets, 65 resources,
+zero warnings/errors. This deliberately packages the whole Examples library, not
+a minimal stripped distribution. PakDump reads Main as scene v10, key
+`0c81ea40-a71f-3b14-0c57-8882d9be88c9`, with three Lantern renderables and the
+authored environment.
 
 RenderScene mounted only `f1-main.pak`, verified its CRC, loaded that exact Main
 key, staged the scene successfully and published it at frame start. No loose
 project or Examples root was mounted. The user confirmed seeing the Lantern
-scene. This is manual rendered acceptance, not an automated UI-suite pass.
-Two earlier UI-filter attempts selected zero tests and are not passing evidence.
-PAK SHA-256:
-`940322e2480a5783a6226785e7264f5501304b76903b1fa5cc0c143f556e8751`.
+scene. This is manual rendered acceptance, not an automated UI-suite pass. Two
+earlier UI-filter attempts selected zero tests and are not passing evidence. PAK
+SHA-256: `940322e2480a5783a6226785e7264f5501304b76903b1fa5cc0c143f556e8751`.
 
 Reproduction from `projects/Oxygen.Engine` in PowerShell:
 
@@ -128,14 +133,14 @@ $out = Join-Path (Get-Location) 'out\m08-f1-user-main'
   --environment-profile scene --cvars-archive "$out\interactive-cvars.json" --debug-layer=true
 ```
 
-For the RenderScene launch, its SDK-local `share/oxygen/RenderScene/demo_settings.json`
-records only this PAK under `content.library.mounted_paks`, empty mounted indices
-and import records, and this Main key/source under `content.active_scene`.
-Do not use `--scene`: it also mounts the shared loose library.
-Local PAK, reports and logs are retained under `out/m08-f1-user-main`; the runtime
-settings remain SDK-local. None are committed. Main's script/input references are
-packaged dependencies; it has no attached script component, so this does not
-claim script execution.
+For the RenderScene launch, its SDK-local
+`share/oxygen/RenderScene/demo_settings.json` records only this PAK under
+`content.library.mounted_paks`, empty mounted indices and import records, and
+this Main key/source under `content.active_scene`. Do not use `--scene`: it also
+mounts the shared loose library. Local PAK, reports and logs are retained under
+`out/m08-f1-user-main`; the runtime settings remain SDK-local. None are
+committed. Main's script/input references are packaged dependencies; it has no
+attached script component, so this does not claim script execution.
 
 ### Procedural origin/binding/cache evidence
 
@@ -173,7 +178,8 @@ metadata. Cooker owns emitted bindings, direct asset dependency metadata and
 generic resource placement. Content resolves those bindings through M08.1.5
 identities. Typed material/geometry/scene decoding remains in its current owner.
 
-The [Data reference contract](../../../projects/Oxygen.Engine/src/Oxygen/Data/Docs/binary_packing_discipline.md#descriptor-local-references-m08f1)
+The
+[Data reference contract](../../../projects/Oxygen.Engine/src/Oxygen/Data/Docs/binary_packing_discipline.md#descriptor-local-references-m08f1)
 owns local references and scripting layout; the
 [Cooker packaging contract](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Pak/paktool_design.md#reference-table-packaging-m08f1)
 owns binding relocation.
@@ -188,13 +194,14 @@ content-addressed database is included.
 
 Scene documents now serialize typed script, input-action, input-mapping-context,
 physics-sidecar, and extra-asset references. The inspector exposes typed catalog
-pickers, removal and extra-path controls; edits are undoable and validated before
-the scene is marked dirty. Descriptor generation emits the native v10 reference
-arrays, and cook dependency discovery retains those references as cooked outputs
-rather than source-cook jobs. Focused inspector tests and a native-backed
-script-reference cook pass. User reference-authoring and live mount-tree
-validation are recorded above. Final managed/UI qualification is non-blocking;
-the remaining cook/package and origin/cache checks retain their own evidence.
+pickers, removal and extra-path controls; edits are undoable and validated
+before the scene is marked dirty. Descriptor generation emits the native v10
+reference arrays, and cook dependency discovery retains those references as
+cooked outputs rather than source-cook jobs. Focused inspector tests and a
+native-backed script-reference cook pass. User reference-authoring and live
+mount-tree validation are recorded above. Final managed/UI qualification is
+non-blocking; the remaining cook/package and origin/cache checks retain their
+own evidence.
 
 Wire details belong in the existing Data packing and Cooker PAK designs before
 implementation; do not duplicate their field layouts in this plan.
@@ -214,54 +221,61 @@ Implementation boundaries:
   Cooker asset emitters, scene/script producers and loose-index registry;
   Content source readers, typed loaders and existing runtime binding owners;
   Inspector and focused native tests. Content tests remain independent of Cooker
-  and external processes; native Cooker tests own package-build integration. Keep
-  local reference indices separate from container indices. Use Base named types and module APIs.
-- **F1.3:** Cooker PAK planning/writing/inspection and full/patch packaging tests.
-  Remove superseded walkers and global script-table machinery in the same slice.
-- **F1.4:** Examples/Content recipes, retained RenderScene imports, native SDK and
-  Interop consumers, editor ContentPipeline integration and maintained projects.
-  Validate native loose/PAK loading before editor workflows. Run focused changed
-  tests; full managed-suite execution remains user-owned.
+  and external processes; native Cooker tests own package-build integration.
+  Keep local reference indices separate from container indices. Use Base named
+  types and module APIs.
+- **F1.3:** Cooker PAK planning/writing/inspection and full/patch packaging
+  tests. Remove superseded walkers and global script-table machinery in the same
+  slice.
+- **F1.4:** Examples/Content recipes, retained RenderScene imports, native SDK
+  and Interop consumers, editor ContentPipeline integration and maintained
+  projects. Validate native loose/PAK loading before editor workflows. Run
+  focused changed tests; full managed-suite execution remains user-owned.
 
-Keep commits buildable and scoped: owner designs accompany their code; engine and
-editor changes remain separate. Finish each slice with a simplification review,
-format/lint checks and focused validation before requesting commit approval.
+Keep commits buildable and scoped: owner designs accompany their code; engine
+and editor changes remain separate. Finish each slice with a simplification
+review, format/lint checks and focused validation before requesting commit
+approval.
 
 ## Ordered layers — approved
 
 **Option A:** ordinary composition and patches share explicit ordered layers.
 Later layers replace compatible definitions of the same AssetKey; deletions mask
 lower layers. Filesystem ordering never chooses winners. Physical indices remain
-local to the selected descriptor's container. Existing objects retain their exact
-bindings; new or reloaded graphs use one coherent current layer view.
+local to the selected descriptor's container. Existing objects retain their
+exact bindings; new or reloaded graphs use one coherent current layer view.
 
-The [Content lifetime contract](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/loose_cooked_content.md#published-generations)
+The
+[Content lifetime contract](../../../projects/Oxygen.Engine/src/Oxygen/Content/Docs/loose_cooked_content.md#published-generations)
 owns runtime binding and cache behavior. The
 [Cooker layer contract](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Pak/paktool_design.md#ordered-layers-and-patch-baselines)
 owns composition and incremental/cumulative patch baselines.
 
 F1.2 origin/binding/cache evidence is recorded in
-[closure verification](#procedural-originbindingcache-evidence).
-F1.3 preserves declared source order, composes base catalogs with
-replacement/deletion semantics and rejects incompatible types; the cited native
-tests cover ordered priority, replacement and deletion.
+[closure verification](#procedural-originbindingcache-evidence). F1.3 preserves
+declared source order, composes base catalogs with replacement/deletion
+semantics and rejects incompatible types; the cited native tests cover ordered
+priority, replacement and deletion.
 
 ## Acceptance
 
 - Base scene + patched material: new/reloaded scene uses the patch; the held old
-  scene retains its original material. Incremental P2 can revert P1 to base bytes,
-  preserve P1 deletions or explicitly recreate a deleted asset. Flattening the same
-  ordered layers preserves effective content. Reversed conflicting inputs change
-  the winner; repeated identical ordered inputs remain deterministic.
+  scene retains its original material. Incremental P2 can revert P1 to base
+  bytes, preserve P1 deletions or explicitly recreate a deleted asset.
+  Flattening the same ordered layers preserves effective content. Reversed
+  conflicting inputs change the winner; repeated identical ordered inputs remain
+  deterministic.
 - Repacking leaves opaque descriptor bytes unchanged while referenced resources
   resolve identically in loose and PAK sources, including multi-root packaging.
 - Managed editor catalog and cook readers accept only loose-index v3 and retain
   reference-block locators/counts without interpreting their payloads.
 - Editor dependency closure includes only native key references classified as
-  `Asset`; `PhysicsResource`, `Logical` and resource bindings are not asset edges.
+  `Asset`; `PhysicsResource`, `Logical` and resource bindings are not asset
+  edges.
 - The editor's authored scene reference lists round-trip and emit the native v10
   material, script, input-action, input-mapping-context, physics-sidecar, and
-  extra-asset categories with project/library resolution and expected-type checks.
+  extra-asset categories with project/library resolution and expected-type
+  checks.
 - Adding a resource-bearing descriptor field needs no packaging offset walker.
 - Missing, wrong-kind, out-of-range, truncated and cyclic hard references reject
   before publication; reference/dependency inventories are complete.
@@ -269,12 +283,13 @@ tests cover ordered priority, replacement and deletion.
   rendering and diagnostics in loose and PAK content. Successful repair/reimport
   restores real textures. Explicit fallback and ordinary unassigned slots retain
   their separate semantics.
-- Scene scripting, metering masks and physics-sidecar target hashes remain valid.
+- Scene scripting, metering masks and physics-sidecar target hashes remain
+  valid.
 - Preserve existing material, camera, slot and IBL behavior. Final managed/UI
   qualification is not a closure gate by user decision on 2026-10-06.
 - Load-cost measurement is not a closure gate by the same decision; keep shader
   evaluation and rendering hot paths unchanged.
 - Current formats only; no legacy reader or shipping conversion branch.
 
-Retain concise results and reproduction commands. Migration backups and generated
-debugging artifacts stay outside Git.
+Retain concise results and reproduction commands. Migration backups and
+generated debugging artifacts stay outside Git.

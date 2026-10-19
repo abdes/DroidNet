@@ -5,6 +5,8 @@ The separately owned live runtime/engine integration remains tracked. Explorer
 category filters affect rows only; viewport picking and native engine/interop
 qualification remain separately owned.
 
+Last Updated: 2026-10-20 01:32
+
 | Outcome                                                                                                                                       | Remaining                                                                                                                       | Evidence                                                                                                                                                                                                                 |
 | --------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
 | SE-01 generic tree capabilities and the single-scene DemoApp showcase are implemented and validated.                                          | Separately owned ED-M08.4–M08.6 runtime integration and native qualification.                                                   | 170 Models and 110 UI tests passed; scoped builds and changed-file hooks passed. T9 proves scoped interaction/recycling; T10 measures native compact/normal profiles on a 1,000-row lazy tree.                           |
@@ -1027,11 +1029,10 @@ their defects were marked closed.
       Unit lane.
 - [x] D8 — **decided by the owner and ratified in the analysis this row points
       at**:
-      [`D8-show-in-editor-runtime-capability.md`](../review/D8-show-in-editor-runtime-capability.md)
-      owns the behaviour contract (R1–R9), the design decisions (DD1–DD4), the
-      per-team action plans (E1–E3 engine, I1–I4 interop/runtime, W1–W7 editor)
-      and the qualification cases. This row does not restate them. What binds
-      the plan: - **D8a** is a scene-scoped hidden-node snapshot applied in
+      [settings 5.1](../lld/settings-architecture.md#51-workspace-visibility-storage-and-lifetime)
+      owns the behaviour and design; the engine and interop work is in the
+      ED-M08 plan's open gaps. This row does not restate them. What binds the
+      plan: - **D8a** is a scene-scoped hidden-node snapshot applied in
       `ScenePrepPipeline::PrepareView`. An editor-hidden node **does not render
       and does not cast shadows** in editing views (R2) — it is dropped, so no
       draw, no depth, no shadow-caster source; the UE5.7 parity basis is
@@ -1830,8 +1831,8 @@ implementation until the user decides it is the right time. It may remain
 pending while editor work proceeds and blocks native/full qualification, not the
 editor deliverable. D8b's ED-M08.4–M08.6-supported native picking path remains a
 separate runtime dependency for end-to-end category-picking qualification. The
-[D8 capability analysis](../review/D8-show-in-editor-runtime-capability.md) owns
-native scope and authorization.
+[settings 5.1](../lld/settings-architecture.md#51-workspace-visibility-storage-and-lifetime)
+owns native scope and authorization.
 
 **Editor-owned implementation and status (verified 2026-10-05):**
 

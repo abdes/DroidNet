@@ -1,15 +1,17 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0 and S1.1 to S1.6 (Assets, Cook on change,
+Status: `in progress` — Phase 0 and S1.1 to S1.7 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
-Scenes) are done. Phase 1 follows
-[editor-module-architecture.md](../review/editor-module-architecture.md) (the
+Scenes, LivePreview) are done; S1.8 is next. Phase 1 follows
+[editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
-[editor-documents.md](../review/editor-documents.md) (the "documents design").
-They replace section 7 of the spec: there are no `Authoring` or
+[editor-documents.md](../lld/editor-documents.md) (the "documents design"). They
+replace section 7 of the spec: there are no `Authoring` or
 `Authoring.Abstractions` projects, `Oxygen.Editor.WorldEditor` is dissolved, and
 the Shell is the application frame.
+
+Last Updated: 2026-10-20 01:32
 
 Issue: [#69](https://github.com/abdes/DroidNet/issues/69)
 
@@ -80,10 +82,9 @@ slices do not reopen them.
    share its fixtures. Internals are visible only to the module's own tests
    (architecture decision 4).
 6. **Domain modules start with a design.** Each domain module slice begins with
-   a design section for review, as
-   [assets-module.md](../review/assets-module.md) did for Assets: type-by-type
-   ownership, public API, ports, dependencies and test plan. Code follows the
-   reviewed design.
+   a design section for review, as [assets-module.md](../lld/assets-module.md)
+   did for Assets: type-by-type ownership, public API, ports, dependencies and
+   test plan. Code follows the reviewed design.
 7. **Move, then rename.** A move commit keeps type names and namespaces so the
    compiler checks the move; a rename commit to the architecture's names follows
    it (architecture decision 6).
@@ -101,23 +102,23 @@ slices do not reopen them.
 
 ## 3. Placement of what the spec does not place
 
-| Code                                                                                                                                          | Target                                  | Cut                                                                                                                                                               |
-| --------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `IRuntimeProblemSource`, `PlayRequest`, `PlayStatus*`, `PlayActivity`, `PlayFailure`                                                          | `LivePreview`                           | Play is runtime work; Problems consumes `IRuntimeProblemSource` only                                                                                              |
-| `PlaySessionService`, `PlaySessionSettingsService`, `PlayerConnection`, `PlayerSettingsSync`, `RuntimeProblemReader` and their tests          | `LivePreview`                           | Registered by the LivePreview module, not by `WorkspaceViewModel.Play`                                                                                            |
-| `IPlayWorkspace`, `ICookingWorkspaceActions` (C12, **C16**)                                                                                   | Shell                                   | Replaced by Shell placement and commands (shell design section 4); selecting a node goes through Scenes. `WorkspaceViewModel` keeps implementing both until S1.10 |
-| `PlayTransportBar`, `ScenePlayToolbarViewModel`, `PlayerWindowModeIndexConverter`, `PlayerWindowSizeOption`, `PlayPrimaryAccent`, `PlayPanel` | `SceneEditor`                           | Moves with the scene editor (`SceneEditorView` hosts the bar)                                                                                                     |
-| `Diagnostics/SceneOperationResults`                                                                                                           | `Scenes`                                | Scene operation-result vocabulary                                                                                                                                 |
-| `Diagnostics/RuntimeOperationResults`                                                                                                         | `LivePreview`                           | Runtime operation-result vocabulary                                                                                                                               |
-| `Utils/ThumbnailGenerator`, `ThumbnailTemplateSelector`                                                                                       | `SceneExplorer`                         | As the spec lists for the explorer's thumbnails                                                                                                                   |
-| Script checks of `Scripting/ScriptAnalysisService`, `ScriptToolingPaths`, `ProjectScriptTooling`                                              | `ContentPipeline`                       | Script and input checks belong to the pipeline (architecture section 7.5); the native analysis reaches it through a port LivePreview implements                   |
-| Native call of `Scripting/ScriptAnalysisService`                                                                                              | `LivePreview`                           | The only domain module that references Runtime and Interop                                                                                                        |
-| `Scripting/InputFileCheck`                                                                                                                    | `ContentPipeline`                       | Input checks belong to the pipeline                                                                                                                               |
-| `Scripting/ScriptSlotEdits`                                                                                                                   | `Scenes`                                | Edits a scene's script slots                                                                                                                                      |
-| Editing part of `MaterialDocumentService` (properties, history entries, persistence)                                                          | World's `Material` and `MaterialEditor` | Documents design decision 7: a document type is a World model and an editor                                                                                       |
-| Scene-specific parts of Projects (`SceneSourceVersion`, `GetSceneSourceVersion`, `SceneAssetRenameOperation`, scene staging)                  | `Scenes`                                | Documents design decision 7; Projects keeps asset-to-file resolution only                                                                                         |
-| `SceneCookInputRegistrar`, `CookDocumentRegistry`, cook read leases and save gates                                                            | removed                                 | Documents design 4.3: the cook reads saved files only and asks `IUnsavedDocuments` which inputs are unsaved                                                       |
-| `IAutomaticCookService.NotifySaved`, `NotifyRenamed`, the automatic-cooking pause                                                             | removed                                 | Documents design 4.1 and 4.2: the cook hears of changes from `IAssetCatalog.Changes`; **Cook on change** is a project setting                                     |
+| Code                                                                                                                                          | Target                           | Cut                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IRuntimeProblemSource`, `PlayRequest`, `PlayStatus*`, `PlayActivity`, `PlayFailure`                                                          | `LivePreview`                    | Play is runtime work; Problems consumes `IRuntimeProblemSource` only                                                                                              |
+| `PlaySessionService`, `PlaySessionSettingsService`, `PlayerConnection`, `PlayerSettingsSync`, `RuntimeProblemReader` and their tests          | `LivePreview`                    | Registered by the LivePreview module, not by `WorkspaceViewModel.Play`                                                                                            |
+| `ICookingWorkspaceActions` (C12, **C16**)                                                                                                     | Shell                            | Replaced by Shell placement and commands (shell design section 4); selecting a node goes through Scenes. `WorkspaceViewModel` keeps implementing both until S1.10 |
+| `PlayTransportBar`, `ScenePlayToolbarViewModel`, `PlayerWindowModeIndexConverter`, `PlayerWindowSizeOption`, `PlayPrimaryAccent`, `PlayPanel` | `SceneEditor`                    | Moves with the scene editor (`SceneEditorView` hosts the bar)                                                                                                     |
+| `Diagnostics/SceneOperationResults`                                                                                                           | `Scenes`                         | Scene operation-result vocabulary                                                                                                                                 |
+| `Diagnostics/RuntimeOperationResults`                                                                                                         | `LivePreview`                    | Runtime operation-result vocabulary                                                                                                                               |
+| `Utils/ThumbnailGenerator`, `ThumbnailTemplateSelector`                                                                                       | `SceneExplorer`                  | As the spec lists for the explorer's thumbnails                                                                                                                   |
+| Script checks of `Scripting/ScriptAnalysisService`, `ScriptToolingPaths`, `ProjectScriptTooling`                                              | `Scripting`                      | The script family's facts and tooling (asset family modules); the native analysis reaches them through `IScriptAnalyzer`, which LivePreview implements            |
+| Native call of `Scripting/ScriptAnalysisService`                                                                                              | `LivePreview`                    | The only domain module that references Runtime and Interop                                                                                                        |
+| `Scripting/InputFileCheck`                                                                                                                    | `Input`                          | The input family's checks (asset family modules)                                                                                                                  |
+| `Scripting/ScriptSlotEdits`                                                                                                                   | `Scenes`, rules in `Scripting`   | Edits a scene's script slots, validated by `ScriptSlotRules`                                                                                                      |
+| Editing part of `MaterialDocumentService` (properties, history entries, persistence)                                                          | `Materials` and `MaterialEditor` | Documents design decision 7: a document type is a family model and an editor                                                                                      |
+| Scene-specific parts of Projects (`SceneSourceVersion`, `GetSceneSourceVersion`, `SceneAssetRenameOperation`, scene staging)                  | `Scenes`                         | Documents design decision 7; Projects keeps asset-to-file resolution only                                                                                         |
+| `OpenDocumentCookInputs`, `CookDocumentRegistry`, cook read leases                                                                            | removed                          | Documents design 5.3.3: the cook reads saved files only and asks `IUnsavedDocuments` which inputs are unsaved                                                     |
+| `IAutomaticCookService.NotifySaved`, `NotifyRenamed`, the automatic-cooking pause                                                             | removed                          | Documents design 5.3.1 and 5.3.2: the cook hears of changes from `IAssetCatalog.Changes`; **Cook on change** is a project setting                                 |
 
 ## 4. Execution slices
 
@@ -148,19 +149,25 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   feed, the identity rules and the rules of properties that reference assets,
   with its `IAssetRuntimeStatusSource` port; the file types table is in
   `Oxygen.Managed.Assets`; the asset messages are gone. Its registration module
-  waits for Phase 3.
-- **S1.2 Cook on change** (documents design 4.1 and 4.2, and the quiet window of
-  4.6). The automatic cook listens to `IAssetCatalog.Changes` instead of being
-  told about saves. Changes to cookable files under authoring roots open the
-  quiet window. When it closes, a run waiting in `NeedsSave` for a changed file
-  resumes; for the others, the cook waits until no cook of the project is in
-  progress and cooks each changed asset whose published output does not match
-  what is on disk, so a cook that already covered the change (Play's) is not
-  repeated. Each asset gets today's automatic cook, with at most one in flight.
-  Opening a project cooks nothing: the catalog reports the files it starts
-  listing as `Listed`, not as changes. The **Cook on change** project setting,
-  stored in the project manifest and changed without reactivating the project,
-  replaces the in-memory pause; the Content Explorer's toggle edits it.
+  waits for Phase 3. Remaining ([assets-module.md](../lld/assets-module.md)):
+  the badge properties of `AssetEntry` (`PrimaryBadge`, `PrimaryBadgeTooltip`,
+  `PackagedBadge`, `GetBadge`) become `AssetStatusText` functions the explorer
+  presents; the feed's callers outside the module (material editor, geometry,
+  exposure, scene references, Problems) stop calling `RefreshAsync`, since the
+  feed follows its own inputs; the feed takes unsaved state from
+  `IUnsavedDocuments` instead of `ICookDocumentRegistry` with S1.11.
+- **S1.2 Cook on change** (documents design 5.3.1 and 5.3.2, and the quiet
+  window of 5.3.6). The automatic cook listens to `IAssetCatalog.Changes`
+  instead of being told about saves. Changes to cookable files under authoring
+  roots open the quiet window. When it closes, a run waiting in `NeedsSave` for
+  a changed file resumes; for the others, the cook waits until no cook of the
+  project is in progress and cooks each changed asset whose published output
+  does not match what is on disk, so a cook that already covered the change
+  (Play's) is not repeated. Each asset gets today's automatic cook, with at most
+  one in flight. Opening a project cooks nothing: the catalog reports the files
+  it starts listing as `Listed`, not as changes. The **Cook on change** project
+  setting, stored in the project manifest and changed without reactivating the
+  project, replaces the in-memory pause; the Content Explorer's toggle edits it.
   `NotifySaved` and `NotifyRenamed` go, with their calls in the scene command
   service, scene rename, the material document service and script analysis. So
   that no change goes unseen, `FileSystemAssetCatalog` reports a file replaced
@@ -173,7 +180,7 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   cook. Gate: Managed.Assets, Projects, Assets and ContentPipeline tests, the
   tests of the callers, the reviewer's editor build and acceptance of the
   toggle.
-- **S1.3 Foreground cooks** (rules 4 to 6 of documents design 4.6). When any
+- **S1.3 Foreground cooks** (rules 4 to 6 of documents design 5.3.6). When any
   foreground work waits for the writer, a running cook on change is cancelled
   and stops at its next cancellation point, which never publishes a partial
   result; one already publishing finishes. It ends as stopped, and cook on
@@ -206,7 +213,7 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   longer waits for save gates or compares an open document's saved hash. Gate:
   Shell, ContentPipeline, Assets, Content Browser, Material Editor and World
   Editor tests, the reviewer's editor build and acceptance of Undo and Redo.
-- **S1.4 Pipeline workflows out of UI** (architecture section 6). The relocation
+- **S1.4 Pipeline workflows out of UI** (architecture section 8). The relocation
   service keeps its reference index current itself: any asset catalog change
   makes the next search read the files again, so no caller invalidates it. It
   also reviews a delete (`IAssetRelocationService.FindReferrersOutsideAsync`):
@@ -259,7 +266,7 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   goes into, still leaves the publication. Gate: engine writer tests,
   ContentPipeline native cook repair tests, and the reviewer's check that
   deleting one asset of a large mount no longer cooks the rest.
-- **S1.5 Document kinds** ([document-kinds.md](../review/document-kinds.md)).
+- **S1.5 Document kinds** ([document-kinds.md](../lld/document-kinds.md)).
   `Oxygen.Editor.Documents` holds what every document has and does, without
   windows or tabs: its file, the version it read, dirty from its history's
   position, missing and changed on disk, its history and its content; opening
@@ -275,8 +282,8 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   unused reference to Documents. Gate: TimeMachine, Documents and Projects tests
   and the tests of the modules whose copies are replaced.
 - **S1.6 Scenes** (C1, C2, C3 model side, C4 contract, C7, C15;
-  [scenes-module.md](../review/scenes-module.md)). `Oxygen.Editor.Scenes`, a
-  class library with no WinUI, takes the command service with its edit sessions,
+  [scenes-module.md](../lld/scenes-module.md)). `Oxygen.Editor.Scenes`, a class
+  library with no WinUI, takes the command service with its edit sessions,
   results, edit records and descriptors, selection, the mutator and the
   organizer without its unused adapter code, node lock and visibility behind an
   interface, and the `ISceneEngineSync` port with value types of its own; it
@@ -290,81 +297,178 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   `SceneAssetRenameOperation` and the project's scene list go. New Scene and the
   scene rules of the relocation service live in ContentPipeline. Done: the
   command service, the gate, the mutator and the organizer are replaced by scene
-  edits ([scene-edits.md](../review/scene-edits.md)): edit records run by each
+  edits ([scene-edits.md](../lld/scene-edits.md)): edit records run by each
   document's `SceneAuthoring`, with atomic batches instead of change sets, and
   an engine projector that follows its change stream. The document identity
-  design ([document-identity.md](../review/document-identity.md)) came in
-  between. Open items are in the problem register of scenes-module.md section 6.
+  design ([document-identity.md](../lld/document-identity.md)) came in between.
   Gate: Scenes tests without the WinUI host, the tests of the callers, the
   reviewer's editor build and acceptance in the running editor.
-- **S1.7 LivePreview** (C4 implementation, C11, C13, Play). Design first.
+- **S1.7 LivePreview** (C4 implementation, C11, C13, Play): done.
   `Oxygen.Editor.LivePreview` takes engine sync, content demand (without its
   `WindowId`), mount changes, the runtime session start taken out of
   `WorkspaceViewModel`, the Play services and the runtime problem source, and
-  the adapters for the ports of Scenes and Assets. It is the only domain module
-  that references `Oxygen.Editor.Runtime` and `Oxygen.Interop`. Design:
-  [live-preview.md](../review/live-preview.md). Gate: LivePreview tests and the
-  reviewer's editor build.
-- **S1.8 Models in World.** Design first. World gains `Material` over
-  `MaterialSource`, `Texture`, `InputMappingContext` and `InputAction`, and
-  `Script` with its source and declared parameters, each with its problems
-  (documents design decision 7); the editing part of `MaterialDocumentService`
-  moves into `Material` and the Material Editor, and `ScriptSlotEdits` moves to
-  Scenes over `Script`. Gate: World, Scenes and Material Editor tests.
-- **S1.9 Script and input checks** (documents design 4.2, and rules 1 to 3 of
-  4.6). ContentPipeline takes the input file check and the script check, and
-  produces the problems of the World models; script analysis runs through a port
-  ContentPipeline owns, which LivePreview implements. Cook on change skips an
-  input with problems, so one automatic run can cover every input that changed
-  in a quiet window: while it waits, new changes join it, and while it runs,
-  they collect into the next one. A cook run fails as a whole when one input
-  fails, which is why the single run waits for the skip. Gate: ContentPipeline
-  and LivePreview tests.
-- **S1.10 Shell** (C9, C10, C12, C16). `Oxygen.Editor.Shell` grows to the layout
-  of shell design section 7 and receives the generic workspace machinery of
-  `WorldEditor/Workspace`. Its document service (`IDocumentService`,
-  `DocumentService`) replaces `EditorDocumentService`, `DocumentHostViewModel`
-  and `DocumentManager`: it opens a file once, places the document, owns the
-  per-document histories beside the global one of S1.4a, the Undo and Redo
-  commands, the confirmations of documents design 2.9, the missing and conflict
-  banner, and following relocated files. The close coordinator, the close and
-  conflict prompts, `DocumentCloseItem` and the input committer move into the
-  Shell with it: they take the `DocumentTab` instead of `IDocumentMetadata` and
-  lose their `WindowId`, and the close prompt's check that a tab is a
-  `DocumentTab` goes. The refusal of every detach moves from
-  `EditorDocumentService` into the Shell's document service, which allows detach
-  once document windows can receive a tab (document-identity.md 3.5). Aura's
-  contract in `DroidNet.Documents` is renamed `IDocumentTabSource`. The other
-  contracts land in their target shape (decision 4): contributions (panel and
-  editor descriptors, `IDocumentEditorProvider`), part services (placement,
-  commands, close and exit) and desktop integration (`CodeEditorService`,
-  `IAssetShell`). Their first implementations adapt today's Aura, Docking and
-  Routing; the library changes of shell design section 9 come in Phase 5.
-  Notifications, menus, the status bar and the command palette are not part of
-  #69 (shell design section 8). Gate: Shell tests and the reviewer's editor
-  build.
-- **S1.11 Unsaved documents** (documents design 4.3). `Oxygen.Editor.Documents`
-  declares `IUnsavedDocuments`, the Shell's document service implements it and
-  ContentPipeline consumes it. Play, Cook and relocation ask before they run.
-  The `NeedsSave` state, `CookDocumentRegistry`, the read leases, the save gates
-  and `SceneCookInputRegistrar` are removed, so every cook reads what is on disk
-  and a cook on change no longer waits for a dirty document (scenario 2.6).
-  Gate: ContentPipeline tests, the reviewer's editor build, and the reviewer's
+  the adapter for the port of Assets; it previews open scene documents by
+  observing them (`IScenePreview`), so Scenes knows no engine. It is the only
+  domain module that references `Oxygen.Editor.Runtime` and `Oxygen.Interop`.
+  Design: [live-preview.md](../lld/live-preview.md). Gate: LivePreview tests and
+  the reviewer's editor build.
+- **S1.8 Asset family modules.** Design:
+  [asset-family-modules.md](../lld/asset-family-modules.md). Each family's
+  model, rules, problems, facts, templates and codes move into its domain
+  module; `WorldEditor/Scripting` is deleted.
+
+  Already in place, not part of this slice: the formats in Managed.Assets
+  (`MaterialSource`, `TextureSource`, `InputSource` with `InputSourceCodes`
+  under `OXE.INPUT.`), `AssetProblem` and `AssetFormatException`,
+  `Oxygen.Editor.Materials` with `Material`, its document kind, edits and codes,
+  and every identity, reference and collision rule of
+  [asset-identity.md](../lld/asset-identity.md).
+
+  Five commits, each building its owning projects and passing their tests:
+  1. **Problem source.** `IAssetProblemSource` (`Problems`, `ProblemsChanged`)
+     in Managed.Assets `Diagnostics/`.
+  2. **Textures.** New `Oxygen.Editor.Textures`: `Texture` over `TextureSource`,
+     and `TextureImport` from ContentPipeline
+     `Import/TextureSourceAssetImporter.cs` (cube face detection,
+     `HasSourceImage`, `ReadCubeDescriptor`). Callers switch: ContentBrowser
+     `Importing/TextureImportDialogViewModel.cs` and the assets pane,
+     WorldEditor `Inspector/Environment/CubemapPickerModel.cs`, MaterialEditor
+     `MaterialEditorViewModel*.cs` and `MaterialTextureChannel.cs`.
+     `TextureSourceAssetImporterTests` move to Textures Unit.
+  3. **Input.** New `Oxygen.Editor.Input`: `InputContainer`, `InputAction`,
+     `InputMappingContext`, `InputProblem`, the input rules,
+     `StartingContextRules`, `InputFacts` as `IInputSources`, and
+     `InputTemplates`. It takes ContentPipeline `InputSourceFiles.cs`,
+     `InputContextSources.cs` and `InputContextSource.cs` (resolving files
+     through Projects' `ProjectContext.Find` instead of the pipeline's
+     `RelocationPaths`), WorldEditor `Scripting/InputFileCheck.cs` and the input
+     half of `Scripting/ScriptAnalysisService.cs`, and ContentBrowser
+     `Scripts/InputDeclaration.cs`. Callers switch: ContentPipeline
+     `SceneDescriptorGenerator.Starting.cs` and the relocation planner's input
+     renames, Scenes `Edits/Settings/SetStartingInputContexts.cs`, WorldEditor
+     `Inspector/SceneNodeEditorViewModel.cs`, the ContentBrowser assets pane.
+     `InputFileCheckTests` move to Input Unit.
+  4. **Scripting.** `Oxygen.Editor.Scripting` grows:
+     - Model: `Script`, `ScriptParameter`, `ScriptParameterKind` from
+       ContentBrowser `Scripts/`; `ScriptProblem : AssetProblem` loses
+       `IsRuntime`, and `ScriptProblemSeverity` goes; `ScriptDiagnosticCodes`
+       moves from Managed.Core.
+     - Rules: `ScriptSlotRules` and `ScriptFieldAddress`, from the checks of
+       WorldEditor `Scripting/ScriptSlotEdits.cs` and ContentPipeline
+       `ScriptSlotDiagnostics.cs`.
+     - Facts and ports: `ScriptFacts` as `IScripts`, from the script half of
+       WorldEditor `Scripting/ScriptAnalysisService.cs` (+ `.Logs.cs`);
+       `IScriptAnalyzer`, implemented by a new LivePreview
+       `Scripting/NativeScriptAnalyzer.cs`; `IScriptLibrary`, implemented by
+       ContentPipeline in place of `Inspection/IScriptDeclarationProvider.cs`,
+       `CookedScriptDeclarations.cs`, `CookedScriptReport.cs` and
+       `ContentPipelineService.ScriptDeclarations.cs`.
+     - Tooling: `ProjectScriptTooling.cs`, `ScriptToolingPaths.cs`
+       (WorldEditor), `ScriptOperationResults.cs` (ContentBrowser).
+     - LivePreview: `RuntimeScriptProblem : ScriptProblem`;
+       `Play/IRuntimeProblemSource.cs` extends `IAssetProblemSource`;
+       `PlaySession*.cs` and `RuntimeProblemReader.cs` produce it.
+     - Scenes: `Edits/Scripting/*` (`AddScriptSlot`, `RemoveScriptSlot`,
+       `MoveScriptSlot`, `SetSlotScript`, `SetSlotExecutionOrder`,
+       `SetScriptValue`, `ResetScriptValue`, `RemoveStaleScriptValues`),
+       validated by `ScriptSlotRules`; `SetScriptSlots` stays.
+     - Cook: ContentPipeline `ScriptSlotDiagnostics.cs`,
+       `SceneDescriptorGenerationResult.cs`,
+       `SceneDescriptorGenerator.Scripting.cs` and
+       `ContentPipelineService.Scripting.cs` report `ScriptSlotRules.Check` and
+       keep only the mapping to `DiagnosticRecord`.
+     - Consumers (LLD section 9): the WorldEditor inspector's script cards,
+       `ScriptDeclarations.cs` (deleted), the Problems panel over every
+       `IAssetProblemSource`, `WorkspaceViewModel.Scripting.cs` and
+       `.Cooking.cs`; the ContentBrowser assets pane and details.
+     - Deleted: `WorldEditor/src/Scripting`; in ContentBrowser `Scripts/`,
+       `ScriptAnalysisSnapshot.cs` and `IScriptAnalysisService.cs` (the code
+       editor files stay for S1.10).
+     - Tests: Scripting Unit (new, takes `ProjectScriptToolingTests`); Scenes
+       Unit takes `ScriptSlotEditsTests`; WorldEditor keeps
+       `ScriptingViewModelTests` and `ProblemsViewModelTests` over fakes of the
+       ports; LivePreview Integration.UI tests `NativeScriptAnalyzer`.
+  5. **Templates.** `AuthoredAssetTemplate` replaces ContentPipeline
+     `Authoring/AuthoredAssetKind.cs` and `AssetTemplates.cs`;
+     `ScriptTemplates`, `InputTemplates`, `MaterialTemplates` and
+     `SceneTemplates` own the texts; `Authoring/AssetAuthoring.cs` and
+     ContentBrowser `Authoring/AuthoredAssetCreation.cs` take a template;
+     `ScriptAuthoringTests` follow.
+
+  Gate: the tests of LLD section 14 and the reviewer's editor build and check
+  (script cards, Play section, Problems with analysis and runtime problems, the
+  Content Explorer's script and input details, texture import, the cubemap
+  picker).
+
+- **S1.9 Cook on change over checked inputs** (documents design 5.3.2, and rules
+  1 to 3 of 5.3.6). In place from S1.2: the **Cook on change** project setting,
+  the cook listening to `IAssetCatalog.Changes`, and the 500 ms quiet window up
+  to 5 s. What remains:
+  - Cook on change skips an input with problems, read from the family facts of
+    S1.8; the change that fixes them cooks it.
+  - One automatic run per quiet window: `AutomaticCookService` queues one cook
+    per changed source today; it queues one run covering them, which new changes
+    join while it waits for the writer.
+  - Changes that arrive while that run cooks collect into the next run, instead
+    of each source cooking once more on its own.
+
+  A cook run fails as a whole when one input fails, which is why the single run
+  waits for the skip. Gate: ContentPipeline and LivePreview tests.
+
+- **S1.10 Shell** (C9, C10, C12, C16). In place: the global history
+  (`IHistoryService`, S1.4a), and `DocumentArea`, `DocumentTab` and
+  `DocumentEditorDescriptor` placing documents in tabs. `Oxygen.Editor.Shell`
+  grows to the layout of shell design section 7 and receives the generic
+  workspace machinery of `WorldEditor/Workspace`. Its document service
+  (`IDocumentService`, `DocumentService`) replaces `EditorDocumentService`,
+  `DocumentHostViewModel` and `DocumentManager`: it opens a file once, places
+  the document, routes Undo and Redo to the per-document histories (created with
+  each open document by `OpenDocuments`) and the global one, the confirmations
+  of documents design 5.2.9, the missing and conflict banner, and following
+  relocated files. The close coordinator, the close and conflict prompts,
+  `DocumentCloseItem` and the input committer move into the Shell with it: they
+  take the `DocumentTab` instead of `IDocumentMetadata` and lose their
+  `WindowId`, and the close prompt's check that a tab is a `DocumentTab` goes.
+  The refusal of every detach moves from `EditorDocumentService` into the
+  Shell's document service, which allows detach once document windows can
+  receive a tab (document-identity.md 5.7). Aura's contract in
+  `DroidNet.Documents` is renamed `IDocumentTabSource`. The other contracts land
+  in their target shape (decision 4): contributions (panel and editor
+  descriptors, `IDocumentEditorProvider`), part services (placement, commands,
+  close and exit) and desktop integration (`CodeEditorService`, `IAssetShell`).
+  Their first implementations adapt today's Aura, Docking and Routing; the
+  library changes of shell design section 9 come in Phase 5. Notifications,
+  menus, the status bar and the command palette are not part of #69 (shell
+  design section 8). Gate: Shell tests and the reviewer's editor build.
+- **S1.11 Unsaved documents** (documents design 5.3.3).
+  `Oxygen.Editor.Documents` declares `IUnsavedDocuments`, the Shell's document
+  service implements it and ContentPipeline consumes it. Play, Cook and
+  relocation ask before they run. The `NeedsSave` state, `CookDocumentRegistry`,
+  the read leases (`Document.AcquireReadLease`) and `OpenDocumentCookInputs` are
+  removed, so every cook reads what is on disk and a cook on change no longer
+  waits for a dirty document (scenario 5.2.6). Relocation asks instead of
+  refusing (`AssetRelocationService.RejectUnsavedDocuments`). Gate:
+  ContentPipeline tests, the reviewer's editor build, and the reviewer's
   acceptance of the confirmations in the running editor.
 - **S1.12 Features**, a move commit and a rename commit each, with the feature's
-  module, theme dictionary and tests, in this order: `Output`, `Problems`,
-  `Cooking`, `CookedInspector` (from `Inspection`), `SceneExplorer` (C3 explorer
-  side), `SceneEditor` (C14, Play UI, and its preview, viewport and transform
-  tool settings), `SceneInspector` (from `Inspector`); then the Material Editor
-  registers its editor provider, the Content Browser becomes `ContentExplorer`
-  (its left pane, `ProjectExplorer` today, becomes `ContentFolders`) and the
-  Project Browser becomes `ProjectExplorer`. The new `TextureEditor` replaces
-  the Content Browser's texture import dialog, and the new `History` panel
-  (documents design decision 1) comes last, as a passive panel over the Shell's
-  histories. After each, the workspace stops registering that feature's types
-  and the document host stops constructing it. Gate: that feature's tests; UI
-  test failures go to the reviewer; visible changes wait for the reviewer's
-  acceptance (decision 8).
+  module, theme dictionary and tests, in this order: `Output` (shows
+  `PlaySession.LogReceived`, which the workspace bridges to `OutputLogBuffer`
+  today), `Problems` (selects a runtime problem's node through
+  `ISceneSelectionService` and reveals itself on a runtime error, which the
+  workspace does today), `Cooking`, `CookedInspector` (from `Inspection`),
+  `SceneExplorer` (C3 explorer side), `SceneEditor` (C14, Play UI, and its
+  preview, viewport and transform tool settings), `SceneInspector` (from
+  `Inspector`); then the Material Editor registers its editor provider, the
+  Content Browser becomes `ContentExplorer` (its relocation and creation
+  workflows go to ContentPipeline, `IAssetShell` to the Shell's desktop
+  integration) (its left pane, `ProjectExplorer` today, becomes
+  `ContentFolders`) and the Project Browser becomes `ProjectExplorer`. The new
+  `TextureEditor` replaces the Content Browser's texture import dialog, and the
+  new `History` panel (documents design decision 1) comes last, as a passive
+  panel over the Shell's histories. After each, the workspace stops registering
+  that feature's types and the document host stops constructing it. Gate: that
+  feature's tests; UI test failures go to the reviewer; visible changes wait for
+  the reviewer's acceptance (decision 8).
 - **S1.13 Dissolve the World Editor.** Nothing is left in
   `Oxygen.Editor.WorldEditor`; the project and its test projects are deleted,
   `Oxygen.Editor.World` drops its internals grant to it, and the application
@@ -378,9 +482,9 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   behavior it checks, and no test project links another module's fixtures. Gate:
   the touched test projects.
 - **S1.15 Enforcement.** A `unittest` in `tooling/tests` checks the layer rules
-  of architecture section 2 and the internals rule of its decision 4; hand-built
-  test containers move to the shared host-equivalent builder in `TestHelpers`.
-  Gate: tooling tests.
+  of architecture section 5.2 and the internals rule of its decision 4;
+  hand-built test containers move to the shared host-equivalent builder in
+  `TestHelpers`. Gate: tooling tests.
 
 ### Phase 2: scope factory and topology test
 

@@ -2,6 +2,8 @@
 
 Status: `active product requirements`
 
+Last Updated: 2026-10-20 01:32
+
 This document defines traceable product requirements for Oxygen Editor V0.1.
 Architecture, ownership, and implementation contracts live in
 [ARCHITECTURE.md](./ARCHITECTURE.md), [DESIGN.md](./DESIGN.md), and
@@ -14,11 +16,11 @@ on every small workflow step.
 
 ## 1. Product Position
 
-Oxygen Editor V0.1 is the first production-quality vertical slice of the
-editor. It is not a demo shell and not a temporary proof. Its primary user is
-the engine developer who needs to validate that Oxygen scenes can be authored,
-previewed through the embedded engine, cooked, and loaded by standalone runtime
-code without manual file repair.
+Oxygen Editor V0.1 is the first production-quality vertical slice of the editor.
+It is not a demo shell and not a temporary proof. Its primary user is the engine
+developer who needs to validate that Oxygen scenes can be authored, previewed
+through the embedded engine, cooked, and loaded by standalone runtime code
+without manual file repair.
 
 Technical artists and tools developers are secondary V0.1 users. Their needs
 matter because V0.1 must establish real editor workflows, but breadth is
@@ -44,8 +46,8 @@ The editor is not yet a dependable authoring product because:
   model
 - content browsing, source import, descriptor generation, cooking, and cooked
   inspection are not one coherent asset workflow
-- camera, lighting, environment, exposure, and tone mapping are not presented
-  as coherent authoring surfaces
+- camera, lighting, environment, exposure, and tone mapping are not presented as
+  coherent authoring surfaces
 - failures are too often discovered through logs after the fact rather than as
   visible editor operation results
 
@@ -68,16 +70,16 @@ Out of V0.1 scope:
 - editing cooked binary data as source authoring data
 - building compatibility bridges to hide bad engine APIs
 - full material graph editing
-- texture authoring, complex texture graph workflows, and advanced material
-  node networks
+- texture authoring, complex texture graph workflows, and advanced material node
+  networks
 - physics scene sidecar editing or physics simulation authoring
 - animation, prefab, terrain, gameplay, and particle editors
 - an embedded script code editor or debugger, and running scripts inside editor
   viewports (simulation); scripts are edited in the user's code editor and run
   by Play
 - a full validation dashboard with filters and fix actions
-- a generic project settings editor, user-selectable project renderer presets,
-  a dedicated batch-recook-stale command, or dedicated descriptor/manifest
+- a generic project settings editor, user-selectable project renderer presets, a
+  dedicated batch-recook-stale command, or dedicated descriptor/manifest
   editor/launcher actions; section 8 defines the supported replacement workflows
 - autosave or crash recovery of changes after the last explicit successful Save
 - treating logs as a substitute for operation results where the user initiated
@@ -155,22 +157,23 @@ recorded by the owning LLD/milestone plan.
 ## 7. Validation Policy
 
 Validation proves that the requirements work; it is not itself the product
-requirement. Each LLD/milestone plan decides the right verification method for its
-scope.
+requirement. Each LLD/milestone plan decides the right verification method for
+its scope.
 
-The post-V0.1 standalone qualification workflow is entirely development-only. Normal editor Debug and Release builds,
-packages and the normal SDK must contain no qualification command, request
-protocol, fixture, comparison harness or qualification runner. Opt-in test/tool
-targets own that work and write to isolated development output directories.
-Production renderer, loading and authoring fixes remain in their owning modules.
-Ordinary field/input validation and cook/runtime compatibility checks remain
-production responsibilities.
+The post-V0.1 standalone qualification workflow is entirely development-only.
+Normal editor Debug and Release builds, packages and the normal SDK must contain
+no qualification command, request protocol, fixture, comparison harness or
+qualification runner. Opt-in test/tool targets own that work and write to
+isolated development output directories. Production renderer, loading and
+authoring fixes remain in their owning modules. Ordinary field/input validation
+and cook/runtime compatibility checks remain production responsibilities.
 
-Pre-V0.1 formats migrate to the canonical model; no legacy runtime reader,
-alias or parallel behavior path is maintained. Useful existing content migrates
-using development tooling and normal recooking; the shipping product has one
-current contract. Migration recovery protects source work without keeping a
-legacy execution path. The [V0.1 authoring contract](review/ED-M08-v01-authoring-scope.md)
+Pre-V0.1 formats migrate to the canonical model; no legacy runtime reader, alias
+or parallel behavior path is maintained. Useful existing content migrates using
+development tooling and normal recooking; the shipping product has one current
+contract. Migration recovery protects source work without keeping a legacy
+execution path. The
+[V0.1 authoring contract](lld/scene-authoring-model.md#12-v01-capability-boundary)
 defines the final capability boundary and eliminated alternatives.
 
 Cheap, meaningful automated tests should be added when they give useful signal,
@@ -185,17 +188,18 @@ summarized once in [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md).
 
 This matrix is the release boundary. The linked field tables define the exact
 editable fields within each row; engine/schema additions do not silently expand
-V0.1. Read-only identity, diagnostics, and editor metadata do not require runtime
-projection. All editable authored fields below require commands, validation,
-undo/redo, save/reopen, cook/load preservation, and the stated preview behavior.
+V0.1. Read-only identity, diagnostics, and editor metadata do not require
+runtime projection. All editable authored fields below require commands,
+validation, undo/redo, save/reopen, cook/load preservation, and the stated
+preview behavior.
 
 | Capability                                    | Authoritative field/interaction contract                                                                           | Preview and release condition                                                                                                                                                                                                                                                                                                                                                                            |
 | --------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Scene hierarchy and Transform                 | `scene-authoring-model.md`; `property-inspector.md` Transform table; `property-pipeline.md`                        | Create/delete/rename/reparent and transforms synchronize; hierarchy/IDs survive cook/load.                                                                                                                                                                                                                                                                                                               |
-| Visibility and shadow participation           | `review/ED-M08-node-light-visibility-review.md`; `property-inspector.md`                                           | Local editor Hide is separate from authored Inherit/Shown/Hidden. Geometry and light eligibility honor resolved visibility; Affects Scene remains independent. Object casting, light shadowing and functional receiver controls remain separate. Hidden cameras remain usable. Generic node activation, authored shadow-only mode and blended shadow casting are excluded.                               |
+| Visibility and shadow participation           | `scene-authoring-model.md` section 4; `property-inspector.md`                                                      | Local editor Hide is separate from authored Inherit/Shown/Hidden. Geometry and light eligibility honor resolved visibility; Affects World remains independent. Object casting, light shadowing and functional receiver controls remain separate. Hidden cameras remain usable. Generic node activation, authored shadow-only mode and blended shadow casting are excluded.                               |
 | Geometry and all existing material slots      | `property-inspector.md`; `content-pipeline.md` procedural and slot contracts                                       | Every mesh slot supports independent per-instance assignment/clearing by stable SlotId; clearing restores its mesh material. Creation/topology editing is excluded. Palette: Cube, Sphere, Capsule, Cylinder, Cone, Plane, Quad, IcoSphere, Torus and advanced SubdividedCube, using the metric centred Z-up defaults. ArrowGizmo is internal; IcoSphere has one canonical identity.                     |
 | Basic perspective camera                      | `property-inspector.md` PerspectiveCamera table                                                                    | Pose, vertical FOV in degrees, Auto/Fixed aspect policy and near/far in metres synchronize and cook; runtime loads the explicitly selected authored camera independently of editor navigation. Auto is the new-camera default and derives per-view aspect without editing saved data. Fixed preserves its ratio/composition with bars and no cropping/stretching. Physical-camera authoring is deferred. |
-| Directional lights and atmospheric assignment | `property-inspector.md` DirectionalLight table; `review/ED-M08-celestial-light-authoring.md`                       | Realtime lighting; no Mixed/Baked authoring workflow. Per-light None/Primary/Secondary uses existing native names. Both atmospheric sources illuminate and shadow, including Secondary alone. Role None retains ordinary directional illumination. Assignments are unique, explicit and stable without promotion or a competing Sun pointer.                                                             |
+| Directional lights and atmospheric assignment | `property-inspector.md` DirectionalLight table; `environment-authoring.md` section 7                               | Realtime lighting; no Mixed/Baked authoring workflow. Per-light None/Primary/Secondary uses existing native names. Both atmospheric sources illuminate and shadow, including Secondary alone. Role None retains ordinary directional illumination. Assignments are unique, explicit and stable without promotion or a competing Sun pointer.                                                             |
 | Scene environment and post-processing         | `environment-authoring.md` field tables                                                                            | Atmosphere, captured-sky diffuse/specular lighting, Manual/Auto exposure, tone mapping, bloom, grading and display-only background have complete live/cooked effects. Atmospheric assignments are owned by lights; scene summary is read-only. Physical-camera authoring is excluded.                                                                                                                    |
 | Scalar material                               | `material-editor.md` field table                                                                                   | Scalar PBR, sidedness, opacity and linear emission colour/HDR intensity use canonical engine-schema data and float32 compiled emission. Swatch responds while editing; the scene displays published material until saved content is cooked/published. Save schedules incremental cooking. Emissive GI and texture authoring are excluded.                                                                |
 | Viewport authoring                            | `viewport-and-tools.md` V0.1 interaction contract                                                                  | One to four live viewports and a camera preview inset, navigation, frame selected/all, picking, selection feedback, transform gestures, icons, and bounded overlays; layout and per-viewport camera state survive reopening.                                                                                                                                                                             |
@@ -205,9 +209,9 @@ undo/redo, save/reopen, cook/load preservation, and the stated preview behavior.
 
 Unsupported required capabilities may produce safe diagnostics during
 development; they cannot satisfy release completion. No feature inside the
-supported matrix is deferred. PRD non-goals and the
-explicit unsupported component/import set are exclusions, not incomplete
-implementations that can be advertised as supported.
+supported matrix is deferred. PRD non-goals and the explicit unsupported
+component/import set are exclusions, not incomplete implementations that can be
+advertised as supported.
 
 ### Content workflow
 
@@ -215,18 +219,18 @@ The [content workflow contract](lld/content-cooking-workflows.md) defines
 browsing, picking, incremental execution and recovery:
 
 1. No generic project-settings panel or default renderer-preset selector in
-   V0.1. Project manifests/mounts supply cook scope; `Projects` owns those facts.
-   Supported creation uses existing templates and target selectors. Scene
+   V0.1. Project manifests/mounts supply cook scope; `Projects` owns those
+   facts. Supported creation uses existing templates and target selectors. Scene
    render intent uses the scene inspector; FPS/logging remain runtime-session
    controls; startup preferences stay editor-local. Cook and validation use the
    matched runtime profile, not an undeclared project renderer policy.
 2. Import and successful Save schedule incremental cooking of their saved scope;
    assignment and active-scene preview request required missing/stale assets.
-   Existing Cook Selected Asset, Cook Folder, Cook Current Scene, and Cook Project
-   remain explicit incremental actions. The existing Cook menu provides session
-   Pause automatic cooking / Resume. Browsing and unsaved edits never cook;
-   external-source reimport remains explicit. One project coordinator coalesces
-   requests; no separate stale-only batch scheduler is introduced.
+   Existing Cook Selected Asset, Cook Folder, Cook Current Scene, and Cook
+   Project remain explicit incremental actions. The existing Cook menu provides
+   session Pause automatic cooking / Resume. Browsing and unsaved edits never
+   cook; external-source reimport remains explicit. One project coordinator
+   coalesces requests; no separate stale-only batch scheduler is introduced.
 3. Descriptor/manifest inspection uses the existing content details/path-copy
    and cook result diagnostics, plus Inspect Cooked Output for runtime products.
    Dedicated Open Descriptor/Open Manifest commands and an embedded raw editor
@@ -237,27 +241,28 @@ browsing, picking, incremental execution and recovery:
    remains dirty and makes the resulting cook stale, without invalidating a
    successful cook of the captured saved revision.
 5. Cook runs against staging while authoring continues. Preview briefly pauses
-   for validated publication and resumes from the current authoring scene.
-   The pause and any failure are visible. One atomic publication selects complete
-   cooked generations; existing readers keep their previous content until replacement.
+   for validated publication and resumes from the current authoring scene. The
+   pause and any failure are visible. One atomic publication selects complete
+   cooked generations; existing readers keep their previous content until
+   replacement.
 
 ## 9. Compatibility And Validation Envelope
 
 V0.1 supports Windows 11 x64 with the repository's .NET/WinUI runtime and an
 Oxygen-supported D3D12 adapter. The ordinary Interop build records its installed
 native SDK inputs in assembly metadata. Startup reads that metadata without
-loading Interop and checks the installed native binaries. An SDK mismatch reports
-which dependency changed and requests an Interop rebuild before native calls.
-Managed/UI edits require no qualification manifest or separate probe build.
-Debug and Release use the same automatic build-compatibility workflow.
+loading Interop and checks the installed native binaries. An SDK mismatch
+reports which dependency changed and requests an Interop rebuild before native
+calls. Managed/UI edits require no qualification manifest or separate probe
+build. Debug and Release use the same automatic build-compatibility workflow.
 
 Cooking checks its tools and matching editor/native schemas when requested and
 captures producer hashes for incremental invalidation. These checks do not block
-viewport startup. Regression tests run in existing test projects; no qualification
-promotion command or dedicated probe project is required. Project Browser and
-safe authoring/save remain available when native compatibility fails. Project
-manifest schema version 1 is supported; unsupported versions are rejected
-without rewriting.
+viewport startup. Regression tests run in existing test projects; no
+qualification promotion command or dedicated probe project is required. Project
+Browser and safe authoring/save remain available when native compatibility
+fails. Project manifest schema version 1 is supported; unsupported versions are
+rejected without rewriting.
 
 Release validation records CPU, RAM, GPU/VRAM, driver, OS/runtime versions,
 build configuration, and exact fixture hashes. This establishes support on the
@@ -266,23 +271,25 @@ recorded configuration, not a claim about all hardware satisfying a GPU name.
 Qualified scale: 100 scene nodes and 1,000 logical authored catalog entries.
 Derived companions must not inflate logical row counts. The fixture includes
 hierarchy, 98 geometry nodes, one perspective camera, one directional sun,
-environment settings, every exposed built-in shape and small imported meshes, shared and
-distinct scalar materials. Pad the catalog with valid scalar descriptors to
-exactly 1,000 entries. Keep visible geometry at or below 250,000 triangles.
+environment settings, every exposed built-in shape and small imported meshes,
+shared and distinct scalar materials. Pad the catalog with valid scalar
+descriptors to exactly 1,000 entries. Keep visible geometry at or below 250,000
+triangles.
 
 V0.1 does not benchmark editor performance; no timing budget gates the release.
-Larger projects remain unqualified;
-they may open if resources permit and must fail visibly without corrupting saved
-data. No autosave/recovery of unsaved edits is promised; the last successful
-explicit Save must remain valid after a crash or interrupted later write.
+Larger projects remain unqualified; they may open if resources permit and must
+fail visibly without corrupting saved data. No autosave/recovery of unsaved
+edits is promised; the last successful explicit Save must remain valid after a
+crash or interrupted later write.
 
 ## 10. Release Acceptance
 
 ED-M10 closes only after all non-deferred capability gates have fresh evidence
-for the qualified build. ED-M08 proves the saved/published authoring slice and the viewport-tool
-gates; ED-M09 adds input authoring; neither depends on completion of a later
-milestone. The detailed ED-M08/09/10 plans own execution and evidence collection.
-No prototype warning, prior milestone row, issue fix, or newly written document
-substitutes for proof of a changed contract. Earlier evidence remains historical
-evidence at its original scope; newly required guarantees are owned by explicit gap-closing milestones.
-Previously closed milestone statuses and their original evidence remain intact.
+for the qualified build. ED-M08 proves the saved/published authoring slice and
+the viewport-tool gates; ED-M09 adds input authoring; neither depends on
+completion of a later milestone. The detailed ED-M08/09/10 plans own execution
+and evidence collection. No prototype warning, prior milestone row, issue fix,
+or newly written document substitutes for proof of a changed contract. Earlier
+evidence remains historical evidence at its original scope; newly required
+guarantees are owned by explicit gap-closing milestones. Previously closed
+milestone statuses and their original evidence remain intact.

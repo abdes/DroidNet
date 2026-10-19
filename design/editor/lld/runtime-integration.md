@@ -3,6 +3,8 @@
 Status:
 `final runtime and ED-M08 integration contract; delivery evidence tracked by milestone`
 
+Last Updated: 2026-10-20 01:32
+
 ## 1. Purpose
 
 Define the managed boundary between the WinUI editor and the embedded Oxygen
@@ -83,9 +85,9 @@ Known ED-M02 gaps:
 - Attach/create/resize completion means "accepted by the managed/native
   boundary", not "a frame has visibly presented"; validation must use visual
   evidence and logs.
-- Engine startup is owned by workspace activation today. ED-M02 must make that
-  ownership explicit and ensure workspace code does not call mount/surface
-  operations before `Running`.
+- Engine startup is owned by LivePreview's preview session
+  ([live-preview.md](live-preview.md)); no code calls mount/surface operations
+  before `Running`.
 - Surface and view ownership is split between `Oxygen.Editor.Runtime` and
   WorldEditor viewport code. ED-M02 accepts this split but documents the
   invariants that must hold.
@@ -160,14 +162,14 @@ native engine frame loop. The ordering contract is:
 
 ## 7. Ownership
 
-| Owner                                   | Responsibility                                                                                                            |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor`                         | Process bootstrap, DI composition, native runtime discovery setup.                                                        |
-| `Oxygen.Editor.LivePreview`             | Preview session: engine start on workspace activation, cooked-root mounting and publication preview; scene preview; Play. |
-| `Oxygen.Editor.WorldEditor` viewport UI | `SwapChainPanel` ownership, load/unload/size events, initial measured size, engine view request timing.                   |
-| `Oxygen.Editor.Runtime`                 | Engine lifecycle, settings bridge, surface leases, view calls, input bridge access, runtime diagnostics mapping.          |
-| `Oxygen.Editor.Interop`                 | Managed/native bridge calls and native handle abstractions.                                                               |
-| Oxygen Engine                           | Frame loop, rendering, content loading, composition, native resource ownership.                                           |
+| Owner                                   | Responsibility                                                                                                           |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `Oxygen.Editor`                         | Process bootstrap, DI composition, native runtime discovery setup.                                                       |
+| `Oxygen.Editor.LivePreview`             | Preview session: engine start when the project opens, cooked-root mounting and publication preview; scene preview; Play. |
+| `Oxygen.Editor.WorldEditor` viewport UI | `SwapChainPanel` ownership, load/unload/size events, initial measured size, engine view request timing.                  |
+| `Oxygen.Editor.Runtime`                 | Engine lifecycle, settings bridge, surface leases, view calls, input bridge access, runtime diagnostics mapping.         |
+| `Oxygen.Editor.Interop`                 | Managed/native bridge calls and native handle abstractions.                                                              |
+| Oxygen Engine                           | Frame loop, rendering, content loading, composition, native resource ownership.                                          |
 
 ED-M02 accepts that viewport UI currently creates engine views directly after
 surface attachment. Later runtime cleanup may wrap view lifecycle more tightly
@@ -542,7 +544,9 @@ Minimum ED-M02 rule:
 
 Allowed:
 
-- `Oxygen.Editor.WorldEditor` depends on `Oxygen.Editor.Runtime`.
+- `Oxygen.Editor.LivePreview` is the only domain module that depends on
+  `Oxygen.Editor.Runtime` and `Oxygen.Interop`; viewport UI depends on
+  `Oxygen.Editor.Runtime` for surface and view leases.
 - `Oxygen.Editor.Runtime` depends on `Oxygen.Editor.Interop`.
 - `Oxygen.Editor.Runtime` depends on DroidNet hosting/settings abstractions.
 - The surface attach entry point may accept a `SwapChainPanel` passed by the
@@ -864,7 +868,7 @@ second capture implementation in the runtime adapter.
 ## 20. Authored Visibility And Editor View Hiding
 
 The
-[scene authoring model](scene-authoring-model.md#ed-m08-visibility-and-shadow-source-state)
+[scene authoring model](scene-authoring-model.md#visibility-participation-and-shadow-source-state)
 owns canonical Local/Inherit values and migration. The ordinary engine
 scene/rendering path owns their effective behavior; this is production behavior,
 not qualification instrumentation.
@@ -894,12 +898,12 @@ Editor-only Hide is a separate **main-view representation mask**, correlated to
 the current project/document/view lifetime. It hides geometry, shadows and
 viewport picking (plus descendants) in the editing view; the transform gizmo
 still renders when the node is selected and the node stays in the scene graph.
-It leaves light collection, shadow-caster eligibility and other scene outputs
-unchanged. Keep its per-user/project workspace state outside authored assets.
-Preserve individual child hide choices across parent hide/show; Show All clears
-the view overrides. Do not route this feature through authored `SetVisibility`.
-The eye toggle records an undo step and never dirties the document or requests
-cooking.
+It drops the node's geometry, depth and cast shadows from editing views only;
+capture, game and validation views are unaffected. Keep its per-user/project
+workspace state outside authored assets. Preserve individual child hide choices
+across parent hide/show; Show All clears the view overrides. Do not route this
+feature through authored `SetVisibility`. The eye toggle records an undo step
+and never dirties the document or requests cooking.
 
 Visible off-screen casters remain eligible for shadows. Authored Hidden cannot
 cast shadows; editor-only Hide retains eligibility. Blended shadow casting and

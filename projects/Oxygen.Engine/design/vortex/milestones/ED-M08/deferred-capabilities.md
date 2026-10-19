@@ -2,13 +2,16 @@
 
 Status: **final V0.1 scope record**
 
+Last Updated: 2026-10-20 01:32
+
 This record defines post-V0.1 boundaries and their source-local tracking IDs.
 Source annotations identify the actual capacity limit, omitted mode or authoring
 gap. Missing implementation of a V0.1 feature remains current milestone work.
 
-Authority: [authoring contract](../../../../../../design/editor/review/ED-M08-v01-authoring-scope.md),
-[visibility/shadow contract](../../../../../../design/editor/review/ED-M08-node-light-visibility-review.md),
-[Primary/Secondary celestial contract](../../../../../../design/editor/review/ED-M08-celestial-light-authoring.md).
+Authority:
+[authoring contract](../../../../../../design/editor/lld/scene-authoring-model.md#12-v01-capability-boundary),
+[visibility/shadow contract](../../../../../../design/editor/lld/scene-authoring-model.md#visibility-participation-and-shadow-source-state),
+[Primary/Secondary celestial contract](../../../../../../design/editor/lld/environment-authoring.md#7-per-light-atmosphere-assignment).
 
 ## Source annotation rule
 
@@ -25,22 +28,22 @@ link to its section here. For example:
 - Describe exactly what is deferred and what already works.
 - Keep one useful annotation at a decision boundary; do not repeat it at every
   caller or annotate unrelated untouched files merely to populate a checklist.
-- Maintain annotations with the relevant implementation and remove them when
-  the deferred feature is delivered.
+- Maintain annotations with the relevant implementation and remove them when the
+  deferred feature is delivered.
 - Keep Primary/Secondary identifiers and relevant existing API names. There is
   no naming cleanup task for neutral A/B terminology.
 - Editor-only exposure belongs to editor work. If native behavior already
   exists, mark an authoring/persistence/qualification gap rather than inventing
   a missing runtime feature.
-- Validation protocols, fixtures, telemetry and qualification runners remain
-  in opt-in development targets.
+- Validation protocols, fixtures, telemetry and qualification runners remain in
+  opt-in development targets.
 
-The annotations are present at the role enum/direction boundary,
-analytic-disk helper, light master gate, authored visibility rejection,
-opaque/masked caster routing, node-state contract, light mobility/angle fields.
-These are comment-only tracking changes; they do not implement deferred or
-current V0.1 functionality. Later implementation must keep them at the relevant
-boundary and update/remove a note when its feature is delivered.
+The annotations are present at the role enum/direction boundary, analytic-disk
+helper, light master gate, authored visibility rejection, opaque/masked caster
+routing, node-state contract, light mobility/angle fields. These are
+comment-only tracking changes; they do not implement deferred or current V0.1
+functionality. Later implementation must keep them at the relevant boundary and
+update/remove a note when its feature is delivered.
 
 ## Deferred capabilities
 
@@ -51,7 +54,8 @@ and Secondary, including two suns or sun and moon. Expanding the count requires
 coherent scene/schema, GPU payload, LUT/pass and shader changes; increasing one
 constant is insufficient.
 
-Source owners: [DirectionalLight.h](../../../../src/Oxygen/Scene/Light/DirectionalLight.h),
+Source owners:
+[DirectionalLight.h](../../../../src/Oxygen/Scene/Light/DirectionalLight.h),
 [DirectionalLightResolver.cpp](../../../../src/Oxygen/Scene/Light/DirectionalLightResolver.cpp),
 [AtmosphereLightModel.h](../../../../src/Oxygen/Vortex/Environment/Types/AtmosphereLightModel.h).
 
@@ -63,7 +67,8 @@ surface map, phase/orientation shading or a body-kind control without an effect.
 Secondary is not intrinsically Moon; the existing convenience name does not
 implement an astronomical body renderer.
 
-Source owners: [DirectionalLight.h](../../../../src/Oxygen/Scene/Light/DirectionalLight.h),
+Source owners:
+[DirectionalLight.h](../../../../src/Oxygen/Scene/Light/DirectionalLight.h),
 [Sky.hlsl](../../../../src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Environment/Sky.hlsl).
 
 ### EV01-CELESTIAL-MOTION
@@ -72,18 +77,21 @@ Source owners: [DirectionalLight.h](../../../../src/Oxygen/Scene/Light/Direction
 transforms. Future astronomy/controller authoring should drive those transforms;
 the light resolver should not accumulate an orbital simulation responsibility.
 
-Source boundaries: [DirectionalLight.h](../../../../src/Oxygen/Scene/Light/DirectionalLight.h),
+Source boundaries:
+[DirectionalLight.h](../../../../src/Oxygen/Scene/Light/DirectionalLight.h),
 [DirectionalLightResolver.cpp](../../../../src/Oxygen/Scene/Light/DirectionalLightResolver.cpp).
 
 ### EV01-LIGHT-SKY-ONLY
 
-**Authored sky-only light contribution.** The V0.1 Affects Scene gate
-controls all contribution; an atmosphere assignment additionally opts a light
-into sky systems. A future sky-only mode needs explicit destination semantics
-and consistent consumers. Both atmosphere slots participate in the delivered direct-light path; a
-sky-only contribution mode remains a separate authoring extension.
+**Authored sky-only light contribution.** The V0.1 Affects Scene gate controls
+all contribution; an atmosphere assignment additionally opts a light into sky
+systems. A future sky-only mode needs explicit destination semantics and
+consistent consumers. Both atmosphere slots participate in the delivered
+direct-light path; a sky-only contribution mode remains a separate authoring
+extension.
 
-Source owners: [LightCommon.h](../../../../src/Oxygen/Scene/Light/LightCommon.h),
+Source owners:
+[LightCommon.h](../../../../src/Oxygen/Scene/Light/LightCommon.h),
 [DirectionalLight.h](../../../../src/Oxygen/Scene/Light/DirectionalLight.h),
 [DirectionalLightResolver.cpp](../../../../src/Oxygen/Scene/Light/DirectionalLightResolver.cpp),
 [SceneRenderer.cpp](../../../../src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp).
@@ -92,8 +100,8 @@ Source owners: [LightCommon.h](../../../../src/Oxygen/Scene/Light/LightCommon.h)
 
 **Authored Shadows Only / Hidden Shadow mode.** V0.1 authored Hidden suppresses
 geometry and its casting. Internal shadow-only routing already exists for
-off-camera visible casters; editor-only Hide must also retain caster eligibility
-under the workspace-visibility contract. Neither is an authored hidden-shadow mode.
+off-camera visible casters; editor-only Hide removes geometry and its casting
+from editing views only. Neither is an authored hidden-shadow mode.
 
 Source owners: [node flags](../../../../src/Oxygen/Scene/Types/Flags.h),
 [RenderableComponent.h](../../../../src/Oxygen/Scene/Detail/RenderableComponent.h),
@@ -102,11 +110,13 @@ Source owners: [node flags](../../../../src/Oxygen/Scene/Types/Flags.h),
 ### EV01-SHADOW-BLEND
 
 **Shadow casting by alpha-blended materials.** Opaque/masked shadow routing and
-masked alpha clipping already exist. Blend needs an explicit opacity/transmission
-model; routing it through ordinary opaque depth would give incorrect shadows.
-This does not defer rendering blended surfaces or their receiver effect.
+masked alpha clipping already exist. Blend needs an explicit
+opacity/transmission model; routing it through ordinary opaque depth would give
+incorrect shadows. This does not defer rendering blended surfaces or their
+receiver effect.
 
-Source owners: [DrawMetadataEmitter.cpp](../../../../src/Oxygen/Vortex/Resources/DrawMetadataEmitter.cpp),
+Source owners:
+[DrawMetadataEmitter.cpp](../../../../src/Oxygen/Vortex/Resources/DrawMetadataEmitter.cpp),
 [ShadowDepthPass.cpp](../../../../src/Oxygen/Vortex/Shadows/Passes/ShadowDepthPass.cpp),
 [DirectionalShadowDepth.hlsl](../../../../src/Oxygen/Graphics/Direct3D12/Shaders/Vortex/Services/Shadows/DirectionalShadowDepth.hlsl).
 
@@ -127,26 +137,28 @@ Source owners: [node flags](../../../../src/Oxygen/Scene/Types/Flags.h),
 
 **Mixed/Baked light authoring and production.** The native mobility enum names
 these workflows but does not supply a V0.1 light-baking pipeline. V0.1 authors
-realtime lights; canonical source does not expose an ineffective mobility choice.
-Future baking needs bake products, invalidation, runtime composition and a
-complete authoring/publication workflow before those choices become available.
+realtime lights; canonical source does not expose an ineffective mobility
+choice. Future baking needs bake products, invalidation, runtime composition and
+a complete authoring/publication workflow before those choices become available.
 
-Source boundary: [LightCommon.h](../../../../src/Oxygen/Scene/Light/LightCommon.h).
+Source boundary:
+[LightCommon.h](../../../../src/Oxygen/Scene/Light/LightCommon.h).
 
 ### EV01-LIGHT-FINITE-SOURCE
 
 **Finite-source directional shading and variable shadow softness.** Current
 angular diameter controls the analytic atmosphere disk. Conventional shadows
 retain the existing fixed 3×3 PCF filter; directional surface shading does not
-derive finite-source specular broadening from this angle. V0.1 labels the control
-Atmosphere Disk Diameter and shows it for assigned atmosphere contributors.
-Future finite-source shading requires a separate renderer contract and reference
-images; the stored angular size alone does not implement those effects. With
-virtual shadow maps, the same angular size sets SMRT shadow softness
-([VSM-D12](../../lld/virtual-shadow-maps.md#2-decisions)); the control's label
-changes with that slice.
+derive finite-source specular broadening from this angle. V0.1 labels the
+control Atmosphere Disk Diameter and shows it for assigned atmosphere
+contributors. Future finite-source shading requires a separate renderer contract
+and reference images; the stored angular size alone does not implement those
+effects. With virtual shadow maps, the same angular size sets SMRT shadow
+softness ([VSM-D12](../../lld/virtual-shadow-maps.md#2-decisions)); the
+control's label changes with that slice.
 
-Source boundary: [DirectionalLight.h](../../../../src/Oxygen/Scene/Light/DirectionalLight.h).
+Source boundary:
+[DirectionalLight.h](../../../../src/Oxygen/Scene/Light/DirectionalLight.h).
 Existing shadow scope: [conventional shadow parity](../VTX-M05D/README.md).
 
 ## Engine capabilities without a renderer
@@ -156,25 +168,26 @@ them because nothing renders them, not by editor choice:
 
 - Volumetric clouds: `VolumetricCloudsEnvironmentRecord` is loaded, but no
   Vortex pass draws clouds.
-- Fog inscattering color cubemap: stored on `Fog`, but the environment
-  lighting service never marks it usable or binds it.
+- Fog inscattering color cubemap: stored on `Fog`, but the environment lighting
+  service never marks it usable or binds it.
 - Depth of field and motion blur: no Vortex pass; aperture and shutter rate
   affect exposure only.
 - Material graphs: the engine has none; materials are parameter and texture
   channel assets.
 
-Physics authoring is post-V0.1 by owner decision; the native physics module
-and its cooked scene bindings are unaffected. Physical-camera, fog, local fog
+Physics authoring is post-V0.1 by owner decision; the native physics module and
+its cooked scene bindings are unaffected. Physical-camera, fog, local fog
 volume, Sky Sphere, Sky Light and script authoring are V0.1 editor work
 (ED-M08.10).
 
 ## Must remain V0.1 work
 
-Do **not** defer physical-camera exposure authoring, point and spot light authoring and rendering, either atmosphere
-slot's real direct lighting/shadowing, ordinary directional fill lighting,
-captured-sky diffuse/specular lighting, functional Receive Shadows, correct
-visibility invalidation, all material slots, scalar emission, Capsule and
-canonical primitive defaults, finite input validation, Auto/Fixed camera framing,
-or orthographic camera sync command. These are current obligations. A post-V0.1
+Do **not** defer physical-camera exposure authoring, point and spot light
+authoring and rendering, either atmosphere slot's real direct
+lighting/shadowing, ordinary directional fill lighting, captured-sky
+diffuse/specular lighting, functional Receive Shadows, correct visibility
+invalidation, all material slots, scalar emission, Capsule and canonical
+primitive defaults, finite input validation, Auto/Fixed camera framing, or
+orthographic camera sync command. These are current obligations. A post-V0.1
 TODO cannot replace an implementation or validation gate for a retained V0.1
 control.

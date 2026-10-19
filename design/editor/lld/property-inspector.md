@@ -1,13 +1,16 @@
 # Property Inspector LLD
 
-Status: **Final V0.1 contract**. [Implementation status](../IMPLEMENTATION_STATUS.md)
-records delivered behavior and remaining qualification.
+Status: **Final V0.1 contract**.
+[Implementation status](../IMPLEMENTATION_STATUS.md) records delivered behavior
+and remaining qualification.
+
+Last Updated: 2026-10-20 01:32
 
 ## 1. Purpose and scope
 
 The inspector edits Transform, Geometry/all existing material slots, basic
-PerspectiveCamera, DirectionalLight and scene environment/post-processing.
-Every editable field in this contract must work through command, Undo/Redo,
+PerspectiveCamera, DirectionalLight and scene environment/post-processing. Every
+editable field in this contract must work through command, Undo/Redo,
 Save/reopen, cooking/loading and live native rendering. Advanced means supported
 with secondary disclosure; it does not mean an unimplemented property.
 
@@ -18,8 +21,9 @@ state, [environment authoring](environment-authoring.md) owns scene settings,
 [live sync](live-engine-sync.md) owns revision-aware runtime convergence.
 
 This covers REQ-005 through REQ-009, REQ-022/024/026/037 and SUCCESS-002/003.
-Import UI, topology editing, general simulation activation and transform
-gizmos are outside this inspector slice. Native capabilities outside this surface remain with their engine owners.
+Import UI, topology editing, general simulation activation and transform gizmos
+are outside this inspector slice. Native capabilities outside this surface
+remain with their engine owners.
 
 ## 2. Ownership and mutation flow
 
@@ -73,32 +77,34 @@ replacement; cosmetic renaming creates no feature value.
 | Geometry Receive Shadows | Inherit / On / Off; root/default On, child Inherit      | Advanced; Off skips direct-light shadow attenuation while retaining direct lighting, ambient occlusion and casting |
 
 Local overrides replace inheritance. A locally Shown child may render/illuminate
-under a Hidden parent; no extra light-only ancestor gate is permitted. Reparenting
-recomputes inherited values without overwriting stored modes. Multi-selection
-shows mixed source modes independently of different effective values.
-Root Inherit resolves the scene defaults Shown/Cast On/Receive On and displays
-that origin. This resolution and the creation defaults are explicit engine/model
-policies, not assumptions about the current low-level Flags constructor.
+under a Hidden parent; no extra light-only ancestor gate is permitted.
+Reparenting recomputes inherited values without overwriting stored modes.
+Multi-selection shows mixed source modes independently of different effective
+values. Root Inherit resolves the scene defaults Shown/Cast On/Receive On and
+displays that origin. This resolution and the creation defaults are explicit
+engine/model policies, not assumptions about the current low-level Flags
+constructor.
 
 Effective Hidden removes the node's geometry, shadows and light contribution.
-Hidden cameras remain selectable/usable. Geometry Cast/Receive flags are distinct
-from Light Cast Shadows. Opaque/masked casting is supported; blended casting and
-authored Shadows Only/Hidden Shadow modes are excluded. Visible off-screen
-casters may remain in shadow submissions.
+Hidden cameras remain selectable/usable. Geometry Cast/Receive flags are
+distinct from Light Cast Shadows. Opaque/masked casting is supported; blended
+casting and authored Shadows Only/Hidden Shadow modes are excluded. Visible
+off-screen casters may remain in shadow submissions.
 
-The eye control, **Hide in editor**, instead masks geometry, shadows and viewport
-picking (plus descendants) in the editing main view; the transform gizmo still
-renders when the node is selected. Light contribution/caster eligibility remain
-unchanged. Store its choices in per-user/project workspace state outside
-authored content. Parent hide/show retains child choices; Show All clears view
-overrides. The toggle records an undo step and never dirties the scene
-document, changes saved source or requests cooking.
-Derived runtime presence (`IsActive`) is not an authored activation field.
+The eye control, **Hide in editor**, instead masks geometry, shadows and
+viewport picking (plus descendants) in the editing main view; the transform
+gizmo still renders when the node is selected. Hidden geometry casts no shadow
+in the editing views; authored state and other views are untouched. Store its
+choices in per-user/project workspace state outside authored content. Parent
+hide/show retains child choices; Show All clears view overrides. The toggle
+records an undo step and never dirties the scene document, changes saved source
+or requests cooking. Derived runtime presence (`IsActive`) is not an authored
+activation field.
 
 ## 5. Transform
 
-All axes use common-component multi-selection and per-axis mixed values. Transform
-is required and locked against removal.
+All axes use common-component multi-selection and per-axis mixed values.
+Transform is required and locked against removal.
 
 | Field                | Source/unit                                   | Default  | Bounds and commit                                                           | Active effect                                                     |
 | -------------------- | --------------------------------------------- | -------- | --------------------------------------------------------------------------- | ----------------------------------------------------------------- |
@@ -122,8 +128,8 @@ quaternion, rotation-order, pivot and generic activation controls are absent.
 ### Primitive recipes
 
 The native catalog owns generator identity, recipes and defaults. The creation
-palette contains ten canonical choices; SubdividedCube is Advanced. No independent
-managed list or corrective editor rotation/scale is permitted.
+palette contains ten canonical choices; SubdividedCube is Advanced. No
+independent managed list or corrective editor rotation/scale is permitted.
 
 | Primitive             | Metric default and orientation                       |
 | --------------------- | ---------------------------------------------------- |
@@ -136,33 +142,32 @@ managed list or corrective editor rotation/scale is permitted.
 | Quad                  | 1 x 1 m upright XZ card, facing -Y                   |
 
 All use centred pivots in Oxygen's metre/Z-up coordinate system. Native buffers,
-bounds, normals, UVs and winding must satisfy these recipes. ArrowGizmo is a tool
-resource, not a creation choice. IcoSphere has one canonical identity. Useful
-old ArrowGizmo scene uses migrate to ordinary geometry. Recipe changes require
-matching API prose and native/editor rendered evidence.
+bounds, normals, UVs and winding must satisfy these recipes. ArrowGizmo is a
+tool resource, not a creation choice. IcoSphere has one canonical identity.
+Useful old ArrowGizmo scene uses migrate to ordinary geometry. Recipe changes
+require matching API prose and native/editor rendered evidence.
 
 ### Existing material slots
 
 `MaterialSlotId` is engine-owned, opaque 128-bit identity, serialized as a UUID;
 indices/names are presentation metadata. The native inventory provides slot IDs,
-layout revision and per-LOD/submesh bindings. Assignment stores the geometry URI,
-slot ID, witnessed layout revision and material identity on that instance.
+layout revision and per-LOD/submesh bindings. Assignment stores the geometry
+URI, slot ID, witnessed layout revision and material identity on that instance.
 
-Clear removes the override; engine Default is an explicit separate choice.
-The current Inspector uses one slot selector and one assignment picker. It offers
+Clear removes the override; engine Default is an explicit separate choice. The
+current Inspector uses one slot selector and one assignment picker. It offers
 only slots reported by the native inventory, keeps mixed assignment values for
 instances of the same geometry, and requires matching geometry before a batch
 edit. The picker captures geometry/SlotId/revision before its asynchronous work;
 the command revalidates that target before mutating any selected instance.
-Unavailable inventories and unresolved assignments appear beside the picker.
-New edits use `ObservedEdit` validation; saved scene projection and history use
+Unavailable inventories and unresolved assignments appear beside the picker. New
+edits use `ObservedEdit` validation; saved scene projection and history use
 `RetainedAssignment`, resolving the same geometry and surviving SlotId against
 the current native inventory. This transport intent is not persisted authoring
-data. Missing or foreign identities remain unresolved; revision drift alone
-does not invalidate proven slot continuity.
-Every nonzero slot receives the same command/history/Save/cook/live-binding and
-failure recovery as slot zero. No adding/removing slots or modifying shared mesh
-or material data is offered.
+data. Missing or foreign identities remain unresolved; revision drift alone does
+not invalidate proven slot continuity. Every nonzero slot receives the same
+command/history/Save/cook/live-binding and failure recovery as slot zero. No
+adding/removing slots or modifying shared mesh or material data is offered.
 
 Reimport retains only proven identity continuity. Unproven matching keeps the
 unresolved override and old context and blocks affected scene cook/qualification
@@ -201,21 +206,21 @@ cameras; no synthetic fallback. A hidden camera node remains usable.
 | Aspect Mode        | Auto / Fixed, Auto         | Defined values | Auto derives aspect per target, retaining OrthographicSize  |
 | Fixed Aspect Ratio | float32 width/height, 16/9 | Finite >0      | Shown in Fixed mode; retain ratio when toggling modes       |
 
-Orthographic uses the same Auto/Fixed framing and bar composition as perspective,
-with OrthographicSize in place of vertical FOV; horizontal extent is
-OrthographicSize × aspect. Aperture (f-number), shutter rate (1/s) and ISO are
-authored on both projections and set the camera EV that ManualCamera exposure
-uses (ED-M08.10). The engine renders no depth of field or motion blur, so
-sensor and lens fields are not offered.
+Orthographic uses the same Auto/Fixed framing and bar composition as
+perspective, with OrthographicSize in place of vertical FOV; horizontal extent
+is OrthographicSize × aspect. Aperture (f-number), shutter rate (1/s) and ISO
+are authored on both projections and set the camera EV that ManualCamera
+exposure uses. The engine renders no depth of field or motion blur, so sensor
+and lens fields are not offered.
 
 ## 8. Directional light
 
-All numeric rows are float32 unless stated otherwise. Light colour is linear RGB;
-colour-picker display conversion occurs at the UI boundary only.
+All numeric rows are float32 unless stated otherwise. Light colour is linear
+RGB; colour-picker display conversion occurs at the UI boundary only.
 
 | Field                                           | Default/unit                                       | Bounds                                            | Disclosure/active effect                                                                 |
 | ----------------------------------------------- | -------------------------------------------------- | ------------------------------------------------- | ---------------------------------------------------------------------------------------- |
-| Affects Scene (`AffectsWorld`)                  | On; bool                                           | Boolean                                           | Primary; controls all contribution, separately gated by effective node visibility        |
+| Affects World (`AffectsWorld`)                  | On; bool                                           | Boolean                                           | Primary; controls all contribution, separately gated by effective node visibility        |
 | Color                                           | (1,1,1); linear RGB                                | Clamp each channel [0,1]                          | Primary; illumination and atmospheric colour                                             |
 | IntensityLux                                    | 100000 lux                                         | Clamp >=0                                         | Primary; stored illuminance                                                              |
 | Cast Shadows                                    | On; bool                                           | Boolean                                           | Primary; shadowing from this light, independent of geometry flags                        |
@@ -234,17 +239,17 @@ colour-picker display conversion occurs at the UI boundary only.
 | TransitionFraction                              | 0.1                                                | [0,1]                                             | Advanced conventional shadows; cascade transition                                        |
 | DistanceFadeoutFraction                         | 0.1                                                | [0,1]                                             | Advanced conventional shadows; far-distance fade                                         |
 
-Mode/count-dependent CSM inputs without an active effect remain visible but disabled.
-Mode/count changes retain all manual distances and the distribution exponent;
-they do not overwrite dormant authoring data. With multiple lights selected,
-mode-specific inputs require a common split mode, and each editable boundary
-must precede the final cascade on every selected light. Cascade count and Maximum
-distance remain editable in both modes. The final active cascade always ends at
-the lesser of Maximum distance and the camera far plane, so its stored manual
-distance is not independently editable.
+Mode/count-dependent CSM inputs without an active effect remain visible but
+disabled. Mode/count changes retain all manual distances and the distribution
+exponent; they do not overwrite dormant authoring data. With multiple lights
+selected, mode-specific inputs require a common split mode, and each editable
+boundary must precede the final cascade on every selected light. Cascade count
+and Maximum distance remain editable in both modes. The final active cascade
+always ends at the lesser of Maximum distance and the camera far plane, so its
+stored manual distance is not independently editable.
 
-Light Cast Shadows On is an explicit creation default. The writer emits it;
-the low-level native CommonLightProperties constructor currently defaults Off.
+Light Cast Shadows On is an explicit creation default. The writer emits it; the
+low-level native CommonLightProperties constructor currently defaults Off.
 Realtime is the canonical authored mobility. Remove Mixed/Baked choices and the
 redundant authored mobility field; do not advertise a nonexistent bake workflow.
 Existing shadow/CSM/contact and compensation fields require complete cooker,
@@ -255,15 +260,15 @@ Atmosphere Disk Diameter retains the existing native AngularSizeRadians field
 and setter/getter names. Show it only for Primary/Secondary assignment; explain
 inactivity when atmosphere/disks or light participation is disabled. It does not
 promise area-light specular highlights or penumbra widening. V0.1 retains the
-conventional 3x3 PCF filter; PCSS/finite-source GGX is outside this contract, not
-an implicit implementation behind the disk control. See the exact
+conventional 3x3 PCF filter; PCSS/finite-source GGX is outside this contract,
+not an implicit implementation behind the disk control. See the exact
 [contact-shadow algorithm](#contact-shadow-algorithm) for the separate bool.
 
 Each non-None atmosphere slot has at most one stored occupant, including hidden/
 off lights. Reject occupied-slot edits with the occupant's identity and no
 partial reassignment. Disabling/hiding retains assignment; Secondary-only never
-promotes to Primary. The names imply no brightness priority or Moon type.
-Keep native AtmosphereLightSlot and its setter/getter names; no A/B aliases.
+promotes to Primary. The names imply no brightness priority or Moon type. Keep
+native AtmosphereLightSlot and its setter/getter names; no A/B aliases.
 SceneEnvironmentData stores no SunNodeId, IsSunLight or Contributes authority.
 The environment Primary picker edits the selected directional light through the
 same validated property command and undo history as its inspector. An occupied
@@ -281,19 +286,19 @@ sources and sky-only authoring are outside V0.1.
 `Shadow.ContactShadows` adds short-range screen-space occlusion to this light's
 direct-shadow attenuation. It applies to every authored directional light,
 including role None, independently of atmospheric membership. Evaluate it only
-when Affects Scene and effective visibility permit contribution, Light Cast
+when Affects World and effective visibility permit contribution, Light Cast
 Shadows is On, and the receiving surface's resolved Receive Shadows is On.
 Receiver Off bypasses both conventional-map and contact attenuation, leaving
 other lighting/caster behavior unchanged.
 
 The fixed V0.1 engine profile is a 0.25 m ray, 16 point-depth samples, 0.001 m
 origin normal bias and a view-depth hit thickness of two steps (0.03125 m), so
-occluders between samples are not stepped over. These are engine constants,
-not new inspector sliders. For receiver world position P, use the normalized
-world geometric normal after sidedness/orientation correction, excluding
-normal-map perturbations: origin `P + 0.001 * N_geometric`. Trace toward the
-light along normalized L. Sample distances are `0.25 * (i + 1) / 16` metres for
-`i = 0..15`; no temporal random phase or accumulated history is introduced.
+occluders between samples are not stepped over. These are engine constants, not
+new inspector sliders. For receiver world position P, use the normalized world
+geometric normal after sidedness/orientation correction, excluding normal-map
+perturbations: origin `P + 0.001 * N_geometric`. Trace toward the light along
+normalized L. Sample distances are `0.25 * (i + 1) / 16` metres for `i = 0..15`;
+no temporal random phase or accumulated history is introduced.
 
 Project samples with the current camera into its content rectangle and point
 sample caster depth at mip 0. Exclude the exact point-sampled start-depth value
@@ -304,15 +309,14 @@ point, reconstructed along the sample's eye ray, lies within
 `pixel_size * sin(view-normal angle) + 0.001` of the receiver's own plane is the
 receiver seen through point-sampled depth, not an occluder, and is skipped; this
 removes self-shadow bands on surfaces seen at a slope. Stop at the first valid
-hit.
-Invalid depth is a miss for that sample; leaving the content rectangle or
-crossing the camera near plane ends the remaining ray without a hit. Camera
-bars never supply occluder depth.
+hit. Invalid depth is a miss for that sample; leaving the content rectangle or
+crossing the camera near plane ends the remaining ray without a hit. Camera bars
+never supply occluder depth.
 
-Vortex owns a dedicated `ContactShadowCasterDepth` product/pass, using the current
-camera/content-rectangle projection and existing depth-format/reversed-Z
-conventions. Reuse normal DepthPrepass mesh/material/raster helpers, but keep the
-product separate from main colour depth. Include opaque/masked geometry with
+Vortex owns a dedicated `ContactShadowCasterDepth` product/pass, using the
+current camera/content-rectangle projection and existing depth-format/reversed-Z
+conventions. Reuse normal DepthPrepass mesh/material/raster helpers, but keep
+the product separate from main colour depth. Include opaque/masked geometry with
 effective Cast Shadows On, including geometry hidden only by the editor mask;
 exclude authored Hidden, Cast Shadows Off and blended casters. Allocate and run
 this pass only when an active contact-shadow light needs it; ordinary frames
@@ -322,14 +326,16 @@ or alternative depth producer is introduced.
 
 For hit distance d, fade occlusion over the last 20% of the ray with
 `end_weight = 1 - smoothstep(0.20, 0.25, d)`. At hit UV, let e be the minimum
-pixel distance to a content-rectangle edge and use `edge_weight = saturate(e/8)`.
-Contact visibility is `1 - end_weight * edge_weight` for a hit and 1 for a miss.
-Multiply conventional-map visibility by contact visibility once in the shared
+pixel distance to a content-rectangle edge and use
+`edge_weight = saturate(e/8)`. Contact visibility is
+`1 - end_weight * edge_weight` for a hit and 1 for a miss. Multiply
+conventional-map visibility by contact visibility once in the shared
 forward/deferred direct-light path. This screen-space supplement cannot find
 off-screen occluders or geometry behind the frontmost stored depth layer; it
 does not replace conventional shadows.
 
-The design basis is [Epic's contact-shadow depth-ray model](https://dev.epicgames.com/documentation/en-us/unreal-engine/contact-shadows-in-unreal-engine)
+The design basis is
+[Epic's contact-shadow depth-ray model](https://dev.epicgames.com/documentation/en-us/unreal-engine/contact-shadows-in-unreal-engine)
 and the UE5.7 `DeferredLightingCommon.ush::ShadowRayCast` /
 `ScreenSpaceShadowRayCast.ush::CastScreenSpaceShadowRay` reference. The explicit
 metric profile and fades above are Oxygen's bounded policy, not a claim of
@@ -340,18 +346,18 @@ and its separate caster/receiver bias handling.
 Implement under Vortex Shadows/Lighting with shared receiver eligibility and
 depth conventions. Qualify thin contact occluders, flat-plane self-shadow
 rejection, edge/end fades, perspective/Auto/Fixed views, Primary/Secondary/None,
-both light and receiver toggles, editor Hide, and native/editor parity. Independent
-golden tests cover depths/bias/thresholds and fade endpoints; a stored bool or
-code-presence assertion cannot establish the effect.
+both light and receiver toggles, editor Hide, and native/editor parity.
+Independent golden tests cover depths/bias/thresholds and fade endpoints; a
+stored bool or code-presence assertion cannot establish the effect.
 
 ## 9. Point light
 
-All numeric rows are float32 unless stated otherwise. Light colour is linear RGB;
-colour-picker display conversion occurs at the UI boundary only.
+All numeric rows are float32 unless stated otherwise. Light colour is linear
+RGB; colour-picker display conversion occurs at the UI boundary only.
 
 | Field                          | Default/unit                  | Bounds                      | Disclosure/active effect                                                      |
 | ------------------------------ | ----------------------------- | --------------------------- | ----------------------------------------------------------------------------- |
-| Affects Scene (`AffectsWorld`) | On; bool                      | Boolean                     | Primary; controls all contribution, gated by effective node visibility        |
+| Affects World (`AffectsWorld`) | On; bool                      | Boolean                     | Primary; controls all contribution, gated by effective node visibility        |
 | Color                          | (1,1,1); linear RGB           | Clamp each channel [0,1]    | Primary; illumination colour                                                  |
 | Intensity (Lumens)             | 1600; float32                 | Finite >0                   | Primary; total luminous intensity                                             |
 | Range                          | 20 m                          | Finite >0                   | Primary; distance at which light intensity reaches zero                       |
@@ -363,26 +369,26 @@ colour-picker display conversion occurs at the UI boundary only.
 | Shadow.ResolutionHint          | Medium                        | Low / Medium / High / Ultra | Advanced, Cast Shadows On; resolution request bounded by renderer             |
 | ExposureCompensation           | 0 EV                          | Clamp [-10,10]              | Advanced; effective light intensity multiplier 2^EV, without rewriting lumens |
 
-Light Cast Shadows On is an explicit creation default. The writer emits it;
-the low-level native CommonLightProperties constructor currently defaults Off.
+Light Cast Shadows On is an explicit creation default. The writer emits it; the
+low-level native CommonLightProperties constructor currently defaults Off.
 Realtime is the canonical authored mobility. Remove Mixed/Baked choices and the
 redundant authored mobility field; do not advertise a nonexistent bake workflow.
-Existing shadow/compensation fields require complete cooker, runtime and rendered
-effects. A current no-op is an implementation defect, not permission to silently
-defer the field.
+Existing shadow/compensation fields require complete cooker, runtime and
+rendered effects. A current no-op is an implementation defect, not permission to
+silently defer the field.
 
 Source Radius remains visual only in V0.1: specular softening follows the radius
-without area-light sampling or penumbra widening. PCSS/finite-source GGX is outside
-this contract.
+without area-light sampling or penumbra widening. PCSS/finite-source GGX is
+outside this contract.
 
 ## 10. Spot light
 
-All numeric rows are float32 unless stated otherwise. Light colour is linear RGB;
-colour-picker display conversion occurs at the UI boundary only.
+All numeric rows are float32 unless stated otherwise. Light colour is linear
+RGB; colour-picker display conversion occurs at the UI boundary only.
 
 | Field                          | Default/unit                  | Bounds                      | Disclosure/active effect                                                      |
 | ------------------------------ | ----------------------------- | --------------------------- | ----------------------------------------------------------------------------- |
-| Affects Scene (`AffectsWorld`) | On; bool                      | Boolean                     | Primary; controls all contribution, gated by effective node visibility        |
+| Affects World (`AffectsWorld`) | On; bool                      | Boolean                     | Primary; controls all contribution, gated by effective node visibility        |
 | Color                          | (1,1,1); linear RGB           | Clamp each channel [0,1]    | Primary; illumination colour                                                  |
 | Intensity (Lumens)             | 1600; float32                 | Finite >0                   | Primary; total luminous intensity                                             |
 | Range                          | 20 m                          | Finite >0                   | Primary; distance at which light intensity reaches zero                       |
@@ -396,21 +402,22 @@ colour-picker display conversion occurs at the UI boundary only.
 | Shadow.ResolutionHint          | Medium                        | Low / Medium / High / Ultra | Advanced, Cast Shadows On; resolution request bounded by renderer             |
 | ExposureCompensation           | 0 EV                          | Clamp [-10,10]              | Advanced; effective light intensity multiplier 2^EV, without rewriting lumens |
 
-Light Cast Shadows On is an explicit creation default. The writer emits it;
-the low-level native CommonLightProperties constructor currently defaults Off.
+Light Cast Shadows On is an explicit creation default. The writer emits it; the
+low-level native CommonLightProperties constructor currently defaults Off.
 Realtime is the canonical authored mobility. Remove Mixed/Baked choices and the
 redundant authored mobility field; do not advertise a nonexistent bake workflow.
-Existing shadow/compensation fields require complete cooker, runtime and rendered
-effects. A current no-op is an implementation defect, not permission to silently
-defer the field.
+Existing shadow/compensation fields require complete cooker, runtime and
+rendered effects. A current no-op is an implementation defect, not permission to
+silently defer the field.
 
-Cone angles clamp inner to outer and both to valid ranges. Cross-field validation
-rejects inner > outer in a single edit. Source Radius remains visual only in V0.1:
-specular softening follows the radius without area-light sampling or penumbra
-widening. PCSS/finite-source GGX is outside this contract.
+Cone angles clamp inner to outer and both to valid ranges. Cross-field
+validation rejects inner > outer in a single edit. Source Radius remains visual
+only in V0.1: specular softening follows the radius without area-light sampling
+or penumbra widening. PCSS/finite-source GGX is outside this contract.
 
-Spotlight falloff uses the standard cosine model: at the inner cone, intensity is
-full; at the outer cone, intensity is zero; between them, intensity is cos-weighted.
+Spotlight falloff uses the standard cosine model: at the inner cone, intensity
+is full; at the outer cone, intensity is zero; between them, intensity is
+cos-weighted.
 
 ## 11. Scene settings and conditional UI
 
@@ -421,8 +428,9 @@ to a node. Optional Primary/Secondary summary is read-only. Mode-specific rows
 are shown only when applicable; inactive values remain valid/persisted.
 
 Use compact shared property sections, NumberBox/VectorBox/colour controls and
-catalog pickers. Keep side-by-side labels/values, inline diagnostics and tooltips
-for clipped content; no bespoke numeric controls or blanket Raw-field view.
+catalog pickers. Keep side-by-side labels/values, inline diagnostics and
+tooltips for clipped content; no bespoke numeric controls or blanket Raw-field
+view.
 
 <a id="111-ed-m07b-compact-layout-and-component-filtering"></a>
 
@@ -435,9 +443,9 @@ to All. Add/remove recomputes availability; removal of the filtered type resets
 All. A filter never changes targets, implicitly adds components or edits source.
 
 The header/component list uses content height, with up to four compact rows and
-bounded overflow. Remaining height belongs to properties. Multi-selection gets
-a compact count/type summary. Preserve field errors across filtering. Commit
-valid pending text before changing sections; cancel unfinished drags. Late colour
+bounded overflow. Remaining height belongs to properties. Multi-selection gets a
+compact count/type summary. Preserve field errors across filtering. Commit valid
+pending text before changing sections; cancel unfinished drags. Late colour
 picker completion cannot affect a new edit lifetime. Validate constrained docks
 and 100%/150%/200% scale with real controls.
 
@@ -445,30 +453,32 @@ and 100%/150%/200% scale with real controls.
 
 Use existing typed property/document command entry points. Extend their payloads
 for node source modes, stable MaterialSlotId and per-light AtmosphereLightSlot;
-old slotIndex is not canonical assignment identity. Operation kinds remain
-owned string constants for transform, geometry, slot, camera, light, component
+old slotIndex is not canonical assignment identity. Operation kinds remain owned
+string constants for transform, geometry, slot, camera, light, component
 add/remove and environment edits.
 
-One committed drag, text edit or menu pick produces one history entry. Intermediate
-preview samples are coalesced; Escape restores the pre-gesture state. Wheel
-samples use the existing 250 ms idle boundary. Mixed vector values are per axis;
-bool/enum/source-mode values are indeterminate; untouched targets retain their
-values. Validate the whole multi-edit, including slot occupancy, before mutation.
-Transform cannot be removed; other cardinality rules are enforced consistently.
+One committed drag, text edit or menu pick produces one history entry.
+Intermediate preview samples are coalesced; Escape restores the pre-gesture
+state. Wheel samples use the existing 250 ms idle boundary. Mixed vector values
+are per axis; bool/enum/source-mode values are indeterminate; untouched targets
+retain their values. Validate the whole multi-edit, including slot occupancy,
+before mutation. Transform cannot be removed; other cardinality rules are
+enforced consistently.
 
 Runtime queue acceptance does not prove application/presentation. Report target/
-revision-correlated results. Not running is a truthful skipped/unavailable preview
-while Save remains valid. Missing/rejected required behavior is a field-scoped
-implementation/qualification failure; no invisible default fallback can pass.
-Unresolved asset identity is preserved with actionable loading/repair feedback.
+revision-correlated results. Not running is a truthful skipped/unavailable
+preview while Save remains valid. Missing/rejected required behavior is a
+field-scoped implementation/qualification failure; no invisible default fallback
+can pass. Unresolved asset identity is preserved with actionable loading/repair
+feedback.
 
 ## 13. Persistence, migration and dependencies
 
 Canonical DTOs preserve node source modes, local transforms, geometry/all-slot
 assignments, camera Auto/Fixed state, per-light assignment/settings and scene
 systems. Save is coherent/atomic; later edits remain dirty. Migrate useful prior
-intent once, regenerate derived content and remove obsolete readers/aliases.
-Old ineffective receiver/mobility values migrate to prior receiving-On/Realtime
+intent once, regenerate derived content and remove obsolete readers/aliases. Old
+ineffective receiver/mobility values migrate to prior receiving-On/Realtime
 behavior; runtime IsActive and workspace Hide never become authored activation.
 
 Inspector depends on document commands, World, shared controls/schemas and asset
@@ -487,9 +497,10 @@ cases precede editor cases; existing unit or storage checks are not presentation
 proof. Invalidate resolver/captured products on all contributing changes.
 
 Rejected alternatives: one scene Sun pointer loses two-source assignment;
-ancestor-AND loses local overrides; name/index slot mapping can redirect materials;
-Mixed/Baked without baking advertises no-ops; automatic Raw rows turn internal
-storage into accidental product scope. Retained Advanced fields are implemented
-and qualified rather than removed merely because their current path is missing.
-Finite-source GGX/PCSS was not selected: the useful existing angle control is
-atmospheric disk size, and established V0.1 conventional filtering remains 3x3 PCF.
+ancestor-AND loses local overrides; name/index slot mapping can redirect
+materials; Mixed/Baked without baking advertises no-ops; automatic Raw rows turn
+internal storage into accidental product scope. Retained Advanced fields are
+implemented and qualified rather than removed merely because their current path
+is missing. Finite-source GGX/PCSS was not selected: the useful existing angle
+control is atmospheric disk size, and established V0.1 conventional filtering
+remains 3x3 PCF.

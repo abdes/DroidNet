@@ -3,6 +3,8 @@
 Status: **Final V0.1 contract**. Delivery and rendered evidence are recorded in
 [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md).
 
+Last Updated: 2026-10-20 01:32
+
 ## 1. Purpose and ownership
 
 Define scene atmosphere, captured-sky lighting, background and post-process
@@ -21,17 +23,19 @@ cannot satisfy the contract.
 
 Environment is scene scope, never editor startup preferences. Editor-only Hide
 belongs to workspace/view state and does not alter these values. See
-[property inspector](property-inspector.md), [scene model](scene-authoring-model.md),
-[live sync](live-engine-sync.md), [content pipeline](content-pipeline.md) and
+[property inspector](property-inspector.md),
+[scene model](scene-authoring-model.md), [live sync](live-engine-sync.md),
+[content pipeline](content-pipeline.md) and
 [standalone qualification](standalone-runtime-validation.md).
 
 ## 2. Canonical source and validation
 
 SceneEnvironmentData contains AtmosphereEnabled, SkyAtmosphere, SkySphere,
-SkyLight, Background, Fog and PostProcess. PostProcess is the sole exposure/tonemapping
-source; duplicate legacy mirrors are removed through migration. Each directional
-light owns AtmosphereLightSlot. No SceneEnvironmentData.SunNodeId or independent
-IsSunLight/Contributes authoring value remains.
+SkyLight, Background, Fog and PostProcess. PostProcess is the sole
+exposure/tonemapping source; duplicate legacy mirrors are removed through
+migration. Each directional light owns AtmosphereLightSlot. No
+SceneEnvironmentData.SunNodeId or independent IsSunLight/Contributes authoring
+value remains.
 
 Table paths are relative to SceneEnvironmentData. Numeric fields are float32
 unless stated otherwise. Reject every non-finite scalar/vector component before
@@ -42,9 +46,9 @@ but their stored bounds are the table bounds. Invalid saved/cooked data is not
 silently repaired during normal runtime loading.
 
 New-scene defaults below come from native scene-system constructors/constants,
-not demo presets or current conflicting managed defaults. Defaults are explicitly
-emitted so separate processes agree. The qualification fixture deliberately
-selects Manual EV 9.7 and is not the new-scene exposure default.
+not demo presets or current conflicting managed defaults. Defaults are
+explicitly emitted so separate processes agree. The qualification fixture
+deliberately selects Manual EV 9.7 and is not the new-scene exposure default.
 
 ## 3. Sky atmosphere fields
 
@@ -83,43 +87,42 @@ Aerial Start is 100 m; 80 km and 0 m are not the native creation defaults.
 `SceneEnvironmentData.Fog` mirrors the native `Fog` system: every field the
 renderer consumes, in native units, with native defaults except Enabled, which
 is off so scenes without authored fog render none. The Fog section shows
-Enabled, Height Fog, Density (σt, 1/m), Height Falloff (1/m), Height Offset
-(m), Max Opacity, Inscattering luminance and Sky Ambient scale, with
-disclosures for the second layer (density, falloff, offset), distances (start,
-end and cutoff; 0 is unlimited), the directional inscattering lobe
-(luminance, exponent, start), volumetric fog (enabled, scattering
-distribution, albedo, emissive, extinction scale, distance where 0 uses the
-camera far plane, start, near fade-in, sky light scattering and fog-colored
-light scattering) and rendering (main pass, holdout, reflection and sky
-capture visibility).
+Enabled, Height Fog, Density (σt, 1/m), Height Falloff (1/m), Height Offset (m),
+Max Opacity, Inscattering luminance and Sky Ambient scale, with disclosures for
+the second layer (density, falloff, offset), distances (start, end and cutoff; 0
+is unlimited), the directional inscattering lobe (luminance, exponent, start),
+volumetric fog (enabled, scattering distribution, albedo, emissive, extinction
+scale, distance where 0 uses the camera far plane, start, near fade-in, sky
+light scattering and fog-colored light scattering) and rendering (main pass,
+holdout, reflection and sky capture visibility).
 
-Validation rejects non-finite values, negative densities, falloffs,
-distances, luminances and scales, Max Opacity and albedo outside 0–1,
-scattering distribution outside ±0.99 and a directional exponent outside
-(0, 1000]. The environment command applies fog with the atmosphere and post
-process in one scene mutation; editor panes request height and local fog from
-the scene as the runtime does. The cooked descriptor carries the full native
-`fog` record; the inscattering cubemap fields stay at native defaults because
-the renderer does not sample them.
+Validation rejects non-finite values, negative densities, falloffs, distances,
+luminances and scales, Max Opacity and albedo outside 0–1, scattering
+distribution outside ±0.99 and a directional exponent outside (0, 1000]. The
+environment command applies fog with the atmosphere and post process in one
+scene mutation; editor panes request height and local fog from the scene as the
+runtime does. The cooked descriptor carries the full native `fog` record; the
+inscattering cubemap fields stay at native defaults because the renderer does
+not sample them.
 
 ### Local fog volumes
 
 `LocalFogVolumeComponent` places a sphere of fog on a node: 5 m in radius at
 unit scale, sized and positioned by the node's transform. One per node; it is
-added from the node inspector's Add Component menu or created on a new root
-node from the viewport's Quick Add menu. Its fields mirror the native
-`LocalFogVolume` with native defaults: Enabled, Density (the radial
-extinction, 1/m at the center, fading to zero at the edge) and Height Density
-(1/m, both ≥0), Height Falloff (≥0), Height Offset (m, relative to the center),
-Phase (0 to 0.999), linear Albedo (0–1), Emissive luminance (≥0) and Sort
-Priority (integer, −127 to 127). Edits travel as descriptor-only property
-entries to a native applier that rejects an invalid candidate whole. The
-cooked descriptor lists the volumes in `local_fog_volumes` against their node
-indices, and editor panes request the local fog pass while any enabled volume
-exists, as the runtime does. The viewport draws a fog icon at each volume and,
-while it is selected, its sphere: a silhouette circle and three faint great
-circles at the radius the renderer uses (5 m times the largest world-scale
-axis). The sphere has no handle; the node's scale sizes it.
+added from the node inspector's Add Component menu or created on a new root node
+from the viewport's Quick Add menu. Its fields mirror the native
+`LocalFogVolume` with native defaults: Enabled, Density (the radial extinction,
+1/m at the center, fading to zero at the edge) and Height Density (1/m, both
+≥0), Height Falloff (≥0), Height Offset (m, relative to the center), Phase (0 to
+0.999), linear Albedo (0–1), Emissive luminance (≥0) and Sort Priority (integer,
+−127 to 127). Edits travel as descriptor-only property entries to a native
+applier that rejects an invalid candidate whole. The cooked descriptor lists the
+volumes in `local_fog_volumes` against their node indices, and editor panes
+request the local fog pass while any enabled volume exists, as the runtime does.
+The viewport draws a fog icon at each volume and, while it is selected, its
+sphere: a silhouette circle and three faint great circles at the radius the
+renderer uses (5 m times the largest world-scale axis). The sphere has no
+handle; the node's scale sizes it.
 
 ## 4. Backdrop, Sky Sphere, Sky Light and background
 
@@ -164,13 +167,13 @@ start disabled so that scenes without them show neither.
 
 The renderer shows one backdrop: an enabled atmosphere, else an enabled
 background, else an enabled sky sphere. The inspector therefore presents one
-choice, Show: Atmosphere, Cubemap or Solid color, as Godot's Background Mode
-and Unity HDRP's sky type do. Each choice sets the enable flags so that exactly
-it shows:
+choice, Show: Atmosphere, Cubemap or Solid color, as Godot's Background Mode and
+Unity HDRP's sky type do. Each choice sets the enable flags so that exactly it
+shows:
 
 - Atmosphere enables the atmosphere and disables the sky sphere and background.
-- Cubemap disables the atmosphere and background and enables the sky sphere
-  with its cubemap source.
+- Cubemap disables the atmosphere and background and enables the sky sphere with
+  its cubemap source.
 - Solid color disables the atmosphere. Its "Light the scene with this color"
   toggle selects the record: on, the sky sphere's solid color, which sky light
   captures see; off, the background, which only paints the view. Toggling
@@ -184,9 +187,9 @@ systems shows the backdrop the renderer would show.
 
 Fields that apply only to some choices follow the inspector's applicability
 rule, as the exposure modes do: browsing shows the atmosphere fields for the
-Atmosphere backdrop, the cubemap and its rotation for Cubemap, the color and
-its lighting toggle for Solid color, the intensity and tint for Cubemap or a
-color that lights the scene, and the Sky Light cubemap and its rotation for the
+Atmosphere backdrop, the cubemap and its rotation for Cubemap, the color and its
+lighting toggle for Solid color, the intensity and tint for Cubemap or a color
+that lights the scene, and the Sky Light cubemap and its rotation for the
 cubemap source. A search also finds the stored values of fields that do not
 apply, each with a note saying when it applies.
 
@@ -196,8 +199,8 @@ The Sky Light section mirrors the engine's fields: Enabled; Source, "Capture
 sky" or "Cubemap"; the cubemap and its rotation, shown for the cubemap source;
 intensity, tint, diffuse and specular multipliers; a Lower hemisphere
 disclosure; and an Advanced disclosure with volumetric scattering and affect
-reflections. Capture sky already follows the backdrop, rotation included, so
-the cubemap rotation stays separate from the backdrop rotation, as in Unreal.
+reflections. Capture sky already follows the backdrop, rotation included, so the
+cubemap rotation stays separate from the backdrop rotation, as in Unreal.
 
 Capture sky lights the scene with the backdrop's calibrated radiance. Display
 and lighting are decoupled, as in three.js and Filament: the Sky Sphere's
@@ -210,8 +213,8 @@ directly or through a captured backdrop, must be cooked as rgba16f or rgba32f.
 An LDR cube can still be shown.
 
 When the Sky Light is enabled but casts no light, the section shows a warning
-naming the cause and the fix: no cubemap, a failed load, a texture that is not
-a cube, an LDR cube, failed processing, a cube still loading, or nothing to
+naming the cause and the fix: no cubemap, a failed load, a texture that is not a
+cube, an LDR cube, failed processing, a cube still loading, or nothing to
 capture. It reads the rendered state, which trails an edit by a few frames, so
 after each environment change it re-reads until the answer settles.
 
@@ -221,56 +224,56 @@ Imported HDR images rarely carry physical units: a typical one delivers a few
 lux on an upward-facing surface, while a daylight sun delivers tens of
 thousands. Left raw, auto exposure meters the dim sky and burns sunlit surfaces
 to white, and the sky lights shadows with almost nothing. Illuminance, in lux,
-calibrates a source once, as Unity HDRP's lux intensity mode does. The
-renderer measures each float cube when it loads, by integrating its luminance
-against the cosine to world up over the upper hemisphere, and scales its
-radiance to deliver the authored illuminance. A solid color of luminance L
-delivers pi times L. The backdrop's Illuminance applies to the view and to
-Capture sky, so the two always agree; the Sky Light's cubemap Illuminance
-applies to the specified cubemap. Zero keeps the radiance as imported, which is
-what older scenes contain. Only float cubes can be measured: an LDR backdrop
-cube with an Illuminance stays raw, and the renderer reports it as
-`sky.uncalibrated` in the diagnostics ledger and the log. Intensity in EV then adjusts relative to the calibrated
-radiance: the backdrop's for the view only, the Sky Light's for lighting only.
-Tooltips give typical values: a clear-day sky delivers 10,000 to 25,000 lux, an
-overcast one 1,000 to 10,000.
+calibrates a source once, as Unity HDRP's lux intensity mode does. The renderer
+measures each float cube when it loads, by integrating its luminance against the
+cosine to world up over the upper hemisphere, and scales its radiance to deliver
+the authored illuminance. A solid color of luminance L delivers pi times L. The
+backdrop's Illuminance applies to the view and to Capture sky, so the two always
+agree; the Sky Light's cubemap Illuminance applies to the specified cubemap.
+Zero keeps the radiance as imported, which is what older scenes contain. Only
+float cubes can be measured: an LDR backdrop cube with an Illuminance stays raw,
+and the renderer reports it as `sky.uncalibrated` in the diagnostics ledger and
+the log. Intensity in EV then adjusts relative to the calibrated radiance: the
+backdrop's for the view only, the Sky Light's for lighting only. Tooltips give
+typical values: a clear-day sky delivers 10,000 to 25,000 lux, an overcast one
+1,000 to 10,000.
 
 ### Units and pickers
 
 Oxygen renders with physical exposure, so both radiance multipliers,
 SkySphere.Intensity and SkyLight.Intensity, are presented as Intensity in EV:
-the stored multiplier is 2^EV, so EV 0 keeps the authored radiance and each
-stop doubles it. The lowest presented stop, EV -16, stands for a zero
-multiplier. Rotations are presented in degrees. Diffuse, specular and
-volumetric multipliers stay linear because they balance shares of one light.
+the stored multiplier is 2^EV, so EV 0 keeps the authored radiance and each stop
+doubles it. The lowest presented stop, EV -16, stands for a zero multiplier.
+Rotations are presented in degrees. Diffuse, specular and volumetric multipliers
+stay linear because they balance shares of one light.
 
 Cubemap fields list the project's cube textures: texture descriptors whose cube
 settings produce a cube texture. Texture import offers a Cube shape. Its layout
-is detected from the image (2:1 panorama, 6:1 or 1:6 strip, 4:3 or 3:4 cross)
-or chosen, and a panorama takes a face size that is a multiple of 256. Six
-separate face files are detected from the selected file's name (`_px`/`_nx`,
+is detected from the image (2:1 panorama, 6:1 or 1:6 strip, 4:3 or 3:4 cross) or
+chosen, and a panorama takes a face size that is a multiple of 256. Six separate
+face files are detected from the selected file's name (`_px`/`_nx`,
 `_posx`/`_negx` or `_right`/`_left` suffixes, as the cooker names them); they
 must be square and the same size, and import copies them as `<name>_px` to
-`<name>_nz` for the cooker to assemble. Cube
-textures default to the hdr_env intent, linear color space and rgba16f output.
-Choosing an LDR format for a cube warns that it can only be displayed, and the
-cubemap pickers mark such cubes "display only". Half floats clamp radiance
-above 65504; the cook reports how much was clamped, and rgba32f keeps it.
+`<name>_nz` for the cooker to assemble. Cube textures default to the hdr_env
+intent, linear color space and rgba16f output. Choosing an LDR format for a cube
+warns that it can only be displayed, and the cubemap pickers mark such cubes
+"display only". Half floats clamp radiance above 65504; the cook reports how
+much was clamped, and rgba32f keeps it.
 
 ### Runtime, cooking and the display-only background
 
 One environment command applies the atmosphere, sky sphere, sky light,
 background, fog and post process in one scene mutation. It loads the exposure
 mask and both cubemaps together and applies them only when all have loaded; a
-failed texture rejects the edit and keeps the previous revision. A texture
-whose source is unchanged keeps its accepted load, so edits to other settings
-apply at once; a refresh after cooking reloads every texture. A cubemap is
-loaded, and cooked as a scene reference, only while an enabled system's source
-uses it, so a stale reference behind another source or a disabled system
-blocks nothing. Scenes saved with the former BackgroundColor clamp it to the
-background's [0,1] range on load. Cooked cubemaps are
-texture bindings in the scene's resource table, as the metering mask is, and
-must be cooked into the scene's own content mount.
+failed texture rejects the edit and keeps the previous revision. A texture whose
+source is unchanged keeps its accepted load, so edits to other settings apply at
+once; a refresh after cooking reloads every texture. A cubemap is loaded, and
+cooked as a scene reference, only while an enabled system's source uses it, so a
+stale reference behind another source or a disabled system blocks nothing.
+Scenes saved with the former BackgroundColor clamp it to the background's [0,1]
+range on load. Cooked cubemaps are texture bindings in the scene's resource
+table, as the metering mask is, and must be cooked into the scene's own content
+mount.
 
 The background paints only the presented view: sky light captures and
 reflections skip it, it does not become emissive or an ambient light, and an
@@ -284,19 +287,19 @@ with the required BRDF integration. With no active lighting sky, sky
 contribution is zero; do not retain a stale capture or invent ambient energy
 from the background. The engine
 [captured-sky IBL contract](../../../projects/Oxygen.Engine/design/vortex/lld/captured-sky-ibl.md)
-defines the scene-global anchor, processing products, filtering, publication
-and Stage 13 ownership. Changes to either contributing light, effective
-visibility or participation, assignment, atmosphere parameters or the
-applicable sky source invalidate affected products. Explicit disks are excluded
-from reflection captures to avoid double-counting direct source energy, while
-both sources' atmospheric scattering remains.
+defines the scene-global anchor, processing products, filtering, publication and
+Stage 13 ownership. Changes to either contributing light, effective visibility
+or participation, assignment, atmosphere parameters or the applicable sky source
+invalidate affected products. Explicit disks are excluded from reflection
+captures to avoid double-counting direct source energy, while both sources'
+atmospheric scattering remains.
 
 ## 5. Exposure fields
 
-ExposureEnabled is independent of tone-curve selection. Manual, ManualCamera and Auto
-retain native enum values 0, 1 and 2; ManualCamera uses the camera EV from the
-authored aperture, shutter rate and ISO. Preserve existing API
-names; no enum renumbering or cosmetic aliases are introduced.
+ExposureEnabled is independent of tone-curve selection. Manual, ManualCamera and
+Auto retain native enum values 0, 1 and 2; ManualCamera uses the camera EV from
+the authored aperture, shutter rate and ISO. Preserve existing API names; no
+enum renumbering or cosmetic aliases are introduced.
 
 | PostProcess path              | Default / unit                      | Bounds                                                | Conditional UI and active effect                                                              |
 | ----------------------------- | ----------------------------------- | ----------------------------------------------------- | --------------------------------------------------------------------------------------------- |
@@ -323,18 +326,20 @@ source loaded for rendering must already satisfy the canonical constraints.
 
 The native calibration constant 12.5 is not the creation ExposureKey default 10.
 Using Core/Types/PostProcess.h, bias = 2^Compensation * (ExposureKey/12.5);
-Manual exposure = bias / 2^EV100. Auto applies the same bias to its target.
-Do not duplicate this authority with a second editor exposure implementation.
+Manual exposure = bias / 2^EV100. Auto applies the same bias to its target. Do
+not duplicate this authority with a second editor exposure implementation.
 Expected conversion examples are independently authored for qualification.
 
 ### Exposure extension and persistence layout
 
-The [exposure implementation package](../../../projects/Oxygen.Engine/design/vortex/milestones/exposure/README.md)
+The
+[exposure implementation package](../../../projects/Oxygen.Engine/design/vortex/milestones/exposure/README.md)
 extends the existing adapters; it does not introduce another editor exposure
-model. Native ManualCamera remains available to games; the existing editor
-Manual/Auto presentation remains unchanged. Use one canonical native validator
-for coupled settings and propagate structured failures without partially
-publishing converted fields. Previous valid settings remain active on error.
+model. The editor presents Manual, ManualCamera and Auto; ManualCamera uses the
+selected camera's aperture, shutter rate and ISO. Use one canonical native
+validator for coupled settings and propagate structured failures without
+partially publishing converted fields. Previous valid settings remain active on
+error.
 
 | Field                          | Default   | Validation / behavior                                                                                |
 | ------------------------------ | --------- | ---------------------------------------------------------------------------------------------------- |
@@ -346,12 +351,13 @@ publishing converted fields. Previous valid settings remain active on error.
 All active existing fields and these additions round-trip source, schema,
 cooker, native record, loader hydration, scripting, Interop and editor save.
 Keep enum ordinals: Manual=0, ManualCamera=1, Auto=2 and Average=0,
-CenterWeighted=1, Spot=2. New-scene defaults remain the table above: absent mask, empty curve, black
-influence 0 and D=1.5. The 2026-09-21 user direction requires migration to v6
-throughout the repository, with no backward-compatibility or legacy read paths.
-Pending mask residency retains the complete old settings/resource revision;
-failed authored resource loading reports failure, never substitutes no mask.
-Transient transitions, GPU state and adaptation history are never serialized.
+CenterWeighted=1, Spot=2. New-scene defaults remain the table above: absent
+mask, empty curve, black influence 0 and D=1.5. The 2026-09-21 user direction
+requires migration to v6 throughout the repository, with no
+backward-compatibility or legacy read paths. Pending mask residency retains the
+complete old settings/resource revision; failed authored resource loading
+reports failure, never substitutes no mask. Transient transitions, GPU state and
+adaptation history are never serialized.
 
 Live editor mask requests retain the authored asset URI in the document. The
 editor maps that URI through its existing cooked-mount layout to a source root
@@ -359,16 +365,17 @@ and a relative texture descriptor path. Content resolves that explicit locator
 only within the matching mounted loose source, validates the current sidecar and
 its texture-table entry, and returns a source-qualified ResourceKey. The editor
 does not parse sidecars, invent texture asset UUIDs, or persist ResourceKeys.
-The scene-session async request owner supersedes stale completions, retries after
-cooked-root refresh, and applies a complete exposure revision only when the
-requested mask is available. Failures preserve the previous accepted revision.
+The scene-session async request owner supersedes stale completions, retries
+after cooked-root refresh, and applies a complete exposure revision only when
+the requested mask is available. Failures preserve the previous accepted
+revision.
 
 The current `PostProcessVolumeEnvironmentRecord` has a 144-byte fixed prefix,
-including its eight-byte type/record-size header. Its first 104 bytes retain
-the established scalar field positions. The scene asset version is 6; readers
-accept only v6 with the complete record below. Reject v5 and 104-byte records;
-do not retain compatibility decoders or synthesize missing fields. Update `SceneAsset` exact-size validation,
-`PakFormatSerioLoaders`, cooker and serializer together.
+including its eight-byte type/record-size header. Its first 104 bytes retain the
+established scalar field positions. The scene asset version is 6; readers accept
+only v6 with the complete record below. Reject v5 and 104-byte records; do not
+retain compatibility decoders or synthesize missing fields. Update `SceneAsset`
+exact-size validation, `PakFormatSerioLoaders`, cooker and serializer together.
 
 | Byte offset | Type                   | Extended record field                                                  |
 | ----------- | ---------------------- | ---------------------------------------------------------------------- |
@@ -383,27 +390,27 @@ do not retain compatibility decoders or synthesize missing fields. Update `Scene
 | 140         | uint32                 | reserved=0                                                             |
 | 144         | count pairs of float32 | EV100, compensation EV, eight bytes per key                            |
 
-Total record_size is exactly `144+8*curve_key_count`, at most 656 bytes.
-Check count/size/available bytes before reading; reject unsupported extension
-version, malformed keys and nonzero reserved fields. Author the mask using a
-texture descriptor path; the cooker resolves its source-local texture index,
-and PAK packing remaps that dependency into the output texture table. Content
-hydrates the scene-relative index into a runtime ResourceKey, following the
-existing texture-resource model. The 2026-09-16 user-approved correction
-replaces the initially proposed descriptor UUID: no runtime UUID lookup exists
-for those cooker-only names. This preserves the 144-byte prefix and curve
-offsets without introducing a new asset type. There are no native pointers or GPU
-descriptor slots in saved records. The single current reader requires the
-complete explicitly versioned record; obsolete representations are rejected.
+Total record_size is exactly `144+8*curve_key_count`, at most 656 bytes. Check
+count/size/available bytes before reading; reject unsupported extension version,
+malformed keys and nonzero reserved fields. Author the mask using a texture
+descriptor path; the cooker resolves its source-local texture index, and PAK
+packing remaps that dependency into the output texture table. Content hydrates
+the scene-relative index into a runtime ResourceKey, following the existing
+texture-resource model. The 2026-09-16 user-approved correction replaces the
+initially proposed descriptor UUID: no runtime UUID lookup exists for those
+cooker-only names. This preserves the 144-byte prefix and curve offsets without
+introducing a new asset type. There are no native pointers or GPU descriptor
+slots in saved records. The single current reader requires the complete
+explicitly versioned record; obsolete representations are rejected.
 
-Native physical camera persistence is included by the 2026-09-16 scope decision.
-Scene-v6 perspective camera records append aperture_f/shutter_rate/iso at
-20/24/28 (32 bytes total); orthographic records append them at 28/32/36
-(40 bytes total). Reject version-5 20/28-byte records. All scene producers and
-consumers migrate together; 11/125/100 are new-authoring defaults, not fallback
-values for old assets. Source schemas, cooker, loader, scripting and existing
-editor adapters preserve these fields. The camera inspector authors these
-fields (ED-M08.10); the engine renders no depth of field or motion blur.
+Native camera records persist the physical camera values. Scene-v6 perspective
+camera records append aperture_f/shutter_rate/iso at 20/24/28 (32 bytes total);
+orthographic records append them at 28/32/36 (40 bytes total). Reject version-5
+20/28-byte records. All scene producers and consumers migrate together;
+11/125/100 are new-authoring defaults, not fallback values for old assets.
+Source schemas, cooker, loader, scripting and existing editor adapters preserve
+these fields. The camera inspector authors these fields; the engine renders no
+depth of field or motion blur.
 
 The engine mathematical authority is now the
 [PBR specification](../../../projects/Oxygen.Engine/design/renderer-core/physically-based-rendering.md);
@@ -435,63 +442,98 @@ The native foreground pipeline has this fixed order:
    exposure exactly once.
 2. Compute Rec.709 luminance `Y = dot(rgb, (0.2126, 0.7152, 0.0722))` and
    saturation `rgb = Y + Saturation * (rgb - Y)`.
-3. Apply contrast in linear light: `rgb = max(0, 0.18 + Contrast * (rgb - 0.18))`.
+3. Apply contrast in linear light:
+   `rgb = max(0, 0.18 + Contrast * (rgb - 0.18))`.
 4. Apply the selected tone curve; None clips to SDR `[0,1]`.
-5. Apply vignette to this foreground display-linear signal using content-rectangle
-   coordinates: `p = 2 * contentUV - 1`, `r2 = dot(p,p)`,
-   `factor = 1 - VignetteIntensity * smoothstep(0.25, 1, r2)`. This centred ellipse
-   has no hidden artist-facing radius parameter.
+5. Apply vignette to this foreground display-linear signal using
+   content-rectangle coordinates: `p = 2 * contentUV - 1`, `r2 = dot(p,p)`,
+   `factor = 1 - VignetteIntensity * smoothstep(0.25, 1, r2)`. This centred
+   ellipse has no hidden artist-facing radius parameter.
 6. Apply the existing DisplayGamma power conversion, then the
    display-background/foreground-coverage composition.
 
-Saturation=1, Contrast=1 and VignetteIntensity=0 are identity settings. Background
-and Fixed-camera bars remain outside foreground grading and metering. Preserve
-correct transparent coverage; no additional exposure or output conversion is
-introduced. Grading needs real Vortex shader/configuration consumers, not only
-stored DTO/buffer fields. This defines Oxygen's bounded implementation; it does
-not claim an identical look to another engine.
+Saturation=1, Contrast=1 and VignetteIntensity=0 are identity settings.
+Background and Fixed-camera bars remain outside foreground grading and metering.
+Preserve correct transparent coverage; no additional exposure or output
+conversion is introduced. Grading needs real Vortex shader/configuration
+consumers, not only stored DTO/buffer fields. This defines Oxygen's bounded
+implementation; it does not claim an identical look to another engine.
 
 Independent golden cases include linear `(0.2,0.4,0.6)` becoming
 `(0.37192,0.37192,0.37192)` at Saturation=0; the same input becoming
-`(0.19,0.29,0.39)` at Contrast=0.5; and vignette factor 1 at the centre versus 0.5
-at `contentUV=(1,0.5)` for intensity 0.5. Use unit exposure, None and gamma 1 for
-these isolated checks. Separately, exposure 2 maps `(0.2,0.4,0.6)` to
-`(0.4,0.8,1.2)`, which None clips to `(0.4,0.8,1)`. Expected values must not be generated by the adapter
-or shader helper under test. Retain full rendered background/transparent cases.
+`(0.19,0.29,0.39)` at Contrast=0.5; and vignette factor 1 at the centre versus
+0.5 at `contentUV=(1,0.5)` for intensity 0.5. Use unit exposure, None and gamma
+1 for these isolated checks. Separately, exposure 2 maps `(0.2,0.4,0.6)` to
+`(0.4,0.8,1.2)`, which None clips to `(0.4,0.8,1)`. Expected values must not be
+generated by the adapter or shader helper under test. Retain full rendered
+background/transparent cases.
 
 ## 7. Per-light atmosphere assignment
 
 Each directional source has one AtmosphereLightSlot: None, Primary or Secondary.
-Use existing enum/GetAtmosphereLightSlot/SetAtmosphereLightSlot names. Primary and
-Secondary map to integration slots 0 and 1; None maps to neither. Neither slot
-means priority, brightness or an intrinsic celestial body type.
+Use existing enum/GetAtmosphereLightSlot/SetAtmosphereLightSlot names. Primary
+and Secondary map to integration slots 0 and 1; None maps to neither. Neither
+slot means priority, brightness or an intrinsic celestial body type.
+
+| Scene            | Assignment                       | Behavior                                                                                  |
+| ---------------- | -------------------------------- | ----------------------------------------------------------------------------------------- |
+| One sun          | Sun→Primary                      | The sun lights geometry and atmosphere while it participates                              |
+| Two suns         | SunOne→Primary; SunTwo→Secondary | Both contribute at once with independent direction, colour, lux, source angle and shadows |
+| Sun and moon     | Sun→Primary; Moon→Secondary      | Both contribute at twilight; disabling the sun leaves the moon in Secondary               |
+| Directional fill | Fill→None                        | Ordinary illumination and shadows without atmospheric disk or scattering                  |
 
 <a id="84-per-light-atmosphere-assignment"></a>
 
 ### Assignment rules
 
-- At most one stored occupant per non-None slot, even while hidden/off. Conflicting
-  direct Light assignment/import/cook reports the occupant and changes neither light.
-  The Scene source picker explicitly replaces a role's source: clearing the old
-  occupant and assigning the selected light are one atomic command change set and
-  one undo entry. This changes only role ownership, not either light's illumination
-  settings or existence. Undo/redo and saved reopen preserve both role assignments.
+- At most one stored occupant per non-None slot, even while hidden/off.
+  Conflicting direct Light assignment/import/cook reports the occupant and
+  changes neither light. The Scene source picker explicitly replaces a role's
+  source: clearing the old occupant and assigning the selected light are one
+  atomic command change set and one undo entry. This changes only role
+  ownership, not either light's illumination settings or existence. Undo/redo
+  and saved reopen preserve both role assignments.
 - Assignment/clear/copy uses the ordinary light command/history path. Hiding or
   disabling retains assignment; Secondary-only never promotes it.
 - None retains ordinary directional illumination/shadow controls. Each light's
-  Affects Scene and effective node visibility gate all contribution independently
-  of assignment. Clearing a role is not turning the light off.
+  Affects World and effective node visibility gate all contribution
+  independently of assignment. Clearing a role is not turning the light off.
 - Both sources provide independent direction, colour, lux, full source angle,
-  requested forward/deferred surface/applicable-fog shadows, atmospheric scattering
-  and captured-sky diffuse/specular contribution.
+  requested forward/deferred surface/applicable-fog shadows, atmospheric
+  scattering and captured-sky diffuse/specular contribution.
 - A Moon use case is directional moonlight and an analytic disk. Lunar phases,
   textures/orbits, more than two atmospheric sources and sky-only authoring are
   outside V0.1. ResolveMoon's existing alias is not a lunar-body implementation.
 
+Both participating slots contribute to sky scattering and analytic disks, light
+surfaces and cast requested shadows in the forward and deferred paths and in
+applicable fog shadowing. The renderer's direct-light list is independent of
+atmospheric membership. Explicit disk suppression during reflection capture is
+an energy-accounting policy; it never suppresses the second source's atmospheric
+illumination or leaves stale products after a change. V0.1 qualifies two
+simultaneous shadowed directional sources; this is not a performance guarantee
+for more lights.
+
+Changes to assignment, effective visibility, light parameters or hierarchy
+invalidate the light selection, the sky and the captured-lighting products they
+affect. Parent transforms and IgnoreParentTransform follow the engine's
+transform contract; assignment creates no transform policy.
+
+Scene/Data/Cooker own the slot schema, packed records, validation and hydration;
+World and Scenes own source values, edits, copy and history and the inspector;
+Runtime/Interop adapt the native contract; Vortex owns surface-light packets,
+shadow resources, sky/fog consumers and capture invalidation. The resolver
+selects; it is not an astronomy simulator. Source entry points:
+[DirectionalLight.h](../../../projects/Oxygen.Engine/src/Oxygen/Scene/Light/DirectionalLight.h),
+[DirectionalLightResolver.cpp](../../../projects/Oxygen.Engine/src/Oxygen/Scene/Light/DirectionalLightResolver.cpp),
+[PakFormat_world.h](../../../projects/Oxygen.Engine/src/Oxygen/Data/PakFormat_world.h),
+[FrameLightSelection.h](../../../projects/Oxygen.Engine/src/Oxygen/Vortex/Types/FrameLightSelection.h),
+[SceneRenderer.cpp](../../../projects/Oxygen.Engine/src/Oxygen/Vortex/SceneRenderer/SceneRenderer.cpp).
+
 The source angle is presented as Atmosphere Disk Diameter for assigned sources.
 It controls the analytic disk only; V0.1 retains conventional 3x3 PCF and does
-not promise finite-source GGX highlights or angle-driven penumbra widening.
-The control is absent for role None; that light's direct illumination and
+not promise finite-source GGX highlights or angle-driven penumbra widening. The
+control is absent for role None; that light's direct illumination and
 independent contact/conventional shadow controls remain functional.
 
 A scene may show a read-only assignment summary. No competing Sun pointer or
@@ -500,11 +542,12 @@ controls are defined in [property-inspector.md](property-inspector.md).
 
 ## 8. Commands, Save, cooking and results
 
-Scene settings use typed Scene.Environment.Edit operations; assignment uses light
-edits. Commands validate complete values, mutate atomically, advance revision,
-record one history step and request current-lifetime sync. Field hiding changes
-presentation only. Preserve inactive values and unrelated errors. Reuse shared
-property controls, sessions and diagnostics; no direct UI-to-Interop calls.
+Scene settings use typed Scene.Environment.Edit operations; assignment uses
+light edits. Commands validate complete values, mutate atomically, advance
+revision, record one history step and request current-lifetime sync. Field
+hiding changes presentation only. Preserve inactive values and unrelated errors.
+Reuse shared property controls, sessions and diagnostics; no direct
+UI-to-Interop calls.
 
 Canonical source, descriptor schemas, packed native records, loader and Interop
 carry every field at its stated units/precision. Finite validation exists before
@@ -515,28 +558,27 @@ preview status; queue acceptance alone never proves rendered application.
 
 Save captures a coherent revision and atomically replaces source; later edits
 remain dirty. Cooking follows its owning workflow. Scene templates emit explicit
-per-light roles/defaults; native startup never selects the first/brightest source
-or restores unrelated demo lighting preferences.
+per-light roles/defaults; native startup never selects the first/brightest
+source or restores unrelated demo lighting preferences.
 
 ## 9. Migration and implementation boundaries
 
 Migrate useful source once and regenerate cooked output. Preserve unambiguous
 explicit slots and sun intent; report conflicts instead of guessing by name,
-brightness/order or collapsing two-source content. Remove SunNodeId, independently
-authored IsSun/Contributes state and implicit fallback readers. Consolidate
-exposure mirrors into PostProcess and remove editor ManualCamera authoring while
-preserving useful resolved composition/exposure through an explicit migration.
-Native physical exposure remains available to its engine consumers.
+brightness/order or collapsing two-source content. Remove SunNodeId,
+independently authored IsSun/Contributes state and implicit fallback readers.
+Consolidate exposure mirrors into PostProcess while preserving useful resolved
+composition/exposure through an explicit migration.
 
-Keep valid existing values when creation defaults change. Native creation defaults
-are Auto/EV 9.7/Key 10 and atmosphere 100 km/Aerial Start 100 m; current conflicting
-managed defaults must converge. This does not reset useful existing authored
-Manual EV 13 scenes or silently recook them as Auto.
+Keep valid existing values when creation defaults change. Native creation
+defaults are Auto/EV 9.7/Key 10 and atmosphere 100 km/Aerial Start 100 m;
+current conflicting managed defaults must converge. This does not reset useful
+existing authored Manual EV 13 scenes or silently recook them as Auto.
 
-Required engine work includes complete two-directional surface/shadow processing,
-captured-sky diffuse/specular processing, receiver and grading effects, and cache
-invalidation. They are not deferred because source storage already exists.
-Deferred boundaries are recorded in the owning
+Required engine work includes complete two-directional surface/shadow
+processing, captured-sky diffuse/specular processing, receiver and grading
+effects, and cache invalidation. They are not deferred because source storage
+already exists. Deferred boundaries are recorded in the owning
 [engine capability record](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md).
 When relevant engine code is modified, add its linked TODO(post-v0.1, ID) beside
 the deferred boundary; do not annotate unrelated untouched files wholesale.
@@ -544,19 +586,30 @@ the deferred boundary; do not annotate unrelated untouched files wholesale.
 ## 10. Qualification and rejected alternatives
 
 For every table field, verify a meaningful non-default value through edit,
-Undo/Redo, Save/reopen, cook/load, native observation and rendered effect. Exercise
-finite/enum/cross-field failures without partial writes and verify metre/radian/
-colour conversions independently. Native rendered tests precede editor tests.
+Undo/Redo, Save/reopen, cook/load, native observation and rendered effect.
+Exercise finite/enum/cross-field failures without partial writes and verify
+metre/radian/ colour conversions independently. Native rendered tests precede
+editor tests.
 
-Include Primary-only, Secondary-only, both sources with distinct colours/directions
-and requested shadows, role-None fill, either source hidden/off/re-enabled,
-assignment conflicts, atmosphere-off, captured-product invalidation, diffuse and
-roughness-dependent specular response, all tone mappers, Manual and Auto, and
-non-default grading/bloom/background with transparent foreground. Auto tests
-observe actual GPU exposure at controlled checkpoints, not just the saved enum.
+Include Primary-only, Secondary-only, both sources with distinct
+colours/directions and requested shadows, role-None fill, either source
+hidden/off/re-enabled, assignment conflicts, atmosphere-off, captured-product
+invalidation, diffuse and roughness-dependent specular response, all tone
+mappers, Manual and Auto, and non-default grading/bloom/background with
+transparent foreground. Auto tests observe actual GPU exposure at controlled
+checkpoints, not just the saved enum.
 
 A single scene Sun pointer was rejected because it loses explicit two-source
 ownership; automatic promotion hides source mistakes; A/B renaming offers no
-capability benefit. Removing ineffective fields was rejected as a substitute
-for implementing promised behavior. Raw DTO exposure, duplicate exposure mirrors
-and using display background as ambient lighting are not alternate contracts.
+capability benefit. Explicit per-light participation is established practice:
+[Unreal](https://dev.epicgames.com/documentation/en-us/unreal-engine/sky-atmosphere-component-in-unreal-engine)
+assigns directional lights to two atmosphere indices,
+[HDRP](https://docs.unity3d.com/Packages/com.unity.render-pipelines.high-definition@17.0/manual/reference-light-component.html)
+offers per-light celestial participation with several disks, and
+[Godot](https://docs.godotengine.org/en/4.6/classes/class_directionallight3d.html)
+separates light and sky contribution. A scene
+[Sun reference](https://docs.unity3d.com/6000.0/Documentation/ScriptReference/RenderSettings-sun.html)
+fits a deliberately single-source sky only. Removing ineffective fields was
+rejected as a substitute for implementing promised behavior. Raw DTO exposure,
+duplicate exposure mirrors and using display background as ambient lighting are
+not alternate contracts.

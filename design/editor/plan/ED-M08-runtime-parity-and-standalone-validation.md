@@ -3,6 +3,8 @@
 Status: **in progress — M08.1, M08.F1, M08.2, M08.V0–V2 and M08.3–M08.10
 validated; rescoped on 2026-10-08; M08.10 closed on 2026-10-15**
 
+Last Updated: 2026-10-20 01:32
+
 Current: **M08.11 Asset thumbnails and previews**. The
 [rescope](#retired-by-the-rescope) retires the development-only parity harness
 (former M08.3 and M08.5–M08.8) and the former M08.4 audit, and replaces them
@@ -50,9 +52,9 @@ redefined by the schedule.
 | Document                                                                                                                 | Implementation authority                                                                                |
 | ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
 | [PRD](../PRD.md), sections 8–10                                                                                          | Feature boundary, workload and release envelope                                                         |
-| [V0.1 authoring contract](../review/ED-M08-v01-authoring-scope.md)                                                       | Complete scope, exclusions and rejected alternatives                                                    |
-| [Visibility and light participation](../review/ED-M08-node-light-visibility-review.md)                                   | Local/Inherit flags, workspace Hide, contribution and shadow semantics                                  |
-| [Celestial-light contract](../review/ED-M08-celestial-light-authoring.md)                                                | None/Primary/Secondary ownership, two contributors and conflicts                                        |
+| [V0.1 capability boundary](../lld/scene-authoring-model.md#12-v01-capability-boundary)                                   | Complete scope, exclusions and rejected alternatives                                                    |
+| [Visibility and light participation](../lld/scene-authoring-model.md#visibility-participation-and-shadow-source-state)   | Local/Inherit flags, workspace Hide, contribution and shadow semantics                                  |
+| [Atmosphere assignment](../lld/environment-authoring.md#7-per-light-atmosphere-assignment)                               | None/Primary/Secondary ownership, two contributors and conflicts                                        |
 | [Scene authoring model](../lld/scene-authoring-model.md)                                                                 | Canonical scene/component identities, hierarchy and workspace-state separation                          |
 | [Property inspector](../lld/property-inspector.md)                                                                       | Exact fields, units, defaults, validation and conditional UI                                            |
 | [Material editor](../lld/material-editor.md)                                                                             | Scalar PBR/emission representation, editing, persistence and preview                                    |
@@ -96,9 +98,11 @@ implementation must produce new evidence for captured sky and specular lighting.
 - Stable per-geometry material-slot identities and independent instance
   overrides for all existing slots; clearing restores the mesh material.
 - Scalar emission colour/intensity with float32 storage, explicit linear-colour
-  conversion and finite HDR bounds.
-- Local/Inherit visibility and geometry shadow flags, independent light
-  contribution/shadow controls, and functional GPU receiving/contact shadows.
+  conversion and finite HDR bounds in source and cooked records (editing is an
+  open gap below).
+- Local/Inherit native visibility and geometry shadow records, local editor
+  values, independent light contribution/shadow controls, and functional GPU
+  receiving/contact shadows.
 - Exact authored perspective/orthographic camera selection with Auto/Fixed
   per-view framing; viewports look through, pilot and align authored cameras.
 - Per-light None/Primary/Secondary atmospheric assignment, two complete shadowed
@@ -137,12 +141,44 @@ implementation must produce new evidence for captured sky and specular lighting.
 - **Editor document migration and repair workflow** (former M08.5): M08.1.4
   migrated every maintained project and there are no external projects.
   Missing/broken reference detection remains as delivered by ED-M06.
-- **Workspace-Hide representation mask** (former M08.4): Hide keeps removing
-  geometry from the editing view; keeping hidden casters and lights contributing
-  is post-V0.1.
 - **Formal inspector audit** (former M08.4): the inspectors were rebuilt and
   validated by M08.2 and the inspector refactoring plan. Defects found while
   using them are fixed as bugs in the slice that finds them.
+
+### Open gaps against the LLDs
+
+The design pack audit found three LLD behaviors that are not built. Each lands
+with M08.10 (engine capability parity) unless scheduled earlier.
+
+| Gap                       | LLD                                                                                                          | Today                                                                                                                                                                                     | Work                                                                                                                                                                                                     |
+| ------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Inherit source modes      | [Scene model](../lld/scene-authoring-model.md#visibility-participation-and-shadow-source-state), inspector 4 | World stores `IsVisible`, `CastsShadows` and `ReceivesShadows` as booleans, so the editor authors local values only; the Rendering section offers no Inherit and shows no resolved origin | Inherit / Shown / Hidden and Inherit / On / Off in World source and `SceneNodeData`, Scenes descriptors, Interop `NodePropertyApplier` and the cooked node records; migrate the booleans as local values |
+| Light collection pruning  | [Scene model](../lld/scene-authoring-model.md#visibility-participation-and-shadow-source-state)              | `DirectionalLightResolver` and `SceneRenderer::BuildFrameLightSelection` traverse with `VisibleFilter`, so a locally Shown light under a Hidden parent contributes nothing                | Collect lights by each node's resolved visibility, as geometry extraction does; keep `VisibleFilter` for callers that prune subtrees deliberately                                                        |
+| Material emission editing | [Material editor](../lld/material-editor.md)                                                                 | `MaterialSource` carries and writes `EmissiveColor` and `EmissiveIntensity`; `MaterialEdits` has no emission edit and the Material Editor shows emission only as a texture slot           | Emission colour and HDR intensity edits in `Oxygen.Editor.Materials` and their Material Editor controls, with history, Save, cook and preview                                                            |
+
+The qualification harness is retired above; its LLD design stays for the
+post-V0.1 work.
+
+The editor Hide engine mask
+([settings](../lld/settings-architecture.md#51-workspace-visibility-storage-and-lifetime))
+is not built: the eye keeps state, persistence, undo and picking exclusion, and
+logs that viewport suppression is pending. The work, in order:
+
+1. Engine: a scene-scoped hidden-root snapshot with revision in
+   `ScenePrepContext`; `ScenePrepPipeline::PrepareView` skips the descendant
+   closure, emitting no render items and no shadow casters for editing views;
+   Vortex design note. Test: a hidden mesh has no draws and no casters in the
+   masked view and renders in an unmasked one.
+2. Interop: `EditorModule::SetEditingViewHiddenNodes(revision, ids)` queued with
+   world commands, IDs resolved through `NodeRegistry` into the snapshot of the
+   scene's editing views in `OnPublishViews`, unresolved IDs retained;
+   `OxygenWorld::SetEditingViewHiddenNodes`.
+3. Runtime: `RuntimeSetEditingViewHiddenNodes` and
+   `IRuntimeWorldCommands.SupportsEditingViewMask`.
+4. Editor: dispatch the mask on change; check hide of a mesh and of a parent
+   (geometry and shadows gone in every editing pane, kept in game and capture
+   views), show of a parent keeping the child hidden, and the gizmo on a
+   selected hidden node.
 
 ### Architecture decisions for M08.3–M08.12
 
@@ -632,7 +668,7 @@ Each item below is a content-author need, not an internal engine seam.
    patterns and common inspector controls. Point lights expose lumens, range and
    source radius; spot lights additionally expose inner and outer cone angles.
    Wire both through command/history/Undo/Save/cook and live projection. Both
-   lights support the same shared fields as directional (colour, Affects Scene,
+   lights support the same shared fields as directional (colour, Affects World,
    Cast Shadows, contact shadows, shadow bias/normal-bias/resolution, exposure
    compensation).
 
@@ -1232,7 +1268,7 @@ editor settings for the ground grid. No owner decision stands behind them. This
 slice removes those lock-outs.
 
 1. **Every exclusion is checked against the engine.** Each exclusion in the
-   [authoring scope](../review/ED-M08-v01-authoring-scope.md#4-canonical-migration-and-excluded-scope),
+   [V0.1 capability boundary](../lld/scene-authoring-model.md#12-v01-capability-boundary),
    the [environment LLD](../lld/environment-authoring.md) and the
    [inspector LLD](../lld/property-inspector.md) was verified against the engine
    source. The engine renders physical-camera exposure, the Sky Sphere and every

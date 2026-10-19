@@ -2,6 +2,8 @@
 
 Status: `V0.1 content workflow contract`
 
+Last Updated: 2026-10-20 01:32
+
 ## 1. Purpose And Ownership
 
 Make supported content easy to discover, prepare, assign, and update without
@@ -11,12 +13,12 @@ This is the V0.1 user-workflow contract. It traces to PRD `REQ-013` through
 
 ContentPipeline owns dependency freshness, requests, incremental execution, and
 publication. ContentBrowser owns shared asset presentation and typed pickers.
-MaterialEditor and WorldEditor own document saves and undoable assignments;
-they submit requests through ContentPipeline. Runtime owns readiness and asset
-load acceptance. Projects owns roots and retained source locations. Existing
-operation results carry finalized outcomes and recovery. Cook-specific coordinator
-state supplies live progress to the [Cooking panel](cooking-panel.md); there is
-no second job system.
+MaterialEditor and WorldEditor own document saves and undoable assignments; they
+submit requests through ContentPipeline. Runtime owns readiness and asset load
+acceptance. Projects owns roots and retained source locations. Existing
+operation results carry finalized outcomes and recovery. Cook-specific
+coordinator state supplies live progress to the
+[Cooking panel](cooking-panel.md); there is no second job system.
 
 Related contracts: [content-pipeline.md](content-pipeline.md) sections 16-19,
 [content-browser-asset-identity.md](content-browser-asset-identity.md),
@@ -29,35 +31,38 @@ Related contracts: [content-pipeline.md](content-pipeline.md) sections 16-19,
 
 ## 2. Scope and integration boundaries
 
-Browser and picker projections consume the same dependency/publication authority.
-File existence or timestamps alone do not prove freshness or runtime readiness.
-Material documents, browser rows and scene assignments report the same source,
-cooked and loading facts. A material source edit, approximate swatch and published
-scene material remain distinct states.
+Browser and picker projections consume the same dependency/publication
+authority. File existence or timestamps alone do not prove freshness or runtime
+readiness. Material documents, browser rows and scene assignments report the
+same source, cooked and loading facts. A material source edit, approximate
+swatch and published scene material remain distinct states.
 
 Native recipe/catalog authority in pipeline section 19 supplies supported
-procedural products. The [property-inspector layout](property-inspector.md#91-ed-m07b-compact-layout-and-component-filtering)
+procedural products. The
+[property-inspector layout](property-inspector.md#component-layout-and-filtering)
 owns compact component selection and filtering. The canonical V0.1 primitive
 inventory and migration rules apply throughout these workflows.
 
 Use the existing WinUI browser, inspector pickers, material document, scene
-toolbar, and output/results surfaces, with a dockable Cooking panel as the common
-cook progress and recovery surface. Required work includes their empty states,
-action labels, disabled reasons, progress, and keyboard/accessibility behavior.
-Full material thumbnails, a new asset management application, a generic settings
-panel, raw generated-file editing, scheduling beyond the existing cook queue,
-rename/move/reference repair, and a new drag/drop placement system are outside
-the general content-management workflow. M08's explicit material-slot repair is
-defined separately by content-pipeline section 20. Qualified
-formats/components remain those in PRD section 8 and pipeline section 17.
+toolbar, and output/results surfaces, with a dockable Cooking panel as the
+common cook progress and recovery surface. Required work includes their empty
+states, action labels, disabled reasons, progress, and keyboard/accessibility
+behavior. Full material thumbnails, a new asset management application, a
+generic settings panel, raw generated-file editing, scheduling beyond the
+existing cook queue, rename/move/reference repair, and a new drag/drop placement
+system are outside the general content-management workflow. M08's explicit
+material-slot repair is defined separately by content-pipeline section 20.
+Qualified formats/components remain those in PRD section 8 and pipeline
+section 17.
 
 ## 3. One Asset Before And After Cooking
 
 The normal browser shows one row per logical authorable asset. Cooking updates
 that row; it does not require finding another copy under Cooked or reassigning a
-scene reference. Preserve folder, search, selected identity, scroll, and keyboard
-focus across refreshes. Source, import settings, generated descriptor, and cooked
-artifact are related facts available in details, not competing choices.
+scene reference. Preserve folder, search, selected identity, scroll, and
+keyboard focus across refreshes. Source, import settings, generated descriptor,
+and cooked artifact are related facts available in details, not competing
+choices.
 
 Folder tree, breadcrumb, row contents, and command scope must agree after every
 navigation, list/tile switch, search, Back/Forward, and publication refresh.
@@ -66,10 +71,10 @@ during a scope transition; never cook an old row under a new folder breadcrumb.
 
 One imported model may produce several geometry/material assets. Show the source
 and its named outputs with their relationship, stable subasset identities, and
-types. Before discovery, show the source with Import as its action; do not invent
-assignable geometry identities from its filename. After import, typed pickers
-show actual supported outputs. Shared source/cooked companions do not inflate
-the PRD's logical asset count.
+types. Before discovery, show the source with Import as its action; do not
+invent assignable geometry identities from its filename. After import, typed
+pickers show actual supported outputs. Shared source/cooked companions do not
+inflate the PRD's logical asset count.
 
 The shared row snapshot retains a configured model's source identity separately
 from descriptor editing paths. Project-produced outputs show that source in
@@ -79,69 +84,75 @@ Before configuration, source rows show Not imported and do not create typed
 picker choices. Previously published output names can remain visible while their
 derived files need regeneration; unobserved names are never synthesized.
 
-Expose engine-provided assets in an explicitly labeled Built-in group/filter
-in the browser as well as the pickers. Use the 07B.7 provenance/identity mapping
-to attach generated cooked companions to their originating built-in. Do not
-offer cooker-internal names such as Engine_Generated_BasicShapes_Cube or
+Expose engine-provided assets in an explicitly labeled Built-in group/filter in
+the browser as well as the pickers. Use the 07B.7 provenance/identity mapping to
+attach generated cooked companions to their originating built-in. Do not offer
+cooker-internal names such as Engine_Generated_BasicShapes_Cube or
 OxygenEditor_Default as duplicate ordinary choices when they are proven derived
-companions. Do not deduplicate by filename or assume two defaults are equivalent.
-An independently authored asset remains distinct; existing explicit references
-to a derived identity remain resolvable and visible, without silent URI rewriting.
-The default material and every engine-generated shape display Built-in, including
-verified project copies. These rows own no source descriptor and offer no
-standalone Cook action. Engine and Cooked folders do not offer Cook Folder;
-project/scene publication maintains the required generated contributions.
+companions. Do not deduplicate by filename or assume two defaults are
+equivalent. An independently authored asset remains distinct; existing explicit
+references to a derived identity remain resolvable and visible, without silent
+URI rewriting. The default material and every engine-generated shape display
+Built-in, including verified project copies. These rows own no source descriptor
+and offer no standalone Cook action. Engine and Cooked folders do not offer Cook
+Folder; project/scene publication maintains the required generated
+contributions.
 
 Default browsing includes valid uncooked and stale assets. Offer clear Type and
 Status filters, including Needs cooking, Out of date, and Problems. An empty
 project offers New Material / Import; an empty Cooked view explains that content
 has not been cooked and links to authored content. Filtered emptiness offers
-Clear filters. Built-ins are identified as Built-in and remain immediately usable.
+Clear filters. Built-ins are identified as Built-in and remain immediately
+usable.
 
-Keep the existing Cooked (derived) tree as a read-only view of published content.
-It uses logical asset names and links back to source where available. Runtime
-tables and companion files belong under technical details/Inspect. Double-click
-opens the supported source editor; a cooked-only item opens read-only details.
-Cooked-only geometry/materials can be assigned when their identity and native
-compatibility are valid; Edit/Reimport explains that source is unavailable.
-No action overwrites a cooked binary or fabricates editable source from it.
+Keep the existing Cooked (derived) tree as a read-only view of published
+content. It uses logical asset names and links back to source where available.
+Runtime tables and companion files belong under technical details/Inspect.
+Double-click opens the supported source editor; a cooked-only item opens
+read-only details. Cooked-only geometry/materials can be assigned when their
+identity and native compatibility are valid; Edit/Reimport explains that source
+is unavailable. No action overwrites a cooked binary or fabricates editable
+source from it.
 
 ### Cooked Library Priority
 
 Use Oxygen's last-mounted-wins policy for unqualified asset-key and virtual-path
-resolution across cooked sources. Project-owned output and local cooked libraries
-share one saved, adjustable priority order. A newly added library starts below
-project output and above older libraries, as selected by the user on 2026-09-13.
-Users may deliberately raise a library above project output. Refresh, recooking
-and reopening preserve the saved order; file timestamps and scan completion do
-not determine priority.
+resolution across cooked sources. Project-owned output and local cooked
+libraries share one saved, adjustable priority order. A newly added library
+starts below project output and above older libraries, as selected by the user
+on 2026-09-13. Users may deliberately raise a library above project output.
+Refresh, recooking and reopening preserve the saved order; file timestamps and
+scan completion do not determine priority.
 
 `Project.oxy` persists `CookedContentOrder` from lowest to highest priority.
-Entries identify `ProjectOutput` or a named `LocalFolder` declaration. An omitted
-order uses the default above; new declarations are inserted directly below the
-project entry without moving explicit overrides above it. Confirmed additions,
-removals and reorderings validate, apply and save immediately, as selected by the
-user on 2026-09-13. A separate Save mounts action is not part of the workflow.
-Atomic manifest replacement rejects an edit based on externally changed project
-configuration. Native refresh completes before that commit point; a failed change
-restores the previously accepted roots before returning control.
+Entries identify `ProjectOutput` or a named `LocalFolder` declaration. An
+omitted order uses the default above; new declarations are inserted directly
+below the project entry without moving explicit overrides above it. Confirmed
+additions, removals and reorderings validate, apply and save immediately, as
+selected by the user on 2026-09-13. A separate Save mounts action is not part of
+the workflow. Atomic manifest replacement rejects an edit based on externally
+changed project configuration. Native refresh completes before that commit
+point; a failed change restores the previously accepted roots before returning
+control.
 
-The browser and runtime must use the same ordered source set. Tooltips and Inspect
-identify the winning source and overridden copies without treating ordinary
-overlap as a failed mount. Preserve native identities and physical source locations;
-do not rename references to avoid overlap or choose a winner by display name.
-Source-qualified dependencies retain Oxygen's parent-source semantics, so report
-the actual dependency origin rather than assuming the global winner supplies it.
+The browser and runtime must use the same ordered source set. Tooltips and
+Inspect identify the winning source and overridden copies without treating
+ordinary overlap as a failed mount. Preserve native identities and physical
+source locations; do not rename references to avoid overlap or choose a winner
+by display name. Source-qualified dependencies retain Oxygen's parent-source
+semantics, so report the actual dependency origin rather than assuming the
+global winner supplies it.
 
 Pass: two libraries with overlapping paths and keys select the expected source;
-new-library insertion, explicit reordering, project recook and reopen preserve the
-chosen behavior. Source-qualified material dependencies retain their source.
+new-library insertion, explicit reordering, project recook and reopen preserve
+the chosen behavior. Source-qualified material dependencies retain their source.
 
 ### Visible State And Next Action
 
-Saved/unsaved authoring, cooked freshness, operation phase, and runtime readiness
-are separate facts. Present the most useful short status on rows, and all relevant
-facts in details. Error and stale overlays must not erase the last good result.
+Saved/unsaved authoring, cooked freshness, operation phase, and runtime
+readiness are separate facts. Present the most useful short status on rows, and
+all relevant facts in details. Error and stale overlays must not erase the last
+good result.
 
 When the SDK cannot provide its built-in catalog, discovery uses the last valid
 engine-provided snapshot and marks those choices as last-known with a "Preview
@@ -165,11 +176,11 @@ native operations.
 | Source missing/invalid, or published data damaged | Source missing / Invalid source / Cooked content invalid | Inspect the named problem, restore valid source externally, or choose a replacement through existing pickers. Explain whether prior runtime content remains usable. |
 
 Ready requires current dependency provenance, valid publication, and runtime
-availability; a later per-asset load failure overrides it. Runtime not initialized,
-tool mismatch, output invalidity, and missing source must not collapse into one
-generic missing badge. A folder/project shows counts for its scope, not Ready
-because the last single-asset cook succeeded. A successful historical cook can
-coexist with Out of date relative to newer authoring.
+availability; a later per-asset load failure overrides it. Runtime not
+initialized, tool mismatch, output invalidity, and missing source must not
+collapse into one generic missing badge. A folder/project shows counts for its
+scope, not Ready because the last single-asset cook succeeded. A successful
+historical cook can coexist with Out of date relative to newer authoring.
 
 Details lead with name, type, location, status, next action, and a short reason.
 Quick asset information uses a structured, read-only tooltip in both list and
@@ -177,13 +188,14 @@ tile views; it reserves no browser layout space. Show the full name/type and
 location, relevant status explanation, source location or engine ownership, and
 known cooked outputs. An engine recipe's expected path is not proof of a
 published project copy. Tooltip content follows the current catalog snapshot;
-opening it does not scan, load, import or cook. Keep long output lists summarized
-and leave interactive navigation and complete reports to explicit inspection.
-Show dependencies and source/output relationships read-only, with navigation to
-the blocking asset. Put hashes, operation IDs, schema/build fingerprints, and
-copyable source/generated/cooked paths under technical details. Paths for cleaned
-temporary artifacts must be labeled no longer retained. A thumbnail or material
-swatch is labeled approximate and never implies the current material is rendered.
+opening it does not scan, load, import or cook. Keep long output lists
+summarized and leave interactive navigation and complete reports to explicit
+inspection. Show dependencies and source/output relationships read-only, with
+navigation to the blocking asset. Put hashes, operation IDs, schema/build
+fingerprints, and copyable source/generated/cooked paths under technical
+details. Paths for cleaned temporary artifacts must be labeled no longer
+retained. A thumbnail or material swatch is labeled approximate and never
+implies the current material is rendered.
 
 ## 4. Cooking triggers
 
@@ -194,8 +206,8 @@ Source saving remains an independent, explicit user operation.
 Rationale: Import and Save express intent to produce usable content. Assignment
 and scene opening express demand for preview. Browsing expresses discovery only.
 Automatic work should follow those intents and rebuild only affected products.
-Saving a shared material updates all its scene uses after publication;
-Save completes independently of subsequent cook success.
+Saving a shared material updates all its scene uses after publication; Save
+completes independently of subsequent cook success.
 
 | User interaction                                                                                          | Cooking behavior                                                                                                                                                                                                                      |
 | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -218,29 +230,32 @@ require an explicitly identified published generation for standalone validation.
 For batch work, add Pause automatic cooking / Resume to the existing Cook menu
 and show a persistent paused indicator. This is session state owned by the
 coordinator, reset on project close; no new durable preference/settings panel.
-Pause prevents automatic jobs starting, does not interrupt an active transaction,
-and coalesces saved/demand changes for Resume. Explicit Cook remains available.
+Pause prevents automatic jobs starting, does not interrupt an active
+transaction, and coalesces saved/demand changes for Resume. Explicit Cook
+remains available.
 
 ### One Completion Path For Every Trigger
 
 The familiar workflow is edit, save/apply, and see existing scene uses update.
-Unreal's [material Apply action](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-engine-material-editor-ui)
+Unreal's
+[material Apply action](https://dev.epicgames.com/documentation/en-us/unreal-engine/unreal-engine-material-editor-ui)
 updates the material and its uses in the world. Unity's
 [asset refresh](https://docs.unity3d.com/6000.0/Documentation/Manual/AssetDatabaseRefreshing.html)
 tracks dependencies, imports changed data and hot-reloads assets. Unreal's
 [platform cooking](https://dev.epicgames.com/documentation/en-us/unreal-engine/cooking-content-in-unreal-engine)
 is a separate concern from applying material edits in the editor.
 
-Oxygen's embedded runtime consumes cooked assets. Successful Save is
-the material's automatic cook trigger; it does not require another Apply button.
+Oxygen's embedded runtime consumes cooked assets. Successful Save is the
+material's automatic cook trigger; it does not require another Apply button.
 Existing direct scene-property previews remain immediate. Transient gestures and
-Undo/Redo never launch cooks. External reimport stays explicit under the accepted
-policy. The supported asset formats remain the PRD's V0.1 set.
+Undo/Redo never launch cooks. External reimport stays explicit under the
+accepted policy. The supported asset formats remain the PRD's V0.1 set.
 
 All triggers converge on one asynchronous project-owned workflow:
 
 1. Successful Save, accepted Import/Reimport, preview demand, or explicit Cook
-   submits the logical source scope. Save success is independent of cook success.
+   submits the logical source scope. Save success is independent of cook
+   success.
 2. The coordinator coalesces requests, captures saved dependencies, and reuses
    verified products. Browsing and catalog refresh cannot submit work.
 3. Changed products cook and validate in private staging while the previous
@@ -263,9 +278,9 @@ to preserve current reference intent and reject late completions.
 An unchanged cook causes no native work, root replacement, catalog-refresh loop
 or preview pause. Failures keep the last working published content and expose
 recovery in Cooking. Automatic work stays quiet and does not steal focus; its
-errors remain discoverable. A saved asset may have failed cooking without becoming
-unsaved again. No extra qualification command or separately built probe belongs
-to this workflow.
+errors remain discoverable. A saved asset may have failed cooking without
+becoming unsaved again. No extra qualification command or separately built probe
+belongs to this workflow.
 
 ## 5. Incremental Execution Contract
 
@@ -285,16 +300,16 @@ directly from a save, watcher, picker, or catalog callback.
 - If nothing changed, report Already up to date without spawning native workers,
   rewriting roots, or pausing preview. If only mount/readiness needs repair,
   handle that through runtime recovery without inventing source staleness.
-- Persist provenance so a reopened project makes the same reuse decision.
-  Track added/removed dependencies and source-owned subassets, not just updates.
-  A failure to establish a complete dependency set blocks that request visibly.
+- Persist provenance so a reopened project makes the same reuse decision. Track
+  added/removed dependencies and source-owned subassets, not just updates. A
+  failure to establish a complete dependency set blocks that request visibly.
 - Coalesce duplicate pending requests for the same project, target, and saved
   revision. A broader pending request may absorb contained work, preserving
   caller correlation and cancellation. Running snapshots never change in place.
   Capture queued work only after acquiring the project gate.
 - Repeated saves during a cook retain at most the latest pending revision for
-  that target. The completed revision is labeled stale when appropriate, and
-  the next valid saved revision follows. Publishing never clears newer edits.
+  that target. The completed revision is labeled stale when appropriate, and the
+  next valid saved revision follows. Publishing never clears newer edits.
   Changes confined to unsaved data do not create another job.
 - User-demand and explicit requests run ahead of pending background-save work;
   do not preempt a running publication. Results expose queued reason and scope.
@@ -311,38 +326,41 @@ directly from a save, watcher, picker, or catalog callback.
   scenes invalidates its demand observer. Completion may populate the catalog
   but cannot restore an undone assignment or update a different document.
 
-Incremental planning/reuse is testable independently of triggers: explicit Cook scopes
-must also skip verified current products. Full-root validation and recoverable
-publication remain mandatory even when only one product is rebuilt.
+Incremental planning/reuse is testable independently of triggers: explicit Cook
+scopes must also skip verified current products. Full-root validation and
+recoverable publication remain mandatory even when only one product is rebuilt.
 
 ## 6. Interaction Details And Failure Recovery
 
 ### Import And Reimport
 
-Show supported formats and the destination authoring mount/folder before starting.
-Retain sources/dependencies in the project according to pipeline section 17;
-selecting a derived root does not place source there. A filename collision offers
-Choose another name/location, explicit Replace/Reimport of the identified source,
-or Cancel. Never silently overwrite source, import settings, or authored material
-edits. Dirty affected documents and changed output identities block replacement
-with an actionable explanation. Unsupported content lists the feature and source.
+Show supported formats and the destination authoring mount/folder before
+starting. Retain sources/dependencies in the project according to pipeline
+section 17; selecting a derived root does not place source there. A filename
+collision offers Choose another name/location, explicit Replace/Reimport of the
+identified source, or Cancel. Never silently overwrite source, import settings,
+or authored material edits. Dirty affected documents and changed output
+identities block replacement with an actionable explanation. Unsupported content
+lists the feature and source.
 
-Import progress ends at usable output or a clear partial result such as Imported;
-cooking failed. Retained source remains discoverable and Retry does not require
-choosing the file again. After success, offer Show imported assets in the browser;
-do not steal selection/focus if the user has moved elsewhere. A source producing
-several meshes lets the user choose the intended named geometry in the picker.
+Import progress ends at usable output or a clear partial result such as
+Imported; cooking failed. Retained source remains discoverable and Retry does
+not require choosing the file again. After success, offer Show imported assets
+in the browser; do not steal selection/focus if the user has moved elsewhere. A
+source producing several meshes lets the user choose the intended named geometry
+in the picker.
 
 ### Save And Cook
 
 Finish/cancel an active gesture through its normal control contract. If the
 selected cook closure contains dirty documents, list them inline with Open and
-Save listed and Cook, plus Cancel. The latter explicitly authorizes ordinary saves
-of exactly the named documents, waits for success, then rechecks the closure.
-Do not save unrelated documents or silently expand the list after consent.
-Any save conflict uses the existing conflict flow and keeps cooking blocked.
-Save and Close keeps its accepted inline conflict actions; a cook failure cannot
-turn a successfully saved document back into an unsaved document or reopen it.
+Save listed and Cook, plus Cancel. The latter explicitly authorizes ordinary
+saves of exactly the named documents, waits for success, then rechecks the
+closure. Do not save unrelated documents or silently expand the list after
+consent. Any save conflict uses the existing conflict flow and keeps cooking
+blocked. Save and Close keeps its accepted inline conflict actions; a cook
+failure cannot turn a successfully saved document back into an unsaved document
+or reopen it.
 
 Background requests wait with Needs save and an action, not a surprise modal.
 They never bypass the pipeline's dirty-input rejection. Saves acknowledged after
@@ -361,36 +379,38 @@ Commit one history entry for the assignment. Cooking/publication creates no
 scene/material history entries. Pending or failed preparation retains the chosen
 identity and explains what the viewport shows: the previous material/geometry
 where available, or the engine's existing fallback/unresolved state. Do not
-silently replace the authored URI with None/Default or erase a failed assignment.
-Successful publication refreshes all current uses of the affected identity with
-existing generation/lifetime guards, without reassigning or restarting.
+silently replace the authored URI with None/Default or erase a failed
+assignment. Successful publication refreshes all current uses of the affected
+identity with existing generation/lifetime guards, without reassigning or
+restarting.
 
 ### Progress, Results, And Recovery
 
 The [Cooking panel contract](cooking-panel.md) owns detailed progress, session
-history, asset-grouped issues, run-scoped progress/technical output, cancellation,
-Retry, and Save listed & Cook for
-all scopes. Explicit Cook opens/selects its run; automatic work never opens the
-panel or moves focus. The accepted compact split layout and filtering keep the
-default view focused on active work and actionable outcomes.
-The selected run's Output section shows its messages live and after completion
-inside Cooking; users do not need to search or navigate the global Logs panel.
+history, asset-grouped issues, run-scoped progress/technical output,
+cancellation, Retry, and Save listed & Cook for all scopes. Explicit Cook
+opens/selects its run; automatic work never opens the panel or moves focus. The
+accepted compact split layout and filtering keep the default view focused on
+active work and actionable outcomes. The selected run's Output section shows its
+messages live and after completion inside Cooking; users do not need to search
+or navigate the global Logs panel.
 
 Use a persistent compact status near the cook action and affected row/slot:
 Queued, Checking dependencies, Cooking, Validating, Updating preview, Ready.
-Show asset/scope, completed/total items when known, and Cancel. Use indeterminate
-progress instead of fabricated percentages when total work is unknown. Start
-feedback within the PRD's 100 ms gate. Details expose changed/reused counts,
-trigger (Save/Import/Use/Cook), blockers, and links to affected assets/results.
+Show asset/scope, completed/total items when known, and Cancel. Use
+indeterminate progress instead of fabricated percentages when total work is
+unknown. Start feedback within the PRD's 100 ms gate. Details expose
+changed/reused counts, trigger (Save/Import/Use/Cook), blockers, and links to
+affected assets/results.
 
 During the short publication boundary, show Updating preview; cancellation reads
 Finishing update when it must wait for commit/rollback. A cancellation report
 follows actual worker drain or transaction completion. Multiple saves produce a
 coalesced status, not stacked notifications. Routine automatic success does not
 open a modal or steal focus. Failure remains actionable after transient messages
-are dismissed and is visible from the asset and Cooking panel. For asset failures
-inside a folder/project cook, continue independent work, skip dependents, and
-collect issues; a failed cook does not replace published output.
+are dismissed and is visible from the asset and Cooking panel. For asset
+failures inside a folder/project cook, continue independent work, skip
+dependents, and collect issues; a failed cook does not replace published output.
 
 Publication failure says whether previous content was restored; failed recovery
 keeps preview visibly unavailable and offers Retry recovery after the cause is
@@ -398,24 +418,26 @@ resolved. Tool mismatch explains which capability is unavailable while browsing,
 authoring, and safe saves continue. A stopped runtime yields Cooked / preview
 unavailable, not cook failure; activation mounts the validated generation.
 
-Inspect shows the actual scope and a browsable read-only asset/dependency report,
-not only counts and a filesystem path. Validate distinguishes output integrity
-from freshness and runtime availability. Reuse the existing details/results
-surfaces; neither command changes the selected asset or initiates a cook.
+Inspect shows the actual scope and a browsable read-only asset/dependency
+report, not only counts and a filesystem path. Validate distinguishes output
+integrity from freshness and runtime availability. Reuse the existing
+details/results surfaces; neither command changes the selected asset or
+initiates a cook.
 
 The user selected an on-demand document tab for the full report on 2026-09-13.
-Use the existing document lifecycle, with no Save or dirty state. Keep a captured
-report stable until an explicit Refresh or Validate request. Assets can be
-searched and selected within the report; source/dependency navigation and copyable
-paths are explicit actions. Root-file and integrity results identify the physical
-root they describe, even when the requested asset list is folder-scoped. Closing
-the tab or project cancels and drains its inspection work.
+Use the existing document lifecycle, with no Save or dirty state. Keep a
+captured report stable until an explicit Refresh or Validate request. Assets can
+be searched and selected within the report; source/dependency navigation and
+copyable paths are explicit actions. Root-file and integrity results identify
+the physical root they describe, even when the requested asset list is
+folder-scoped. Closing the tab or project cancels and drains its inspection
+work.
 
 Every required action is keyboard reachable, has a meaningful accessible name,
 and displays its disabled reason outside hover-only tooltips. Use text/icons in
 addition to color, announce phase/result changes without reading every progress
-tick, and preserve focus across row replacement, popups, and publication.
-Reuse DroidNet controls and existing spacing/theme resources.
+tick, and preserve focus across row replacement, popups, and publication. Reuse
+DroidNet controls and existing spacing/theme resources.
 
 At supported dock widths, reflow or overflow commands without clipping Save,
 Cook, Cancel, status, or picker choices. Long paths stay in expandable details;
@@ -452,21 +474,22 @@ including the trigger policy in section 4.
 | Offline native state or mismatched build                                                      | Authoring and saves work; cooking/readiness report the specific capability; activation converges without an unnecessary recook.                                                           |
 | Keyboard-only, screen reader, theme and scale checks                                          | Core import/cook/browse/pick/recovery actions are usable with readable state and stable focus.                                                                                            |
 
-Exercise before/during/after cooking states to verify discoverability, legibility
-and interaction behavior. M08 additionally owns rendered standalone parity.
+Exercise before/during/after cooking states to verify discoverability,
+legibility and interaction behavior. M08 additionally owns rendered standalone
+parity.
 
 ## 8. Design rationale and eliminated alternatives
 
-The trigger table and session pause control in section 4 include explicit
-Save listed and Cook. A successful saved revision schedules
-cooking and can refresh every shared use. Source saving stays explicit and
-independent. PRD `REQ-014/026`, section 8, and the material/pipeline contracts use
-this policy. Explicit-only cooking adds a second routine action after every Save;
-automatic cooking on transient edits or browsing produces work without a saved
-authoring or preview need. Neither fits this workflow.
+The trigger table and session pause control in section 4 include explicit Save
+listed and Cook. A successful saved revision schedules cooking and can refresh
+every shared use. Source saving stays explicit and independent. PRD
+`REQ-014/026`, section 8, and the material/pipeline contracts use this policy.
+Explicit-only cooking adds a second routine action after every Save; automatic
+cooking on transient edits or browsing produces work without a saved authoring
+or preview need. Neither fits this workflow.
 
 Dependency-aware incremental processing is established in
 [Unity's asset database workflow](https://docs.unity3d.com/6000.0/Documentation/Manual/AssetDatabaseRefreshing.html),
 which tracks dependency changes to determine reimport. This informs reuse and
-invalidation here; the Oxygen trigger policy is a product decision,
-not a claim that another editor's refresh and Oxygen cooking are equivalent.
+invalidation here; the Oxygen trigger policy is a product decision, not a claim
+that another editor's refresh and Oxygen cooking are equivalent.

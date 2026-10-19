@@ -2,9 +2,11 @@
 
 Status: **proposal, awaiting review** (no code changed)
 
+Last Updated: 2026-10-20 01:32
+
 Section 7 (project decomposition, rules R1 to R6) and the project lists of
 section 9 Phase 1 are being replaced by the drafts
-[editor-module-architecture.md](editor-module-architecture.md) and
+[editor-module-architecture.md](../lld/editor-module-architecture.md) and
 [editor-shell.md](editor-shell.md): no `Authoring` or `Authoring.Abstractions`
 projects, no World Editor host, the Shell as application frame.
 
@@ -40,13 +42,14 @@ scope design (section 6) implementable: each module registers its own layer.
 
 The target design replaces the two ad-hoc child containers with a small fixed
 chain of **scopes** (Editor → Project Session → Window, with session-owned
-unique panels), built by one factory that makes root singletons shared by construction instead of by luck,
-owned by explicit scope objects, and populated by per-subsystem registration
-modules instead of by view models. This is what allows the Content Browser, the
-Material Editor or any document host to live docked or in its own window.
-`IProjectContextService` is replaced by the session scope, unique panels are
-owned by the session and moved between windows by a registry, and every
-document or panel request carries an explicit window placement.
+unique panels), built by one factory that makes root singletons shared by
+construction instead of by luck, owned by explicit scope objects, and populated
+by per-subsystem registration modules instead of by view models. This is what
+allows the Content Browser, the Material Editor or any document host to live
+docked or in its own window. `IProjectContextService` is replaced by the session
+scope, unique panels are owned by the session and moved between windows by a
+registry, and every document or panel request carries an explicit window
+placement.
 
 ## 2. DryIoc behavior this design depends on
 
@@ -81,8 +84,8 @@ the same rules the editor's host uses, not inferred from documentation.
 | Content Browser | `ContentBrowserViewModel.InitializeChildContainer`  | First navigation to the Content Browser | `WithMvvm`, `WithLocalRouting`, browser state, shell, dialogs, layouts, `AssetsViewModel`                                                          | `ContentBrowserViewModel.Dispose`   |
 
 Nothing else creates containers. There is no scope (`OpenScope`) and no
-`Reuse.Scoped` in any production code. The Project Browser lives entirely in
-the root container.
+`Reuse.Scoped` in any production code. The Project Browser lives entirely in the
+root container.
 
 ### 3.2 Topology today
 
@@ -145,9 +148,9 @@ private child copy (D2, D3), depending on what ran earlier in the process.
 
 The code base contains the evidence that this is a known trap:
 
-- [Program.cs:478](../../../projects/Oxygen.Editor/src/Program.cs:478)
-  eagerly resolves `AssetRedirects` "so a workspace child container never
-  creates a second instance that the root's services would not see".
+- [Program.cs:478](../../../projects/Oxygen.Editor/src/Program.cs:478) eagerly
+  resolves `AssetRedirects` "so a workspace child container never creates a
+  second instance that the root's services would not see".
 - [WorkspaceViewModel.cs:380](../../../projects/Oxygen.Editor.WorldEditor/src/Workspace/WorkspaceViewModel.cs:380)
   eagerly resolves `IAssetRelocationService` so "the Content Browser's child
   container must reach the same instance".
@@ -187,9 +190,9 @@ starts depending on one of them.
 
 The `IMessenger` fallback at line 165 is dead code (`OnSetupChildContainer`
 always assigns the messenger first) and `IMessenger` is registered only in the
-child, so it would fail if it ever ran. The class summary
-states the correct rule ("resolutions inside the workspace must always use the
-child container") and the class does not follow it.
+child, so it would fail if it ever ran. The class summary states the correct
+rule ("resolutions inside the workspace must always use the child container")
+and the class does not follow it.
 
 ### F3. Disposable transients are retained forever (Medium)
 
@@ -255,7 +258,8 @@ Process-global messengers also bypass the container:
 [SceneNodeDetailsViewModel.cs:288](../../../projects/Oxygen.Editor.WorldEditor/src/Inspector/SceneNodeDetailsViewModel.cs:288),
 [line 315](../../../projects/Oxygen.Editor.WorldEditor/src/Inspector/SceneNodeDetailsViewModel.cs:315)
 and the registrations in `SceneNodeEditorViewModel` (lines 630 and 633), and
-`StrongReferenceMessenger.Default` in the Docking library's `DockPanelViewModel.cs:133`.
+`StrongReferenceMessenger.Default` in the Docking library's
+`DockPanelViewModel.cs:133`.
 
 ### F7. Silent duplicate registrations and swallowed container errors (Medium)
 
@@ -264,32 +268,33 @@ and the registrations in `SceneNodeEditorViewModel` (lines 630 and 633), and
   [HostBuilderExtensions.cs:101](../../../projects/Routing/Routing.WinUI/src/HostBuilderExtensions.cs:101)
   and [Program.cs:312](../../../projects/Oxygen.Editor/src/Program.cs:312).
   `ViewModelToView` and the keyed `"VmToView"` converter are registered twice
-  with different implementations ([Program.cs:313](../../../projects/Oxygen.Editor/src/Program.cs:313)
-  versus `Bootstrapper.WithMvvm`). By D6 the last one wins with no diagnostic.
+  with different implementations
+  ([Program.cs:313](../../../projects/Oxygen.Editor/src/Program.cs:313) versus
+  `Bootstrapper.WithMvvm`). By D6 the last one wins with no diagnostic.
 - `RegisterViewsAndViewModels` runs twice: at the end of
-  `ConfigureApplicationServices` ([line 319](../../../projects/Oxygen.Editor/src/Program.cs:319))
-  and again in `Main` ([line 124](../../../projects/Oxygen.Editor/src/Program.cs:124)).
-- `Main` wraps container setup in `catch (ContainerException or
-InvalidOperationException)` with the comment "No EditorSettingsManager
-  registered"
+  `ConfigureApplicationServices`
+  ([line 319](../../../projects/Oxygen.Editor/src/Program.cs:319)) and again in
+  `Main` ([line 124](../../../projects/Oxygen.Editor/src/Program.cs:124)).
+- `Main` wraps container setup in
+  `catch (ContainerException or InvalidOperationException)` with the comment "No
+  EditorSettingsManager registered"
   ([Program.cs:126](../../../projects/Oxygen.Editor/src/Program.cs:126)). Any
   real wiring error during setup is swallowed and the editor continues half
   configured.
 
 ### F8. Registrations live in the wrong place (Medium)
 
-`Program.cs` is a 480-line registry of every subsystem, and
-`WorkspaceViewModel` registers about 75 types, including the Content Browser's
-services, the Inspector's editors and the Scripting services. A view model
-should not know the registration list of other subsystems, and the lists cannot
-be reused by a second host (a floating Content Browser window would have to
-duplicate them).
+`Program.cs` is a 480-line registry of every subsystem, and `WorkspaceViewModel`
+registers about 75 types, including the Content Browser's services, the
+Inspector's editors and the Scripting services. A view model should not know the
+registration list of other subsystems, and the lists cannot be reused by a
+second host (a floating Content Browser window would have to duplicate them).
 
 ### F9. Child creation is hand-built three times (Medium)
 
 `WithMvvm` + `WithLocalRouting` + `RegisterInstance(WindowId)` + `Docker`
-registration is open-coded in `DockingWorkspaceViewModel`, and
-`WithMvvm` + `WithLocalRouting` again in `ContentBrowserViewModel`. The
+registration is open-coded in `DockingWorkspaceViewModel`, and `WithMvvm` +
+`WithLocalRouting` again in `ContentBrowserViewModel`. The
 `LocalRoutingExtensions.WithMvvm` shadows the three root registrations from F7
 through D5, so `ResolveMany<IViewLocator>` in a child returns more than one.
 
@@ -309,10 +314,10 @@ only protection is the two eager-resolve comments.
 ### F12. One 60,000-line project holds every editor (High for delivery)
 
 `Oxygen.Editor.WorldEditor` (`net10.0-windows`, `UseWinUI`) contains the
-workspace, the document host, the scene command service, the live engine
-sync, the Scene Explorer, the Inspector, the viewport editor, three output
-panels, the cooked-asset inspector and the workspace preferences. Measured from
-the source tree:
+workspace, the document host, the scene command service, the live engine sync,
+the Scene Explorer, the Inspector, the viewport editor, three output panels, the
+cooked-asset inspector and the workspace preferences. Measured from the source
+tree:
 
 | Folder (under `src/`)           | C# files | C# lines | XAML | Role                                                                       |
 | ------------------------------- | -------- | -------- | ---- | -------------------------------------------------------------------------- |
@@ -327,16 +332,15 @@ the source tree:
 | `Inspection`                    | 7        | 656      | 1    | Cooked-asset inspector document editor                                     |
 | `Messages`                      | 21       | 595      | 0    | Cross-editor message vocabulary                                            |
 
-Tests add 182 files and about 29,700 lines in four projects (`Unit`,
-`Unit.UI`, `Integration.UI`, `Benchmarks.UI`) plus a shared `testsupport`, and
-all of them reference the single source project. Only the application
-references the project, so the monolith is a pure build and test boundary, not
-an API boundary.
+Tests add 182 files and about 29,700 lines in four projects (`Unit`, `Unit.UI`,
+`Integration.UI`, `Benchmarks.UI`) plus a shared `testsupport`, and all of them
+reference the single source project. Only the application references the
+project, so the monolith is a pure build and test boundary, not an API boundary.
 
 The cross-folder references show why the folders are not separable today, and
 which links are real. Counting distinct types used across folders (identifier
-matches against uniquely owned type names; common-word false positives
-excluded after inspection):
+matches against uniquely owned type names; common-word false positives excluded
+after inspection):
 
 | From → to                                          | Types       | What actually flows                                                                                                                         |
 | -------------------------------------------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -365,8 +369,8 @@ Two facts drive the decomposition:
 
 ### F13. The Docking library cannot host two workspaces (High for the multi-window goal)
 
-`Dockable.Factory` and `Dock.Factory` keep process-static
-`ConcurrentDictionary` registries keyed by id and throw on a duplicate id
+`Dockable.Factory` and `Dock.Factory` keep process-static `ConcurrentDictionary`
+registries keyed by id and throw on a duplicate id
 ([Dockable.Factory.cs:101](../../../projects/Docking/src/Dockable.Factory.cs:101),
 [line 149](../../../projects/Docking/src/Dockable.Factory.cs:149)). Workspace
 dockable ids are route outlet names (`renderer`, `se`, `props`, `cb`, `log`,
@@ -374,76 +378,76 @@ dockable ids are route outlet names (`renderer`, `se`, `props`, `cb`, `log`,
 `renderer`. Editor code also reaches dockables through the global
 `Dockable.FromId(...)` (`WorkspaceViewModel.Cooking.cs`, `ContentFailure.cs`,
 `DockingWorkspaceViewModel.cs`, `DockingWorkspaceLayout.cs`), and
-`DockPanelViewModel` broadcasts docking mode on `StrongReferenceMessenger.Default`
-(Docking `DockPanelViewModel.cs:133-182`), so every window would enter docking
-mode together. The factory APIs (`Dockable.New`, `ToolDock.New`, `CenterDock.New`,
-`RoutedDockable.New`) carry no docker, and `Dock.Factory` has a static id
-counter (`NextId`). Routing is single-window-shaped too: the workspace window is
-one keyed registration (`Target { Name = "wnd-we" }`, `Program.cs:389-397`) and
-`WindowContextProvider` resolves `Window` by that key, so a second workspace
-window needs a window factory with dynamic targets. Moving a panel between
-windows is impossible while these exist.
+`DockPanelViewModel` broadcasts docking mode on
+`StrongReferenceMessenger.Default` (Docking `DockPanelViewModel.cs:133-182`), so
+every window would enter docking mode together. The factory APIs
+(`Dockable.New`, `ToolDock.New`, `CenterDock.New`, `RoutedDockable.New`) carry
+no docker, and `Dock.Factory` has a static id counter (`NextId`). Routing is
+single-window-shaped too: the workspace window is one keyed registration
+(`Target { Name = "wnd-we" }`, `Program.cs:389-397`) and `WindowContextProvider`
+resolves `Window` by that key, so a second workspace window needs a window
+factory with dynamic targets. Moving a panel between windows is impossible while
+these exist.
 
 ### F14. Several "session" candidates are window-bound today (High for the placement table)
 
-`SceneDocumentCommandService`
-([line 54](../../../projects/Oxygen.Editor.WorldEditor/src/Documents/Commands/SceneDocumentCommandService.cs:54)),
-`SceneContentDemandService` (line 56) and `DocumentManager` take a `WindowId` in
-their constructors, and `WindowId` exists only in a window scope. The two
-services use it only as an address, for calls such as
-`UpdateMetadataAsync(this.windowId, context.DocumentId, …)` (command service
-lines 1452 and 1582 and its `Reload`, `Relocation` and `SceneRename` partials,
-content demand line 190), so the window can be derived from the document id.
-They must stay Session services, because the session-owned panels
-(`SceneExplorerViewModel`, `SceneNodeEditorViewModel`) depend on them and a
-session singleton cannot resolve a window-scoped service. `DocumentManager`
+`SceneDocumentCommandService` (line 54), `SceneContentDemandService` (line 56)
+and `DocumentManager` take a `WindowId` in their constructors, and `WindowId`
+exists only in a window scope. The two services use it only as an address, for
+calls such as `UpdateMetadataAsync(this.windowId, context.DocumentId, …)`
+(command service lines 1452 and 1582 and its `Reload`, `Relocation` and
+`SceneRename` partials, content demand line 190), so the window can be derived
+from the document id. They must stay Session services, because the session-owned
+panels (`SceneExplorerViewModel`, `SceneNodeEditorViewModel`) depend on them and
+a session singleton cannot resolve a window-scoped service. `DocumentManager`
 genuinely serves one window's documents and stays Window-scoped.
 
 The panels themselves also take a `WindowId` and an `IRouter`
 (`SceneExplorerViewModel` takes `IMessenger`, `IRouter` and `WindowId`;
 `SceneNodeEditorViewModel` takes `WindowId`). Those become `IPanelHost.Current`
 reads when the panel is migrated (Phase 5). A constructor audit of the other
-session candidates found them free of window-bound parameters; the one
-exception is `MaterialPickerService`, which takes an optional `IMessenger` to
-subscribe to asset changes and moves to `ISessionEvents`.
+session candidates found them free of window-bound parameters; the one exception
+is `MaterialPickerService`, which takes an optional `IMessenger` to subscribe to
+asset changes and moves to `ISessionEvents`.
 
 ## 5. Principles for the redesign
 
 1. **A scope is a lifetime, not a view model.** A container exists because
-   something has a lifetime (process, project open, window, unique panel), never because
-   a view model needs a private router.
+   something has a lifetime (process, project open, window, unique panel), never
+   because a view model needs a private router.
 2. **Each service has exactly one owning scope**, fixed by its registration
    module. Services never get a second instance because of resolution order.
 3. **Dependencies flow down only.** A scope sees its parent chain, never a
-   sibling and never a child. Sibling windows share nothing except
-   through the session.
-4. **Domain state in the session, UI state in the window or the panel.** View models
-   are created by a scope and die with it.
-5. **Composition roots own registrations.** Each subsystem exposes a module
-   next to its code. A view model never registers services.
+   sibling and never a child. Sibling windows share nothing except through the
+   session.
+4. **Domain state in the session, UI state in the window or the panel.** View
+   models are created by a scope and die with it.
+5. **Composition roots own registrations.** Each subsystem exposes a module next
+   to its code. A view model never registers services.
 6. **`IContainer` is infrastructure.** Application services and view models take
    their dependencies, or a typed factory, in the constructor.
-7. **Failure is loud.** Duplicate registrations throw unless explicitly
-   declared as shadowing; setup errors abort startup.
+7. **Failure is loud.** Duplicate registrations throw unless explicitly declared
+   as shadowing; setup errors abort startup.
 8. **Editors depend on shared contracts, never on each other or on their host.**
-   An editor project references the abstractions, shell and assets projects (none
-   contains editor code) and never an implementation project. Implementations are
-   referenced by the composition root and by integration tests (section 7).
+   An editor project references the abstractions, shell and assets projects
+   (none contains editor code) and never an implementation project.
+   Implementations are referenced by the composition root and by integration
+   tests (section 7).
 9. **One identity per document.** Every per-document store that outlives a view
    model (undo and redo history, clipboard entries, engine-sync registration,
    save gates, authoring gates, window placement) is keyed by `DocumentId`. Weak
-   tables keyed by an object are allowed only as caches that die with that object.
-   For a scene document `DocumentId` is the scene id by construction
+   tables keyed by an object are allowed only as caches that die with that
+   object. For a scene document `DocumentId` is the scene id by construction
    (`DocumentManager` creates `SceneDocumentMetadata(loadedScene.Id)`, and the
    Scene Explorer builds its `SceneAdapter` from the same loaded scene, so
-   `Scene.AttachedObject.Id` and `Metadata.DocumentId` are the same value today).
-   That equality is accidental while the code spells the key two ways, so
-   `IDocumentHistory` and every store accept a `DocumentId` only, and the Scene
-   Explorer reads it from the document metadata. Today `SceneAuthoringGate.States`
-   and `SceneDocumentCommandService.SaveGates` are static
-   `ConditionalWeakTable<Scene, …>` and `SceneEngineSync.registrations` is keyed by
-   the metadata object; Phase 4 moves the two static tables into session services
-   keyed by `DocumentId`.
+   `Scene.AttachedObject.Id` and `Metadata.DocumentId` are the same value
+   today). That equality is accidental while the code spells the key two ways,
+   so `IDocumentHistory` and every store accept a `DocumentId` only, and the
+   Scene Explorer reads it from the document metadata. Today
+   `SceneAuthoringGate.States` and `SceneDocumentCommandService.SaveGates` are
+   static `ConditionalWeakTable<Scene, …>` and `SceneEngineSync.registrations`
+   is keyed by the metadata object; Phase 4 moves the two static tables into
+   session services keyed by `DocumentId`.
 
 ## 6. Target design
 
@@ -488,14 +492,15 @@ Placement rules used to decide the table, applied to each registration:
 
 - Needs the `ProjectContext`, or must change when the project changes → Session.
 - Holds UI state of one window (dock layout, outlet, document host) → Window.
-- Is a panel with a single semantic identity (6.8) → Panel, owned by the session.
+- Is a panel with a single semantic identity (6.8) → Panel, owned by the
+  session.
 - A service whose constructor takes a `WindowId`, a router or any other
   window-bound dependency is not a Session service. Where the dependency is only
-  an address (the service uses the window id to call `IEditorDocumentService`
-  by window and document), the dependency is **removed**, not the service
-  demoted: the window is derived from the document id through the document
-  service or the window registry. Phase 1 audits every Session candidate's
-  constructor; the topology test enforces it.
+  an address (the service uses the window id to call `IEditorDocumentService` by
+  window and document), the dependency is **removed**, not the service demoted:
+  the window is derived from the document id through the document service or the
+  window registry. Phase 1 audits every Session candidate's constructor; the
+  topology test enforces it.
 - A view or a view model created inside a Window or Panel scope is Transient or
   owned by the registry. A view is never a singleton: a `UIElement` cannot be
   shared across `XamlRoot`s (`AssetsView` and `DocumentHostView` are singletons
@@ -512,11 +517,10 @@ container** built from a fresh copy of the host's Microsoft rules (not the
 parent's rules object) and a single unknown-service resolver that delegates to
 the **immediate** parent: when the child has no registration of its own for a
 (type, key) and the parent chain can provide it, it returns
-`parent.Resolve(type, key)`. Child containers remain the
-isolation mechanism; `CreateChild` (copy of the registry and of the existing
-singletons) is no longer used, because it cannot guarantee shared identity (F1)
-and its repair, copying and forwarding each parent singleton, has defects (D12,
-D13).
+`parent.Resolve(type, key)`. Child containers remain the isolation mechanism;
+`CreateChild` (copy of the registry and of the existing singletons) is no longer
+used, because it cannot guarantee shared identity (F1) and its repair, copying
+and forwarding each parent singleton, has defects (D12, D13).
 
 ```mermaid
 sequenceDiagram
@@ -541,18 +545,18 @@ disposing the child does not dispose parent singletons; the captive-dependency
 check still applies. Two details of the recipe are load-bearing, both found by
 probing a root > session > window chain:
 
-- **Fresh rules, immediate parent only.** `WithUnknownServiceResolvers` appends to
-  the rules it is given, so a child built from the parent's rules would run the
-  root's resolver first and throw for a type that only the session registers.
-  Each scope therefore starts from fresh host rules and holds exactly one
-  resolver, which asks its immediate parent.
-- **Honor optional dependencies.** The resolver returns no factory when the parent
-  chain cannot provide the (type, key). The check asks, in each scope and then up
-  its parent link, `IsRegistered(type, key)` or, for a constructed generic type,
-  `IsRegistered(type.GetGenericTypeDefinition(), key)`: a plain check fails for
-  `ILogger<T>` and `IOptions<T>`, which the host registers only as open generics.
-  Negative answers are not cached, so a registration added to a parent later is
-  visible. Without this, `IfUnresolved.ReturnDefault` and
+- **Fresh rules, immediate parent only.** `WithUnknownServiceResolvers` appends
+  to the rules it is given, so a child built from the parent's rules would run
+  the root's resolver first and throw for a type that only the session
+  registers. Each scope therefore starts from fresh host rules and holds exactly
+  one resolver, which asks its immediate parent.
+- **Honor optional dependencies.** The resolver returns no factory when the
+  parent chain cannot provide the (type, key). The check asks, in each scope and
+  then up its parent link, `IsRegistered(type, key)` or, for a constructed
+  generic type, `IsRegistered(type.GetGenericTypeDefinition(), key)`: a plain
+  check fails for `ILogger<T>` and `IOptions<T>`, which the host registers only
+  as open generics. Negative answers are not cached, so a registration added to
+  a parent later is visible. Without this, `IfUnresolved.ReturnDefault` and
   optional constructor parameters throw instead of returning the default (the
   editor has eight `ReturnDefault` calls). The resolver caches one factory per
   (type, key) in a thread-safe map, so each request does not allocate a new one.
@@ -560,9 +564,10 @@ probing a root > session > window chain:
 In a scope built this way `IServiceProvider` resolves to the scope's own
 container, not to the root (D10 describes the `CreateChild` behavior only).
 
-One limitation is accepted: a non-generic `ILogger` injected into a type that the
-child builds loses its category, because the parent builds it in a fresh request.
-Only two adapters take a non-generic `ILogger`, and neither is container-built.
+One limitation is accepted: a non-generic `ILogger` injected into a type that
+the child builds loses its category, because the parent builds it in a fresh
+request. Only two adapters take a non-generic `ILogger`, and neither is
+container-built.
 
 Rules enforced by the factory and the topology test:
 
@@ -583,8 +588,8 @@ Rules enforced by the factory and the topology test:
    `IfAlreadyRegistered.Throw` policy considered earlier (D6).
 4. **No cross-layer collections.** `IEnumerable<T>` and `ResolveMany` see only a
    scope's own registrations (D11). The topology test rejects a constructor
-   parameter of collection type in a Window, Panel or Session layer whose element
-   type is registered in a parent.
+   parameter of collection type in a Window, Panel or Session layer whose
+   element type is registered in a parent.
 5. **Disposal is explicit.** Child rules turn disposable-transient tracking off,
    because otherwise the child would dispose the parent singletons it returned.
    A disposable transient that a layer owns opts in with
@@ -684,8 +689,8 @@ Consequences:
   `IProjectContextService` and its `ProjectChanged` stream are removed (6.10).
 - Closing a project disposes everything project-bound in one operation, in
   reverse dependency order, instead of through route disposal.
-- The engine remains editor-wide. The workspace window still triggers the
-  first engine start; the session owns which cooked roots are mounted.
+- The engine remains editor-wide. The workspace window still triggers the first
+  engine start; the session owns which cooked roots are mounted.
 
 ### 6.6 Lifetime and disposal policy
 
@@ -700,13 +705,13 @@ Consequences:
 | Static messengers                                                        | Not allowed in editor code                                                          | -                        |
 
 Why panels need a marker and not a disposal trick. Today the panels
-(`ContentBrowserViewModel`, `SceneExplorerViewModel`, `SceneNodeEditorViewModel`,
-`CookingPanelViewModel`, `ProblemsViewModel`) are `IDisposable` transients, and
-five of the six are `IDisposable` and stay so: `ContentBrowserViewModel` and
-`SceneExplorerViewModel` through `AbstractOutletContainer` and
-`DynamicTreeViewModel`, and `SceneNodeEditorViewModel`, `CookingPanelViewModel`
-and `ProblemsViewModel` directly. Three things dispose view
-models in the current code:
+(`ContentBrowserViewModel`, `SceneExplorerViewModel`,
+`SceneNodeEditorViewModel`, `CookingPanelViewModel`, `ProblemsViewModel`) are
+`IDisposable` transients, and five of the six are `IDisposable` and stay so:
+`ContentBrowserViewModel` and `SceneExplorerViewModel` through
+`AbstractOutletContainer` and `DynamicTreeViewModel`, and
+`SceneNodeEditorViewModel`, `CookingPanelViewModel` and `ProblemsViewModel`
+directly. Three things dispose view models in the current code:
 
 - `AbstractOutletContainer` disposes the previous view model on every
   `LoadContent` and on its own `Dispose`.
@@ -714,33 +719,34 @@ models in the current code:
   tree when the navigation context is destroyed. This is a real disposer for the
   root router. For a local router, `Router.Dispose` unsubscribes first, so the
   local tree is in practice not route-disposed.
-- DryIoc tracking in the workspace child disposes the tracked transients when the
-  child is disposed. For the panels this is the disposer that actually runs
+- DryIoc tracking in the workspace child disposes the tracked transients when
+  the child is disposed. For the panels this is the disposer that actually runs
   today.
 
 A session-owned panel that a window's outlet or router could dispose would be
 destroyed by whichever window hosts it. The design therefore adds one small
-marker, `IRetainedViewModel`, in `Routing.Abstractions`. `AbstractOutletContainer`,
-`RoutedWindow.LoadContent` (Aura, which also disposes the previous content view
-model, so a floating-panel window would destroy the panel) and
-`Router.DisposeRouteTree` skip a view model that carries it, and the panel
-registry is its only disposer. A panel registered `Reuse.Singleton` in the
+marker, `IRetainedViewModel`, in `Routing.Abstractions`.
+`AbstractOutletContainer`, `RoutedWindow.LoadContent` (Aura, which also disposes
+the previous content view model, so a floating-panel window would destroy the
+panel) and `Router.DisposeRouteTree` skip a view model that carries it, and the
+panel registry is its only disposer. A panel registered `Reuse.Singleton` in the
 session container is also disposed by that container when the session scope is
 disposed, after the registry has already disposed it; panel registrations use
 `preventDisposal`, so the registry stays the single disposer. `Dockable`,
-`DockViewFactory` and `DockingWorkspaceViewModel` do not dispose view models. This is a change to shared routing libraries and
-is scheduled with the registry (Phase 5). Replacing the DryIoc tracking safety
-net needs no extra work: the scope handle disposes whatever the layer registered
-with `trackDisposableTransient: true`.
+`DockViewFactory` and `DockingWorkspaceViewModel` do not dispose view models.
+This is a change to shared routing libraries and is scheduled with the registry
+(Phase 5). Replacing the DryIoc tracking safety net needs no extra work: the
+scope handle disposes whatever the layer registered with
+`trackDisposableTransient: true`.
 
 ### 6.7 Registration modules
 
-Every subsystem exposes a module beside its code, as `WithAura` and
-`WithConfig` already do. A module takes the layer it registers into, so that a
-misplacement is a compile or startup error rather than a convention. A module
-also declares its **activation list**: the services that must be created at
-scope open, in order. This replaces the scattered `_ = Resolve<…>()` lines in
-`Program.cs` and `OnSetupChildContainer`.
+Every subsystem exposes a module beside its code, as `WithAura` and `WithConfig`
+already do. A module takes the layer it registers into, so that a misplacement
+is a compile or startup error rather than a convention. A module also declares
+its **activation list**: the services that must be created at scope open, in
+order. This replaces the scattered `_ = Resolve<…>()` lines in `Program.cs` and
+`OnSetupChildContainer`.
 
 | Module (project)                                                                                                                                                                                                           | Layer           | Replaces                                                                                                                                                                                                         |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -760,8 +766,8 @@ project state, so two simultaneous views would either show the same thing twice
 or need to be kept in sync. Unique panels have exactly one view model, owned by
 the session, and exactly one view at a time, hosted by any window or floating
 alone. Uniqueness is enforced by the model (one view model, one attachment), not
-by hiding commands. MVVM would allow several views on one view model; the
-design deliberately attaches at most one.
+by hiding commands. MVVM would allow several views on one view model; the design
+deliberately attaches at most one.
 
 Classification of today's panels, applied once and recorded here:
 
@@ -777,10 +783,10 @@ Classification of today's panels, applied once and recorded here:
 The document host and the document editors are not panels: many can exist, one
 per document, in any window (6.9).
 
-Multiplicity is declared by the panel's descriptor and defaults to `Single`.
-A panel kind that later needs several independent instances declares `Many`,
-and each instance then has its own state and its own panel scope; that is a
-property of that panel, not a change to the infrastructure.
+Multiplicity is declared by the panel's descriptor and defaults to `Single`. A
+panel kind that later needs several independent instances declares `Many`, and
+each instance then has its own state and its own panel scope; that is a property
+of that panel, not a change to the infrastructure.
 
 **Behavior.** The session's `IPanelRegistry` is the only way a panel view
 appears.
@@ -800,27 +806,28 @@ Rules that make this safe:
 
 - **The view model never knows its window.** It receives an `IPanelHost` whose
   `Current` (nullable, observable) exposes the window currently showing it:
-  window id, dialog owner, navigate-out router, and the placement context used for `RequestingWindow`. Dialogs, drag and
-  navigation read it at call time. Nothing caches a `WindowId` or a window
-  router. This replaces the `parentRouter` and `LocalRouterContext(NavigationTarget)`
-  that `ContentBrowserViewModel` captures at construction; `AssetsViewModel`
-  already reads the window id at call time.
-- **Hidden panels do no UI work.** Panels implement `OnShown` and `OnHidden`
-  to suspend subscriptions that only serve the view. State that must survive
+  window id, dialog owner, navigate-out router, and the placement context used
+  for `RequestingWindow`. Dialogs, drag and navigation read it at call time.
+  Nothing caches a `WindowId` or a window router. This replaces the
+  `parentRouter` and `LocalRouterContext(NavigationTarget)` that
+  `ContentBrowserViewModel` captures at construction; `AssetsViewModel` already
+  reads the window id at call time.
+- **Hidden panels do no UI work.** Panels implement `OnShown` and `OnHidden` to
+  suspend subscriptions that only serve the view. State that must survive
   (filters, navigation history, selection) stays in the view model.
 - **A panel's top-level view is registered in the hosting window's layer.** The
-  panel scope is a sibling of the window, so the window's view locator cannot see
-  a view registered in it. A panel module therefore has two parts: a session part
-  (view model, state, local router services) and a window part (the top-level view
-  type and its view-only dependencies), registered into whichever window shows
-  the panel.
-- **The view is transient and stateless.** It is created by the hosting
-  window's view locator from the view model and holds no state. Views registered
-  as singletons today (`AssetsView`, `DocumentHostView`) become transient.
+  panel scope is a sibling of the window, so the window's view locator cannot
+  see a view registered in it. A panel module therefore has two parts: a session
+  part (view model, state, local router services) and a window part (the
+  top-level view type and its view-only dependencies), registered into whichever
+  window shows the panel.
+- **The view is transient and stateless.** It is created by the hosting window's
+  view locator from the view model and holds no state. Views registered as
+  singletons today (`AssetsView`, `DocumentHostView`) become transient.
 - **Routes still name the panel's view model type.** The window's route
-  configuration keeps working because the window resolves the session
-  singleton through its parent (6.3). The dock loader asks the registry to attach instead of
-  creating the view model, so a restored layout cannot create a second panel.
+  configuration keeps working because the window resolves the session singleton
+  through its parent (6.3). The dock loader asks the registry to attach instead
+  of creating the view model, so a restored layout cannot create a second panel.
 - **Docking is a prerequisite, Aura limitations are not.** The Docking library's
   static dockable and dock registries and static messenger (F13) are scoped per
   `IDocker` before panels can move or a second workspace can exist (Phase 5).
@@ -855,12 +862,12 @@ the editor supports all of its cases:
 | `NewWindow(options)` | Create a window of a given kind (workspace window, single-document window, floating panel)    |
 
 The session's placement service resolves the value to a target `WindowId`,
-creating the window through `IWindowScopeFactory` for `NewWindow`, and
-registers it in the session's window registry. A `Window(WindowId)` that no
-longer exists falls back to the requesting window, then to any workspace
-window, and publishes a visible operation result; it never fails silently. The
-editor does not pick one policy and refuse the others: Aura supports every case
-and the placement value is the only thing a caller chooses.
+creating the window through `IWindowScopeFactory` for `NewWindow`, and registers
+it in the session's window registry. A `Window(WindowId)` that no longer exists
+falls back to the requesting window, then to any workspace window, and publishes
+a visible operation result; it never fails silently. The editor does not pick
+one policy and refuse the others: Aura supports every case and the placement
+value is the only thing a caller chooses.
 
 Delivery changes from broadcast-and-filter to resolve-and-deliver. Today each
 `DocumentManager` receives every request through the shared messenger and
@@ -874,8 +881,8 @@ in place of the bare `WindowId` field used by the document and panel requests.
 **Decision: it is removed.** It is replaced by the Project Session scope.
 
 The service does one job: expose "which project is active" to code that cannot
-otherwise know. In the target design that is a structural fact, not a
-runtime query. Evidence for removal, from the current code:
+otherwise know. In the target design that is a structural fact, not a runtime
+query. Evidence for removal, from the current code:
 
 - About 40 production files use it and there are about 147 `ActiveProject`
   references. Every one is inside the Content Browser, Content Pipeline,
@@ -902,13 +909,13 @@ Replacement:
 | `IProjectManagerService.CurrentProject` (about 18 reads in World Editor and Content Browser) | `IProject` registered as a session instance. `CurrentProject` is removed from `IProjectManagerService`, which keeps load, staging, acceptance and save |
 
 The single remaining global is `IProjectSessionHost.Current` (nullable) and its
-`SessionChanged` event, at the Editor scope. Its consumers are Editor-level
-code only: the activation coordinator, the close-project command and menu
-enabling. It is a host for scopes, not a context that leaks into services.
+`SessionChanged` event, at the Editor scope. Its consumers are Editor-level code
+only: the activation coordinator, the close-project command and menu enabling.
+It is a host for scopes, not a context that leaks into services.
 
-Migration is compile-enforced: consumers move cluster by cluster to the
-injected `ProjectContext` while both exist, and deleting
-`IProjectContextService` is the last step of Phase 4.
+Migration is compile-enforced: consumers move cluster by cluster to the injected
+`ProjectContext` while both exist, and deleting `IProjectContextService` is the
+last step of Phase 4.
 
 ### 6.11 Cross-cutting concerns
 
@@ -935,13 +942,13 @@ later phase then touches only the projects it concerns.
   and nothing else. The same holds for every editor.
 - Logic without XAML lives in projects that skip the XAML compiler. "XAML-free"
   is the claim; it is not "WinUI-free": these projects still reference the
-  Windows App SDK for `WindowId` and `HostingContext`, and `Authoring` references
-  `Oxygen.Editor.Runtime`, which itself references the native interop project.
-  Their tests run in plain `MSTest.Sdk` projects, as `tests/Unit` does today
-  against the `UseWinUI` WorldEditor project, passing a `HostingContext` with
-  null dispatcher fields; services that observe on
-  `HostingContext.DispatcherScheduler` (`ScriptAnalysisService`) get an immediate
-  scheduler. Phase 1 step 3 exit: `Authoring.Tests` passes under
+  Windows App SDK for `WindowId` and `HostingContext`, and `Authoring`
+  references `Oxygen.Editor.Runtime`, which itself references the native interop
+  project. Their tests run in plain `MSTest.Sdk` projects, as `tests/Unit` does
+  today against the `UseWinUI` WorldEditor project, passing a `HostingContext`
+  with null dispatcher fields; services that observe on
+  `HostingContext.DispatcherScheduler` (`ScriptAnalysisService`) get an
+  immediate scheduler. Phase 1 step 3 exit: `Authoring.Tests` passes under
   `traverse Invoke-Tests` without the WinUI host.
 - The graph is enforced, not described: a tooling test checks it (7.6).
 
@@ -983,10 +990,11 @@ Granularity decisions:
 - The Inspector stays one project. Its 6.8k top-level lines are shared
   infrastructure (edit sessions, mixed-value handling, property editor base
   types) used by every subfolder, so splitting `Environment`, `Geometry` or
-  `Scripting` would need a further Inspector abstractions project for a few dozen
-  shared types, for little gain. The folders keep their boundaries.
+  `Scripting` would need a further Inspector abstractions project for a few
+  dozen shared types, for little gain. The folders keep their boundaries.
 - The live engine sync lives in `Authoring`, not in its own project: it shares
-  the sync contract with the command service and both need `Oxygen.Editor.Runtime`.
+  the sync contract with the command service and both need
+  `Oxygen.Editor.Runtime`.
 - The shell contracts and implementation are one project: a second consumer of
   the contracts without the implementation does not exist.
 - The small editors (`Output`, `Cooking`, `Problems`, `CookedInspection`) are
@@ -1060,13 +1068,14 @@ flowchart TB
 ```
 
 All arrows point down and the graph has no cycle. One edge is easy to get
-backwards, and the code confirms its direction: `Authoring.Abstractions →
-Assets`, because `ISceneContentDemandService` and the command service use the
-asset identity and asset messages. Nothing in the `Assets` candidate folders
-references any WorldEditor namespace. `Authoring.Abstractions` does not
-reference `Runtime`: the two engine types its sync contract needs move into it
-(C4). `WindowPlacement` is defined in `Oxygen.Editor.Documents` (foundation) so
-that request contracts have their target shape from Phase 1.
+backwards, and the code confirms its direction:
+`Authoring.Abstractions → Assets`, because `ISceneContentDemandService` and the
+command service use the asset identity and asset messages. Nothing in the
+`Assets` candidate folders references any WorldEditor namespace.
+`Authoring.Abstractions` does not reference `Runtime`: the two engine types its
+sync contract needs move into it (C4). `WindowPlacement` is defined in
+`Oxygen.Editor.Documents` (foundation) so that request contracts have their
+target shape from Phase 1.
 
 ### 7.4 What a change rebuilds
 
@@ -1078,11 +1087,11 @@ that request contracts have their target shape from Phase 1.
 | Scene Explorer, Scene Editor, Content Browser, panels | That project and the application                                                        | That project's tests                                       |
 | Anything, for the workspace integration suite         | The integration project references the implementations, so it rebuilds with any of them | `WorldEditor` integration tests, run on demand             |
 
-Per-module solutions already work through `./tooling/GenerateSolution.ps1
--Scope projects/<module>`, and `traverse Invoke-Tests --start
-projects/<module>/tests` runs only that module's tests. Test projects that
-reference Runtime or the native interop still need the 64-bit Visual Studio
-MSBuild described in `AGENTS.md`.
+Per-module solutions already work through
+`./tooling/GenerateSolution.ps1 -Scope projects/<module>`, and
+`traverse Invoke-Tests --start projects/<module>/tests` runs only that module's
+tests. Test projects that reference Runtime or the native interop still need the
+64-bit Visual Studio MSBuild described in `AGENTS.md`.
 
 ### 7.5 The cut list
 
@@ -1108,8 +1117,8 @@ listed in the order the phases perform them.
 | C14 | Eight `SceneEditor` files use the namespace `Oxygen.Editor.LevelEditor`                                                                                                                                                        | Normalise to `Oxygen.Editor.World.*` during the move so the namespace matches the owner                                                                                                                                                                                                                                                           |
 | C15 | Session candidates that take `WindowId`: `SceneDocumentCommandService`, `SceneContentDemandService` (F14)                                                                                                                      | Remove the `WindowId` parameter: derive the window from the document id through `IEditorDocumentService` or the window registry. `DocumentManager` stays Window-scoped. `MaterialPickerService`'s messenger becomes `ISessionEvents`. The constructor audit of the other session candidates is a Phase 1 step and a topology-test rule            |
 
-C3, C7, C9, C10, C11 and C15 are the cuts that change constructors or flow; the rest
-move files and fix namespaces and visibility.
+C3, C7, C9, C10, C11 and C15 are the cuts that change constructors or flow; the
+rest move files and fix namespaces and visibility.
 
 ### 7.6 Tests
 
@@ -1147,8 +1156,8 @@ every window and are only shown by one.
 
 **What must be shared?** Everything that is the same for the whole editor
 (Editor scope) and everything bound to the open project (Session scope). Shared
-means one instance for the whole subtree below the owner, guaranteed by
-the parent fallback (6.3), never by creation order.
+means one instance for the whole subtree below the owner, guaranteed by the
+parent fallback (6.3), never by creation order.
 
 **What does not need a container?** A window scope that exists only to hold a
 router and a view model could instead use a lightweight router scope with no
@@ -1166,10 +1175,10 @@ containers.
 ## 9. Refactoring plan
 
 Phases are ordered so that each leaves a working editor and a passing build.
-None is a big-bang change. The decomposition comes first: every later phase
-then builds and tests only the projects it touches. Phase 1 is
-behavior-preserving, not "mechanical": types change visibility, tests rehome and
-six cuts (C3, C7, C9, C10, C11, C15) change constructors or flow.
+None is a big-bang change. The decomposition comes first: every later phase then
+builds and tests only the projects it touches. Phase 1 is behavior-preserving,
+not "mechanical": types change visibility, tests rehome and six cuts (C3, C7,
+C9, C10, C11, C15) change constructors or flow.
 
 ### Phase 0: startup hygiene (no behavior change)
 
@@ -1187,29 +1196,29 @@ In this order (lowest coupling first); the solution builds and the existing
 tests pass after every step.
 
 1. **Assets.** Extract `Oxygen.Editor.Assets` from `ContentBrowser` (C8).
-2. **Contracts and audit.** Create `Oxygen.Editor.Authoring.Abstractions`.
-   Move the contract files and perform cuts C1 to C7 and C13. Classify every
-   message (C2). Audit every Session candidate's constructor for `WindowId`,
-   routers and other window-bound parameters (C15). Write the new contracts in
-   their **target shape** behind adapters over today's implementations, so that
-   Phases 4 and 5 do not rewrite them: preference interfaces take no
-   `ProjectContext` parameter (the adapter supplies today's active project),
-   requests carry `WindowPlacement` instead of a bare `WindowId`, and the command
-   and content-demand services derive the window from the document id (C15).
-   Create the `Shell` project with the panel and editor descriptors and
-   `IDocumentEditorProvider` (C9, C10 contracts). `WorldEditor` references the new projects while it still contains
-   everything else.
+2. **Contracts and audit.** Create `Oxygen.Editor.Authoring.Abstractions`. Move
+   the contract files and perform cuts C1 to C7 and C13. Classify every message
+   (C2). Audit every Session candidate's constructor for `WindowId`, routers and
+   other window-bound parameters (C15). Write the new contracts in their
+   **target shape** behind adapters over today's implementations, so that Phases
+   4 and 5 do not rewrite them: preference interfaces take no `ProjectContext`
+   parameter (the adapter supplies today's active project), requests carry
+   `WindowPlacement` instead of a bare `WindowId`, and the command and
+   content-demand services derive the window from the document id (C15). Create
+   the `Shell` project with the panel and editor descriptors and
+   `IDocumentEditorProvider` (C9, C10 contracts). `WorldEditor` references the
+   new projects while it still contains everything else.
 3. **Authoring.** Create `Authoring` (command service, selection, mutator,
    organizer model part, workspace preferences, scripting, live engine sync,
    runtime session startup: C11). Re-home its tests and test support (7.6).
    Exit: `Authoring.Tests` passes without the WinUI host (7.1).
-4. **Editors**, one at a time, each with its module and its tests:
-   `Output`, `Problems`, `Cooking` and `CookedInspection` (smallest, C12), `SceneExplorer`
+4. **Editors**, one at a time, each with its module and its tests: `Output`,
+   `Problems`, `Cooking` and `CookedInspection` (smallest, C12), `SceneExplorer`
    (C3's explorer side), `SceneEditor` (C14), `Inspector`. For each, the
    Workspace stops registering its types and the document host stops
    constructing its editor (C9, C10).
-5. **Host.** `WorldEditor` is reduced to the workspace host (R4). `Oxygen.Editor`
-   composes the modules.
+5. **Host.** `WorldEditor` is reduced to the workspace host (R4).
+   `Oxygen.Editor` composes the modules.
 6. **Enforcement.** Add the project-graph check (R1 to R5), remove the old
    monolithic test projects, and move hand-built test containers to the shared
    builder.
@@ -1217,7 +1226,9 @@ tests pass after every step.
 Exit: no editor project references another editor, `WorldEditor` or `Authoring`;
 the graph check passes; building or testing one editor touches only that editor
 and the application; `WorldEditor` has no editor type in its source. F12 is
-closed. Contracts are written in their final shape in step 2; Phases 4 and 5 change only the implementations behind them, so editors are not rebuilt for contract reasons.
+closed. Contracts are written in their final shape in step 2; Phases 4 and 5
+change only the implementations behind them, so editors are not rebuilt for
+contract reasons.
 
 ### Phase 2: topology tests, scope factory and handles
 
@@ -1227,27 +1238,27 @@ closed. Contracts are written in their final shape in step 2; Phases 4 and 5 cha
   builds the Editor, Session and Window layer registrations and asserts: every
   parent singleton resolves to the identical instance from a child, including a
   child that resolves it first, and `ILogger<T>`/`IOptions<T>` resolve; no
-  undeclared shadowing; no cross-layer collection injection; no `IServiceProvider`
-  or `IContainer` in a non-infrastructure type; no Session type whose constructor
-  needs a window-bound dependency; no singleton view; disposal never reaches a parent instance; optional
-  dependencies resolve to their default through the fallback. The
-  transient-graph checks walk the roots of
-  `ContainerTools.GenerateResolutionExpressions` for reflection-based
+  undeclared shadowing; no cross-layer collection injection; no
+  `IServiceProvider` or `IContainer` in a non-infrastructure type; no Session
+  type whose constructor needs a window-bound dependency; no singleton view;
+  disposal never reaches a parent instance; optional dependencies resolve to
+  their default through the fallback. The transient-graph checks walk the roots
+  of `ContainerTools.GenerateResolutionExpressions` for reflection-based
   registrations; `RegisterDelegate` registrations appear in its `Errors`, have
   opaque bodies, and are listed in a reviewed allowlist in the test.
   `Container.Validate` does not report these cases.
-- Move the Workspace and Content Browser child creation onto the factory, keeping
-  their current registrations. The four preference services that are registered
-  at the root today but effectively live per workspace
-  (`PreviewSettingsService`, `WorkspaceInteractionService`, `ViewportStateService`
-  and the keyed `EditorSettingsManager`) move from `Program.cs` to the window
-  module (removed at the root, so this is not a shadow), so their lifetime does
-  not silently become process-wide before Phase 4 moves them to the session.
-  `TransformToolSettingsService` stays at the root and intentionally becomes
-  process-wide (a per-user preference, 6.2). The project-switch test asserts both
-  behaviors. Move the window-sensitive root transients
-  (`DockPanelViewModel`, `DockPanel`) into the window module. Delete the
-  eager-resolve workarounds (`Program.cs:478`, `WorkspaceViewModel.cs:380`).
+- Move the Workspace and Content Browser child creation onto the factory,
+  keeping their current registrations. The four preference services that are
+  registered at the root today but effectively live per workspace
+  (`PreviewSettingsService`, `WorkspaceInteractionService`,
+  `ViewportStateService` and the keyed `EditorSettingsManager`) move from
+  `Program.cs` to the window module (removed at the root, so this is not a
+  shadow), so their lifetime does not silently become process-wide before Phase
+  4 moves them to the session. `TransformToolSettingsService` stays at the root
+  and intentionally becomes process-wide (a per-user preference, 6.2). The
+  project-switch test asserts both behaviors. Move the window-sensitive root
+  transients (`DockPanelViewModel`, `DockPanel`) into the window module. Delete
+  the eager-resolve workarounds (`Program.cs:478`, `WorkspaceViewModel.cs:380`).
 - Make `WorkspaceViewModel` resolve only through its scope handle (fixes F2).
 
 Exit: F1, F2, F9 and F11 are closed; no behavior change observable in the
@@ -1265,16 +1276,18 @@ Exit: F8 closed; view models contain no `Register` calls.
 
 - Add `IProjectSessionHost`, `IProjectSession`, `ISessionEvents` and the
   `ProjectContext` and `IProject` session instances in `Shell`. Split
-  `CookPublicationRecovery` out of `CookPublicationService` as an Editor service.
-  Rework `ProjectActivationCoordinator` as in 6.5 (cancel, replace, failure
-  paths), including the failure contract for `NavigationError` and
-  `App.StopApplication`. Introduce `IDocumentHistory` (6.11) and the session-owned clipboard.
+  `CookPublicationRecovery` out of `CookPublicationService` as an Editor
+  service. Rework `ProjectActivationCoordinator` as in 6.5 (cancel, replace,
+  failure paths), including the failure contract for `NavigationError` and
+  `App.StopApplication`. Introduce `IDocumentHistory` (6.11) and the
+  session-owned clipboard.
 - Move project-bound services to the session modules one cluster at a time, in
   this order (low coupling first): preference services; asset stack; content
   pipeline and cooking; scene stack; script tooling. Per cluster, inject
-  `ProjectContext`, delete the `ProjectChanged` self-reset, and replace staleness
-  checks with the session lifetime token. `DocumentManager` stays in the window module; the command and
-  content-demand services move to the session without their `WindowId` (C15).
+  `ProjectContext`, delete the `ProjectChanged` self-reset, and replace
+  staleness checks with the session lifetime token. `DocumentManager` stays in
+  the window module; the command and content-demand services move to the session
+  without their `WindowId` (C15).
 - Remove `CurrentProject` from `IProjectManagerService` and delete
   `IProjectContextService` and `ProjectContextService` (6.10).
 
@@ -1295,16 +1308,17 @@ Browser is open and asserts the process stays up.
   `AbstractOutletContainer`, Aura's `RoutedWindow.LoadContent` and
   `Router.DisposeRouteTree` (6.6).
 - Introduce `IWindowScopeFactory`, the window registry, the placement service
-  (6.9) and the layout store in `Shell`. `DockingWorkspaceViewModel` shrinks to a
-  docking host over a window handle. `DocumentManager` stays window-scoped and
+  (6.9) and the layout store in `Shell`. `DockingWorkspaceViewModel` shrinks to
+  a docking host over a window handle. `DocumentManager` stays window-scoped and
   requests carry `WindowPlacement`.
 - Introduce `IPanelRegistry`, `IPanelHost` and the panel behavior (6.8) on top
   of the Phase 1 panel descriptors. Migrate the six panels one at a time,
   starting with the Content Browser: view model to the session,
-  `IRetainedViewModel`, `OnShown`/`OnHidden`, `IPanelHost` instead of the captured
-  parent router, navigation target and `WindowId` (`SceneExplorerViewModel`,
-  `SceneNodeEditorViewModel`, `ContentBrowserViewModel`), transient views, and
-  the service-call replacement for the request/reply messages their panels answer. The dock loader attaches
+  `IRetainedViewModel`, `OnShown`/`OnHidden`, `IPanelHost` instead of the
+  captured parent router, navigation target and `WindowId`
+  (`SceneExplorerViewModel`, `SceneNodeEditorViewModel`,
+  `ContentBrowserViewModel`), transient views, and the service-call replacement
+  for the request/reply messages their panels answer. The dock loader attaches
   through the registry.
 - Prove the move contract with a floating-window host, even if it ships behind a
   setting.
@@ -1320,8 +1334,9 @@ every panel view model carries `IRetainedViewModel`.
   factories (6.6); `DocumentHostViewModel` is already done by cut C9. Remove the
   `IfUnresolved.ReturnDefault` paths by making the dependency required or an
   explicit optional parameter.
-- Replace `WeakReferenceMessenger.Default` and `StrongReferenceMessenger.Default`
-  in editor code with the window or session bus.
+- Replace `WeakReferenceMessenger.Default` and
+  `StrongReferenceMessenger.Default` in editor code with the window or session
+  bus.
 - Apply the disposal policy of 6.6 to every registration.
 
 Exit: F3 and F4 closed; `IContainer` appears only in router, window factory,
@@ -1329,10 +1344,10 @@ view locator, scope factory and modules.
 
 ### Phase 7: documentation
 
-- Update `design/editor/ARCHITECTURE.md` (section 8.1 diagram,
-  "Workspace child container") and `lld/project-workspace-shell.md` to describe
-  the project decomposition and the scope chain, and replace this review with
-  the final topology reference.
+- Update `design/editor/ARCHITECTURE.md` (section 8.1 diagram, "Workspace child
+  container") and `lld/project-workspace-shell.md` to describe the project
+  decomposition and the scope chain, and replace this review with the final
+  topology reference.
 
 ## 10. Decisions
 
@@ -1345,14 +1360,14 @@ view locator, scope factory and modules.
 3. **`IProjectContextService` is removed.** The Project Session scope, the
    injected `ProjectContext` and `IProject` replace it (6.10).
 4. **`Oxygen.Editor.WorldEditor` is decomposed first**, into one project per
-   editor over a contract project, a shell project and an assets project, with the dependency rules R1 to R6
-   enforced by a tooling test (section 7, Phase 1). The Inspector stays one
-   project.
+   editor over a contract project, a shell project and an assets project, with
+   the dependency rules R1 to R6 enforced by a tooling test (section 7, Phase
+   1). The Inspector stays one project.
 
 ## 11. Risk mitigation strategy
 
-Each risk has a mitigation and a gate that proves it. A risk is closed only
-when its gate passes in the phase named.
+Each risk has a mitigation and a gate that proves it. A risk is closed only when
+its gate passes in the phase named.
 
 | Risk                                                                                                                                                           | Mitigation                                                                                                                                                                                                                      | Gate                                                                                                             |
 | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------- |

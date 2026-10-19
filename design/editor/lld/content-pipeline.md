@@ -3,10 +3,11 @@
 Status:
 `Canonical V0.1 contract; implementation and qualification tracked by ED-M08`
 
+Last Updated: 2026-10-20 01:32
+
 **Navigation:** [purpose](#1-purpose),
 [slot identity and reimport](#20-canonical-material-slot-identity-and-reimport),
-[emission](#21-material-emission-precision),
-[planned simplification](#22-planned-content-pipeline-simplification).
+[emission](#21-material-emission-precision).
 
 ## 1. Purpose
 
@@ -1435,4 +1436,4 @@ owns how the pipeline cooks it.
 
 Gates: input authoring IA-7 and IA-14.
 
-[aid]: ../review/asset-identity.md#12-sources-that-produce-one-asset-and-containers
+[aid]: asset-identity.md#52-sources-and-containers

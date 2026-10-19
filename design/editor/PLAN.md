@@ -2,6 +2,8 @@
 
 Status: `active top-level plan`
 
+Last Updated: 2026-10-20 01:32
+
 Related:
 
 - [PRD.md](./PRD.md)
@@ -14,16 +16,16 @@ Related:
 
 ## 1. Purpose
 
-This document is the top-level execution plan for Oxygen Editor V0.1. It
-defines milestone order, milestone outcomes, LLD timing, and the handoff from
-design into detailed implementation plans.
+This document is the top-level execution plan for Oxygen Editor V0.1. It defines
+milestone order, milestone outcomes, LLD timing, and the handoff from design
+into detailed implementation plans.
 
 It is not the live progress ledger. Progress is tracked in
 [IMPLEMENTATION_STATUS.md](./IMPLEMENTATION_STATUS.md).
 
-It is not the task list for individual milestones. Detailed implementation
-plans live under [plan/](./plan/), and each active milestone must have one
-before implementation starts.
+It is not the task list for individual milestones. Detailed implementation plans
+live under [plan/](./plan/), and each active milestone must have one before
+implementation starts.
 
 ## 2. Planning Hierarchy
 
@@ -42,18 +44,17 @@ Planning rules:
 
 1. A milestone may begin implementation only after its required LLDs are
    reviewed enough to guide code.
-2. A milestone must have a detailed implementation plan before code work
-   starts.
-3. Implementation plans may contain tasks, file touch points, sequencing,
-   tests, risks, and rollout steps. This top-level plan must not.
+2. A milestone must have a detailed implementation plan before code work starts.
+3. Implementation plans may contain tasks, file touch points, sequencing, tests,
+   risks, and rollout steps. This top-level plan must not.
 4. Milestone validation is recorded once in `IMPLEMENTATION_STATUS.md`.
 5. If scope changes, update PRD/ARCHITECTURE/DESIGN before reshaping milestone
    work.
 6. PRD section 8 owns the V0.1 capability boundary; the linked LLD field and
    interaction contracts define its details. Required gates execute under their
    current owning milestones. Multi-viewport layouts are in scope under
-   ED-M08.V1; listed non-goals are exclusions, not permission to omit
-   required fields.
+   ED-M08.V1; listed non-goals are exclusions, not permission to omit required
+   fields.
 7. Previously recorded milestone status/evidence is retained. Identified missing
    implementation or additional guarantees execute in named gap-closing
    milestones; do not create a retrospective closure sweep.
@@ -83,31 +84,33 @@ flowchart LR
 ```
 
 `ED-M02` is validated; its supported-viewport evidence is recorded. The current
-execution sequence is ED-M08 -> ED-M09 -> ED-M10. ED-M07A and ED-M07B are validated.
-Earlier milestones retain their delivery records; source-identified omissions
-are assigned to 07A/07B, with no new M04 closure action. M08 still requires its
-joint review with the recorded ED-M02 evidence.
+execution sequence is ED-M08 -> ED-M09 -> ED-M10. ED-M07A and ED-M07B are
+validated. Earlier milestones retain their delivery records; source-identified
+omissions are assigned to 07A/07B, with no new M04 closure action. M08 still
+requires its joint review with the recorded ED-M02 evidence.
 
-Within ED-M08, execute M08.1 → [M08.F1 descriptor-local references](plan/ED-M08.F1-descriptor-local-references.md)
-→ M08.2 → M08.V0–V2 → M08.3–M08.12. M08.F1 is validated and closed on 2026-10-06: editor workflow checks,
-the user's Main/Lantern scene packaged and rendered from its PAK alone, and
-focused native origin/binding/cache evidence pass. Its
+Within ED-M08, execute M08.1 →
+[M08.F1 descriptor-local references](plan/ED-M08.F1-descriptor-local-references.md)
+→ M08.2 → M08.V0–V2 → M08.3–M08.12. M08.F1 is validated and closed on
+2026-10-06: editor workflow checks, the user's Main/Lantern scene packaged and
+rendered from its PAK alone, and focused native origin/binding/cache evidence
+pass. Its
 [closure record](plan/ED-M08.F1-descriptor-local-references.md#closure-verification)
-retains the user's non-blocking managed/UI and load-cost decisions.
-M08.2 rendering and view behavior is validated and closed on 2026-10-08.
-M08.V0 viewport robustness, M08.V1 multi-viewport layouts and M08.V2
-viewport state persistence are validated and closed on 2026-10-08. The
-2026-10-08 rescope retires the development-only parity harness and adds the
-viewport editing tools (the former ED-M09) and the Content Browser redesign,
-including reference-aware rename/move. M08.3 viewport HUD, M08.4 picking,
-selection outline and framing, M08.5 transform gizmos and snapping, and M08.6
-scene helpers and orientation, and the M08.7 Content Browser redesign are
-validated on 2026-10-08; M08.8 asset relocation on 2026-10-09. M08.9 viewport performance and per-frame editor work on 2026-10-09. M08.10
-engine capability parity in the editor is in progress: fog and the sky
-(M08.10a–d) were delivered on 2026-10-09, the ground grid settings (M08.10e)
-on 2026-10-10, eye adaptation in editor panes (M08.10f) and physical camera
-controls (M08.10g) and the scripting design (M08.10h) on 2026-10-11;
-the scripting engine and editor slices (M08.10i–q) follow.
+retains the user's non-blocking managed/UI and load-cost decisions. M08.2
+rendering and view behavior is validated and closed on 2026-10-08. M08.V0
+viewport robustness, M08.V1 multi-viewport layouts and M08.V2 viewport state
+persistence are validated and closed on 2026-10-08. The 2026-10-08 rescope
+retires the development-only parity harness and adds the viewport editing tools
+(the former ED-M09) and the Content Browser redesign, including reference-aware
+rename/move. M08.3 viewport HUD, M08.4 picking, selection outline and framing,
+M08.5 transform gizmos and snapping, and M08.6 scene helpers and orientation,
+and the M08.7 Content Browser redesign are validated on 2026-10-08; M08.8 asset
+relocation on 2026-10-09. M08.9 viewport performance and per-frame editor work
+on 2026-10-09. M08.10 engine capability parity in the editor is in progress: fog
+and the sky (M08.10a–d) were delivered on 2026-10-09, the ground grid settings
+(M08.10e) on 2026-10-10, eye adaptation in editor panes (M08.10f) and physical
+camera controls (M08.10g) and the scripting design (M08.10h) on 2026-10-11; the
+scripting engine and editor slices (M08.10i–q) follow.
 
 ## 4. Milestone Roadmap
 
@@ -149,16 +152,16 @@ Exit gate:
 
 ### ED-M01 - Project Browser And Workspace Activation
 
-Purpose: make the required start-of-workflow product behavior real before
-scene authoring milestones assume an active project/workspace.
+Purpose: make the required start-of-workflow product behavior real before scene
+authoring milestones assume an active project/workspace.
 
 LLD work:
 
 - `project-workspace-shell.md` is reviewed in detail for Project Browser,
   project open/create, invalid project handling, workspace activation, and
   restoration failure behavior.
-- `project-services.md` is reviewed for project metadata, content roots,
-  project settings, and project policy needed at activation time.
+- `project-services.md` is reviewed for project metadata, content roots, project
+  settings, and project policy needed at activation time.
 - `diagnostics-operation-results.md` is reviewed for project open/create and
   workspace restoration failures.
 
@@ -197,8 +200,8 @@ Deferred work:
 
 - Multi-viewport layout validation is deferred out of ED-M02. The existing UI
   path may remain visible, but multi-pane stability is not an ED-M02 closure
-  gate and must stay deferred. Stable multi-viewport requires later
-  engine multi-surface / multi-view renderer work.
+  gate and must stay deferred. Stable multi-viewport requires later engine
+  multi-surface / multi-view renderer work.
 
 ### ED-M03 - Authoring Foundation
 
@@ -226,18 +229,19 @@ Exit gate:
 
 ### ED-M04 - Scene Editing UX And Component Inspectors
 
-Delivery note: this is the original milestone scope. Its recorded status/evidence
-is preserved. Concrete missing implementation and evidence are assigned to
-ED-M07A and ED-M07B; no new execution or closure sweep occurs under ED-M04.
+Delivery note: this is the original milestone scope. Its recorded
+status/evidence is preserved. Concrete missing implementation and evidence are
+assigned to ED-M07A and ED-M07B; no new execution or closure sweep occurs under
+ED-M04.
 
-Purpose: make the supported scene component set authorable through real UI,
-not hardcoded defaults or debug-only paths. Material asset authoring and
+Purpose: make the supported scene component set authorable through real UI, not
+hardcoded defaults or debug-only paths. Material asset authoring and
 identity-based material assignment are completed in `ED-M05`.
 
 LLD work:
 
-- `property-inspector.md` is reviewed for component editors, fields,
-  validation, and multi-selection.
+- `property-inspector.md` is reviewed for component editors, fields, validation,
+  and multi-selection.
 - `environment-authoring.md` is reviewed for atmosphere, sun, exposure, tone
   mapping, and scene render intent.
 - `settings-architecture.md` is reviewed for scene/runtime/project settings
@@ -248,8 +252,8 @@ LLD work:
 
 Exit gate:
 
-- Transform, Geometry, PerspectiveCamera, DirectionalLight, and Environment
-  have scoped production-ready editing behavior.
+- Transform, Geometry, PerspectiveCamera, DirectionalLight, and Environment have
+  scoped production-ready editing behavior.
 - Geometry components expose a material assignment/override slot that persists
   and can hold an unresolved or placeholder material identity until `ED-M05`
   wires real material asset creation, picking, and assignment.
@@ -307,14 +311,14 @@ Exit gate:
 
 ### ED-M06A - Game Project Layout And Template Standardization
 
-Purpose: make the accepted game-project filesystem contract real before
-content pipeline and runtime milestones depend on it.
+Purpose: make the accepted game-project filesystem contract real before content
+pipeline and runtime milestones depend on it.
 
 LLD work:
 
 - `project-layout-and-templates.md` is reviewed in detail for project folder
-  layout, authored content roots, local folder mounts, derived roots,
-  predefined template payloads, template descriptors, and creation targets.
+  layout, authored content roots, local folder mounts, derived roots, predefined
+  template payloads, template descriptors, and creation targets.
 - `project-services.md` is reviewed for project manifest, project creation,
   validation, active project context, and cook-scope facts.
 - `project-workspace-shell.md` is reviewed only for create-from-template
@@ -330,15 +334,15 @@ LLD work:
 Exit gate:
 
 - Creating each predefined project template produces a valid project with a
-  unique project id, required folder skeleton, valid manifest, required
-  template media, and starter scene under `Content/Scenes`.
+  unique project id, required folder skeleton, valid manifest, required template
+  media, and starter scene under `Content/Scenes`.
 - New scenes are authored under `Content/Scenes/*.oscene.json`.
 - New materials are authored under `Content/Materials/*.omat.json`.
 - Content Browser folder navigation refreshes visible rows without restart.
 - Material Picker shows one logical row per material and no unrelated project
   files.
-- Source media, config, packages, and derived roots are presented distinctly
-  and never become implicit authored-asset creation targets.
+- Source media, config, packages, and derived roots are presented distinctly and
+  never become implicit authored-asset creation targets.
 - Extra authoring mounts and explicitly selected local mounts follow the
   project-layout target rules.
 - Project/template/layout failures produce visible operation results.
@@ -358,8 +362,7 @@ LLD work:
 
 Exit gate:
 
-- Procedural geometry descriptors are generated for supported procedural
-  meshes.
+- Procedural geometry descriptors are generated for supported procedural meshes.
 - Scoped source import produces supported descriptors.
 - Cooking includes current scene and referenced V0.1 assets.
 - Cook output validates before mount.
@@ -367,18 +370,20 @@ Exit gate:
 
 ### ED-M07A - Authoring Integrity And Runtime Convergence
 
-Status: `validated` (2026-09-11). Automated control/native cases and user-confirmed
-viewport workflows pass.
+Status: `validated` (2026-09-11). Automated control/native cases and
+user-confirmed viewport workflows pass.
 
 Purpose: close the source-identified inspector/property and authoring-integrity
-gaps in the [detailed plan](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
+gaps in the
+[detailed plan](plan/ED-M07A-authoring-integrity-and-runtime-convergence.md).
 This plan names existing working paths, missing behavior, file touch points and
 pass/fail cases; implementation starts with those fixes, not another audit.
 
 Exit gate: native background truth, gesture sessions, scoped field diagnostics,
-revision/lifetime-aware replay, scene/material save integrity and complete actual
-control/native evidence pass the named task gates, including issues #6/#7/#9/#10. Earlier milestone evidence is
-retained; ED-M07A gets its own validation row.
+revision/lifetime-aware replay, scene/material save integrity and complete
+actual control/native evidence pass the named task gates, including issues
+#6/#7/#9/#10. Earlier milestone evidence is retained; ED-M07A gets its own
+validation row.
 
 ### ED-M07B - Safe Content Publication And Compatibility
 
@@ -387,23 +392,24 @@ recovery alongside descriptor/publication/import/compatibility gaps in the
 [detailed plan](plan/ED-M07B-safe-content-publication-and-compatibility.md).
 
 Exit gate: saved dependency capture, staged validation, brief preview pause,
-rollback/recovery, PostProcess/Background native cook/load mapping, matched-build
-preflight and portable static/scalar import pass their specified failure cases.
-All four existing cook scopes execute incrementally with honest freshness and
-publication results. Shared state, correct list/tile navigation, useful filters
-and details, typed picking before/after cooking, import/save recovery, and usable
-command layouts pass the recorded UI journeys. Implement the automatic trigger
-policy accepted in 07B.0. Native worker lifetime (#8) and the complete
-engine procedural catalog's shared authority (#11) pass their concrete tasks
-before parity, including Cylinder scene/project cooking and engine sphere aliases.
-07B.5g also closes compact single/multi-node inspector layout and component
-filtering, with deselection restoring all applicable property editors.
+rollback/recovery, PostProcess/Background native cook/load mapping,
+matched-build preflight and portable static/scalar import pass their specified
+failure cases. All four existing cook scopes execute incrementally with honest
+freshness and publication results. Shared state, correct list/tile navigation,
+useful filters and details, typed picking before/after cooking, import/save
+recovery, and usable command layouts pass the recorded UI journeys. Implement
+the automatic trigger policy accepted in 07B.0. Native worker lifetime (#8) and
+the complete engine procedural catalog's shared authority (#11) pass their
+concrete tasks before parity, including Cylinder scene/project cooking and
+engine sphere aliases. 07B.5g also closes compact single/multi-node inspector
+layout and component filtering, with deselection restoring all applicable
+property editors.
 
 ### ED-M08 - Runtime Parity And Authoring Workspace
 
 Purpose: one canonical engine/editor authoring contract, and an editor in which
-a content author assembles, arranges and lights a scene directly in the
-viewport using assets found visually in the Content Browser.
+a content author assembles, arranges and lights a scene directly in the viewport
+using assets found visually in the Content Browser.
 
 ED-M07A/07B are validated. The
 [detailed plan](plan/ED-M08-runtime-parity-and-standalone-validation.md) owns
@@ -412,24 +418,23 @@ layouts and persistence (M08.V0–V2), the viewport HUD and editing tools
 (M08.3–M08.6, the former ED-M09), and the Content Browser redesign, asset
 relocation, viewport performance, engine capability parity, thumbnails and
 drag-and-drop (M08.7–M08.12). The
-[V0.1 authoring contract](review/ED-M08-v01-authoring-scope.md) defines the
-final property surface and exclusions.
+[V0.1 authoring contract](lld/scene-authoring-model.md#12-v01-capability-boundary)
+defines the final property surface and exclusions.
 
 Runtime parity rests on the shared production renderer, loaders and cooked
 formats plus native tests for every changed capability; the closeout loads an
-editor-cooked project in RenderScene. The development-only qualification
-harness in the standalone LLD is post-V0.1.
+editor-cooked project in RenderScene. The development-only qualification harness
+in the standalone LLD is post-V0.1.
 
 Exit gate: the detailed plan's exit checklist, including the user's closeout
 walkthrough in the normal Release editor.
 
 ### ED-M09 - Input Authoring
 
-Purpose: users create and edit input actions and mapping contexts in the
-editor (REQ-045). Design: [input authoring LLD](lld/input-authoring.md);
-sequence and acceptance: [plan](plan/ED-M09-input-authoring.md). The design
-was approved in M09.1; the engine input fixes (M09.2) come first. The ID
-previously named the
+Purpose: users create and edit input actions and mapping contexts in the editor
+(REQ-045). Design: [input authoring LLD](lld/input-authoring.md); sequence and
+acceptance: [plan](plan/ED-M09-input-authoring.md). The design was approved in
+M09.1; the engine input fixes (M09.2) come first. The ID previously named the
 viewport tools that ED-M08.4–M08.6 delivered.
 
 ### ED-M10 - V0.1 Acceptance
@@ -440,7 +445,8 @@ LLD work:
 
 - All V0.1 LLDs have been reviewed or explicitly marked as not gating V0.1.
 - The scope decisions are fixed in PRD sections 8-10. Required implementation
-  and validation failures remain release blockers until fixed; no silent deferral.
+  and validation failures remain release blockers until fixed; no silent
+  deferral.
 
 Exit gate:
 
@@ -452,10 +458,9 @@ Exit gate:
 - Generate descriptors/manifests.
 - Cook, inspect, refresh, and mount output.
 - Load cooked scene in standalone runtime.
-- Pass the matched-build, 100-node/1,000-entry workload, save/cook failure,
-  and clean-copy reproduction cases in the ED-M10 plan.
-- Record final `SUCCESS-XXX` validation evidence in
-  `IMPLEMENTATION_STATUS.md`.
+- Pass the matched-build, 100-node/1,000-entry workload, save/cook failure, and
+  clean-copy reproduction cases in the ED-M10 plan.
+- Record final `SUCCESS-XXX` validation evidence in `IMPLEMENTATION_STATUS.md`.
 
 ## 6. LLD Schedule
 
@@ -507,8 +512,8 @@ Detailed plans are expected to contain:
 - rollback or containment notes where useful
 
 Unresolved scope questions remain explicit in the owning milestone plan.
-Reorganizing plans does not resolve those questions, defer features, or establish
-implementation or validation completion.
+Reorganizing plans does not resolve those questions, defer features, or
+establish implementation or validation completion.
 
 Active milestone plans:
 
@@ -547,8 +552,8 @@ documented, and validated against the PRD requirement IDs it claims to satisfy.
 
 This is an ownership/evidence map, not an issue-closure claim or second progress
 ledger. Historical issue bodies were checked against the rebased source. Issues
-6-11 remain implementation tasks even where earlier fixes already supply part
-of their requested behavior. Their complete acceptance cases live in the owning
+6-11 remain implementation tasks even where earlier fixes already supply part of
+their requested behavior. Their complete acceptance cases live in the owning
 plan tasks and LLDs.
 
 | Issue                                              | Landed evidence or remaining work                                                                                                                                     | Milestone/task                                                                 |
@@ -564,6 +569,6 @@ plan tasks and LLDs.
 | [#10](https://github.com/abdes/DroidNet/issues/10) | Injectable managed world/input capabilities, Runtime-owned facade/DTO conversion, full consumer migration and boundary tests.                                         | ED-M07A.0; Runtime section 18.                                                 |
 | [#11](https://github.com/abdes/DroidNet/issues/11) | Engine/content authority for the full named generator catalog and aliases, every selectable shape cookable, no interop pak policy, shared live/cook semantic tests.   | ED-M07B.7; pipeline section 19; visual parity in ED-M08.                       |
 
-No earlier milestone is reopened or superseded by this map. New proof belongs
-to the gap-closing milestones. The issue #2-5 plans retain their recorded limits,
+No earlier milestone is reopened or superseded by this map. New proof belongs to
+the gap-closing milestones. The issue #2-5 plans retain their recorded limits,
 including automated versus running-editor evidence.

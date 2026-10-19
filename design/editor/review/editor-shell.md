@@ -2,12 +2,15 @@
 
 Status: **early draft, under discussion** (no code follows it yet)
 
+Last Updated: 2026-10-20 01:32
+
 Scope: `Oxygen.Editor.Shell`, the application frame of the Oxygen Editor. It
 defines the workbench model (sessions, windows, parts), what feature modules
 contribute, the services parts consume, the notification system, and the changes
-the shell needs in Aura, Docking and Routing. Module boundaries and naming are in
-[editor-module-architecture.md](editor-module-architecture.md); scopes and
-container mechanics are in [di-container-topology.md](di-container-topology.md).
+the shell needs in Aura, Docking and Routing. Module boundaries and naming are
+in [editor-module-architecture.md](../lld/editor-module-architecture.md); scopes
+and container mechanics are in
+[di-container-topology.md](di-container-topology.md).
 
 ## 1. Purpose and rule
 
@@ -73,8 +76,8 @@ What the current use of routing for the dock layout costs:
 
 - `DockingWorkspaceLayout` syncs layout changes back into the URL by scanning
   the process-global `Dockable.All`, so it sees other windows' dockables.
-- Adding a dock route at runtime goes through the router's
-  `MatchViewModelType`, which hard-codes `Children[0].Children[0]`.
+- Adding a dock route at runtime goes through the router's `MatchViewModelType`,
+  which hard-codes `Children[0].Children[0]`.
 - A route deleted by a change-set navigation leaves its view model undisposed.
 - The router creates and disposes the view models of its routes, while unique
   panels must be owned by the session and survive any window.
@@ -88,10 +91,10 @@ routing. The fourth is the real design question. Two options:
 | B: shell layout model      | A shell-owned tree of areas and docks, serialized per project and window kind                      | Direct ownership of panels by the registry                    | Its own serializer, its own history if wanted, a second composition path beside routing |
 
 Option B is chosen only if it is shown better on persistence, history,
-addressability, multi-window behavior and panel retention than option A with
-its fixes. Panel-internal navigation (the Content Browser's left and right
-outlets and its history) keeps routing in either option. Window placement is
-keyed by window kind and instance, not by URL, in either option.
+addressability, multi-window behavior and panel retention than option A with its
+fixes. Panel-internal navigation (the Content Browser's left and right outlets
+and its history) keeps routing in either option. Window placement is keyed by
+window kind and instance, not by URL, in either option.
 
 ## 3. Contributions
 
@@ -178,9 +181,9 @@ Actions name commands, not delegates. A command id with a string argument
 survives a Windows notification activation, which can arrive after the toast is
 gone; the command service resolves it in the current context.
 
-`Post` is callable from any thread; the shell marshals presentation to the
-right dispatcher. A `Window` scope targets the window of the posting part (from
-its `IPartHost`); the others target the active editor window.
+`Post` is callable from any thread; the shell marshals presentation to the right
+dispatcher. A `Window` scope targets the window of the posting part (from its
+`IPartHost`); the others target the active editor window.
 
 ### 5.3 Services and attention
 
@@ -215,8 +218,8 @@ mode (for example while playing a scene).
 - **Notifications** are requests for attention, raised by UI parts and by the
   shell's result policy (section 5.3).
 - **Output** remains the log; **Problems** remains the list of persistent
-  problems; the **Notification Center** is the history of attention requests.
-  A "Details" action opens Output filtered to the linked operation.
+  problems; the **Notification Center** is the history of attention requests. A
+  "Details" action opens Output filtered to the linked operation.
 
 ### 5.6 To verify
 
@@ -284,8 +287,8 @@ separately, though the services above are shaped for them:
 
 ## 10. Open questions
 
-1. Routed layout or a shell layout model (section 2.4). Routing stays unless
-   the alternative is shown better.
+1. Routed layout or a shell layout model (section 2.4). Routing stays unless the
+   alternative is shown better.
 2. Panel multiplicity `Many` (two independent explorers, a pinned inspector):
    supported by descriptors, but no panel needs it yet.
 3. Notification history persistence across editor restarts.
