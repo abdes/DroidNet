@@ -45,8 +45,8 @@ public sealed partial class NativeLoopCleanupTests
         var manifest = new ContentImportManifest(
             1,
             cookedRoot,
-            new ContentImportLayout("/Content") { TextureDescriptorsDirectory = "Textures" },
-            [new ContentImportJob("mask", "texture-descriptor", "Meter.otex.json", [], Output: null, Name: "Meter")]);
+            new ContentImportLayout("/Content"),
+            [new ContentImportJob("mask", "texture-descriptor", "Meter.otex.json", [], Output: null, Name: "Meter") { VirtualPath = "/Content/Textures/Meter.otex" }]);
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = new ImportToolContentPipelineApi(
             new EngineContentPipelineToolLocator(),
