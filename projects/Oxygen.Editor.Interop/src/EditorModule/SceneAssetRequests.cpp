@@ -141,6 +141,15 @@ struct SceneAssetRequests::State {
   std::shared_ptr<ThreadSafeQueue<Completion>> inbox
     = std::make_shared<ThreadSafeQueue<Completion>>();
 
+  auto IsAvailable(const std::string& uri, bool material) -> bool
+  {
+    try {
+      return available(uri, material);
+    } catch (const std::exception&) {
+      return false;
+    }
+  }
+
   auto CanRefresh(const std::string& uri, bool material) -> bool
   {
     try {
@@ -203,7 +212,8 @@ SceneAssetRequests::SceneAssetRequests(
             });
         }
       },
-      [](const std::string& message) { LOG_F(ERROR, "{}", message); },
+      // The editor reports each failed request; this is the engine's trace.
+      [](const std::string& message) { LOG_F(1, "{}", message); },
       [&resolver](const std::string& uri, bool /*material*/) {
         return resolver.ResolveAssetKey(uri).has_value();
       },
@@ -538,6 +548,29 @@ void SceneAssetRequests::SuspendLoads() { state_->loads_paused = true; }
 void SceneAssetRequests::ResumeLoads(scene::Scene& scene)
 {
   state_->loads_paused = false;
+  // A refresh reloads only what the mounted content resolves; a request held
+  // back while paused that it cannot resolve is started here so it reports
+  // its own failure instead of staying pending.
+  for (auto& [handle, target] : state_->targets) {
+    const auto node = scene.GetNode(handle);
+    if (!node || !node->IsAlive()) {
+      continue;
+    }
+    if (target.geometry_pending
+      && !state_->IsAvailable(target.geometry_uri, false)) {
+      auto complete = BeginGeometry(handle, target.geometry_uri,
+        target.geometry_failure, target.geometry_success);
+      LoadGeometry(target.geometry_uri, std::move(complete));
+    }
+    const auto slots = target.slots;
+    for (const auto& [index, slot] : slots) {
+      if (!slot.ready && !slot.rejected_slot && slot.uri
+        && !state_->IsAvailable(*slot.uri, true)) {
+        QueueMaterial(handle, slot.target, slot.uri, slot.intent,
+          slot.on_failure, slot.on_success, slot.accepted_geometry);
+      }
+    }
+  }
   Refresh(scene);
 }
 

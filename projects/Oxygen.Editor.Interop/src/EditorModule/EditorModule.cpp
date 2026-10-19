@@ -1495,6 +1495,9 @@ namespace oxygen::interop::module {
 
     asset_requests_ = std::make_unique<SceneAssetRequests>(
       *asset_loader_, *path_resolver_);
+    if (!content_resumed_ || preview_paused_) {
+      asset_requests_->SuspendLoads();
+    }
 
     auto environment = std::make_unique<oxygen::scene::SceneEnvironment>();
     (void)environment
@@ -1709,6 +1712,7 @@ namespace oxygen::interop::module {
     // Releasing a replaced completion cancels its managed waiter outside the lock.
     canceled_roots = {};
     if (!*requested) {
+      content_resumed_ = true;
       if (scene_ && asset_requests_) {
         asset_requests_->ResumeLoads(*scene_);
       }

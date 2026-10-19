@@ -379,6 +379,9 @@ namespace oxygen::interop::module {
     std::function<void(bool, std::string)> active_roots_completion_;
     std::uint64_t roots_revision_ = 0;
     bool preview_paused_ = false;
+    //! Scene loads wait until project content is first resumed; before that
+    //! only the engine content is mounted, and every project path is unknown.
+    bool content_resumed_ = false;
     std::optional<bool> requested_content_pause_;
     std::function<void(bool, std::string)> content_pause_completion_;
     std::function<void(bool, std::string)> content_resume_completion_;

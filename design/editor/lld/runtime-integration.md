@@ -433,8 +433,15 @@ mutation path. Full node handles protect node identity, and the separate scene
 session lifetime prevents reused scene identifiers from accepting old results.
 The generation and material-slot semantics belong to
 [live-engine-sync.md](./live-engine-sync.md#82-material-slot-v01-behavior).
-Current asset failures retain the native runtime logging path and do not change
-the managed queue-acceptance contract or roll back authored edits.
+Current asset failures reach the editor through the request's failure callback,
+which publishes them; the native trace logs them at verbose level only. They do
+not change the managed queue-acceptance contract or roll back authored edits.
+
+A new session holds its loads back until project content is first resumed, and
+while content is suspended: before that, only the engine content is mounted, so
+every project path would fail as unresolved. Resuming reloads what the mounted
+content resolves and starts every held request it cannot resolve, so that
+request reports its own failure instead of staying pending.
 
 ### ED-M04 Inspector-Driven Sync Semantics
 

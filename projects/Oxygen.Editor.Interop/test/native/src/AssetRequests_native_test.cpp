@@ -718,6 +718,31 @@ void SuspendedLoadsRetainLatestIntentAndClear()
     !f.requests->IsRefreshPending(), "clear remained pending after resume");
 }
 
+void ResumeStartsHeldRequestsTheContentCannotResolve()
+{
+  Fixture f;
+  std::vector<std::string> failures;
+  f.requests->SuspendLoads();
+  f.unavailable.insert("missing");
+  SetGeometryCommand geometry(f.node.GetHandle(), "missing");
+  geometry.SetFailureCallback([&](uint64_t, const std::string& error) {
+    failures.push_back(error);
+  });
+  f.Execute(geometry);
+  f.Drain();
+  Require(f.geometry_loads.empty(), "a held request started while paused");
+  f.requests->ResumeLoads(*f.scene);
+  Require(f.geometry_loads.size() == 1,
+    "resume left an unresolvable request pending");
+  Require(!f.requests->IsRefreshPending(),
+    "a held request was counted as a content refresh");
+  f.geometry_loads[0]({}, "asset path could not be resolved");
+  f.Drain();
+  Require(failures.size() == 1, "the held request did not report its failure");
+  Require(f.requests->RefreshError().empty(),
+    "a held request failed the content refresh");
+}
+
 void PublicationRefreshWorksWhileAuthoringLoadsStaySuspended()
 {
   Fixture f;
@@ -1382,6 +1407,9 @@ auto RunScenario(int scenario) -> const char*
     case 43:
       AppliedSkyCubemapStaysResidentUntilReplaced();
       break;
+    case 44:
+      ResumeStartsHeldRequestsTheContentCannotResolve();
+      break;
     case 38:
       RetainedMaterialIdentitySurvivesInventoryRevisionChange();
       break;
@@ -1571,6 +1599,10 @@ public:
 
   [TestMethod] void AppliedSkyCubemapStaysResidentUntilReplaced() {
     Check(43);
+  }
+
+  [TestMethod] void ResumeStartsHeldRequestsTheContentCannotResolve() {
+    Check(44);
   }
 
     [TestMethod] void LoadedMaterialRecoversAfterGeometryFailure()
