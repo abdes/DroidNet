@@ -152,6 +152,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         this.container.RegisterInstance(Mock.Of<IAutomaticCookService>());
         this.container.RegisterInstance(Mock.Of<IProjectManagerService>());
         this.container.RegisterInstance(Mock.Of<IContentPipelineService>());
+        this.container.RegisterInstance<IEngineContentPak>(new Oxygen.Editor.ContentPipeline.TestSupport.EngineContentPakFixture());
         this.container.RegisterInstance(Mock.Of<IOperationResultPublisher>());
         this.container.RegisterInstance(Mock.Of<IStatusReducer>());
         this.container.RegisterInstance(Mock.Of<IWindowManagerService>());
