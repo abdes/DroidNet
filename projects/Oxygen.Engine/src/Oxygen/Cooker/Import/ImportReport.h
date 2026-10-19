@@ -17,6 +17,8 @@
 
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportProgress.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/SourceKey.h>
 
 namespace oxygen::content::import {
@@ -82,6 +84,26 @@ struct ImportOutputRecord final {
   uint64_t size_bytes = 0;
 };
 
+//! An asset or texture descriptor produced by an import job.
+/*!
+ The products of a job are what its source produced, so that tools can map a
+ source to its products and a product back to its source without scanning the
+ cooked layout.
+*/
+struct ImportProductRecord final {
+  //! Virtual path of the product.
+  std::string virtual_path;
+
+  //! Container-relative path to the product's descriptor.
+  std::string descriptor_relpath;
+
+  //! Key of an asset; empty for a texture descriptor, which is a resource.
+  std::optional<data::AssetKey> key {};
+
+  //! Type of an asset; `kUnknown` for a texture descriptor.
+  data::AssetType asset_type = data::AssetType::kUnknown;
+};
+
 //! CI-grade packaging diagnostics summary for import outcomes.
 struct ImportPackagingSummary final {
   //! Number of produced output records in the report.
@@ -141,6 +163,9 @@ struct ImportReport final {
 
   //! Cooked outputs emitted during the import.
   std::vector<ImportOutputRecord> outputs;
+
+  //! Assets and texture descriptors produced by this import's source.
+  std::vector<ImportProductRecord> products;
 
   //! Timing and performance telemetry for the job.
   ImportTelemetry telemetry {};

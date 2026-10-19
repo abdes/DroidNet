@@ -15,6 +15,10 @@ namespace Oxygen.Editor.ContentPipeline.Incremental;
 /// <param name="Products">The source fingerprints responsible for produced assets.</param>
 internal sealed partial record CookProvenance(Guid ProjectId, ImmutableArray<CookProvenance.Root> Roots, ImmutableArray<CookProvenance.Product> Products)
 {
+    /// <summary>Gets the identity of every asset the publication's sources produced, as the import reports named them.</summary>
+    internal IEnumerable<AssetPath> ProducedAssets => this.Products.SelectMany(static product => product.Outputs)
+        .Select(static output => output.Asset.CookedAssetUri).Distinct();
+
     internal bool IsValid(ProjectContext project)
     {
         if (this.ProjectId != project.ProjectId || this.Roots.IsDefault || this.Products.IsDefault

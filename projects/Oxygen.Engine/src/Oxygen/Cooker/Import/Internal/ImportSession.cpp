@@ -4,7 +4,6 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
-#include <bit>
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
@@ -69,8 +68,9 @@ namespace {
         "Failed to create directory for external file: " + path.string());
     }
 
-    std::ofstream out(
-      base::ToNativePath(path), std::ios::binary | std::ios::app);
+    // MSVC's openmode is a signed int, so its flags combine as signed bits.
+    std::ofstream out(base::ToNativePath(path),
+      std::ios::binary | std::ios::app); // NOLINT(bugprone-signed-bitwise)
     if (!out) {
       throw std::runtime_error(
         "Failed to create external file: " + path.string());
@@ -160,8 +160,9 @@ namespace {
   auto ReadBinaryFile(const std::filesystem::path& path)
     -> std::vector<std::byte>
   {
-    auto in = std::ifstream(
-      base::ToNativePath(path), std::ios::binary | std::ios::ate);
+    // MSVC's openmode is a signed int, so its flags combine as signed bits.
+    auto in = std::ifstream(base::ToNativePath(path),
+      std::ios::binary | std::ios::ate); // NOLINT(bugprone-signed-bitwise)
     if (!in) {
       return {};
     }
@@ -173,8 +174,10 @@ namespace {
     const auto size = static_cast<size_t>(end);
     auto bytes = std::vector<std::byte>(size);
     in.seekg(0, std::ios::beg);
-    in.read(
-      std::bit_cast<char*>(bytes.data()), static_cast<std::streamsize>(size));
+    // Streams read chars; a char may alias the byte buffer.
+    // NOLINTNEXTLINE(cppcoreguidelines-pro-type-reinterpret-cast)
+    in.read(reinterpret_cast<char*>(bytes.data()),
+      static_cast<std::streamsize>(size));
     if (!in.good() && !in.eof()) {
       return {};
     }
@@ -286,7 +289,7 @@ ImportSession::~ImportSession() { DLOG_F(INFO, "Session destroyed"); }
 auto ImportSession::DrainAndRetire() -> co::Co<>
 {
   const auto started = std::chrono::steady_clock::now();
-  const auto timing = ScopeGuard([this, started]() noexcept -> void {
+  const auto timing = ScopeGuard([this, started] noexcept -> void {
     finalize_duration_ += std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::steady_clock::now() - started);
   });
@@ -611,7 +614,7 @@ auto ImportSession::HasErrors() const noexcept -> bool
 auto ImportSession::Finalize() -> co::Co<ImportReport>
 {
   const auto started = std::chrono::steady_clock::now();
-  const auto timing = ScopeGuard([this, started]() noexcept -> void {
+  const auto timing = ScopeGuard([this, started] noexcept -> void {
     finalize_duration_ += std::chrono::duration_cast<std::chrono::microseconds>(
       std::chrono::steady_clock::now() - started);
   });
@@ -809,6 +812,12 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
           .path = rec.descriptor_relpath,
           .size_bytes = rec.descriptor_size,
         });
+        report.products.push_back({
+          .virtual_path = rec.virtual_path,
+          .descriptor_relpath = rec.descriptor_relpath,
+          .key = rec.key,
+          .asset_type = rec.asset_type,
+        });
       }
     }
 
@@ -822,6 +831,10 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
         } else {
           index_registry_->RegisterExternalTextureDescriptor(
             cooked_root_, rec.relpath, rec.virtual_path);
+          report.products.push_back({
+            .virtual_path = rec.virtual_path,
+            .descriptor_relpath = rec.relpath,
+          });
         }
         output_missing
           |= !AppendOutputRecord(report.outputs, report.diagnostics,

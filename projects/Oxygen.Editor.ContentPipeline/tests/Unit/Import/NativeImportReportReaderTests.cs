@@ -15,26 +15,31 @@ public sealed class NativeImportReportReaderTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Native output files and source diagnostics remain correlated to their owning operation.</summary>
+    /// <summary>Native output files, products and source diagnostics remain correlated to their owning operation.</summary>
     [TestMethod]
-    public void ReadsExactOutputsAndSourceDiagnostics()
+    public void ReadsExactOutputsProductsAndSourceDiagnostics()
     {
         var (execution, report) = CreateReport();
         var result = NativeImportReportReader.Read(report.ToJsonString(), execution, 0);
         _ = result.Succeeded.Should().BeTrue();
         _ = result.OutputsBySource["model.gltf"].Should().Equal("Models/Model/Geometry/Triangle.ogeo");
+        _ = result.ProductsBySource["model.gltf"].Should().BeEquivalentTo("/Content/Models/Model/Geometry/Triangle.ogeo", "/Content/Models/Model/Textures/Albedo.otex");
         _ = result.Diagnostics.Should().ContainSingle(issue => issue.OperationId == execution.OperationId
             && issue.Severity == DiagnosticSeverity.Warning && issue.Code == "source.warning"
             && issue.AffectedPath == Path.Combine(execution.InputRoot, "model.gltf"));
     }
 
-    /// <summary>Malformed versions, job identity and escaped paths cannot become authoritative output ownership.</summary>
+    /// <summary>Malformed versions, job identity, escaped paths and products that are not identities cannot become authoritative output ownership.</summary>
     /// <param name="invalid">The invalid report field.</param>
     [TestMethod]
     [DataRow("version")]
     [DataRow("index")]
     [DataRow("path")]
     [DataRow("type")]
+    [DataRow("products")]
+    [DataRow("product")]
+    [DataRow("descriptor")]
+    [DataRow("key")]
     public void RejectsInvalidReportOwnership(string invalid)
     {
         var (execution, report) = CreateReport();
@@ -43,6 +48,10 @@ public sealed class NativeImportReportReaderTests
             case "version": report["report_version"] = "1"; break;
             case "index": report["jobs"]![0]!["index"] = 2; break;
             case "path": report["jobs"]![0]!["outputs"]![0]!["path"] = "../outside.ogeo"; break;
+            case "products": _ = report["jobs"]![0]!.AsObject().Remove("products"); break;
+            case "product": report["jobs"]![0]!["products"]![0]!["virtual_path"] = "/Content/Models/../Triangle.ogeo"; break;
+            case "descriptor": report["jobs"]![0]!["products"]![0]!["descriptor_relative_path"] = "../outside.ogeo"; break;
+            case "key": _ = report["jobs"]![0]!["products"]![0]!.AsObject().Remove("asset_key"); break;
             default: report["jobs"]![0]!["type"] = "fbx"; break;
         }
 
@@ -60,8 +69,11 @@ public sealed class NativeImportReportReaderTests
             root,
             new(1, output, new("/Content"), [new("model", "gltf", "model.gltf", [], Output: null, Name: "Model")]));
         var report = JsonNode.Parse("""
-            {"report_version":"2","session":{"cooked_root":""},"jobs":[
+            {"report_version":"3","session":{"cooked_root":""},"jobs":[
               {"index":1,"type":"gltf","status":"succeeded","outputs":[{"path":"Models/Model/Geometry/Triangle.ogeo","size_bytes":128}],
+               "products":[
+                 {"kind":"asset","virtual_path":"/Content/Models/Model/Geometry/Triangle.ogeo","descriptor_relative_path":"Models/Model/Geometry/Triangle.ogeo","asset_key":"00000000-0000-0000-0000-000000000001","asset_type":2},
+                 {"kind":"texture","virtual_path":"/Content/Models/Model/Textures/Albedo.otex","descriptor_relative_path":"Models/Model/Textures/Albedo.otex"}],
                "diagnostics":[{"severity":"warning","code":"source.warning","message":"Source warning."}]}]}
             """)!;
         report["session"]!["cooked_root"] = output;

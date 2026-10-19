@@ -85,7 +85,7 @@ public sealed partial class AssetCookStatusReader(
         var unresolved = resolved.Select(static item => item.Input.Unresolved).OfType<AssetCookStatus>().ToArray();
         var mapped = resolved.Where(static item => item.Input.Input is not null).Select(static item => (item.Requested, item.Resolution)).ToArray();
         var inputs = resolved.Select(static item => item.Input.Input).OfType<ContentCookInput>().ToArray();
-        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, engineContent, cancellationToken, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), imports.KnownOutputs).ConfigureAwait(false);
+        using var libraries = await CookedLibraryReadSet.AcquireAsync(project, engineContent, cancellationToken, uri => imports.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. prior.ProducedAssets]).ConfigureAwait(false);
         var graph = await CreateDependencyDiscovery(project, prior, imports, libraries).DiscoverAsync(project, inputs, cancellationToken).ConfigureAwait(false);
         graph = libraries.Apply(graph);
         var validGraph = WithCompleteAssets(graph);

@@ -29,7 +29,7 @@ internal sealed class CapturingRunner(ContentPipelineProcessResult result) : ICo
             var reportPath = request.Arguments[request.Arguments.ToList().IndexOf("--report") + 1];
             var report = JsonSerializer.Serialize(new
             {
-                report_version = "2",
+                report_version = "3",
                 session = new { cooked_root = manifest.RootElement.GetProperty("output").GetString() },
                 jobs = manifest.RootElement.GetProperty("jobs").EnumerateArray().Select(static (job, index) => new
                 {
@@ -37,6 +37,7 @@ internal sealed class CapturingRunner(ContentPipelineProcessResult result) : ICo
                     type = job.GetProperty("type").GetString(),
                     status = "succeeded",
                     outputs = Array.Empty<object>(),
+                    products = Array.Empty<object>(),
                     diagnostics = Array.Empty<object>(),
                 }),
             });

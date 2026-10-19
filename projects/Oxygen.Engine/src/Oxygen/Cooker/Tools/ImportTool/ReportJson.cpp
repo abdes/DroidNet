@@ -6,6 +6,7 @@
 
 #include <algorithm>
 #include <chrono>
+#include <cstdint>
 #include <ctime>
 #include <iomanip>
 #include <optional>
@@ -139,24 +140,23 @@ auto UpdateProgressTrace(JobProgressTrace& trace, const ProgressEvent& progress,
     }
   }
 
-  if (const auto* item = GetItemProgress(progress)) {
-    if (!item->item_name.empty()) {
-      std::string key = item->item_kind;
-      if (!key.empty()) {
-        key.append(":");
-      }
-      key.append(item->item_name);
-      auto& trace_item = trace.items[key];
-      trace_item.phase = nostd::to_string(progress.header.phase);
-      trace_item.kind = item->item_kind;
-      trace_item.name = item->item_name;
-      if (progress.header.kind == ProgressEventKind::kItemStarted) {
-        trace_item.started = now;
-      } else if (progress.header.kind == ProgressEventKind::kItemFinished) {
-        trace_item.finished = now;
-      } else if (progress.header.kind == ProgressEventKind::kItemCollected) {
-        trace_item.collected = now;
-      }
+  if (const auto* item = GetItemProgress(progress);
+    item != nullptr && !item->item_name.empty()) {
+    std::string key = item->item_kind;
+    if (!key.empty()) {
+      key.append(":");
+    }
+    key.append(item->item_name);
+    auto& trace_item = trace.items[key];
+    trace_item.phase = nostd::to_string(progress.header.phase);
+    trace_item.kind = item->item_kind;
+    trace_item.name = item->item_name;
+    if (progress.header.kind == ProgressEventKind::kItemStarted) {
+      trace_item.started = now;
+    } else if (progress.header.kind == ProgressEventKind::kItemFinished) {
+      trace_item.finished = now;
+    } else if (progress.header.kind == ProgressEventKind::kItemCollected) {
+      trace_item.collected = now;
     }
   }
 }
@@ -243,6 +243,29 @@ auto BuildOutputsJson(const std::vector<ImportOutputRecord>& outputs)
   return entries;
 }
 
+auto BuildProductsJson(const std::vector<ImportProductRecord>& products)
+  -> ordered_json
+{
+  ordered_json entries = ordered_json::array();
+  for (const auto& product : products) {
+    CHECK_F(
+      !product.virtual_path.empty() && !product.descriptor_relpath.empty(),
+      "Product virtual and descriptor paths must be non-empty");
+    ordered_json entry = ordered_json::object();
+    entry["virtual_path"] = product.virtual_path;
+    entry["descriptor_relative_path"] = product.descriptor_relpath;
+    if (product.key.has_value()) {
+      entry["kind"] = "asset";
+      entry["asset_key"] = nostd::to_string(*product.key);
+      entry["asset_type"] = static_cast<uint8_t>(product.asset_type);
+    } else {
+      entry["kind"] = "texture";
+    }
+    entries.push_back(std::move(entry));
+  }
+  return entries;
+}
+
 auto BuildWorkItemsJson(const JobProgressTrace& trace,
   const std::string_view fallback_type, const std::string_view fallback_name)
   -> ordered_json
@@ -252,10 +275,9 @@ auto BuildWorkItemsJson(const JobProgressTrace& trace,
   if (!base.has_value()) {
     for (const auto& [key, item] : trace.items) {
       (void)key;
-      if (item.started.has_value()) {
-        if (!base.has_value() || *item.started < *base) {
-          base = item.started;
-        }
+      if (item.started.has_value()
+        && (!base.has_value() || *item.started < *base)) {
+        base = item.started;
       }
     }
   }
@@ -292,13 +314,11 @@ auto BuildWorkItemsJson(const JobProgressTrace& trace,
 
 auto IsCanceledReport(const ImportReport& report) -> bool
 {
-  for (const auto& diag : report.diagnostics) {
-    if (diag.code == "import.canceled"
-      || diag.code == "input.import.skipped_predecessor_failed") {
-      return true;
-    }
-  }
-  return false;
+  return std::ranges::any_of(
+    report.diagnostics, [](const ImportDiagnostic& diag) -> bool {
+      return diag.code == "import.canceled"
+        || diag.code == "input.import.skipped_predecessor_failed";
+    });
 }
 
 auto JobStatusFromReport(const ImportReport& report) -> std::string_view

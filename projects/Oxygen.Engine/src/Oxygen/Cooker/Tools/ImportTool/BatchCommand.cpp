@@ -1904,6 +1904,8 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
             { { "status", std::string(JobStatusFromReport(report_value)) } });
           job_json.update(
             { { "outputs", BuildOutputsJson(report_value.outputs) } });
+          job_json.update(
+            { { "products", BuildProductsJson(report_value.products) } });
           if (report_value.success
             && !report_value.material_slot_provenance_json.empty()) {
             job_json.update({
@@ -1925,6 +1927,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
           job_json.update({
             { "status", "not_submitted" },
             { "outputs", ordered_json::array() },
+            { "products", ordered_json::array() },
             { "stats", BuildEmptyStatsJson() },
             { "diagnostics", ordered_json::array() },
           });

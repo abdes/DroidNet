@@ -59,10 +59,14 @@ releasing its input and tool leases. Failed termination retains ownership until
 the worker drains. Progress and structured warnings/errors flow into the shared
 Cooking panel throughout import, validation and publication.
 
-Every import retains the native report's per-source output paths. Those
-associations identify source-owned auxiliary files; the native index owns their
-sizes and digests. Named texture outputs use the descriptor's `virtual_path` and
-participate in the same cooking, reuse and reference-resolution workflow.
+Every import reads two lists per source from the native report. Its products
+(assets and texture descriptors, by virtual path) say which source produced each
+cooked asset: a model's or an input file's products are attributed from this
+list, never from the folder they cook into, and become the provenance map that
+status, library resolution and the next cook read. Its output files identify
+source-owned auxiliary files; the native index owns their sizes and digests.
+Named texture outputs use the descriptor's `virtual_path` and participate in the
+same cooking, reuse and reference-resolution workflow.
 
 ## Freshness and validation
 

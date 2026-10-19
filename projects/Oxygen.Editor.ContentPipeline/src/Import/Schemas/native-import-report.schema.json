@@ -1,20 +1,14 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "type": "object",
-  "required": [
-    "report_version",
-    "session",
-    "jobs"
-  ],
+  "required": ["report_version", "session", "jobs"],
   "properties": {
     "report_version": {
-      "const": "2"
+      "const": "3"
     },
     "session": {
       "type": "object",
-      "required": [
-        "cooked_root"
-      ],
+      "required": ["cooked_root"],
       "properties": {
         "cooked_root": {
           "type": "string",
@@ -32,6 +26,7 @@
           "type",
           "status",
           "outputs",
+          "products",
           "diagnostics"
         ],
         "properties": {
@@ -56,10 +51,7 @@
             "type": "array",
             "items": {
               "type": "object",
-              "required": [
-                "path",
-                "size_bytes"
-              ],
+              "required": ["path", "size_bytes"],
               "properties": {
                 "path": {
                   "type": "string",
@@ -72,22 +64,52 @@
               }
             }
           },
+          "products": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["kind", "virtual_path", "descriptor_relative_path"],
+              "properties": {
+                "kind": {
+                  "enum": ["asset", "texture"]
+                },
+                "virtual_path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "descriptor_relative_path": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "asset_key": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "asset_type": {
+                  "type": "integer",
+                  "minimum": 1
+                }
+              },
+              "if": {
+                "properties": {
+                  "kind": {
+                    "const": "asset"
+                  }
+                }
+              },
+              "then": {
+                "required": ["asset_key", "asset_type"]
+              }
+            }
+          },
           "diagnostics": {
             "type": "array",
             "items": {
               "type": "object",
-              "required": [
-                "severity",
-                "code",
-                "message"
-              ],
+              "required": ["severity", "code", "message"],
               "properties": {
                 "severity": {
-                  "enum": [
-                    "info",
-                    "warning",
-                    "error"
-                  ]
+                  "enum": ["info", "warning", "error"]
                 },
                 "code": {
                   "type": "string"

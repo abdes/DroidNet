@@ -22,7 +22,7 @@ namespace oxygen::content::import::tool {
 
 using nlohmann::ordered_json;
 
-inline constexpr std::string_view kReportVersion = "2";
+inline constexpr std::string_view kReportVersion = "3";
 
 constexpr auto PhaseCount() -> size_t
 {
@@ -75,6 +75,9 @@ auto UpdateProgressTrace(JobProgressTrace& trace, const ProgressEvent& progress,
 
 [[nodiscard]] auto BuildOutputsJson(
   const std::vector<ImportOutputRecord>& outputs) -> ordered_json;
+
+[[nodiscard]] auto BuildProductsJson(
+  const std::vector<ImportProductRecord>& products) -> ordered_json;
 
 [[nodiscard]] auto BuildWorkItemsJson(const JobProgressTrace& trace,
   std::string_view fallback_type, std::string_view fallback_name)

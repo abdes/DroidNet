@@ -51,6 +51,31 @@ public sealed class InputFileCookTests
             + string.Join("; ", again.Diagnostics.Select(static issue => issue.Code + ": " + (issue.TechnicalMessage ?? issue.Message))));
     }
 
+    /// <summary>Two input files in one folder each own what they declared: the report says which file made each product.</summary>
+    /// <returns>The asynchronous cook.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task CookFolderAttributesEachProductToTheFileThatDeclaredIt()
+    {
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        workspace.WriteText("Content/Gameplay/Player.input.json", Player);
+        workspace.WriteText("Content/Gameplay/Vehicle.input.json", Player.Replace("Jump", "Boost", StringComparison.Ordinal).Replace("Gameplay", "Driving", StringComparison.Ordinal));
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
+        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+
+        var result = await service.CookFolderAsync(AssetPath.Parse("/Content/Gameplay"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
+        _ = result.CookedAssets.ToDictionary(static asset => asset.CookedAssetUri.VirtualPath, static asset => asset.SourceAssetUri.VirtualPath).Should().BeEquivalentTo(new Dictionary<string, string>
+        {
+            ["/Content/Gameplay/Jump.oiact"] = "/Content/Gameplay/Player.input.json",
+            ["/Content/Gameplay/Gameplay.oimap"] = "/Content/Gameplay/Player.input.json",
+            ["/Content/Gameplay/Boost.oiact"] = "/Content/Gameplay/Vehicle.input.json",
+            ["/Content/Gameplay/Driving.oimap"] = "/Content/Gameplay/Vehicle.input.json",
+        });
+    }
+
     /// <summary>A file that uses another file's action fails with the reason before the cooker runs.</summary>
     /// <returns>The asynchronous cook.</returns>
     [TestMethod]

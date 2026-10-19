@@ -23,9 +23,11 @@ internal sealed class ProjectAssetKeyIndex(string cachePath, string[] paths)
     /// <summary>Gets a value indicating whether candidate identities still need a native lookup.</summary>
     public bool IsPending => paths.Length != 0 && this.map is null;
 
-    /// <summary>Reads a cache for the current descriptor and known imported-output names.</summary>
+    /// <summary>Reads a cache for the project's descriptors and the products its containers last cooked.</summary>
+    /// <remarks>A descriptor is its own asset, so its identity is known before it is cooked; a container's products,
+    /// such as an input file's actions, are known from the provenance map.</remarks>
     /// <param name="project">The source mounts to inspect.</param>
-    /// <param name="knownOutputs">Previously identified imported outputs.</param>
+    /// <param name="knownOutputs">The assets the project's publication produced, from its provenance.</param>
     /// <param name="cancellationToken">Cancels enumeration and cache reading.</param>
     /// <returns>A current candidate index, possibly awaiting native identity lookup.</returns>
     public static async Task<ProjectAssetKeyIndex> ReadAsync(ProjectContext project, IReadOnlyCollection<AssetPath> knownOutputs, CancellationToken cancellationToken)

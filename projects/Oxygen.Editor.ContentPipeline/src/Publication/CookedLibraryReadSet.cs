@@ -39,7 +39,7 @@ internal sealed partial class CookedLibraryReadSet : IDisposable
     /// <param name="engineContent">The engine content pak, the lowest library beneath the declared ones.</param>
     /// <param name="cancellationToken">Cancels acquisition and hashing.</param>
     /// <param name="resolveImported">Resolves retained project owners of imported outputs.</param>
-    /// <param name="knownOutputs">Previously identified imported project output names.</param>
+    /// <param name="knownOutputs">The assets the project's publication produced, from its provenance.</param>
     /// <returns>The selected library readers and lookup facts.</returns>
     public static async Task<CookedLibraryReadSet> AcquireAsync(ProjectContext project, IEngineContentPak engineContent, CancellationToken cancellationToken, Func<AssetPath, ContentCookInput?>? resolveImported = null, IReadOnlyCollection<AssetPath>? knownOutputs = null)
     {

@@ -7,6 +7,7 @@
 // Covers: Tools/ImportTool/BatchCommand.cpp
 
 #include <cstddef>
+#include <cstdint>
 #include <expected>
 #include <filesystem>
 #include <fstream>
@@ -31,6 +32,7 @@
 #include <Oxygen/Cooker/Tools/ImportTool/MessageWriter.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
+#include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace {
@@ -234,6 +236,56 @@ NOLINT_TEST_F(BatchCommandPhysicsDagTest,
   EXPECT_TRUE(job.at("stats").at("time_ms_total").is_number());
   EXPECT_FALSE(job.at("diagnostics").empty());
   EXPECT_FALSE(std::filesystem::exists(root / "cooked"));
+}
+
+//! Each job reports what its own source produced, so a container's products
+//! map back to it without scanning the cooked layout.
+NOLINT_TEST_F(BatchCommandPhysicsDagTest, ReportListsEachSourcesProducts)
+{
+  const auto root = MakeScenarioDir("report_products");
+  const auto cooked_root = root / ".cooked";
+  const auto manifest_path = root / "import-manifest.json";
+  const auto report_path = root / "report.json";
+  WriteText(root / "Wood.material.json", R"({"name":"Wood"})");
+  WriteText(root / "Input" / "Player.input.json", R"({
+    "actions":[{"name":"Jump","type":"bool"}],
+    "contexts":[{"name":"OnFoot","mappings":[
+      {"action":"Jump","slot":"Space","trigger":"pressed"}]}]})");
+  WriteText(manifest_path,
+    R"({"version":1,"output":")" + cooked_root.generic_string() + R"(",
+    "jobs":[{"type":"material-descriptor","source":"Wood.material.json"},
+      {"id":"input","type":"input","source":"Input/Player.input.json"}]})");
+
+  ASSERT_TRUE(RunBatch(manifest_path, std::nullopt, report_path).has_value())
+    << Messages();
+  auto stream = std::ifstream(report_path);
+  ASSERT_TRUE(stream.is_open());
+  const auto report = nlohmann::json::parse(stream);
+  EXPECT_EQ(report.at("report_version"), "3");
+  const auto& jobs = report.at("jobs");
+  ASSERT_EQ(jobs.size(), 2U);
+
+  const auto& material = jobs.at(0).at("products");
+  ASSERT_EQ(material.size(), 1U);
+  EXPECT_EQ(material.at(0).at("kind"), "asset");
+  EXPECT_EQ(material.at(0).at("asset_type"),
+    static_cast<uint8_t>(oxygen::data::AssetType::kMaterial));
+  EXPECT_TRUE(material.at(0)
+      .at("virtual_path")
+      .get<std::string>()
+      .ends_with("/Wood.omat"));
+
+  auto input_types = std::vector<uint8_t> {};
+  for (const auto& product : jobs.at(1).at("products")) {
+    EXPECT_FALSE(product.at("asset_key").get<std::string>().empty());
+    EXPECT_TRUE(std::filesystem::exists(
+      cooked_root / product.at("descriptor_relative_path").get<std::string>()));
+    input_types.push_back(product.at("asset_type").get<uint8_t>());
+  }
+  EXPECT_THAT(input_types,
+    ::testing::UnorderedElementsAre(
+      static_cast<uint8_t>(oxygen::data::AssetType::kInputAction),
+      static_cast<uint8_t>(oxygen::data::AssetType::kInputMappingContext)));
 }
 
 NOLINT_TEST_F(BatchCommandPhysicsDagTest,

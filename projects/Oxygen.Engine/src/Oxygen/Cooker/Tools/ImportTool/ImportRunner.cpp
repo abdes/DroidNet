@@ -342,6 +342,7 @@ auto RunImportJob(const ImportRequest& request,
     });
     job.update({ { "status", std::string(JobStatusFromReport(report_copy)) } });
     job.update({ { "outputs", BuildOutputsJson(report_copy.outputs) } });
+    job.update({ { "products", BuildProductsJson(report_copy.products) } });
     job.update({ { "cooked_root", report_copy.cooked_root.generic_string() } });
     if (report_copy.retained_record_path) {
       job.update({

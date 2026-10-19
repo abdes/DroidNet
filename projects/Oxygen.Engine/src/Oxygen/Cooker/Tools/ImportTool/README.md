@@ -681,7 +681,16 @@ Notes:
 
 ## Reports and Exit Codes
 
-Per-command `--report` and batch `--report` write JSON report output.
+Per-command `--report` and batch `--report` write JSON report output, version
+`3`. Each job lists:
+
+- `outputs`: every file the job wrote, as `{path, size_bytes}`, including shared
+  tables and the index.
+- `products`: what the job's source produced, as
+  `{kind, virtual_path, descriptor_relative_path}`. An asset (`kind` `asset`)
+  adds `asset_key` and its numeric `asset_type`. A texture descriptor (`kind`
+  `texture`) has neither. A tool maps a source to its products, and a product to
+  its source, from this list rather than from the cooked layout.
 
 Current process exit codes:
 

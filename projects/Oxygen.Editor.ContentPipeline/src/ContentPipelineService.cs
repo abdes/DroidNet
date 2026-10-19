@@ -243,10 +243,11 @@ public sealed partial class ContentPipelineService(
                 ? OperationStatus.SucceededWithWarnings
                 : OperationStatus.Succeeded;
 
-    private static bool OwnsByReport(ContentCookInput input, CookedAssetEntry asset, NativeImportResult import)
-        => asset.DescriptorRelativePath is not null
-            && import.OutputsBySource.TryGetValue(input.SourceRelativePath, out var outputs)
-            && outputs.Contains(asset.DescriptorRelativePath, StringComparer.Ordinal);
+    // A container's products are the ones its job reported; any other source's only product is its own identity.
+    private static bool Produced(ContentCookInput input, CookedAssetEntry asset, NativeImportResult import)
+        => input.Kind is ContentCookAssetKind.ForeignSource or ContentCookAssetKind.Input
+            ? import.ProductsBySource.TryGetValue(input.SourceRelativePath, out var products) && products.Contains(asset.VirtualPath)
+            : string.Equals(input.OutputVirtualPath, asset.VirtualPath, StringComparison.Ordinal);
 
     private static List<ContentCookedAsset> CreateCookedAssets(
         ContentCookScope scope,
@@ -257,12 +258,7 @@ public sealed partial class ContentPipelineService(
         var result = new List<ContentCookedAsset>();
         foreach (var asset in inspection.Assets)
         {
-            var input = scope.Inputs.FirstOrDefault(input => input.OwnsOutput(asset.VirtualPath)
-                && (input.Kind != ContentCookAssetKind.Input || OwnsByReport(input, asset, import)));
-            if (input is not null && (input.Kind is not (ContentCookAssetKind.ForeignSource or ContentCookAssetKind.Input)
-                || (asset.DescriptorRelativePath is not null
-                    && import.OutputsBySource.TryGetValue(input.SourceRelativePath, out var outputs)
-                    && outputs.Contains(asset.DescriptorRelativePath, StringComparer.Ordinal))))
+            if (scope.Inputs.FirstOrDefault(input => Produced(input, asset, import)) is { } input)
             {
                 result.Add(new(input.AssetUri, AssetPath.Parse(asset.VirtualPath), asset.Kind, input.MountName, asset.VirtualPath)
                 {

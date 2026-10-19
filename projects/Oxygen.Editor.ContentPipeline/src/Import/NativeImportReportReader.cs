@@ -10,7 +10,7 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.ContentPipeline.Import;
 
-/// <summary>Reads native batch output ownership and diagnostics from the existing version-two report.</summary>
+/// <summary>Reads native batch outputs, products and diagnostics from the version-three report.</summary>
 internal static class NativeImportReportReader
 {
     private static readonly Lazy<JsonSchema> Schema = new(static () =>
@@ -21,7 +21,7 @@ internal static class NativeImportReportReader
         return JsonSchema.FromText(reader.ReadToEnd());
     });
 
-    /// <summary>Validates the requested jobs and detaches their output ownership and diagnostics.</summary>
+    /// <summary>Validates the requested jobs and detaches their outputs, products and diagnostics.</summary>
     /// <param name="json">The native report document.</param>
     /// <param name="execution">The immutable native request.</param>
     /// <param name="exitCode">The completed worker result.</param>
@@ -43,6 +43,7 @@ internal static class NativeImportReportReader
         }
 
         var outputsBySource = ImmutableDictionary.CreateBuilder<string, ImmutableArray<string>>(StringComparer.Ordinal);
+        var productsBySource = ImmutableDictionary.CreateBuilder<string, ImmutableHashSet<string>>(StringComparer.Ordinal);
         var diagnostics = new List<DiagnosticRecord>();
         var provenance = ImmutableDictionary.CreateBuilder<string, NativeMaterialSlotProvenance>(StringComparer.Ordinal);
         var succeeded = exitCode == 0;
@@ -66,6 +67,7 @@ internal static class NativeImportReportReader
             if (requested.Source is { } source)
             {
                 outputsBySource.Add(source, [.. emitted.Order(StringComparer.Ordinal)]);
+                productsBySource.Add(source, ReadProducts(job));
             }
 
             if (requested.MaterialSlotProvenance is { } previous
@@ -115,6 +117,7 @@ internal static class NativeImportReportReader
         return new(succeeded, diagnostics)
         {
             OutputsBySource = outputsBySource.ToImmutable(),
+            ProductsBySource = productsBySource.ToImmutable(),
             MaterialSlotProvenance = succeeded ? provenance.ToImmutable() : ImmutableDictionary<string, NativeMaterialSlotProvenance>.Empty,
         };
     }
@@ -123,13 +126,32 @@ internal static class NativeImportReportReader
     {
         foreach (var output in job.GetProperty("outputs").EnumerateArray())
         {
-            var path = output.GetProperty("path").GetString()!.Replace('\\', '/');
-            if (Path.IsPathRooted(path) || path.Split('/').Any(static part => part is "" or "." or ".." || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
-            {
-                throw new InvalidDataException("The native report contains an output outside its root.");
-            }
-
-            _ = outputs.Add(path);
+            _ = outputs.Add(ReadContainedPath(output.GetProperty("path")));
         }
+    }
+
+    // A product is named by its virtual path, the identity the rest of the editor uses for it.
+    private static ImmutableHashSet<string> ReadProducts(JsonElement job)
+    {
+        var products = ImmutableHashSet.CreateBuilder<string>(StringComparer.Ordinal);
+        foreach (var product in job.GetProperty("products").EnumerateArray())
+        {
+            _ = ReadContainedPath(product.GetProperty("descriptor_relative_path"));
+            var virtualPath = product.GetProperty("virtual_path").GetString()!;
+            if (!AssetPath.TryParse(virtualPath, out _) || !products.Add(virtualPath))
+            {
+                throw new InvalidDataException("The native report names a product that is not one asset identity.");
+            }
+        }
+
+        return products.ToImmutable();
+    }
+
+    private static string ReadContainedPath(JsonElement value)
+    {
+        var path = value.GetString()!.Replace('\\', '/');
+        return Path.IsPathRooted(path) || path.Split('/').Any(static part => part is "" or "." or ".." || part.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0)
+            ? throw new InvalidDataException("The native report contains an output outside its root.")
+            : path;
     }
 }

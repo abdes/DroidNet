@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -30,18 +29,14 @@ public sealed record ContentCookInput(
     /// <summary>Gets the disjoint output folders owned by an imported source.</summary>
     public ImmutableArray<string> OutputNamespaces { get; init; } = [];
 
-    /// <summary>Tests output ownership without treating the whole mount as an imported namespace.</summary>
+    /// <summary>Tests, before cooking, whether this input will produce an asset.</summary>
+    /// <remarks>An input file's actions and contexts are known only from the provenance of its last cook.</remarks>
     /// <param name="virtualPath">The native output identity.</param>
-    /// <returns>Whether this input owns the exact asset or its imported folder.</returns>
+    /// <returns>Whether this input is the asset or owns the model output folder that holds it.</returns>
     public bool OwnsOutput(string virtualPath) => this.Kind switch
     {
         ContentCookAssetKind.ForeignSource => this.OutputNamespaces.Any(prefix => virtualPath.StartsWith(prefix, StringComparison.Ordinal))
             || (this.OutputNamespaces.IsEmpty && this.OutputVirtualPath is { } prefix && virtualPath.StartsWith(prefix, StringComparison.Ordinal)),
-
-        // An input file's actions and contexts cook into its own folder; the import report says which file made each.
-        ContentCookAssetKind.Input => this.OutputVirtualPath is { } file
-            && string.Equals(virtualPath[..(virtualPath.LastIndexOf('/') + 1)], file[..(file.LastIndexOf('/') + 1)], StringComparison.Ordinal)
-            && (virtualPath.EndsWith(AssetFileTypes.InputAction, StringComparison.Ordinal) || virtualPath.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.Ordinal)),
         _ => string.Equals(this.OutputVirtualPath, virtualPath, StringComparison.Ordinal),
     };
 }

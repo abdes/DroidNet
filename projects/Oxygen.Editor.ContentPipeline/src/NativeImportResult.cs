@@ -15,9 +15,13 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="Diagnostics">Adapted native diagnostics.</param>
 public sealed record NativeImportResult(bool Succeeded, IReadOnlyList<DiagnosticRecord> Diagnostics)
 {
-    /// <summary>Gets the native job's emitted paths keyed by captured source-relative path.</summary>
+    /// <summary>Gets the files each native job wrote, shared tables included, keyed by captured source-relative path.</summary>
     public ImmutableDictionary<string, ImmutableArray<string>> OutputsBySource { get; init; }
         = ImmutableDictionary<string, ImmutableArray<string>>.Empty;
+
+    /// <summary>Gets the virtual paths of the assets and textures each source produced, keyed by captured source-relative path.</summary>
+    public ImmutableDictionary<string, ImmutableHashSet<string>> ProductsBySource { get; init; }
+        = ImmutableDictionary<string, ImmutableHashSet<string>>.Empty;
 
     /// <summary>Gets native allocation records keyed by their captured source-relative paths.</summary>
     public ImmutableDictionary<string, NativeMaterialSlotProvenance> MaterialSlotProvenance { get; init; }

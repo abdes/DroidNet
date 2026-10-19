@@ -1402,12 +1402,12 @@ owns how the pipeline cooks it.
   `CreateJobLayout` does for materials. `Jump` declared in
   `Content/Gameplay/Player.input.json` cooks to `/Content/Gameplay/Jump.oiact`
   and round-trips to `asset:///Content/Gameplay/Jump.oiact`.
-- **Several outputs per source.** Provenance records every key an input job
-  emits with its file and declaration JSON pointer; the project input index is
-  built from the same facts. An output whose declaration disappears by any route
-  (rename, delete, Move asset, file move, hand edit, file removal) is retired at
-  the next publication; Split transfers the key to its new file without retiring
-  it.
+- **Several outputs per source.** The import report lists every asset an input
+  job produced; provenance records them under the input file, never by the
+  folder they cook into. The project input index is built from the same facts.
+  An output whose declaration disappears by any route (rename, delete, Move
+  asset, file move, hand edit, file removal) is retired at the next publication;
+  Split transfers the key to its new file without retiring it.
 - **Dependencies.** A reference to an action in another file is a `.oiact`
   virtual path once the engine supports it (input authoring IF-12 b). The
   manifest then adds `depends_on` on the job that produces it and, across

@@ -17,9 +17,6 @@ internal sealed class ImportedSourceIndex
     private readonly List<Entry> entries = [];
     private string? projectRoot;
 
-    /// <summary>Gets previously identified native outputs for project key lookup.</summary>
-    public IReadOnlyCollection<AssetPath> KnownOutputs => this.previousOwners.Keys;
-
     /// <summary>Reads saved source namespaces and trusted prior output ownership once for a cook.</summary>
     /// <param name="project">The project's authoring mount declarations.</param>
     /// <param name="documents">Owners protecting acknowledged saved settings.</param>
