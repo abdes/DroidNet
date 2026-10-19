@@ -39,6 +39,12 @@ Optional explicit importer executable; otherwise use the SDK or source-checkout 
 .PARAMETER ContentRoot
 Content directory containing scenes/<name>/import-manifest.json. Defaults to this script directory.
 
+.PARAMETER EnginePak
+Engine content pak that resolves /Engine asset references. Defaults to the
+installed SDK's share/oxygen/engine.pak, or in a source checkout to the pak the
+selected build tree produces (built with the importer). Required with -ToolPath
+outside an SDK.
+
 .PARAMETER Help
 Show usage, options and examples without selecting tools or cooking. Alias: -h.
 
@@ -69,6 +75,8 @@ param(
     [string]$Config,
 
     [string]$ContentRoot,
+
+    [string]$EnginePak,
 
     [Parameter(Mandatory = $true, ParameterSetName = 'Help')]
     [Alias('h')][switch]$Help
@@ -106,9 +114,12 @@ $installedSdk = Test-Path -LiteralPath $SdkSupport
 if ($ToolPath -or $installedSdk) {
     $tools = Resolve-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-importtool' -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{ 'oxygen-cooker-importtool' = $ToolPath }
 } else {
-    $tools = Build-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-importtool' -BuildTree $BuildTree -Config $Config -Preset $Preset
+    $tools = Build-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-importtool' -Prerequisites 'oxygen-engine-content' -BuildTree $BuildTree -Config $Config -Preset $Preset
 }
 Write-OxygenExecutableSelection $tools
+
+$EnginePak = Get-OxygenEngineContentPak -SourceRoot $RepoRoot -Selection $tools.Selection -Path $EnginePak
+Write-Host "Using engine content pak: $EnginePak"
 
 # Collect scenes to process
 $ScenesToCook = @()
@@ -158,7 +169,7 @@ foreach ($SceneDir in $ScenesToCook) {
     # Global ImportTool options precede the batch subcommand.
     $ArgsList = @()
     if ($NoTUI) { $ArgsList += '--no-tui' }
-    $ArgsList += @('batch', '--manifest', $ManifestPath)
+    $ArgsList += @('batch', '--manifest', $ManifestPath, '--cooked-context-root', $EnginePak)
     Invoke-OxygenTool -Context $tools -Target 'oxygen-cooker-importtool' -Arguments $ArgsList
     $ExitCode = $LASTEXITCODE
 

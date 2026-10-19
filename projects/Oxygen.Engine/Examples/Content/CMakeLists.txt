@@ -1,6 +1,7 @@
 # The SDK ships a deliberately small, self-contained set of authored samples.
 set(
   OXYGEN_SHOWCASE_SCENES
+  engine-assets
   sdk-lantern
   sdk-furniture
   sdk-materials
@@ -66,13 +67,15 @@ add_custom_command(
     "${OXYGEN_SHOWCASE_LAUNCHER}" "${OXYGEN_PWSH_EXECUTABLE}" -NoLogo -NoProfile
     -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/cook_scenes.ps1"
     -All -NoTUI -ContentRoot "${OXYGEN_SHOWCASE_CONTENT}" -ToolPath
-    "$<TARGET_FILE:oxygen-cooker-importtool>"
+    "$<TARGET_FILE:oxygen-cooker-importtool>" -EnginePak
+    "$<GENEX_EVAL:$<TARGET_PROPERTY:oxygen-engine-content,OXYGEN_ENGINE_CONTENT_PAK>>"
   COMMAND
     "${OXYGEN_SHOWCASE_LAUNCHER}" "${OXYGEN_PWSH_EXECUTABLE}" -NoLogo -NoProfile
     -ExecutionPolicy Bypass -File "${CMAKE_CURRENT_SOURCE_DIR}/pak_content.ps1"
     -CookedRoot "${OXYGEN_SHOWCASE_CONTENT}/.cooked/main" -ContentRoot
     "${OXYGEN_SHOWCASE_CONTENT}" -OutputDir "${OXYGEN_SHOWCASE_CONTENT}/pak"
-    -ToolPath "$<TARGET_FILE:oxygen-cooker-paktool>"
+    -ToolPath "$<TARGET_FILE:oxygen-cooker-paktool>" -EnginePak
+    "$<GENEX_EVAL:$<TARGET_PROPERTY:oxygen-engine-content,OXYGEN_ENGINE_CONTENT_PAK>>"
   COMMAND
     "${OXYGEN_SHOWCASE_LAUNCHER}" "$<TARGET_FILE:oxygen-cooker-inspector>"
     validate "${OXYGEN_SHOWCASE_CONTENT}/.cooked/main"
@@ -86,6 +89,7 @@ add_custom_command(
     oxygen-cooker-importtool
     oxygen-cooker-paktool
     oxygen-cooker-inspector
+    oxygen-engine-content
   COMMAND_EXPAND_LISTS
   VERBATIM
   COMMENT "Preparing the installed Oxygen showcase content"

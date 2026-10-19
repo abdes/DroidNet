@@ -12,6 +12,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <utility>
 #include <vector>
 
@@ -24,7 +25,6 @@
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTypeList.h>
-#include <Oxygen/Content/TextureResourceLocator.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
@@ -220,12 +220,12 @@ public:
     std::weak_ptr<int> alive_token_;
   };
 
-  //! Resolve a current loose texture descriptor in its explicitly mounted
-  //! source. Missing mounts/descriptors return nullopt; malformed or stale
-  //! descriptors throw. Call on the loader's owning thread before
-  //! StartLoadTexture.
+  //! Resolve a texture descriptor by its virtual path in the mounted sources,
+  //! newest mount first. An absent path returns nullopt; a non-canonical path,
+  //! or a malformed or stale descriptor, throws. Call on the loader's owning
+  //! thread before StartLoadTexture.
   [[nodiscard]] virtual auto ResolveTextureResourceKey(
-    const TextureResourceLocator& locator) -> std::optional<ResourceKey> = 0;
+    std::string_view virtual_path) -> std::optional<ResourceKey> = 0;
 
   //! Resolve a nonzero texture index in a uniquely mounted source. Missing,
   //! ambiguous sources and out-of-range indices return nullopt. The resulting
@@ -381,11 +381,13 @@ public:
   virtual auto RetireLooseCookedGeneration(data::SourceKey source_key) -> bool
     = 0;
 
-  //! Prepare complete loose roots off-thread without changing active
-  //! precedence. The caller prevents new loads through commit; preparation owns
+  //! Prepare a complete mount set off-thread without changing active
+  //! precedence: loose cooked roots and pak files, lowest precedence first,
+  //! with the engine content pak beneath them. Pak layering rules apply as for
+  //! AddPakFile. The caller prevents new loads through commit; preparation owns
   //! its paths.
-  [[nodiscard]] virtual auto PrepareLooseCookedRootsAsync(
-    std::vector<std::filesystem::path> roots) -> co::Co<PreparedMountSet> = 0;
+  [[nodiscard]] virtual auto PrepareMountsAsync(
+    std::vector<ContentMount> mounts) -> co::Co<PreparedMountSet> = 0;
 
   //! Validate the candidate and detach old cache entries before swapping
   //! sources. Failure before the swap preserves active roots. No subscriber
@@ -394,7 +396,8 @@ public:
   [[nodiscard]] virtual auto CommitPreparedMounts(PreparedMountSet&& prepared)
     -> MountRetirement = 0;
 
-  //! Clear all mounted roots and pak files.
+  //! Clear all mounted roots and pak files except the engine content pak, which
+  //! stays beneath every other source.
   virtual auto ClearMounts() -> void = 0;
 
   //! Await outstanding asset/resource reads before replacing mounted sources.

@@ -1,0 +1,388 @@
+{
+  "version": 13,
+  "name": "EngineAssets",
+  "nodes": [
+    {
+      "name": "Root",
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Floor",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 0.0, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [40.0, 40.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Cube",
+      "parent": 0,
+      "transform": {
+        "translation": [-4.0, 0.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "SubdividedCube",
+      "parent": 0,
+      "transform": {
+        "translation": [-2.0, 0.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Sphere",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 0.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Cylinder",
+      "parent": 0,
+      "transform": {
+        "translation": [2.0, 0.0, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Quad",
+      "parent": 0,
+      "transform": {
+        "translation": [4.0, 0.0, 0.5],
+        "rotation": [0.70710678, 0.0, 0.0, 0.70710678],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "IcoSphere",
+      "parent": 0,
+      "transform": {
+        "translation": [-4.0, 2.5, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Cone",
+      "parent": 0,
+      "transform": {
+        "translation": [-2.0, 2.5, 0.5],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Capsule",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 2.5, 1.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Torus",
+      "parent": 0,
+      "transform": {
+        "translation": [2.0, 2.5, 0.1],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [2.0, 2.0, 2.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "ArrowGizmo",
+      "parent": 0,
+      "transform": {
+        "translation": [4.0, 2.5, 0.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "MainCamera",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, -11.0, 7.0],
+        "rotation": [0.5155, 0.0, 0.0, 0.8569],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "Sun",
+      "parent": 0,
+      "transform": {
+        "translation": [0.0, 5.0, 8.0],
+        "rotation": [0.5, 0.0, 0.0, 0.8660254],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "FillLight",
+      "parent": 0,
+      "transform": {
+        "translation": [1.0, 1.25, 2.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    },
+    {
+      "name": "SpotRig",
+      "parent": 0,
+      "transform": {
+        "translation": [-2.0, 0.0, 3.0],
+        "rotation": [0.0, 0.0, 0.0, 1.0],
+        "scale": [1.0, 1.0, 1.0]
+      },
+      "flags": {
+        "visible": "shown",
+        "casts_shadows": "on",
+        "receives_shadows": "on"
+      }
+    }
+  ],
+  "renderables": [
+    {
+      "node": 1,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Plane.ogeo",
+      "visible": true
+    },
+    {
+      "node": 2,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cube.ogeo",
+      "visible": true,
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCube.omat",
+          "layout_revision": "2d931c8e0852f74695f7d17d44942ab876335f098d8374d43c557e1217a08979"
+        }
+      ]
+    },
+    {
+      "node": 3,
+      "geometry_ref": "/Engine/Generated/BasicShapes/SubdividedCube.ogeo",
+      "visible": true,
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCubeB.omat",
+          "layout_revision": "2d931c8e0852f74695f7d17d44942ab876335f098d8374d43c557e1217a08979"
+        }
+      ]
+    },
+    {
+      "node": 4,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Sphere.ogeo",
+      "visible": true,
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCubeC.omat",
+          "layout_revision": "2d931c8e0852f74695f7d17d44942ab876335f098d8374d43c557e1217a08979"
+        }
+      ]
+    },
+    {
+      "node": 5,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cylinder.ogeo",
+      "visible": true,
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCubeD.omat",
+          "layout_revision": "2d931c8e0852f74695f7d17d44942ab876335f098d8374d43c557e1217a08979"
+        }
+      ]
+    },
+    {
+      "node": 6,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Quad.ogeo",
+      "visible": true,
+      "material_overrides": [
+        {
+          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "material_ref": "/.cooked/Materials/MatCubeD.omat",
+          "layout_revision": "2d931c8e0852f74695f7d17d44942ab876335f098d8374d43c557e1217a08979"
+        }
+      ]
+    },
+    {
+      "node": 7,
+      "geometry_ref": "/Engine/Generated/BasicShapes/IcoSphere.ogeo",
+      "visible": true
+    },
+    {
+      "node": 8,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Cone.ogeo",
+      "visible": true
+    },
+    {
+      "node": 9,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Capsule.ogeo",
+      "visible": true
+    },
+    {
+      "node": 10,
+      "geometry_ref": "/Engine/Generated/BasicShapes/Torus.ogeo",
+      "visible": true
+    },
+    {
+      "node": 11,
+      "geometry_ref": "/Engine/Internal/ArrowGizmo.ogeo",
+      "visible": true
+    }
+  ],
+  "cameras": {
+    "perspective": [
+      {
+        "node": 12,
+        "fov_y": 0.785398,
+        "aspect_ratio": 1.777778,
+        "aspect_mode": "fixed",
+        "near_plane": 0.1,
+        "far_plane": 100.0
+      }
+    ]
+  },
+  "lights": {
+    "directional": [
+      {
+        "node": 13,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.98, 0.92],
+          "casts_shadows": true,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "angular_size_radians": 0.00935,
+        "atmosphere_light_slot": 1,
+        "intensity_lux": 150000.0
+      }
+    ],
+    "point": [
+      {
+        "node": 14,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [1.0, 0.35, 0.25],
+          "casts_shadows": false,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "range": 8.0,
+        "source_radius": 0.05,
+        "luminous_flux_lm": 1200.0
+      }
+    ],
+    "spot": [
+      {
+        "node": 15,
+        "common": {
+          "affects_world": true,
+          "color_rgb": [0.25, 0.6, 1.0],
+          "casts_shadows": false,
+          "shadow": {
+            "bias": 0.03
+          }
+        },
+        "range": 12.0,
+        "inner_cone_angle_radians": 0.25,
+        "outer_cone_angle_radians": 0.45,
+        "source_radius": 0.02,
+        "luminous_flux_lm": 3000.0
+      }
+    ]
+  },
+  "references": {
+    "materials": [
+      "/.cooked/Materials/MatCube.omat",
+      "/.cooked/Materials/MatCubeB.omat",
+      "/.cooked/Materials/MatCubeC.omat",
+      "/.cooked/Materials/MatCubeD.omat"
+    ]
+  }
+}

@@ -125,7 +125,9 @@ struct AssetLoaderConfig final {
   */
   bool verify_content_hashes { false };
 
-  //! Path resolution service used for mapping disk changes to script assets.
+  //! Path resolution service used for mapping disk changes to script assets
+  //! and for locating the engine content pak; without the pak, `/Engine`
+  //! assets are unavailable.
   std::optional<PathFinder> path_finder;
 
   //! Runtime residency policy (budget/trim/default-priority).
@@ -270,8 +272,7 @@ public:
   OXGN_CNTT_API auto RetireLooseCookedGeneration(data::SourceKey source_key)
     -> bool override;
 
-  OXGN_CNTT_NDAPI auto PrepareLooseCookedRootsAsync(
-    std::vector<std::filesystem::path> roots)
+  OXGN_CNTT_NDAPI auto PrepareMountsAsync(std::vector<ContentMount> mounts)
     -> co::Co<PreparedMountSet> override;
   OXGN_CNTT_NDAPI auto CommitPreparedMounts(PreparedMountSet&& prepared)
     -> MountRetirement override;
@@ -288,7 +289,7 @@ public:
 
   OXGN_CNTT_NDAPI auto VerifyContentHashesEnabled() const noexcept -> bool;
 
-  //! Clear all mounted roots and pak files.
+  //! Clear all mounted roots and pak files except the engine content pak.
   OXGN_CNTT_API auto ClearMounts() -> void override;
   //! Drain started awaitable loads and accepted callback loads through
   //! publication and callback completion, including callback-enqueued work.
@@ -881,8 +882,7 @@ public:
     const data::Asset& context_asset,
     data::ResourceReferenceIndex resource_index)
     -> std::optional<ResourceKey> override;
-  OXGN_CNTT_NDAPI auto ResolveTextureResourceKey(
-    const TextureResourceLocator& locator)
+  OXGN_CNTT_NDAPI auto ResolveTextureResourceKey(std::string_view virtual_path)
     -> std::optional<ResourceKey> override;
   OXGN_CNTT_NDAPI auto ReadScriptResourceForAsset(
     const data::Asset& context_asset,
@@ -1137,8 +1137,13 @@ private:
   friend class MountRetirement;
   static auto PrepareMountSetAsync(
     std::unique_ptr<internal::MountReplacementState> state,
-    observer_ptr<co::ThreadPool> pool, std::vector<std::filesystem::path> roots,
-    bool verify_content) -> co::Co<PreparedMountSet>;
+    observer_ptr<co::ThreadPool> pool,
+    std::optional<std::filesystem::path> engine_content_pak,
+    std::vector<ContentMount> mounts, bool verify_content)
+    -> co::Co<PreparedMountSet>;
+  //! Mounts the engine content pak, when configured, beneath every other
+  //! source.
+  auto MountEngineContentPak() -> void;
   auto CompleteMountRetirement(internal::MountReplacementState& state) noexcept
     -> void;
   struct DecodedAssetAsyncResult final {
@@ -1457,6 +1462,8 @@ private:
 
   bool verify_content_hashes_ { false };
   ResidencyPolicy residency_policy_ {};
+  //! The normalized engine content pak, mounted beneath every other source.
+  std::optional<std::filesystem::path> engine_content_pak_;
 
   //=== Eviction Notifications ===-----------------------------------------//
 

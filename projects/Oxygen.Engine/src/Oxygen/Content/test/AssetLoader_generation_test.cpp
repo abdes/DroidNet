@@ -30,6 +30,7 @@
 
 #include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Base/Uuid.h>
+#include <Oxygen/Config/PathFinderConfig.h>
 #include <Oxygen/Content/AssetLoader.h>
 #include <Oxygen/Content/ContentMounts.h>
 #include <Oxygen/Content/EvictionEvents.h>
@@ -40,6 +41,7 @@
 #include <Oxygen/Content/Loaders/SceneLoader.h>
 #include <Oxygen/Content/Loaders/ScriptLoader.h>
 #include <Oxygen/Content/OperationCancelledException.h>
+#include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/VirtualPathResolver.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -85,6 +87,20 @@ namespace {
     data::AssetKey scene_material;
     data::AssetKey script;
   };
+
+  //! Loose cooked roots as a mount set, lowest precedence first.
+  auto LooseRoots(const std::vector<std::filesystem::path>& roots)
+    -> std::vector<ContentMount>
+  {
+    auto mounts = std::vector<ContentMount> {};
+    for (const auto& root : roots) {
+      mounts.push_back({
+        .kind = ContentMount::Kind::kLooseCookedRoot,
+        .path = root,
+      });
+    }
+    return mounts;
+  }
 
   auto SceneKey() -> data::AssetKey
   {
@@ -823,8 +839,8 @@ namespace {
       std::vector failed_roots { new_root, root / "missing" };
       auto rejected = false;
       try {
-        auto failed = co_await loader.PrepareLooseCookedRootsAsync(
-          std::move(failed_roots));
+        auto failed
+          = co_await loader.PrepareMountsAsync(LooseRoots(failed_roots));
       } catch (const std::exception&) {
         rejected = true;
       }
@@ -833,8 +849,7 @@ namespace {
       EXPECT_EQ(loader.GetMaterialAsset(old_key), original);
 
       std::vector stale_roots { new_root };
-      auto stale
-        = co_await loader.PrepareLooseCookedRootsAsync(std::move(stale_roots));
+      auto stale = co_await loader.PrepareMountsAsync(LooseRoots(stale_roots));
       loader.AddLooseCookedRoot(old_root);
       EXPECT_THROW(
         static_cast<void>(loader.CommitPreparedMounts(std::move(stale))),
@@ -861,8 +876,7 @@ namespace {
         = loader.SubscribeResourceEvictions(data::MaterialAsset::ClassTypeId(),
           [&](const EvictionEvent&) -> void { ++canceled_notifications; });
       std::vector roots { new_root };
-      auto prepared
-        = co_await loader.PrepareLooseCookedRootsAsync(std::move(roots));
+      auto prepared = co_await loader.PrepareMountsAsync(LooseRoots(roots));
       VirtualPathResolver next;
       next.AddLooseCookedRoot(new_root);
       {
@@ -905,8 +919,7 @@ namespace {
         co_await loader->LoadAssetAsync<data::MaterialAsset>(MaterialKey()),
         nullptr);
       std::vector roots { std::move(new_root) };
-      prepared.emplace(
-        co_await loader->PrepareLooseCookedRootsAsync(std::move(roots)));
+      prepared.emplace(co_await loader->PrepareMountsAsync(LooseRoots(roots)));
       co_return co::kCancel;
     };
     if (!prepared.has_value()) {
@@ -946,7 +959,7 @@ namespace {
     config.thread_pool = observer_ptr { &pool };
     auto loader = std::make_unique<AssetLoader>(
       engine::internal::EngineTagFactory::Get(), config);
-    auto work = loader->PrepareLooseCookedRootsAsync({});
+    auto work = loader->PrepareMountsAsync({});
     loader.reset();
     EXPECT_THROW(static_cast<void>(co::Run(loop, std::move(work))),
       OperationCancelledException);
@@ -979,6 +992,148 @@ namespace {
     EXPECT_EQ(notifications, 1U);
     EXPECT_EQ(loader, nullptr);
     retirement.Finish();
+  }
+
+  NOLINT_TEST_F(AssetLoaderBasicTest, EngineContentPakStaysBeneathEveryMountSet)
+  {
+    // Arrange
+    const auto engine_pak = temp_dir_ / "engine.pak";
+    const auto engine_source = data::SourceKey { Uuid::Generate() };
+    auto pak = PakTestWriter::Config {};
+    pak.source_key = engine_source;
+    PakTestWriter(engine_pak).Write(pak);
+    const auto project = temp_dir_ / "project";
+    const auto project_source
+      = WriteGeneration(project, { .material = MaterialKey() });
+    TestEventLoop loop;
+    co::ThreadPool pool(loop, 2);
+    AssetLoaderConfig config {};
+    config.thread_pool = observer_ptr { &pool };
+    config.path_finder.emplace(PathFinderConfig::Create()
+                                 .WithEngineContentPakPath(engine_pak)
+                                 .BuildShared(),
+      temp_dir_);
+    AssetLoader loader(engine::internal::EngineTagFactory::Get(), config);
+    const auto mounted_keys = [&loader] -> std::vector<data::SourceKey> {
+      auto keys = std::vector<data::SourceKey> {};
+      for (const auto& source : loader.EnumerateMountedSources()) {
+        keys.push_back(source.source_key);
+      }
+      return keys;
+    };
+    const auto at_construction = mounted_keys();
+
+    // Act
+    loader.AddLooseCookedRoot(project);
+    loader.ClearMounts();
+    const auto after_clear = mounted_keys();
+    auto prepared
+      = co::Run(loop, loader.PrepareMountsAsync(LooseRoots({ project })));
+    auto retirement = loader.CommitPreparedMounts(std::move(prepared));
+    retirement.Finish();
+    const auto after_replacement = mounted_keys();
+
+    // Assert
+    EXPECT_THAT(at_construction, ::testing::ElementsAre(engine_source));
+    EXPECT_THAT(after_clear, ::testing::ElementsAre(engine_source));
+    EXPECT_THAT(after_replacement,
+      ::testing::UnorderedElementsAre(engine_source, project_source));
+  }
+
+  //! A prepared mount set mounts pak files in their place above the engine
+  //! content pak, and applies the pak layering rules before anything changes.
+  NOLINT_TEST_F(AssetLoaderBasicTest, PreparedMountSetMountsPakFiles)
+  {
+    // Arrange
+    const auto engine_pak = temp_dir_ / "engine.pak";
+    auto engine_config = PakTestWriter::Config {};
+    engine_config.source_key = data::SourceKey { Uuid::Generate() };
+    PakTestWriter(engine_pak).Write(engine_config);
+    const auto engine = PakFile(engine_pak).Catalog();
+    const auto content_pak = temp_dir_ / "content.pak";
+    auto content_config = PakTestWriter::Config {};
+    content_config.source_key = data::SourceKey { Uuid::Generate() };
+    content_config.dependencies = { {
+      .source_key = engine.source_key,
+      .content_version = engine.content_version,
+      .catalog_digest = engine.catalog_digest,
+    } };
+    PakTestWriter(content_pak).Write(content_config);
+    const auto project = temp_dir_ / "project";
+    const auto project_source
+      = WriteGeneration(project, { .material = MaterialKey() });
+    TestEventLoop loop;
+    co::ThreadPool pool(loop, 2);
+    AssetLoaderConfig with_engine_config {};
+    with_engine_config.thread_pool = observer_ptr { &pool };
+    with_engine_config.path_finder.emplace(
+      PathFinderConfig::Create()
+        .WithEngineContentPakPath(engine_pak)
+        .BuildShared(),
+      temp_dir_);
+    AssetLoader with_engine(
+      engine::internal::EngineTagFactory::Get(), with_engine_config);
+    AssetLoaderConfig without_engine_config {};
+    without_engine_config.thread_pool = observer_ptr { &pool };
+    AssetLoader without_engine(
+      engine::internal::EngineTagFactory::Get(), without_engine_config);
+    const auto mounts = std::vector<ContentMount> {
+      { .kind = ContentMount::Kind::kPakFile, .path = content_pak },
+      { .kind = ContentMount::Kind::kLooseCookedRoot, .path = project },
+    };
+
+    // Act
+    auto prepared = co::Run(loop, with_engine.PrepareMountsAsync(mounts));
+    auto retirement = with_engine.CommitPreparedMounts(std::move(prepared));
+    retirement.Finish();
+    auto keys = std::vector<data::SourceKey> {};
+    for (const auto& source : with_engine.EnumerateMountedSources()) {
+      keys.push_back(source.source_key);
+    }
+
+    // Assert
+    EXPECT_THAT(keys,
+      ::testing::UnorderedElementsAre(
+        engine_config.source_key, content_config.source_key, project_source));
+    NOLINT_EXPECT_THROW(static_cast<void>(co::Run(
+                          loop, without_engine.PrepareMountsAsync(mounts))),
+      std::invalid_argument);
+  }
+
+  //! A pak built against the engine content pak mounts above other layers that
+  //! sit on the engine pak, and refuses to mount without it.
+  NOLINT_TEST_F(AssetLoaderBasicTest, DependentPakRequiresItsDependencyBelow)
+  {
+    // Arrange
+    const auto engine_pak = temp_dir_ / "engine.pak";
+    auto engine_config = PakTestWriter::Config {};
+    engine_config.source_key = data::SourceKey { Uuid::Generate() };
+    PakTestWriter(engine_pak).Write(engine_config);
+    const auto engine = PakFile(engine_pak).Catalog();
+    const auto content_pak = temp_dir_ / "content.pak";
+    auto content_config = PakTestWriter::Config {};
+    content_config.source_key = data::SourceKey { Uuid::Generate() };
+    content_config.dependencies = { {
+      .source_key = engine.source_key,
+      .content_version = engine.content_version,
+      .catalog_digest = engine.catalog_digest,
+    } };
+    PakTestWriter(content_pak).Write(content_config);
+    const auto project = temp_dir_ / "project";
+    static_cast<void>(WriteGeneration(project, { .material = MaterialKey() }));
+    AssetLoaderConfig config {};
+    config.path_finder.emplace(PathFinderConfig::Create()
+                                 .WithEngineContentPakPath(engine_pak)
+                                 .BuildShared(),
+      temp_dir_);
+    AssetLoader with_engine(engine::internal::EngineTagFactory::Get(), config);
+    AssetLoader without_engine(engine::internal::EngineTagFactory::Get());
+    with_engine.AddLooseCookedRoot(project);
+
+    // Act and Assert
+    NOLINT_EXPECT_NO_THROW(with_engine.AddPakFile(content_pak));
+    NOLINT_EXPECT_THROW(
+      without_engine.AddPakFile(content_pak), std::invalid_argument);
   }
 
   NOLINT_TEST_F(AssetLoaderBasicTest, SidecarDiscoveryUsesCapturedLayerView)

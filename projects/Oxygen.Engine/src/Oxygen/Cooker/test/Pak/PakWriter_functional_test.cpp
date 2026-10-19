@@ -35,6 +35,7 @@
 #include <Oxygen/Data/PakFormatSerioLoaders.h> // IWYU pragma: keep
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_physics.h>
+#include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
@@ -343,6 +344,77 @@ NOLINT_TEST_F(PakWriterTest, DeterministicModeProducesBitExactOutputs)
   EXPECT_EQ(first.pak_crc32, second.pak_crc32);
   EXPECT_EQ(first.file_size, second.file_size);
   EXPECT_EQ(first_bytes, second_bytes);
+}
+
+//! A loose texture descriptor's virtual path reaches the pak's browse index and
+//! resolves to the texture's index in the pak.
+NOLINT_TEST_F(PakWriterTest, TextureDescriptorPathsResolveInThePak)
+{
+  using data::CookedSource;
+  using data::CookedSourceKind;
+  using pak::PakPlanBuilder;
+  using pak::PakWriter;
+
+  // Arrange
+  const auto source = Root() / "textures_loose";
+  const auto output_path = Root() / "textures.pak";
+  constexpr auto kTextureBytes = uint32_t { 4U };
+  auto table = std::array<core::TextureResourceDesc, 3> {};
+  for (uint32_t index = 1U; index < table.size(); ++index) {
+    auto& record = table.at(index);
+    record.data_offset = (index - 1U) * kTextureBytes;
+    record.size_bytes = kTextureBytes;
+    record.width = index;
+    record.height = 1U;
+    record.depth = 1U;
+    record.array_layers = 1U;
+    record.mip_levels = 1U;
+  }
+  const auto table_bytes = std::as_bytes(std::span { table });
+  const auto sky = data::EncodeTextureResourceDescriptor({
+    .index = core::ResourceIndexT { 2U },
+    .descriptor = table.at(2),
+  });
+  const auto files = std::array {
+    paktest::FileSpec {
+      .kind = data::loose_cooked::FileKind::kTexturesTable,
+      .relpath = "Resources/textures.table",
+      .payload = { table_bytes.begin(), table_bytes.end() },
+    },
+    paktest::FileSpec {
+      .kind = data::loose_cooked::FileKind::kTexturesData,
+      .relpath = "Resources/textures.data",
+      .payload = MakePatternBytes(0x11U, 2U * kTextureBytes),
+    },
+    paktest::FileSpec {
+      .kind = data::loose_cooked::FileKind::kTextureDescriptor,
+      .relpath = "Textures/Sky.otex",
+      .payload = sky,
+      .virtual_path = "/Content/Textures/Sky.otex",
+    },
+  };
+  ASSERT_TRUE(paktest::WriteLooseIndex(source, {},
+    std::span<const paktest::FileSpec>(files.data(), files.size()), 0x72U));
+  const auto request = paktest::MakeFullRequest(output_path,
+    { .sources = { CookedSource {
+        .kind = CookedSourceKind::kLooseCooked, .path = source, }, },
+      .embed_browse_index = true, });
+
+  // Act
+  const auto plan_result = PakPlanBuilder {}.Build(request);
+  ASSERT_FALSE(HasError(plan_result.diagnostics));
+  ASSERT_HAS_VALUE(plan_result.plan);
+  const auto write_result = PakWriter {}.Write(request, *plan_result.plan);
+  ASSERT_FALSE(HasError(write_result.diagnostics));
+  const auto pak_file = content::PakFile(output_path);
+
+  // Assert
+  EXPECT_THAT(pak_file.BrowseTextures(), ::testing::SizeIs(1U));
+  EXPECT_EQ(
+    pak_file.ResolveTextureIndexByVirtualPath("/Content/Textures/Sky.otex"),
+    core::ResourceIndexT { 2U });
+  EXPECT_FALSE(pak_file.ResolveTextureIndexByVirtualPath(
+    "/Content/Textures/Missing.otex"));
 }
 
 } // namespace

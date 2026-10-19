@@ -6,6 +6,8 @@
 
 #pragma once
 
+#include <cstdint>
+#include <filesystem>
 #include <memory>
 
 #include <Oxygen/Base/Macros.h>
@@ -17,6 +19,20 @@ class AssetLoader;
 namespace internal {
   struct MountReplacementState;
 }
+
+//! One content source of a mount set: a loose cooked root or a pak file.
+struct ContentMount {
+  enum class Kind : std::uint8_t {
+    kLooseCookedRoot,
+    kPakFile,
+  };
+
+  Kind kind { Kind::kLooseCookedRoot };
+  //! The root directory or the pak file.
+  std::filesystem::path path;
+
+  auto operator==(const ContentMount&) const -> bool = default;
+};
 
 //! A validated candidate for one loader's current source context.
 class PreparedMountSet final {

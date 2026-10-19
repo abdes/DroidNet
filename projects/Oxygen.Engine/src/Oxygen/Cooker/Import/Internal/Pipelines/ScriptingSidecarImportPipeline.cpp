@@ -986,13 +986,12 @@ namespace {
 
       const auto object_path
         = "bindings[" + std::to_string(row_index) + "].script_virtual_path";
-      const auto read = co_await reader.ReadFile(
-        mounted->context->cooked_root / mounted->entry->descriptor_relpath);
+      const auto read = co_await detail::ReadCookedDescriptor(
+        *mounted->context, *mounted->entry, reader);
       if (!read.has_value()) {
         AddDiagnosticAtPath(session, request, ImportSeverity::kError,
           "script.sidecar.script_declarations_unreadable",
-          "Failed to read the script descriptor: " + read.error().ToString(),
-          object_path);
+          "Failed to read the script descriptor", object_path);
         continue;
       }
       auto decoded = DecodeScriptDeclarations(read.value());
@@ -1521,7 +1520,7 @@ namespace {
 
     for (const auto& context : cooked_contexts) {
       try {
-        resolver.AddLooseCookedRoot(context.cooked_root);
+        detail::MountCookedInspectionContext(resolver, context);
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "script.sidecar.resolver_mount_failed",

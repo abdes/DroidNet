@@ -150,6 +150,13 @@ public:
   [[nodiscard]] virtual auto ResolveVirtualPath(
     const data::AssetKey& key) const noexcept -> std::optional<std::string> = 0;
 
+  //! Texture table index of the texture descriptor recorded under
+  //! `virtual_path`, or nullopt when this source records none. A recorded
+  //! descriptor that is malformed or disagrees with the table throws.
+  [[nodiscard]] virtual auto FindTextureIndexByVirtualPath(
+    std::string_view virtual_path) const
+    -> std::optional<data::pak::core::ResourceIndexT> = 0;
+
 private:
   mutable std::once_flag physics_index_once_ {};
   mutable std::unordered_map<data::AssetKey, data::pak::core::ResourceIndexT>

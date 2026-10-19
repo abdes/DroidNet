@@ -39,8 +39,8 @@ auto LooseCookedIndexImpl::GetFileInventory() const
   -> std::vector<lc::FileIntegrity>
 {
   std::vector<lc::FileIntegrity> files;
-  files.reserve(
-    key_to_asset_info_.size() + kind_to_file_.size() + auxiliary_files_.size());
+  files.reserve(key_to_asset_info_.size() + kind_to_file_.size()
+    + auxiliary_files_.size() + texture_descriptors_.size());
   for (const auto& [key, asset] : key_to_asset_info_) {
     static_cast<void>(key);
     files.push_back({
@@ -50,15 +50,19 @@ auto LooseCookedIndexImpl::GetFileInventory() const
       .size = asset.descriptor_size,
       .sha256 = asset.descriptor_sha256,
       .kind = std::nullopt,
+      .virtual_path = {},
     });
   }
+  const auto string_at = [this](const uint32_t offset) -> std::string {
+    return std::string(std::string_view(string_storage_).substr(offset).data());
+  };
   const auto append_file = [&](const auto kind, const FileInfo& file) -> auto {
     files.push_back({
-      .relative_path = std::string(
-        std::string_view(string_storage_).substr(file.relpath_offset).data()),
+      .relative_path = string_at(file.relpath_offset),
       .size = file.size,
       .sha256 = file.sha256,
       .kind = kind,
+      .virtual_path = string_at(file.virtual_path_offset),
     });
   };
   for (const auto& [kind, file] : kind_to_file_) {
@@ -66,6 +70,9 @@ auto LooseCookedIndexImpl::GetFileInventory() const
   }
   for (const auto& file : auxiliary_files_) {
     append_file(data::loose_cooked::FileKind::kAuxiliary, file);
+  }
+  for (const auto& file : texture_descriptors_) {
+    append_file(data::loose_cooked::FileKind::kTextureDescriptor, file);
   }
   std::ranges::sort(files, {}, &lc::FileIntegrity::relative_path);
   return files;

@@ -6,10 +6,12 @@
 
 #pragma once
 
+#include <filesystem>
 #include <memory>
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportManifest.h>
@@ -51,6 +53,7 @@ private:
     std::string root_path;
     std::string captured_inputs_path;
     std::string report_path;
+    std::vector<std::filesystem::path> cooked_context_roots;
     uint32_t max_in_flight_jobs = 0U;
     bool max_in_flight_jobs_set = false;
     bool dry_run = false;

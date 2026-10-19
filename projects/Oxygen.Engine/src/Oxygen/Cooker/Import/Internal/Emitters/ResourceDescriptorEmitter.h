@@ -43,6 +43,8 @@ public:
   struct Record final {
     std::string relpath;
     uint64_t size_bytes = 0;
+    //! Virtual path of a texture descriptor; empty for buffer descriptors.
+    std::string virtual_path;
   };
 
   OXGN_COOK_API ResourceDescriptorEmitter(IAsyncFileWriter& file_writer,
@@ -88,7 +90,7 @@ private:
   IAsyncFileWriter& file_writer_;
   LooseCookedLayout layout_;
   std::filesystem::path cooked_root_;
-  std::unordered_map<std::string, uint64_t> record_sizes_;
+  std::unordered_map<std::string, Record> records_;
   std::atomic<size_t> pending_count_ { 0 };
   std::atomic<size_t> error_count_ { 0 };
   std::optional<FileErrorInfo> first_error_ {}; // Import-thread callbacks.

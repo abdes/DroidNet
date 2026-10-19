@@ -14,14 +14,11 @@
 
 namespace {
 
-using oxygen::player::CanRemount;
 using oxygen::player::LaunchFileError;
 using oxygen::player::LaunchMount;
 using oxygen::player::LaunchWindowMode;
 using oxygen::player::ParseLaunchFile;
-using oxygen::player::PlanRemount;
 using oxygen::player::ReadLaunchFile;
-using oxygen::player::RemountPlan;
 
 class LaunchFileTest : public testing::Test {
 protected:
@@ -91,7 +88,6 @@ NOLINT_TEST_F(LaunchFileTest, ReadsEveryFieldAndResolvesRelativePaths)
   const auto& control = launch.control.value();
   EXPECT_EQ(control.port, 4711U);
   EXPECT_TRUE(control.exit_when_owner_leaves);
-  EXPECT_FALSE(CanRemount(launch));
 }
 
 NOLINT_TEST_F(LaunchFileTest, OptionalFieldsTakeTheirDefaults)
@@ -108,7 +104,6 @@ NOLINT_TEST_F(LaunchFileTest, OptionalFieldsTakeTheirDefaults)
   EXPECT_TRUE(launch.window.vsync);
   EXPECT_EQ(launch.window.frame_cap, 0U);
   EXPECT_FALSE(launch.control.has_value());
-  EXPECT_TRUE(CanRemount(launch));
 }
 
 NOLINT_TEST_F(LaunchFileTest, ReadLaunchFileResolvesAgainstItsFolder)
@@ -175,50 +170,6 @@ NOLINT_TEST_F(LaunchFileTest, UnreadableFileIsReported)
 {
   EXPECT_THROW(
     static_cast<void>(ReadLaunchFile(root_ / "missing.json")), LaunchFileError);
-}
-
-NOLINT_TEST_F(LaunchFileTest, PlayRemountsLooseRootsTheLaunchFileNamesNow)
-{
-  std::filesystem::create_directories(root_ / "republished");
-  const auto mounted = Parse(R"({
-    "version": 2, "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
-  })");
-  const auto current = Parse(R"({
-    "version": 2, "mounts": ["republished"], "scene": "/Scenes/B.oscene"
-  })");
-
-  EXPECT_EQ(PlanRemount(mounted, current), RemountPlan::kRemount);
-  EXPECT_EQ(PlanRemount(mounted, mounted), RemountPlan::kRemount);
-}
-
-NOLINT_TEST_F(LaunchFileTest, PlayReusesUnchangedPakMounts)
-{
-  const auto mounted = Parse(R"({
-    "version": 2, "mounts": ["base.pak", "cooked"], "scene": "/Scenes/A.oscene"
-  })");
-  const auto current = Parse(R"({
-    "version": 2, "mounts": ["base.pak", "cooked"], "scene": "/Scenes/B.oscene"
-  })");
-
-  EXPECT_EQ(PlanRemount(mounted, current), RemountPlan::kReuse);
-}
-
-NOLINT_TEST_F(LaunchFileTest, ChangedPakMountsNeedANewPlayer)
-{
-  std::ofstream(root_ / "patch.pak") << "pak";
-  const auto loose = Parse(R"({
-    "version": 2, "mounts": ["cooked"], "scene": "/Scenes/A.oscene"
-  })");
-  const auto pak = Parse(R"({
-    "version": 2, "mounts": ["base.pak"], "scene": "/Scenes/A.oscene"
-  })");
-  const auto patched = Parse(R"({
-    "version": 2, "mounts": ["base.pak", "patch.pak"], "scene": "/Scenes/A.oscene"
-  })");
-
-  EXPECT_EQ(PlanRemount(pak, patched), RemountPlan::kRelaunch);
-  EXPECT_EQ(PlanRemount(loose, pak), RemountPlan::kRelaunch);
-  EXPECT_EQ(PlanRemount(pak, loose), RemountPlan::kRelaunch);
 }
 
 } // namespace

@@ -14,6 +14,7 @@
 #include <Oxygen/Base/Span.h>
 #include <Oxygen/Content/Internal/ContentFileReader.h>
 #include <Oxygen/Content/Internal/IContentSource.h>
+#include <Oxygen/Content/api_export.h>
 #include <Oxygen/Serio/FileLock.h>
 
 namespace oxygen::content::internal {
@@ -170,6 +171,10 @@ public:
     return std::make_unique<ContentFileReader>(
       cooked_root_ / std::filesystem::path(*rel));
   }
+
+  OXGN_CNTT_NDAPI auto FindTextureIndexByVirtualPath(
+    std::string_view virtual_path) const
+    -> std::optional<data::pak::core::ResourceIndexT> override;
 
   [[nodiscard]] auto ReadAssetReferenceMetadata(const data::AssetKey& key) const
     -> data::AssetReferences override

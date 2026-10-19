@@ -64,6 +64,8 @@ struct FileSpec final {
   lc::FileKind kind = lc::FileKind::kUnknown;
   std::string relpath;
   std::vector<std::byte> payload;
+  //! Virtual path of a texture descriptor; empty for every other file.
+  std::string virtual_path;
 };
 
 //! Per-test unique temp directory; thin naming adapter over `TempDirTest`.
@@ -187,7 +189,7 @@ inline auto EnableDescriptorHash(std::vector<std::byte>& bytes) -> void
   auto writer = content::testing::LooseCookedTestWriter(root);
   writer.SetSourceKey(LooseSourceKey(guid_seed));
   for (const auto& file : files) {
-    writer.WriteFile(file.kind, file.relpath, file.payload);
+    writer.WriteFile(file.kind, file.relpath, file.payload, file.virtual_path);
   }
   for (const auto& asset : assets) {
     writer.WriteAssetDescriptor(asset.key, asset.asset_type, asset.virtual_path,

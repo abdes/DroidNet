@@ -14,6 +14,8 @@
 #include <string_view>
 #include <vector>
 
+#include <Oxygen/Content/ContentMounts.h>
+
 namespace oxygen::player {
 
 //! A launch file that cannot be read, is not valid JSON, breaks the schema or
@@ -23,19 +25,8 @@ public:
   using std::runtime_error::runtime_error;
 };
 
-//! One cooked content source.
-struct LaunchMount {
-  enum class Kind : std::uint8_t {
-    kLooseCookedRoot,
-    kPakFile,
-  };
-
-  Kind kind { Kind::kLooseCookedRoot };
-  //! Absolute.
-  std::filesystem::path path;
-
-  auto operator==(const LaunchMount&) const -> bool = default;
-};
+//! One cooked content source: a loose cooked root or a pak file.
+using LaunchMount = content::ContentMount;
 
 //! How the player window shows.
 enum class LaunchWindowMode : std::uint8_t {
@@ -94,25 +85,5 @@ struct PlayerLaunch {
 */
 [[nodiscard]] auto ReadLaunchFile(const std::filesystem::path& path)
   -> PlayerLaunch;
-
-//! Whether the loader can replace these mounts in place between sessions:
-//! true when every mount is a loose cooked root.
-[[nodiscard]] auto CanRemount(const PlayerLaunch& launch) noexcept -> bool;
-
-//! How a Play takes the mounts its launch file names now.
-enum class RemountPlan : std::uint8_t {
-  //! Replace the loose cooked roots with the ones named now.
-  kRemount,
-  //! Keep the mounts: PAK files are immutable and the list is unchanged.
-  kReuse,
-  //! The PAK mounts changed, which only a new player process can apply.
-  kRelaunch,
-};
-
-//! Decides how a Play moves from the `mounted` content to the `current`
-//! launch file's mounts. A launcher rewrites the launch file when it
-//! publishes content to new roots, so every Play reads it again.
-[[nodiscard]] auto PlanRemount(const PlayerLaunch& mounted,
-  const PlayerLaunch& current) noexcept -> RemountPlan;
 
 } // namespace oxygen::player

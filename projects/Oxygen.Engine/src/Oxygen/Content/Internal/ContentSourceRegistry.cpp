@@ -101,6 +101,10 @@ auto ContentSourceRegistry::ValidateMount(const IContentSource& source,
         !valid) {
         throw std::invalid_argument(valid.error());
       }
+      if (const auto valid = catalog->ValidateDependencies(lower_layers);
+        !valid) {
+        throw std::invalid_argument(valid.error());
+      }
       lower_layers.push_back({
         .source_key = catalog->source_key,
         .content_version = catalog->content_version,
@@ -266,11 +270,18 @@ auto ContentSourceRegistry::PrepareReplacement(
       throw std::invalid_argument(
         "A replacement mount set requires unique sources");
     }
-    if (item.generation) {
+    switch (item.kind) {
+    case PreparedSourceKind::kGeneration:
       static_cast<void>(candidate.MountGeneration(item.source, std::nullopt));
-    } else {
+      break;
+    case PreparedSourceKind::kPak:
+      static_cast<void>(
+        candidate.MountPak(item.pak_path, item.source, MountMode::kAppend));
+      break;
+    case PreparedSourceKind::kLoose:
       static_cast<void>(
         candidate.MountLoose(item.source->DebugName(), item.source));
+      break;
     }
   }
   return candidate;

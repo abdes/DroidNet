@@ -941,6 +941,20 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                   .StoreTo(&options_.report_path)
                   .Build();
 
+  auto cooked_context_root
+    = Option::WithKey("cooked-context-root")
+        .About("Add a cooked source (loose cooked root or pak file) that "
+               "resolves references for every job, beneath the manifest's "
+               "own context roots; repeat for several, lowest priority first")
+        .Long("cooked-context-root")
+        .WithValue<std::filesystem::path>()
+        .UserFriendlyName("PATH")
+        .Repeatable()
+        .CallOnEachValue([this](const std::filesystem::path& path) -> void {
+          options_.cooked_context_roots.push_back(path);
+        })
+        .Build();
+
   auto max_in_flight = Option::WithKey("max-in-flight-jobs")
                          .About("Maximum number of in-flight jobs")
                          .Long("max-in-flight-jobs")
@@ -958,6 +972,7 @@ auto BatchCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .WithOption(std::move(captured_inputs))
     .WithOption(std::move(dry_run))
     .WithOption(std::move(report))
+    .WithOption(std::move(cooked_context_root))
     .WithOption(std::move(max_in_flight));
 }
 
@@ -1057,6 +1072,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   }
 
   // 3. Prepare Jobs
+  manifest->AddBaseCookedContextRoots(options_.cooked_context_roots);
   if (service_config_override_ != nullptr && concurrency_override_set_) {
     manifest->concurrency = service_config_override_->concurrency;
   }

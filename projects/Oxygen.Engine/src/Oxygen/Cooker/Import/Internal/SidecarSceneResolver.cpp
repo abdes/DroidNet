@@ -270,7 +270,7 @@ auto LoadCookedInspectionContext(const std::filesystem::path& cooked_root,
 {
   try {
     out_context.cooked_root = cooked_root;
-    out_context.inspection.LoadFromRoot(cooked_root);
+    out_context.inspection.Load(cooked_root);
     return true;
   } catch (const std::exception& ex) {
     AddDiagnostic(session, request, ImportSeverity::kError,
@@ -278,6 +278,35 @@ auto LoadCookedInspectionContext(const std::filesystem::path& cooked_root,
       "Failed loading cooked index: " + std::string(ex.what()));
     return false;
   }
+}
+
+auto MountCookedInspectionContext(content::VirtualPathResolver& resolver,
+  const CookedInspectionContext& context) -> void
+{
+  if (context.inspection.IsPak()) {
+    resolver.AddPakFile(context.cooked_root);
+  } else {
+    resolver.AddLooseCookedRoot(context.cooked_root);
+  }
+}
+
+auto ReadCookedDescriptor(const CookedInspectionContext& context,
+  const lc::AssetEntry& asset, IAsyncFileReader& reader)
+  -> co::Co<std::optional<std::vector<std::byte>>>
+{
+  if (context.inspection.IsPak()) {
+    try {
+      co_return context.inspection.ReadAssetDescriptor(asset.key);
+    } catch (const std::exception&) {
+      co_return std::nullopt;
+    }
+  }
+  auto read = co_await reader.ReadFile(
+    context.cooked_root / std::filesystem::path(asset.descriptor_relpath));
+  if (!read) {
+    co_return std::nullopt;
+  }
+  co_return std::move(read.value());
 }
 
 auto ResolveSceneInspectionContextByKey(

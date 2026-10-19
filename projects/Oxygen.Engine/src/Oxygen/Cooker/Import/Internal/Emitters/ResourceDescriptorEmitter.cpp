@@ -15,7 +15,6 @@
 #include <stdexcept>
 #include <string>
 #include <string_view>
-#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -27,40 +26,10 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/OxCo/Co.h>
 
 namespace oxygen::content::import {
-
-namespace {
-
-  constexpr uint16_t kSidecarDescriptorVersion = 1;
-
-  template <typename DescT, char C0, char C1, char C2, char C3>
-#pragma pack(push, 1)
-  struct SidecarDescriptorFile final {
-    char magic[4] = { C0, C1, C2, C3 };
-    uint16_t version = kSidecarDescriptorVersion;
-    uint16_t reserved = 0;
-    data::pak::core::ResourceIndexT resource_index
-      = data::pak::core::kNoResourceIndex;
-    DescT descriptor {};
-  };
-#pragma pack(pop)
-
-  using TextureSidecarFile
-    = SidecarDescriptorFile<data::pak::core::TextureResourceDesc, 'O', 'T', 'E',
-      'X'>;
-
-  static_assert(std::is_trivially_copyable_v<TextureSidecarFile>);
-
-  template <typename T>
-  [[nodiscard]] auto SerializePod(const T& pod) -> std::vector<std::byte>
-  {
-    const auto bytes = std::as_bytes(std::span<const T, 1>(&pod, 1));
-    return std::vector<std::byte>(bytes.begin(), bytes.end());
-  }
-
-} // namespace
 
 ResourceDescriptorEmitter::ResourceDescriptorEmitter(
   IAsyncFileWriter& file_writer, const LooseCookedLayout& layout,
@@ -94,12 +63,17 @@ auto ResourceDescriptorEmitter::EmitTextureAtRelPath(
       "texture descriptor path must remain within its cooked root");
   }
 
-  TextureSidecarFile file {};
-  file.resource_index = resource_index;
-  file.descriptor = descriptor;
-
-  auto bytes = std::make_shared<std::vector<std::byte>>(SerializePod(file));
-  record_sizes_.insert_or_assign(std::string(relpath), bytes->size());
+  auto bytes = std::make_shared<std::vector<std::byte>>(
+    data::EncodeTextureResourceDescriptor({
+      .index = resource_index,
+      .descriptor = descriptor,
+    }));
+  records_.insert_or_assign(std::string(relpath),
+    Record {
+      .relpath = std::string(relpath),
+      .size_bytes = bytes->size(),
+      .virtual_path = layout_.DescriptorVirtualPath(relpath),
+    });
   QueueWrite(std::string(relpath), std::move(bytes));
   return std::string(relpath);
 }
@@ -114,7 +88,12 @@ auto ResourceDescriptorEmitter::EmitBuffer(std::string_view name_hint,
   auto bytes = std::make_shared<std::vector<std::byte>>(
     internal::SerializeBufferDescriptorSidecar(
       resource_index, descriptor, views));
-  record_sizes_[relpath] = bytes->size();
+  records_.insert_or_assign(relpath,
+    Record {
+      .relpath = relpath,
+      .size_bytes = bytes->size(),
+      .virtual_path = {},
+    });
   QueueWrite(relpath, std::move(bytes));
   return relpath;
 }
@@ -133,7 +112,12 @@ auto ResourceDescriptorEmitter::EmitBufferAtRelPath(
   auto bytes = std::make_shared<std::vector<std::byte>>(
     internal::SerializeBufferDescriptorSidecar(
       resource_index, descriptor, views));
-  record_sizes_[path] = bytes->size();
+  records_.insert_or_assign(path,
+    Record {
+      .relpath = path,
+      .size_bytes = bytes->size(),
+      .virtual_path = {},
+    });
   QueueWrite(std::move(path), std::move(bytes));
   return std::string(relpath);
 }
@@ -176,12 +160,10 @@ auto ResourceDescriptorEmitter::OnWriteComplete(
 auto ResourceDescriptorEmitter::Records() const -> std::vector<Record>
 {
   auto records = std::vector<Record> {};
-  records.reserve(record_sizes_.size());
-  for (const auto& [relpath, size] : record_sizes_) {
-    records.push_back(Record {
-      .relpath = relpath,
-      .size_bytes = size,
-    });
+  records.reserve(records_.size());
+  for (const auto& [relpath, record] : records_) {
+    static_cast<void>(relpath);
+    records.push_back(record);
   }
   std::ranges::sort(records, [](const Record& lhs, const Record& rhs) -> bool {
     return lhs.relpath < rhs.relpath;

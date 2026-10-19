@@ -31,7 +31,7 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MaterialSlotInventory.h>
-#include <Oxygen/Serio/FileStream.h>
+#include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
 namespace oxygen::content::inspection {
@@ -40,7 +40,7 @@ auto BuildGeometryMetadataCommand(GeometryMetadataOptions& options)
   -> std::shared_ptr<clap::Command>
 {
   auto root = clap::Option::Positional("cooked_root")
-                .About("Loose cooked root directory")
+                .About("Loose cooked root directory or pak file")
                 .Required()
                 .WithValue<std::string>()
                 .StoreTo(&options.cooked_root)
@@ -77,13 +77,17 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
       throw std::runtime_error(
         "Geometry metadata output must not replace its source index.");
     }
+    if (output_path == root) {
+      throw std::runtime_error(
+        "Geometry metadata output must not replace its source pak.");
+    }
     lc::Inspection inspection;
-    inspection.LoadFromRoot(root);
+    inspection.Load(root);
     auto geometries = json::array();
     for (const auto& entry : inspection.Assets()) {
       const auto relative
         = std::filesystem::path(entry.descriptor_relpath).lexically_normal();
-      if (output_path == root / relative) {
+      if (!inspection.IsPak() && output_path == root / relative) {
         throw std::runtime_error(
           "Geometry metadata output must not replace a source descriptor.");
       }
@@ -96,17 +100,18 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
         continue;
       }
       try {
-        if (relative.empty() || relative.has_root_path()
-          || *relative.begin() == "..") {
+        if (!inspection.IsPak()
+          && (relative.empty() || relative.has_root_path()
+            || *relative.begin() == "..")) {
           throw std::runtime_error(
             "Descriptor path must stay within its cooked root.");
         }
-        serio::FileStream<> stream(root / relative, std::ios::in);
-        const auto size = stream.Size();
-        if (!size || *size != entry.descriptor_size) {
+        const auto bytes = inspection.ReadAssetDescriptor(entry.key);
+        if (bytes.size() != entry.descriptor_size) {
           throw std::runtime_error(
             "Geometry descriptor size does not match its index entry.");
         }
+        serio::ReadOnlyMemoryStream stream(bytes);
         serio::Reader reader(stream);
         const LoaderContext context {
           .current_asset_key = entry.key,

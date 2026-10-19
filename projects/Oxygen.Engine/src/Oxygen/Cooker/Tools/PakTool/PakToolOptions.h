@@ -24,6 +24,8 @@ struct PakToolOutputOptions {
 struct PakToolRequestOptions {
   std::vector<data::CookedSource> sources;
   std::vector<std::filesystem::path> script_source_roots;
+  //! Paks this pak references without containing them, lowest first.
+  std::vector<std::filesystem::path> dependency_paks;
   std::filesystem::path output_pak;
   std::filesystem::path catalog_output;
   uint16_t content_version = 0;

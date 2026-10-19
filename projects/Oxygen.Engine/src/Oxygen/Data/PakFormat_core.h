@@ -232,8 +232,12 @@ static_assert(sizeof(AssetDirectoryEntry) == 64);
 
 //! Embedded browse index header.
 /*!
- Provides a mapping from canonical virtual paths to AssetKeys for editor and
- tooling use. The browse index is not required for runtime loading.
+ Provides a mapping from canonical virtual paths to AssetKeys and texture
+ resources for editor and tooling use. Runtime loading by key does not need it;
+ resolving a texture by its virtual path does.
+
+ The payload is the header, `entry_count` asset entries, `texture_entry_count`
+ texture entries and the string table.
 
  The browse index payload is stored as a contiguous blob at
  `browse_index_offset` with length `browse_index_size` and is referenced from
@@ -248,10 +252,11 @@ struct PakBrowseIndexHeader {
   char magic[8] = { 'O', 'X', 'P', 'A', 'K', 'B', 'I', 'X' };
   uint32_t version = kBrowseIndexVersion;
   uint32_t entry_count = 0;
+  uint32_t texture_entry_count = 0;
   StringTableSizeT string_table_size = 0;
 };
 #pragma pack(pop)
-static_assert(sizeof(PakBrowseIndexHeader) == 20);
+static_assert(sizeof(PakBrowseIndexHeader) == 24);
 
 //! Embedded browse index entry.
 /*!
@@ -266,6 +271,20 @@ struct PakBrowseIndexEntry {
 };
 #pragma pack(pop)
 static_assert(sizeof(PakBrowseIndexEntry) == 24);
+
+//! Embedded browse index texture entry.
+/*!
+ Maps the virtual path of a cooked texture descriptor (`.otex`) to its index
+ in the pak's texture table. Several paths may share one texture.
+*/
+#pragma pack(push, 1)
+struct PakBrowseIndexTextureEntry {
+  ResourceIndexT texture_index = kNoResourceIndex;
+  StringTableOffsetT virtual_path_offset = 0;
+  StringTableSizeT virtual_path_length = 0;
+};
+#pragma pack(pop)
+static_assert(sizeof(PakBrowseIndexTextureEntry) == 12);
 
 //! Buffer resource table entry
 /*!

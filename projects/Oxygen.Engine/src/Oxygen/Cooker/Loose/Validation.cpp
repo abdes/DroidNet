@@ -61,9 +61,7 @@ auto ValidateRoot(
   oxygen::content::lc::Inspection inspection;
   inspection.LoadFromRoot(cooked_root);
   for (const auto& file : inspection.Files()) {
-    if (file.kind == FileKind::kAuxiliary
-      && std::filesystem::path(file.relpath).extension()
-        == data::kTextureDescriptorExtension) {
+    if (file.kind == FileKind::kTextureDescriptor) {
       static_cast<void>(inspection.ReadTextureDescriptor(file.relpath));
     }
   }

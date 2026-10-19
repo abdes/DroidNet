@@ -775,10 +775,7 @@ auto PakWriter::Write(const PakBuildRequest& request, const PakPlan& plan) const
     const auto& browse = plan.BrowseIndex();
     if (MoveCursorToOffset(state, browse.offset, "browse_index")) {
       auto payload = std::vector<std::byte> {};
-      const auto stored = StoreBrowseIndexPayload(
-        std::span<const pak::PakBrowseEntryPlan>(
-          browse.entries.data(), browse.entries.size()),
-        payload);
+      const auto stored = StoreBrowseIndexPayload(browse, payload);
       if (!stored) {
         AddDiagnostic(state, PakDiagnosticSeverity::kError,
           "pak.write.browse_index_store_failed",

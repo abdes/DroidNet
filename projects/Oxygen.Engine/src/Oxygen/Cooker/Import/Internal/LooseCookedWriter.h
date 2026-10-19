@@ -47,6 +47,8 @@ struct LooseCookedFileRecord final {
 
   uint64_t size = 0;
   base::Sha256Digest sha256 {};
+  //! Virtual path of a texture descriptor; empty for every other file.
+  std::string virtual_path;
 };
 
 //! Collision decisions recorded while building/updating index records.
@@ -190,6 +192,18 @@ public:
   OXGN_COOK_API auto RegisterExternalFile(
     data::loose_cooked::FileKind kind, std::string_view relpath) -> void;
 
+  //! Register an externally-written texture descriptor under its virtual path.
+  /*!
+   Runtimes and tools resolve the texture by `virtual_path`; re-registering the
+   same descriptor path refreshes its record.
+
+   @param relpath Container-relative path of the `.otex` descriptor.
+   @param virtual_path Canonical virtual path of the descriptor.
+   @throw std::runtime_error if the file does not exist or a path is invalid.
+  */
+  OXGN_COOK_API auto RegisterExternalTextureDescriptor(
+    std::string_view relpath, std::string_view virtual_path) -> void;
+
   //! Register an externally-written asset descriptor.
   /*!
    This is used when an asset descriptor file was written by an external
@@ -231,12 +245,13 @@ public:
   OXGN_COOK_API auto RemoveAssetDescriptor(std::string_view virtual_path)
     -> void;
 
-  //! Remove an auxiliary file's record and the file itself.
+  //! Remove an auxiliary file or texture descriptor record and the file.
   /*!
-   @param relpath Container-relative path of the auxiliary file.
+   @param relpath Container-relative path of the file.
 
    @throw std::runtime_error from `Finish()` if the index has no auxiliary
-     file at this path, or if this writer also writes it.
+     file or texture descriptor at this path, or if this writer also writes
+     it.
   */
   OXGN_COOK_API auto RemoveAuxiliaryFile(std::string_view relpath) -> void;
 

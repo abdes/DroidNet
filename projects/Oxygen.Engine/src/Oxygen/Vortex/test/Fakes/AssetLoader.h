@@ -12,6 +12,7 @@
 #include <optional>
 #include <span>
 #include <stdexcept>
+#include <string_view>
 #include <unordered_map>
 #include <vector>
 
@@ -186,7 +187,7 @@ public:
 
   auto ClearMounts() -> void override { }
   auto WaitForPendingLoadsAsync() -> co::Co<> override { co_return; }
-  auto PrepareLooseCookedRootsAsync(std::vector<std::filesystem::path>)
+  auto PrepareMountsAsync(std::vector<content::ContentMount>)
     -> co::Co<content::PreparedMountSet> override
   {
     throw std::logic_error("Renderer test loader does not prepare disk mounts");
@@ -318,7 +319,7 @@ public:
   }
 
   [[nodiscard]] auto ResolveTextureResourceKey(
-    const content::TextureResourceLocator&)
+    std::string_view /*virtual_path*/)
     -> std::optional<content::ResourceKey> override
   {
     return std::nullopt;

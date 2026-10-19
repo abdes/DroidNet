@@ -13,7 +13,7 @@
 #include <utility>
 
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Content/TextureResourceLocator.h>
+#include <Oxygen/Content/TextureDescriptorPath.h>
 #include <Oxygen/Cooker/Import/IAsyncFileReader.h>
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>

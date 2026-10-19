@@ -44,15 +44,24 @@ struct PakCatalog final {
   std::array<uint8_t, 32> catalog_digest {};
   std::vector<PakCatalogEntry> entries;
   std::vector<AssetKey> deleted {};
+  //! Patch baseline: the exact layers this patch's deltas apply to.
   std::vector<PakCatalogBase> bases {};
+  //! Layers whose assets this pak references without containing them, such as
+  //! the engine content pak, lowest first.
+  std::vector<PakCatalogBase> dependencies {};
 
-  //! Canonical digest of physical entries, deletions and ordered base
-  //! identities.
+  //! Canonical digest of physical entries, deletions and ordered base and
+  //! dependency identities.
   OXGN_DATA_NDAPI auto ComputeDigest() const
     -> Result<base::Sha256Digest, std::string>;
   OXGN_DATA_NDAPI auto Validate() const -> Result<void, std::string>;
   //! Required bases must be the contiguous suffix below this layer.
   OXGN_DATA_NDAPI auto ValidateBaseLayers(
+    std::span<const PakCatalogBase> lower_layers) const
+    -> Result<void, std::string>;
+  //! Dependencies must be mounted below this layer in their declared order;
+  //! other layers may sit between them.
+  OXGN_DATA_NDAPI auto ValidateDependencies(
     std::span<const PakCatalogBase> lower_layers) const
     -> Result<void, std::string>;
   OXGN_DATA_NDAPI auto Encode() const

@@ -55,6 +55,9 @@ public:
     //! Asset keys copied into `catalog.deleted`.
     std::vector<data::AssetKey> deleted;
 
+    //! Layers copied into `catalog.dependencies`.
+    std::vector<data::PakCatalogBase> dependencies;
+
     //! Source identity of both the header and the catalog. Without it the
     //! catalog uses the default identity, whatever `header` holds.
     std::optional<data::SourceKey> source_key;
@@ -127,6 +130,7 @@ inline void PakTestWriter::Write(const Config& config)
     .entries = {},
     .deleted = config.deleted,
     .bases = {},
+    .dependencies = config.dependencies,
   };
   catalog.catalog_digest = catalog.ComputeDigest().value();
   const auto catalog_bytes = catalog.Encode().value();

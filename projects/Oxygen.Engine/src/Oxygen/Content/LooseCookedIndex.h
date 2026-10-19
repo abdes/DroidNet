@@ -36,6 +36,8 @@ struct FileIntegrity final {
   uint64_t size = 0;
   base::Sha256Digest sha256 {};
   std::optional<data::loose_cooked::FileKind> kind {};
+  //! Virtual path of a texture descriptor; empty for every other file.
+  std::string virtual_path;
 };
 
 enum class IntegrityFailure : uint8_t {

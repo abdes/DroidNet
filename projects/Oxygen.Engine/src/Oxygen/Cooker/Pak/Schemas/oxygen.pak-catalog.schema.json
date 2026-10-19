@@ -9,7 +9,7 @@
     },
     "schema_version": {
       "type": "integer",
-      "const": 2
+      "const": 3
     },
     "source_key": {
       "type": "string",
@@ -74,26 +74,17 @@
       }
     },
     "bases": {
+      "description": "Patch baseline: the exact layers the patch applies to, lowest first.",
       "type": "array",
       "items": {
-        "type": "object",
-        "additionalProperties": false,
-        "properties": {
-          "source_key": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
-          },
-          "content_version": {
-            "type": "integer",
-            "minimum": 0,
-            "maximum": 65535
-          },
-          "catalog_digest": {
-            "type": "string",
-            "pattern": "^[0-9a-f]{64}$"
-          }
-        },
-        "required": ["source_key", "content_version", "catalog_digest"]
+        "$ref": "#/definitions/layer"
+      }
+    },
+    "dependencies": {
+      "description": "Layers whose assets the pak references without containing them, lowest first.",
+      "type": "array",
+      "items": {
+        "$ref": "#/definitions/layer"
       }
     }
   },
@@ -104,6 +95,29 @@
     "catalog_digest",
     "entries",
     "deleted",
-    "bases"
-  ]
+    "bases",
+    "dependencies"
+  ],
+  "definitions": {
+    "layer": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "source_key": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-7[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$"
+        },
+        "content_version": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 65535
+        },
+        "catalog_digest": {
+          "type": "string",
+          "pattern": "^[0-9a-f]{64}$"
+        }
+      },
+      "required": ["source_key", "content_version", "catalog_digest"]
+    }
+  }
 }

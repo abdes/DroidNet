@@ -6,6 +6,7 @@
 
 #pragma once
 
+#include <cstddef>
 #include <filesystem>
 #include <optional>
 #include <span>
@@ -68,6 +69,17 @@ OXGN_COOK_API auto LoadCookedInspectionContext(
   const ImportRequest& request,
   const SidecarSceneResolverDiagnostics& diagnostics,
   CookedInspectionContext& out_context) -> bool;
+
+//! Mount a loaded context, a pak or a loose root, into a resolver.
+OXGN_COOK_API auto MountCookedInspectionContext(
+  content::VirtualPathResolver& resolver,
+  const CookedInspectionContext& context) -> void;
+
+//! Read the descriptor of an asset a loaded context lists; nullopt when it
+//! cannot be read.
+OXGN_COOK_NDAPI auto ReadCookedDescriptor(
+  const CookedInspectionContext& context, const lc::AssetEntry& asset,
+  IAsyncFileReader& reader) -> co::Co<std::optional<std::vector<std::byte>>>;
 
 //! Resolve the mounted context containing a given scene key (highest
 //! precedence).

@@ -88,7 +88,7 @@
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Content/ResourceTypeList.h>
-#include <Oxygen/Content/TextureResourceLocator.h>
+#include <Oxygen/Content/VirtualPath.h>
 #include <Oxygen/Content/api_export.h>
 #include <Oxygen/Core/AnyCache.h>
 #include <Oxygen/Core/CachePolicyContract.h>
@@ -429,6 +429,37 @@ AssetLoader::AssetLoader(
     content_cache_.OnEviction([this](const auto& retired) -> auto {
       RetireCacheEntry(retired, EvictionReason::kRefCountZero);
     }));
+
+  if (config.path_finder) {
+    const auto pak = config.path_finder->EngineContentPakPath();
+    if (std::filesystem::is_regular_file(base::ToNativePath(pak))) {
+      engine_content_pak_ = base::ToLogicalPath(
+        std::filesystem::weakly_canonical(base::ToNativePath(pak)));
+      MountEngineContentPak();
+    } else {
+      LOG_F(WARNING,
+        "ENGINE CONTENT PAK MISSING: '{}' does not exist. Every /Engine asset "
+        "(basic shapes, the default material, engine-internal assets) will "
+        "fail to load, and content referencing them will not render. Build "
+        "the 'oxygen-engine-content' target, install the SDK (it ships "
+        "share/oxygen/engine.pak), or point "
+        "PathFinderConfig::WithEngineContentPakPath at an existing engine.pak.",
+        pak.string());
+    }
+  }
+}
+
+auto AssetLoader::MountEngineContentPak() -> void
+{
+  if (!engine_content_pak_) {
+    return;
+  }
+  static_cast<void>(impl_->source_registry.MountPak(*engine_content_pak_,
+    std::make_shared<internal::PakFileSource>(
+      *engine_content_pak_, verify_content_hashes_),
+    internal::ContentSourceRegistry::MountMode::kAppend));
+  ++impl_->mount_revision;
+  LOG_F(INFO, "Mounted engine content pak: {}", engine_content_pak_->string());
 }
 
 auto AssetLoader::SetVerifyContentHashes(const bool enable) -> void
@@ -1157,8 +1188,8 @@ auto AssetLoader::RetireLooseCookedGeneration(const data::SourceKey source_key)
   return true;
 }
 
-auto AssetLoader::PrepareLooseCookedRootsAsync(
-  std::vector<std::filesystem::path> roots) -> co::Co<PreparedMountSet>
+auto AssetLoader::PrepareMountsAsync(std::vector<ContentMount> mounts)
+  -> co::Co<PreparedMountSet>
 {
   AssertOwningThread();
   if (!thread_pool_ || releases_->IsClosed()) {
@@ -1170,14 +1201,15 @@ auto AssetLoader::PrepareLooseCookedRootsAsync(
   state->lifetime = lifetime_token_;
   state->epoch = releases_;
   state->revision = impl_->mount_revision;
-  return PrepareMountSetAsync(
-    std::move(state), thread_pool_, std::move(roots), verify_content_hashes_);
+  return PrepareMountSetAsync(std::move(state), thread_pool_,
+    engine_content_pak_, std::move(mounts), verify_content_hashes_);
 }
 
 auto AssetLoader::PrepareMountSetAsync(
   std::unique_ptr<internal::MountReplacementState> state,
   const observer_ptr<co::ThreadPool> pool,
-  std::vector<std::filesystem::path> roots, const bool verify_content)
+  std::optional<std::filesystem::path> engine_content_pak,
+  std::vector<ContentMount> mounts, const bool verify_content)
   -> co::Co<PreparedMountSet>
 {
   if (state->lifetime.expired() || state->epoch->IsClosed()) {
@@ -1190,14 +1222,33 @@ auto AssetLoader::PrepareMountSetAsync(
     throw OperationCancelledException(
       "Content mounts changed before preparation began");
   }
-  auto sources = co_await pool->Run([paths = std::move(roots),
+  auto sources = co_await pool->Run([engine_pak = std::move(engine_content_pak),
+                                      requested = std::move(mounts),
                                       verify = verify_content]
     -> std::vector<internal::ContentSourceRegistry::PreparedSource> {
     std::vector<internal::ContentSourceRegistry::PreparedSource> prepared;
-    prepared.reserve(paths.size());
-    for (const auto& path : paths) {
+    prepared.reserve(requested.size() + 1);
+    // The engine content stays beneath every replacement set.
+    if (engine_pak) {
+      prepared.push_back({
+        .source
+        = std::make_shared<internal::PakFileSource>(*engine_pak, verify),
+        .kind = internal::ContentSourceRegistry::PreparedSourceKind::kPak,
+        .pak_path = *engine_pak,
+      });
+    }
+    for (const auto& mount : requested) {
       const auto normalized = base::ToLogicalPath(
-        std::filesystem::weakly_canonical(base::ToNativePath(path)));
+        std::filesystem::weakly_canonical(base::ToNativePath(mount.path)));
+      if (mount.kind == ContentMount::Kind::kPakFile) {
+        prepared.push_back({
+          .source
+          = std::make_shared<internal::PakFileSource>(normalized, verify),
+          .kind = internal::ContentSourceRegistry::PreparedSourceKind::kPak,
+          .pak_path = normalized,
+        });
+        continue;
+      }
       const auto marker
         = normalized / data::loose_cooked::kGenerationLeaseFileName;
       if (std::filesystem::exists(base::ToNativePath(marker))) {
@@ -1212,14 +1263,15 @@ auto AssetLoader::PrepareMountSetAsync(
             verify ? internal::LooseCookedSource::OpenMode::kVerifyContent
                    : internal::LooseCookedSource::OpenMode::kValidateMetadata,
             std::move(lease).value()),
-          .generation = true,
+          .kind
+          = internal::ContentSourceRegistry::PreparedSourceKind::kGeneration,
         });
       } else {
         prepared.push_back({
           .source = std::make_shared<internal::LooseCookedSource>(normalized,
             verify ? internal::LooseCookedSource::OpenMode::kVerifyContent
                    : internal::LooseCookedSource::OpenMode::kValidateMetadata),
-          .generation = false,
+          .kind = internal::ContentSourceRegistry::PreparedSourceKind::kLoose,
         });
       }
     }
@@ -1421,6 +1473,7 @@ auto AssetLoader::ClearMounts() -> void
   AssertOwningThread(); // Ensure this method is called on the owning thread
   impl_->source_registry.Clear();
   ++impl_->mount_revision;
+  MountEngineContentPak();
 
   // Clear the content cache to prevent stale assets from being returned
   // when switching content sources (e.g. scene swap).
@@ -2630,79 +2683,26 @@ auto AssetLoader::MakeTextureResourceKey(const data::SourceKey source_key,
   return InternResourceKey(*source_id, kTextureTypeIndex, resource_index);
 }
 
-auto AssetLoader::ResolveTextureResourceKey(
-  const TextureResourceLocator& locator) -> std::optional<ResourceKey>
+auto AssetLoader::ResolveTextureResourceKey(const std::string_view virtual_path)
+  -> std::optional<ResourceKey>
 {
   AssertOwningThread();
-  if (!locator.cooked_root.is_absolute()
-    || locator.descriptor_relative_path.empty()
-    || locator.descriptor_relative_path.has_root_path()
-    || std::ranges::any_of(locator.descriptor_relative_path,
-      [](const auto& part) -> bool { return part == ".."; })) {
-    throw std::invalid_argument(
-      "Texture locator requires an absolute cooked root and a contained "
-      "relative descriptor path");
+  if (const auto error = ValidateVirtualPath(virtual_path); error.has_value()) {
+    throw std::invalid_argument(std::string("Virtual path is not canonical: ")
+      + nostd::to_string(*error));
   }
-  const auto root = base::ToLogicalPath(
-    std::filesystem::weakly_canonical(base::ToNativePath(locator.cooked_root)));
+  // The newest mount wins, as it does for assets.
   const auto& sources = impl_->source_registry.Sources();
-  for (std::size_t i = 0; i < sources.size(); ++i) {
-    const auto& source = sources.at(i);
-    std::error_code error;
-    if (source->GetTypeId() != internal::LooseCookedSource::ClassTypeId()
-      || !std::filesystem::equivalent(base::ToNativePath(source->SourcePath()),
-        base::ToNativePath(root), error)
-      || error) {
+  for (auto i = sources.size(); i-- > 0;) {
+    const auto index
+      = sources.at(i)->FindTextureIndexByVirtualPath(virtual_path);
+    if (!index) {
       continue;
-    }
-    const auto path = FindTextureResourceDescriptorPath(
-      root / locator.descriptor_relative_path);
-    if (!path) {
-      return std::nullopt;
-    }
-    const auto relative = base::ToLogicalPath(
-      std::filesystem::weakly_canonical(base::ToNativePath(*path)))
-                            .lexically_relative(root);
-    if (relative.empty() || relative.has_root_path()
-      || *relative.begin() == "..") {
-      throw std::invalid_argument(
-        "Texture descriptor resolves outside its mounted source");
-    }
-    if (std::filesystem::file_size(base::ToNativePath(*path))
-      != data::kTextureResourceDescriptorSize) {
-      throw std::runtime_error(
-        "Texture descriptor does not use the current OTEX layout");
-    }
-    serio::FileStream<> stream(*path, std::ios::in);
-    serio::Reader reader(stream);
-    const auto bytes = reader.ReadBlob(data::kTextureResourceDescriptorSize);
-    if (!bytes) {
-      throw std::runtime_error("Texture descriptor could not be read");
-    }
-    const auto decoded = data::DecodeTextureResourceDescriptor(*bytes);
-    if (!decoded) {
-      throw std::runtime_error(decoded.error());
-    }
-    const auto* table = source->GetTextureTable();
-    if (decoded->index == data::pak::core::kNoResourceIndex || table == nullptr
-      || !table->IsValidKey(decoded->index)) {
-      throw std::runtime_error(
-        "Texture descriptor index is outside its mounted source table");
-    }
-    auto table_reader = source->CreateTextureTableReader();
-    auto descriptor = data::pak::core::TextureResourceDesc {};
-    const auto offset = table->GetResourceOffset(decoded->index);
-    if (!table_reader || !offset || !table_reader->Seek(*offset)
-      || !serio::Load(*table_reader, descriptor)
-      || std::memcmp(&descriptor, &decoded->descriptor, sizeof(descriptor))
-        != 0) {
-      throw std::runtime_error("Texture descriptor is stale or does not match "
-                               "its mounted source table");
     }
     constexpr auto kTextureTypeIndex = static_cast<uint16_t>(
       IndexOf<data::TextureResource, ResourceTypeList>::value);
-    return InternResourceKey(impl_->source_registry.SourceIds().at(i),
-      kTextureTypeIndex, decoded->index);
+    return InternResourceKey(
+      impl_->source_registry.SourceIds().at(i), kTextureTypeIndex, *index);
   }
   return std::nullopt;
 }

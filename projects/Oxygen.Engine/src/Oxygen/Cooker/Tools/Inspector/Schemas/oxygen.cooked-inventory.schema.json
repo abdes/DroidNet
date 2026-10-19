@@ -46,7 +46,7 @@
           "file_kind": {
             "type": ["integer", "null"],
             "minimum": 0,
-            "maximum": 11
+            "maximum": 12
           },
           "sha256": {
             "$ref": "#/$defs/digest"
@@ -91,9 +91,15 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["kind", "descriptor_relative_path", "resource_index"],
+        "required": [
+          "kind",
+          "virtual_path",
+          "descriptor_relative_path",
+          "resource_index"
+        ],
         "properties": {
           "kind": { "const": "texture" },
+          "virtual_path": { "type": "string", "pattern": "^/" },
           "descriptor_relative_path": { "type": "string", "minLength": 1 },
           "resource_index": {
             "type": ["integer", "null"],

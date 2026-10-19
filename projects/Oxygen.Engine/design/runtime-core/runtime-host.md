@@ -943,8 +943,8 @@ set off-thread, wait for in-flight reads and commit it atomically, detaching the
 old sources' cache entries (`IAssetLoader.h:382-403`).
 
 Answer: on `ngin.session.begin`, the player always reads the launch file again
-and remounts the mounts it names between sessions with
-`PrepareLooseCookedRootsAsync`, `WaitForPendingLoadsAsync` and
+and remounts the mounts it names (loose cooked roots and pak files alike)
+between sessions with `PrepareMountsAsync`, `WaitForPendingLoadsAsync` and
 `CommitPreparedMounts`, with no session running and no instantiation in flight.
 The toolbar's Play runs the same command, so it remounts too
 ([commands and remote control §7](commands-and-remote-control.md#7-oxygenplayer)).

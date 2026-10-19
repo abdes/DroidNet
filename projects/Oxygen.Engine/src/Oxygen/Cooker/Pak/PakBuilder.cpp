@@ -117,6 +117,13 @@ auto PakBuilder::Build(const PakBuildRequest& request) noexcept
       "Patch mode requires at least one base catalog.");
   }
 
+  // A full build references other paks through dependencies; bases are the
+  // exact stack a patch's deltas apply to.
+  if (request.mode == BuildMode::kFull && !request.base_catalogs.empty()) {
+    AddRequestError(result, "pak.request.full_forbids_base_catalogs",
+      "Full mode takes dependency catalogs, not base catalogs.");
+  }
+
   if (request.mode == BuildMode::kPatch
     && request.output_manifest_path.empty()) {
     AddRequestError(result, "pak.request.patch_requires_output_manifest_path",

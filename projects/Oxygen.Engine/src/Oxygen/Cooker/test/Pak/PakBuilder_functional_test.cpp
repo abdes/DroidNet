@@ -26,6 +26,7 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
+#include <Oxygen/Data/PakCatalog.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
@@ -201,6 +202,137 @@ NOLINT_TEST_F(PakBuilderTest, SentinelTextureReferencesSurvivePackAndRepack)
       { .kind = data::CookedSourceKind::kPak, .path = request.output_pak_path },
     };
   }
+}
+
+//! A full build that depends on another pak, whose owner material references
+//! the dependency's material with the given expected type.
+class PakBuilderDependencyTest : public PakBuilderTest {
+protected:
+  auto BuildLayer(const data::AssetType expected_type) -> pak::PakBuildResult
+  {
+    const auto target_key = MakeAssetKey(42U);
+    auto descriptor = data::pak::render::MaterialAssetDesc {};
+    descriptor.header.asset_type
+      = static_cast<uint8_t>(data::AssetType::kMaterial);
+    descriptor.header.version = data::pak::render::kMaterialAssetVersion;
+    const auto bytes = data::MakeDescriptorBytes(descriptor);
+    const auto none = data::AssetReferences::Create({}, {});
+    const auto owner_references = data::AssetReferences::Create({},
+      {
+        {
+          .key = target_key,
+          .kind = data::KeyReferenceKind::kAsset,
+          .expected_type = expected_type,
+        },
+      });
+    if (!none.has_value() || !owner_references.has_value()) {
+      ADD_FAILURE() << "Expected the reference tables to encode";
+      return {};
+    }
+
+    const auto engine_root = Path("engine");
+    auto engine_writer
+      = oxygen::content::testing::LooseCookedTestWriter(engine_root);
+    engine_writer.WriteAssetDescriptor(target_key, data::AssetType::kMaterial,
+      "/Engine/Target.omat", "Target.omat", bytes, *none);
+    static_cast<void>(engine_writer.Finish());
+    auto request = pak::PakBuildRequest {};
+    request.sources = {
+      { .kind = data::CookedSourceKind::kLooseCooked, .path = engine_root },
+    };
+    request.output_pak_path = Path("engine.pak");
+    request.content_version = 1U;
+    request.source_key = MakeSourceKey(3U);
+    const auto engine = pak::PakBuilder {}.Build(request);
+    if (!engine.has_value() || engine->summary.diagnostics_error != 0U) {
+      ADD_FAILURE() << "Expected the dependency pak to build";
+      return {};
+    }
+
+    const auto layer_root = Path("layer");
+    auto layer_writer
+      = oxygen::content::testing::LooseCookedTestWriter(layer_root);
+    layer_writer.WriteAssetDescriptor(owner_key_, data::AssetType::kMaterial,
+      "/Game/Owner.omat", "Owner.omat", bytes, *owner_references);
+    static_cast<void>(layer_writer.Finish());
+    request.sources = {
+      { .kind = data::CookedSourceKind::kLooseCooked, .path = layer_root },
+    };
+    request.output_pak_path = Path("layer.pak");
+    request.output_manifest_path = Path("layer.manifest.json");
+    request.options.emit_manifest_in_full = true;
+    request.source_key = MakeSourceKey(4U);
+    request.dependency_catalogs
+      = { oxygen::content::PakFile(Path("engine.pak")).Catalog() };
+    auto layer = pak::PakBuilder {}.Build(request);
+    if (!layer.has_value()) {
+      ADD_FAILURE() << "Expected the layer build to report";
+      return {};
+    }
+    return std::move(*layer);
+  }
+
+  data::AssetKey owner_key_ = MakeAssetKey(41U);
+};
+
+//! References into a dependency resolve without copying its asset, and the
+//! catalog and manifest require the dependency.
+NOLINT_TEST_F(PakBuilderDependencyTest, ReferencesResolveIntoTheDependency)
+{
+  // Act
+  const auto layer = BuildLayer(data::AssetType::kMaterial);
+
+  // Assert
+  EXPECT_EQ(layer.summary.diagnostics_error, 0U);
+  const auto archive = oxygen::content::PakFile(Path("layer.pak"));
+  EXPECT_TRUE(archive.FindEntry(owner_key_).has_value());
+  EXPECT_FALSE(archive.FindEntry(MakeAssetKey(42U)).has_value());
+  const auto engine = oxygen::content::PakFile(Path("engine.pak")).Catalog();
+  EXPECT_TRUE(archive.Catalog().bases.empty());
+  ASSERT_EQ(archive.Catalog().dependencies.size(), 1U);
+  EXPECT_EQ(
+    archive.Catalog().dependencies.front().source_key, engine.source_key);
+  EXPECT_EQ(archive.Catalog().dependencies.front().catalog_digest,
+    engine.catalog_digest);
+  ASSERT_TRUE(layer.patch_manifest.has_value());
+  const auto& envelope = layer.patch_manifest->compatibility_envelope;
+  EXPECT_TRUE(envelope.required_base_layers.empty());
+  ASSERT_EQ(envelope.required_dependencies.size(), 1U);
+  EXPECT_EQ(
+    envelope.required_dependencies.front().source_key, engine.source_key);
+}
+
+//! A reference into a dependency still checks the referenced asset's type.
+NOLINT_TEST_F(PakBuilderDependencyTest, ReferenceTypesAreChecked)
+{
+  // Act
+  const auto layer = BuildLayer(data::AssetType::kScript);
+
+  // Assert
+  EXPECT_TRUE(HasDiagnosticCode(
+    layer.diagnostics, "pak.plan.asset_reference_type_mismatch"));
+  EXPECT_FALSE(std::filesystem::exists(Path("layer.pak")));
+}
+
+//! Bases are the exact stack a patch applies to; a full build is rejected.
+NOLINT_TEST_F(PakBuilderTest, FullBuildRejectsBaseCatalogs)
+{
+  // Arrange
+  auto request = pak::PakBuildRequest {};
+  request.mode = pak::BuildMode::kFull;
+  request.output_pak_path = Path("full.pak");
+  request.content_version = 1U;
+  request.source_key = MakeSourceKey(5U);
+  request.base_catalogs = { data::PakCatalog {} };
+
+  // Act
+  const auto result = pak::PakBuilder {}.Build(request);
+
+  // Assert
+  ASSERT_HAS_VALUE(result);
+  EXPECT_TRUE(HasDiagnosticCode(
+    result->diagnostics, "pak.request.full_forbids_base_catalogs"));
+  EXPECT_FALSE(std::filesystem::exists(request.output_pak_path));
 }
 
 NOLINT_TEST_F(PakBuilderTest, PatchRequestValidationEmitsAllModeErrors)

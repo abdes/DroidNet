@@ -1908,6 +1908,24 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
   return std::nullopt;
 }
 
+auto ImportManifest::AddBaseCookedContextRoots(
+  const std::span<const std::filesystem::path> roots) -> void
+{
+  auto base = std::vector<std::string> {};
+  base.reserve(roots.size());
+  for (const auto& root : roots) {
+    base.push_back(std::filesystem::absolute(root).lexically_normal().string());
+  }
+  const auto prepend = [&base](std::vector<std::string>& job_roots) -> void {
+    job_roots.insert(job_roots.begin(), base.begin(), base.end());
+  };
+  for (auto& job : jobs) {
+    prepend(job.scene_descriptor.cooked_context_roots);
+    prepend(job.geometry_descriptor.cooked_context_roots);
+    prepend(job.scripting_sidecar.cooked_context_roots);
+  }
+}
+
 auto ImportManifest::BuildRequests(std::ostream& error_stream,
   const std::shared_ptr<const CapturedInputSet>& captured_inputs) const
   -> std::vector<ImportRequest>

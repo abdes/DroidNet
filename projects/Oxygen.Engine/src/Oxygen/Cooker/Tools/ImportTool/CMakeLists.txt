@@ -33,8 +33,8 @@ add_library(
   STATIC
   "BatchCommand.cpp"
   "BatchCommand.h"
-  "BuiltinCatalogCommand.cpp"
-  "BuiltinCatalogCommand.h"
+  "EngineContentCommand.cpp"
+  "EngineContentCommand.h"
   "CliBuilder.cpp"
   "CliBuilder.h"
   "FbxCommand.cpp"

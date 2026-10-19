@@ -209,12 +209,10 @@ namespace {
         .inspection = std::nullopt,
       };
 
-      const auto index_path = mount.root / "container.index.bin";
-      std::error_code ec;
-      if (std::filesystem::exists(index_path, ec)) {
+      if (lc::Inspection::IsCookedSource(mount.root)) {
         try {
           auto inspection = lc::Inspection {};
-          inspection.LoadFromRoot(mount.root);
+          inspection.Load(mount.root);
           mount.inspection = std::move(inspection);
         } catch (const std::exception& ex) {
           AddDiagnostic(context.session, context.request,
@@ -343,6 +341,52 @@ namespace {
     return resolved;
   }
 
+  //! A cooked descriptor looked up in the mounted sources' listings.
+  struct ListedDescriptor final {
+    //! Whether a mounted source lists the asset.
+    bool listed = false;
+    //! The descriptor bytes; empty when a listed descriptor cannot be read.
+    std::optional<std::vector<std::byte>> bytes;
+  };
+
+  //! Reads the descriptor of an asset a mounted source lists, newest first.
+  auto ReadListedDescriptor(const SceneDescriptorExecutionContext& context,
+    const data::AssetKey& key, IAsyncFileReader& file_reader)
+    -> co::Co<ListedDescriptor>
+  {
+    for (auto mount = context.mounts.rbegin(); mount != context.mounts.rend();
+      ++mount) {
+      if (!mount->inspection) {
+        continue;
+      }
+      const auto assets = mount->inspection->Assets();
+      const auto asset = std::ranges::find(assets, key, &lc::AssetEntry::key);
+      if (asset == assets.end()) {
+        continue;
+      }
+      if (mount->inspection->IsPak()) {
+        try {
+          co_return ListedDescriptor {
+            .listed = true,
+            .bytes = mount->inspection->ReadAssetDescriptor(key),
+          };
+        } catch (const std::exception&) {
+          co_return ListedDescriptor { .listed = true, .bytes = std::nullopt };
+        }
+      }
+      auto read = co_await file_reader.ReadFile(
+        mount->root / std::filesystem::path(asset->descriptor_relpath));
+      if (!read) {
+        co_return ListedDescriptor { .listed = true, .bytes = std::nullopt };
+      }
+      co_return ListedDescriptor {
+        .listed = true,
+        .bytes = std::move(read.value()),
+      };
+    }
+    co_return ListedDescriptor {};
+  }
+
   auto LoadSlotInventories(SceneDescriptorExecutionContext& context,
     const internal::SceneSource& source, IAsyncFileReader& file_reader)
     -> co::Co<bool>
@@ -360,37 +404,26 @@ namespace {
       if (!resolved) {
         co_return false;
       }
-      std::filesystem::path descriptor_path;
-      for (auto mount = context.mounts.rbegin(); mount != context.mounts.rend();
-        ++mount) {
-        if (mount->inspection) {
-          for (const auto& asset : mount->inspection->Assets()) {
-            if (asset.key == resolved->first && asset.virtual_path == path) {
-              descriptor_path = mount->root / asset.descriptor_relpath;
-              break;
-            }
-          }
-        }
-        if (!descriptor_path.empty()) {
-          break;
-        }
-      }
-      if (descriptor_path.empty()) {
+      auto bytes
+        = (co_await ReadListedDescriptor(context, resolved->first, file_reader))
+            .bytes;
+      if (!bytes) {
+        // A descriptor this cook writes is not listed in an index yet.
         std::string relative;
         if (internal::TryVirtualPathToRelPath(
               context.request, path, relative)) {
           for (auto mount = context.mounts.rbegin();
-            mount != context.mounts.rend(); ++mount) {
+            mount != context.mounts.rend() && !bytes; ++mount) {
             const auto candidate = mount->root / relative;
             const auto exists = co_await file_reader.Exists(candidate);
             if (exists && exists.value()) {
-              descriptor_path = candidate;
-              break;
+              if (auto read = co_await file_reader.ReadFile(candidate)) {
+                bytes = std::move(read.value());
+              }
             }
           }
         }
       }
-      const auto bytes = co_await file_reader.ReadFile(descriptor_path);
       if (!bytes) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.geometry_inventory_unavailable",
@@ -573,24 +606,6 @@ namespace {
     };
   }
 
-  //! The cooked descriptor of an asset listed in a mounted root's index.
-  auto FindIndexedDescriptor(const SceneDescriptorExecutionContext& context,
-    const data::AssetKey& key) -> std::optional<std::filesystem::path>
-  {
-    for (auto mount = context.mounts.rbegin(); mount != context.mounts.rend();
-      ++mount) {
-      if (!mount->inspection) {
-        continue;
-      }
-      for (const auto& asset : mount->inspection->Assets()) {
-        if (asset.key == key) {
-          return mount->root / asset.descriptor_relpath;
-        }
-      }
-    }
-    return std::nullopt;
-  }
-
   //! Walks the cooked scenes reachable through instances and fails when one
   //! of them instances the scene being cooked. Scenes not yet cooked end
   //! their branch: their own cook checks them.
@@ -621,19 +636,19 @@ namespace {
       if (!visited.insert(key).second) {
         continue;
       }
-      const auto path = FindIndexedDescriptor(context, key);
-      if (!path) {
+      auto listed = co_await ReadListedDescriptor(context, key, file_reader);
+      if (!listed.listed) {
         continue;
       }
-      auto bytes = co_await file_reader.ReadFile(*path);
-      if (!bytes) {
+      if (!listed.bytes) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.instance_unreadable",
-          "Cannot read an instanced scene: " + path->string(), object_path);
+          "Cannot read an instanced scene: " + data::to_string(key),
+          object_path);
         co_return false;
       }
       try {
-        const auto scene = data::SceneAsset(key, std::move(bytes.value()));
+        const auto scene = data::SceneAsset(key, std::move(*listed.bytes));
         for (const auto& nested :
           scene.GetComponents<data::pak::world::SceneInstanceRecord>()) {
           pending.push_back({ .key = nested.scene_key, .origin = origin });

@@ -525,13 +525,42 @@ function Invoke-OxygenBuild {
 function Build-OxygenExecutables {
     param([Parameter(Mandatory)][ValidateNotNullOrEmpty()][string[]]$Targets,
         [string]$SourceRoot = (Get-OxygenSourceRoot), [string]$BuildTree,
-        [string]$Config = 'Release', [string]$Preset)
+        [string]$Config = 'Release', [string]$Preset,
+        # Non-executable targets the tools need, built in the same invocation.
+        [string[]]$Prerequisites = @())
 
     # A configured tree is enough: missing executables must be built, not skipped.
     $selection = Resolve-OxygenBuildSelection -SourceRoot $SourceRoot -BuildTree $BuildTree -Config $Config -Preset $Preset
     Write-OxygenBuildSelection $selection
-    Invoke-OxygenBuild -Targets $Targets -Selection $selection
+    Invoke-OxygenBuild -Targets ($Targets + $Prerequisites) -Selection $selection
     return Resolve-OxygenExecutables -SourceRoot $SourceRoot -Targets $Targets -Selection $selection
+}
+
+# The engine content pak that resolves /Engine references: an explicit path,
+# else an installed SDK's share/oxygen/engine.pak, else the pak the selected
+# build tree's oxygen-engine-content target writes, as that tree records it.
+function Get-OxygenEngineContentPak {
+    param([string]$SourceRoot = (Get-OxygenSourceRoot), $Selection, [string]$Path)
+
+    if ([string]::IsNullOrWhiteSpace($Path)) {
+        if (Test-Path -LiteralPath (Join-Path $SourceRoot 'share/oxygen/oxygen-source.json')) {
+            $Path = Join-Path $SourceRoot 'share/oxygen/engine.pak'
+        } elseif (-not $Selection -or -not $Selection.BuildRoot) {
+            throw 'Explicit tools have no build tree to take the engine content pak from; pass the engine pak explicitly.'
+        } else {
+            $record = Join-Path $Selection.BuildRoot "engine-content-pak-$($Selection.Config).txt"
+            if (-not (Test-Path -LiteralPath $record)) {
+                throw "The build tree does not record its engine content pak: $record. Reconfigure the build tree."
+            }
+            $Path = (Get-Content -LiteralPath $record -Raw).Trim()
+        }
+    }
+    if (-not [IO.Path]::IsPathRooted($Path)) { $Path = Join-Path $PWD.Path $Path }
+    $Path = [IO.Path]::GetFullPath($Path)
+    if (-not (Test-Path -LiteralPath $Path -PathType Leaf)) {
+        throw "Engine content pak not found: $Path. Build the 'oxygen-engine-content' target or install the SDK."
+    }
+    return $Path
 }
 
 function Write-OxygenExecutableSelection($Context) {

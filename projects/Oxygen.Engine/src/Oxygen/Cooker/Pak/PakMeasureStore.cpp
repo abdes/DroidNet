@@ -298,57 +298,78 @@ auto EmitAssetDirectoryPayload(
 }
 
 template <typename Sink>
-auto EmitBrowseIndexPayload(
-  const std::span<const pak::PakBrowseEntryPlan> entries, Sink& sink) -> bool
+auto EmitBrowseIndexPayload(const pak::PakBrowseIndexPlan& browse, Sink& sink)
+  -> bool
 {
   constexpr auto kMaxU32AsU64
     = static_cast<uint64_t>((std::numeric_limits<uint32_t>::max)());
 
+  auto paths = std::vector<std::string_view> {};
+  paths.reserve(browse.entries.size() + browse.textures.size());
+  for (const auto& entry : browse.entries) {
+    paths.emplace_back(entry.virtual_path);
+  }
+  for (const auto& entry : browse.textures) {
+    paths.emplace_back(entry.virtual_path);
+  }
+
   uint64_t string_table_size = 0;
-  for (const auto& entry : entries) {
-    const auto path_size = static_cast<uint64_t>(entry.virtual_path.size());
-    if (path_size > kMaxU32AsU64
-      || path_size
-        > (std::numeric_limits<uint64_t>::max)() - string_table_size) {
+  for (const auto path : paths) {
+    const auto path_size = static_cast<uint64_t>(path.size());
+    if (path_size > kMaxU32AsU64 - string_table_size) {
       return false;
     }
     string_table_size += path_size;
   }
-
-  if (entries.size() > kMaxU32AsU64 || string_table_size > kMaxU32AsU64) {
+  if (browse.entries.size() > kMaxU32AsU64
+    || browse.textures.size() > kMaxU32AsU64) {
     return false;
   }
 
   auto header = core::PakBrowseIndexHeader {};
-  header.entry_count = static_cast<uint32_t>(entries.size());
+  header.entry_count = static_cast<uint32_t>(browse.entries.size());
+  header.texture_entry_count = static_cast<uint32_t>(browse.textures.size());
   header.string_table_size = static_cast<uint32_t>(string_table_size);
   if (!sink.WriteObject(header)) {
     return false;
   }
 
-  uint64_t current_offset = 0;
-  for (const auto& entry : entries) {
-    const auto path_size = static_cast<uint64_t>(entry.virtual_path.size());
-    if (current_offset > kMaxU32AsU64 || path_size > kMaxU32AsU64
-      || path_size > kMaxU32AsU64 - current_offset) {
-      return false;
-    }
-
-    auto index_entry = core::PakBrowseIndexEntry {
+  // Paths are stored in entry order, so each one starts where the last ended.
+  uint32_t current_offset = 0;
+  const auto next_slice
+    = [&current_offset](
+        const std::string& path) -> std::pair<uint32_t, uint32_t> {
+    const auto slice
+      = std::pair { current_offset, static_cast<uint32_t>(path.size()) };
+    current_offset += slice.second;
+    return slice;
+  };
+  for (const auto& entry : browse.entries) {
+    const auto [offset, length] = next_slice(entry.virtual_path);
+    const auto index_entry = core::PakBrowseIndexEntry {
       .asset_key = entry.asset_key,
-      .virtual_path_offset = static_cast<uint32_t>(current_offset),
-      .virtual_path_length = static_cast<uint32_t>(path_size),
+      .virtual_path_offset = offset,
+      .virtual_path_length = length,
     };
     if (!sink.WriteObject(index_entry)) {
       return false;
     }
-    current_offset += path_size;
+  }
+  for (const auto& entry : browse.textures) {
+    const auto [offset, length] = next_slice(entry.virtual_path);
+    const auto texture_entry = core::PakBrowseIndexTextureEntry {
+      .texture_index = core::ResourceIndexT { entry.texture_index },
+      .virtual_path_offset = offset,
+      .virtual_path_length = length,
+    };
+    if (!sink.WriteObject(texture_entry)) {
+      return false;
+    }
   }
 
-  for (const auto& entry : entries) {
-    const auto path_bytes = std::as_bytes(
-      std::span { entry.virtual_path.data(), entry.virtual_path.size() });
-    if (!sink.WriteBytes(path_bytes)) {
+  for (const auto path : paths) {
+    if (!sink.WriteBytes(
+          std::as_bytes(std::span { path.data(), path.size() }))) {
       return false;
     }
   }
@@ -465,20 +486,20 @@ auto StoreAssetDirectoryPayload(
     out_bytes);
 }
 
-auto MeasureBrowseIndexPayload(
-  const std::span<const PakBrowseEntryPlan> entries) -> std::optional<uint64_t>
+auto MeasureBrowseIndexPayload(const PakBrowseIndexPlan& browse)
+  -> std::optional<uint64_t>
 {
-  return MeasurePayload([entries](auto& sink) -> auto {
-    return EmitBrowseIndexPayload(entries, sink);
+  return MeasurePayload([&browse](auto& sink) -> auto {
+    return EmitBrowseIndexPayload(browse, sink);
   });
 }
 
-auto StoreBrowseIndexPayload(const std::span<const PakBrowseEntryPlan> entries,
-  std::vector<std::byte>& out_bytes) -> bool
+auto StoreBrowseIndexPayload(
+  const PakBrowseIndexPlan& browse, std::vector<std::byte>& out_bytes) -> bool
 {
   return StorePayload(
-    [entries](
-      auto& sink) -> auto { return EmitBrowseIndexPayload(entries, sink); },
+    [&browse](
+      auto& sink) -> auto { return EmitBrowseIndexPayload(browse, sink); },
     out_bytes);
 }
 

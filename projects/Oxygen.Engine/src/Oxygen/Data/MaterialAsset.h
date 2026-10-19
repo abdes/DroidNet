@@ -14,6 +14,7 @@
 #include <memory>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
@@ -215,7 +216,12 @@ public:
     return desc_.emissive_texture;
   }
 
+  //! Virtual path of the engine's default material in the engine content pak.
+  static constexpr std::string_view kDefaultVirtualPath
+    = "/Engine/Generated/Materials/Default.omat";
+
   //! Creates a default material for procedural meshes and fallback scenarios.
+  //! Its key is the key of `kDefaultVirtualPath`, the cooked default material.
   OXGN_DATA_NDAPI static auto CreateDefault()
     -> std::shared_ptr<const MaterialAsset>;
 

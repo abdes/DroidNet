@@ -107,12 +107,12 @@ set(
   OXYGEN_COOKER_HEADERS
   "api_export.h"
   "Import/AsyncImportService.h"
-  "Import/BuiltinGeometryCatalog.h"
   "Import/BufferContainerImportRequestBuilder.h"
   "Import/BufferContainerImportSettings.h"
   "Import/BufferImportTypes.h"
   "Import/CollisionShapeDescriptorImportRequestBuilder.h"
   "Import/CollisionShapeDescriptorImportSettings.h"
+  "Import/EngineContent.h"
   "Import/FileError.h"
   "Import/GeometryDescriptorImportRequestBuilder.h"
   "Import/GeometryDescriptorImportSettings.h"
@@ -281,7 +281,7 @@ set(
 set(
   OXYGEN_COOKER_PRIVATE_SOURCES
   "Import/AsyncImportService.cpp"
-  "Import/BuiltinGeometryCatalog.cpp"
+  "Import/EngineContent.cpp"
   "Import/SceneSourceInspection.cpp"
   "Import/FileError.cpp"
   "Import/ImportManifest.cpp"

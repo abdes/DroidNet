@@ -63,6 +63,11 @@ public:
     return ResolvePath(config_->CVarsArchivePath());
   }
 
+  [[nodiscard]] auto EngineContentPakPath() const -> std::filesystem::path
+  {
+    return ResolvePath(config_->EngineContentPakPath());
+  }
+
   [[nodiscard]] auto ScriptSourceRoots() const
     -> std::vector<std::filesystem::path>
   {

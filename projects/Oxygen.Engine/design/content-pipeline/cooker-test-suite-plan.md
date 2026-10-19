@@ -4,9 +4,8 @@
 task that does not need careful concurrency or cross-module reasoning is
 implemented but **not yet built or run**, because the Cooker builds only on
 Windows. The remaining tasks are reserved for a local Opus pass. See
-[§0 Implementation status](#0-implementation-status) before doing anything.
-All decisions are resolved ([§6](#6-decisions)). **Owner:** the local
-implementer.
+[§0 Implementation status](#0-implementation-status) before doing anything. All
+decisions are resolved ([§6](#6-decisions)). **Owner:** the local implementer.
 **Scope:**
 
 - `src/Oxygen/Cooker/test/**` and `src/Oxygen/Cooker/Tools/*/test/**`
@@ -14,7 +13,8 @@ implementer.
 - `<tool>-core` libraries for the three Cooker tools
 - three new Content tests and one Content test fixture that take over
   Content-behaviour checks currently made from Cooker tests
-  ([D-02](#6-decisions), [D-07](#6-decisions), [§2.8](#28-module-boundary-what-a-cooker-test-may-use))
+  ([D-02](#6-decisions), [D-07](#6-decisions),
+  [§2.8](#28-module-boundary-what-a-cooker-test-may-use))
 - one Engine test file ([D-06](#6-decisions))
 - Git LFS rules for large test assets.
 
@@ -28,8 +28,8 @@ good, but five problems make the suite slow to work in and hard to trust:
 
 1. **Unit and functional tests are mixed in the same executables.** CTest
    registers one test per executable, so there is no way to run "just the fast
-   tests". A hang or flake in one threaded test fails every unit test in the same
-   executable. ([F-01](#f-01))
+   tests". A hang or flake in one threaded test fails every unit test in the
+   same executable. ([F-01](#f-01))
 2. **Several tests can hang forever or crash** instead of failing:
    - unbounded `latch.wait()`
    - `EXPECT` checks followed by a dereference of the checked value
@@ -51,8 +51,8 @@ good, but five problems make the suite slow to work in and hard to trust:
    lines. ([F-09](#f-09))
 
 The plan fixes these in seven phases. Each phase can be merged on its own and
-proves itself by **not losing a single test** (see [CT-0](#ct-0-baseline)).
-It adds:
+proves itself by **not losing a single test** (see [CT-0](#ct-0-baseline)). It
+adds:
 
 - three tiers, `unit`, `functional` and `gpu`, as CTest labels
 - a mechanical rule that maps a source file to its test file
@@ -74,11 +74,12 @@ enforced by review, not automation ([D-08](#6-decisions)).
 
 ## 0. Implementation status
 
-Snapshot of branch `claude/kind-wozniak-kxme2w` (2026-10-10). The branch is
-two commits rebased onto `editor` at `59a9e912`: the plan commit, then one code
-commit, `test(cooker): restructure Cooker tests into tiers with shared test
-support`. That commit's message is the record of every rename, split, `TEST_P`
-fold and deletion. **`59a9e912` is the CT-0 baseline commit.**
+Snapshot of branch `claude/kind-wozniak-kxme2w` (2026-10-10). The branch is two
+commits rebased onto `editor` at `59a9e912`: the plan commit, then one code
+commit,
+`test(cooker): restructure Cooker tests into tiers with shared test support`.
+That commit's message is the record of every rename, split, `TEST_P` fold and
+deletion. **`59a9e912` is the CT-0 baseline commit.**
 
 The rebase ported `editor`'s own test changes into the restructured files. They
 include new tests and changed expectations, so the inventory diff also shows
@@ -86,14 +87,13 @@ include new tests and changed expectations, so the inventory diff also shows
 
 **State values:**
 
-- **implemented, unbuilt:** the code change is complete, and was formatted
-  with `oxyformat` (LLVM 23) and `gersemi`. It was checked for brace/paren
-  balance and reviewed against this plan, but it has **never been compiled or
-  run**.
-- **pending (Opus):** reserved for the local Opus pass, because it needs
-  careful concurrency, ownership or cross-module reasoning.
-- **pending (local):** needs a Windows build or local tooling. Any model can
-  do it.
+- **implemented, unbuilt:** the code change is complete, and was formatted with
+  `oxyformat` (LLVM 23) and `gersemi`. It was checked for brace/paren balance
+  and reviewed against this plan, but it has **never been compiled or run**.
+- **pending (Opus):** reserved for the local Opus pass, because it needs careful
+  concurrency, ownership or cross-module reasoning.
+- **pending (local):** needs a Windows build or local tooling. Any model can do
+  it.
 
 ### 0.1 Task status
 
@@ -121,15 +121,22 @@ include new tests and changed expectations, so the inventory diff also shows
 1. **CT-0 at `59a9e912`:** build, record the inventory and the run times.
 2. **Build the branch head.**
    - Expect compile errors. Nothing here has been compiled.
-   - Fix them in this order: `Oxygen.Cooker.TestSupport`, then `Import.Unit`, `Pak.Unit`, `Loose.Unit`, then the functional executables, then the three tool test directories and `Oxygen.Engine.ScriptingContracts.Tests`.
-   - The changes most likely to need fixes are the ones the implementing agents flagged:
+   - Fix them in this order: `Oxygen.Cooker.TestSupport`, then `Import.Unit`,
+     `Pak.Unit`, `Loose.Unit`, then the functional executables, then the three
+     tool test directories and `Oxygen.Engine.ScriptingContracts.Tests`.
+   - The changes most likely to need fixes are the ones the implementing agents
+     flagged:
      - `PipelineHarness.h`: perfect forwarding into the coroutine lambda.
-     - The `SetUpTestSuite` statics in `GltfModelImport`, `PhysicsSidecarRecook` and `ImportSourceAnalysis`.
+     - The `SetUpTestSuite` statics in `GltfModelImport`, `PhysicsSidecarRecook`
+       and `ImportSourceAnalysis`.
      - The `MakeFullRequest` default arguments in `PakTestSupport.h`.
      - The CT-6.10 expected counts.
-     - The schema-case `error_substr` values. They match json-schema-validator 2.4.0's message wording, which was checked against its source.
-3. **Run the inventory diff.** Every difference must be explained by a commit message. Then run `ctest -R "^Oxygen\.Cooker\." -L unit` and `-L functional`.
-4. **Then the Opus tasks**, in this order: CT-1.2 `ImportHarness` → CT-2.3 + CT-4.4 → CT-2.5 – 2.7 → CT-3.8 → E.6 rows 2–4 → CT-6.9.
+     - The schema-case `error_substr` values. They match json-schema-validator
+       2.4.0's message wording, which was checked against its source.
+3. **Run the inventory diff.** Every difference must be explained by a commit
+   message. Then run `ctest -R "^Oxygen\.Cooker\." -L unit` and `-L functional`.
+4. **Then the Opus tasks**, in this order: CT-1.2 `ImportHarness` → CT-2.3 +
+   CT-4.4 → CT-2.5 – 2.7 → CT-3.8 → E.6 rows 2–4 → CT-6.9.
 
 ### 0.3 Rebase onto `editor` (`59a9e912`)
 
@@ -147,11 +154,10 @@ Each change was ported into the file or test where that code now lives:
 
 The new code from `editor` received the same mechanical transforms as the rest:
 shared `ReadBytes`/`WriteBytes`, `ScopedTempDir`, `ASSERT_TRUE(x.has_value())`,
-the pipeline harness and the fixture thread pool. The changes git merged
-through rename detection (`TextureCooker`, `GeometrySource`,
-`MaterialSlotProvenance`, `PhysicsSidecarRecook`, the Inspector tests and the
-Python CLI test) were checked line by line: every line `editor` added is present
-in the new location.
+the pipeline harness and the fixture thread pool. The changes git merged through
+rename detection (`TextureCooker`, `GeometrySource`, `MaterialSlotProvenance`,
+`PhysicsSidecarRecook`, the Inspector tests and the Python CLI test) were
+checked line by line: every line `editor` added is present in the new location.
 
 ---
 
@@ -176,22 +182,22 @@ in the new location.
 Severity: **H** = can hang, crash or hide failures. **M** = slows work or
 duplicates code. **L** = style.
 
-| ID                    | Sev | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | Fixed by         |
-| --------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ---------------- |
-| <a id="f-01"></a>F-01 | H   | **Tiers are mixed per executable.** Examples: `AsyncImportCore` holds pure unit tests (Naming, Bc7Encoder, ImageProcessing) alongside `AsyncImportService_test` (500 ms sleeps, real job routing). `AsyncImportTexture` holds 6 unit files with 3 threaded pipeline files and a disk-writing emitter. Every descriptor-family executable mixes schema unit tests with threaded job tests. One flake fails the whole executable, and there is no fast subset.                                                                                                                                                                                                                                                                                            | CT-1, CT-3       |
-| <a id="f-02"></a>F-02 | H   | **Unbounded waits.** `SubmitAndWait` does `EXPECT_TRUE(submitted)` and then `done.wait()`. If submission fails the latch never fires and the test hangs until the CTest timeout (1,500 s by default). Affected: `ScriptImportJob_test.cpp:178`, `PhysicsImportJob_test.cpp:48`, `BufferContainerImportJob_test.cpp:108`, `CollisionShapeDescriptorImportJob_test.cpp:122`, `GeometryDescriptorImportJob_test.cpp:145`, `PhysicsMaterialDescriptorImportJob_test.cpp:78`, `PhysicsPhase3Closure_test.cpp:239`. Also `AsyncImporterFullTestBase.h:172` and `MeshTransformBake_test.cpp:160`. `SceneDescriptorImportJob_test.cpp:147` and `MaterialDescriptorImportJob_test.cpp:123` handle a failed submit but still wait without a timeout.              | CT-2             |
-| <a id="f-03"></a>F-03 | H   | **`EXPECT` followed by a dereference** (undefined behaviour or an exception after a soft failure): `PakDomainValidation_test.cpp:85-89`, `PakToolBuildReportJson_test.cpp:176-196`, `PakWriter_test.cpp:100-109`, `PakToolScriptSealing_test.cpp:106-110`, `TextureSourceAssembly_test.cpp:370-373`, `WindowsFileReader_test.cpp` (11 sites from :81), `WindowsFileWriter_test.cpp:212,236,255,379`. A related problem is `EXPECT_TRUE(report.success)` followed by reads of the outputs, which turns one failure into many: `GeometryDescriptorImportJob_test.cpp:514,754,1294,1375,1616`, `BufferContainerImportJob_test.cpp:197,337`.                                                                                                                | CT-2             |
-| <a id="f-04"></a>F-04 | H   | **Sleeps used as synchronisation:** `AsyncImportService_test.cpp:77,92,727,763,788,913,1050`, `ImportEventLoop_test.cpp:75,177,231` (:177 is racy against `Stop`), `BufferPipeline_test.cpp:432`, and `Mocks/TestImportJob.cpp:81` (step delays). Some assertions accept any outcome: `AsyncImportService_test.cpp:732` checks `cancel_result \|\| job_completed`, and `:1052` ends with `SUCCEED()`.                                                                                                                                                                                                                                                                                                                                                   | CT-2             |
-| <a id="f-05"></a>F-05 | H   | **Fake-disabled tests:** `DISABLEDAsyncBackendImportsSponza` (`AsyncFbxImporter_test.cpp:140`, `AsyncGltfImporter_test.cpp:927`) has no `_`, so GoogleTest runs it. It points at `F:\projects\main_sponza\...` and reports SKIPPED. Also, `GTEST_SKIP` when a _checked-in_ model is missing (`AsyncFbxImporter_test.cpp:50,103`, `AsyncGltfImporter_test.cpp:837,888`) hides real breakage.                                                                                                                                                                                                                                                                                                                                                             | CT-2             |
-| <a id="f-06"></a>F-06 | M   | **Copied helpers (about 3,000 lines).** JSON-schema harness (`CollectingErrorHandler` + `FindRepoRoot` + `LoadJsonFile` + `ValidateSchema`, about 90 lines): 11 copies. Temp dirs: about 50 files, most with fixed names that collide when two configurations run at once and are never cleaned up. `ReadBinaryFile`/`ReadAllBytes`: 15 copies. `WriteTextFile`: 24 copies. `SubmitAndWait`: 11. `HasDiagnosticCode`: 13+. `MakeBmp2x2`: 4. `MakeAssetKey`: 10. `ExpectVector`: 3. The pipeline `co::Run` + nursery boilerplate appears about 47 times.                                                                                                                                                                                                 | CT-1, CT-4       |
-| <a id="f-07"></a>F-07 | M   | **Fragile paths.** Models and schemas are found by walking up from `__FILE__`, which breaks under `-ffile-prefix-map` or relocated sources. 9 manifest tests hardcode `C:/tmp/...` outputs and some assert them exactly (`ImportManifest_input_test.cpp:136,172`). `AsyncImporter_test.cpp:224-228` deletes `current_path()/.cooked`.                                                                                                                                                                                                                                                                                                                                                                                                                   | CT-1, CT-2, CT-6 |
-| <a id="f-08"></a>F-08 | M   | **No source-to-test mapping rule.** Wrong or misleading homes include: `ImportJobLifetime_test` (6 of its 8 tests target `LooseCookedIndexRegistry`/`ResourceTableRegistry`), `Loose/LooseCookedWriter_test` (the source is `Import/Internal/LooseCookedWriter.cpp`), `Import/Inspector*_test` and `Import/BatchCommand_physics_dag_test` (tool code), `PhysicsImportJob_test` (the job is `PhysicsSidecarImportJob`), `PhysicsPhase3Closure_test` (named after a milestone) and `TextureImportJob_policy_test` (the source is `TextureImportPolicy.h`). CMake grouping is just as loose: `PakPlanBuilder_test` sits in the `PakDomainValidation` executable, and `BuiltinGeometryCatalog`/`GeometrySource` sit in the `GeometryDescriptor` executable. | CT-3             |
-| <a id="f-09"></a>F-09 | M   | **Oversized files and tests:** `ScriptImportJob_test.cpp` (3,445 lines, 59 tests, 2 jobs), `GeometryDescriptorImportJob_test.cpp` (2,155), `PakWriter_test.cpp` (1,692), `PakPlanBuilder_test.cpp` (1,454; one test is 255 lines with 4 phases), `PakPatchPlanner_test.cpp` (1,299), `PhysicsPhase3Closure_test.cpp` (1,285), `AsyncImportService_test.cpp` (1,104), `LooseCookedWriter_test.cpp` (1,021). `AsyncGltfImporter_test.cpp:130-451` is one 320-line test.                                                                                                                                                                                                                                                                                   | CT-5             |
-| <a id="f-10"></a>F-10 | M   | **Duplicate compilation.** The PakTool tests compile the same tool `.cpp` files into 8 executables (`ArtifactPublication.cpp` 5×). `AsyncImporterFullTestBase.cpp` is compiled into 2 executables. `UFBX_REAL_IS_FLOAT` is defined for the whole `AsyncImportGltf` executable even though only `StaticImport_test.cpp` needs it.                                                                                                                                                                                                                                                                                                                                                                                                                        | CT-3, CT-4       |
-| <a id="f-11"></a>F-11 | M   | **Schema rejection tests never check _why_ a document is rejected.** There are 38 bare `EXPECT_FALSE(ValidateSchema(...))`. A fixture that is invalid for an unrelated reason still passes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             | CT-4             |
-| <a id="f-12"></a>F-12 | L   | **GoogleTest hygiene.** 8 death tests are in a suite not named `*DeathTest` (`ImportPlanner_test.cpp:297-535`). Many suites have empty fixtures or one test each (`TextureImportPresets` has 9 suites for 10 tests). Comment headers repeat the test name (`//! Test:` ×134, plus `//! Verify`). Test names include plan section numbers (`(6.3.10)`). There are 65 `EXPECT_TRUE(s.find(x) != npos)` checks instead of `HasSubstr`, and 228 `if (!x) { FAIL(); }`, 93 of them with no message. 8 `#if defined(NDEBUG)` branches mean whichever expectation doesn't match the build configuration never runs.                                                                                                                                            | CT-6             |
-| <a id="f-13"></a>F-13 | L   | **Test assets.** `Test/Import/Models` is 57 MB, has no Git LFS for `.fbx`, and duplicates `Tools/ImportTool/Testing/Models` (`dino-a.fbx` 52 MB, `Rigged_Humanoid_a.fbx`, `Tabuleiro.glb`). No test references `Rigged Humanoid.fbx`, `Samba Dancing.fbx` or `static_ao_grid.gltf`; the first two also have spaces in their names. `static_ao_grid.gltf` is used by `Data/Docs/material_system.md` for native visual checks, so it stays.                                                                                                                                                                                                                                                                                                               | CT-6             |
-| <a id="f-14"></a>F-14 | L   | **CTest wiring.** `Oxygen.Cooker.RetainedImport.Cli` has no `TIMEOUT`. `retained_import_cli_test.py` uses bare `assert`, which `python -O` strips. `MaterialSlotAllocation.cpp` and `ImportSourceSnapshot.cpp` are compiled into both the library and a test executable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | CT-2, CT-3.8     |
+| ID                    | Sev | Finding                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    | Fixed by         |
+| --------------------- | --- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------- |
+| <a id="f-01"></a>F-01 | H   | **Tiers are mixed per executable.** Examples: `AsyncImportCore` holds pure unit tests (Naming, Bc7Encoder, ImageProcessing) alongside `AsyncImportService_test` (500 ms sleeps, real job routing). `AsyncImportTexture` holds 6 unit files with 3 threaded pipeline files and a disk-writing emitter. Every descriptor-family executable mixes schema unit tests with threaded job tests. One flake fails the whole executable, and there is no fast subset.                                                                                                                                                                                                                                                                               | CT-1, CT-3       |
+| <a id="f-02"></a>F-02 | H   | **Unbounded waits.** `SubmitAndWait` does `EXPECT_TRUE(submitted)` and then `done.wait()`. If submission fails the latch never fires and the test hangs until the CTest timeout (1,500 s by default). Affected: `ScriptImportJob_test.cpp:178`, `PhysicsImportJob_test.cpp:48`, `BufferContainerImportJob_test.cpp:108`, `CollisionShapeDescriptorImportJob_test.cpp:122`, `GeometryDescriptorImportJob_test.cpp:145`, `PhysicsMaterialDescriptorImportJob_test.cpp:78`, `PhysicsPhase3Closure_test.cpp:239`. Also `AsyncImporterFullTestBase.h:172` and `MeshTransformBake_test.cpp:160`. `SceneDescriptorImportJob_test.cpp:147` and `MaterialDescriptorImportJob_test.cpp:123` handle a failed submit but still wait without a timeout. | CT-2             |
+| <a id="f-03"></a>F-03 | H   | **`EXPECT` followed by a dereference** (undefined behaviour or an exception after a soft failure): `PakDomainValidation_test.cpp:85-89`, `PakToolBuildReportJson_test.cpp:176-196`, `PakWriter_test.cpp:100-109`, `PakToolScriptSealing_test.cpp:106-110`, `TextureSourceAssembly_test.cpp:370-373`, `WindowsFileReader_test.cpp` (11 sites from :81), `WindowsFileWriter_test.cpp:212,236,255,379`. A related problem is `EXPECT_TRUE(report.success)` followed by reads of the outputs, which turns one failure into many: `GeometryDescriptorImportJob_test.cpp:514,754,1294,1375,1616`, `BufferContainerImportJob_test.cpp:197,337`.                                                                                                   | CT-2             |
+| <a id="f-04"></a>F-04 | H   | **Sleeps used as synchronisation:** `AsyncImportService_test.cpp:77,92,727,763,788,913,1050`, `ImportEventLoop_test.cpp:75,177,231` (:177 is racy against `Stop`), `BufferPipeline_test.cpp:432`, and `Mocks/TestImportJob.cpp:81` (step delays). Some assertions accept any outcome: `AsyncImportService_test.cpp:732` checks `cancel_result \|\| job_completed`, and `:1052` ends with `SUCCEED()`.                                                                                                                                                                                                                                                                                                                                      | CT-2             |
+| <a id="f-05"></a>F-05 | H   | **Fake-disabled tests:** `DISABLEDAsyncBackendImportsSponza` (`AsyncFbxImporter_test.cpp:140`, `AsyncGltfImporter_test.cpp:927`) has no `_`, so GoogleTest runs it. It points at `F:\projects\main_sponza\...` and reports SKIPPED. Also, `GTEST_SKIP` when a _checked-in_ model is missing (`AsyncFbxImporter_test.cpp:50,103`, `AsyncGltfImporter_test.cpp:837,888`) hides real breakage.                                                                                                                                                                                                                                                                                                                                                | CT-2             |
+| <a id="f-06"></a>F-06 | M   | **Copied helpers (about 3,000 lines).** JSON-schema harness (`CollectingErrorHandler` + `FindRepoRoot` + `LoadJsonFile` + `ValidateSchema`, about 90 lines): 11 copies. Temp dirs: about 50 files, most with fixed names that collide when two configurations run at once and are never cleaned up. `ReadBinaryFile`/`ReadAllBytes`: 15 copies. `WriteTextFile`: 24 copies. `SubmitAndWait`: 11. `HasDiagnosticCode`: 13+. `MakeBmp2x2`: 4. `MakeAssetKey`: 10. `ExpectVector`: 3. The pipeline `co::Run` + nursery boilerplate appears about 47 times.                                                                                                                                                                                    | CT-1, CT-4       |
+| <a id="f-07"></a>F-07 | M   | **Fragile paths.** Models and schemas are found by walking up from `__FILE__`, which breaks under `-ffile-prefix-map` or relocated sources. 9 manifest tests hardcode `C:/tmp/...` outputs and some assert them exactly (`ImportManifest_input_test.cpp:136,172`). `AsyncImporter_test.cpp:224-228` deletes `current_path()/.cooked`.                                                                                                                                                                                                                                                                                                                                                                                                      | CT-1, CT-2, CT-6 |
+| <a id="f-08"></a>F-08 | M   | **No source-to-test mapping rule.** Wrong or misleading homes include: `ImportJobLifetime_test` (6 of its 8 tests target `LooseCookedIndexRegistry`/`ResourceTableRegistry`), `Loose/LooseCookedWriter_test` (the source is `Import/Internal/LooseCookedWriter.cpp`), `Import/Inspector*_test` and `Import/BatchCommand_physics_dag_test` (tool code), `PhysicsImportJob_test` (the job is `PhysicsSidecarImportJob`), `PhysicsPhase3Closure_test` (named after a milestone) and `TextureImportJob_policy_test` (the source is `TextureImportPolicy.h`). CMake grouping is just as loose: `PakPlanBuilder_test` sits in the `PakDomainValidation` executable, and `GeometrySource` sits in the `GeometryDescriptor` executable.            | CT-3             |
+| <a id="f-09"></a>F-09 | M   | **Oversized files and tests:** `ScriptImportJob_test.cpp` (3,445 lines, 59 tests, 2 jobs), `GeometryDescriptorImportJob_test.cpp` (2,155), `PakWriter_test.cpp` (1,692), `PakPlanBuilder_test.cpp` (1,454; one test is 255 lines with 4 phases), `PakPatchPlanner_test.cpp` (1,299), `PhysicsPhase3Closure_test.cpp` (1,285), `AsyncImportService_test.cpp` (1,104), `LooseCookedWriter_test.cpp` (1,021). `AsyncGltfImporter_test.cpp:130-451` is one 320-line test.                                                                                                                                                                                                                                                                      | CT-5             |
+| <a id="f-10"></a>F-10 | M   | **Duplicate compilation.** The PakTool tests compile the same tool `.cpp` files into 8 executables (`ArtifactPublication.cpp` 5×). `AsyncImporterFullTestBase.cpp` is compiled into 2 executables. `UFBX_REAL_IS_FLOAT` is defined for the whole `AsyncImportGltf` executable even though only `StaticImport_test.cpp` needs it.                                                                                                                                                                                                                                                                                                                                                                                                           | CT-3, CT-4       |
+| <a id="f-11"></a>F-11 | M   | **Schema rejection tests never check _why_ a document is rejected.** There are 38 bare `EXPECT_FALSE(ValidateSchema(...))`. A fixture that is invalid for an unrelated reason still passes.                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                | CT-4             |
+| <a id="f-12"></a>F-12 | L   | **GoogleTest hygiene.** 8 death tests are in a suite not named `*DeathTest` (`ImportPlanner_test.cpp:297-535`). Many suites have empty fixtures or one test each (`TextureImportPresets` has 9 suites for 10 tests). Comment headers repeat the test name (`//! Test:` ×134, plus `//! Verify`). Test names include plan section numbers (`(6.3.10)`). There are 65 `EXPECT_TRUE(s.find(x) != npos)` checks instead of `HasSubstr`, and 228 `if (!x) { FAIL(); }`, 93 of them with no message. 8 `#if defined(NDEBUG)` branches mean whichever expectation doesn't match the build configuration never runs.                                                                                                                               | CT-6             |
+| <a id="f-13"></a>F-13 | L   | **Test assets.** `Test/Import/Models` is 57 MB, has no Git LFS for `.fbx`, and duplicates `Tools/ImportTool/Testing/Models` (`dino-a.fbx` 52 MB, `Rigged_Humanoid_a.fbx`, `Tabuleiro.glb`). No test references `Rigged Humanoid.fbx`, `Samba Dancing.fbx` or `static_ao_grid.gltf`; the first two also have spaces in their names. `static_ao_grid.gltf` is used by `Data/Docs/material_system.md` for native visual checks, so it stays.                                                                                                                                                                                                                                                                                                  | CT-6             |
+| <a id="f-14"></a>F-14 | L   | **CTest wiring.** `Oxygen.Cooker.RetainedImport.Cli` has no `TIMEOUT`. `retained_import_cli_test.py` uses bare `assert`, which `python -O` strips. `MaterialSlotAllocation.cpp` and `ImportSourceSnapshot.cpp` are compiled into both the library and a test executable.                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | CT-2, CT-3.8     |
 
 What is already good and must be kept:
 
@@ -226,16 +232,16 @@ the rest move to `X_functional_test.cpp`. [§3](#3-file-mapping) lists every
 split.
 
 The **gpu** tier is empty today and is only reserved. When a Cooker test needs a
-device (for example a GPU BC7 path), give it `X_gpu_test.cpp` and a `*.Gpu.Tests`
-executable registered with the `GPU` option. That option already adds the
-`oxygen_gpu` resource lock, and after CT-1 it also adds the `gpu` label. Do not
-create empty GPU executables.
+device (for example a GPU BC7 path), give it `X_gpu_test.cpp` and a
+`*.Gpu.Tests` executable registered with the `GPU` option. That option already
+adds the `oxygen_gpu` resource lock, and after CT-1 it also adds the `gpu`
+label. Do not create empty GPU executables.
 
 ### 2.2 Directory layout and the mapping rule
 
-**Rule (mechanical).** A test for source file `Cooker/<Dir>/<Stem>.{h,cpp}` lives in
-`Cooker/test/<Dir'>/<Stem>[_<aspect>][_functional|_gpu]_test.cpp`, where
-`<Dir'>` is chosen as follows:
+**Rule (mechanical).** A test for source file `Cooker/<Dir>/<Stem>.{h,cpp}`
+lives in `Cooker/test/<Dir'>/<Stem>[_<aspect>][_functional|_gpu]_test.cpp`,
+where `<Dir'>` is chosen as follows:
 
 | Source directory                                                            | Test directory              |
 | --------------------------------------------------------------------------- | --------------------------- |
@@ -302,8 +308,8 @@ This makes both directions a single search:
 - source to tests: `rg "Covers:.*ScriptingSidecarImportJob" Test Tools`
 - test to source: read line 1 after the license.
 
-The mapping rule in §2.2 gives the expected location. `Covers:` is the
-authority when a test spans several files.
+The mapping rule in §2.2 gives the expected location. `Covers:` is the authority
+when a test spans several files.
 
 ### 2.5 Shared support library `Oxygen.Cooker.TestSupport`
 
@@ -339,8 +345,8 @@ callers in **different directories**.
 
 1. **`cmake/GTestHelpers.cmake`:** add a `LABELS` multi-value argument to
    `gtest_program` and `m_gtest_program`. `GPU` also appends the `gpu` label.
-   The full snippet is in [Appendix B](#appendix-b-cmake-snippets). Other modules
-   are unaffected because the argument is optional.
+   The full snippet is in [Appendix B](#appendix-b-cmake-snippets). Other
+   modules are unaffected because the argument is optional.
 2. **`Cooker/test/Support/CMakeLists.txt`** defines:
    - the `Oxygen.Cooker.TestSupport` library
    - one helper function. Every Cooker test executable is declared through it,
@@ -384,8 +390,8 @@ callers in **different directories**.
    the library is not defined. The DLL export surface does not change. A CMake
    comment restricts the library to **stateless** internals that depend only on
    exported or public headers, because in shared builds the copy lives outside
-   the DLL. An OBJECT library is not used: the Visual Studio generator lists
-   its objects as `.obj` items in every consumer project.
+   the DLL. An OBJECT library is not used: the Visual Studio generator lists its
+   objects as `.obj` items in every consumer project.
 6. **Target executables** (14 GoogleTest executables, down from 40):
 
 | Executable (`Oxygen.Cooker.` …)     | Tier       | Source directory                                                                                |
@@ -410,9 +416,9 @@ Plus `Oxygen.Cooker.LinkTest` (label `cooker;unit`) and the two Python tests
 `Oxygen.Cooker.ImportTool.RetainedImport.Cli` (label `cooker;functional`,
 `TIMEOUT 300`), both registered from `Tools/ImportTool/test/CMakeLists.txt`.
 
-Unit executables are grouped by area: they are fast, and one binary per area keeps
-link time low. Functional executables are split by directory, so that a hang in
-one area doesn't take another area's results with it.
+Unit executables are grouped by area: they are fast, and one binary per area
+keeps link time low. Functional executables are split by directory, so that a
+hang in one area doesn't take another area's results with it.
 
 ### 2.7 Running the tests
 
@@ -433,9 +439,9 @@ The Cooker depends on Data and Content. A Cooker test checks **Cooker output**:
 cooked files, pak bytes, catalogs, manifests, reports and diagnostics. It may
 read that output back with:
 
-- Cooker's own readers: `lc::Inspection`, `lc::ValidateRoot(…, IntegrityCheck::kFull)`
-  (this also verifies content hashes), and the Pak plan, catalog and manifest
-  types.
+- Cooker's own readers: `lc::Inspection`,
+  `lc::ValidateRoot(…, IntegrityCheck::kFull)` (this also verifies content
+  hashes), and the Pak plan, catalog and manifest types.
 - Data's format types (`data::pak::*` descriptors, `PakCatalog`,
   `AssetReferences`), copied out with `memcpy` as the rules require.
 - Content's **stateless public format readers**:
@@ -458,11 +464,10 @@ A Cooker test must **not**:
 Behaviour that sits on the Content side of this line is tested in Content, with
 Content's fixtures. End-to-end acceptance (sources cooked, packed and loaded by
 the real runtime) is already exercised by the Examples content pipeline:
-`Examples/Content/import_models`, `cook_scenes` (including the
-`physics_domains` scene with its physics sidecar) and `pak_content`, consumed
-by `RenderScene` and `DemoShell`. No new example scenario is needed, because
-every check in [E.6](#e6-cross-module-assertions-d-07) can be written inside a
-single module.
+`Examples/Content/import_models`, `cook_scenes` (including the `physics_domains`
+scene with its physics sidecar) and `pak_content`, consumed by `RenderScene` and
+`DemoShell`. No new example scenario is needed, because every check in
+[E.6](#e6-cross-module-assertions-d-07) can be written inside a single module.
 
 ---
 
@@ -470,9 +475,9 @@ single module.
 
 This table is the authoritative work list for CT-3 (moves and tier splits) and
 CT-5 (behaviour splits). Paths are relative to `Cooker/`. Use `git mv` for every
-row that is a move, so history follows the file. **U** = unit, **F** = functional.
-The "Exe" column gives the executable suffix after `Oxygen.Cooker.` and before
-`.Tests`.
+row that is a move, so history follows the file. **U** = unit, **F** =
+functional. The "Exe" column gives the executable suffix after `Oxygen.Cooker.`
+and before `.Tests`.
 
 ### 3.1 `Test/Import` (current flat directory)
 
@@ -491,11 +496,11 @@ The "Exe" column gives the executable suffix after `Oxygen.Cooker.` and before
 | BufferEmitter_test.cpp                                                                               | Test/Import/Emitters/BufferEmitter_functional_test.cpp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | F    | Import.Emitters.Functional               | –                                                                                                                                               |
 | BufferPipeline_test.cpp                                                                              | Test/Import/Pipelines/BufferPipeline_functional_test.cpp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            | F    | Import.Pipelines.Functional              | –                                                                                                                                               |
 | BufferSource_test.cpp                                                                                | Test/Import/BufferSource_test.cpp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | U    | Import.Unit                              | –                                                                                                                                               |
-| BuiltinGeometryCatalog_test.cpp                                                                      | Test/Import/BuiltinGeometryCatalog_test.cpp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | U    | Import.Unit                              | –                                                                                                                                               |
 | CapturedInputSet_test.cpp                                                                            | Test/Import/CapturedInputSet_test.cpp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                               | U    | Import.Unit                              | CT-6: `TEST_P` for :93 and :109; expect the precise exception type                                                                              |
 | CollisionShapeDescriptorImportJob_test.cpp                                                           | Test/Import/Jobs/CollisionShapeDescriptorImportJob_functional_test.cpp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | F    | Import.Jobs.Functional                   | –                                                                                                                                               |
 | CollisionShapeDescriptorImportRequestBuilder_test.cpp                                                | Test/Import/CollisionShapeDescriptorImportRequestBuilder_functional_test.cpp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | F    | Import.Functional                        | –                                                                                                                                               |
 | CollisionShapeDescriptorJsonSchema_test.cpp                                                          | Test/Import/Schemas/CollisionShapeDescriptorSchema_test.cpp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | U    | Import.Unit                              | CT-4: `SchemaCase` table                                                                                                                        |
+| EngineContent_test.cpp                                                                               | Test/Import/EngineContent_test.cpp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                  | U    | Import.Unit                              | –                                                                                                                                               |
 | FileError_test.cpp                                                                                   | Test/Import/FileError_test.cpp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      | U    | Import.Unit                              | CT-6: `MapSystemError` tests (:127-195) as a `TEST_P`                                                                                           |
 | GeometryDescriptorImportJob_test.cpp                                                                 | Test/Import/Jobs/GeometryDescriptorImportJob_functional_test.cpp (move only)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                        | F    | Import.Jobs.Functional                   | **CT-5.6:** split by behaviour ([E.7](#e7-geometrydescriptorimportjob_testcpp))                                                                 |
 | GeometryDescriptorImportRequestBuilder_test.cpp                                                      | Test/Import/GeometryDescriptorImportRequestBuilder_functional_test.cpp                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | F    | Import.Functional                        | –                                                                                                                                               |
@@ -573,8 +578,8 @@ The "Exe" column gives the executable suffix after `Oxygen.Cooker.` and before
 | retained_import_cli_test.py                                                                          | Tools/ImportTool/test/retained_import_cli_test.py                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   | F    | Python CTest                             | CT-2: `unittest` + `TIMEOUT`                                                                                                                    |
 | Models/                                                                                              | Test/Assets/Models/                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | –    | –                                        | CT-6.8/6.9: delete unreferenced files and duplicates; LFS for large files                                                                       |
 
-`WindowsFileReader`/`WindowsFileWriter` keep their `$<$<BOOL:${WIN32}>:…>`
-guard in the source list.
+`WindowsFileReader`/`WindowsFileWriter` keep their `$<$<BOOL:${WIN32}>:…>` guard
+in the source list.
 
 ### 3.2 `Test/Plan`, `Test/Mocks`, `Test/Fixtures`
 
@@ -639,14 +644,15 @@ guard in the source list.
 General rules for every phase:
 
 - **One PR per phase**, or per slice where a phase lists slices.
-- **Do not change test behaviour while moving files.** A move commit contains only
-  `git mv` and CMake changes, so reviewers can see it is mechanical. Content
-  edits go in a separate commit.
+- **Do not change test behaviour while moving files.** A move commit contains
+  only `git mv` and CMake changes, so reviewers can see it is mechanical.
+  Content edits go in a separate commit.
 - **Prove nothing was lost.** After every slice, run the inventory diff from
   [Appendix D](#appendix-d-test-inventory-diff). Every removed or renamed test
   name must appear in the slice's rename list in the PR description.
 - Run `oxyformat` on changed C++ before building, and `oxytidy` before asking
-  for review. Clear all warnings in touched files ([RULES](../../../../design/oxygen/RULES.md)).
+  for review. Clear all warnings in touched files
+  ([RULES](../../../../design/oxygen/RULES.md)).
 - Build only the Cooker test targets (`cmake --build <build> --target <exe>`),
   not the whole engine. Then run them with `ctest -R "^Oxygen\.Cooker\."`.
 - Commit only after review approval.
@@ -779,9 +785,9 @@ These apply to all new and touched code. Reviewers check them.
 
 1. **One behaviour per test.** If the name needs "And", split it.
 2. **Use `ASSERT_*` when continuing would crash or be meaningless.** That covers
-   optional/pointer access, container indexing and `report.success` before reading
-   outputs. Use `EXPECT_*` for independent checks. Never dereference something
-   that was only `EXPECT`ed.
+   optional/pointer access, container indexing and `report.success` before
+   reading outputs. Use `EXPECT_*` for independent checks. Never dereference
+   something that was only `EXPECT`ed.
 3. **Write helpers so failure is explicit.** A helper either returns a value
    (`std::optional`, or throws `std::runtime_error` with context, which
    GoogleTest reports as a failure), or is `void` and uses `ASSERT_*`, called
@@ -802,8 +808,8 @@ These apply to all new and touched code. Reviewers check them.
 9. **Do not use sleeps.** Synchronise with latches, promises or gates, and
    always bound waits (`wait_for`) so a bug fails fast instead of hanging.
 10. **Use `GTEST_SKIP()` only for a missing environment capability** (for
-    example no GPU), always with a message. Never skip because a checked-in
-    file is missing. Never use `DISABLED_` without a tracking ID in a comment.
+    example no GPU), always with a message. Never skip because a checked-in file
+    is missing. Never use `DISABLED_` without a tracking ID in a comment.
 11. **Test observable behaviour**, not private call sequences or another
     module's internals.
 12. **Write comments that explain why**, not what the name already says. Do not
@@ -1107,11 +1113,10 @@ design/content-pipeline/cooker-test-suite-plan.md §2.1.
 
 Source `Cooker/<Dir>/<Stem>.cpp` →
 `Test/<Dir without Internal/>/<Stem>[_aspect][_functional|_gpu]_test.cpp`.
-`Jobs/`, `Pipelines/`, `Emitters/` and `Schemas/` keep their subdirectory.
-Tool tests live in `Tools/<Tool>/test/`. Cross-area workflows live in
-`Test/Scenarios/`.
-Every test file names its sources on a `// Covers:` line. To find the tests for
-a source file: `rg "Covers:.*<Stem>" Test Tools`.
+`Jobs/`, `Pipelines/`, `Emitters/` and `Schemas/` keep their subdirectory. Tool
+tests live in `Tools/<Tool>/test/`. Cross-area workflows live in
+`Test/Scenarios/`. Every test file names its sources on a `// Covers:` line. To
+find the tests for a source file: `rg "Covers:.*<Stem>" Test Tools`.
 
 ## Adding a test
 
@@ -1127,8 +1132,8 @@ a source file: `rg "Covers:.*<Stem>" Test Tools`.
 
 ## Appendix D: Test inventory diff
 
-Requires Python 3.10+. Save this as a local script outside the repository (for example in your build
-directory), not in Git. Run it after each slice.
+Requires Python 3.10+. Save this as a local script outside the repository (for
+example in your build directory), not in Git. Run it after each slice.
 
 ```python
 # list_cooker_tests.py <build-bin-dir> <out.txt>
@@ -1175,7 +1180,8 @@ The current layout is: lines 1-596 helpers, 601-1071 `ScriptAssetImportTest` (17
 tests), 1086-3445 `ScriptingSidecarImportTest` (42 tests).
 
 1. Create `Test/Import/Jobs/ScriptImportTestSupport.h` with:
-   - the `ScriptingImportTestBase` fixture (built on `ImportServiceTest` after CT-4)
+   - the `ScriptingImportTestBase` fixture (built on `ImportServiceTest` after
+     CT-4)
    - one `MakeSidecarPayload(const SidecarBindingSpec&) -> std::string`, built
      with `nlohmann::json`. It replaces the 6 string-concatenation builders at
      :370-540.
@@ -1201,10 +1207,10 @@ comment at :1083-1085.
 ### E.2 `PakWriter_test.cpp`
 
 1. Add a fixture method `CanonicalPlan()` that returns a valid minimal
-   `PakPlan::Data`, built from the existing `MakeCanonicalRegions`/`MakeCanonicalTables`
-   (:215/:254). Each negative test then mutates a single field. This removes the
-   literal region and table spelling at :634-733, :733-838, :1289-1496 and
-   :1496-1649.
+   `PakPlan::Data`, built from the existing
+   `MakeCanonicalRegions`/`MakeCanonicalTables` (:215/:254). Each negative test
+   then mutates a single field. This removes the literal region and table
+   spelling at :634-733, :733-838, :1289-1496 and :1496-1649.
 2. Split into these files:
    - `PakWriter_functional_test.cpp`: the planner + writer tests at :300, :344,
      :386, :525 and :1649, covering CRC on/off, full-mode descriptors, physics
@@ -1234,9 +1240,9 @@ comment at :1083-1085.
 4. Split into these files:
    - `PakPlanBuilder_functional_test.cpp`: layering, resources, index-zero,
      browse size, physics pairs
-   - the patch-mode tests go to `PakPlanBuilder_patch_functional_test.cpp`
-     (E.4)
-   - the repack tests (including :587) go to `Test/Pak/PakRepack_functional_test.cpp`.
+   - the patch-mode tests go to `PakPlanBuilder_patch_functional_test.cpp` (E.4)
+   - the repack tests (including :587) go to
+     `Test/Pak/PakRepack_functional_test.cpp`.
 5. `ExpectPlansEquivalent` (:128-242) has a single caller (:438, the determinism
    test). It stays in `PakPlanBuilder_functional_test.cpp`, next to that test.
 
@@ -1299,9 +1305,9 @@ namespace `oxygen::content::testing`):
   the fixture, and its tests must still pass.
 - Add three optional inputs:
   - `physics_resources`, a span of `PhysicsResourceDesc` plus one
-    `std::vector<std::byte>` payload per entry. The writer appends the
-    payloads as the physics region, sets each `data_offset` (absolute) and
-    `size_bytes`, then writes the table and fills
+    `std::vector<std::byte>` payload per entry. The writer appends the payloads
+    as the physics region, sets each `data_offset` (absolute) and `size_bytes`,
+    then writes the table and fills
     `footer.physics_region`/`footer.physics_resource_table`.
   - `deleted`, a span of `AssetKey` copied into `catalog.deleted`.
   - `source_key`.
@@ -1336,9 +1342,10 @@ Acceptance:
 
 ### E.7 `GeometryDescriptorImportJob_test.cpp`
 
-The file is now `Test/Import/Jobs/GeometryDescriptorImportJob_functional_test.cpp`,
-with 17 tests after 337 lines of helpers. CT-4 replaces most of those helpers.
-Split it like this:
+The file is now
+`Test/Import/Jobs/GeometryDescriptorImportJob_functional_test.cpp`, with 17
+tests after 337 lines of helpers. CT-4 replaces most of those helpers. Split it
+like this:
 
 | New file (`Test/Import/Jobs/`)                               | Suite                                       | Tests (current line)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | ------------------------------------------------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -1346,11 +1353,11 @@ Split it like this:
 | `GeometryDescriptorImportJob_buffers_functional_test.cpp`    | `GeometryDescriptorImportJobBuffersTest`    | LocalBuffersEmitGeometryAndBufferArtifacts (338), ResolvesLocalBufferSidecars and RejectsBufferSidecarsOwnedByForeignRoot (both from 564, see below), RejectsBufferSidecarsFromAdditionalCookedContextRoot (948), DuplicateMountedBufferSidecarsFailWithAmbiguousDiagnostic (1040), BufferReferenceOutsideMountedRootsFailsWithHelpfulDiagnostic (1138), UnknownBufferViewReferenceFailsWithHelpfulDiagnostic (1168), EquivalentLocalBuffersAcrossGeometryJobsWithDifferentVirtualPathsFail (1945), EquivalentLocalBuffersWithDifferentVirtualPathsFailWithConflictDiagnostic (2074) |
 | `GeometryDescriptorImportJob_procedural_functional_test.cpp` | `GeometryDescriptorImportJobProceduralTest` | ProceduralDescriptorImportsAndRemainsLoaderCompatible (1239), ProceduralPlanePreservesDescriptorBoundsInCookedMetadata (1308), ProceduralCapsuleParametersRoundTripThroughNativeLoader (1401), ProceduralCapsuleRejectsUnrepresentableDimensionsWithoutOutput (1525), ProceduralIcoSphereParametersRoundTripThroughNativeLoader (1558), ProceduralSubdividedCubeImportsAndRemainsLoaderCompatible (1667)                                                                                                                                                                             |
 
-`ResolvesLocalBuffersAndRejectsForeignRootIndices` (564-790) does two things
-in sequence:
+`ResolvesLocalBuffersAndRejectsForeignRootIndices` (564-790) does two things in
+sequence:
 
-- relative lines 1-211 cook the local buffers and import geometry that
-  resolves them (:747-757)
+- relative lines 1-211 cook the local buffers and import geometry that resolves
+  them (:747-757)
 - relative lines 212-227 cook buffers into a second root and expect
   `geometry.buffer.foreign_root` (:775-789).
 

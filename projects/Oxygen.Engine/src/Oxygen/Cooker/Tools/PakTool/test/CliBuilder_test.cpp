@@ -220,4 +220,37 @@ NOLINT_TEST(PakToolCliTest, BuildCommandRejectsPatchOnlyOptionSurface)
     CmdLineArgumentsError);
 }
 
+//! Both commands take dependency paks, whose assets the pak references.
+NOLINT_TEST(PakToolCliTest, BuildCommandAcceptsDependencyPaks)
+{
+  auto options = PakToolCliOptions {};
+  const auto cli = BuildCli(options);
+
+  constexpr auto argc = 15;
+  const auto argv = std::array {
+    "Oxygen.Cooker.PakTool",
+    "build",
+    "--out",
+    "C:/Build/game.pak",
+    "--catalog-out",
+    "C:/Build/game.pakcatalog.json",
+    "--content-version",
+    "42",
+    "--source-key",
+    kSourceKey,
+    "--loose-source",
+    "C:/Cooked/Game",
+    "--dependency-pak",
+    "C:/Sdk/share/oxygen/engine.pak",
+    "--quiet",
+  };
+
+  const auto context = cli->Parse(argc, const_cast<const char**>(argv.data()));
+
+  EXPECT_EQ(context.active_command->PathAsString(), "build");
+  ASSERT_EQ(options.request.dependency_paks.size(), 1U);
+  EXPECT_EQ(options.request.dependency_paks.front(),
+    std::filesystem::path("C:/Sdk/share/oxygen/engine.pak"));
+}
+
 } // namespace

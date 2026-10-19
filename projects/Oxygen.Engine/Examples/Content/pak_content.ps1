@@ -41,6 +41,12 @@ uses the installed SDK's PakTool. In a source checkout it builds PakTool in a
 configured tree, preferring Release, ordinary builds, then Ninja. Build-selection
 switches apply only in a source checkout.
 
+.PARAMETER EnginePak
+Engine content pak the showcase pak depends on, so scenes reference /Engine
+assets without copying them. Defaults to the installed SDK's
+share/oxygen/engine.pak, or in a source checkout to the pak the selected build
+tree produces (built with PakTool). Required with -ToolPath outside an SDK.
+
 .PARAMETER DiagnosticsFile
 Optional explicit diagnostics report path. If omitted, no diagnostics report is
 emitted.
@@ -87,6 +93,8 @@ param(
 
     [string]$ToolPath,
 
+    [string]$EnginePak,
+
     [string]$DiagnosticsFile,
 
     [switch]$NoManifest,
@@ -127,9 +135,10 @@ $installedSdk = Test-Path -LiteralPath $SdkSupport
 if ($ToolPath -or $installedSdk) {
     $tools = Resolve-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-paktool' -BuildTree $BuildTree -Config $Config -Preset $Preset -Overrides @{ 'oxygen-cooker-paktool' = $ToolPath }
 } else {
-    $tools = Build-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-paktool' -BuildTree $BuildTree -Config $Config -Preset $Preset
+    $tools = Build-OxygenExecutables -SourceRoot $RepoRoot -Targets 'oxygen-cooker-paktool' -Prerequisites 'oxygen-engine-content' -BuildTree $BuildTree -Config $Config -Preset $Preset
 }
 Write-OxygenExecutableSelection $tools
+$EnginePak = Get-OxygenEngineContentPak -SourceRoot $RepoRoot -Selection $tools.Selection -Path $EnginePak
 
 $CookedRoot = Get-FullPath $CookedRoot
 $OutputDir = Get-FullPath $OutputDir
@@ -145,6 +154,7 @@ $ManifestPath = Join-Path $OutputDir ($BaseName + ".manifest.json")
 $Arguments = @(
     "build",
     "--loose-source", $CookedRoot,
+    "--dependency-pak", $EnginePak,
     "--script-source-root", (Get-FullPath $ContentRoot),
     "--out", $PakPath,
     "--catalog-out", $CatalogPath,
@@ -165,6 +175,7 @@ Write-Host "Cooked root : $CookedRoot" -ForegroundColor DarkGray
 Write-Host "Output dir  : $OutputDir" -ForegroundColor DarkGray
 Write-Host "Base name   : $BaseName" -ForegroundColor DarkGray
 Write-Host "Source key  : $SourceKey" -ForegroundColor DarkGray
+Write-Host "Depends on  : $EnginePak" -ForegroundColor DarkGray
 
 if ($PSCmdlet.ShouldProcess($PakPath, "Build pak from loose-cooked root")) {
     if (-not (Test-Path -LiteralPath $OutputDir -PathType Container)) {

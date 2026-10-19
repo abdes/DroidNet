@@ -129,8 +129,7 @@ auto RunInventoryReport(const InventoryReportOptions& options) -> int
     }
     auto resources = json::array();
     for (const auto& file : inspection.Files()) {
-      if (file.kind != lc::FileKind::kAuxiliary
-        || std::filesystem::path(file.relpath).extension() != ".otex") {
+      if (file.kind != lc::FileKind::kTextureDescriptor) {
         continue;
       }
       auto resource_index = json(nullptr);
@@ -140,6 +139,7 @@ auto RunInventoryReport(const InventoryReportOptions& options) -> int
       }
       resources.push_back({
         { "kind", "texture" },
+        { "virtual_path", file.virtual_path },
         { "descriptor_relative_path", file.relpath },
         { "resource_index", std::move(resource_index) },
       });

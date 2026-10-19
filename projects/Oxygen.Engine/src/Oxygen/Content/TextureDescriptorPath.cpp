@@ -16,7 +16,7 @@
 #include <vector>
 
 #include <Oxygen/Base/Filesystem.h>
-#include <Oxygen/Content/TextureResourceLocator.h>
+#include <Oxygen/Content/TextureDescriptorPath.h>
 
 namespace oxygen::content {
 namespace {

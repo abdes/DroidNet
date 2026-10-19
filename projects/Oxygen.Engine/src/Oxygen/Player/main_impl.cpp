@@ -128,6 +128,7 @@ auto CVarNames(const EngineCli& engine) -> std::vector<std::string>
 struct PlayerPaths {
   std::filesystem::path root;
   std::filesystem::path shader_library;
+  std::filesystem::path engine_content_pak;
 };
 
 auto ExecutablePath() -> std::filesystem::path
@@ -147,15 +148,20 @@ auto ExecutablePath() -> std::filesystem::path
   }
 }
 
-//! An installed SDK has `bin/Oxygen.Player.exe` and the shader library under
-//! `share/oxygen`; a build tree uses the engine source root.
+//! An installed SDK has `bin/Oxygen.Player.exe` and the shader library and
+//! engine content pak under `share/oxygen`; a build tree uses the engine source
+//! root.
 auto ResolvePlayerPaths() -> PlayerPaths
 {
   const auto install_root = ExecutablePath().parent_path().parent_path();
   const auto installed_shaders
     = install_root / "share/oxygen/shaders/shaders.bin";
   if (std::filesystem::is_regular_file(installed_shaders)) {
-    return { .root = install_root, .shader_library = installed_shaders };
+    return {
+      .root = install_root,
+      .shader_library = installed_shaders,
+      .engine_content_pak = install_root / "share/oxygen/engine.pak",
+    };
   }
   const auto source_root
     = std::filesystem::path(std::source_location::current().file_name())
@@ -167,6 +173,8 @@ auto ResolvePlayerPaths() -> PlayerPaths
     .root = source_root,
     .shader_library
     = PathFinderConfig::DefaultShaderLibraryPathForCurrentBuild(),
+    .engine_content_pak
+    = PathFinderConfig::DefaultEngineContentPakPathForCurrentBuild(),
   };
 }
 
@@ -198,6 +206,7 @@ auto MakeHostConfig(const player::PlayerLaunch& launch,
     = PathFinderConfig::Create()
         .WithWorkspaceRoot(paths.root)
         .WithShaderLibraryPath(paths.shader_library)
+        .WithEngineContentPakPath(paths.engine_content_pak)
         .WithScriptSourceRoots(launch.script_source_roots)
         .Build();
   // `--control` overrides the launch file's port.

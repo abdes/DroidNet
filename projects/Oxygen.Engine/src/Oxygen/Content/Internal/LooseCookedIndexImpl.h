@@ -99,6 +99,11 @@ public:
     std::string_view virtual_path) const noexcept
     -> std::optional<data::AssetKey>;
 
+  //! Relative path of the texture descriptor recorded under `virtual_path`.
+  OXGN_CNTT_NDAPI auto FindTextureDescriptorRelPath(
+    std::string_view virtual_path) const noexcept
+    -> std::optional<std::string_view>;
+
   [[nodiscard]] auto GetAllAssetKeys() const noexcept
     -> std::span<const data::AssetKey>
   {
@@ -131,6 +136,7 @@ private:
 
   struct FileInfo {
     uint32_t relpath_offset = 0;
+    uint32_t virtual_path_offset = 0;
     uint64_t size = 0;
     base::Sha256Digest sha256 {};
   };
@@ -152,6 +158,7 @@ private:
   std::unordered_map<data::loose_cooked::FileKind, FileInfo, FileKindHash>
     kind_to_file_;
   std::vector<FileInfo> auxiliary_files_;
+  std::vector<FileInfo> texture_descriptors_;
   data::SourceKey guid_;
 
   static auto LoadAndValidateHeader(IndexLoadContext& context) -> void;

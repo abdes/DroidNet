@@ -72,11 +72,10 @@ OXGN_COOK_NDAPI auto StoreAssetDirectoryPayload(
   std::span<const PakAssetDirectoryEntryPlan> entries,
   std::vector<std::byte>& out_bytes) -> bool;
 
-OXGN_COOK_NDAPI auto MeasureBrowseIndexPayload(
-  std::span<const PakBrowseEntryPlan> entries) -> std::optional<uint64_t>;
+OXGN_COOK_NDAPI auto MeasureBrowseIndexPayload(const PakBrowseIndexPlan& browse)
+  -> std::optional<uint64_t>;
 
 OXGN_COOK_NDAPI auto StoreBrowseIndexPayload(
-  std::span<const PakBrowseEntryPlan> entries,
-  std::vector<std::byte>& out_bytes) -> bool;
+  const PakBrowseIndexPlan& browse, std::vector<std::byte>& out_bytes) -> bool;
 
 } // namespace oxygen::content::pak

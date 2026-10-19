@@ -1,12 +1,12 @@
 # PakTool Technical Design
 
-Start with [purpose](#1-purpose); the implemented reference-table packaging is in
-[M08.F1 reference-table packaging](#reference-table-packaging-m08f1).
+Start with [purpose](#1-purpose); the implemented reference-table packaging is
+in [M08.F1 reference-table packaging](#reference-table-packaging-m08f1).
 
 This document defines the release-target design for
-`src/Oxygen/Cooker/Tools/PakTool`, the native Oxygen CLI for building
-`.pak` archives from cooked content and for emitting the metadata required to
-manage those archives across build, patch, and publishing workflows.
+`src/Oxygen/Cooker/Tools/PakTool`, the native Oxygen CLI for building `.pak`
+archives from cooked content and for emitting the metadata required to manage
+those archives across build, patch, and publishing workflows.
 
 The design is intentionally anchored to the existing native pak pipeline in
 `Oxygen/Cooker/Pak`. `PakTool` is a productization layer over that pipeline. It
@@ -54,7 +54,8 @@ Current request/result contracts:
   - output pak/manifest paths
   - `content_version`
   - `source_key`
-  - `base_catalogs`
+  - `base_catalogs` (patch baseline)
+  - `dependency_catalogs` (paks the output references without containing)
   - `PakBuildOptions`
 - `PakBuildResult` already exposes:
   - `output_catalog`
@@ -93,8 +94,8 @@ Design consequence:
 - Emitting a structured build report file for automation when requested.
 - Deterministic console diagnostics and stable exit codes.
 - Safe output staging/publish semantics for final artifacts.
-- Automated coverage for CLI parsing, catalog IO, report IO, and tool
-  end-to-end behavior.
+- Automated coverage for CLI parsing, catalog IO, report IO, and tool end-to-end
+  behavior.
 
 ### 3.2 Out of Scope For This Release
 
@@ -166,9 +167,9 @@ Sealing rules:
 
 - if a script asset already has embedded source and/or bytecode, preserve those
   embedded payloads.
-- if a script asset advertises `kAllowExternalSource` and lacks embedded
-  source, resolve the external source file and append it to staged
-  `scripts.table` / `scripts.data`.
+- if a script asset advertises `kAllowExternalSource` and lacks embedded source,
+  resolve the external source file and append it to staged `scripts.table` /
+  `scripts.data`.
 - never compile during pak build.
 - never invent bytecode when the cooked content did not already provide it.
 - final staged PAK inputs must not retain `kAllowExternalSource`.
@@ -199,8 +200,8 @@ Artifact contracts belong where their semantics belong:
 
 - `data::PakCatalog` sidecar IO belongs in `Oxygen/Cooker/Pak` because it is a
   reusable content-management contract used by patch planning.
-- `PakTool` structured build-report emission belongs in
-  `Tools/PakTool` because it is a tool-local automation/reporting contract.
+- `PakTool` structured build-report emission belongs in `Tools/PakTool` because
+  it is a tool-local automation/reporting contract.
 
 This split keeps domain artifacts reusable without turning the tool into a
 general-purpose library.
@@ -233,9 +234,9 @@ paths. This applies to:
 - output catalog,
 - output manifest.
 
-For loose-cooked inputs, PakTool may also allocate staged source roots used
-only for content sealing during the current build. Those staged source roots
-are ephemeral tool-owned inputs and must not be published as authoritative
+For loose-cooked inputs, PakTool may also allocate staged source roots used only
+for content sealing during the current build. Those staged source roots are
+ephemeral tool-owned inputs and must not be published as authoritative
 artifacts.
 
 The diagnostics/build report is different: it describes the publication outcome
@@ -307,34 +308,28 @@ other native Oxygen tools do.
 CLI option design rule:
 
 - prefer flags or inversion flags over required bool literals,
-- do not require users to spell `true`/`false` for defaulted behavior unless
-  the underlying parser/framework leaves no cleaner choice.
+- do not require users to spell `true`/`false` for defaulted behavior unless the
+  underlying parser/framework leaves no cleaner choice.
 
 ### 7.1 Common Options
 
-- `--loose-source <dir>` repeatable
-  Maps to `CookedSource { kind = kLooseCooked, path = ... }`.
-- `--pak-source <path>` repeatable
-  Maps to `CookedSource { kind = kPak, path = ... }`.
-- `--out <pak-path>` required
-  Final published pak path.
-- `--catalog-out <path>` required
-  Final published pak catalog sidecar path.
-- `--content-version <u16>` required
-  Maps to `PakBuildRequest::content_version`.
-- `--source-key <uuid>` required
-  Parsed through `Uuid::FromString`; must be canonical lowercase UUIDv7 text
-  and is persisted in canonical lowercase UUIDv7 format.
-- `--non-deterministic`
-  Sets `PakBuildOptions::deterministic = false`.
-- `--embed-browse-index`
-  Sets `PakBuildOptions::embed_browse_index = true`.
+- `--loose-source <dir>` repeatable Maps to
+  `CookedSource { kind = kLooseCooked, path = ... }`.
+- `--pak-source <path>` repeatable Maps to
+  `CookedSource { kind = kPak, path = ... }`.
+- `--out <pak-path>` required Final published pak path.
+- `--catalog-out <path>` required Final published pak catalog sidecar path.
+- `--content-version <u16>` required Maps to `PakBuildRequest::content_version`.
+- `--source-key <uuid>` required Parsed through `Uuid::FromString`; must be
+  canonical lowercase UUIDv7 text and is persisted in canonical lowercase UUIDv7
+  format.
+- `--non-deterministic` Sets `PakBuildOptions::deterministic = false`.
+- `--embed-browse-index` Sets `PakBuildOptions::embed_browse_index = true`.
 - `--no-crc32`
 - `--fail-on-warnings`
 - `--quiet`
 - `--no-color`
-- `--diagnostics-file <path>`
-  Writes the structured build report.
+- `--diagnostics-file <path>` Writes the structured build report.
 
 Intentionally not included in this release:
 
@@ -360,8 +355,8 @@ Rules:
 
 Rules:
 
-- Each `--base-pak` supplies its validated embedded catalog, in command-line order.
-  Base identity, version, digest and order checks are mandatory.
+- Each `--base-pak` supplies its validated embedded catalog, in command-line
+  order. Base identity, version, digest and order checks are mandatory.
 
 ### 7.4 Input Rules
 
@@ -425,8 +420,8 @@ Oxygen.Cooker.PakTool patch ^
 
 Behavioral note:
 
-- when both the base pak and patch pak are mounted, later mounts take
-  precedence for subsequent loads
+- when both the base pak and patch pak are mounted, later mounts take precedence
+  for subsequent loads
 - mounting a patch after a base scene has already been loaded must still allow
   the next load of that scene to resolve patched content rather than reusing a
   stale base-cache entry
@@ -436,13 +431,12 @@ Behavioral note:
 ### 8.1 Pak Catalog Sidecar
 
 The canonical catalog is embedded in every PAK. The JSON sidecar is its
-inspection representation; mounting, composition and patch baselines consume
-the archive directly.
+inspection representation; mounting, composition and patch baselines consume the
+archive directly.
 
 Canonical contract:
 
-- Schema file:
-  `src/Oxygen/Cooker/Pak/Schemas/oxygen.pak-catalog.schema.json`
+- Schema file: `src/Oxygen/Cooker/Pak/Schemas/oxygen.pak-catalog.schema.json`
 - Default extension: `.pakcatalog.json`
 - Ownership: `Oxygen/Cooker/Pak`
 - Serialization: deterministic JSON via `nlohmann::ordered_json`
@@ -471,8 +465,8 @@ Behavioral requirements:
 - catalog write/read helpers must live in pak-domain code, for example
   `PakCatalogIo`,
 - patch mode accepts only this canonical catalog format,
-- `source_key` round-trips must enforce the native `SourceKey` runtime
-  contract and reject non-v7 values on both text and binary ingress paths,
+- `source_key` round-trips must enforce the native `SourceKey` runtime contract
+  and reject non-v7 values on both text and binary ingress paths,
 - schema-invalid catalogs fail fast before build execution,
 - catalog serialization ordering must be deterministic.
 
@@ -616,7 +610,8 @@ artifact publication.
 - `content-version` -> `content_version`
 - `source-key` -> `source_key`
 - build flags -> `PakBuildOptions`
-- catalogs read from base PAKs -> `base_catalogs`
+- catalogs read from base PAKs (patch only) -> `base_catalogs`
+- catalogs read from dependency PAKs (both commands) -> `dependency_catalogs`
 
 ### 11.2 Result Handling
 
@@ -725,16 +720,18 @@ separately approved:
 
 Native packaging uses descriptor-local bindings. Data owns the
 [descriptor-local reference contract](../../../Data/Docs/binary_packing_discipline.md#descriptor-local-references-m08f1).
-The [format milestone](../../../../../../../design/editor/plan/ED-M08.F1-descriptor-local-references.md)
+The
+[format milestone](../../../../../../../design/editor/plan/ED-M08.F1-descriptor-local-references.md)
 owns the remaining editor scene-reference authoring and qualification.
 
 ### Producer and packaging boundary
 
-Typed producers build local references while serializing descriptors. `AssetEmitter`
-and `LooseCookedWriter` accept descriptor bytes and their reference metadata as one
-asset record. `LooseCookedIndexRegistry` preserves both across concurrent sessions,
-replacement and incremental imports. A producer cannot publish a descriptor with
-metadata left over from its previous generation.
+Typed producers build local references while serializing descriptors.
+`AssetEmitter` and `LooseCookedWriter` accept descriptor bytes and their
+reference metadata as one asset record. `LooseCookedIndexRegistry` preserves
+both across concurrent sessions, replacement and incremental imports. A producer
+cannot publish a descriptor with metadata left over from its previous
+generation.
 
 `PakPlanBuilder` consumes those records without decoding asset fields:
 
@@ -759,12 +756,12 @@ existing neutral white texture in every source. Error selects its shared
 magenta/black checkerboard. Neither marker is a missing hard dependency or a
 payload relocation request.
 
-Stable key references need no relocation. Keyed physics references participate in
-resource closure/digests through the resource table's existing key inventory.
+Stable key references need no relocation. Keyed physics references participate
+in resource closure/digests through the resource table's existing key inventory.
 Logical references appear in inspection but do not force inclusion or ownership.
 The source's typed validation establishes descriptor/inventory agreement before
-publication; packaging performs generic graph/table checks rather than introducing
-another descriptor decoder.
+publication; packaging performs generic graph/table checks rather than
+introducing another descriptor decoder.
 
 ### Ordered layers and patch baselines
 
@@ -778,36 +775,50 @@ selected descriptor's source. Keep descriptors opaque and unchanged.
 Every current-format PAK embeds its catalog, including empty and deletion-only
 archives. The footer records its offset and size; the 256-byte footer and CRC
 field position remain unchanged. The catalog follows directory/browse metadata
-and precedes the footer. Missing catalogs require recooking, with no legacy path.
+and precedes the footer. Missing catalogs require recooking, with no legacy
+path.
 
 `Data::PakCatalog` owns physical entries, deletions and ordered base records
-`{SourceKey, content_version, catalog_digest}`. Its native codec and external JSON
-represent the same object. Readers validate the catalog digest, PAK identity,
-entry/directory agreement and non-overlapping bounded storage before mounting;
-this metadata check does not hash every resource payload. Packaging verifies
-entry digests using its existing source measurements. Runtime mounting and
-repacking require no companion metadata files.
+`{SourceKey, content_version, catalog_digest}`. Its native codec and external
+JSON represent the same object. Readers validate the catalog digest, PAK
+identity, entry/directory agreement and non-overlapping bounded storage before
+mounting; this metadata check does not hash every resource payload. Packaging
+verifies entry digests using its existing source measurements. Runtime mounting
+and repacking require no companion metadata files.
 
 A patch catalog describes its layer, including deletions. Compose baseline
-catalogs in declared order: replacements overwrite earlier definitions, deletions
-mask them, and a later explicit definition can recreate a deleted asset. Compare
-the complete desired content against that effective baseline. An incremental P2
-therefore compares against B + P1; a cumulative P2 compares against B and replaces
-earlier cumulative patches at deployment. A change back to B's bytes must still
-be emitted when P1 supplied different bytes.
+catalogs in declared order: replacements overwrite earlier definitions,
+deletions mask them, and a later explicit definition can recreate a deleted
+asset. Compare the complete desired content against that effective baseline. An
+incremental P2 therefore compares against B + P1; a cumulative P2 compares
+against B and replaces earlier cumulative patches at deployment. A change back
+to B's bytes must still be emitted when P1 supplied different bytes.
 
 Validate base identities, content versions, catalog digests and order before
 patch activation. Declared bases must form the contiguous suffix immediately
 below the patch. Additional lower-priority layers are allowed: Engine → Game →
-P1 accepts P1 built against Game. Game → Mod → P1 does not; intentional overrides
-belong above the patch. A cumulative P2 built against Game replaces P1 instead of
-being appended above it. There are no source/version/digest bypass switches.
-Catalog digests cover deletion metadata as well as entries. Resource payloads
-remain container-local: a changed descriptor may bring unchanged payloads it
-needs. This is asset-level patching, not binary-delta compression.
+P1 accepts P1 built against Game. Game → Mod → P1 does not; intentional
+overrides belong above the patch. A cumulative P2 built against Game replaces P1
+instead of being appended above it. There are no source/version/digest bypass
+switches. Catalog digests cover deletion metadata as well as entries. Resource
+payloads remain container-local: a changed descriptor may bring unchanged
+payloads it needs. This is asset-level patching, not binary-delta compression.
 
-This policy follows [UE5.7 patch priority](https://dev.epicgames.com/documentation/en-us/unreal-engine/how-to-create-a-patch-in-unreal-engine?application_version=5.7)
-and [Godot ordered packs and incremental chains](https://docs.godotengine.org/en/stable/tutorials/export/exporting_pcks.html).
+Dependencies are a separate contract from patch bases. A dependency pak provides
+assets the output references without containing them: game content references
+the engine content pak's basic shapes and default material. The planner resolves
+asset references into dependencies (the referenced asset's type is checked,
+nothing is copied), and the catalog and manifest record each dependency's
+identity, content version and catalog digest. At mount time each dependency must
+already be mounted below the pak, in declared order, with that exact identity;
+unlike bases, other layers may sit between, so Engine → Mod → Game accepts Game
+built against Engine. A full build takes dependencies and no bases; a patch may
+take both.
+
+This policy follows
+[UE5.7 patch priority](https://dev.epicgames.com/documentation/en-us/unreal-engine/how-to-create-a-patch-in-unreal-engine?application_version=5.7)
+and
+[Godot ordered packs and incremental chains](https://docs.godotengine.org/en/stable/tutorials/export/exporting_pcks.html).
 Runtime objects retain bindings until reload, as required by the
 [Content lifetime contract](../../../Content/Docs/loose_cooked_content.md#published-generations).
 
@@ -823,15 +834,16 @@ sidecar inputs, script resource emission and normal resource payload placement.
 
 Tests compare descriptor bytes before/after multi-root full and patch packaging,
 then load the result through Content. Cover all reference-bearing asset types,
-fallback/error markers across roots, absent references, swapping textures between slots,
-AO, metering masks, scripts and physics-sidecar hashes. Also package a model with
-a missing texture, verify its existing error-texture behavior, then repair and
-reimport the source and verify the real texture replaces it. Rejection cases cover
-invalid tables, undeclared/wrong-kind
+fallback/error markers across roots, absent references, swapping textures
+between slots, AO, metering masks, scripts and physics-sidecar hashes. Also
+package a model with a missing texture, verify its existing error-texture
+behavior, then repair and reimport the source and verify the real texture
+replaces it. Rejection cases cover invalid tables, undeclared/wrong-kind
 references, missing targets, owning cycles and stale versions. Use shared typed
 fixture producers; hand-crafted bytes belong only in malformed-format tests.
 
-Measure reference metadata size and planning/loading cost on the maintained small
-scene and Sponza. Preserve the source-qualified runtime identity and IBL contracts.
-PAK/index version changes, native SDK refresh and full recooking replace legacy
-readers; no packaging conversion of retired descriptors is provided.
+Measure reference metadata size and planning/loading cost on the maintained
+small scene and Sponza. Preserve the source-qualified runtime identity and IBL
+contracts. PAK/index version changes, native SDK refresh and full recooking
+replace legacy readers; no packaging conversion of retired descriptors is
+provided.

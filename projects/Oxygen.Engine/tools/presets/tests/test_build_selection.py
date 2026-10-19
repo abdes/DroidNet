@@ -545,6 +545,7 @@ exit $LASTEXITCODE
             (
                 "@echo off\r\necho RUNTIME=%OXYGEN_SELECTED_RUNTIME%\r\n"
                 "echo ARG1=%~1\r\necho ARG2=%~2\r\necho ARG3=%~3\r\necho ARG4=%~4\r\n"
+                "echo ARG5=%~5\r\necho ARG6=%~6\r\n"
                 f"exit /b {exit_code}\r\n"
             ).encode()
         )
@@ -576,6 +577,13 @@ function global:cmake {
         scene = self.root / "Examples/Content/scenes/fixture"
         scene.mkdir(parents=True)
         (scene / "import-manifest.json").write_text("{}", encoding="utf-8")
+        # The build tree records the engine content pak it produces.
+        engine_pak = self.root / "bin/Oxygen/Release/engine.pak"
+        engine_pak.parent.mkdir(parents=True)
+        engine_pak.write_bytes(b"")
+        (tree / "engine-content-pak-Release.txt").write_text(
+            str(engine_pak), encoding="utf-8"
+        )
         output = self.command(
             self.RECORDING_CMAKE
             + """
@@ -586,7 +594,7 @@ exit $LASTEXITCODE
         # The selected tree builds the importer first, so a stale one is
         # rebuilt before it cooks anything.
         self.assertIn(
-            "BUILD --build --preset conan-ninja-release --target oxygen-cooker-importtool",
+            "BUILD --build --preset conan-ninja-release --target oxygen-cooker-importtool oxygen-engine-content",
             output,
         )
         self.assertIn("conan-ninja-release", output)
@@ -595,6 +603,8 @@ exit $LASTEXITCODE
         self.assertIn("ARG2=batch", output)
         self.assertIn("ARG3=--manifest", output)
         self.assertIn(str(scene / "import-manifest.json"), output)
+        self.assertIn("ARG5=--cooked-context-root", output)
+        self.assertIn(str(engine_pak), output)
 
     def test_explicit_tool_and_companion_still_use_shared_invocation(self):
         tool = self.fake_tool(self.root / "explicit tools", "CustomImporter", 17)
@@ -752,6 +762,12 @@ function global:cmake { throw 'Unexpected build invocation' }
         self.fake_tool(tree / "bin/Release", "Oxygen.Cooker.PakTool", 29)
         self.copy_workflow("Examples/Content/pak_content.ps1")
         (self.root / "Examples/Content/.cooked/main").mkdir(parents=True)
+        engine_pak = self.root / "bin/Oxygen/Release/engine.pak"
+        engine_pak.parent.mkdir(parents=True)
+        engine_pak.write_bytes(b"")
+        (tree / "engine-content-pak-Release.txt").write_text(
+            str(engine_pak), encoding="utf-8"
+        )
         output = self.command(
             self.RECORDING_CMAKE
             + """
@@ -761,11 +777,13 @@ exit $LASTEXITCODE
             expect=29,
         )
         self.assertIn(
-            "BUILD --build --preset conan-ninja-release --target oxygen-cooker-paktool",
+            "BUILD --build --preset conan-ninja-release --target oxygen-cooker-paktool oxygen-engine-content",
             output,
         )
         self.assertIn("RUNTIME=ninja-Release", output)
         self.assertIn("ARG1=build", output)
+        self.assertIn("ARG4=--dependency-pak", output)
+        self.assertIn(f"ARG5={engine_pak}", output)
         self.assertNotIn("Published artifacts:", output)
 
     def test_cooker_callers_have_no_private_launch_paths(self):
@@ -847,6 +865,7 @@ exit $LASTEXITCODE
         caller = self.root / "caller"
         caller.mkdir()
         (caller / "cooked").mkdir()
+        (caller / "engine.pak").write_bytes(b"")
         (caller / "Pak.cmd").write_bytes(b"@echo off\r\necho TOOL-RAN\r\nexit /b 0\r\n")
         self.copy_workflow("Examples/Content/pak_content.ps1")
         output = self.command("""
@@ -856,7 +875,7 @@ try {
     Invoke-OxygenTool -Context $context -Target Pak -LogPath './tool.log' -CheckExitCode
     if (-not (Test-Path -LiteralPath './tool.log')) { throw 'Log did not use caller directory' }
     if ((Get-Content -LiteralPath './tool.log') -ne 'TOOL-RAN') { throw 'Tool did not run' }
-    & (Join-Path $PSScriptRoot 'Examples/Content/pak_content.ps1') -ToolPath './Pak.cmd' -CookedRoot './cooked' -OutputDir './uncreated' -WhatIf
+    & (Join-Path $PSScriptRoot 'Examples/Content/pak_content.ps1') -ToolPath './Pak.cmd' -EnginePak './engine.pak' -CookedRoot './cooked' -OutputDir './uncreated' -WhatIf
     if (Test-Path -LiteralPath './uncreated') { throw 'WhatIf created output' }
 } finally { Pop-Location }
 """)

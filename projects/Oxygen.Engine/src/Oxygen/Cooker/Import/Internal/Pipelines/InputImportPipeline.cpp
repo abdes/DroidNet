@@ -14,9 +14,7 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
-#include <fstream>
 #include <ios>
-#include <iterator>
 #include <limits>
 #include <optional>
 #include <span>
@@ -24,7 +22,6 @@
 #include <stop_token>
 #include <string>
 #include <string_view>
-#include <system_error>
 #include <unordered_map>
 #include <unordered_set>
 #include <utility>
@@ -514,16 +511,9 @@ namespace {
     std::string name;
   };
 
-  auto TryReadInputActionDescriptor(const std::filesystem::path& path)
+  auto TryReadInputActionDescriptor(std::span<const std::byte> bytes)
     -> std::optional<MountedActionDescriptor>
   {
-    auto in = std::ifstream(path, std::ios::binary);
-    if (!in) {
-      return std::nullopt;
-    }
-    const auto chars = std::vector<char>(
-      std::istreambuf_iterator<char>(in), std::istreambuf_iterator<char> {});
-    const auto bytes = std::as_bytes(std::span(chars));
     auto result = MountedActionDescriptor {};
     if (bytes.size() < sizeof(result.desc)) {
       return std::nullopt;
@@ -556,15 +546,13 @@ namespace {
       if (!visited.insert(normalized.string()).second) {
         continue;
       }
-      std::error_code ec;
-      if (!std::filesystem::exists(normalized / "container.index.bin", ec)
-        || ec) {
+      if (!lc::Inspection::IsCookedSource(normalized)) {
         continue;
       }
 
       auto inspection = lc::Inspection {};
       try {
-        inspection.LoadFromRoot(normalized);
+        inspection.Load(normalized);
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kWarning,
           "input.import.context_index_unreadable",
@@ -577,9 +565,13 @@ namespace {
         if (entry.asset_type != static_cast<uint8_t>(AssetType::kInputAction)) {
           continue;
         }
-        const auto descriptor_path
-          = normalized / std::filesystem::path(entry.descriptor_relpath);
-        const auto action = TryReadInputActionDescriptor(descriptor_path);
+        auto bytes = std::vector<std::byte> {};
+        try {
+          bytes = inspection.ReadAssetDescriptor(entry.key);
+        } catch (const std::exception&) {
+          continue;
+        }
+        const auto action = TryReadInputActionDescriptor(bytes);
         if (!action.has_value() || action->name.empty()) {
           continue;
         }

@@ -726,6 +726,7 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   Field("Browse Index Present", pak.HasBrowseIndex() ? "yes" : "no");
   if (pak.HasBrowseIndex()) {
     Field("Browse Index Entries", std::to_string(pak.BrowseIndex().size()));
+    Field("Browse Index Textures", std::to_string(pak.BrowseTextures().size()));
   }
 
   Field("Catalog Offset", ToHexString(f.catalog_offset));
@@ -737,6 +738,13 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
   for (const auto& base : catalog.bases) {
     Field("Base Source", oxygen::data::to_string(base.source_key), 4);
     Field("Base Content Version", std::to_string(base.content_version), 4);
+  }
+  Field("Dependencies", std::to_string(catalog.dependencies.size()));
+  for (const auto& dependency : catalog.dependencies) {
+    Field(
+      "Dependency Source", oxygen::data::to_string(dependency.source_key), 4);
+    Field("Dependency Content Version",
+      std::to_string(dependency.content_version), 4);
   }
 
   Field("PAK CRC32", fmt::format("0x{:08x}", f.pak_crc32));
@@ -757,6 +765,19 @@ void PakFileDumper::PrintPakFooter(const PakFile& pak)
     if (entries.size() > kMaxEntriesToPrint) {
       std::cout << "  ... (" << (entries.size() - kMaxEntriesToPrint)
                 << " more entries)\n\n";
+    }
+    const auto textures = pak.BrowseTextures();
+    const auto texture_count = (std::min)(textures.size(), kMaxEntriesToPrint);
+    for (size_t i = 0; i < texture_count; ++i) {
+      const auto& e = textures[i];
+      std::cout << "  [texture " << i << "]\n";
+      Field("Virtual Path", e.virtual_path, 4);
+      Field("Texture Index", std::to_string(e.texture_index.get()), 4);
+      std::cout << "\n";
+    }
+    if (textures.size() > kMaxEntriesToPrint) {
+      std::cout << "  ... (" << (textures.size() - kMaxEntriesToPrint)
+                << " more textures)\n\n";
     }
   }
 

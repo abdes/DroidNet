@@ -13,12 +13,6 @@
 
 namespace oxygen::content {
 
-//! Authoring-time locator for a texture within an explicitly mounted source.
-struct TextureResourceLocator {
-  std::filesystem::path cooked_root;
-  std::filesystem::path descriptor_relative_path;
-};
-
 //! Find the exact descriptor or its unique current hashed filename.
 //! Ambiguous matches throw; a missing descriptor returns nullopt.
 OXGN_CNTT_NDAPI auto FindTextureResourceDescriptorPath(

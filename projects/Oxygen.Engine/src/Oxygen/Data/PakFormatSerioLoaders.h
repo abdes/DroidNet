@@ -161,6 +161,7 @@ inline auto Load(AnyReader& reader,
     reader.ReadBlobInto(std::as_writable_bytes(std::span { header.magic })));
   CHECK_RESULT(reader.ReadInto(header.version));
   CHECK_RESULT(reader.ReadInto(header.entry_count));
+  CHECK_RESULT(reader.ReadInto(header.texture_entry_count));
   CHECK_RESULT(reader.ReadInto(header.string_table_size));
   return {};
 }
@@ -170,6 +171,16 @@ inline auto Load(AnyReader& reader, data::pak::core::PakBrowseIndexEntry& entry)
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(entry.asset_key));
+  CHECK_RESULT(reader.ReadInto(entry.virtual_path_offset));
+  CHECK_RESULT(reader.ReadInto(entry.virtual_path_length));
+  return {};
+}
+
+inline auto Load(AnyReader& reader,
+  data::pak::core::PakBrowseIndexTextureEntry& entry) -> Result<void>
+{
+  auto pack = reader.ScopedAlignment(1);
+  CHECK_RESULT(reader.ReadInto(entry.texture_index));
   CHECK_RESULT(reader.ReadInto(entry.virtual_path_offset));
   CHECK_RESULT(reader.ReadInto(entry.virtual_path_length));
   return {};

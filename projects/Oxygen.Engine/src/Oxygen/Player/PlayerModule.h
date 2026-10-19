@@ -52,9 +52,9 @@ struct PlayOutcome;
 
  Without a scene (stopped, loading, failed) the window shows why. Play
  (`ngin.session.begin`, from the toolbar, the console or a remote client)
- reads the launch file again and remounts the loose cooked roots it names,
- so content a launcher published since is seen, and replies with the load
- outcome. Lifecycle, script diagnostic and GPU work events go
+ reads the launch file again and remounts the cooked roots and pak files it
+ names, so content a launcher published since is seen, and replies with the
+ load outcome. Lifecycle, script diagnostic and GPU work events go
  to the host's event log.
 */
 class PlayerModule final : public host::HostModule {

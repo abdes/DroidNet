@@ -62,8 +62,9 @@ public:
     index_version_ = version;
   }
 
+  //! Writes a member file; only texture descriptors take a `virtual_path`.
   auto WriteFile(data::loose_cooked::FileKind kind, std::string relpath,
-    std::span<const std::byte> bytes) -> void
+    std::span<const std::byte> bytes, std::string virtual_path = {}) -> void
   {
     const auto absolute_path = cooked_root_ / std::filesystem::path(relpath);
     if (const auto parent = absolute_path.parent_path(); !parent.empty()) {
@@ -82,6 +83,7 @@ public:
       .relpath = std::move(relpath),
       .size = static_cast<uint64_t>(bytes.size()),
       .sha256 = base::ComputeSha256(bytes),
+      .virtual_path = std::move(virtual_path),
     });
   }
 
@@ -169,6 +171,8 @@ public:
       FileRecord record {};
       record.kind = pending_file.kind;
       record.relpath_offset = AppendString(strings, pending_file.relpath);
+      record.virtual_path_offset
+        = AppendString(strings, pending_file.virtual_path);
       record.size = pending_file.size;
       record.sha256 = pending_file.sha256;
       file_records.push_back(record);
@@ -259,6 +263,7 @@ private:
     std::string relpath;
     uint64_t size = 0;
     base::Sha256Digest sha256 {};
+    std::string virtual_path;
   };
 
   [[nodiscard]] static auto AppendString(

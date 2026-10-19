@@ -150,22 +150,4 @@ auto ReadLaunchFile(const std::filesystem::path& path) -> PlayerLaunch
   return ParseLaunchFile(text, absolute.parent_path(), path.string());
 }
 
-auto CanRemount(const PlayerLaunch& launch) noexcept -> bool
-{
-  return std::ranges::all_of(
-    launch.mounts, [](const LaunchMount& mount) -> bool {
-      return mount.kind == LaunchMount::Kind::kLooseCookedRoot;
-    });
-}
-
-auto PlanRemount(const PlayerLaunch& mounted,
-  const PlayerLaunch& current) noexcept -> RemountPlan
-{
-  if (CanRemount(mounted) && CanRemount(current)) {
-    return RemountPlan::kRemount;
-  }
-  return mounted.mounts == current.mounts ? RemountPlan::kReuse
-                                          : RemountPlan::kRelaunch;
-}
-
 } // namespace oxygen::player

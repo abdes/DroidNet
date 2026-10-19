@@ -59,9 +59,14 @@ public:
     std::optional<SourceKeyConflict> source_key_conflict;
   };
 
+  //! How a prepared source mounts in a replacement set.
+  enum class PreparedSourceKind : uint8_t { kLoose, kGeneration, kPak };
+
   struct PreparedSource final {
     std::shared_ptr<IContentSource> source;
-    bool generation = false;
+    PreparedSourceKind kind { PreparedSourceKind::kLoose };
+    //! The normalized pak file of a `kPak` source.
+    std::filesystem::path pak_path {};
   };
 
   //! Build a complete replacement without changing active or retired sources.

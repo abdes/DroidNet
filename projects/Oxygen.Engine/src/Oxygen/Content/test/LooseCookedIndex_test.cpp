@@ -22,6 +22,7 @@
 
 #include "./AssetLoader_test.h"
 #include "Fixtures/LooseCookedTestLayout.h"
+#include "Fixtures/LooseCookedTestWriter.h"
 #include <gtest/gtest.h>
 
 #include <Oxygen/Base/Sha256.h>
@@ -1711,6 +1712,81 @@ NOLINT_TEST_F(LooseCookedIndexTest, AddLooseCookedRootNoGuidThrows)
 
   EXPECT_THROW(
     { asset_loader_->AddLooseCookedRoot(cooked_root); }, std::exception);
+}
+
+//! A texture descriptor record keeps the virtual path it is addressed by.
+NOLINT_TEST_F(LooseCookedIndexTest, TextureDescriptorRecordKeepsItsVirtualPath)
+{
+  using oxygen::data::loose_cooked::FileKind;
+
+  // Arrange
+  const auto root = temp_dir_ / "textures";
+  const auto bytes = std::array<std::byte, 4> {};
+  {
+    auto writer = oxygen::content::testing::LooseCookedTestWriter(root);
+    writer.WriteFile(FileKind::kTextureDescriptor, "Textures/Sky.otex", bytes,
+      "/Content/Textures/Sky.otex");
+    static_cast<void>(writer.Finish());
+  }
+
+  // Act
+  const auto inventory
+    = oxygen::content::lc::LooseCookedIndex::LoadFromRoot(root)
+        .GetFileInventory();
+
+  // Assert
+  ASSERT_EQ(inventory.size(), 1U);
+  EXPECT_EQ(inventory.front().kind, FileKind::kTextureDescriptor);
+  EXPECT_EQ(inventory.front().virtual_path, "/Content/Textures/Sky.otex");
+}
+
+//! A texture descriptor needs a canonical virtual path of its own; no other
+//! file record may carry one.
+NOLINT_TEST_F(LooseCookedIndexTest, InvalidFileRecordVirtualPathsAreRejected)
+{
+  using oxygen::data::loose_cooked::FileKind;
+
+  struct Case {
+    FileKind kind;
+    std::string virtual_path;
+  };
+  const auto cases = std::array {
+    Case { .kind = FileKind::kTextureDescriptor, .virtual_path = {} },
+    Case {
+      .kind = FileKind::kTextureDescriptor,
+      .virtual_path = "Content/Textures/Sky.otex",
+    },
+    Case {
+      .kind = FileKind::kAuxiliary,
+      .virtual_path = "/Content/Textures/Sky.otex",
+    },
+    Case {
+      .kind = FileKind::kTextureDescriptor,
+      .virtual_path = "/Content/Materials/Wood.omat",
+    },
+  };
+  const auto bytes = std::array<std::byte, 4> {};
+  auto index = 0;
+  for (const auto& test_case : cases) {
+    // Arrange
+    const auto root = temp_dir_ / ("case" + std::to_string(index++));
+    {
+      auto writer = oxygen::content::testing::LooseCookedTestWriter(root);
+      writer.WriteAssetDescriptor(
+        oxygen::data::AssetKey::FromVirtualPath("/Content/Materials/Wood.omat"),
+        oxygen::data::AssetType::kMaterial, "/Content/Materials/Wood.omat",
+        "Materials/Wood.omat", bytes);
+      writer.WriteFile(
+        test_case.kind, "Textures/Sky.otex", bytes, test_case.virtual_path);
+      static_cast<void>(writer.Finish());
+    }
+
+    // Act & Assert
+    EXPECT_THROW(static_cast<void>(
+                   oxygen::content::lc::LooseCookedIndex::LoadFromRoot(root)),
+      std::runtime_error)
+      << test_case.virtual_path;
+  }
 }
 
 } // namespace

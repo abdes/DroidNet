@@ -34,6 +34,8 @@ struct FileEntry {
   std::string relpath;
   uint64_t size = 0;
   base::Sha256Digest sha256 {};
+  //! Virtual path of a texture descriptor; empty for every other file.
+  std::string virtual_path;
 };
 
 } // namespace oxygen::content::lc

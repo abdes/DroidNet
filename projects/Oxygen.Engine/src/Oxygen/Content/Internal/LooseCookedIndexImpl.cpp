@@ -209,6 +209,7 @@ auto ValidateFileKind(const FileKind kind) -> void
   case FileKind::kPhysicsTable:
   case FileKind::kPhysicsData:
   case FileKind::kAuxiliary:
+  case FileKind::kTextureDescriptor:
     return;
   case FileKind::kUnknown:
   default:
@@ -608,14 +609,31 @@ auto LooseCookedIndexImpl::ReadFileRecords(IndexLoadContext& context) -> void
         "Duplicate FileKind record in loose cooked index");
     }
 
+    ValidateStringOffset(context.header, record.virtual_path_offset);
+    const auto virtual_path = ExtractNullTerminatedString(
+      context.stored_table, record.virtual_path_offset);
+    if (record.kind == FileKind::kTextureDescriptor) {
+      RequireCanonicalVirtualPath(virtual_path);
+      if (!context.unique_virtual_paths.insert(virtual_path).second) {
+        throw std::runtime_error(
+          "Duplicate virtual path in loose cooked index file records");
+      }
+    } else if (!virtual_path.empty()) {
+      throw std::runtime_error(
+        "Only texture descriptor records may have a virtual path");
+    }
+
     FileInfo info {
       .relpath_offset = record.relpath_offset,
+      .virtual_path_offset = record.virtual_path_offset,
       .size = record.size,
       .sha256 = record.sha256,
     };
 
     if (record.kind == FileKind::kAuxiliary) {
       context.index->auxiliary_files_.push_back(info);
+    } else if (record.kind == FileKind::kTextureDescriptor) {
+      context.index->texture_descriptors_.push_back(info);
     } else {
       context.index->kind_to_file_.insert_or_assign(record.kind, info);
       context.index->file_kinds_.push_back(record.kind);
@@ -753,6 +771,25 @@ auto LooseCookedIndexImpl::FindAssetKeyByVirtualPath(
       const auto stored = ExtractNullTerminatedString(table, offset);
       if (stored == virtual_path) {
         return key;
+      }
+    }
+    return std::nullopt;
+  } catch (...) {
+    return std::nullopt;
+  }
+}
+
+auto LooseCookedIndexImpl::FindTextureDescriptorRelPath(
+  std::string_view virtual_path) const noexcept
+  -> std::optional<std::string_view>
+{
+  try {
+    const auto table
+      = std::string_view(string_storage_.data(), string_storage_.size());
+    for (const auto& file : texture_descriptors_) {
+      if (ExtractNullTerminatedString(table, file.virtual_path_offset)
+        == virtual_path) {
+        return ExtractNullTerminatedString(table, file.relpath_offset);
       }
     }
     return std::nullopt;

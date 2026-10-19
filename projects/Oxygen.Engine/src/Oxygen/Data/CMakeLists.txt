@@ -54,7 +54,6 @@ set(
   "AssetRuntimeBindings.h"
   "AssetType.h"
   "BufferResource.h"
-  "BuiltinGeometry.h"
   "ComponentType.h"
   "GeometryAsset.h"
   "GeometryIndices.h"
@@ -106,7 +105,6 @@ set(
   OXYGEN_DATA_PRIVATE_SOURCES
   "AssetReferences.cpp"
   "BufferResource.cpp"
-  "BuiltinGeometry.cpp"
   "CookedSource.cpp"
   "DescriptorStrings.cpp"
   "GeometryAsset.cpp"

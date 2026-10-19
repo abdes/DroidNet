@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <ostream>
+#include <span>
 #include <stop_token>
 #include <string>
 #include <string_view>
@@ -96,6 +97,18 @@ struct ImportManifest {
   OXGN_COOK_NDAPI auto AnalyzeSources(const std::stop_token& stop_token = {},
     std::shared_ptr<const CapturedInputSet> captured_inputs = {}) const
     -> ImportSourceAnalysis;
+
+  //! Places cooked context sources beneath every job's own context roots.
+  /*!
+   Batch-wide sources, such as the engine content pak, resolve references for
+   scene, geometry and scripting sidecar jobs with lower priority than the
+   sources the manifest names.
+
+   @param roots Loose cooked roots or pak files, lowest priority first;
+     relative paths resolve against the current directory.
+  */
+  OXGN_COOK_API auto AddBaseCookedContextRoots(
+    std::span<const std::filesystem::path> roots) -> void;
 
   OXGN_COOK_NDAPI auto BuildRequests(std::ostream& error_stream,
     const std::shared_ptr<const CapturedInputSet>& captured_inputs = {}) const

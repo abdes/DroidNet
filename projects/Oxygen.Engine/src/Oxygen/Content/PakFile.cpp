@@ -18,6 +18,8 @@
 #include <stdexcept>
 #include <string>
 #include <system_error>
+#include <unordered_map>
+#include <unordered_set>
 #include <utility>
 
 #include <Oxygen/Base/Logging.h>
@@ -37,6 +39,7 @@ using oxygen::data::AssetKey;
 using oxygen::data::pak::core::AssetDirectoryEntry;
 using oxygen::data::pak::core::PakBrowseIndexEntry;
 using oxygen::data::pak::core::PakBrowseIndexHeader;
+using oxygen::data::pak::core::PakBrowseIndexTextureEntry;
 using oxygen::data::pak::core::PakFooter;
 using oxygen::data::pak::core::PakHeader;
 
@@ -156,6 +159,7 @@ struct ParsedPakMetadata final {
 struct ParsedBrowseIndex final {
   std::vector<PakFile::BrowseEntry> entries {}; // NOLINT
   std::unordered_map<std::string_view, AssetKey> vpath_to_key {}; // NOLINT
+  std::vector<PakFile::BrowseTextureEntry> textures {}; // NOLINT
 };
 
 auto ReadPakHeader(oxygen::serio::FileStream<>& stream,
@@ -452,7 +456,9 @@ auto LoadBrowseIndex(oxygen::serio::FileStream<>& stream,
   }
 
   const uint64_t entries_size
-    = static_cast<uint64_t>(header.entry_count) * sizeof(PakBrowseIndexEntry);
+    = (static_cast<uint64_t>(header.entry_count) * sizeof(PakBrowseIndexEntry))
+    + (static_cast<uint64_t>(header.texture_entry_count)
+      * sizeof(PakBrowseIndexTextureEntry));
   const uint64_t expected_min_size
     = sizeof(PakBrowseIndexHeader) + entries_size + header.string_table_size;
   if (expected_min_size > browse_size) {
@@ -473,6 +479,17 @@ auto LoadBrowseIndex(oxygen::serio::FileStream<>& stream,
     }
     entries.push_back(entry_result.value());
   }
+  std::vector<PakBrowseIndexTextureEntry> texture_entries;
+  texture_entries.reserve(header.texture_entry_count);
+  for (uint32_t i = 0; i < header.texture_entry_count; ++i) {
+    auto entry_result = reader.Read<PakBrowseIndexTextureEntry>();
+    if (!entry_result) {
+      LOG_F(ERROR, "Failed to read browse index texture entry {}: {}", i,
+        entry_result.error().message());
+      return ParsedBrowseIndex {};
+    }
+    texture_entries.push_back(entry_result.value());
+  }
 
   auto strings_blob_result
     = reader.ReadBlob(static_cast<size_t>(header.string_table_size));
@@ -483,17 +500,14 @@ auto LoadBrowseIndex(oxygen::serio::FileStream<>& stream,
   }
   const auto& strings_blob = strings_blob_result.value();
 
-  parsed.entries.reserve(header.entry_count);
-  for (const auto& e : entries) {
-    const uint64_t off = e.virtual_path_offset;
-    const uint64_t len = e.virtual_path_length;
+  const auto read_path = [&](const uint64_t off,
+                           const uint64_t len) -> std::optional<std::string> {
     const uint64_t end = off + len;
     if (off > header.string_table_size || len > header.string_table_size
       || end > header.string_table_size || end < off) {
       LOG_F(ERROR, "Browse index string reference out of bounds (ignoring)");
-      return ParsedBrowseIndex {};
+      return std::nullopt;
     }
-
     const auto path_bytes
       = std::span<const std::byte>(strings_blob)
           .subspan(static_cast<size_t>(off), static_cast<size_t>(len));
@@ -503,24 +517,59 @@ auto LoadBrowseIndex(oxygen::serio::FileStream<>& stream,
       [](const std::byte byte) -> char { return std::to_integer<char>(byte); });
     if (vpath.empty() || vpath.front() != '/') {
       LOG_F(ERROR, "Browse index virtual path is not canonical (ignoring)");
+      return std::nullopt;
+    }
+    return vpath;
+  };
+
+  parsed.entries.reserve(header.entry_count);
+  for (const auto& e : entries) {
+    auto vpath = read_path(e.virtual_path_offset, e.virtual_path_length);
+    if (!vpath) {
       return ParsedBrowseIndex {};
     }
-
     parsed.entries.push_back(PakFile::BrowseEntry {
-      .virtual_path = std::move(vpath),
+      .virtual_path = std::move(*vpath),
       .asset_key = e.asset_key,
     });
   }
-
-  parsed.vpath_to_key.reserve(parsed.entries.size());
-  for (const auto& entry : parsed.entries) {
-    const std::string_view key_view(entry.virtual_path);
-    if (parsed.vpath_to_key.contains(key_view)) {
-      LOG_F(ERROR, "Browse index contains duplicate virtual path '{}'",
-        entry.virtual_path);
+  parsed.textures.reserve(header.texture_entry_count);
+  for (const auto& e : texture_entries) {
+    if (e.texture_index == oxygen::data::pak::core::kNoResourceIndex
+      || e.texture_index.get() >= footer.texture_table.count) {
+      LOG_F(ERROR, "Browse index texture is outside the texture table");
       return ParsedBrowseIndex {};
     }
-    parsed.vpath_to_key.emplace(key_view, entry.asset_key);
+    auto vpath = read_path(e.virtual_path_offset, e.virtual_path_length);
+    if (!vpath) {
+      return ParsedBrowseIndex {};
+    }
+    parsed.textures.push_back(PakFile::BrowseTextureEntry {
+      .virtual_path = std::move(*vpath),
+      .texture_index = e.texture_index,
+    });
+  }
+
+  auto unique_paths = std::unordered_set<std::string_view> {};
+  unique_paths.reserve(parsed.entries.size() + parsed.textures.size());
+  const auto claim = [&unique_paths](const std::string& path) -> bool {
+    if (unique_paths.insert(path).second) {
+      return true;
+    }
+    LOG_F(ERROR, "Browse index contains duplicate virtual path '{}'", path);
+    return false;
+  };
+  parsed.vpath_to_key.reserve(parsed.entries.size());
+  for (const auto& entry : parsed.entries) {
+    if (!claim(entry.virtual_path)) {
+      return ParsedBrowseIndex {};
+    }
+    parsed.vpath_to_key.emplace(entry.virtual_path, entry.asset_key);
+  }
+  for (const auto& entry : parsed.textures) {
+    if (!claim(entry.virtual_path)) {
+      return ParsedBrowseIndex {};
+    }
   }
 
   return parsed;
@@ -588,6 +637,7 @@ PakFile::PakFile(const std::filesystem::path& path)
     = LoadBrowseIndex(*meta_stream_, size_result.value(), footer_);
   browse_index_ = std::move(parsed_browse.entries);
   browse_vpath_to_key_ = std::move(parsed_browse.vpath_to_key);
+  browse_textures_ = std::move(parsed_browse.textures);
 }
 
 auto PakFile::ValidateCrc32Integrity() const -> void
@@ -630,7 +680,7 @@ auto PakFile::ValidateCrc32Integrity() const -> void
 
 auto PakFile::HasBrowseIndex() const noexcept -> bool
 {
-  return !browse_index_.empty();
+  return !browse_index_.empty() || !browse_textures_.empty();
 }
 
 auto PakFile::BrowseIndex() const noexcept -> std::span<const BrowseEntry>
@@ -647,6 +697,24 @@ auto PakFile::ResolveAssetKeyByVirtualPath(
     return std::nullopt;
   }
   return it->second;
+}
+
+auto PakFile::BrowseTextures() const noexcept
+  -> std::span<const BrowseTextureEntry>
+{
+  return browse_textures_;
+}
+
+auto PakFile::ResolveTextureIndexByVirtualPath(
+  const std::string_view virtual_path) const noexcept
+  -> std::optional<data::pak::core::ResourceIndexT>
+{
+  const auto it = std::ranges::find(
+    browse_textures_, virtual_path, &BrowseTextureEntry::virtual_path);
+  if (it == browse_textures_.end()) {
+    return std::nullopt;
+  }
+  return it->texture_index;
 }
 
 auto PakFile::CreateReaderAtOffset(serio::FileStream<>* stream,

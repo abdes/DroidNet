@@ -61,6 +61,11 @@ public:
     const std::filesystem::path& cooked_root, data::loose_cooked::FileKind kind,
     std::string_view relpath) -> void;
 
+  //! Register a texture descriptor record under its virtual path.
+  OXGN_COOK_API auto RegisterExternalTextureDescriptor(
+    const std::filesystem::path& cooked_root, std::string_view relpath,
+    std::string_view virtual_path) -> void;
+
   //! Register an asset record in the shared index writer.
   OXGN_COOK_API auto RegisterExternalAssetDescriptor(
     const std::filesystem::path& cooked_root, const data::AssetKey& key,

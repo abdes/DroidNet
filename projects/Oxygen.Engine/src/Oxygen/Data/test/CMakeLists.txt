@@ -36,7 +36,6 @@ m_gtest_program(
     "AssetReferences_test.cpp"
     "PakCatalog_test.cpp"
     "BufferResource_test.cpp"
-    "BuiltinGeometry_test.cpp"
     "CanonicalPrimitives_test.cpp"
     "Capsule_test.cpp"
     "CameraExposureSerialization_test.cpp"

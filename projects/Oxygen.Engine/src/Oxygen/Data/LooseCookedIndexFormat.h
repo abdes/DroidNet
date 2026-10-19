@@ -139,6 +139,8 @@ enum class FileKind : uint16_t {
   kPhysicsData = 8,
   //! Explicitly emitted resource descriptors or other non-role content files.
   kAuxiliary = 11,
+  //! A texture resource descriptor (`.otex`), addressed by its virtual path.
+  kTextureDescriptor = 12,
 };
 
 //! File record for resources and other cooked artifacts.
@@ -148,9 +150,12 @@ struct FileRecord {
   SizeT size = 0;
   //! Offset into string table for the relative path.
   uint32_t relpath_offset = 0; // e.g. "resources/buffers.table"
+  //! Offset into string table for the virtual path; only texture descriptors
+  //! have one, every other record uses the empty string at offset 0.
+  uint32_t virtual_path_offset = 0; // e.g. "/Content/Textures/Sky.otex"
   std::array<uint8_t, kSha256Size> sha256 {};
 };
 #pragma pack(pop)
-static_assert(sizeof(FileRecord) == 46);
+static_assert(sizeof(FileRecord) == 50);
 
 } // namespace oxygen::data::loose_cooked

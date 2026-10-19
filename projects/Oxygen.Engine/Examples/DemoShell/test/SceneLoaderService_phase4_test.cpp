@@ -33,7 +33,6 @@
 #include <Oxygen/Content/ResidencyPin.h>
 #include <Oxygen/Content/ResidencyPolicy.h>
 #include <Oxygen/Content/ResourceKey.h>
-#include <Oxygen/Content/TextureResourceLocator.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -666,8 +665,7 @@ namespace {
     }
     auto ClearMounts() -> void override { }
     auto WaitForPendingLoadsAsync() -> co::Co<> override { co_return; }
-    auto PrepareLooseCookedRootsAsync(
-      std::vector<std::filesystem::path> /*roots*/)
+    auto PrepareMountsAsync(std::vector<content::ContentMount> /*mounts*/)
       -> co::Co<content::PreparedMountSet> override
     {
       throw std::logic_error(
@@ -766,7 +764,7 @@ namespace {
       co_return nullptr;
     }
     [[nodiscard]] auto ResolveTextureResourceKey(
-      const content::TextureResourceLocator& /*locator*/)
+      std::string_view /*virtual_path*/)
       -> std::optional<content::ResourceKey> override
     {
       return std::nullopt;

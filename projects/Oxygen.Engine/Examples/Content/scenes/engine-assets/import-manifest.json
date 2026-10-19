@@ -40,48 +40,16 @@
       "content_hashing": true
     },
     {
-      "id": "geometry.GeoCube",
-      "type": "geometry-descriptor",
-      "source": "./GeoCube.geometry.json",
-      "name": "GeoCube",
-      "content_hashing": true,
-      "depends_on": ["material.MatCube"]
-    },
-    {
-      "id": "geometry.GeoCubeB",
-      "type": "geometry-descriptor",
-      "source": "./GeoCubeB.geometry.json",
-      "name": "GeoCubeB",
-      "content_hashing": true,
-      "depends_on": ["material.MatCubeB"]
-    },
-    {
-      "id": "geometry.GeoCubeC",
-      "type": "geometry-descriptor",
-      "source": "./GeoCubeC.geometry.json",
-      "name": "GeoCubeC",
-      "content_hashing": true,
-      "depends_on": ["material.MatCubeC"]
-    },
-    {
-      "id": "geometry.GeoCubeD",
-      "type": "geometry-descriptor",
-      "source": "./GeoCubeD.geometry.json",
-      "name": "GeoCubeD",
-      "content_hashing": true,
-      "depends_on": ["material.MatCubeD"]
-    },
-    {
-      "id": "scene.CubeScene",
+      "id": "scene.EngineAssets",
       "type": "scene-descriptor",
-      "source": "./CubeScene.scene.json",
-      "name": "CubeScene",
+      "source": "./EngineAssets.scene.json",
+      "name": "EngineAssets",
       "content_hashing": true,
       "depends_on": [
-        "geometry.GeoCube",
-        "geometry.GeoCubeB",
-        "geometry.GeoCubeC",
-        "geometry.GeoCubeD"
+        "material.MatCube",
+        "material.MatCubeB",
+        "material.MatCubeC",
+        "material.MatCubeD"
       ]
     }
   ]

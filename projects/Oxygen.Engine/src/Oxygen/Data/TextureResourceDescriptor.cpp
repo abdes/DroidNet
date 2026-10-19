@@ -8,6 +8,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <vector>
 
@@ -16,14 +17,35 @@
 #include <Oxygen/Data/TextureResourceDescriptor.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
+#include <Oxygen/Serio/Writer.h>
 
 namespace oxygen::data {
+
+namespace {
+  constexpr uint16_t kVersion = 1U;
+  constexpr std::array kMagic { 'O', 'T', 'E', 'X' };
+} // namespace
+
+auto EncodeTextureResourceDescriptor(
+  const TextureResourceDescriptor& descriptor) -> std::vector<std::byte>
+{
+  serio::MemoryStream stream;
+  serio::Writer writer(stream);
+  const auto packed = writer.ScopedAlignment(1);
+  if (!writer.WriteBlob(std::as_bytes(std::span { kMagic }))
+    || !writer.Write(kVersion) || !writer.Write(uint16_t { 0U })
+    || !writer.Write(descriptor.index)
+    || !writer.WriteBlob(
+      std::as_bytes(std::span { &descriptor.descriptor, 1U }))) {
+    throw std::runtime_error("Texture descriptor could not be encoded");
+  }
+  const auto bytes = stream.Data();
+  return { bytes.begin(), bytes.end() };
+}
 
 auto DecodeTextureResourceDescriptor(const std::span<const std::byte> bytes)
   -> Result<TextureResourceDescriptor, std::string>
 {
-  constexpr uint16_t kVersion = 1U;
-  constexpr std::array kMagic { 'O', 'T', 'E', 'X' };
   if (bytes.size() != kTextureResourceDescriptorSize) {
     return Err(
       std::string("Texture descriptor size does not match the current format"));

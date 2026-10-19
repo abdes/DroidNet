@@ -10,7 +10,7 @@
     },
     "schema_version": {
       "type": "integer",
-      "const": 1
+      "const": 2
     },
     "tool_name": {
       "type": "string",
@@ -178,6 +178,13 @@
             "minLength": 1
           }
         },
+        "dependency_paks": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "minLength": 1
+          }
+        },
         "options": {
           "$ref": "#/definitions/request_options"
         },
@@ -195,6 +202,7 @@
         "content_version",
         "sources",
         "base_paks",
+        "dependency_paks",
         "options",
         "script_source_roots"
       ]

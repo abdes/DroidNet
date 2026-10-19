@@ -40,6 +40,7 @@
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
 #include <Oxygen/Clap/Option.h>
+#include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
 #include <Oxygen/Core/EngineTag.h>
@@ -134,6 +135,10 @@ auto FileKindToString(const FileKind kind) -> std::string_view
     return "physics.table";
   case FileKind::kPhysicsData:
     return "physics.data";
+  case FileKind::kAuxiliary:
+    return "auxiliary";
+  case FileKind::kTextureDescriptor:
+    return "texture";
   case FileKind::kUnknown:
   default:
     return "unknown";
@@ -262,14 +267,19 @@ auto DumpFileRecords(
     return;
   }
 
-  os << "Kind             Path                                Size\n";
-  os << "---------------  ----------------------------------  ----------\n";
+  os << "Kind             Path                                Size        "
+        "Virtual Path\n";
+  os << "---------------  ----------------------------------  ----------  "
+        "------------\n";
 
   for (const auto& e : entries) {
     os << std::left << std::setw(kFileKindColumn) << FileKindToString(e.kind)
        << "  ";
     os << std::left << std::setw(kFilePathColumn) << e.relpath << "  ";
     os << std::right << std::setw(kSizeColumn) << e.size;
+    if (!e.virtual_path.empty()) {
+      os << "  " << e.virtual_path;
+    }
     os << "\n";
   }
 }
@@ -316,6 +326,14 @@ auto RunValidate(const ValidateOptions& opts) -> int
   const std::filesystem::path cooked_root(opts.cooked_root);
 
   try {
+    if (std::filesystem::is_regular_file(cooked_root)) {
+      const oxygen::content::PakFile pak(cooked_root);
+      pak.ValidateCrc32Integrity();
+      if (!opts.quiet) {
+        std::cout << "OK: valid pak: " << cooked_root.string() << "\n";
+      }
+      return 0;
+    }
     oxygen::content::lc::ValidateRoot(cooked_root);
     if (!opts.quiet) {
       std::cout << "OK: valid loose cooked root: " << cooked_root.string()
@@ -1058,7 +1076,7 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
   -> std::unique_ptr<Cli>
 {
   auto validate_root = Option::Positional("cooked_root")
-                         .About("Loose cooked root directory")
+                         .About("Loose cooked root directory or pak file")
                          .Required()
                          .WithValue<std::string>()
                          .StoreTo(&validate_opts.cooked_root)
@@ -1074,7 +1092,8 @@ auto BuildCli(ValidateOptions& validate_opts, DumpOptions& dump_opts,
 
   const std::shared_ptr<Command> validate_cmd
     = CommandBuilder("validate")
-        .About("Validate a loose cooked root (index + files).")
+        .About("Validate a loose cooked root (index and files) or a pak "
+               "(structure, catalog and CRC).")
         .WithPositionalArguments(validate_root)
         .WithOption(std::move(validate_quiet));
 

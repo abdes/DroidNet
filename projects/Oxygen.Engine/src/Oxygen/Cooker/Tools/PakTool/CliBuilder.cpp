@@ -102,6 +102,18 @@ namespace {
         })
         .Build());
 
+    group->Add(Option::WithKey("dependency-pak")
+        .About("PAK whose assets this pak references without containing them, "
+               "such as the engine content pak; repeat lowest first")
+        .Long("dependency-pak")
+        .WithValue<std::filesystem::path>()
+        .UserFriendlyName("PATH")
+        .Repeatable()
+        .CallOnEachValue([&options](const std::filesystem::path& path) -> void {
+          options.dependency_paks.push_back(path);
+        })
+        .Build());
+
     group->Add(Option::WithKey("pak-source")
         .About("Add an existing pak source archive")
         .Long("pak-source")

@@ -3417,7 +3417,7 @@ namespace {
 
     for (const auto& context : cooked_contexts) {
       try {
-        resolver.AddLooseCookedRoot(context.cooked_root);
+        detail::MountCookedInspectionContext(resolver, context);
       } catch (const std::exception& ex) {
         AddDiagnostic(session, request, ImportSeverity::kError,
           "physics.sidecar.resolver_mount_failed",

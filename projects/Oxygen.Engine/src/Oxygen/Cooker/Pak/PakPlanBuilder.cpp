@@ -533,6 +533,7 @@ auto MakeSkeletonPlan(const pak::PakBuildRequest& request) -> pak::PakPlan::Data
     .offset = 0,
     .size_bytes = 0,
     .entries = {},
+    .textures = {},
   };
 
   const auto footer_offset = static_cast<uint64_t>(sizeof(core::PakHeader));
@@ -823,7 +824,15 @@ auto BuildOutputCatalog(const pak::PakBuildRequest& request,
     .entries = std::move(entries),
     .deleted = {},
     .bases = {},
+    .dependencies = {},
   };
+  for (const auto& dependency : request.dependency_catalogs) {
+    catalog.dependencies.push_back({
+      .source_key = dependency.source_key,
+      .content_version = dependency.content_version,
+      .catalog_digest = dependency.catalog_digest,
+    });
+  }
   if (request.mode == pak::BuildMode::kPatch) {
     for (const auto& base : request.base_catalogs) {
       catalog.bases.push_back({
@@ -854,6 +863,11 @@ struct PhysicsScenePair final {
   data::AssetKey sidecar_key {};
 };
 
+struct SourceTextureRef final {
+  size_t source_order { 0 };
+  uint32_t texture_index { 0 };
+};
+
 struct PlanningState final {
   explicit PlanningState(const pak::PakBuildRequest& request_in)
     : request(oxygen::observer_ptr<const pak::PakBuildRequest> {
@@ -872,6 +886,12 @@ struct PlanningState final {
   std::vector<PhysicsScenePair> physics_scene_pairs;
   std::unordered_map<data::AssetKey, size_t> asset_positions;
   std::unordered_set<data::AssetKey> tombstones;
+  //! Effective assets of the patch base layers, after their deletions.
+  std::unordered_map<data::AssetKey, data::PakCatalogEntry> base_entries;
+  //! Every asset type a base layer declares, deleted assets included.
+  std::unordered_map<data::AssetKey, data::AssetType> base_asset_types;
+  //! Effective assets of the dependency paks, after their deletions.
+  std::unordered_map<data::AssetKey, data::AssetType> dependency_types;
   std::vector<data::PakCatalogBase> layers;
   std::vector<PendingResource> pending_resources;
   std::unordered_map<size_t, SourceContribution> source_contributions;
@@ -880,6 +900,10 @@ struct PlanningState final {
   std::vector<std::vector<data::AssetKey>>
     planned_resource_dependent_asset_keys;
   std::unordered_map<std::string, data::AssetKey> browse_map;
+  //! Texture descriptor paths by the source and source-local texture index
+  //! they name; a later source's path replaces an earlier one.
+  std::unordered_map<std::string, SourceTextureRef> browse_textures;
+  std::vector<pak::PakBrowseTextureEntryPlan> planned_browse_textures;
   TableCounts table_counts {};
 };
 
@@ -1101,6 +1125,17 @@ auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
     source_assets.assign(
       inspection.Assets().begin(), inspection.Assets().end());
     source_files.assign(inspection.Files().begin(), inspection.Files().end());
+    for (const auto& file : inspection.Files()) {
+      if (file.kind == lc::FileKind::kTextureDescriptor) {
+        state.browse_textures.insert_or_assign(
+          ToCanonicalVirtualPath(file.virtual_path),
+          SourceTextureRef {
+            .source_order = context.order,
+            .texture_index
+            = inspection.ReadTextureDescriptor(file.relpath).index.get(),
+          });
+      }
+    }
     state.layers.push_back({
       .source_key = inspection.Guid(),
       .content_version = 0U,
@@ -1148,6 +1183,14 @@ auto LoadSourceMetadata(PlanningState& state, SourceCollection& context) -> void
     for (const auto& entry : pak_file->BrowseIndex()) {
       state.browse_map[ToCanonicalVirtualPath(entry.virtual_path)]
         = entry.asset_key;
+    }
+    for (const auto& entry : pak_file->BrowseTextures()) {
+      state.browse_textures.insert_or_assign(
+        ToCanonicalVirtualPath(entry.virtual_path),
+        SourceTextureRef {
+          .source_order = context.order,
+          .texture_index = entry.texture_index.get(),
+        });
     }
     ProjectPakResourceFiles(context);
   }
@@ -1353,6 +1396,7 @@ auto CollectSourceFiles(PlanningState& state, SourceCollection& context) -> void
         "pak.plan.scripts_table_size_invalid");
       break;
     case data::loose_cooked::FileKind::kAuxiliary:
+    case data::loose_cooked::FileKind::kTextureDescriptor:
     case data::loose_cooked::FileKind::kUnknown:
       break;
     }
@@ -1808,9 +1852,120 @@ auto CollectSourceData(PlanningState& state) -> void
     });
 }
 
+//! Validates the dependency paks and records their assets, which references
+//! may resolve into without the assets being copied.
+auto CollectDependencies(PlanningState& state) -> void
+{
+  auto& diagnostics = state.output.diagnostics;
+  auto identities = std::unordered_set<data::SourceKey> {};
+  for (const auto& base : state.request->base_catalogs) {
+    identities.insert(base.source_key);
+  }
+  for (const auto& catalog : state.request->dependency_catalogs) {
+    if (const auto valid = catalog.Validate(); !valid) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning, "pak.plan.dependency_catalog_invalid",
+        valid.error());
+      continue;
+    }
+    if (catalog.source_key == state.request->source_key
+      || !identities.insert(catalog.source_key).second) {
+      AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+        pak::PakBuildPhase::kPlanning,
+        "pak.plan.dependency_catalog_identity_conflict",
+        "Dependencies must have distinct identities different from the output "
+        "and its bases.");
+      continue;
+    }
+    for (const auto& entry : catalog.entries) {
+      const auto [it, inserted]
+        = state.dependency_types.emplace(entry.asset_key, entry.asset_type);
+      if (!inserted && it->second != entry.asset_type) {
+        AddDiagnostic(diagnostics, pak::PakDiagnosticSeverity::kError,
+          pak::PakBuildPhase::kPlanning,
+          "pak.plan.dependency_catalog_type_mismatch",
+          "Same AssetKey appears in dependencies with different asset_type.");
+      }
+    }
+    for (const auto& key : catalog.deleted) {
+      state.dependency_types.erase(key);
+    }
+  }
+}
+
+//! Validates the base layers a patch applies to and records their assets.
+auto CollectBaseLayers(PlanningState& state) -> void
+{
+  using pak::PakBuildPhase;
+  using pak::PakDiagnosticSeverity;
+
+  auto& diagnostics = state.output.diagnostics;
+  std::unordered_set<data::SourceKey> base_sources;
+  std::vector<data::PakCatalogBase> base_layers;
+  for (const auto& catalog : state.request->base_catalogs) {
+    if (const auto valid = catalog.Validate(); !valid) {
+      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.base_catalog_invalid",
+        valid.error());
+      continue;
+    }
+    if (const auto valid = catalog.ValidateBaseLayers(base_layers); !valid) {
+      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.base_catalog_order_invalid",
+        valid.error());
+      continue;
+    }
+    base_layers.push_back({
+      .source_key = catalog.source_key,
+      .content_version = catalog.content_version,
+      .catalog_digest = catalog.catalog_digest,
+    });
+    if (catalog.source_key == state.request->source_key
+      || !base_sources.insert(catalog.source_key).second) {
+      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+        PakBuildPhase::kPlanning, "pak.plan.base_catalog_identity_conflict",
+        "Base layers must have distinct identities different from the output.");
+      continue;
+    }
+    for (const auto& entry : catalog.entries) {
+      const auto [it, inserted]
+        = state.base_asset_types.emplace(entry.asset_key, entry.asset_type);
+      if (!inserted && it->second != entry.asset_type) {
+        AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
+          PakBuildPhase::kPlanning, "pak.plan.base_catalog_type_mismatch",
+          "Same AssetKey appears in base catalogs with different asset_type.");
+        continue;
+      }
+      state.base_entries.insert_or_assign(entry.asset_key, entry);
+    }
+    for (const auto& key : catalog.deleted) {
+      state.base_entries.erase(key);
+    }
+  }
+}
+
 // Check the original pair before relocation; never repair stale authored input.
 auto ValidateAssetReferences(PlanningState& state) -> void
 {
+  // A reference resolves to an asset planned here, an asset of a patch base or
+  // an asset of a dependency, in that order.
+  const auto referenced_type
+    = [&state](const data::AssetKey& key) -> std::optional<data::AssetType> {
+    if (const auto planned = state.asset_positions.find(key);
+      planned != state.asset_positions.end()) {
+      return state.assets.at(planned->second).asset_type;
+    }
+    if (const auto base = state.base_entries.find(key);
+      base != state.base_entries.end()) {
+      return base->second.asset_type;
+    }
+    if (const auto dependency = state.dependency_types.find(key);
+      dependency != state.dependency_types.end()) {
+      return dependency->second;
+    }
+    return std::nullopt;
+  };
+
   std::vector<size_t> dependency_counts(state.assets.size(), 0U);
   std::vector<std::vector<size_t>> dependents(state.assets.size());
   for (size_t owner = 0; owner < state.assets.size(); ++owner) {
@@ -1819,8 +1974,8 @@ auto ValidateAssetReferences(PlanningState& state) -> void
       if (reference.kind != data::KeyReferenceKind::kAsset) {
         continue;
       }
-      const auto target = state.asset_positions.find(reference.key);
-      if (target == state.asset_positions.end()) {
+      const auto actual_type = referenced_type(reference.key);
+      if (!actual_type) {
         AddDiagnostic(state.output.diagnostics,
           pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
           "pak.plan.asset_reference_missing",
@@ -1829,19 +1984,23 @@ auto ValidateAssetReferences(PlanningState& state) -> void
           asset.descriptor_path);
         continue;
       }
-      const auto actual_type = state.assets.at(target->second).asset_type;
-      if (actual_type != reference.expected_type) {
+      if (*actual_type != reference.expected_type) {
         AddDiagnostic(state.output.diagnostics,
           pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
           "pak.plan.asset_reference_type_mismatch",
           "Asset " + data::to_string(asset.key) + " requires "
             + data::to_string(reference.expected_type) + " "
             + data::to_string(reference.key) + "; target is "
-            + data::to_string(actual_type),
+            + data::to_string(*actual_type),
           asset.descriptor_path);
       }
-      ++dependency_counts.at(owner);
-      dependents.at(target->second).push_back(owner);
+      // Base and dependency assets load beneath this pak; only assets planned
+      // here order the dependency graph.
+      if (const auto target = state.asset_positions.find(reference.key);
+        target != state.asset_positions.end()) {
+        ++dependency_counts.at(owner);
+        dependents.at(target->second).push_back(owner);
+      }
     }
   }
 
@@ -1967,58 +2126,15 @@ auto ClassifyPatchActionsAndFinalizeBrowse(PlanningState& state) -> void
     source_catalog_entries[asset.key] = ToCatalogEntry(asset);
   }
 
-  std::unordered_map<data::AssetKey, data::PakCatalogEntry>
-    base_catalog_entries;
-  std::unordered_map<data::AssetKey, data::AssetType> base_asset_types;
-  std::unordered_set<data::SourceKey> base_sources;
-  std::vector<data::PakCatalogBase> base_layers;
-  for (const auto& catalog : state.request->base_catalogs) {
-    if (const auto valid = catalog.Validate(); !valid) {
-      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-        PakBuildPhase::kPlanning, "pak.plan.base_catalog_invalid",
-        valid.error());
-      continue;
-    }
-    if (const auto valid = catalog.ValidateBaseLayers(base_layers); !valid) {
-      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-        PakBuildPhase::kPlanning, "pak.plan.base_catalog_order_invalid",
-        valid.error());
-      continue;
-    }
-    base_layers.push_back({
-      .source_key = catalog.source_key,
-      .content_version = catalog.content_version,
-      .catalog_digest = catalog.catalog_digest,
-    });
-    if (catalog.source_key == state.request->source_key
-      || !base_sources.insert(catalog.source_key).second) {
-      AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-        PakBuildPhase::kPlanning, "pak.plan.base_catalog_identity_conflict",
-        "Base layers must have distinct identities different from the output.");
-      continue;
-    }
-    for (const auto& entry : catalog.entries) {
-      const auto [it, inserted]
-        = base_asset_types.emplace(entry.asset_key, entry.asset_type);
-      if (!inserted && it->second != entry.asset_type) {
-        AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
-          PakBuildPhase::kPlanning, "pak.plan.base_catalog_type_mismatch",
-          "Same AssetKey appears in base catalogs with different asset_type.");
-        continue;
-      }
-      base_catalog_entries.insert_or_assign(entry.asset_key, entry);
-    }
-    for (const auto& key : catalog.deleted) {
-      base_catalog_entries.erase(key);
-    }
-  }
+  const auto& base_catalog_entries = state.base_entries;
+  const auto& base_asset_types = state.base_asset_types;
   for (const auto& [key, entry] : source_catalog_entries) {
     const auto previous = base_asset_types.find(key);
     if (previous != base_asset_types.end()
       && previous->second != entry.asset_type) {
       AddDiagnostic(diagnostics, PakDiagnosticSeverity::kError,
         PakBuildPhase::kPlanning, "pak.plan.asset_override_type_mismatch",
-        "A patch cannot change an existing AssetKey's asset type.");
+        "A layer cannot change the asset type of a base layer's asset.");
     }
   }
 
@@ -2362,6 +2478,34 @@ auto RelocateResourceBindings(
   asset.references = std::move(*relocated);
 }
 
+//! Maps each texture descriptor path to its texture index in this pak. A
+//! texture a patch leaves to its base pak keeps the base pak's entry.
+auto PlanBrowseTextures(PlanningState& state, const ResourceIndexRemaps& remaps)
+  -> void
+{
+  state.planned_browse_textures.clear();
+  const auto domain = remaps.find("texture");
+  for (const auto& [path, texture] : state.browse_textures) {
+    if (domain == remaps.end()) {
+      break;
+    }
+    const auto source = domain->second.find(texture.source_order);
+    if (source == domain->second.end()) {
+      continue;
+    }
+    const auto target = source->second.find(texture.texture_index);
+    if (target == source->second.end()) {
+      continue;
+    }
+    state.planned_browse_textures.push_back({
+      .texture_index = target->second,
+      .virtual_path = path,
+    });
+  }
+  std::ranges::sort(state.planned_browse_textures, {},
+    &pak::PakBrowseTextureEntryPlan::virtual_path);
+}
+
 auto PlanFileLayout(PlanningState& state) -> void
 {
   std::ranges::stable_sort(state.pending_resources,
@@ -2496,6 +2640,7 @@ auto PlanFileLayout(PlanningState& state) -> void
   for (auto& asset : state.assets) {
     RelocateResourceBindings(asset, resource_remaps);
   }
+  PlanBrowseTextures(state, resource_remaps);
   for (const auto& asset : state.assets) {
     cursor = AlignUp(cursor, AlignmentBytes { kAssetAlignment });
 
@@ -2567,8 +2712,10 @@ auto PlanFileLayout(PlanningState& state) -> void
     .offset = 0,
     .size_bytes = 0,
     .entries = {},
+    .textures = {},
   };
-  if (state.request->options.embed_browse_index && !state.browse_map.empty()) {
+  if (state.request->options.embed_browse_index
+    && (!state.browse_map.empty() || !state.planned_browse_textures.empty())) {
     std::vector<pak::PakBrowseEntryPlan> browse_entries;
     browse_entries.reserve(state.browse_map.size());
     for (const auto& entry : state.browse_map) {
@@ -2581,9 +2728,14 @@ auto PlanFileLayout(PlanningState& state) -> void
       [](const pak::PakBrowseEntryPlan& lhs, const pak::PakBrowseEntryPlan& rhs)
         -> bool { return lhs.virtual_path < rhs.virtual_path; });
 
-    const auto browse_payload_size
-      = pak::MeasureBrowseIndexPayload(std::span<const pak::PakBrowseEntryPlan>(
-        browse_entries.data(), browse_entries.size()));
+    auto browse = pak::PakBrowseIndexPlan {
+      .enabled = true,
+      .offset = 0,
+      .size_bytes = 0,
+      .entries = std::move(browse_entries),
+      .textures = state.planned_browse_textures,
+    };
+    const auto browse_payload_size = pak::MeasureBrowseIndexPayload(browse);
     if (!browse_payload_size.has_value()) {
       AddDiagnostic(state.output.diagnostics,
         pak::PakDiagnosticSeverity::kError, pak::PakBuildPhase::kPlanning,
@@ -2593,12 +2745,9 @@ auto PlanFileLayout(PlanningState& state) -> void
     }
 
     cursor = AlignUp(cursor, AlignmentBytes { kBrowseAlignment });
-    state.data_plan.browse_index = pak::PakBrowseIndexPlan {
-      .enabled = true,
-      .offset = cursor,
-      .size_bytes = *browse_payload_size,
-      .entries = std::move(browse_entries),
-    };
+    browse.offset = cursor;
+    browse.size_bytes = *browse_payload_size;
+    state.data_plan.browse_index = std::move(browse);
     cursor += *browse_payload_size;
   }
 
@@ -2796,10 +2945,7 @@ auto ValidateLayoutInvariants(PlanningState& state) -> void
   if (state.data_plan.browse_index.enabled) {
     std::vector<std::byte> browse_payload;
     const auto stored = pak::StoreBrowseIndexPayload(
-      std::span<const pak::PakBrowseEntryPlan>(
-        state.data_plan.browse_index.entries.data(),
-        state.data_plan.browse_index.entries.size()),
-      browse_payload);
+      state.data_plan.browse_index, browse_payload);
     EnforceStageInvariant(state, stored,
       "pak.plan.stage.layout.browse_store_failed",
       "Browse index measure/store serialization failed.");
@@ -2895,6 +3041,11 @@ auto PakPlanBuilder::Build(const PakBuildRequest& request) const -> BuildResult
   RunStage(state, "ValidateCollectSourceDataInvariants",
     "pak.plan.stage.collect_invariants_exception",
     [&state] -> void { ValidateCollectSourceDataInvariants(state); });
+  RunStage(state, "CollectBaseLayers", "pak.plan.stage.base_layers_exception",
+    [&state] -> void { CollectBaseLayers(state); });
+  RunStage(state, "CollectDependencies",
+    "pak.plan.stage.dependencies_exception",
+    [&state] -> void { CollectDependencies(state); });
   RunStage(state, "ValidateAssetReferences",
     "pak.plan.stage.references_exception",
     [&state] -> void { ValidateAssetReferences(state); });

@@ -31,18 +31,18 @@ namespace {
 
   constexpr uint64_t kDigestSize = 32U;
   constexpr uint64_t kHeaderSize = sizeof(uint32_t) + SourceKey::kSizeBytes
-    + sizeof(uint16_t) + (3U * sizeof(uint32_t));
+    + sizeof(uint16_t) + (4U * sizeof(uint32_t));
   constexpr uint64_t kEntrySize
     = AssetKey::kSizeBytes + sizeof(uint8_t) + (2U * kDigestSize);
   constexpr uint64_t kBaseSize
     = SourceKey::kSizeBytes + sizeof(uint16_t) + kDigestSize;
 
   auto ContentSize(const uint32_t entries, const uint32_t deleted,
-    const uint32_t bases) noexcept -> uint64_t
+    const uint32_t layers) noexcept -> uint64_t
   {
     return kHeaderSize + (uint64_t { entries } * kEntrySize)
       + (uint64_t { deleted } * AssetKey::kSizeBytes)
-      + (uint64_t { bases } * kBaseSize);
+      + (uint64_t { layers } * kBaseSize);
   }
 
   auto ValidateStructure(const PakCatalog& catalog) -> Result<void, std::string>
@@ -50,7 +50,7 @@ namespace {
     constexpr auto kMaxCount = std::numeric_limits<uint32_t>::max();
     if (catalog.source_key.IsNil() || catalog.entries.size() > kMaxCount
       || catalog.deleted.size() > kMaxCount
-      || catalog.bases.size() > kMaxCount) {
+      || catalog.bases.size() + catalog.dependencies.size() > kMaxCount) {
       return Err(std::string("Invalid PAK catalog identity or record count"));
     }
     std::unordered_set<AssetKey> keys;
@@ -66,12 +66,21 @@ namespace {
         return Err(std::string("Duplicate or conflicting PAK deletion"));
       }
     }
-    std::unordered_set<SourceKey> base_keys;
+    // A layer is either a patch baseline or a dependency, never both.
+    std::unordered_set<SourceKey> layer_keys;
     for (const auto& base : catalog.bases) {
       if (base.source_key.IsNil() || base.source_key == catalog.source_key
-        || !base_keys.insert(base.source_key).second) {
+        || !layer_keys.insert(base.source_key).second) {
         return Err(
           std::string("Invalid, repeated or self-referencing PAK base"));
+      }
+    }
+    for (const auto& dependency : catalog.dependencies) {
+      if (dependency.source_key.IsNil()
+        || dependency.source_key == catalog.source_key
+        || !layer_keys.insert(dependency.source_key).second) {
+        return Err(
+          std::string("Invalid, repeated or self-referencing PAK dependency"));
       }
     }
     return Result<void, std::string>::Ok();
@@ -86,7 +95,10 @@ namespace {
     const auto entry_count = static_cast<uint32_t>(catalog.entries.size());
     const auto deleted_count = static_cast<uint32_t>(catalog.deleted.size());
     const auto base_count = static_cast<uint32_t>(catalog.bases.size());
-    const auto size = ContentSize(entry_count, deleted_count, base_count);
+    const auto dependency_count
+      = static_cast<uint32_t>(catalog.dependencies.size());
+    const auto size
+      = ContentSize(entry_count, deleted_count, base_count + dependency_count);
     if (size > std::numeric_limits<size_t>::max()) {
       return Err(std::string("PAK catalog exceeds addressable size"));
     }
@@ -101,7 +113,8 @@ namespace {
     if (!writer.Write(pak::version::kPakCatalogVersion)
       || !writer.WriteBlob(as_bytes(catalog.source_key))
       || !writer.Write(catalog.content_version) || !writer.Write(entry_count)
-      || !writer.Write(deleted_count) || !writer.Write(base_count)) {
+      || !writer.Write(deleted_count) || !writer.Write(base_count)
+      || !writer.Write(dependency_count)) {
       return Err(std::string("Could not encode PAK catalog header"));
     }
     for (const auto& entry : entries) {
@@ -118,12 +131,16 @@ namespace {
         return Err(std::string("Could not encode PAK catalog deletion"));
       }
     }
-    // Base order is semantic precedence, unlike entry and deletion ordering.
-    for (const auto& base : catalog.bases) {
-      if (!writer.WriteBlob(as_bytes(base.source_key))
-        || !writer.Write(base.content_version)
-        || !writer.WriteBlob(std::as_bytes(std::span(base.catalog_digest)))) {
-        return Err(std::string("Could not encode PAK catalog base"));
+    // Layer order is semantic precedence, unlike entry and deletion ordering.
+    for (const auto& layers :
+      { std::span(catalog.bases), std::span(catalog.dependencies) }) {
+      for (const auto& layer : layers) {
+        if (!writer.WriteBlob(as_bytes(layer.source_key))
+          || !writer.Write(layer.content_version)
+          || !writer.WriteBlob(
+            std::as_bytes(std::span(layer.catalog_digest)))) {
+          return Err(std::string("Could not encode PAK catalog layer"));
+        }
       }
     }
     return Ok(std::move(bytes));
@@ -183,6 +200,23 @@ auto PakCatalog::ValidateBaseLayers(
   return Result<void, std::string>::Ok();
 }
 
+auto PakCatalog::ValidateDependencies(
+  const std::span<const PakCatalogBase> lower_layers) const
+  -> Result<void, std::string>
+{
+  auto next = lower_layers.begin();
+  for (const auto& dependency : dependencies) {
+    next = std::ranges::find(next, lower_layers.end(), dependency);
+    if (next == lower_layers.end()) {
+      return Err(std::string(
+        "PAK dependency is not mounted below this layer with the identity, "
+        "version and digest it was built against, in declared order"));
+    }
+    ++next;
+  }
+  return Result<void, std::string>::Ok();
+}
+
 auto PakCatalog::Decode(const std::span<const std::byte> bytes)
   -> Result<PakCatalog, std::string>
 {
@@ -198,17 +232,22 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
   uint32_t entry_count = 0;
   uint32_t deleted_count = 0;
   uint32_t base_count = 0;
+  uint32_t dependency_count = 0;
   if (!reader.ReadInto(version)
     || !reader.ReadBlobInto(std::as_writable_bytes(std::span(source_bytes)))
     || !reader.ReadInto(content_version) || !reader.ReadInto(entry_count)
-    || !reader.ReadInto(deleted_count) || !reader.ReadInto(base_count)) {
+    || !reader.ReadInto(deleted_count) || !reader.ReadInto(base_count)
+    || !reader.ReadInto(dependency_count)) {
     return Err(std::string("Could not decode PAK catalog header"));
   }
   if (version != pak::version::kPakCatalogVersion) {
     return Err(std::string("Unsupported PAK catalog version; recook content"));
   }
-  if (ContentSize(entry_count, deleted_count, base_count) + kDigestSize
-    != bytes.size()) {
+  if (uint64_t { base_count } + dependency_count
+      > std::numeric_limits<uint32_t>::max()
+    || ContentSize(entry_count, deleted_count, base_count + dependency_count)
+        + kDigestSize
+      != bytes.size()) {
     return Err(std::string("PAK catalog size does not match record counts"));
   }
   const auto source = SourceKey::FromBytes(source_bytes);
@@ -222,6 +261,7 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
     .entries = std::vector<PakCatalogEntry>(entry_count),
     .deleted = std::vector<AssetKey>(deleted_count),
     .bases = std::vector<PakCatalogBase>(base_count),
+    .dependencies = std::vector<PakCatalogBase>(dependency_count),
   };
   for (auto& entry : catalog.entries) {
     std::array<uint8_t, AssetKey::kSizeBytes> key_bytes {};
@@ -244,18 +284,21 @@ auto PakCatalog::Decode(const std::span<const std::byte> bytes)
     }
     key = AssetKey::FromBytes(key_bytes);
   }
-  for (auto& base : catalog.bases) {
-    if (!reader.ReadBlobInto(std::as_writable_bytes(std::span(source_bytes)))
-      || !reader.ReadInto(base.content_version)
-      || !reader.ReadBlobInto(
-        std::as_writable_bytes(std::span(base.catalog_digest)))) {
-      return Err(std::string("Could not decode PAK catalog base"));
+  for (const auto& layers :
+    { std::span(catalog.bases), std::span(catalog.dependencies) }) {
+    for (auto& layer : layers) {
+      if (!reader.ReadBlobInto(std::as_writable_bytes(std::span(source_bytes)))
+        || !reader.ReadInto(layer.content_version)
+        || !reader.ReadBlobInto(
+          std::as_writable_bytes(std::span(layer.catalog_digest)))) {
+        return Err(std::string("Could not decode PAK catalog layer"));
+      }
+      const auto layer_key = SourceKey::FromBytes(source_bytes);
+      if (!layer_key) {
+        return Err(std::string("Invalid PAK catalog layer identity"));
+      }
+      layer.source_key = *layer_key;
     }
-    const auto base_key = SourceKey::FromBytes(source_bytes);
-    if (!base_key) {
-      return Err(std::string("Invalid PAK catalog base identity"));
-    }
-    base.source_key = *base_key;
   }
   if (!reader.ReadBlobInto(
         std::as_writable_bytes(std::span(catalog.catalog_digest)))) {

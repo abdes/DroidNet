@@ -10,6 +10,7 @@
 #include <memory>
 #include <optional>
 #include <stdexcept>
+#include <string_view>
 #include <vector>
 
 #include <Oxygen/Content/IAssetLoader.h>
@@ -31,7 +32,7 @@ public:
   using IAssetLoader::StartLoadScriptAsset;
   using IAssetLoader::StartLoadTexture;
 
-  auto ResolveTextureResourceKey(const TextureResourceLocator& /*locator*/)
+  auto ResolveTextureResourceKey(std::string_view /*virtual_path*/)
     -> std::optional<ResourceKey> override
   {
     return {};
@@ -142,8 +143,7 @@ public:
   {
     return {};
   }
-  auto PrepareLooseCookedRootsAsync(
-    std::vector<std::filesystem::path> /*roots*/)
+  auto PrepareMountsAsync(std::vector<ContentMount> /*mounts*/)
     -> co::Co<PreparedMountSet> override
   {
     // Mount sets are made only by AssetLoader.

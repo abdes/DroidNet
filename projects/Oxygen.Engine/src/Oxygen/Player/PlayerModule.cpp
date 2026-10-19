@@ -246,14 +246,13 @@ namespace {
   }
 
   auto RunRemount(const observer_ptr<content::IAssetLoader> loader,
-    std::vector<std::filesystem::path> roots, std::shared_ptr<Remount> remount)
+    std::vector<content::ContentMount> mounts, std::shared_ptr<Remount> remount)
     -> co::Co<>
   {
     try {
       // No session runs, so nothing starts new loads until the commit.
       co_await loader->WaitForPendingLoadsAsync();
-      auto prepared
-        = co_await loader->PrepareLooseCookedRootsAsync(std::move(roots));
+      auto prepared = co_await loader->PrepareMountsAsync(std::move(mounts));
       co_await loader->WaitForPendingLoadsAsync();
       auto retirement = loader->CommitPreparedMounts(std::move(prepared));
       retirement.Finish();
@@ -532,25 +531,10 @@ auto PlayerModule::HandlePlay(const std::optional<std::string>& scene)
     return commands::CommandResult::Failure(
       commands::ExecutionStatus::kError, ex.what());
   }
-  const auto plan = PlanRemount(launch_, current);
-  if (plan == RemountPlan::kRelaunch) {
-    return commands::CommandResult::Failure(commands::ExecutionStatus::kError,
-      "the launch file changed its PAK files; close the player and launch it "
-      "again to mount them");
-  }
   // Window, control and script source roots belong to the process.
   launch_.mounts = std::move(current.mounts);
   launch_.scene = std::move(current.scene);
   next_scene_ = scene.value_or(launch_.scene);
-  if (plan == RemountPlan::kReuse) {
-    // PAK files are immutable; a launcher recooks loose roots only.
-    LOG_F(INFO, "{}: PAK mounts are reused, not remounted", GetName());
-    if (!Host().engine->BeginSession()) {
-      return commands::CommandResult::Failure(commands::ExecutionStatus::kError,
-        "a play session is already starting");
-    }
-    return commands::CommandResult::Success();
-  }
   StartRemount();
   return commands::CommandResult::Success();
 }
@@ -562,14 +546,10 @@ auto PlayerModule::StartRemount() -> void
   if (!nursery || nursery->GetExecutor() == nullptr || !loader) {
     return;
   }
-  auto roots = std::vector<std::filesystem::path> {};
-  for (const auto& mount : launch_.mounts) {
-    roots.push_back(mount.path);
-  }
   remount_ = std::make_shared<Remount>();
   remount_->scene = next_scene_;
   status_ = fmt::format("Loading {}", next_scene_);
-  nursery->Start(&RunRemount, loader, std::move(roots), remount_);
+  nursery->Start(&RunRemount, loader, launch_.mounts, remount_);
 }
 
 auto PlayerModule::FinishRemount() -> void

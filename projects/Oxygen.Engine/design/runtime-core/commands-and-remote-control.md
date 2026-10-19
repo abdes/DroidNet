@@ -475,11 +475,11 @@ the `command` and `log` topics in `Oxygen.Control`'s README.
   `control` present the player starts the server; `--control [port]` starts it
   from the command line. Version 1 files are rejected with the schema error.
 - `ngin.session.begin [scene]` is the one Play: it reads the launch file again,
-  remounts the loose cooked roots it names and begins the session (what the
-  pipe's `play` did), so the toolbar's Play also shows recooked content. It is
-  asynchronous and replies with the scene's load outcome: `data` has the scene
-  and the camera it is viewed through; a failed load returns `kError` with the
-  issues.
+  remounts the cooked roots and pak files it names and begins the session (what
+  the pipe's `play` did), so the toolbar's Play also shows recooked content. It
+  is asynchronous and replies with the scene's load outcome: `data` has the
+  scene and the camera it is viewed through; a failed load returns `kError` with
+  the issues.
 - Removed: `PipeChannel`, `EventStream`, the request parser and its variant, the
   requests schema and the module's request handling. The log capture moves into
   the event log.

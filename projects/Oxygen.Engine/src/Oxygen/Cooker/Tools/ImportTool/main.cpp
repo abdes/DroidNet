@@ -52,8 +52,8 @@
 #include <Oxygen/Clap/CommandLineContext.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Tools/ImportTool/BatchCommand.h>
-#include <Oxygen/Cooker/Tools/ImportTool/BuiltinCatalogCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/CliBuilder.h>
+#include <Oxygen/Cooker/Tools/ImportTool/EngineContentCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/FbxCommand.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GlobalOptions.h>
 #include <Oxygen/Cooker/Tools/ImportTool/GltfCommand.h>
@@ -707,8 +707,7 @@ auto main(int argc, char** argv) -> int
     GlobalOptions global_options;
     global_options.command_line = BuildCommandLineString(argc, argv);
     BatchCommand batch_command(&global_options);
-    oxygen::content::import::tool::BuiltinCatalogCommand
-      builtin_catalog_command;
+    oxygen::content::import::tool::EngineContentCommand engine_content_command;
     oxygen::content::import::tool::SourceInspectionCommand
       source_inspection_command;
     oxygen::content::import::tool::SourceAnalysisCommand
@@ -731,7 +730,7 @@ auto main(int argc, char** argv) -> int
       &scripting_sidecar_command,
       &physics_sidecar_command,
       &batch_command,
-      &builtin_catalog_command,
+      &engine_content_command,
       &source_inspection_command,
       &source_analysis_command,
       &reclaim_command,

@@ -65,6 +65,45 @@ NOLINT_TEST(ImportManifestSceneDescriptorTest,
   EXPECT_EQ(overridden->cooked_context_roots.at(1), root / "out");
 }
 
+//! Batch-wide context roots sit beneath the roots each job names.
+NOLINT_TEST(ImportManifestSceneDescriptorTest, BaseContextRootsPrecedeJobRoots)
+{
+  // Arrange
+  const ScopedTempDir temp;
+  const auto path = temp.Path() / "base_roots" / "import_manifest.json";
+  const auto root = path.parent_path();
+  WriteText(root / "scene.json",
+    MakeCurrentSceneDescriptor(R"({"name":"Scene","nodes":[{"name":"Root"}]})")
+      .dump());
+  WriteText(path, R"({
+    "version":1,"output":"out",
+    "jobs":[
+      {"type":"scene-descriptor","source":"scene.json"},
+      {"type":"scene-descriptor","source":"scene.json",
+       "cooked_context_roots":["Libraries/High"]}
+    ]})");
+  auto errors = std::ostringstream {};
+  auto manifest = ImportManifest::Load(path, std::nullopt, errors);
+  ASSERT_HAS_VALUE(manifest)
+    << "Expected manifest to contain a value" << errors.str();
+  const auto engine = temp.Path() / "engine.pak";
+
+  // Act
+  manifest->AddBaseCookedContextRoots(std::vector { engine });
+
+  // Assert
+  const auto plain = manifest->jobs.at(0).BuildRequest(errors);
+  const auto named = manifest->jobs.at(1).BuildRequest(errors);
+  ASSERT_HAS_VALUE(plain) << "Expected plain to contain a value"
+                          << errors.str();
+  ASSERT_HAS_VALUE(named) << "Expected named to contain a value"
+                          << errors.str();
+  EXPECT_EQ(
+    plain->cooked_context_roots, std::vector<std::filesystem::path> { engine });
+  EXPECT_EQ(named->cooked_context_roots,
+    (std::vector<std::filesystem::path> { engine, root / "Libraries/High" }));
+}
+
 NOLINT_TEST(ImportManifestSceneDescriptorTest, RejectsInvalidContextRootValues)
 {
   const ScopedTempDir temp;

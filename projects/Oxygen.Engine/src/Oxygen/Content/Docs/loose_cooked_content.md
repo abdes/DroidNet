@@ -56,10 +56,13 @@ trim independently. Source instances and opaque content IDs are not recycled. A
 reopened generation uses an independent opening, allowing retired metadata to
 expire while the new instance remains mounted.
 
-For complete context changes, `IAssetLoader::PrepareLooseCookedRootsAsync` owns
-the candidate paths and reads source metadata on the worker pool. Its move-only
-`PreparedMountSet` binds the originating loader lifetime, restart epoch and
-mount revision. A stopped loader or changed mount set invalidates the candidate.
+For complete context changes, `IAssetLoader::PrepareMountsAsync` owns the
+candidate mounts (each a `ContentMount`: a loose cooked root or a pak file,
+lowest precedence first) and reads source metadata on the worker pool. The
+engine content pak stays beneath them, and pak layering rules apply as for
+`AddPakFile`. Its move-only `PreparedMountSet` binds the originating loader
+lifetime, restart epoch and mount revision. A stopped loader or changed mount
+set invalidates the candidate.
 
 `CommitPreparedMounts` requires drained loads and prepares cache retirements
 before changing active precedence. Validation/allocation failure leaves the old

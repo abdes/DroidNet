@@ -145,7 +145,8 @@ namespace {
         << CountSources(options, data::CookedSourceKind::kLooseCooked)
         << " pak_sources="
         << CountSources(options, data::CookedSourceKind::kPak)
-        << " base_catalogs=" << options.patch.base_paks.size();
+        << " base_catalogs=" << options.patch.base_paks.size()
+        << " dependency_catalogs=" << options.request.dependency_paks.size();
     return out.str();
   }
 

@@ -498,8 +498,15 @@ auto CollectBrowseRangeAndValidatePaths(ValidationState& state) -> void
     }
 
     std::unordered_set<std::string> seen_paths;
+    auto paths = std::vector<std::string_view> {};
     for (const auto& browse_entry : browse.entries) {
-      const auto& path = browse_entry.virtual_path;
+      paths.emplace_back(browse_entry.virtual_path);
+    }
+    for (const auto& texture_entry : browse.textures) {
+      paths.emplace_back(texture_entry.virtual_path);
+    }
+    for (const auto path_view : paths) {
+      const auto path = std::string(path_view);
       if (!IsCanonicalVirtualPath(path)) {
         AddDiagnostic(state.output.diagnostics, Severity::kError,
           Phase::kPlanning, "pak.plan.browse_path_not_canonical",
@@ -515,7 +522,7 @@ auto CollectBrowseRangeAndValidatePaths(ValidationState& state) -> void
           {}, "browse_index", {}, path);
       }
     }
-  } else if (!browse.entries.empty()) {
+  } else if (!browse.entries.empty() || !browse.textures.empty()) {
     AddDiagnostic(state.output.diagnostics, Severity::kError, Phase::kPlanning,
       "pak.plan.browse_path_without_index",
       "Browse virtual paths are populated but browse index is disabled.",

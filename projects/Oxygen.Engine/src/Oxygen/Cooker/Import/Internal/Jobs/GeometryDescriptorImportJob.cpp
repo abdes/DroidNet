@@ -114,12 +114,10 @@ namespace {
         .inspection = std::nullopt,
       };
 
-      const auto index_path = mount.root / "container.index.bin";
-      std::error_code ec;
-      if (std::filesystem::exists(index_path, ec)) {
+      if (lc::Inspection::IsCookedSource(mount.root)) {
         try {
           auto inspection = lc::Inspection {};
-          inspection.LoadFromRoot(mount.root);
+          inspection.Load(mount.root);
           mount.inspection = std::move(inspection);
         } catch (const std::exception& ex) {
           AddDiagnostic(context.session, context.request,

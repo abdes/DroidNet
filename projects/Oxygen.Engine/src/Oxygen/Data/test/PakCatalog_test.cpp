@@ -56,6 +56,9 @@ auto Catalog() -> PakCatalog
       { .source_key = Source(1U), .content_version = 0U, .catalog_digest = {} },
       { .source_key = Source(2U), .content_version = 1U, .catalog_digest = {} },
     },
+    .dependencies = {
+      { .source_key = Source(6U), .content_version = 1U, .catalog_digest = {} },
+    },
   };
   catalog.entries.at(0).descriptor_digest.fill(0x11U);
   catalog.entries.at(0).transitive_resource_digest.fill(0x22U);
@@ -63,6 +66,7 @@ auto Catalog() -> PakCatalog
   catalog.entries.at(1).transitive_resource_digest.fill(0x44U);
   catalog.bases.at(0).catalog_digest.fill(0x55U);
   catalog.bases.at(1).catalog_digest.fill(0x66U);
+  catalog.dependencies.at(0).catalog_digest.fill(0x77U);
   catalog.catalog_digest = catalog.ComputeDigest().value();
   return catalog;
 }
@@ -79,6 +83,7 @@ NOLINT_TEST(PakCatalogTest, RoundTripPreservesLayerMeaning)
   EXPECT_EQ(decoded->catalog_digest, original.catalog_digest);
   EXPECT_EQ(decoded->deleted, original.deleted);
   EXPECT_EQ(decoded->bases, original.bases);
+  EXPECT_EQ(decoded->dependencies, original.dependencies);
   ASSERT_EQ(decoded->entries.size(), original.entries.size());
   for (size_t index = 0; index < original.entries.size(); ++index) {
     const auto& entry = decoded->entries.at(index);
@@ -159,6 +164,45 @@ NOLINT_TEST(PakCatalogTest, BaselineMustBeImmediatelyBelowPatch)
   ++layers.at(0).content_version;
   EXPECT_FALSE(patch.ValidateBaseLayers(layers));
   EXPECT_FALSE(patch.ValidateBaseLayers({}));
+}
+
+//! A layer is a patch baseline or a dependency, never both, and never the
+//! catalog itself.
+NOLINT_TEST(PakCatalogTest, RejectsInvalidDependencies)
+{
+  auto catalog = Catalog();
+  catalog.dependencies.at(0).source_key = catalog.source_key;
+  EXPECT_FALSE(catalog.ComputeDigest());
+  catalog = Catalog();
+  catalog.dependencies.push_back(catalog.dependencies.at(0));
+  EXPECT_FALSE(catalog.ComputeDigest());
+  catalog = Catalog();
+  catalog.dependencies.push_back(catalog.bases.at(0));
+  EXPECT_FALSE(catalog.ComputeDigest());
+}
+
+//! Dependencies must be mounted below in declared order; unlike patch bases,
+//! other layers may sit between them.
+NOLINT_TEST(PakCatalogTest, DependenciesMustBeMountedBelowInOrder)
+{
+  auto catalog = Catalog();
+  const auto engine = catalog.dependencies.at(0);
+  auto tools = engine;
+  tools.source_key = Source(7U);
+  catalog.dependencies.push_back(tools);
+  const auto content = oxygen::data::PakCatalogBase {
+    .source_key = Source(8U),
+    .content_version = 0U,
+    .catalog_digest = {},
+  };
+
+  EXPECT_TRUE(catalog.ValidateDependencies(
+    std::vector { engine, content, tools, content }));
+  EXPECT_FALSE(catalog.ValidateDependencies(std::vector { engine, content }));
+  EXPECT_FALSE(catalog.ValidateDependencies(std::vector { tools, engine }));
+  auto rebuilt = engine;
+  rebuilt.catalog_digest.at(0) ^= 1U;
+  EXPECT_FALSE(catalog.ValidateDependencies(std::vector { rebuilt, tools }));
 }
 
 NOLINT_TEST(PakCatalogTest, RejectsTruncationCorruptionAndOversizedCounts)

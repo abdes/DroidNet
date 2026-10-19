@@ -278,6 +278,8 @@ auto ExecutePakToolCommand(const pak::BuildMode mode, std::string command,
   LogInfoMessage("PakTool request prepared: sources="
     + std::to_string(request.build_request.sources.size()) + " base_catalogs="
     + std::to_string(request.build_request.base_catalogs.size())
+    + " dependency_catalogs="
+    + std::to_string(request.build_request.dependency_catalogs.size())
     + " output_pak='" + PathForLog(request.build_request.output_pak_path)
     + "' output_catalog='"
     + PathForLog(request.publication_plan.catalog.staged_path) + "'");

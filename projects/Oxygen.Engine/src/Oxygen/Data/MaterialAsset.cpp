@@ -22,26 +22,6 @@
 using oxygen::data::MaterialAsset;
 namespace {
 
-constexpr auto kDefaultMaterialAssetKey = oxygen::data::AssetKey::FromBytes(
-  std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {
-    0x4d,
-    0x41,
-    0x54,
-    0x5f,
-    0x44,
-    0x45,
-    0x46,
-    0x41,
-    0x55,
-    0x4c,
-    0x54,
-    0x5f,
-    0x5f,
-    0x5f,
-    0x5f,
-    0x5f,
-  });
-
 constexpr auto kDebugMaterialAssetKey = oxygen::data::AssetKey::FromBytes(
   std::array<std::uint8_t, oxygen::data::AssetKey::kSizeBytes> {
     0x4d,
@@ -128,7 +108,8 @@ auto MaterialAsset::CreateDefault() -> std::shared_ptr<const MaterialAsset>
     std::vector<ShaderReference> shader_refs {};
 
     auto material = std::make_shared<MaterialAsset>(
-      kDefaultMaterialAssetKey, desc, std::move(shader_refs));
+      AssetKey::FromVirtualPath(kDefaultVirtualPath), desc,
+      std::move(shader_refs));
     material->SetAssetName("Default");
     return material;
   }();

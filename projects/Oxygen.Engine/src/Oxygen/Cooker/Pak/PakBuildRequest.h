@@ -44,6 +44,9 @@ struct PakBuildRequest {
   data::SourceKey source_key {};
 
   std::vector<data::PakCatalog> base_catalogs {};
+  //! Catalogs of the paks this pak references without containing them, lowest
+  //! first; full builds and patches alike.
+  std::vector<data::PakCatalog> dependency_catalogs {};
   PakBuildOptions options {};
 };
 

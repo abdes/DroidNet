@@ -726,7 +726,12 @@ namespace {
       if (!std::filesystem::exists(base::ToNativePath(file_path))) {
         continue;
       }
-      writer.RegisterExternalFile(file.kind, file.relpath);
+      if (file.kind == data::loose_cooked::FileKind::kTextureDescriptor) {
+        writer.RegisterExternalTextureDescriptor(
+          file.relpath, file.virtual_path);
+      } else {
+        writer.RegisterExternalFile(file.kind, file.relpath);
+      }
       seen_file_kinds.insert(file.kind);
     }
 

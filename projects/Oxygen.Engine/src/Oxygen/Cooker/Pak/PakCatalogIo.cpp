@@ -13,6 +13,7 @@
 #include <fstream>
 #include <ios>
 #include <optional>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -191,6 +192,41 @@ namespace {
     return Result<AssetType>::Err(std::errc::invalid_argument);
   }
 
+  auto ToJsonLayers(std::span<const data::PakCatalogBase> layers)
+    -> ordered_json
+  {
+    auto items = ordered_json::array();
+    for (const auto& layer : layers) {
+      auto item = ordered_json::object();
+      item["source_key"] = data::to_string(layer.source_key);
+      item["content_version"] = layer.content_version;
+      item["catalog_digest"] = ToHex(layer.catalog_digest);
+      items.push_back(std::move(item));
+    }
+    return items;
+  }
+
+  auto ParseJsonLayers(const ordered_json& items)
+    -> std::optional<std::vector<data::PakCatalogBase>>
+  {
+    auto layers = std::vector<data::PakCatalogBase> {};
+    for (const auto& item : items) {
+      const auto key = data::SourceKey::FromString(
+        item.at("source_key").get_ref<const std::string&>());
+      const auto digest = ParseHexBytes<32>(
+        item.at("catalog_digest").get_ref<const std::string&>());
+      if (!key || !digest) {
+        return std::nullopt;
+      }
+      layers.push_back({
+        .source_key = *key,
+        .content_version = item.at("content_version").get<uint16_t>(),
+        .catalog_digest = *digest,
+      });
+    }
+    return layers;
+  }
+
   auto BuildCanonicalDocument(const data::PakCatalog& catalog) -> ordered_json
   {
     auto entries = std::vector<data::PakCatalogEntry>(catalog.entries);
@@ -221,14 +257,8 @@ namespace {
     for (const auto& key : deleted) {
       root["deleted"].push_back(data::to_string(key));
     }
-    root["bases"] = ordered_json::array();
-    for (const auto& base : catalog.bases) {
-      auto item = ordered_json::object();
-      item["source_key"] = data::to_string(base.source_key);
-      item["content_version"] = base.content_version;
-      item["catalog_digest"] = ToHex(base.catalog_digest);
-      root["bases"].push_back(std::move(item));
-    }
+    root["bases"] = ToJsonLayers(catalog.bases);
+    root["dependencies"] = ToJsonLayers(catalog.dependencies);
 
     return root;
   }
@@ -306,6 +336,7 @@ namespace {
       .entries = std::move(entries),
       .deleted = {},
       .bases = {},
+      .dependencies = {},
     };
     for (const auto& item : document.at("deleted")) {
       const auto key
@@ -316,20 +347,13 @@ namespace {
       catalog.deleted.push_back(*key);
     }
     std::ranges::sort(catalog.deleted);
-    for (const auto& item : document.at("bases")) {
-      const auto key = data::SourceKey::FromString(
-        item.at("source_key").get_ref<const std::string&>());
-      const auto digest = ParseHexBytes<32>(
-        item.at("catalog_digest").get_ref<const std::string&>());
-      if (!key || !digest) {
-        return Result<data::PakCatalog>::Err(std::errc::invalid_argument);
-      }
-      catalog.bases.push_back({
-        .source_key = *key,
-        .content_version = item.at("content_version").get<uint16_t>(),
-        .catalog_digest = *digest,
-      });
+    auto bases = ParseJsonLayers(document.at("bases"));
+    auto dependencies = ParseJsonLayers(document.at("dependencies"));
+    if (!bases || !dependencies) {
+      return Result<data::PakCatalog>::Err(std::errc::invalid_argument);
     }
+    catalog.bases = std::move(*bases);
+    catalog.dependencies = std::move(*dependencies);
     if (!catalog.Validate()) {
       return Result<data::PakCatalog>::Err(std::errc::invalid_argument);
     }

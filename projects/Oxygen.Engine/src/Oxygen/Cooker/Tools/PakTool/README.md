@@ -15,8 +15,8 @@ in `src/Oxygen/Cooker/Pak` and does not implement a second planner or writer.
 - Published patch manifests for compatibility enforcement
 - Safe staged publication of pak/catalog/manifest outputs
 - Optional structured build report emission
-- Staged sealing of loose-cooked external script assets into embedded-source
-  pak inputs
+- Staged sealing of loose-cooked external script assets into embedded-source pak
+  inputs
 
 ## Build
 
@@ -53,6 +53,7 @@ Common options:
 | --------------------------- | ------------------------------------------ |
 | `--loose-source <dir>`      | Repeatable loose-cooked source root        |
 | `--pak-source <path>`       | Repeatable existing pak source             |
+| `--dependency-pak <path>`   | Repeatable dependency pak, lowest first    |
 | `--out <pak-path>`          | Final pak output path                      |
 | `--catalog-out <path>`      | Final pak catalog sidecar path             |
 | `--content-version <u16>`   | Pak content version                        |
@@ -73,6 +74,35 @@ Common options:
 
 - `--base-pak <path>` repeatable, required
 - `--manifest-out <path>` required
+
+## Lower Layers
+
+A pak can rely on paks mounted beneath it in two ways. Both are recorded in the
+pak's catalog and manifest by identity (source key, content version, catalog
+digest), and the runtime refuses to mount a pak whose requirements do not hold.
+
+| Contract   | Option             | Commands       | Runtime requirement                     |
+| ---------- | ------------------ | -------------- | --------------------------------------- |
+| Dependency | `--dependency-pak` | build, patch   | Mounted below, in order; others between |
+| Patch base | `--base-pak`       | patch (needed) | The contiguous layers right below it    |
+
+- A **dependency** provides assets the pak references without containing them,
+  the way game content references the engine content pak (`engine.pak`). The
+  planner resolves asset references into dependencies, checks each referenced
+  asset's type, and copies nothing.
+- A **patch base** is the exact stack a patch's deltas apply to: the patch
+  classifies every asset as created, replaced, deleted or unchanged against its
+  bases, and its deletions hide base assets. A full build has no bases.
+
+```powershell
+Oxygen.Cooker.PakTool.exe build --loose-source Content/.cooked/main `
+  --dependency-pak share/oxygen/engine.pak --out Content/pak/all.pak `
+  --catalog-out Content/pak/all.catalog.json --content-version 1 `
+  --source-key 018f8f8f-1234-7abc-8def-0123456789ab
+```
+
+A dependency matches only the exact catalog the pak was built against, so a pak
+is rebuilt when its dependency's content changes.
 
 ## Published Artifacts
 

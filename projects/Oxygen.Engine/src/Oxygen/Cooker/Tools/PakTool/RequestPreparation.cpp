@@ -9,6 +9,7 @@
 #include <exception>
 #include <filesystem>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -76,6 +77,35 @@ namespace {
         });
     }
     return Result<void, RequestPreparationError>::Ok();
+  }
+
+  //! Reads the catalogs of the base or dependency paks a request names.
+  auto ReadLayerCatalogs(const std::span<const std::filesystem::path> paths,
+    const std::string_view role, IRequestPreparationFileSystem& fs)
+    -> Result<std::vector<data::PakCatalog>, RequestPreparationError>
+  {
+    using ReadResult
+      = Result<std::vector<data::PakCatalog>, RequestPreparationError>;
+    const auto prefix = "paktool.prepare." + std::string(role);
+    auto catalogs = std::vector<data::PakCatalog> {};
+    catalogs.reserve(paths.size());
+    for (const auto& path : paths) {
+      if (const auto validated = ValidateFileInput(path, prefix, fs);
+        !validated) {
+        return ReadResult::Err(validated.error());
+      }
+      try {
+        const content::PakFile archive(path);
+        catalogs.push_back(archive.Catalog());
+      } catch (const std::exception& error) {
+        return ReadResult::Err(RequestPreparationError {
+          .error_code = prefix + "_invalid",
+          .error_message = std::string("Could not read PAK: ") + error.what(),
+          .path = path,
+        });
+      }
+    }
+    return ReadResult::Ok(std::move(catalogs));
   }
 
   auto ValidateSourceInput(const data::CookedSource& source,
@@ -339,34 +369,24 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
       "source_key must be canonical lowercase UUIDv7 text.");
   }
 
-  auto base_catalogs = std::vector<data::PakCatalog> {};
-  auto base_pak_paths = std::vector<std::filesystem::path> {};
-  if (mode == pak::BuildMode::kPatch) {
-    if (options.patch.base_paks.empty()) {
-      return MakeError("paktool.prepare.base_pak_required",
-        "Patch mode requires at least one --base-pak.");
-    }
-
-    base_catalogs.reserve(options.patch.base_paks.size());
-    base_pak_paths.reserve(options.patch.base_paks.size());
-
-    for (const auto& path : options.patch.base_paks) {
-      if (const auto validated
-        = ValidateFileInput(path, "paktool.prepare.base_pak", fs);
-        !validated) {
-        return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
-          validated.error());
-      }
-
-      try {
-        const content::PakFile archive(path);
-        base_catalogs.push_back(archive.Catalog());
-      } catch (const std::exception& error) {
-        return MakeError("paktool.prepare.base_pak_invalid",
-          std::string("Could not read base PAK: ") + error.what(), path);
-      }
-      base_pak_paths.push_back(path);
-    }
+  // Only a patch has bases, the exact stack its deltas apply to; the builder
+  // rejects bases in a full build.
+  const auto& base_pak_paths = options.patch.base_paks;
+  if (mode == pak::BuildMode::kPatch && base_pak_paths.empty()) {
+    return MakeError("paktool.prepare.base_pak_required",
+      "Patch mode requires at least one --base-pak.");
+  }
+  auto base_catalogs = ReadLayerCatalogs(base_pak_paths, "base_pak", fs);
+  if (!base_catalogs) {
+    return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
+      base_catalogs.error());
+  }
+  const auto& dependency_pak_paths = options.request.dependency_paks;
+  auto dependency_catalogs
+    = ReadLayerCatalogs(dependency_pak_paths, "dependency_pak", fs);
+  if (!dependency_catalogs) {
+    return Result<PreparedPakToolRequest, RequestPreparationError>::Err(
+      dependency_catalogs.error());
   }
 
   const auto publication_plan = MakeArtifactPublicationPlan(
@@ -378,8 +398,8 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
       : std::optional<std::filesystem::path>(options.output.diagnostics_file));
 
   auto distinct_paths = std::vector<NamedPath> {};
-  distinct_paths.reserve(
-    options.request.sources.size() + base_pak_paths.size() + 8U);
+  distinct_paths.reserve(options.request.sources.size() + base_pak_paths.size()
+    + dependency_pak_paths.size() + 8U);
   for (const auto& source : options.request.sources) {
     distinct_paths.push_back(NamedPath {
       .label = source.kind == data::CookedSourceKind::kLooseCooked
@@ -392,6 +412,12 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
     distinct_paths.push_back(NamedPath {
       .label = "base-pak",
       .path = base_catalog_path,
+    });
+  }
+  for (const auto& dependency_path : dependency_pak_paths) {
+    distinct_paths.push_back(NamedPath {
+      .label = "dependency-pak",
+      .path = dependency_path,
     });
   }
   distinct_paths.push_back(NamedPath {
@@ -474,7 +500,8 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
     : std::filesystem::path {};
   build_request.content_version = options.request.content_version;
   build_request.source_key = source_key.value();
-  build_request.base_catalogs = std::move(base_catalogs);
+  build_request.base_catalogs = std::move(*base_catalogs);
+  build_request.dependency_catalogs = std::move(*dependency_catalogs);
   build_request.options.deterministic = options.request.deterministic;
   build_request.options.embed_browse_index = options.request.embed_browse_index;
   build_request.options.compute_crc32 = options.request.compute_crc32;
@@ -487,7 +514,8 @@ auto PreparePakToolRequest(const pak::BuildMode mode,
       .build_request = build_request,
       .request_snapshot = PakToolRequestSnapshot {
         .request = build_request,
-        .base_pak_paths = std::move(base_pak_paths),
+        .base_pak_paths = base_pak_paths,
+        .dependency_pak_paths = dependency_pak_paths,
         .script_source_roots = std::move(script_roots),
       },
       .publication_plan = publication_plan,

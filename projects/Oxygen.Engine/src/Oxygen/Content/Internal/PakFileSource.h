@@ -230,6 +230,13 @@ public:
     return std::nullopt;
   }
 
+  [[nodiscard]] auto FindTextureIndexByVirtualPath(
+    const std::string_view virtual_path) const
+    -> std::optional<data::pak::core::ResourceIndexT> override
+  {
+    return pak_.ResolveTextureIndexByVirtualPath(virtual_path);
+  }
+
   [[nodiscard]] auto Pak() const noexcept -> const PakFile& { return pak_; }
 
 private:

@@ -6,10 +6,12 @@ Plays a cooked example scene in Oxygen.Player.
 .DESCRIPTION
 Finds the scene among the cooked content under .cooked (the main root and
 every imported model root), writes a launch file that mounts it, and runs
-Oxygen.Player with that launch file. Arguments after `--` go to the player
-unchanged, for example `-- -w 1280x720 -r 60 -c vtx.occlusion.enable=true`,
-or `-- --control` to accept JSON-RPC commands on loopback; run with
-`-- --help` to list them.
+Oxygen.Player with that launch file. Player options follow the scene and the
+script options, after `--` or directly (a PowerShell prompt consumes `--`
+itself): the first argument that is not a script option and everything after it
+go to the player unchanged, for example `-- -w 1280x720 -r 60 -c
+vtx.occlusion.enable=true`, or `-- --control` to accept JSON-RPC commands on
+loopback; run with `-- --help` to list them.
 
 The launch file mounts .cooked/main and, for an imported scene, its import
 root last so it wins; it uses this folder as the script source root, so
@@ -80,11 +82,16 @@ for ($i = 0; $i -lt $args.Count; ++$i) {
         $text.Substring($text.IndexOf('<#') + 2, $text.IndexOf('#>') - $text.IndexOf('<#') - 2).Trim() |
             Write-Host
         return
+    } elseif ($Scene) {
+        # A PowerShell prompt consumes `--` before the script sees it, so the
+        # first argument after the scene that is not a script option starts the
+        # player options.
+        $PlayerArgs = @($args[$i..($args.Count - 1)])
+        break
     } elseif ($arg.StartsWith('-')) {
-        Write-Error "Unknown option '$arg'; player options go after '--'. Run with -Help."
+        Write-Error "Unknown option '$arg'; name the scene before player options. Run with -Help."
         exit 2
-    } elseif (-not $Scene) { $Scene = $arg }
-    else { Write-Error "Unexpected argument '$arg'; player options go after '--'."; exit 2 }
+    } else { $Scene = $arg }
 }
 if (-not $List -and -not $Scene) {
     Write-Error 'Name the scene to play, or use -List. Run with -Help for usage.'
@@ -101,10 +108,24 @@ if (-not (Test-Path -LiteralPath $CookedDir -PathType Container)) {
     exit 1
 }
 
-# Every cooked root: .cooked/main and .cooked/imports/<source>/<import>.
-function Get-CookedScenes([string]$CookedDir) {
+# The generations retained imports publish: each imports/*.import.json record
+# names its published generation; older generations stay until reclaimed.
+function Get-PublishedImportGenerations([string]$ContentDir) {
+    $records = Join-Path $ContentDir 'imports'
+    if (-not (Test-Path -LiteralPath $records -PathType Container)) { return @() }
+    @(Get-ChildItem -LiteralPath $records -Filter '*.import.json' -File | ForEach-Object {
+        $published = (Get-Content -LiteralPath $_.FullName -Raw | ConvertFrom-Json).published_generation
+        if ($published) { $published.id }
+    })
+}
+
+# Every cooked root: .cooked/main and the published .cooked/imports/<source>/<import>.
+function Get-CookedScenes([string]$CookedDir, [string]$ContentDir) {
+    $imports = Join-Path $CookedDir 'imports'
+    $published = Get-PublishedImportGenerations $ContentDir
     $roots = @(Get-ChildItem -LiteralPath $CookedDir -Recurse -Filter 'container.index.bin' -File |
-        ForEach-Object { $_.Directory })
+        ForEach-Object { $_.Directory } |
+        Where-Object { -not $_.FullName.StartsWith($imports + [IO.Path]::DirectorySeparatorChar) -or $published -contains $_.Name })
     foreach ($root in $roots) {
         $scenesDir = Join-Path $root.FullName 'Scenes'
         if (-not (Test-Path -LiteralPath $scenesDir -PathType Container)) { continue }
@@ -118,7 +139,7 @@ function Get-CookedScenes([string]$CookedDir) {
     }
 }
 
-$scenes = @(Get-CookedScenes $CookedDir | Sort-Object Name)
+$scenes = @(Get-CookedScenes $CookedDir $ContentDir | Sort-Object Name)
 
 if ($List) {
     $mainRoot = Join-Path $CookedDir 'main'

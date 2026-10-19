@@ -531,6 +531,10 @@ Optional:
 - `--root <path>` (base for resolving relative `source` values)
 - `--dry-run`
 - `--report <path>`
+- `--cooked-context-root <path>` (repeatable): a loose cooked root or pak file
+  that resolves references for every scene, geometry and scripting sidecar job,
+  beneath the context roots the manifest names. Pass the engine content pak
+  (`share/oxygen/engine.pak` in an SDK) to reference `/Engine` assets.
 - `--max-in-flight-jobs <n>`
 
 ## Manifest Format

@@ -248,6 +248,7 @@ extern "C" auto MainImpl(std::span<const char*> args) -> int
         if (runtime_paths.installed) {
           paths = std::move(paths)
                     .WithShaderLibraryPath("share/oxygen/shaders/shaders.bin")
+                    .WithEngineContentPakPath("share/oxygen/engine.pak")
                     .WithCVarsArchivePath(runtime_paths.showcase / "cvars.json")
                     .WithScriptBytecodeCachePath(
                       runtime_paths.showcase / "scripts.bin");

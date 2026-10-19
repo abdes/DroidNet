@@ -1180,7 +1180,7 @@
     },
     "cooked_context_roots": {
       "type": "array",
-      "description": "Ordered resolver-only cooked roots, relative to the manifest or absolute. Later roots have higher priority.",
+      "description": "Ordered resolver-only cooked sources, loose cooked roots or pak files, relative to the manifest or absolute. Later sources have higher priority.",
       "items": {
         "type": "string",
         "minLength": 1

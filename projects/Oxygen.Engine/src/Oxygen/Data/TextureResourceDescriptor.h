@@ -9,6 +9,7 @@
 #include <cstddef>
 #include <span>
 #include <string>
+#include <vector>
 
 #include <Oxygen/Base/Result.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -24,6 +25,10 @@ struct TextureResourceDescriptor {
 
 inline constexpr std::size_t kTextureResourceDescriptorSize
   = 12U + sizeof(pak::core::TextureResourceDesc);
+
+//! Encode an OTEX sidecar in the current layout.
+OXGN_DATA_NDAPI auto EncodeTextureResourceDescriptor(
+  const TextureResourceDescriptor& descriptor) -> std::vector<std::byte>;
 
 //! Decode an OTEX sidecar, rejecting obsolete layouts and reserved values.
 OXGN_DATA_NDAPI auto DecodeTextureResourceDescriptor(

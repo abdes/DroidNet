@@ -12,9 +12,9 @@
 
 namespace oxygen::content::import::tool {
 
-//! Exports a catalog without starting import workers or modifying cooked
-//! content.
-class BuiltinCatalogCommand final : public ImportCommand {
+//! Writes the engine content descriptors and the manifests that cook them,
+//! without starting import workers or modifying cooked content.
+class EngineContentCommand final : public ImportCommand {
 public:
   [[nodiscard]] auto Name() const -> std::string_view override;
   [[nodiscard]] auto BuildCommand() -> std::shared_ptr<clap::Command> override;
@@ -25,8 +25,8 @@ public:
   }
 
 private:
-  std::string output_path_;
-  std::string mount_name_ = "Content";
+  std::string sources_path_;
+  std::string cooked_root_;
 };
 
 } // namespace oxygen::content::import::tool

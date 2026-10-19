@@ -16,6 +16,7 @@
 #include <limits>
 #include <optional>
 #include <span>
+#include <stdexcept>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -25,12 +26,15 @@
 #include <nlohmann/json_fwd.hpp>
 
 #include <Oxygen/Base/Span.h>
+#include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
+#include <Oxygen/Cooker/Pak/PakBuildRequest.h>
+#include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
@@ -40,6 +44,7 @@
 #include <Oxygen/Core/Types/TextureType.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
@@ -47,6 +52,7 @@
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
@@ -109,6 +115,11 @@ namespace {
   }
 
   using oxygen::cooker::test::HasDiagnosticCode;
+
+  constexpr auto kEngineCube
+    = std::string_view { "/Engine/Generated/BasicShapes/Cube.ogeo" };
+  constexpr auto kEngineDefault
+    = std::string_view { "/Engine/Generated/Materials/Default.omat" };
 
   class SceneDescriptorImportJobTest : public ImportServiceTest {
   protected:
@@ -1233,6 +1244,84 @@ namespace {
     EXPECT_EQ(report->scenes_written, 0U);
     EXPECT_TRUE(HasDiagnosticCode(
       report->diagnostics, "scene.descriptor.recook_required"));
+  }
+
+  //! Packs a procedural geometry with one material slot and a material under
+  //! /Engine, the way the engine content pak ships them.
+  auto WriteEnginePak(const std::filesystem::path& work)
+    -> std::filesystem::path
+  {
+    const auto loose = work / "engine_loose";
+    const auto geometry = content::test::GeometryDescriptor("Cube");
+    const auto material = content::test::MaterialDescriptor("Default");
+    {
+      auto writer = LooseCookedWriter(loose);
+      writer.WriteAssetDescriptor(data::AssetKey::FromVirtualPath(kEngineCube),
+        data::AssetType::kGeometry, kEngineCube,
+        "Generated/BasicShapes/Cube.ogeo", geometry.bytes, geometry.references);
+      writer.WriteAssetDescriptor(
+        data::AssetKey::FromVirtualPath(kEngineDefault),
+        data::AssetType::kMaterial, kEngineDefault,
+        "Generated/Materials/Default.omat", material.bytes,
+        material.references);
+      static_cast<void>(writer.Finish());
+    }
+    const auto pak_path = work / "engine.pak";
+    const auto built = pak::PakBuilder {}.Build(pak::PakBuildRequest {
+      .mode = pak::BuildMode::kFull,
+      .sources = { data::CookedSource {
+        .kind = data::CookedSourceKind::kLooseCooked,
+        .path = loose,
+      } },
+      .output_pak_path = pak_path,
+      .content_version = 1U,
+      .source_key = data::SourceKey { Uuid::Generate() },
+      .options = { .embed_browse_index = true },
+    });
+    if (!built) {
+      throw std::runtime_error("The engine test pak could not be built");
+    }
+    return pak_path;
+  }
+
+  //! A project scene resolves /Engine geometry and material, and validates a
+  //! material override against the geometry's slots, from a pak context.
+  NOLINT_TEST_F(
+    SceneDescriptorImportJobTest, ResolvesEngineReferencesFromAPakContext)
+  {
+    // Arrange
+    const auto output = TempDir() / "pak_context_output";
+    std::filesystem::create_directories(output);
+    const auto slot = data::to_string(
+      data::MaterialSlotId::FromStableIdentity("fixture-slot"));
+    auto request = MakeRequest(output,
+      R"({"name":"Scene",
+      "nodes":[{"name":"Mesh"}],
+      "renderables":[{"node":0,
+        "geometry_ref":"/Engine/Generated/BasicShapes/Cube.ogeo",
+        "material_overrides":[{"slot_id":")"
+        + slot + R"(",
+          "material_ref":"/Engine/Generated/Materials/Default.omat",
+          "layout_revision":"0000000000000000000000000000000000000000000000000000000000000001"
+        }]}]})");
+    request.cooked_context_roots = { WriteEnginePak(TempDir()) };
+
+    // Act
+    const auto report = Import(std::move(request));
+
+    // Assert
+    ASSERT_HAS_VALUE(report);
+    EXPECT_TRUE(report->success);
+    const auto scene_path
+      = output / LooseCookedLayout {}.SceneDescriptorRelPath("Scene");
+    const auto scene = data::SceneAsset(
+      data::AssetKey::FromVirtualPath("/.cooked/Scenes/Scene.oscene"),
+      ReadBytes(scene_path));
+    const auto renderables
+      = scene.GetComponents<data::pak::world::RenderableRecord>();
+    ASSERT_EQ(renderables.size(), 1U);
+    EXPECT_EQ(CheckedAt(renderables, 0).geometry_key,
+      data::AssetKey::FromVirtualPath(kEngineCube));
   }
 
 } // namespace

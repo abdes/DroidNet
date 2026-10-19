@@ -10,6 +10,8 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
+#include <vector>
 
 #include <Oxygen/Base/Macros.h>
 
@@ -61,6 +63,16 @@ public:
       + std::string(DefaultShaderModeName()) + "/shaders.bin");
   }
 
+  //! Repo-local path of the engine content pak the engine build produces for
+  //! the current configuration; an installed SDK ships it as
+  //! `share/oxygen/engine.pak`.
+  [[nodiscard]] static auto DefaultEngineContentPakPathForCurrentBuild()
+    -> std::filesystem::path
+  {
+    return std::filesystem::path(std::string("bin/Oxygen/")
+      + std::string(DefaultShaderBuildConfigName()) + "/engine.pak");
+  }
+
   //! Constructs a default configuration.
   PathFinderConfig() = default;
 
@@ -85,6 +97,13 @@ public:
     -> const std::filesystem::path&
   {
     return cvars_archive_path_;
+  }
+
+  //! The engine content pak, mounted beneath every other content source.
+  [[nodiscard]] auto EngineContentPakPath() const noexcept
+    -> const std::filesystem::path&
+  {
+    return engine_content_pak_path_;
   }
 
   //! The list of directories where script source files (.lua, .luau) are
@@ -121,6 +140,9 @@ private:
   };
   std::filesystem::path cvars_archive_path_ {
     std::string(kDefaultCVarsArchivePath),
+  };
+  std::filesystem::path engine_content_pak_path_ {
+    DefaultEngineContentPakPathForCurrentBuild(),
   };
   std::vector<std::filesystem::path> script_source_roots_ {
     std::filesystem::path(std::string(kDefaultScriptsRootPath)),
@@ -175,6 +197,13 @@ public:
     std::filesystem::path path) && -> Builder&&
   {
     config_.script_bytecode_cache_path_ = std::move(path);
+    return std::move(*this);
+  }
+
+  [[nodiscard]] auto WithEngineContentPakPath(
+    std::filesystem::path engine_content_pak_path) && -> Builder&&
+  {
+    config_.engine_content_pak_path_ = std::move(engine_content_pak_path);
     return std::move(*this);
   }
 

@@ -24,6 +24,7 @@ oxygen_cooker_test(
     nlohmann_json_schema_validator
   SOURCES
     "AssetKeyMap_functional_test.cpp"
+    "DependencyReport_functional_test.cpp"
     "GeometryMetadata_functional_test.cpp"
     "ScriptMetadata_functional_test.cpp"
     "SceneMetadata_functional_test.cpp"

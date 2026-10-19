@@ -196,7 +196,14 @@ namespace {
     base::Sha256Digest sha256 {};
     bool updated = false;
     bool externally_written = false;
+    std::string virtual_path;
   };
+
+  //! Records keyed by path rather than by kind: a root holds many of them.
+  [[nodiscard]] auto IsPathKeyed(const FileKind kind) noexcept -> bool
+  {
+    return kind == FileKind::kAuxiliary || kind == FileKind::kTextureDescriptor;
+  }
 
   [[nodiscard]] auto IsEquivalent(
     const StoredAsset& lhs, const StoredAsset& rhs) -> bool
@@ -504,10 +511,16 @@ struct LooseCookedWriter::Impl final {
     }
   }
 
-  auto RegisterExternalFile(const FileKind kind, std::string_view relpath)
-    -> void
+  auto RegisterExternalFile(const FileKind kind, std::string_view relpath,
+    std::string_view virtual_path = {}) -> void
   {
     ValidateRelativePath(relpath);
+    if (kind == FileKind::kTextureDescriptor) {
+      RequireCanonicalVirtualPath(virtual_path);
+    } else if (!virtual_path.empty()) {
+      throw std::runtime_error(
+        "RegisterExternalFile: only texture descriptors have virtual paths");
+    }
 
     const auto path_on_disk = cooked_root_ / std::filesystem::path(relpath);
 
@@ -530,6 +543,7 @@ struct LooseCookedWriter::Impl final {
       .size = size,
       .updated = true,
       .externally_written = true,
+      .virtual_path = std::string(virtual_path),
     };
 
     static_cast<void>(StoreFile_(std::move(record), "RegisterExternalFile"));
@@ -721,6 +735,7 @@ struct LooseCookedWriter::Impl final {
         .relpath = f.relpath,
         .size = f.size,
         .sha256 = f.sha256,
+        .virtual_path = f.virtual_path,
       };
 
       out.files.push_back(std::move(rec));
@@ -768,7 +783,7 @@ private:
           + relpath);
       }
       const auto file = files_.find(relpath);
-      if (file == files_.end() || file->second.kind != FileKind::kAuxiliary) {
+      if (file == files_.end() || !IsPathKeyed(file->second.kind)) {
         throw std::runtime_error(
           "Cannot remove an auxiliary file the index does not list: "
           + relpath);
@@ -811,7 +826,12 @@ private:
 
   auto StoreFile_(StoredFile file, const std::string_view context) -> bool
   {
-    const auto existing = file.kind == FileKind::kAuxiliary
+    if (file.kind == FileKind::kTextureDescriptor
+      && file.virtual_path.empty()) {
+      throw std::runtime_error(
+        "Texture descriptor records require a virtual path: " + file.relpath);
+    }
+    const auto existing = IsPathKeyed(file.kind)
       ? files_.find(file.relpath)
       : std::ranges::find_if(files_, [&](const auto& item) -> auto {
           return item.second.kind == file.kind;
@@ -896,6 +916,7 @@ private:
             .sha256 = file.sha256,
             .updated = false,
             .externally_written = false,
+            .virtual_path = file.virtual_path,
           });
       }
 
@@ -971,10 +992,18 @@ private:
     }
 
     std::unordered_set<std::string> unique_virtual_paths;
-    unique_virtual_paths.reserve(assets_.size());
+    unique_virtual_paths.reserve(assets_.size() + files_.size());
     for (const auto& [key, asset] : assets_) {
       (void)key;
       if (!unique_virtual_paths.insert(asset.virtual_path).second) {
+        throw std::runtime_error(
+          "Duplicate virtual path string in loose cooked index");
+      }
+    }
+    for (const auto& [path, file] : files_) {
+      (void)path;
+      if (!file.virtual_path.empty()
+        && !unique_virtual_paths.insert(file.virtual_path).second) {
         throw std::runtime_error(
           "Duplicate virtual path string in loose cooked index");
       }
@@ -1027,6 +1056,7 @@ private:
         .kind = file.kind,
         .size = file.size,
         .relpath_offset = strings.Add(file.relpath),
+        .virtual_path_offset = strings.Add(file.virtual_path),
         .sha256 = file.sha256,
       });
     }
@@ -1184,6 +1214,13 @@ auto LooseCookedWriter::RegisterExternalFile(
   const FileKind kind, std::string_view relpath) -> void
 {
   impl_->RegisterExternalFile(kind, relpath);
+}
+
+auto LooseCookedWriter::RegisterExternalTextureDescriptor(
+  std::string_view relpath, std::string_view virtual_path) -> void
+{
+  impl_->RegisterExternalFile(
+    FileKind::kTextureDescriptor, relpath, virtual_path);
 }
 
 auto LooseCookedWriter::RegisterExternalAssetDescriptor(

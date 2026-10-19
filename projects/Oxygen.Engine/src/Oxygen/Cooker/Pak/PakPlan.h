@@ -98,11 +98,18 @@ struct PakBrowseEntryPlan {
   std::string virtual_path;
 };
 
+//! A texture descriptor's virtual path and its texture index in this pak.
+struct PakBrowseTextureEntryPlan {
+  uint32_t texture_index = 0;
+  std::string virtual_path;
+};
+
 struct PakBrowseIndexPlan {
   bool enabled = false;
   uint64_t offset = 0;
   uint64_t size_bytes = 0;
   std::vector<PakBrowseEntryPlan> entries;
+  std::vector<PakBrowseTextureEntryPlan> textures;
 };
 
 struct PakFooterPlan {

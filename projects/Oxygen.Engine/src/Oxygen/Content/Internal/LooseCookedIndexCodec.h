@@ -77,6 +77,7 @@ inline auto Load(AnyReader& reader, data::loose_cooked::FileRecord& record)
   case FileKind::kPhysicsTable:
   case FileKind::kPhysicsData:
   case FileKind::kAuxiliary:
+  case FileKind::kTextureDescriptor:
     record.kind = static_cast<FileKind>(kind_u);
     break;
   default:
@@ -84,6 +85,7 @@ inline auto Load(AnyReader& reader, data::loose_cooked::FileRecord& record)
   }
   CHECK_RESULT(reader.ReadInto(record.size));
   CHECK_RESULT(reader.ReadInto(record.relpath_offset));
+  CHECK_RESULT(reader.ReadInto(record.virtual_path_offset));
   CHECK_RESULT(
     reader.ReadBlobInto(std::as_writable_bytes(std::span { record.sha256 })));
   return {};

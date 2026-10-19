@@ -31,7 +31,7 @@ auto BuildDependencyCommand(DependencyReportOptions& options)
   -> std::shared_ptr<clap::Command>
 {
   auto root = clap::Option::Positional("cooked_root")
-                .About("Loose cooked root directory")
+                .About("Loose cooked root directory or pak file")
                 .Required()
                 .WithValue<std::string>()
                 .StoreTo(&options.cooked_root)
@@ -56,7 +56,7 @@ auto RunDependencyReport(const DependencyReportOptions& options) -> int
     const auto root
       = std::filesystem::absolute(options.cooked_root).lexically_normal();
     lc::Inspection inspection;
-    inspection.LoadFromRoot(root);
+    inspection.Load(root);
     nlohmann::json assets = nlohmann::json::array();
     for (const auto& entry : inspection.Assets()) {
       nlohmann::json row = {

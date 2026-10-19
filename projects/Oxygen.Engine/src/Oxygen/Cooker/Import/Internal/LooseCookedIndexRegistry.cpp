@@ -118,6 +118,24 @@ auto LooseCookedIndexRegistry::RegisterExternalFile(
     static_cast<uint32_t>(kind), key);
 }
 
+auto LooseCookedIndexRegistry::RegisterExternalTextureDescriptor(
+  const std::filesystem::path& cooked_root, std::string_view relpath,
+  std::string_view virtual_path) -> void
+{
+  const auto key = NormalizeKey(cooked_root);
+  const auto state = GetEntry(cooked_root);
+  std::scoped_lock lock(state->mutex);
+  auto& entry = *state;
+  if (!entry.writer) {
+    entry.aborted = false;
+    entry.writer = std::make_unique<LooseCookedWriter>(cooked_root);
+  }
+
+  entry.writer->RegisterExternalTextureDescriptor(relpath, virtual_path);
+  DLOG_F(INFO, "Texture descriptor '{}' ({}) registered for '{}'",
+    std::string(relpath), std::string(virtual_path), key);
+}
+
 auto LooseCookedIndexRegistry::RegisterExternalAssetDescriptor(
   const std::filesystem::path& cooked_root, const data::AssetKey& key,
   const data::AssetType asset_type, std::string_view virtual_path,

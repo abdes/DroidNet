@@ -7,8 +7,8 @@
 // Authoritative current cooked-format versions. Native producers, readers and
 // tools consume this catalog; readers accept these versions only.
 OXDAT_FORMAT_VERSION(kPakVersion, uint16_t, 9)
-OXDAT_FORMAT_VERSION(kPakCatalogVersion, uint32_t, 2)
-OXDAT_FORMAT_VERSION(kLooseCookedIndexVersion, uint16_t, 3)
+OXDAT_FORMAT_VERSION(kPakCatalogVersion, uint32_t, 3)
+OXDAT_FORMAT_VERSION(kLooseCookedIndexVersion, uint16_t, 4)
 OXDAT_ASSET_VERSION(kMaterialAssetVersion, kMaterial, material, 5)
 OXDAT_ASSET_VERSION(kGeometryAssetVersion, kGeometry, geometry, 5)
 OXDAT_ASSET_VERSION(kSceneAssetVersion, kScene, scene, 14)
@@ -21,5 +21,5 @@ OXDAT_ASSET_VERSION(
 OXDAT_ASSET_VERSION(
   kCollisionShapeAssetVersion, kCollisionShape, collision_shape, 2)
 OXDAT_ASSET_VERSION(kPhysicsSceneAssetVersion, kPhysicsScene, physics_scene, 2)
-OXDAT_FORMAT_VERSION(kBrowseIndexVersion, uint32_t, 1)
+OXDAT_FORMAT_VERSION(kBrowseIndexVersion, uint32_t, 2)
 OXDAT_FORMAT_VERSION(kExposureExtensionVersion, uint32_t, 1)

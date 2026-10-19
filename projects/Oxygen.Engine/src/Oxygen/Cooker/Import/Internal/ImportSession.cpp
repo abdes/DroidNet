@@ -816,8 +816,13 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
       const auto records = (*resource_descriptor_emitter_)->Records();
       report.outputs.reserve(report.outputs.size() + records.size());
       for (const auto& rec : records) {
-        index_registry_->RegisterExternalFile(
-          cooked_root_, FileKind::kAuxiliary, rec.relpath);
+        if (rec.virtual_path.empty()) {
+          index_registry_->RegisterExternalFile(
+            cooked_root_, FileKind::kAuxiliary, rec.relpath);
+        } else {
+          index_registry_->RegisterExternalTextureDescriptor(
+            cooked_root_, rec.relpath, rec.virtual_path);
+        }
         output_missing
           |= !AppendOutputRecord(report.outputs, report.diagnostics,
             cooked_root_, rec.relpath, request_.source_path.string());

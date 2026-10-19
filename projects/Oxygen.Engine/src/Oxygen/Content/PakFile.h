@@ -122,6 +122,13 @@ public:
     data::AssetKey asset_key;
   };
 
+  //! Browse index entry mapping a texture descriptor's virtual path to its
+  //! texture table index.
+  struct BrowseTextureEntry {
+    std::string virtual_path;
+    data::pak::core::ResourceIndexT texture_index {};
+  };
+
   //! Check whether this pak contains an embedded browse index.
   OXGN_CNTT_NDAPI auto HasBrowseIndex() const noexcept -> bool;
 
@@ -133,6 +140,15 @@ public:
   OXGN_CNTT_NDAPI auto ResolveAssetKeyByVirtualPath(
     std::string_view virtual_path) const noexcept
     -> std::optional<data::AssetKey>;
+
+  //! Get the embedded browse index texture entries.
+  OXGN_CNTT_NDAPI auto BrowseTextures() const noexcept
+    -> std::span<const BrowseTextureEntry>;
+
+  //! Resolve a texture descriptor's virtual path to its texture table index.
+  OXGN_CNTT_NDAPI auto ResolveTextureIndexByVirtualPath(
+    std::string_view virtual_path) const noexcept
+    -> std::optional<data::pak::core::ResourceIndexT>;
 
   //=== Header Information ===-----------------------------------------------//
 
@@ -279,6 +295,7 @@ private:
 
   std::vector<BrowseEntry> browse_index_;
   std::unordered_map<std::string_view, data::AssetKey> browse_vpath_to_key_;
+  std::vector<BrowseTextureEntry> browse_textures_;
 
   // Resource table members (optional, only if present in the PAK file)
   mutable std::optional<BuffersTableT> buffers_table_;

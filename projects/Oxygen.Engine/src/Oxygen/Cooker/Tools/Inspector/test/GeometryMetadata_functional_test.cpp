@@ -26,14 +26,17 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Loose/Validation.h>
+#include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/Tools/Inspector/GeometryMetadata.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
+#include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/JsonSchema.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
+#include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialSlotId.h>
@@ -470,6 +473,55 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsStaleLocalSlotLayout)
       .layout_revision = revision,
     });
   EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
+}
+
+//! A pak reports the same slot inventory as the loose root it was packed from.
+NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSlotsFromAPak)
+{
+  // Arrange
+  const auto loose = Path("loose");
+  const auto material = oxygen::content::test::MaterialDescriptor("Shared");
+  const auto assets = std::array {
+    GeometryAsset({}),
+    DescriptorAsset("/Content/Materials/Shared.omat",
+      oxygen::data::AssetType::kMaterial, "Materials/Shared.omat",
+      material.bytes, material.references),
+  };
+  WriteRoot(loose, assets);
+  const auto pak = Path("content.pak");
+  const auto built = oxygen::content::pak::PakBuilder {}.Build(
+    oxygen::content::pak::test::MakeFullRequest(pak,
+      {
+        .sources = { oxygen::data::CookedSource {
+          .kind = oxygen::data::CookedSourceKind::kLooseCooked,
+          .path = loose,
+        } },
+        .embed_browse_index = true,
+      }));
+  ASSERT_TRUE(built.has_value());
+  for (const auto& diagnostic : built->diagnostics) {
+    EXPECT_NE(
+      diagnostic.severity, oxygen::content::pak::PakDiagnosticSeverity::kError)
+      << diagnostic.code;
+  }
+  ASSERT_EQ(RunGeometryMetadataReport({
+              .cooked_root = loose.string(),
+              .output = Path("loose.json").string(),
+              .virtual_path = {},
+            }),
+    0);
+
+  // Act
+  const auto exit_code = RunGeometryMetadataReport({
+    .cooked_root = pak.string(),
+    .output = Path("geometries.json").string(),
+    .virtual_path = "/Content/Geometry/Inspection.ogeo",
+  });
+
+  // Assert
+  ASSERT_EQ(exit_code, 0);
+  std::ifstream expected(Path("loose.json"));
+  EXPECT_EQ(ReadReport(), nlohmann::json::parse(expected));
 }
 
 } // namespace

@@ -263,6 +263,13 @@ auto BuildManifestModel(const pak::PakBuildRequest& request,
       });
     }
   }
+  for (const auto& dependency : request.dependency_catalogs) {
+    manifest.compatibility_envelope.required_dependencies.push_back({
+      .source_key = dependency.source_key,
+      .content_version = dependency.content_version,
+      .catalog_digest = dependency.catalog_digest,
+    });
+  }
   manifest.diff_basis_identifier = std::string(kDiffBasisIdentifier);
   manifest.patch_source_key = request.source_key;
   manifest.patch_pak_crc32 = pak_crc32;
@@ -303,15 +310,18 @@ auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
     deleted.push_back(data::to_string(key));
   }
 
-  auto required_base_layers = ordered_json::array();
-  for (const auto& base :
-    manifest.compatibility_envelope.required_base_layers) {
-    required_base_layers.push_back(ordered_json {
-      { "source_key", data::to_string(base.source_key) },
-      { "content_version", base.content_version },
-      { "catalog_digest", ToHex(std::span(base.catalog_digest)) },
-    });
-  }
+  const auto to_json_layers
+    = [](const std::vector<data::PakCatalogBase>& layers) -> ordered_json {
+    auto items = ordered_json::array();
+    for (const auto& layer : layers) {
+      items.push_back(ordered_json {
+        { "source_key", data::to_string(layer.source_key) },
+        { "content_version", layer.content_version },
+        { "catalog_digest", ToHex(std::span(layer.catalog_digest)) },
+      });
+    }
+    return items;
+  };
 
   auto document = ordered_json {
     { "created", std::move(created) },
@@ -320,7 +330,14 @@ auto SerializeManifestToJson(const data::PatchManifest& manifest) -> std::string
     {
       "compatibility_envelope",
       ordered_json {
-        { "required_base_layers", std::move(required_base_layers) },
+        {
+          "required_base_layers",
+          to_json_layers(manifest.compatibility_envelope.required_base_layers),
+        },
+        {
+          "required_dependencies",
+          to_json_layers(manifest.compatibility_envelope.required_dependencies),
+        },
         {
           "patch_content_version",
           manifest.compatibility_envelope.patch_content_version,

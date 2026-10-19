@@ -10,15 +10,20 @@
 #include <filesystem>
 #include <ios>
 #include <memory>
+#include <optional>
 #include <span>
 #include <stdexcept>
+#include <string>
 #include <string_view>
+#include <system_error>
 #include <tuple>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/LooseCookedIndex.h>
+#include <Oxygen/Content/PakFile.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/Types.h>
 #include <Oxygen/Data/PakFormat_core.h>
@@ -34,6 +39,8 @@ struct Inspection::Impl {
   std::vector<FileEntry> files;
   data::SourceKey source_identity = {};
   std::filesystem::path root;
+  //! The open pak when the source is one; descriptors are read through it.
+  std::unique_ptr<PakFile> pak;
 };
 
 Inspection::Inspection()
@@ -46,6 +53,53 @@ Inspection::~Inspection() = default;
 Inspection::Inspection(Inspection&&) noexcept = default;
 
 auto Inspection::operator=(Inspection&&) noexcept -> Inspection& = default;
+
+auto Inspection::Load(const std::filesystem::path& source) -> void
+{
+  if (std::filesystem::is_regular_file(source)) {
+    LoadFromPak(source);
+  } else {
+    LoadFromRoot(source);
+  }
+}
+
+auto Inspection::IsCookedSource(const std::filesystem::path& source) noexcept
+  -> bool
+{
+  std::error_code ec;
+  return std::filesystem::is_regular_file(source, ec)
+    || std::filesystem::is_regular_file(source / "container.index.bin", ec);
+}
+
+auto Inspection::LoadFromPak(const std::filesystem::path& pak_path) -> void
+{
+  auto pak = std::make_unique<PakFile>(pak_path);
+  auto paths = std::unordered_map<data::AssetKey, std::string> {};
+  for (const auto& entry : pak->BrowseIndex()) {
+    paths.insert_or_assign(entry.asset_key, entry.virtual_path);
+  }
+
+  impl_->assets.clear();
+  impl_->files.clear();
+  impl_->source_identity = pak->Catalog().source_key;
+  impl_->root = pak_path;
+  for (const auto& entry : pak->Directory()) {
+    auto out = AssetEntry {
+      .key = entry.asset_key,
+      .virtual_path = {},
+      .descriptor_relpath = {},
+      .descriptor_size = entry.desc_size,
+      .asset_type = static_cast<uint8_t>(entry.asset_type),
+      .descriptor_sha256 = std::nullopt,
+      .references = pak->ReadAssetReferences(entry.asset_key),
+    };
+    if (const auto path = paths.find(entry.asset_key); path != paths.end()) {
+      out.virtual_path = path->second;
+    }
+    impl_->assets.push_back(std::move(out));
+  }
+  impl_->pak = std::move(pak);
+}
 
 auto Inspection::LoadFromRoot(const std::filesystem::path& cooked_root) -> void
 {
@@ -60,6 +114,7 @@ auto Inspection::LoadFromFile(const std::filesystem::path& index_path) -> void
   impl_->files.clear();
   impl_->source_identity = index.Guid();
   impl_->root = index_path.parent_path();
+  impl_->pak.reset();
 
   for (const auto& key : index.GetAllAssetKeys()) {
     AssetEntry out;
@@ -100,6 +155,7 @@ auto Inspection::LoadFromFile(const std::filesystem::path& index_path) -> void
         .relpath = file.relative_path,
         .size = file.size,
         .sha256 = file.sha256,
+        .virtual_path = file.virtual_path,
       });
     }
   }
@@ -125,6 +181,42 @@ auto Inspection::Guid() const noexcept -> data::SourceKey
   return impl_->source_identity;
 }
 
+auto Inspection::IsPak() const noexcept -> bool
+{
+  return impl_->pak != nullptr;
+}
+
+auto Inspection::ReadAssetDescriptor(const data::AssetKey& key) const
+  -> std::vector<std::byte>
+{
+  const auto asset = std::ranges::find(impl_->assets, key, &AssetEntry::key);
+  if (asset == impl_->assets.end()) {
+    throw std::runtime_error("The cooked source does not list the asset");
+  }
+  const auto size = static_cast<size_t>(asset->descriptor_size);
+  if (impl_->pak) {
+    const auto entry = impl_->pak->FindEntry(key);
+    if (!entry) {
+      throw std::runtime_error("The pak directory does not list the asset");
+    }
+    auto reader = impl_->pak->CreateReader(*entry);
+    auto bytes = reader.ReadBlob(size);
+    if (!bytes) {
+      throw std::runtime_error("Cannot read the asset descriptor from the pak");
+    }
+    return std::move(bytes).value();
+  }
+  serio::FileStream<> stream(
+    impl_->root / std::filesystem::path(asset->descriptor_relpath),
+    std::ios::in);
+  serio::Reader reader(stream);
+  auto bytes = reader.ReadBlob(size);
+  if (!bytes) {
+    throw std::runtime_error("Cannot read the asset descriptor");
+  }
+  return std::move(bytes).value();
+}
+
 auto Inspection::ReadTextureDescriptor(
   const std::string_view relative_path) const -> data::TextureResourceDescriptor
 {
@@ -133,7 +225,7 @@ auto Inspection::ReadTextureDescriptor(
   const auto table = std::ranges::find(
     impl_->files, FileKind::kTexturesTable, &FileEntry::kind);
   constexpr auto entry_size = sizeof(data::pak::core::TextureResourceDesc);
-  if (file == impl_->files.end() || file->kind != FileKind::kAuxiliary
+  if (file == impl_->files.end() || file->kind != FileKind::kTextureDescriptor
     || file->size != data::kTextureResourceDescriptorSize
     || table == impl_->files.end() || table->size % entry_size != 0) {
     throw std::runtime_error("Texture descriptor or table metadata is invalid");
