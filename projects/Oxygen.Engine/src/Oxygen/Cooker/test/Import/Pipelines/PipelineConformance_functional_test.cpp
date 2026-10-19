@@ -225,11 +225,7 @@ auto MakeSceneWorkItem(std::shared_ptr<FakeSceneAdapter> adapter)
 {
   ImportRequest request;
   request.source_path = "Scene.scene";
-  static NamingService naming_service(NamingService::Config {
-    .strategy = std::make_shared<NoOpNamingStrategy>(),
-    .enable_namespacing = false,
-    .enforce_uniqueness = false,
-  });
+  static NamingService naming_service;
   return ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter), "Scene", {},
     {}, std::move(request), oxygen::observer_ptr { &naming_service }, {});
 }

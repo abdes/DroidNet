@@ -67,7 +67,6 @@ protected:
     request.cooked_root = MakeTempDir("source_witness_cook_" + TestName() + "_"
       + std::to_string(capture_index_++));
     request.options.coordinate = coordinates;
-    request.options.naming_strategy = std::make_shared<NoOpNamingStrategy>();
     const auto imported = RunImport(std::move(request));
     EXPECT_TRUE(imported.report.success);
     if (!imported.report.success) {

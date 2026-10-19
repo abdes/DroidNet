@@ -14,6 +14,7 @@
 #include <iomanip>
 #include <ios>
 #include <limits>
+#include <map>
 #include <memory>
 #include <new>
 #include <numbers>
@@ -695,36 +696,29 @@ namespace {
     return TexturePreset::kData;
   }
 
-  [[nodiscard]] auto BuildTextureName(
+  //! The source a texture cooks from: its image, or the texture itself when it
+  //! has no core image. Two textures of one image share their source.
+  [[nodiscard]] auto BuildTextureSourceKey(
     const cgltf_data& data, const cgltf_texture& texture) -> std::string
   {
-    if (texture.name != nullptr && *texture.name != '\0') {
-      return texture.name;
+    if (texture.image != nullptr) {
+      return "image_" + std::to_string(cgltf_image_index(&data, texture.image));
     }
-    if (texture.image != nullptr && texture.image->name != nullptr
-      && *texture.image->name != '\0') {
-      return texture.image->name;
-    }
-    if (texture.image != nullptr && texture.image->uri != nullptr
-      && *texture.image->uri != '\0') {
-      return texture.image->uri;
-    }
-    const auto index = cgltf_texture_index(&data, &texture);
-    return "texture_" + std::to_string(index);
+    return "texture_" + std::to_string(cgltf_texture_index(&data, &texture));
   }
 
   [[nodiscard]] auto BuildTextureSourceId(std::string_view prefix,
     const cgltf_data& data, const cgltf_texture& texture,
     const TextureUsage usage) -> std::string
   {
-    auto name = BuildTextureName(data, texture);
+    const auto key = BuildTextureSourceKey(data, texture);
     std::string id;
     if (!prefix.empty()) {
       id = std::string(prefix);
       id.append("::");
     }
     id.append("tex::");
-    id.append(name);
+    id.append(key);
     id.append("::");
     id.append(UsageLabel(usage));
     return id;
@@ -1131,7 +1125,6 @@ namespace {
     }
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
     const auto scene_name = input.request.GetSceneName();
-    const auto source_path_text = input.request.source_path.string();
     const auto bake_plan
       = BuildGltfBakePlan(data, input.request.options.coordinate);
     for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
@@ -1159,13 +1152,11 @@ namespace {
         continue;
       }
       const auto authored_name
-        = std::string(mesh->name != nullptr ? mesh->name : "")
-        + variant.name_suffix;
+        = std::string_view(mesh->name != nullptr ? mesh->name : "");
       const auto context = NamingContext {
         .kind = ImportNameKind::kMesh,
         .ordinal = static_cast<uint32_t>(variant.mesh_index),
-        .parent_name = {},
-        .source_id = source_path_text,
+        .variant = variant.name_suffix,
         .scene_namespace = scene_name,
       };
       auto name = input.naming_service->MakeUniqueName(authored_name, context);
@@ -2135,7 +2126,6 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
   }
 
   const auto scene_name = input.request.GetSceneName();
-  const auto source_path_text = input.request.source_path.string();
   const auto& data = *impl_->data_owner;
   const auto material_count = static_cast<uint32_t>(data.materials_count);
   result.sources.reserve(material_count);
@@ -2152,8 +2142,6 @@ auto GltfAdapter::PrepareMaterials(const AdapterInput& input)
     const NamingContext material_context {
       .kind = ImportNameKind::kMaterial,
       .ordinal = i,
-      .parent_name = {},
-      .source_id = source_path_text,
       .scene_namespace = scene_name,
     };
     const auto material_name
@@ -2394,7 +2382,8 @@ auto GltfAdapter::PrepareTextures(const AdapterInput& input) const
 
   const auto& data = *impl_->data_owner;
 
-  std::unordered_map<std::string, ModelTextureSource> work_items;
+  // Sorted by source key, so textures are produced in a fixed order.
+  std::map<std::string, ModelTextureSource> work_items;
 
   auto register_texture
     = [&](const cgltf_texture_view& view, const TextureUsage usage) -> void {
@@ -2603,7 +2592,6 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   const auto& request = *input.request;
 
   const auto bake_plan = BuildGltfBakePlan(data, request.options.coordinate);
-  const auto source_path_text = request.source_path.string();
 
   if (!input.geometry_keys.empty()
     && input.geometry_keys.size() < bake_plan.variants.size()) {
@@ -2619,8 +2607,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
 
   const auto kInvalidParent = std::numeric_limits<uint32_t>::max();
   const auto apply_node
-    = [&](const cgltf_node* node, uint32_t parent_index,
-        std::string_view parent_name, uint32_t& ordinal,
+    = [&](const cgltf_node* node, uint32_t parent_index, uint32_t& ordinal,
         const glm::mat4& parent_world, auto&& self) -> void {
     if (node == nullptr || input.stop_token.stop_requested()) {
       return;
@@ -2631,8 +2618,6 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     const NamingContext node_context {
       .kind = ImportNameKind::kSceneNode,
       .ordinal = ordinal,
-      .parent_name = parent_name,
-      .source_id = source_path_text,
       .scene_namespace = scene_name,
     };
     const auto base_name
@@ -2673,12 +2658,11 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     }
 
     nodes.push_back(std::move(node_input));
-    const auto current_name = nodes.back().base_name;
 
     ++ordinal;
 
     for (const auto* child : std::span(node->children, node->children_count)) {
-      self(child, index, current_name, ordinal, world_matrix, self);
+      self(child, index, ordinal, world_matrix, self);
     }
   };
 
@@ -2686,8 +2670,7 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
   if (data.scenes_count > 0) {
     const auto* scene = data.scene != nullptr ? data.scene : data.scenes;
     for (const auto* root : std::span(scene->nodes, scene->nodes_count)) {
-      apply_node(
-        root, kInvalidParent, {}, ordinal, glm::mat4 { 1.0F }, apply_node);
+      apply_node(root, kInvalidParent, ordinal, glm::mat4 { 1.0F }, apply_node);
     }
   }
 
@@ -2815,8 +2798,6 @@ auto GltfAdapter::BuildSceneStage(const SceneStageInput& input,
     const NamingContext context {
       .kind = ImportNameKind::kSceneNode,
       .ordinal = index,
-      .parent_name = owner.base_name,
-      .source_id = input.source_id,
       .scene_namespace = scene_name,
     };
     const auto name = input.naming_service->MakeUniqueName(

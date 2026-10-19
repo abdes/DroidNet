@@ -35,11 +35,7 @@ namespace {
   NOLINT_TEST(ModelMaterialSourceTest, GltfOcclusionRetainsStrengthSemantics)
   {
     for (const auto strength : { 0.0F, 0.5F, 1.0F }) {
-      auto naming = NamingService({
-        .strategy = std::make_shared<NoOpNamingStrategy>(),
-        .enable_namespacing = true,
-        .enforce_uniqueness = true,
-      });
+      NamingService naming;
       const auto json
         = std::string(
             R"({"asset":{"version":"2.0"},"images":[{"uri":"ao.png"}],"textures":[{"source":0}],"materials":[{"name":"AO","occlusionTexture":{"index":0,"strength":)")
@@ -62,28 +58,6 @@ namespace {
     }
   }
 
-  class CancelNamingStrategy final : public NamingStrategy {
-  public:
-    explicit CancelNamingStrategy(std::stop_source& cancellation)
-      : cancellation_(cancellation)
-    {
-    }
-    ~CancelNamingStrategy() override = default;
-    OXYGEN_MAKE_NON_COPYABLE(CancelNamingStrategy)
-    OXYGEN_MAKE_NON_MOVABLE(CancelNamingStrategy)
-
-    [[nodiscard]] auto Rename(std::string_view /*authored_name*/,
-      const NamingContext& /*context*/) const
-      -> std::optional<std::string> override
-    {
-      cancellation_.request_stop();
-      return std::nullopt;
-    }
-
-  private:
-    std::stop_source& cancellation_;
-  };
-
   class MaterialSink final : public adapters::MaterialWorkItemSink {
   public:
     MaterialSink() = default;
@@ -105,11 +79,7 @@ namespace {
   {
     const auto path = oxygen::cooker::test::ModelPath(filename);
     const auto source_id = path.string();
-    auto prepared_naming = NamingService({
-      .strategy = std::make_shared<NoOpNamingStrategy>(),
-      .enable_namespacing = true,
-      .enforce_uniqueness = true,
-    });
+    NamingService prepared_naming;
     auto input = adapters::AdapterInput {};
     input.source_id_prefix = source_id;
     input.request.source_path = path;
@@ -122,11 +92,7 @@ namespace {
 
     // Analysis and import each own a naming session; neither assigns names
     // twice.
-    auto import_naming = NamingService({
-      .strategy = std::make_shared<NoOpNamingStrategy>(),
-      .enable_namespacing = true,
-      .enforce_uniqueness = true,
-    });
+    NamingService import_naming;
     input.naming_service = observer_ptr { &import_naming };
     auto sink = MaterialSink {};
     const auto streamed
@@ -168,19 +134,14 @@ namespace {
     CheckPreparedMaterials<adapters::FbxAdapter>("static_scalar_triangle.fbx");
   }
 
-  NOLINT_TEST(
-    ModelMaterialSourceTest, GltfCancellationStopsFurtherNameAllocation)
+  NOLINT_TEST(ModelMaterialSourceTest, GltfCancellationStopsNameAllocation)
   {
     constexpr auto document = std::string_view { R"({
       "asset":{"version":"2.0"},
       "materials":[{"name":"First"},{"name":"Second"}]
     })" };
     auto cancellation = std::stop_source {};
-    auto naming = NamingService({
-      .strategy = std::make_shared<CancelNamingStrategy>(cancellation),
-      .enable_namespacing = true,
-      .enforce_uniqueness = true,
-    });
+    NamingService naming;
     auto input = adapters::AdapterInput {};
     input.source_id_prefix = "cancellation.gltf";
     input.request.source_path = "cancellation.gltf";
@@ -191,12 +152,13 @@ namespace {
         .Parse(
           std::as_bytes(std::span(document.data(), document.size())), input)
         .success);
+    cancellation.request_stop();
     const auto prepared = adapter.PrepareMaterials(input);
     EXPECT_FALSE(prepared.success);
     ASSERT_EQ(prepared.diagnostics.size(), 1U);
     EXPECT_EQ(prepared.diagnostics.front().code, "import.canceled");
-    EXPECT_EQ(prepared.sources.size(), 1U);
-    EXPECT_EQ(naming.GetNameCount(ImportNameKind::kMaterial), 1U);
+    EXPECT_TRUE(prepared.sources.empty());
+    EXPECT_EQ(naming.GetNameCount(ImportNameKind::kMaterial), 0U);
   }
 } // namespace
 } // namespace oxygen::content::import::test

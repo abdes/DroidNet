@@ -8,13 +8,10 @@
 
 #include <array>
 #include <cstdint>
-#include <memory>
-#include <optional>
 #include <shared_mutex>
 #include <string>
 #include <string_view>
 #include <unordered_map>
-#include <utility>
 
 #include <Oxygen/Base/Macros.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -39,224 +36,78 @@ enum class ImportNameKind : uint8_t {
 //! Number of distinct ImportNameKind values.
 inline constexpr size_t kImportNameKindCount = 4;
 
-//! Context passed to node/asset naming strategies.
-/*!
- Naming strategies may use this context to apply consistent conventions.
-
- @warning Oxygen does not require unique names. Naming strategies MUST NOT
-  assume that names are unique, and MUST NOT enforce uniqueness unless that is
-  explicitly desired.
-*/
+//! What is being named, and where it sits in its source.
 struct NamingContext final {
   //! What kind of object is being named.
   ImportNameKind kind = ImportNameKind::kSceneNode;
 
-  //! Stable ordinal of this object within its kind (if applicable).
-  /*!
-   Importers may use this as a deterministic tiebreaker when generating
-   fallback names.
-  */
+  //! Index of the object in its source; an unnamed object's fallback uses it.
   uint32_t ordinal = 0;
 
-  //! Optional parent name (for scene nodes).
-  std::string_view parent_name = {};
+  //! Appended to the name, such as a mesh variant (`__baked_3`).
+  std::string_view variant = {};
 
-  //! Optional source identifier for diagnostics (path, URI, or format id).
-  std::string_view source_id = {};
-
-  //! Optional scene namespace for asset namespacing.
+  //! Scene namespace that asset names are placed under.
   std::string_view scene_namespace = {};
 };
 
-//! Strategy for naming imported nodes and assets.
+//! Assigns the names of one import's products.
 /*!
- This strategy is purely a rename hook:
+ Implements the product naming rule of the asset identity contract:
 
- - Input: the authored name plus contextual information.
- - Output: an optional replacement string.
+ - **Name.** An asset keeps its authored name. An unnamed one takes
+   `Mesh_<ordinal>`, `Material_<ordinal>` or `Scene_<ordinal>`; the context's
+   variant follows the name. No prefix or naming convention is applied.
+ - **Replacement.** Only what the virtual path segment rule refuses is changed
+   (`content::ToSegmentName`). A name whose leaf, with its variant, `_N` suffix
+   and extension, exceeds the segment bound is shortened at a code point
+   boundary.
+ - **Uniqueness.** One registry per kind compares asset names case-folded
+   (Unicode simple case folding). A taken name gets `_N`, probing past every
+   occupied name.
+ - **Scene nodes.** A node name is a label, not a path segment: it is kept
+   verbatim, takes `Node_<ordinal>` when unnamed, and is unique by exact
+   comparison, because the node's key is derived from it.
 
- If the strategy returns `std::nullopt`, the importer MUST keep the authored
- name as-is.
+ A service names one import session; analysis and production each start a
+ fresh one and register in source order, so both assign the same names.
 
- @note This API does not distinguish stored vs. display names. Any rename is a
-  semantic change to the imported name.
-*/
-class NamingStrategy {
-public:
-  virtual ~NamingStrategy() = default;
-
-  //! Optionally returns a replacement name for an imported object.
-  [[nodiscard]] virtual auto Rename(std::string_view authored_name,
-    const NamingContext& context) const -> std::optional<std::string> = 0;
-};
-
-//! Naming strategy that never renames anything.
-class NoOpNamingStrategy final : public NamingStrategy {
-public:
-  [[nodiscard]] auto Rename(
-    std::string_view /*authored_name*/, const NamingContext& /*context*/) const
-    -> std::optional<std::string> override
-  {
-    return std::nullopt;
-  }
-};
-
-//! Naming strategy that normalizes names into a UE-style convention.
-/*!
- The default behavior is intentionally non-destructive:
-
- - trims leading/trailing whitespace
- - collapses internal whitespace into single underscores
- - replaces non `[A-Za-z0-9_]` characters with underscores
-
- Prefixing is optional, and this strategy does not enforce uniqueness.
-
- Per request, mesh names use the `G_` prefix (instead of UE's `SM_`).
-*/
-class NormalizeNamingStrategy final : public NamingStrategy {
-public:
-  //! Options controlling normalization behavior.
-  struct Options final {
-    bool trim_whitespace = true;
-    bool collapse_whitespace = true;
-    bool replace_invalid_chars = true;
-    bool collapse_underscores = true;
-    bool apply_prefixes = true;
-
-    std::string mesh_prefix = "G_";
-    std::string material_prefix = "M_";
-  };
-
-  NormalizeNamingStrategy() = default;
-  explicit NormalizeNamingStrategy(Options options)
-    : options_(std::move(options))
-  {
-  }
-
-  OXGN_COOK_NDAPI auto Rename(std::string_view authored_name,
-    const NamingContext& context) const -> std::optional<std::string> override;
-
-  //! Generate a default base name for the given context.
-  [[nodiscard]] static auto DefaultBaseName(const NamingContext& context)
-    -> std::string
-  {
-    switch (context.kind) {
-    case ImportNameKind::kSceneNode:
-      return "Node";
-    case ImportNameKind::kScene:
-      return "Scene";
-    case ImportNameKind::kMesh:
-      return "Mesh";
-    case ImportNameKind::kMaterial:
-      return "Material";
-    }
-    return "Unnamed";
-  }
-
-private:
-  [[nodiscard]] auto Normalize(std::string_view input) const -> std::string;
-  [[nodiscard]] auto PrefixFor(ImportNameKind kind) const -> std::string_view;
-
-  Options options_ = {};
-};
-
-//! Thread-safe naming service with uniqueness tracking.
-/*!
- NamingService wraps a stateless NamingStrategy and adds session-scoped
- uniqueness tracking and optional scene namespacing.
-
- ### Design Principles
-
- 1. **Stateless Strategy**: Delegates convention logic to pluggable strategy
- 2. **Stateful Uniqueness**: Tracks used names per kind, assigns collision
-    suffixes
- 3. **Thread-Safe**: Uses per-kind registries with shared_mutex for concurrent
-    access
- 4. **Session-Scoped**: Intended for one import session; call Reset() between
-    sessions
-
- Asset storage names (mesh, material, scene) use ASCII case-insensitive
- comparison on every platform. Scene-node display names compare exactly.
- Comparison includes namespaces and suffixes but preserves returned spelling.
- The registry is scoped to one import session and does not fold Unicode case.
-
- @see NamingStrategy, NamingContext
+ ### Thread Safety
+ `MakeUniqueName`, `HasName` and `GetNameCount` may be called concurrently;
+ concurrent registrations are serialized, and their order decides suffixes.
 */
 class NamingService final {
 public:
-  //! Configuration for the naming service.
-  struct Config final {
-    //! Strategy for applying naming conventions.
-    std::shared_ptr<const NamingStrategy> strategy;
-
-    //! Enable scene namespace prefixing for assets.
-    bool enable_namespacing = true;
-
-    //! Enforce uniqueness by appending collision suffixes.
-    //! Asset storage names compare without ASCII case; scene nodes compare
-    //! exactly. Disabling this option bypasses registration and suffixing.
-    bool enforce_uniqueness = true;
-  };
-
-  //! Construct a naming service with the given configuration.
-  /*!
-   @param config Configuration specifying strategy and behavior.
-
-   @pre config.strategy must not be null.
-  */
-  OXGN_COOK_API explicit NamingService(Config config);
-
-  //! Use normal import naming, preserving authored style when no strategy is
-  //! set.
-  OXGN_COOK_API explicit NamingService(
-    std::shared_ptr<const NamingStrategy> strategy);
-
+  NamingService() = default;
   ~NamingService() = default;
 
   OXYGEN_MAKE_NON_COPYABLE(NamingService)
-  OXYGEN_DEFAULT_MOVABLE(NamingService)
+  OXYGEN_MAKE_NON_MOVABLE(NamingService)
 
-  //! Generate a unique name for an imported object.
-  /*!
-   Applies the naming strategy, then enforces uniqueness if enabled.
-
-   For a fixed registration order, append the first available numeric suffix
-   without changing the normalized spelling. Existing suffixes participate in
-   collision checks. For example, registering materials MetalGrey, metalgrey_1,
-   and Metalgrey produces M_MetalGrey, M_metalgrey_1, and M_Metalgrey_2 with the
-   default strategy. Concurrent calls are serialized by the registry lock;
-   their registration order determines suffix assignment.
-
-   @param authored_name Original name from source file (may be empty).
-   @param context Contextual information for naming conventions.
-   @return Unique name ready for use in the import session.
-
-   ### Thread Safety
-   This method is thread-safe and may be called concurrently.
-  */
+  //! Assigns and registers the name of one imported object.
   OXGN_COOK_NDAPI auto MakeUniqueName(std::string_view authored_name,
     const NamingContext& context) -> std::string;
 
-  //! Check a registered name using the same kind-specific comparison rule.
+  //! True when a name of this kind is taken, by the kind's comparison rule.
   OXGN_COOK_NDAPI auto HasName(ImportNameKind kind, std::string_view name) const
     -> bool;
 
-  //! Get the count of registered names for a specific kind.
+  //! Number of names registered for a kind.
   OXGN_COOK_NDAPI auto GetNameCount(ImportNameKind kind) const -> size_t;
-  //! Reset all registries for a new import session.
+
+  //! Releases every registered name.
   /*!
    @warning Not thread-safe with respect to MakeUniqueName().
-   Call this only when no naming operations are in progress.
   */
   OXGN_COOK_API auto Reset() -> void;
 
 private:
   struct NameRegistry {
-    std::unordered_map<std::string, uint32_t> usage_counts;
+    //! Comparison key of each taken name, and the next suffix to probe for it.
+    std::unordered_map<std::string, uint32_t> next_suffix;
     mutable std::shared_mutex mutex;
   };
 
-  Config config_;
   std::array<NameRegistry, kImportNameKindCount> registries_;
 };
 

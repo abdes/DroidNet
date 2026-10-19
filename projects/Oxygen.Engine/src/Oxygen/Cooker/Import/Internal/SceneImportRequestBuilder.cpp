@@ -205,18 +205,6 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
   options.with_content_hashing
     = EffectiveContentHashingEnabled(settings.with_content_hashing);
 
-  if (!settings.naming_policy.empty()) {
-    if (settings.naming_policy == "normalize") {
-      options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
-    } else if (settings.naming_policy == "none"
-      || settings.naming_policy == "preserve") {
-      options.naming_strategy = std::make_shared<NoOpNamingStrategy>();
-    } else {
-      error_stream << "ERROR: invalid naming_policy value\n";
-      return std::nullopt;
-    }
-  }
-
   if (!settings.unit_policy.empty()) {
     const auto parsed = ParseUnitPolicy(settings.unit_policy);
     if (!parsed.has_value()) {

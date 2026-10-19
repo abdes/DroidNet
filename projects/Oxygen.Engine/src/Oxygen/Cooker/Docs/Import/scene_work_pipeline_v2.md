@@ -398,7 +398,7 @@ Notes:
 ### Importer/Orchestrator Responsibilities
 
 - Geometry emission and `geometry_keys` population.
-- Import content flags and naming strategy setup.
+- Import content flags.
 - The scene's identity: a scene descriptor job places the scene at its request's
   `asset_virtual_path`.
 - Environment system extraction (SkyAtmosphere, Fog, PostProcess, etc.).
@@ -484,10 +484,10 @@ item).
 
 ## Deterministic Naming and Node IDs
 
-- The adapter is responsible for disambiguating `node_name` values and ensuring
-  deterministic `node_id` generation. A stable strategy (name + traversal
-  ordinal) should be used; append `_N` suffixes in traversal order for any
-  remaining duplicates and emit a warning.
+- The adapter names nodes through the import's `NamingService`: a node keeps its
+  authored name verbatim, an unnamed one takes `Node_<ordinal>`, and a duplicate
+  gets `_N` in traversal order, compared case-sensitively. Unique names keep
+  `node_id` unique within the model.
 - `node_id` derives from the scene's virtual path, as every key does
   (`AssetKey::FromVirtualPath`): a model keys a node by `<scene>/<node name>`, a
   scene descriptor by `<scene>/nodes/<index>`.

@@ -49,11 +49,7 @@ namespace {
   {
     const auto path = oxygen::cooker::test::ModelPath(filename);
     const auto source_id = path.string();
-    auto naming = NamingService({
-      .strategy = std::make_shared<NoOpNamingStrategy>(),
-      .enable_namespacing = true,
-      .enforce_uniqueness = true,
-    });
+    NamingService naming;
     auto input = adapters::AdapterInput {};
     input.source_id_prefix = source_id;
     input.request.source_path = path;
@@ -105,11 +101,7 @@ namespace {
       "accessors":[{"bufferView":0,"componentType":5126,"count":3,"type":"VEC3"}],
       "meshes":[{"name":"Triangle","primitives":[{"attributes":{"POSITION":0}}]}]
     })" };
-    auto naming = NamingService({
-      .strategy = std::make_shared<NoOpNamingStrategy>(),
-      .enable_namespacing = true,
-      .enforce_uniqueness = true,
-    });
+    NamingService naming;
     auto input = adapters::AdapterInput {};
     input.source_id_prefix = "logical.gltf";
     input.request.source_path = "logical.gltf";

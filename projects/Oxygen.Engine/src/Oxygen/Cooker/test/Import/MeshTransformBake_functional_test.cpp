@@ -138,7 +138,6 @@ protected:
     request.source_path = root / ("fixture." + extension);
     request.cooked_root = root / "cooked";
     request.options.coordinate.bake_transforms_into_meshes = bake;
-    request.options.naming_strategy = std::make_shared<NoOpNamingStrategy>();
     {
       std::ofstream output(request.source_path, std::ios::binary);
       output << source;

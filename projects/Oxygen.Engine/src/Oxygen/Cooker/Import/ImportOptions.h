@@ -16,7 +16,6 @@
 #include <unordered_map>
 
 #include <Oxygen/Base/Macros.h>
-#include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/api_export.h>
@@ -398,18 +397,6 @@ struct ImportOptions final {
   //! Cooperative cancellation token for long-running imports.
   /*! Importers should periodically check this token and abort promptly. */
   std::stop_token stop_token {};
-
-  //! Optional naming strategy applied to imported nodes and assets.
-  /*!
-   If set, the importer should call this hook when assigning names to scene
-   nodes and emitted assets.
-
-   If the strategy returns `std::nullopt`, the importer MUST keep the authored
-   name unchanged.
-
-   @note Names are not required to be unique in Oxygen.
-  */
-  std::shared_ptr<const NamingStrategy> naming_strategy;
 
   //! Policy for pruning empty nodes from imported scenes.
   /*!

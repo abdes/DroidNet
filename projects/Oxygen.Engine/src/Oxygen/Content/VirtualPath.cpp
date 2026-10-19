@@ -25,52 +25,68 @@ namespace {
 
   namespace unicode = internal::unicode;
 
-  //! Decodes strict UTF-8: no overlong forms, surrogates or code points past
-  //! U+10FFFF.
+  //! One decoded code point and the bytes it took.
+  struct Decoded final {
+    char32_t code = 0;
+    std::size_t length = 0;
+  };
+
+  //! Decodes the strict UTF-8 sequence at `index`: no overlong forms,
+  //! surrogates or code points past U+10FFFF.
+  auto DecodeAt(const std::string_view text, const std::size_t index)
+    -> std::optional<Decoded>
+  {
+    const auto lead = static_cast<unsigned char>(text[index]);
+    auto length = std::size_t { 0 };
+    auto code = char32_t { 0 };
+    auto minimum = char32_t { 0 };
+    if (lead < 0x80U) {
+      return Decoded { .code = lead, .length = 1 };
+    }
+    if ((lead & 0xE0U) == 0xC0U) {
+      length = 2;
+      code = lead & 0x1FU;
+      minimum = 0x80;
+    } else if ((lead & 0xF0U) == 0xE0U) {
+      length = 3;
+      code = lead & 0x0FU;
+      minimum = 0x800;
+    } else if ((lead & 0xF8U) == 0xF0U) {
+      length = 4;
+      code = lead & 0x07U;
+      minimum = 0x10000;
+    } else {
+      return std::nullopt;
+    }
+    if (text.size() - index < length) {
+      return std::nullopt;
+    }
+    for (auto offset = std::size_t { 1 }; offset < length; ++offset) {
+      const auto next = static_cast<unsigned char>(text[index + offset]);
+      if ((next & 0xC0U) != 0x80U) {
+        return std::nullopt;
+      }
+      code = (code << 6U) | (next & 0x3FU);
+    }
+    if (code < minimum || code > 0x10FFFF
+      || (code >= 0xD800 && code <= 0xDFFF)) {
+      return std::nullopt;
+    }
+    return Decoded { .code = code, .length = length };
+  }
+
   auto Decode(const std::string_view text) -> std::optional<std::u32string>
   {
     auto out = std::u32string {};
     out.reserve(text.size());
     auto index = std::size_t { 0 };
     while (index < text.size()) {
-      const auto lead = static_cast<unsigned char>(text[index]);
-      auto length = std::size_t { 0 };
-      auto code = char32_t { 0 };
-      auto minimum = char32_t { 0 };
-      if (lead < 0x80U) {
-        length = 1;
-        code = lead;
-      } else if ((lead & 0xE0U) == 0xC0U) {
-        length = 2;
-        code = lead & 0x1FU;
-        minimum = 0x80;
-      } else if ((lead & 0xF0U) == 0xE0U) {
-        length = 3;
-        code = lead & 0x0FU;
-        minimum = 0x800;
-      } else if ((lead & 0xF8U) == 0xF0U) {
-        length = 4;
-        code = lead & 0x07U;
-        minimum = 0x10000;
-      } else {
+      const auto decoded = DecodeAt(text, index);
+      if (!decoded.has_value()) {
         return std::nullopt;
       }
-      if (text.size() - index < length) {
-        return std::nullopt;
-      }
-      for (auto offset = std::size_t { 1 }; offset < length; ++offset) {
-        const auto next = static_cast<unsigned char>(text[index + offset]);
-        if ((next & 0xC0U) != 0x80U) {
-          return std::nullopt;
-        }
-        code = (code << 6U) | (next & 0x3FU);
-      }
-      if (code < minimum || code > 0x10FFFF
-        || (code >= 0xD800 && code <= 0xDFFF)) {
-        return std::nullopt;
-      }
-      out.push_back(code);
-      index += length;
+      out.push_back(decoded->code);
+      index += decoded->length;
     }
     return out;
   }
@@ -362,6 +378,43 @@ auto FoldCase(const std::string_view text) -> std::optional<std::string>
   }
   std::ranges::transform(*codes, codes->begin(), Fold);
   return Encode(*codes);
+}
+
+auto ToSegmentName(const std::string_view text) -> std::string
+{
+  constexpr auto kReplacement = U'_';
+  auto codes = std::u32string {};
+  codes.reserve(text.size());
+  auto index = std::size_t { 0 };
+  while (index < text.size()) {
+    const auto decoded = DecodeAt(text, index);
+    if (!decoded.has_value()) {
+      codes.push_back(kReplacement);
+      ++index;
+      continue;
+    }
+    const auto code = decoded->code;
+    codes.push_back(IsControl(code) || IsReserved(code) || !IsAssigned(code)
+        ? kReplacement
+        : code);
+    index += decoded->length;
+  }
+
+  // Valid UTF-8 now, so normalization cannot fail.
+  auto name = ToNfc(Encode(codes)).value_or(std::string {});
+  if (name.empty()) {
+    return name;
+  }
+  if (name.front() == '.' || name.front() == ' ') {
+    name.front() = '_';
+  }
+  if (name.back() == '.' || name.back() == ' ') {
+    name.back() = '_';
+  }
+  if (IsDeviceName(name)) {
+    name.insert(std::min(name.find('.'), name.size()), 1, '_');
+  }
+  return name;
 }
 
 } // namespace oxygen::content

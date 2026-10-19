@@ -9,6 +9,7 @@
 //   Import/Internal/Pipelines/TexturePipeline.cpp
 
 #include <algorithm>
+#include <cstddef>
 #include <filesystem>
 #include <span>
 #include <string_view>
@@ -99,6 +100,74 @@ namespace {
       EXPECT_EQ(item->source_path, source.source_path);
       EXPECT_EQ(item->desc.output_format, source.desc.output_format);
       EXPECT_EQ(item->desc.max_mip_levels, source.desc.max_mip_levels);
+    }
+  }
+
+  NOLINT_TEST(ModelTextureSourceTest, GltfTexturesAreKeyedByImageAndUsage)
+  {
+    // Two textures named "diffuse" with different images stay two textures;
+    // two textures of one image with one usage are one.
+    constexpr auto document = std::string_view { R"({
+      "asset":{"version":"2.0"},
+      "images":[{"uri":"a/diffuse.png"},{"uri":"b/diffuse.png"}],
+      "textures":[
+        {"name":"diffuse","source":0},
+        {"name":"diffuse","source":1},
+        {"name":"other","source":0}
+      ],
+      "materials":[
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":0}}},
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":1}}},
+        {"pbrMetallicRoughness":{"baseColorTexture":{"index":2}}}
+      ]
+    })" };
+    auto input = adapters::AdapterInput {};
+    input.source_id_prefix = "model";
+    input.request.source_path = "authoring/model.gltf";
+    auto adapter = adapters::GltfAdapter {};
+    ASSERT_TRUE(adapter
+        .Parse(
+          std::as_bytes(std::span(document.data(), document.size())), input)
+        .success);
+    const auto prepared = adapter.PrepareTextures(input);
+    ASSERT_TRUE(prepared.success);
+    ASSERT_EQ(prepared.sources.size(), 2U);
+    EXPECT_NE(
+      prepared.sources.at(0).source_path, prepared.sources.at(1).source_path);
+  }
+
+  NOLINT_TEST(ModelTextureSourceTest, GltfTexturesAreProducedInSourceKeyOrder)
+  {
+    constexpr auto document = std::string_view { R"({
+      "asset":{"version":"2.0"},
+      "images":[{"uri":"c.png"},{"uri":"a.png"},{"uri":"b.png"}],
+      "textures":[{"source":2},{"source":0},{"source":1}],
+      "materials":[
+        {"normalTexture":{"index":0},
+         "pbrMetallicRoughness":{"baseColorTexture":{"index":1}}},
+        {"emissiveTexture":{"index":2},"occlusionTexture":{"index":0}}
+      ]
+    })" };
+    auto input = adapters::AdapterInput {};
+    input.source_id_prefix = "model";
+    input.request.source_path = "authoring/model.gltf";
+    auto adapter = adapters::GltfAdapter {};
+    ASSERT_TRUE(adapter
+        .Parse(
+          std::as_bytes(std::span(document.data(), document.size())), input)
+        .success);
+    const auto prepared = adapter.PrepareTextures(input);
+    ASSERT_TRUE(prepared.success);
+    ASSERT_EQ(prepared.sources.size(), 4U);
+    EXPECT_TRUE(std::ranges::is_sorted(
+      prepared.sources, {}, &adapters::ModelTextureSource::source_id));
+
+    auto sink = TextureSink {};
+    ASSERT_TRUE(
+      adapter.BuildWorkItems(adapters::TextureWorkTag {}, sink, input).success);
+    ASSERT_EQ(sink.items.size(), prepared.sources.size());
+    for (size_t i = 0; i < sink.items.size(); ++i) {
+      EXPECT_EQ(sink.items.at(i).source_id, prepared.sources.at(i).source_id);
     }
   }
 

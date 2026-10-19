@@ -659,9 +659,6 @@
         "node_pruning": {
           "enum": ["keep", "drop-empty"]
         },
-        "naming_policy": {
-          "enum": ["normalize", "none", "preserve"]
-        },
         "texture_overrides": {
           "type": "object",
           "additionalProperties": {
@@ -1049,9 +1046,6 @@
         },
         "node_pruning": {
           "enum": ["keep", "drop-empty"]
-        },
-        "naming_policy": {
-          "enum": ["normalize", "none", "preserve"]
         },
         "texture_overrides": {
           "type": "object",

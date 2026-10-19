@@ -313,8 +313,7 @@ auto ContentVm::StartImport(const std::filesystem::path& source_path) -> void
     }
     auto options = settings_->GetImportOptions();
     options.texture_tuning = settings_->GetTextureTuning();
-    auto model
-      = content::import::SceneImportSettings::FromOptions(options, "normalize");
+    auto model = content::import::SceneImportSettings::FromOptions(options);
     model.source_path = source_path.string();
     const auto content_root = file_browser_->GetContentRoots().content_root;
     const auto record = content::import::RetainedModelImport::RecordPath(

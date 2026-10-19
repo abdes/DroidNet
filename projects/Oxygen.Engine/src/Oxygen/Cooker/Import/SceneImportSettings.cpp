@@ -105,15 +105,10 @@ namespace {
 
 } // namespace
 
-auto SceneImportSettings::FromOptions(const ImportOptions& options,
-  std::string naming_policy) -> SceneImportSettings
+auto SceneImportSettings::FromOptions(const ImportOptions& options)
+  -> SceneImportSettings
 {
-  if (options.naming_strategy) {
-    throw std::invalid_argument(
-      "Model recipe conversion requires an explicit naming policy");
-  }
   SceneImportSettings settings;
-  settings.naming_policy = std::move(naming_policy);
   settings.normals_policy = GeometryPolicy(options.normal_policy);
   settings.tangents_policy = GeometryPolicy(options.tangent_policy);
   switch (options.node_pruning) {

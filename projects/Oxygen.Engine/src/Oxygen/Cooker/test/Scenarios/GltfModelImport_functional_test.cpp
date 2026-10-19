@@ -75,7 +75,6 @@ namespace {
 using oxygen::content::import::ImportContentFlags;
 using oxygen::content::import::ImportRequest;
 using oxygen::content::import::LooseCookedLayout;
-using oxygen::content::import::NormalizeNamingStrategy;
 using oxygen::content::import::test::ModelImportTestBase;
 namespace world = oxygen::data::pak::world;
 
@@ -251,8 +250,6 @@ protected:
         ImportRequest request {};
         request.source_path = source_path;
         request.cooked_root = root / ("cooked_" + std::to_string(pass));
-        request.options.naming_strategy
-          = std::make_shared<NormalizeNamingStrategy>();
         request.options.coordinate.bake_transforms_into_meshes = false;
         request.options.node_pruning = pruning;
         const auto scene_path = request.loose_cooked_layout.SceneVirtualPath(
@@ -1017,8 +1014,6 @@ protected:
       .orchestration = std::nullopt,
       .options = {},
     };
-    request.options.naming_strategy
-      = std::make_shared<NormalizeNamingStrategy>();
     request.options.import_content = ImportContentFlags::kAll;
 
     auto provenance
@@ -1202,7 +1197,6 @@ NOLINT_TEST_F(AsyncGltfImporterFullTest, AsyncBackendImportsFullTabuleiroScene)
     .orchestration = std::nullopt,
     .options = {},
   };
-  request.options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
   request.options.import_content = ImportContentFlags::kAll;
 
   const auto run_result = RunImport(std::move(request));
@@ -1249,7 +1243,6 @@ NOLINT_TEST_F(
     .orchestration = std::nullopt,
     .options = {},
   };
-  request.options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
   request.options.import_content = ImportContentFlags::kAll;
 
   const auto run_result = RunImport(std::move(request));

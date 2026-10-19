@@ -209,7 +209,6 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest,
   auto settings = Settings();
   settings.cooked_root.clear();
   settings.material_slot_provenance_path = Path("not-on-disk.json").string();
-  settings.naming_policy = "normalize";
   std::ostringstream errors;
   const auto request = settings.Prepare(
     ImportFormat::kGltf, RetainedProvenance().dump(), errors);

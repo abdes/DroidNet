@@ -27,7 +27,6 @@ namespace {
 using oxygen::content::import::ImportContentFlags;
 using oxygen::content::import::ImportRequest;
 using oxygen::content::import::LooseCookedLayout;
-using oxygen::content::import::NormalizeNamingStrategy;
 using oxygen::content::import::test::ModelImportTestBase;
 namespace world = oxygen::data::pak::world;
 
@@ -59,7 +58,6 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest, ImportsTexturedFbxScene)
     .source_key = std::nullopt,
     .options = {},
   };
-  request.options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
   request.options.import_content = ImportContentFlags::kAll;
 
   constexpr size_t kExpectedMaterials = 1U;
@@ -112,7 +110,6 @@ NOLINT_TEST_F(AsyncFbxImporterFullTest,
     .source_key = std::nullopt,
     .options = {},
   };
-  request.options.naming_strategy = std::make_shared<NormalizeNamingStrategy>();
   request.options.import_content = ImportContentFlags::kAll;
 
   const auto run_result = RunImport(std::move(request));

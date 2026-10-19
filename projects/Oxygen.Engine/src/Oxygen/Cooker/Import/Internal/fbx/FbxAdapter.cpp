@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <filesystem>
+#include <map>
 #include <memory>
 #include <numbers>
 #include <optional>
@@ -168,21 +169,6 @@ namespace {
     }
 
     return texture;
-  }
-
-  [[nodiscard]] auto TextureIdString(const ufbx_texture& texture)
-    -> std::string_view
-  {
-    if (texture.relative_filename.length > 0) {
-      return ToStringView(texture.relative_filename);
-    }
-    if (texture.filename.length > 0) {
-      return ToStringView(texture.filename);
-    }
-    if (texture.name.length > 0) {
-      return ToStringView(texture.name);
-    }
-    return {};
   }
 
   [[nodiscard]] auto NormalizeTexturePathId(std::filesystem::path p)
@@ -979,9 +965,7 @@ namespace {
   };
 
   [[nodiscard]] auto ResolveTextureIdentity(const ufbx_texture* texture,
-    const ImportRequest& request, std::string_view source_id,
-    std::vector<ImportDiagnostic>& diagnostics)
-    -> std::optional<TextureIdentity>
+    const ImportRequest& request) -> std::optional<TextureIdentity>
   {
     const auto* file_tex = ResolveFileTexture(texture);
     if (file_tex == nullptr) {
@@ -993,14 +977,11 @@ namespace {
     identity.embedded
       = (file_tex->content.data != nullptr && file_tex->content.size > 0);
 
+    // An embedded texture is keyed by its element: two embedded images may
+    // share a name.
     if (identity.embedded) {
-      const auto id = TextureIdString(*file_tex);
-      if (!id.empty()) {
-        identity.texture_id = "embedded:" + std::string(id);
-      } else {
-        identity.texture_id
-          = "embedded:fbx_texture_" + std::to_string(file_tex->element_id);
-      }
+      identity.texture_id
+        = "embedded:fbx_texture_" + std::to_string(file_tex->element_id);
       return identity;
     }
 
@@ -1034,19 +1015,8 @@ namespace {
     }
 
     if (identity.texture_id.empty()) {
-      const auto id = TextureIdString(*file_tex);
-      if (!id.empty()) {
-        identity.texture_id = std::string(id);
-      } else {
-        identity.texture_id
-          = "fbx_texture_" + std::to_string(file_tex->element_id);
-      }
-    }
-
-    if (identity.texture_id.empty()) {
-      diagnostics.push_back(MakeWarningDiagnostic("fbx.texture.id_missing",
-        "FBX texture could not be assigned a stable id", source_id, ""));
-      return std::nullopt;
+      identity.texture_id
+        = "fbx_texture_" + std::to_string(file_tex->element_id);
     }
 
     return identity;
@@ -1538,7 +1508,6 @@ namespace {
     }
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
     const auto scene_name = input.request.GetSceneName();
-    const auto source_path_text = input.request.source_path.string();
     const auto bake_plan
       = BuildFbxBakePlan(scene, input.request.options.coordinate);
     for (size_t index = 0; index < bake_plan.retained_reasons.size(); ++index) {
@@ -1564,13 +1533,11 @@ namespace {
       if (mesh == nullptr) {
         continue;
       }
-      const auto authored_name
-        = std::string(ToStringView(mesh->name)) + variant.name_suffix;
+      const auto authored_name = ToStringView(mesh->name);
       const auto context = NamingContext {
         .kind = ImportNameKind::kMesh,
         .ordinal = static_cast<uint32_t>(variant.mesh_index),
-        .parent_name = {},
-        .source_id = source_path_text,
+        .variant = variant.name_suffix,
         .scene_namespace = scene_name,
       };
       auto name = input.naming_service->MakeUniqueName(authored_name, context);
@@ -1967,8 +1934,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
   std::unordered_map<const ufbx_texture*, std::string> texture_ids;
 
   auto resolve_texture_id
-    = [&](const ufbx_texture* texture,
-        std::string_view material_source_id) -> std::optional<std::string> {
+    = [&](const ufbx_texture* texture) -> std::optional<std::string> {
     const auto* file_tex = ResolveFileTexture(texture);
     if (file_tex == nullptr) {
       return std::nullopt;
@@ -1978,8 +1944,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
       return it->second;
     }
 
-    auto identity = ResolveTextureIdentity(
-      texture, input.request, material_source_id, result.diagnostics);
+    auto identity = ResolveTextureIdentity(texture, input.request);
     if (!identity.has_value()) {
       return std::nullopt;
     }
@@ -2007,16 +1972,13 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
   if (material_count == 0) {
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
     const auto scene_name = input.request.GetSceneName();
-    const auto source_path_text = input.request.source_path.string();
     const NamingContext material_context {
       .kind = ImportNameKind::kMaterial,
       .ordinal = 0,
-      .parent_name = {},
-      .source_id = source_path_text,
       .scene_namespace = scene_name,
     };
     const auto material_name
-      = input.naming_service->MakeUniqueName("M_Default", material_context);
+      = input.naming_service->MakeUniqueName("Default", material_context);
 
     ModelMaterialSource item;
     item.material.name = material_name;
@@ -2044,7 +2006,6 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
 
     CHECK_F(input.naming_service != nullptr, "NamingService must not be null");
     const auto scene_name = input.request.GetSceneName();
-    const auto source_path_text = input.request.source_path.string();
 
     const auto* material = ItemAt(scene.materials, i);
     const auto authored_name = material != nullptr
@@ -2053,8 +2014,6 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
     const NamingContext material_context {
       .kind = ImportNameKind::kMaterial,
       .ordinal = i,
-      .parent_name = {},
-      .source_id = source_path_text,
       .scene_namespace = scene_name,
     };
     const auto material_name
@@ -2179,8 +2138,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
         = metallic_file != nullptr && metallic_file == roughness_file;
 
       if (orm_packed) {
-        const auto texture_id
-          = resolve_texture_id(metallic_tex, item.source_id);
+        const auto texture_id = resolve_texture_id(metallic_tex);
         if (texture_id.has_value()) {
           const auto source_id = BuildTextureSourceId(input.source_id_prefix,
             *texture_id, TextureUsage::kMetallicRoughness);
@@ -2205,26 +2163,22 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
 
       if (!orm_packed) {
         apply_binding(item.material.textures.metallic,
-          resolve_texture_id(metallic_tex, item.source_id),
-          TextureUsage::kMetallic);
+          resolve_texture_id(metallic_tex), TextureUsage::kMetallic);
         apply_binding(item.material.textures.roughness,
-          resolve_texture_id(roughness_tex, item.source_id),
-          TextureUsage::kRoughness);
+          resolve_texture_id(roughness_tex), TextureUsage::kRoughness);
       }
 
       apply_binding(item.material.textures.base_color,
-        resolve_texture_id(base_color_tex, item.source_id),
-        TextureUsage::kBaseColor);
+        resolve_texture_id(base_color_tex), TextureUsage::kBaseColor);
       apply_binding(item.material.textures.normal,
-        resolve_texture_id(normal_tex, item.source_id), TextureUsage::kNormal);
+        resolve_texture_id(normal_tex), TextureUsage::kNormal);
       if (!orm_packed
         || item.material.textures.ambient_occlusion.source_id.empty()) {
         apply_binding(item.material.textures.ambient_occlusion,
-          resolve_texture_id(ao_tex, item.source_id), TextureUsage::kOcclusion);
+          resolve_texture_id(ao_tex), TextureUsage::kOcclusion);
       }
       apply_binding(item.material.textures.emissive,
-        resolve_texture_id(emissive_tex, item.source_id),
-        TextureUsage::kEmissive);
+        resolve_texture_id(emissive_tex), TextureUsage::kEmissive);
 
       if (material->features.specular.enabled) {
         if (material->pbr.specular_factor.has_value) {
@@ -2233,8 +2187,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
         }
         if (material->pbr.specular_color.texture_enabled) {
           apply_binding(item.material.textures.specular,
-            resolve_texture_id(
-              material->pbr.specular_color.texture, item.source_id),
+            resolve_texture_id(material->pbr.specular_color.texture),
             TextureUsage::kSpecular);
         }
       }
@@ -2248,8 +2201,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
         }
         if (material->pbr.sheen_color.texture_enabled) {
           apply_binding(item.material.textures.sheen_color,
-            resolve_texture_id(
-              material->pbr.sheen_color.texture, item.source_id),
+            resolve_texture_id(material->pbr.sheen_color.texture),
             TextureUsage::kSheenColor);
         }
       }
@@ -2267,14 +2219,12 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
               .texture_enabled) { // coat_color is often used for weight/factor
                                   // map
           apply_binding(item.material.textures.clearcoat,
-            resolve_texture_id(
-              material->pbr.coat_factor.texture, item.source_id),
+            resolve_texture_id(material->pbr.coat_factor.texture),
             TextureUsage::kClearcoat);
         }
         if (material->pbr.coat_normal.texture_enabled) {
           apply_binding(item.material.textures.clearcoat_normal,
-            resolve_texture_id(
-              material->pbr.coat_normal.texture, item.source_id),
+            resolve_texture_id(material->pbr.coat_normal.texture),
             TextureUsage::kClearcoatNormal);
         }
       }
@@ -2290,8 +2240,7 @@ auto FbxAdapter::PrepareMaterials(const AdapterInput& input)
             tex = material->pbr.transmission_factor.texture;
           }
           apply_binding(item.material.textures.transmission,
-            resolve_texture_id(tex, item.source_id),
-            TextureUsage::kTransmission);
+            resolve_texture_id(tex), TextureUsage::kTransmission);
         }
 
         if (material->pbr.transmission_scatter.has_value) {
@@ -2375,12 +2324,12 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
   }
 
   const auto& scene = *impl_->source.scene;
-  std::unordered_map<std::string, ModelTextureSource> work_items;
+  // Sorted by source key, so textures are produced in a fixed order.
+  std::map<std::string, ModelTextureSource> work_items;
   std::unordered_map<const ufbx_texture*, TextureIdentity> identities;
 
   auto get_identity
-    = [&](const ufbx_texture* texture,
-        std::string_view source_id) -> std::optional<TextureIdentity> {
+    = [&](const ufbx_texture* texture) -> std::optional<TextureIdentity> {
     const auto* file_tex = ResolveFileTexture(texture);
     if (file_tex == nullptr) {
       return std::nullopt;
@@ -2390,8 +2339,7 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
       return it->second;
     }
 
-    auto identity = ResolveTextureIdentity(
-      texture, input.request, source_id, result.diagnostics);
+    auto identity = ResolveTextureIdentity(texture, input.request);
     if (!identity.has_value()) {
       return std::nullopt;
     }
@@ -2401,13 +2349,12 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
   };
 
   auto register_texture
-    = [&](const ufbx_texture* texture, const TextureUsage usage,
-        std::string_view source_id) -> void {
+    = [&](const ufbx_texture* texture, const TextureUsage usage) -> void {
     if (texture == nullptr) {
       return;
     }
 
-    auto identity = get_identity(texture, source_id);
+    auto identity = get_identity(texture);
     if (!identity.has_value()) {
       return;
     }
@@ -2470,13 +2417,6 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
       continue;
     }
 
-    const auto authored_name = ToStringView(material->name);
-    const std::string material_name = !authored_name.empty()
-      ? std::string(authored_name)
-      : ("Material_" + std::to_string(i));
-    const auto material_source_id
-      = BuildSourceId(input.source_id_prefix, material_name, i);
-
     const auto textures = FbxMaterialTextures::From(*material);
     const auto* base_color_tex = textures.base_color.Texture();
     const auto* normal_tex = textures.normal.Texture();
@@ -2490,24 +2430,20 @@ auto FbxAdapter::PrepareTextures(const AdapterInput& input) const
     const bool orm_packed
       = metallic_file != nullptr && metallic_file == roughness_file;
 
-    register_texture(
-      base_color_tex, TextureUsage::kBaseColor, material_source_id);
-    register_texture(normal_tex, TextureUsage::kNormal, material_source_id);
-    register_texture(emissive_tex, TextureUsage::kEmissive, material_source_id);
+    register_texture(base_color_tex, TextureUsage::kBaseColor);
+    register_texture(normal_tex, TextureUsage::kNormal);
+    register_texture(emissive_tex, TextureUsage::kEmissive);
 
     if (orm_packed) {
-      register_texture(
-        metallic_tex, TextureUsage::kMetallicRoughness, material_source_id);
+      register_texture(metallic_tex, TextureUsage::kMetallicRoughness);
       const auto* ao_file = ResolveFileTexture(ao_tex);
       if (ao_file == nullptr || ao_file != metallic_file) {
-        register_texture(ao_tex, TextureUsage::kOcclusion, material_source_id);
+        register_texture(ao_tex, TextureUsage::kOcclusion);
       }
     } else {
-      register_texture(
-        metallic_tex, TextureUsage::kMetallic, material_source_id);
-      register_texture(
-        roughness_tex, TextureUsage::kRoughness, material_source_id);
-      register_texture(ao_tex, TextureUsage::kOcclusion, material_source_id);
+      register_texture(metallic_tex, TextureUsage::kMetallic);
+      register_texture(roughness_tex, TextureUsage::kRoughness);
+      register_texture(ao_tex, TextureUsage::kOcclusion);
     }
   }
 
@@ -2612,7 +2548,6 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   const auto& request = *input.request;
 
   const auto bake_plan = BuildFbxBakePlan(scene, request.options.coordinate);
-  const auto source_path_text = request.source_path.string();
   std::unordered_map<const ufbx_node*, size_t> source_node_indices;
   source_node_indices.reserve(scene.nodes.count);
   for (size_t index = 0; index < scene.nodes.count; ++index) {
@@ -2629,8 +2564,7 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
   nodes.reserve(scene.nodes.count > 0 ? scene.nodes.count : 1U);
 
   auto traverse = [&](auto&& self, const ufbx_node* node, uint32_t parent,
-                    std::string_view parent_name, uint32_t& ordinal,
-                    const glm::mat4& parent_world) -> void {
+                    uint32_t& ordinal, const glm::mat4& parent_world) -> void {
     if (node == nullptr || input.stop_token.stop_requested()) {
       return;
     }
@@ -2642,8 +2576,6 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     const NamingContext node_context {
       .kind = ImportNameKind::kSceneNode,
       .ordinal = ordinal,
-      .parent_name = parent_name,
-      .source_id = source_path_text,
       .scene_namespace = scene_name,
     };
     const auto base_name
@@ -2681,19 +2613,17 @@ auto FbxAdapter::BuildSceneStage(const SceneStageInput& input,
     }
 
     nodes.push_back(std::move(node_input));
-    const auto current_name = nodes.back().base_name;
 
     ++ordinal;
 
     for (size_t i = 0; i < node->children.count; ++i) {
-      self(self, ItemAt(node->children, i), index, current_name, ordinal,
-        world_matrix);
+      self(self, ItemAt(node->children, i), index, ordinal, world_matrix);
     }
   };
 
   uint32_t ordinal = 0;
   if (scene.root_node != nullptr) {
-    traverse(traverse, scene.root_node, 0, {}, ordinal, glm::mat4 { 1.0F });
+    traverse(traverse, scene.root_node, 0, ordinal, glm::mat4 { 1.0F });
   }
 
   if (nodes.empty()) {

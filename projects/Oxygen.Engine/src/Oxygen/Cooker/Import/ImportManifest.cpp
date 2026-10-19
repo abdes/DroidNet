@@ -725,10 +725,6 @@ namespace {
     if (!ReadStringField(obj, "node_pruning", settings.node_pruning, errors)) {
       return false;
     }
-    if (!ReadStringField(
-          obj, "naming_policy", settings.naming_policy, errors)) {
-      return false;
-    }
 
     // Apply texture overrides from the same object (flat structure)
     if (!ApplyTextureOverrides(obj, settings.texture_defaults, errors)) {

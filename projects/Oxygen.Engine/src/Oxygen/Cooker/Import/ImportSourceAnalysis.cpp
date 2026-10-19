@@ -223,7 +223,7 @@ namespace {
     report.source_path = request.source_path;
     const auto source_id = request.source_path.string();
     const auto layout = request.loose_cooked_layout;
-    auto naming = NamingService(request.options.naming_strategy);
+    auto naming = NamingService {};
     auto input = adapters::AdapterInput {};
     input.source_id_prefix = source_id;
     input.request = std::move(request);

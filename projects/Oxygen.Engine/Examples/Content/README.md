@@ -228,8 +228,9 @@ Distinct authored assets need distinct virtual paths: instancing uses
 version 9. Atmosphere sources use explicit per-light slots; scripted light
 changes apply validated whole-candidate updates.
 
-The native import naming service keeps normalized spelling and adds numeric
-suffixes for mesh, material and scene names that collide after ASCII case
-folding. For example, `MetalGrey` and `Metalgrey` become `M_MetalGrey` and
-`M_Metalgrey_1`. Namespaces and occupied suffixes participate in collision
-checks. Scene-node display names retain their case-sensitive behavior.
+Imported meshes, materials and scenes keep their authored names: the importer
+adds no prefix and applies no naming convention, and it replaces only the
+characters a virtual path segment refuses. Names that collide after Unicode case
+folding get numeric suffixes: `MetalGrey` and `Metalgrey` become `MetalGrey` and
+`Metalgrey_1`. Namespaces and occupied suffixes participate in collision checks.
+Scene-node names are kept verbatim and compared case-sensitively.

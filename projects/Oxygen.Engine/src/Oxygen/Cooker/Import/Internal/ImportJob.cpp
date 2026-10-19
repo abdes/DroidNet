@@ -240,8 +240,7 @@ auto ImportJob::IsStopped() const noexcept -> bool
 auto ImportJob::GetNamingService() -> NamingService&
 {
   if (!naming_service_) {
-    naming_service_
-      = std::make_unique<NamingService>(request_.options.naming_strategy);
+    naming_service_ = std::make_unique<NamingService>();
   }
   return *naming_service_;
 }

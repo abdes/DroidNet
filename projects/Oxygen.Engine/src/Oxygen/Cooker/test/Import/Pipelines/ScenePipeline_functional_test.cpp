@@ -131,11 +131,7 @@ NOLINT_TEST_F(ScenePipelineTest, RejectsUnsupportedNodeFlagSourceModes)
   ScenePipeline::WorkResult result;
   co::Run(loop_, [&] -> Co<> {
     ScenePipeline pipeline(pool_);
-    NamingService naming_service(NamingService::Config {
-      .strategy = std::make_shared<NoOpNamingStrategy>(),
-      .enable_namespacing = false,
-      .enforce_uniqueness = false,
-    });
+    NamingService naming_service;
     auto item = ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter),
       "Scene", {}, {}, ImportRequest { .source_path = "Flags.scene" },
       oxygen::observer_ptr { &naming_service }, {});
@@ -166,11 +162,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectMinimalSceneBuildsDescriptor)
   co::Run(loop_, [&] -> Co<> {
     ScenePipeline pipeline(pool_);
 
-    NamingService naming_service(NamingService::Config {
-      .strategy = std::make_shared<NoOpNamingStrategy>(),
-      .enable_namespacing = false,
-      .enforce_uniqueness = false,
-    });
+    NamingService naming_service;
 
     auto item = ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter),
       "Scene", {}, {},
@@ -253,11 +245,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectSortsRenderablesByNodeIndex)
   co::Run(loop_, [&] -> Co<> {
     ScenePipeline pipeline(pool_);
 
-    NamingService naming_service(NamingService::Config {
-      .strategy = std::make_shared<NoOpNamingStrategy>(),
-      .enable_namespacing = false,
-      .enforce_uniqueness = false,
-    });
+    NamingService naming_service;
 
     auto item = ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter),
       "Scene", {}, {},
@@ -315,11 +303,7 @@ NOLINT_TEST_F(ScenePipelineTest, CollectWithEnvironmentBlockAppendsBlock)
   co::Run(loop_, [&] -> Co<> {
     ScenePipeline pipeline(pool_);
 
-    NamingService naming_service(NamingService::Config {
-      .strategy = std::make_shared<NoOpNamingStrategy>(),
-      .enable_namespacing = false,
-      .enforce_uniqueness = false,
-    });
+    NamingService naming_service;
 
     auto item
       = ScenePipeline::WorkItem::MakeWorkItem(std::move(adapter), "Scene", {},

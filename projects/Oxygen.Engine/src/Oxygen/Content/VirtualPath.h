@@ -79,6 +79,17 @@ OXGN_CNTT_NDAPI auto IsCanonicalVirtualPath(std::string_view virtual_path,
 //! The NFC form of UTF-8 text, or nothing when the text is not valid UTF-8.
 OXGN_CNTT_NDAPI auto ToNfc(std::string_view text) -> std::optional<std::string>;
 
+//! The nearest name the segment rule accepts, for a name the engine assigns.
+/*!
+ Normalizes to NFC and replaces each refused character, invalid UTF-8 sequence
+ and unassigned code point with `_`, as well as a leading `.`, a leading or
+ trailing space and a trailing dot. A name whose part before its first dot is a
+ device name gets `_` after that part (`NUL.v2` becomes `NUL_.v2`). Empty text
+ stays empty, and the length is not bounded: the caller shortens the name to
+ the leaf it builds. The cooker names imported model products with it.
+*/
+OXGN_CNTT_NDAPI auto ToSegmentName(std::string_view text) -> std::string;
+
 //! The Unicode 15.1 simple case folding of UTF-8 text, or nothing when the text
 //! is not valid UTF-8.
 OXGN_CNTT_NDAPI auto FoldCase(std::string_view text)

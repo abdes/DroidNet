@@ -348,7 +348,6 @@ auto RetainedModelImport::MakeRecipe(const SceneImportSettings& settings,
   add("normals_policy", settings.normals_policy);
   add("tangents_policy", settings.tangents_policy);
   add("node_pruning", settings.node_pruning);
-  add("naming_policy", settings.naming_policy);
   if (settings.unit_scale_set) {
     job.update({ { "unit_scale", settings.unit_scale } });
   }

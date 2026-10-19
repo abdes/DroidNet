@@ -22,10 +22,9 @@ struct ImportOptions;
 
 struct SceneImportSettings {
   //! Converts persisted native options to the canonical model-recipe
-  //! vocabulary. Naming policy is explicit because arbitrary strategy objects
-  //! are not recipes.
-  OXGN_COOK_NDAPI static auto FromOptions(const ImportOptions& options,
-    std::string naming_policy) -> SceneImportSettings;
+  //! vocabulary.
+  OXGN_COOK_NDAPI static auto FromOptions(const ImportOptions& options)
+    -> SceneImportSettings;
   //! Interpret a model recipe and supplied provenance bytes without file I/O.
   //! The resulting request has no cooked destination; execution attaches it.
   OXGN_COOK_NDAPI auto Prepare(ImportFormat expected_format,
@@ -66,7 +65,6 @@ struct SceneImportSettings {
   std::string normals_policy;
   std::string tangents_policy;
   std::string node_pruning;
-  std::string naming_policy;
 
   //! Default tuning for all textures in the scene.
   TextureImportSettings texture_defaults;
