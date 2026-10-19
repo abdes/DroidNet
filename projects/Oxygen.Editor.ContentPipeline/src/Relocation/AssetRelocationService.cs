@@ -387,7 +387,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         var extension = isDirectory ? string.Empty : AssetFileTypes.GetSuffix(name);
         var stem = name[..^extension.Length];
         var candidate = folder.Combine(name);
-        for (var index = 2; File.Exists(candidate.FullPath) || Directory.Exists(candidate.FullPath) || reserved.Contains(candidate) || ScriptSourceNames.FindCollision(candidate) is not null; index++)
+        for (var index = 2; File.Exists(candidate.FullPath) || Directory.Exists(candidate.FullPath) || reserved.Contains(candidate) || SourceCollisions.Find(candidate).Count != 0; index++)
         {
             candidate = folder.Combine(string.Create(CultureInfo.InvariantCulture, $"{stem} ({index}){extension}"));
         }

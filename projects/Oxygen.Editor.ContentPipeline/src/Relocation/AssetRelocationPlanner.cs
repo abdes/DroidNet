@@ -185,9 +185,9 @@ internal static class AssetRelocationPlanner
             throw new AssetRelocationException($"The destination folder '{move.Target.Parent}' does not exist.");
         }
 
-        if (!isDirectory && ScriptSourceNames.FindCollision(target, ignored: source) is { } collision)
+        if (!isDirectory && SourceCollisions.Find(target, ignored: source) is [var collision, ..])
         {
-            throw new AssetRelocationException($"'{collision.Name}' is already in '{move.Target.Parent}'; both would cook to the same script. Choose another name.");
+            throw new AssetRelocationException(AssetRelocationException.SourceCollisionCode, $"'{collision.Name}' is already in '{move.Target.Parent}'; both would cook to the same asset. Choose another name.");
         }
     }
 

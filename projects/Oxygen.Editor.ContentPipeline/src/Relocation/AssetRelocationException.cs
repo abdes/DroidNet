@@ -11,6 +11,9 @@ public sealed class AssetRelocationException : Exception
     /// <remarks>A model product is regenerated from its model on every cook and has no authored place of its own.</remarks>
     public const string ModelProductCode = "relocation.model_product";
 
+    /// <summary>The code of a refused relocation that would leave two sources producing one asset.</summary>
+    public const string SourceCollisionCode = "relocation.source_collision";
+
     /// <summary>Initializes a new instance of the <see cref="AssetRelocationException"/> class.</summary>
     public AssetRelocationException()
     {

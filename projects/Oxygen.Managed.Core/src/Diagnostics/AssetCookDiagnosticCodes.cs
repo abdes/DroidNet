@@ -18,4 +18,10 @@ public static class AssetCookDiagnosticCodes
     /// Loose cooked index is missing or invalid.
     /// </summary>
     public const string IndexInvalid = DiagnosticCodes.AssetCookPrefix + "IndexInvalid";
+
+    /// <summary>
+    /// Two sources produce one asset identity, or identities that differ only in case; neither is cooked until one is
+    /// renamed or removed.
+    /// </summary>
+    public const string IdentityCollision = DiagnosticCodes.AssetCookPrefix + "IdentityCollision";
 }

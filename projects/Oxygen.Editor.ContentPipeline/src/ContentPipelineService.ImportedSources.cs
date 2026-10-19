@@ -160,13 +160,6 @@ public sealed partial class ContentPipelineService
         {
             var settingsPath = Path.Combine(scope.Snapshot!.InputRoot, input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix);
             var settings = NativeSceneImportSettings.Parse(await File.ReadAllBytesAsync(settingsPath, cancellationToken).ConfigureAwait(false));
-            var collision = await this.FindImportedOutputCollisionAsync(operationId, scope, input, settings, cancellationToken).ConfigureAwait(false);
-            if (collision is not null)
-            {
-                results.Add(new(operationId, scope.TargetKind, OperationStatus.Failed, [collision], [], Inspection: null, Validation: null));
-                continue;
-            }
-
             var sourceScope = scope with { Inputs = [input] };
             var job = scope.NativeJobs.GetValueOrDefault(input.AssetUri) ?? this.manifestBuilder.BuildJob(input, [], settings);
             var manifest = new ContentImportManifest(
@@ -186,34 +179,5 @@ public sealed partial class ContentPipelineService
 
         var merged = MergeProjectResults(operationId, results) with { TargetKind = scope.TargetKind };
         return merged with { VerifiedRoot = results[^1].VerifiedRoot, NativeInventory = results[^1].NativeInventory, Inspection = results[^1].Inspection, Validation = results[^1].Validation };
-    }
-
-    // A product identity under the model that the output already holds, and that the model did not produce before,
-    // belongs to something else: an earlier model imported at the same path.
-    private async Task<DiagnosticRecord?> FindImportedOutputCollisionAsync(Guid operationId, ContentCookScope scope, ContentCookInput source, NativeSceneImportSettings settings, CancellationToken cancellationToken)
-    {
-        var output = (scope.Output ?? throw new InvalidOperationException("The import has no generation owner.")).Path;
-        if (!File.Exists(Path.Combine(output, "container.index.bin")))
-        {
-            return null;
-        }
-
-        var inspection = await this.engineContentPipelineApi.InspectLooseCookedRootAsync(output, cancellationToken).ConfigureAwait(false);
-        var owned = scope.PreviousProvenance?.Products.FirstOrDefault(product => product.SourceUri == source.AssetUri)?.Outputs
-            .Select(static output => output.Asset.VirtualPath).ToHashSet(StringComparer.Ordinal) ?? [with(StringComparer.Ordinal)];
-        var conflict = inspection.Assets.FirstOrDefault(asset => AssetPath.TryParse(asset.VirtualPath, out var product)
-            && AssetFileTypes.ContainerOf(product) == source.AssetUri && !owned.Contains(asset.VirtualPath));
-        return conflict is null ? null : Collision(conflict.VirtualPath);
-
-        DiagnosticRecord Collision(string path) => new()
-        {
-            OperationId = operationId,
-            Domain = FailureDomain.AssetImport,
-            Severity = DiagnosticSeverity.Error,
-            Code = AssetImportDiagnosticCodes.ImportFailed,
-            AffectedPath = source.SourceAbsolutePath.FullPath,
-            AffectedVirtualPath = source.AssetUri.VirtualPath,
-            Message = $"Import of '{settings.Name}' overlaps '{path}'. Choose a different destination without replacing existing assets.",
-        };
     }
 }

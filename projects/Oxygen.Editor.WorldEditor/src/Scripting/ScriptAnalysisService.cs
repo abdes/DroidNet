@@ -13,6 +13,7 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
@@ -180,29 +181,6 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         return new ScriptAnalysisSnapshot(path, script, problems, outOfDate ? lastValid : parameters, outOfDate);
     }
 
-    /// <summary>Finds the other script sources in a script's folder that cook to the same asset.</summary>
-    /// <param name="path">The script file.</param>
-    /// <returns>The file names of the colliding sources, sorted.</returns>
-    internal static IReadOnlyList<string> FindCollisions(FileSystemPath path)
-    {
-        ArgumentNullException.ThrowIfNull(path);
-        if (path.Parent is not { } folder || !Directory.Exists(folder.FullPath))
-        {
-            return [];
-        }
-
-        return [.. Directory.EnumerateFiles(folder.FullPath)
-            .Select(FileSystemPath.From)
-            .Where(other => other != path && IsSameScript(other, path))
-            .Select(static other => other.Name)
-            .Order(FileSystemPath.NameComparer)];
-    }
-
-    // Two sources in one folder cook to the same script when their names match without the file type.
-    private static bool IsSameScript(FileSystemPath left, FileSystemPath right)
-        => AssetFileTypes.Is(left.Name, AssetFileCategory.Script) && AssetFileTypes.Is(right.Name, AssetFileCategory.Script) && left.Parent == right.Parent
-            && string.Equals(AssetFileTypes.RemoveSuffix(left.Name), AssetFileTypes.RemoveSuffix(right.Name), FileSystemPath.NameComparison);
-
     private static IEnumerable<FileSystemPath> EnumerateScripts(FileSystemPath root)
     {
         if (!Directory.Exists(root.FullPath))
@@ -279,7 +257,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             return this.Find(path);
         }
 
-        var collisions = FindCollisions(path);
+        var collisions = SourceCollisions.Find(path).Select(static other => other.Name).ToArray();
         var hash = Convert.ToHexString(SHA256.HashData(bytes)) + "|" + string.Join('|', collisions);
         if (this.entries.TryGetValue(path, out var previous) && !force && string.Equals(previous.Hash, hash, StringComparison.Ordinal))
         {
@@ -294,7 +272,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             return this.Find(path);
         }
 
-        if (collisions.Count > 0)
+        if (collisions.Length > 0)
         {
             snapshot = snapshot with { Problems = [CollisionProblem(path, collisions), .. snapshot.Problems] };
         }
@@ -468,7 +446,7 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
             _ = Task.Run(() => this.AnalyzeChangedAsync(path));
         }
 
-        foreach (var sibling in this.entries.Keys.Where(other => other != path && IsSameScript(other, path)).ToArray())
+        foreach (var sibling in SourceCollisions.Find(path).Where(this.entries.ContainsKey))
         {
             _ = Task.Run(() => this.AnalyzeChangedAsync(sibling));
         }

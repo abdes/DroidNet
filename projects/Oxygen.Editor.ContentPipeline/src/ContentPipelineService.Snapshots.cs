@@ -278,7 +278,7 @@ public sealed partial class ContentPipelineService
                 cookDocuments,
                 previous),
             resolveImported: uri => Import.ImportedOutputs.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency),
-            resolveBufferOwner: path => previous.FindBufferOwner(operation.Project, path),
+            resolveProducer: previous.CreateProducerLookup(operation.Project),
             preferCookedReference: libraries.IsLibraryPreferred,
             expandCookedReferences: (input, references, token) => libraries.ExpandReferencesAsync(
                 input,

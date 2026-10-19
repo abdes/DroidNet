@@ -297,7 +297,7 @@ public sealed class AssetRelocationTests
 
         Func<Task> work = () => workspace.Service.RelocateAsync(request, "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
-        _ = await work.Should().ThrowAsync<AssetRelocationException>().WithMessage("*move.luau*same script*").ConfigureAwait(false);
+        _ = await work.Should().ThrowAsync<AssetRelocationException>().Where(static error => error.Code == AssetRelocationException.SourceCollisionCode).ConfigureAwait(false);
         _ = workspace.Exists("Content/Player/jump.lua").Should().BeTrue();
     }
 

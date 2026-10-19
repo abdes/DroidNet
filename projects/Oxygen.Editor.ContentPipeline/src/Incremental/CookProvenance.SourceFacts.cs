@@ -32,24 +32,32 @@ internal sealed partial record CookProvenance
         };
     }
 
-    /// <summary>Finds the accepted source that declares a buffer output.</summary>
-    /// <param name="project">The project containing the source.</param>
-    /// <param name="virtualPath">The native buffer identity.</param>
-    /// <returns>The source input, or null when no accepted source declares it.</returns>
-    internal ContentCookInput? FindBufferOwner(Oxygen.Editor.Projects.ProjectContext project, string virtualPath)
+    /// <summary>
+    /// Creates the lookup of the accepted sources that produce each identity, among the sources still in the project; a
+    /// source that was moved or deleted produces nothing any more. Identities differing only in case find each other.
+    /// </summary>
+    /// <param name="project">The project containing the sources.</param>
+    /// <returns>Finds the source producing an identity, or null when no accepted source does.</returns>
+    /// <exception cref="InvalidDataException">The accepted facts give an identity more than one source.</exception>
+    internal Func<string, ContentCookInput?> CreateProducerLookup(Oxygen.Editor.Projects.ProjectContext project)
     {
-        var owners = this.Products.Where(product => product.SourceInput is not null && product.DeclaredOutputs.Any(output =>
-            string.Equals(output.Kind, "buffer", StringComparison.Ordinal) && string.Equals(output.VirtualPath, virtualPath, StringComparison.Ordinal))).ToArray();
-        if (owners.Length > 1)
+        var producers = this.Products
+            .Where(static product => product.SourceInput is not null)
+            .Select(product => (product.DeclaredOutputs, Input: product.SourceInput! with
+            {
+                SourceAbsolutePath = project.ProjectRoot.Combine(product.SourceInput.SourceRelativePath),
+                Role = ContentCookInputRole.Dependency,
+            }))
+            .Where(static product => File.Exists(product.Input.SourceAbsolutePath.FullPath))
+            .SelectMany(static product => product.DeclaredOutputs.Select(output => (output.VirtualPath, product.Input)))
+            .GroupBy(static item => item.VirtualPath, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => group.Select(static item => item.Input).DistinctBy(static input => input.AssetUri).ToArray(), StringComparer.OrdinalIgnoreCase);
+        return virtualPath => producers.GetValueOrDefault(virtualPath) switch
         {
-            throw new InvalidDataException($"Multiple sources claim buffer '{virtualPath}'.");
-        }
-
-        return owners.FirstOrDefault()?.SourceInput is { } input ? input with
-        {
-            SourceAbsolutePath = project.ProjectRoot.Combine(input.SourceRelativePath),
-            Role = ContentCookInputRole.Dependency,
-        } : null;
+            null => null,
+            [var producer] => producer,
+            _ => throw new InvalidDataException($"Multiple sources produce '{virtualPath}'."),
+        };
     }
 
     private static bool ValidSourceFacts(Product product)

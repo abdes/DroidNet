@@ -314,7 +314,7 @@ public sealed partial class AssetCookStatusReader(
         => new(
             new AcceptedCookSourceFacts(project, prior, CookSavedSourceReader.HashFileAsync),
             resolveImported: uri => ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Dependency),
-            resolveBufferOwner: path => prior.FindBufferOwner(project, path),
+            resolveProducer: prior.CreateProducerLookup(project),
             preferCookedReference: libraries.IsLibraryPreferred,
             expandCookedReferences: (input, references, token) => libraries.ExpandReferencesAsync(input, references, inspector: null, operationRoot: string.Empty, artifacts: null, token));
 }

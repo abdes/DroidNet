@@ -18,7 +18,7 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 internal sealed class CookDependencyDiscovery(
     ICookSourceFactsProvider analyzer,
     Func<AssetPath, ContentCookInput?>? resolveImported = null,
-    Func<string, ContentCookInput?>? resolveBufferOwner = null,
+    Func<string, ContentCookInput?>? resolveProducer = null,
     Func<AssetPath, bool>? preferCookedReference = null,
     Func<ContentCookInput, IReadOnlyList<AssetPath>, CancellationToken, Task<CookReferenceExpansion>>? expandCookedReferences = null)
 {
@@ -27,7 +27,7 @@ internal sealed class CookDependencyDiscovery(
 
     internal async Task<CookDependencyGraph> DiscoverAsync(ProjectContext project, IReadOnlyList<ContentCookInput> roots, CookDependencyGraph? preparedImport, CancellationToken cancellationToken)
     {
-        var discovery = new Discovery(project, analyzer, resolveImported, resolveBufferOwner, preferCookedReference, expandCookedReferences);
+        var discovery = new Discovery(project, analyzer, resolveImported, resolveProducer, preferCookedReference, expandCookedReferences);
         if (preparedImport is not null)
         {
             discovery.AddPreparedImport(preparedImport);
@@ -47,7 +47,7 @@ internal sealed class CookDependencyDiscovery(
 
     private sealed class Discovery(ProjectContext project, ICookSourceFactsProvider analyzer,
         Func<AssetPath, ContentCookInput?>? resolveImported,
-        Func<string, ContentCookInput?>? resolveBufferOwner,
+        Func<string, ContentCookInput?>? resolveProducer,
         Func<AssetPath, bool>? preferCookedReference,
         Func<ContentCookInput, IReadOnlyList<AssetPath>, CancellationToken, Task<CookReferenceExpansion>>? expandCookedReferences)
     {
@@ -67,7 +67,8 @@ internal sealed class CookDependencyDiscovery(
         private readonly Dictionary<AssetPath, CookSourceFacts> sourceFacts = [];
         private readonly HashSet<AssetPath> requiresAnalysis = [];
         private readonly Dictionary<string, NativeCapturedInput> generatedInputs = [with(StringComparer.OrdinalIgnoreCase)];
-        private readonly Dictionary<string, ContentCookInput> bufferOwners = [with(StringComparer.Ordinal)];
+        // Each identity has one producing source; identities differing only in case are one file in a cooked root.
+        private readonly Dictionary<string, ContentCookInput> producers = [with(StringComparer.OrdinalIgnoreCase)];
         private readonly Dictionary<AssetPath, ImmutableArray<AssetPath>> resourceDependencies = [];
 
         public void AddPreparedImport(CookDependencyGraph prepared)
@@ -109,15 +110,7 @@ internal sealed class CookDependencyDiscovery(
 
                 foreach (var source in analyzed.Sources)
                 {
-                    foreach (var output in source.Outputs.Where(static output => string.Equals(output.Kind, "buffer", StringComparison.Ordinal)))
-                    {
-                        if (this.bufferOwners.TryGetValue(output.VirtualPath, out var owner) && owner.AssetUri != source.Input.AssetUri)
-                        {
-                            throw new InvalidDataException($"Multiple sources claim buffer '{output.VirtualPath}'.");
-                        }
-
-                        this.bufferOwners[output.VirtualPath] = source.Input;
-                    }
+                    this.ClaimOutputs(source);
                 }
 
                 foreach (var source in analyzed.Sources)
@@ -211,7 +204,7 @@ internal sealed class CookDependencyDiscovery(
             var bufferDependencies = new HashSet<AssetPath>();
             foreach (var reference in external.Where(static reference => string.Equals(reference.Kind, "buffer", StringComparison.Ordinal)))
             {
-                var owner = this.bufferOwners.GetValueOrDefault(reference.VirtualPath) ?? resolveBufferOwner?.Invoke(reference.VirtualPath);
+                var owner = this.producers.GetValueOrDefault(reference.VirtualPath) ?? resolveProducer?.Invoke(reference.VirtualPath);
                 if (owner is null)
                 {
                     // Native linking validates existing local sidecars and rejects foreign-root indices.
@@ -247,6 +240,34 @@ internal sealed class CookDependencyDiscovery(
 
         // A reference is an asset's identity. It resolves to a cooked asset the cook publishes as it is (a library asset,
         // including the engine content pak's), or the project source that cooks into it.
+        // A source's outputs are its own unless another source in this cook, or one the accepted facts record and the
+        // project still holds, produces the same identity; then neither is cooked until one is renamed or removed.
+        private void ClaimOutputs(CookSourceFacts source)
+        {
+            foreach (var output in source.Outputs)
+            {
+                var producer = this.producers.GetValueOrDefault(output.VirtualPath) ?? resolveProducer?.Invoke(output.VirtualPath);
+                if (producer is null || producer.AssetUri == source.Input.AssetUri)
+                {
+                    this.producers[output.VirtualPath] = source.Input;
+                    continue;
+                }
+
+                var other = Path.GetFileName(producer.SourceRelativePath);
+                ContentCookInput[] colliding = [producer, source.Input];
+                this.diagnostics.AddRange(colliding.Select(input => new DiagnosticRecord
+                {
+                    OperationId = Guid.Empty,
+                    Domain = FailureDomain.AssetCook,
+                    Severity = DiagnosticSeverity.Error,
+                    Code = AssetCookDiagnosticCodes.IdentityCollision,
+                    AffectedPath = input.SourceAbsolutePath.FullPath,
+                    AffectedVirtualPath = output.VirtualPath,
+                    Message = $"'{Path.GetFileName(source.Input.SourceRelativePath)}' and '{other}' both produce '{output.VirtualPath}'. Rename or remove one of them.",
+                }));
+            }
+        }
+
         private AssetPath ResolveReference(AssetPath uri)
         {
             if (preferCookedReference?.Invoke(uri) == true)
