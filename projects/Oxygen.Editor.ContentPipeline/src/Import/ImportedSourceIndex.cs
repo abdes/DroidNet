@@ -174,9 +174,9 @@ internal sealed class ImportedSourceIndex
     /// <returns>The scope with source owners and exact required output identities.</returns>
     public ContentCookScope ResolveScope(ContentCookScope scope)
     {
-        foreach (var input in scope.Inputs.Where(static input => input.Kind != ContentCookAssetKind.ForeignSource && input.OutputVirtualPath is not null))
+        foreach (var input in scope.Inputs.Where(static input => input.Kind != ContentCookAssetKind.ForeignSource))
         {
-            _ = this.ResolveOutput(scope.Project, AssetPath.Parse(input.OutputVirtualPath!), input.Role);
+            _ = this.ResolveOutput(scope.Project, input.AssetUri, input.Role);
         }
 
         return scope.ScopeUri is not { } requested ? scope

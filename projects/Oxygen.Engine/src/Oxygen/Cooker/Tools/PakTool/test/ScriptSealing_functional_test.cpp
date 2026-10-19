@@ -132,11 +132,9 @@ protected:
     auto strings = oxygen::data::DescriptorStringsBuilder {};
     descriptor.external_source_path_offset = strings.Add(stored);
     LooseCookedWriter writer(cooked);
-    const auto layout = LooseCookedLayout {};
-    const auto virtual_path = layout.ScriptVirtualPath("rooted");
+    const auto virtual_path = std::string("/.cooked/rooted.oscript");
     writer.WriteAssetDescriptor(AssetKey::FromVirtualPath(virtual_path),
-      AssetType::kScript, virtual_path,
-      layout.ScriptDescriptorRelPath("rooted"),
+      AssetType::kScript, virtual_path, "rooted.oscript",
       oxygen::data::MakeDescriptorBytes(descriptor, strings), {});
     static_cast<void>(writer.Finish());
     PakBuildRequest request {};
@@ -170,9 +168,8 @@ NOLINT_TEST_P(PakToolScriptSealingTest,
   WriteTextFile(external_script_path, "return { update = function() end }\n");
 
   const auto layout = LooseCookedLayout {};
-  const auto script_name = std::string("proc_cubes");
-  const auto script_virtual_path = layout.ScriptVirtualPath(script_name);
-  const auto script_relpath = layout.ScriptDescriptorRelPath(script_name);
+  const auto script_virtual_path = std::string("/.cooked/proc_cubes.oscript");
+  const auto script_relpath = std::string("proc_cubes.oscript");
   const auto script_key = AssetKey::FromVirtualPath(script_virtual_path);
 
   auto descriptor = ScriptAssetDesc {};

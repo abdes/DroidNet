@@ -32,7 +32,7 @@ public sealed class IncrementalCookTests
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var revealed = false;
         workspace.CookCoordinator.RunChanged += (_, args) => revealed |= args.Reveal;
-        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
+        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene");
 
         var result = await pipeline.CookSavedAssetAsync(sceneUri, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -57,7 +57,7 @@ public sealed class IncrementalCookTests
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
-        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
+        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var hold = WriterHold.Take(workspace.CookCoordinator, this.TestContext.CancellationToken);
         var saved = pipeline.CookSavedAssetAsync(sceneUri, workspace.ProjectContext, this.TestContext.CancellationToken);
         _ = saved.IsCompleted.Should().BeFalse();
@@ -114,7 +114,7 @@ public sealed class IncrementalCookTests
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
 
         var result = await pipeline.CookCurrentSceneAsync(
-            AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
+            AssetPath.Parse("/Content/Scenes/Main.oscene"),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertCookSucceeded(result);
@@ -122,7 +122,7 @@ public sealed class IncrementalCookTests
             dependency.AssetUri == AssetPath.Parse("/Content/Scripts/Orbit.oscript")
             && string.Equals(dependency.SourceName, "Scripts", StringComparison.Ordinal));
         _ = result.CookedAssets.Should().Contain(asset =>
-            asset.SourceAssetUri == AssetPath.Parse("/Content/Scenes/Main.oscene.json"));
+            asset.SourceAssetUri == AssetPath.Parse("/Content/Scenes/Main.oscene"));
     }
 
     /// <summary>An unchanged project reuses all products and preserves output bytes and timestamps across service recreation.</summary>
@@ -176,7 +176,7 @@ public sealed class IncrementalCookTests
         var changed = await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         AssertCookSucceeded(changed);
-        _ = changed.CookedAssets.Should().ContainSingle(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Materials/Blue.omat.json"));
+        _ = changed.CookedAssets.Should().ContainSingle(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Materials/Blue.omat"));
         _ = api.Imported.Should().ContainSingle();
         _ = api.Imported[0].Manifest.Jobs.Should().ContainSingle(job => job.Type == "material-descriptor");
         _ = api.Analyzed.Skip(beforeAnalysis).SelectMany(static execution => execution.Jobs).Should().ContainSingle(job => job.Type == "material-descriptor");
@@ -272,7 +272,7 @@ public sealed class IncrementalCookTests
         _ = reused.IsUpToDate.Should().BeTrue();
         _ = reused.Status.Should().Be(OperationStatus.SucceededWithWarnings);
         _ = reused.Diagnostics.Should().Contain(diagnostic => diagnostic.Code == "TEST.SCENE_WARNING" && diagnostic.OperationId == reused.OperationId);
-        var material = await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var material = await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = material.IsUpToDate.Should().BeTrue();
         _ = material.Diagnostics.Should().NotContain(static diagnostic => diagnostic.Code == "TEST.SCENE_WARNING");
     }

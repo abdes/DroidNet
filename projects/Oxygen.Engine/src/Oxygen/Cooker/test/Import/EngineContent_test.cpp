@@ -8,6 +8,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <filesystem>
 #include <string>
 #include <vector>
 
@@ -41,7 +42,10 @@ auto CheckShapeJob(const json& job, const json& schema) -> void
   EXPECT_EQ(lod.at("procedural").at("generator"), job.at("name"));
   EXPECT_EQ(lod.at("submeshes").at(0).at("material_ref").get<std::string>(),
     oxygen::data::MaterialAsset::kDefaultVirtualPath);
-  EXPECT_EQ(job.at("layout").at("virtual_mount_root"), "/Engine");
+  EXPECT_EQ(job.at("layout"), (json { { "virtual_mount_root", "/Engine" } }));
+  EXPECT_THAT(job.at("virtual_path").get<std::string>(),
+    testing::AllOf(testing::StartsWith("/Engine/"),
+      testing::EndsWith("/" + job.at("name").get<std::string>() + ".ogeo")));
   if (job.at("name") == "Capsule") {
     EXPECT_EQ(
       descriptor.at("bounds").at("min"), json::array({ -0.5F, -0.5F, -1.0F }));
@@ -67,9 +71,8 @@ NOLINT_TEST_F(EngineContentTest, DefaultMaterialMatchesTheLiveMaterial)
   const auto& job = manifest.at("jobs").at(0);
   EXPECT_EQ(job.at("type"), "material-descriptor");
   EXPECT_EQ(job.at("name"), "Default");
-  EXPECT_EQ(job.at("layout"),
-    (json { { "virtual_mount_root", "/Engine" }, { "descriptors_dir", "" },
-      { "materials_subdir", "Generated/Materials" } }));
+  EXPECT_EQ(job.at("virtual_path"), "/Engine/Generated/Materials/Default.omat");
+  EXPECT_EQ(job.at("layout"), (json { { "virtual_mount_root", "/Engine" } }));
   const auto descriptor = LoadJson(job.at("source").get<std::string>());
   EXPECT_THAT(
     ValidateJson(
@@ -104,10 +107,12 @@ NOLINT_TEST_F(EngineContentTest, EveryShapeCooksUnderItsEnginePath)
   for (const auto& job : jobs) {
     TRACE_GCHECK_F(CheckShapeJob(job, geometry_schema), "shape job");
     folders.push_back(
-      job.at("layout").at("geometry_subdir").get<std::string>());
+      std::filesystem::path(job.at("virtual_path").get<std::string>())
+        .parent_path()
+        .generic_string());
   }
-  EXPECT_EQ(std::ranges::count(folders, "Internal"), 1);
-  EXPECT_EQ(std::ranges::count(folders, "Generated/BasicShapes"),
+  EXPECT_EQ(std::ranges::count(folders, "/Engine/Internal"), 1);
+  EXPECT_EQ(std::ranges::count(folders, "/Engine/Generated/BasicShapes"),
     static_cast<std::ptrdiff_t>(GetEngineShapes().size() - 1));
 }
 

@@ -19,28 +19,25 @@ namespace oxygen::content::import {
 //! Configurable relative paths for a loose cooked container.
 /*!
  The runtime Content loader expects a `container.index.bin` index at the root
- plus optional resource table/data files referenced by that index.
+ plus optional resource table/data files referenced by that index. The loader
+ follows whatever paths the index records.
 
- These are conventions used by Oxygen tooling; the loader ultimately follows
- whatever paths are recorded in the index.
+ ### What the layout places
 
- ### Layout Goals
+ The cooked layout is the identity: a job that cooks one asset (a material,
+ geometry, scene, script, texture, physics material or collision shape
+ descriptor) writes its descriptor at the virtual path its request names, so
+ the descriptor of `/Mount/X/Y.ext` lives at `X/Y.ext` under the cooked root.
+ The layout has no folder for those.
 
- - Allow tooling to group descriptor files by asset type
-   (scene/geometry/materials) or to put all descriptors into a single folder.
+ The layout still names the products of containers by type: a model's
+ materials, geometry, scenes, textures and buffers, and an input file's
+ actions and mapping contexts. It also places the shared resource tables.
+
  - Keep resource blob files (tables/data) under a dedicated resources folder.
  - Keep a virtual mount root that anchors virtual paths recorded in the index.
  - Ensure all configured *physical* paths are container-relative and use
    forward slashes.
-
- @note Only Oxygen asset types (`oxygen::data::AssetType`) have descriptor
-
-
- folders here (scene/geometry/material/script/input). Cameras and lights are
-
- components attached to scene nodes and are authored into the scene
- descriptor;
- they are not emitted as standalone loose cooked assets.
 
  @warning The runtime mount path is rooted at `container.index.bin`.
   Today, mounting assumes this filename at the container root.
@@ -78,12 +75,6 @@ struct LooseCookedLayout final : Layout {
       + std::string(data::kPhysicsSceneDescriptorExtension);
   }
 
-  [[nodiscard]] static auto ScriptDescriptorFileName(std::string_view name)
-    -> std::string
-  {
-    return std::string(name) + std::string(data::kScriptDescriptorExtension);
-  }
-
   [[nodiscard]] static auto InputActionDescriptorFileName(std::string_view name)
     -> std::string
   {
@@ -108,20 +99,6 @@ struct LooseCookedLayout final : Layout {
     -> std::string
   {
     return std::string(name) + std::string(data::kBufferDescriptorExtension);
-  }
-
-  [[nodiscard]] static auto PhysicsMaterialDescriptorFileName(
-    std::string_view name) -> std::string
-  {
-    return std::string(name)
-      + std::string(data::kPhysicsMaterialDescriptorExtension);
-  }
-
-  [[nodiscard]] static auto CollisionShapeDescriptorFileName(
-    std::string_view name) -> std::string
-  {
-    return std::string(name)
-      + std::string(data::kCollisionShapeDescriptorExtension);
   }
 
   [[nodiscard]] static auto PhysicsResourceDescriptorFileName(
@@ -168,13 +145,6 @@ struct LooseCookedLayout final : Layout {
       PhysicsSceneDescriptorFileName(scene_name));
   }
 
-  [[nodiscard]] auto ScriptVirtualLeaf(std::string_view name) const
-    -> std::string
-  {
-    return JoinRelPath(DescriptorDirFor(data::AssetType::kScript),
-      ScriptDescriptorFileName(name));
-  }
-
   [[nodiscard]] auto InputActionVirtualLeaf(std::string_view name) const
     -> std::string
   {
@@ -199,20 +169,6 @@ struct LooseCookedLayout final : Layout {
     -> std::string
   {
     return JoinRelPath(BufferDescriptorDir(), BufferDescriptorFileName(name));
-  }
-
-  [[nodiscard]] auto PhysicsMaterialVirtualLeaf(std::string_view name) const
-    -> std::string
-  {
-    return JoinRelPath(DescriptorDirFor(data::AssetType::kPhysicsMaterial),
-      PhysicsMaterialDescriptorFileName(name));
-  }
-
-  [[nodiscard]] auto CollisionShapeVirtualLeaf(std::string_view name) const
-    -> std::string
-  {
-    return JoinRelPath(DescriptorDirFor(data::AssetType::kCollisionShape),
-      CollisionShapeDescriptorFileName(name));
   }
 
   [[nodiscard]] auto PhysicsResourceVirtualLeaf(std::string_view name) const
@@ -244,12 +200,6 @@ struct LooseCookedLayout final : Layout {
     std::string_view scene_name) const -> std::string
   {
     return PhysicsSceneVirtualLeaf(scene_name);
-  }
-
-  [[nodiscard]] auto ScriptDescriptorRelPath(std::string_view name) const
-    -> std::string
-  {
-    return ScriptVirtualLeaf(name);
   }
 
   [[nodiscard]] auto InputActionDescriptorRelPath(std::string_view name) const
@@ -284,18 +234,6 @@ struct LooseCookedLayout final : Layout {
   //! Source-derived buffer sidecar path using the same identity naming rule.
   OXGN_COOK_NDAPI auto BufferDescriptorRelPath(std::string_view name_hint,
     std::string_view stable_id) const -> std::string;
-
-  [[nodiscard]] auto PhysicsMaterialDescriptorRelPath(
-    std::string_view name) const -> std::string
-  {
-    return PhysicsMaterialVirtualLeaf(name);
-  }
-
-  [[nodiscard]] auto CollisionShapeDescriptorRelPath(
-    std::string_view name) const -> std::string
-  {
-    return CollisionShapeVirtualLeaf(name);
-  }
 
   [[nodiscard]] auto PhysicsResourceDescriptorRelPath(
     std::string_view name) const -> std::string
@@ -337,12 +275,6 @@ struct LooseCookedLayout final : Layout {
       virtual_mount_root, PhysicsSceneVirtualLeaf(scene_name));
   }
 
-  [[nodiscard]] auto ScriptVirtualPath(std::string_view name) const
-    -> std::string
-  {
-    return JoinVirtualPath(virtual_mount_root, ScriptVirtualLeaf(name));
-  }
-
   [[nodiscard]] auto InputActionVirtualPath(std::string_view name) const
     -> std::string
   {
@@ -366,19 +298,6 @@ struct LooseCookedLayout final : Layout {
     -> std::string
   {
     return JoinVirtualPath(virtual_mount_root, BufferVirtualLeaf(name));
-  }
-
-  [[nodiscard]] auto PhysicsMaterialVirtualPath(std::string_view name) const
-    -> std::string
-  {
-    return JoinVirtualPath(
-      virtual_mount_root, PhysicsMaterialVirtualLeaf(name));
-  }
-
-  [[nodiscard]] auto CollisionShapeVirtualPath(std::string_view name) const
-    -> std::string
-  {
-    return JoinVirtualPath(virtual_mount_root, CollisionShapeVirtualLeaf(name));
   }
 
   [[nodiscard]] auto PhysicsResourceVirtualPath(std::string_view name) const
@@ -449,11 +368,6 @@ struct LooseCookedLayout final : Layout {
   /*! Set to empty to place materials directly under `descriptors_dir`. */
   std::string materials_subdir = std::string(kMaterialsDirName);
 
-  //! Subfolder for script descriptors.
-  /*! Set to empty to place script descriptors directly under `descriptors_dir`.
-   */
-  std::string scripts_subdir = "Scripts";
-
   //! Subfolder for all input descriptors (`.oiact`, `.oimap`).
   /*! Set to empty to place input descriptors directly under
    *
@@ -473,16 +387,10 @@ struct LooseCookedLayout final : Layout {
    * `resources_dir`. */
   std::string buffer_descriptors_subdir = "Buffers";
 
-  //! Base folder (relative to cooked root) for physics
-  //! materials/shapes/resources.
-  /*! Set to empty to place these physics outputs directly under cooked root. */
+  //! Base folder (relative to cooked root) for physics resources.
+  /*! Set to empty to place the physics resource folder under the cooked root.
+   */
   std::string physics_dir = "Physics";
-
-  //! Subfolder for physics material assets (`.opmat`) under `physics_dir`.
-  std::string physics_materials_subdir = "Materials";
-
-  //! Subfolder for collision shape assets (`.ocshape`) under `physics_dir`.
-  std::string physics_shapes_subdir = "Shapes";
 
   //! Subfolder for physics resource files under `physics_dir`.
   std::string physics_resources_subdir = "Resources";
@@ -559,18 +467,6 @@ struct LooseCookedLayout final : Layout {
     return JoinRelPath(PhysicsRootDir(), physics_resources_subdir);
   }
 
-  //! Resolve the container-relative directory for physics materials.
-  [[nodiscard]] auto PhysicsMaterialsDir() const -> std::string
-  {
-    return JoinRelPath(PhysicsRootDir(), physics_materials_subdir);
-  }
-
-  //! Resolve the container-relative directory for physics shapes.
-  [[nodiscard]] auto PhysicsShapesDir() const -> std::string
-  {
-    return JoinRelPath(PhysicsRootDir(), physics_shapes_subdir);
-  }
-
   //! Resolve the descriptor folder for an asset type.
   [[nodiscard]] auto DescriptorDirFor(data::AssetType asset_type) const
     -> std::string
@@ -584,16 +480,14 @@ struct LooseCookedLayout final : Layout {
       return JoinRelPath(descriptors_dir, geometry_subdir);
     case data::AssetType::kMaterial:
       return JoinRelPath(descriptors_dir, materials_subdir);
-    case data::AssetType::kScript:
-      return JoinRelPath(descriptors_dir, scripts_subdir);
     case data::AssetType::kInputAction:
       return JoinRelPath(descriptors_dir, input_subdir);
     case data::AssetType::kInputMappingContext:
       return JoinRelPath(descriptors_dir, input_subdir);
+    case data::AssetType::kScript:
     case data::AssetType::kPhysicsMaterial:
-      return PhysicsMaterialsDir();
     case data::AssetType::kCollisionShape:
-      return PhysicsShapesDir();
+      // Only single-asset jobs cook these; each is placed at its identity.
     case data::AssetType::kUnknown:
       break;
     }

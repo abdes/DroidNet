@@ -9,7 +9,6 @@
 #include <chrono>
 #include <cstddef>
 #include <cstdint>
-#include <exception>
 #include <filesystem>
 #include <limits>
 #include <optional>
@@ -43,6 +42,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
@@ -58,8 +58,6 @@
 namespace oxygen::content::import::detail {
 
 namespace {
-
-  namespace lc = oxygen::content::lc;
 
   // Copying the sidecar strings and maps can only fail on allocation.
   // NOLINTNEXTLINE(bugprone-exception-escape)
@@ -823,12 +821,12 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       ImportPhase::kFailed, 1.0F, "Geometry descriptor preparation failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
-  if (auto refused = internal::CheckAssetVirtualPath(Request(),
-        Request().loose_cooked_layout.GeometryVirtualPath(source->name),
-        "name")) {
-    session.AddDiagnostic(std::move(*refused));
+  auto placement
+    = internal::PlaceAsset(Request(), data::kGeometryDescriptorExtension);
+  if (!placement.has_value()) {
+    session.AddDiagnostic(std::move(placement.error()));
     ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Geometry descriptor name refused");
+      ImportPhase::kFailed, 1.0F, "Geometry virtual path refused");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
@@ -905,11 +903,7 @@ auto GeometryDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  const auto virtual_path
-    = Request().loose_cooked_layout.GeometryVirtualPath(prepared.geometry_name);
-  const auto descriptor_relpath
-    = Request().loose_cooked_layout.GeometryDescriptorRelPath(
-      prepared.geometry_name);
+  const auto& [virtual_path, descriptor_relpath] = *placement;
   const auto geometry_key = BuildAssetKey(Request(), virtual_path);
 
   const auto emit_start = std::chrono::steady_clock::now();

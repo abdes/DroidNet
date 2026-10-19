@@ -91,6 +91,16 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
                        .StoreTo(&options_.cooked_root)
                        .Build();
 
+  auto virtual_path
+    = Option::WithKey("virtual-path")
+        .About("Identity of the cooked texture: its descriptor is written at "
+               "this virtual path")
+        .Long("virtual-path")
+        .Required()
+        .WithValue<std::string>()
+        .StoreTo(&options_.virtual_path)
+        .Build();
+
   auto with_content_hashing
     = Option::WithKey("content-hashing")
         .About("Enable or disable content hashing for outputs")
@@ -282,6 +292,7 @@ auto TextureCommand::BuildCommand() -> std::shared_ptr<clap::Command>
     .About("Import a standalone texture image")
     .WithPositionalArguments(source_path)
     .WithOption(std::move(cooked_root))
+    .WithOption(std::move(virtual_path))
     .WithOption(std::move(job_name))
     .WithOption(std::move(intent))
     .WithOption(std::move(color_space))

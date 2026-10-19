@@ -6,9 +6,8 @@
 | ------------ | ------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | CK-IMPORT-01 | planned | Honor `ImportOptions.import_content` in model planning; current glTF/FBX plans run all content stages. Qualify geometry without authored materials using engine defaults, texture/material dependency selection, and the scene-without-geometry reference policy. Slot provenance reports actual processed geometry, not requested flags. |
 
-**Status:** Complete Design (Phase 5)
-**Date:** 2026-01-26
-**Parent:** [async_import_pipeline_v2.md](async_import_pipeline_v2.md)
+**Status:** Complete Design (Phase 5) **Date:** 2026-01-26 **Parent:**
+[async_import_pipeline_v2.md](async_import_pipeline_v2.md)
 
 ---
 
@@ -27,9 +26,9 @@ Core properties:
 - **Geometry-aware**: links nodes to geometry assets via `geometry_keys`.
 - **Native scene layout**: uses the current
   [SceneAssetDesc](../../../Data/PakFormat_world.h) and environment records.
-- **Empty scenes**: a zero-node scene is valid and retains its environment.
-  No placeholder node is emitted. Node-indexed components require an existing
-  node; empty scenes cannot contain dangling component references.
+- **Empty scenes**: a zero-node scene is valid and retains its environment. No
+  placeholder node is emitted. Node-indexed components require an existing node;
+  empty scenes cannot contain dangling component references.
 - **Planner‑gated**: the planner submits scene work only after referenced
   geometry assets are ready.
 
@@ -38,8 +37,9 @@ Core properties:
 ## Alignment With Current Architecture
 
 The pipeline-agnostic concurrency and lifetime model is defined in the parent
-document [design/async_import_pipeline_v2.md](design/async_import_pipeline_v2.md)
-under **Concurrency, Ownership, and Lifetime (Definitive)**.
+document
+[design/async_import_pipeline_v2.md](design/async_import_pipeline_v2.md) under
+**Concurrency, Ownership, and Lifetime (Definitive)**.
 
 ### Pipeline vs Emitter Responsibilities
 
@@ -50,9 +50,9 @@ under **Concurrency, Ownership, and Lifetime (Definitive)**.
 
 ## Data Model
 
-The pipeline is intentionally narrow: adapters produce an in-memory
-SceneBuild (node records, strings, and component record arrays) and the
-pipeline serializes and packages that build into the final `.oscene` bytes.
+The pipeline is intentionally narrow: adapters produce an in-memory SceneBuild
+(node records, strings, and component record arrays) and the pipeline serializes
+and packages that build into the final `.oscene` bytes.
 
 ```cpp
 struct SceneEnvironmentSystem {
@@ -127,20 +127,22 @@ struct WorkResult {
 
 Notes:
 
-- Adapters are responsible for producing a fully-formed `SceneBuild`:
-  node traversal, naming, node IDs, local TRS, node flags, node pruning,
-  coordinate conversion (to engine space) and attaching component records
-  (renderables/cameras/lights). The pipeline does NOT perform these
-  operations — it expects the `SceneBuild` to be adapter-provided.
-- The adapter-provided `strings` must start with a leading NUL byte so
-  offset `0` maps to the empty string.
-- `request` provides naming strategy and asset key policy; the pipeline
-  performs final scene naming only to build asset keys and paths.
+- Adapters are responsible for producing a fully-formed `SceneBuild`: node
+  traversal, naming, node IDs, local TRS, node flags, node pruning, coordinate
+  conversion (to engine space) and attaching component records
+  (renderables/cameras/lights). The pipeline does NOT perform these operations —
+  it expects the `SceneBuild` to be adapter-provided.
+- The adapter-provided `strings` must start with a leading NUL byte so offset
+  `0` maps to the empty string.
+- A scene descriptor job hands the pipeline its placement: the identity its
+  request names. A model's scene has none, and the pipeline names it from the
+  request's scene name and layout. Either way the asset key derives from the
+  virtual path.
 - `environment_systems` encodes the trailing scene environment block (PAK v7).
   The pipeline validates system record headers and computes the block size.
-- `geometry_keys` must contain resolved geometry keys; the planner must
-  ensure geometry assets are ready before submission. The adapter’s mesh
-  traversal order defines the index mapping used by renderable records.
+- `geometry_keys` must contain resolved geometry keys; the planner must ensure
+  geometry assets are ready before submission. The adapter’s mesh traversal
+  order defines the index mapping used by renderable records.
 
 ---
 
@@ -148,19 +150,17 @@ Notes:
 
 ScenePipeline work items are produced **directly from the native importer
 scene** (ufbx/cgltf) with **no intermediate scene graph**. The format adapter
-walks the native node hierarchy and implements a `BuildSceneStage` that
-produces a `SceneBuild` (nodes, strings, component tables). The adapter
-must produce fully-converted/validated `SceneBuild` data (see notes above)
-and may use the provided `WorkItem` helper to create a submission container
-that holds an opaque `adapter_owner` and an adapter `build_stage` function.
-The adapter must not re-pack or clone node data in a way that loses the
-original import semantics.
+walks the native node hierarchy and implements a `BuildSceneStage` that produces
+a `SceneBuild` (nodes, strings, component tables). The adapter must produce
+fully-converted/validated `SceneBuild` data (see notes above) and may use the
+provided `WorkItem` helper to create a submission container that holds an opaque
+`adapter_owner` and an adapter `build_stage` function. The adapter must not
+re-pack or clone node data in a way that loses the original import semantics.
 
 Planner integration rules:
 
-- The adapter registers a **scene plan item** and stores a
-  `WorkPayloadHandle` that points to the ScenePipeline `WorkItem` storage
-  owned by the job.
+- The adapter registers a **scene plan item** and stores a `WorkPayloadHandle`
+  that points to the ScenePipeline `WorkItem` storage owned by the job.
 - The planner **gates** scene submission on geometry readiness using
   dependencies declared for each `RenderableRecord::geometry_key`.
 - The job executes the plan steps; for the scene step it waits on
@@ -255,44 +255,42 @@ public:
 At runtime each worker coroutine processes items from the input channel and
 follows this behavior (implementation notes & diagnostics below):
 
-1. Check cancellation: if `WorkItem.stop_token` is requested the pipeline
-   sends a cancelled `WorkResult` (diagnostic `import.canceled`) and continues.
-2. Validate adapter presence: if `adapter_owner` or `build_stage` is missing
-   the pipeline emits `scene.adapter_missing` and fails the item.
-3. Run the adapter scene stage on the `ThreadPool` (`BuildSceneStage`) using
-   the typed adapter via the opaque `build_stage` function pointer. The
-   stage is cancellable; the pipeline collects any diagnostics emitted by the
-   stage.
+1. Check cancellation: if `WorkItem.stop_token` is requested the pipeline sends
+   a cancelled `WorkResult` (diagnostic `import.canceled`) and continues.
+2. Validate adapter presence: if `adapter_owner` or `build_stage` is missing the
+   pipeline emits `scene.adapter_missing` and fails the item.
+3. Run the adapter scene stage on the `ThreadPool` (`BuildSceneStage`) using the
+   typed adapter via the opaque `build_stage` function pointer. The stage is
+   cancellable; the pipeline collects any diagnostics emitted by the stage.
 4. If the stage was cancelled the pipeline sends a cancelled result; if the
    stage failed without diagnostics the pipeline emits `scene.stage_failed`.
 5. On stage success the pipeline:
    - Sorts all component arrays by `node_index`.
-   - Builds final scene naming/paths for the asset key (uses
-     `request.GetSceneName()` + `request.loose_cooked_layout` to produce
-     `virtual_path` and descriptor `relpath`).
-   - Serializes the payload (packed alignment=1) to an in-memory buffer in
-     this order: `SceneAssetDesc`, `NodeRecord[]`, string-table bytes,
-     component tables, component directory, then the SceneEnvironment block.
+   - Places the scene: a scene descriptor job's placement, or, for a model,
+     `request.GetSceneName()` in `request.loose_cooked_layout`. The asset key
+     derives from the resulting `virtual_path`.
+   - Serializes the payload (packed alignment=1) to an in-memory buffer in this
+     order: `SceneAssetDesc`, `NodeRecord[]`, string-table bytes, component
+     tables, component directory, then the SceneEnvironment block.
    - When serializing the environment systems the pipeline validates each
-     `SceneEnvironmentSystemRecordHeader` (size >= header size and matches
-     the available record bytes); failures emit blocking diagnostics
+     `SceneEnvironmentSystemRecordHeader` (size >= header size and matches the
+     available record bytes); failures emit blocking diagnostics
      (`scene.environment.*`).
    - Writer failures produce `scene.serialize_failed` diagnostics.
-6. If serialization succeeded and `Config::with_content_hashing` is true
-   the pipeline computes the `content_hash` on the `ThreadPool` (cancellable)
-   and patches `SceneAssetDesc.header.content_hash` when the computed hash is
+6. If serialization succeeded and `Config::with_content_hashing` is true the
+   pipeline computes the `content_hash` on the `ThreadPool` (cancellable) and
+   patches `SceneAssetDesc.header.content_hash` when the computed hash is
    non-zero.
 7. The worker constructs a `WorkResult` with collected diagnostics and
-   `ImportWorkItemTelemetry` (cook duration) and sends it to the output
-   channel. If `WorkItem.on_finished` is provided it is invoked after work
-   completes.
+   `ImportWorkItemTelemetry` (cook duration) and sends it to the output channel.
+   If `WorkItem.on_finished` is provided it is invoked after work completes.
 
 Notes:
 
 - `WorkItem.on_started` is called just before the stage begins processing.
 - All errors and validation failures are expressed as `ImportDiagnostic`.
-- The pipeline never throws exceptions across coroutine boundaries; failures
-  are reported via diagnostics and `success=false` in `WorkResult`.
+- The pipeline never throws exceptions across coroutine boundaries; failures are
+  reported via diagnostics and `success=false` in `WorkResult`.
 
 ---
 
@@ -306,36 +304,35 @@ Adapter responsibilities (the adapter's `BuildSceneStage` must do these):
 - Node traversal & naming: produce `NodeRecord` entries with stable
   `scene_name_offset` values into the string table.
 - Deterministic node IDs, disambiguation and uniqueness enforcement.
-- Apply coordinate conversion (to engine space) if indicated by source
-  metadata; re-normalize rotations after conversion.
+- Apply coordinate conversion (to engine space) if indicated by source metadata;
+  re-normalize rotations after conversion.
 - Apply `NodePruningPolicy` and preserve world transforms when reparenting.
-- Populate node flags from source metadata and import overrides.
-  Imported-scene default policy:
-  renderable nodes default to `casts_shadows + receives_shadows`, light-only
-  nodes default node-level `casts_shadows`, and empty helper nodes stay neutral.
-  Where the source format exposes authored light shadow intent, the adapter must
-  preserve it in the light component record instead of replacing it with a
-  blanket default.
-- Attach components (renderables/cameras/lights) and populate component
-  records with `node_index` referring to the node table.
+- Populate node flags from source metadata and import overrides. Imported-scene
+  default policy: renderable nodes default to
+  `casts_shadows + receives_shadows`, light-only nodes default node-level
+  `casts_shadows`, and empty helper nodes stay neutral. Where the source format
+  exposes authored light shadow intent, the adapter must preserve it in the
+  light component record instead of replacing it with a blanket default.
+- Attach components (renderables/cameras/lights) and populate component records
+  with `node_index` referring to the node table.
 - Ensure the string table begins with a leading NUL byte.
 
 Pipeline responsibilities (performed by `ScenePipeline`):
 
 - Sort each component array by `node_index`.
 - Serialize the scene asset into a packed in-memory blob in this order:
-  `SceneAssetDesc`, `NodeRecord[]`, string table, component tables,
-  component directory, SceneEnvironmentBlock.
+  `SceneAssetDesc`, `NodeRecord[]`, string table, component tables, component
+  directory, SceneEnvironmentBlock.
 - Validate environment system records (record header size, payload size).
-- Compute and patch `SceneAssetDesc.header.content_hash` when hashing is
-  enabled (computed on the `ThreadPool`).
+- Compute and patch `SceneAssetDesc.header.content_hash` when hashing is enabled
+  (computed on the `ThreadPool`).
 - Emit diagnostics for serialization and environment validation failures.
 
 Notes:
 
 - `SceneAssetDesc.header.version` is set to `data::pak::kSceneAssetVersion`.
-- Unknown environment system types are preserved if their record size is
-  valid; invalid records block the work item with diagnostics.
+- Unknown environment system types are preserved if their record size is valid;
+  invalid records block the work item with diagnostics.
 
 ---
 
@@ -386,13 +383,15 @@ Notes:
   - Coordinate conversion to engine space (if required) and quaternion
     re-normalization.
   - `NodePruningPolicy` with transform preservation and reparenting.
-  - Populate complete node flags and component records (renderables/cameras/lights).
+  - Populate complete node flags and component records
+    (renderables/cameras/lights).
   - Provide a string table that starts with a leading NUL byte.
 
 - **Pipeline**:
   - Sort component tables by `node_index`.
   - Serialize `SceneAssetDesc` and trailing payload with packed alignment.
-  - Validate and append the SceneEnvironment block; reject invalid system records.
+  - Validate and append the SceneEnvironment block; reject invalid system
+    records.
   - Populate `SceneAssetDesc.header.version` and compute `header.content_hash`
     when hashing is enabled.
 
@@ -400,7 +399,8 @@ Notes:
 
 - Geometry emission and `geometry_keys` population.
 - Import content flags and naming strategy setup.
-- Asset key policy (deterministic vs random).
+- The scene's identity: a scene descriptor job places the scene at its request's
+  `asset_virtual_path`.
 - Environment system extraction (SkyAtmosphere, Fog, PostProcess, etc.).
 
 ---
@@ -440,14 +440,13 @@ Pipeline tracks submitted/completed/failed counts and exposes
 
 1. Pipeline never writes output files.
 2. Scene payload must be packed with alignment = 1.
-3. The adapter must provide a string table that starts with `\0` so offset
-   `0` maps to the empty string; the pipeline will serialize the bytes as
-   provided.
+3. The adapter must provide a string table that starts with `\0` so offset `0`
+   maps to the empty string; the pipeline will serialize the bytes as provided.
 4. Environment block header is always appended (even empty) and system record
    headers must be validated by the pipeline.
 5. `header.content_hash` (when hashing is enabled) must cover the entire
-   descriptor payload including the environment block; the pipeline computes
-   the hash on the `ThreadPool` and patches the header only when the hash is
+   descriptor payload including the environment block; the pipeline computes the
+   hash on the `ThreadPool` and patches the header only when the hash is
    non-zero.
 
 Diagnostic codes emitted by the pipeline include (non-exhaustive):
@@ -472,25 +471,26 @@ conversion is **one-shot** and must be applied by the adapter during its
 Rules:
 
 1. The importer/adapter must supply source-space metadata per scene.
-2. The adapter must apply at most one conversion to produce final engine
-   space (translations, rotations, scales) and re-normalize quaternions.
+2. The adapter must apply at most one conversion to produce final engine space
+   (translations, rotations, scales) and re-normalize quaternions.
 3. No pipeline-side "unmapping" or additional remappings are allowed.
 4. If source space already matches engine space the adapter should be a no-op.
 
 Missing or inconsistent source-space metadata is a **blocking error** (the
-adapter should emit a blocking diagnostic so the pipeline can fail the
-work item).
+adapter should emit a blocking diagnostic so the pipeline can fail the work
+item).
 
 ---
 
 ## Deterministic Naming and Node IDs
 
-- The adapter is responsible for disambiguating `node_name` values and
-  ensuring deterministic `node_id` generation. A stable strategy (name +
-  traversal ordinal) should be used; append `_N` suffixes in traversal order
-  for any remaining duplicates and emit a warning.
-- `node_id` is typically generated with a deterministic asset key policy such
-  as `MakeDeterministicAssetKey(virtual_path + "/" + node_name)`.
+- The adapter is responsible for disambiguating `node_name` values and ensuring
+  deterministic `node_id` generation. A stable strategy (name + traversal
+  ordinal) should be used; append `_N` suffixes in traversal order for any
+  remaining duplicates and emit a warning.
+- `node_id` derives from the scene's virtual path, as every key does
+  (`AssetKey::FromVirtualPath`): a model keys a node by `<scene>/<node name>`, a
+  scene descriptor by `<scene>/nodes/<index>`.
 
 ---
 
@@ -522,11 +522,11 @@ adapter should emit a blocking diagnostic and keep the original parent.
 
 ## Validation and Limits (Implementation Behavior)
 
-- Most structural validation (node counts, string table size, camera/light
-  value sanity) is the responsibility of the adapter during the scene stage.
-  The adapter should emit diagnostics and fail the stage for blocking errors.
-- The pipeline enforces and validates environment system records, serializes
-  the payload, and reports writer/serialization failures.
+- Most structural validation (node counts, string table size, camera/light value
+  sanity) is the responsibility of the adapter during the scene stage. The
+  adapter should emit diagnostics and fail the stage for blocking errors.
+- The pipeline enforces and validates environment system records, serializes the
+  payload, and reports writer/serialization failures.
 - All counts and offsets are written using fixed-size fields from the PAK
   schema; adapters must ensure their sizes fit target field types.
 

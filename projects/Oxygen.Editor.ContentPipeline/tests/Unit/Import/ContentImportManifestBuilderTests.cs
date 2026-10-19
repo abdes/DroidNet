@@ -21,41 +21,40 @@ public sealed class ContentImportManifestBuilderTests
         var paths = new[] { "Content/a-b.omat.json", "Content/a_b.omat.json", "Content/日.omat.json", "Content/本.omat.json" };
         var ids = paths.Select(path => builder.BuildJob(
             new ContentCookInput(
-                AssetPath.Parse("/" + path),
+                AssetPath.Parse("/" + path[..^5]),
                 ContentCookAssetKind.Material,
                 "Content",
                 path,
                 FileSystemPath.From(Path.GetFullPath(path)),
-                "/Content/Materials/Value.omat",
                 ContentCookInputRole.Primary),
             []).Id).ToArray();
         _ = ids.Distinct(StringComparer.Ordinal).Should().HaveCount(paths.Length);
     }
 
-    /// <summary>Analysis recipes keep authored output identity without allocating a cooked destination.</summary>
+    /// <summary>A source that cooks one asset names its identity, without allocating a cooked destination.</summary>
     [TestMethod]
-    public void BuildJobPreservesMaterialNameAndExplicitTextureIdentity()
+    public void BuildJobNamesTheIdentityOfASingleAssetSource()
     {
         using var workspace = new ManifestWorkspace();
         var builder = new ContentImportManifestBuilder();
         var input = new ContentCookInput(
-            AssetPath.Parse("/Content/Materials/Red.omat.json"),
+            AssetPath.Parse("/Content/Materials/Red.omat"),
             ContentCookAssetKind.Material,
             "Content",
             "Content/Materials/Red.omat.json",
             FileSystemPath.From(Path.Combine(workspace.Root, "Content", "Materials", "Red.omat.json")),
-            "/Content/Materials/Red.omat",
             ContentCookInputRole.Primary);
         var material = builder.BuildJob(input, []);
         _ = material.Name.Should().Be("Red");
-        _ = material.Layout!.MaterialsDirectory.Should().Be("Materials");
+        _ = material.VirtualPath.Should().Be("/Content/Materials/Red.omat");
+        _ = material.Layout.Should().Be(new ContentImportLayout("/Content"), "the cooker places the descriptor at its identity in its mount");
         _ = material.Output.Should().BeNull();
         var texture = builder.BuildJob(
             input with
             {
+                AssetUri = AssetPath.Parse("/Content/Textures/Red.otex"),
                 Kind = ContentCookAssetKind.Texture,
                 SourceRelativePath = "Content/Textures/Red.otex.json",
-                OutputVirtualPath = "/Content/Textures/Red.otex",
             },
             []);
         _ = texture.VirtualPath.Should().Be("/Content/Textures/Red.otex");
@@ -72,7 +71,6 @@ public sealed class ContentImportManifestBuilderTests
             "Content",
             "Content/SourceMedia/model.gltf",
             FileSystemPath.From(Path.GetFullPath("model.gltf")),
-            null,
             ContentCookInputRole.Primary);
         var settings = new ContentPipeline.Import.NativeSceneImportSettings(4, global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.ImporterIdentity, "Content", "RetainedName", "Content/SourceMedia", "model.gltf", new string('a', 64), ["model.gltf"], "Models/Retained")
         {
@@ -92,30 +90,29 @@ public sealed class ContentImportManifestBuilderTests
         _ = job.MaterialSlotProvenance.Should().BeSameAs(settings.MaterialSlotProvenance);
     }
 
-    /// <summary>Scene exposure masks cook before the scene, in its own texture descriptor namespace.</summary>
+    /// <summary>Scene exposure masks cook before the scene, at their own identity.</summary>
     [TestMethod]
     public void BuildSceneManifestIncludesMeteringMaskDependency()
     {
         using var workspace = new ManifestWorkspace();
         var scope = CreateScope(workspace);
         var texture = new ContentCookInput(
-            AssetPath.Parse("/Content/Textures/Meter.otex.json"),
+            AssetPath.Parse("/Content/Textures/Meter.otex"),
             ContentCookAssetKind.Texture,
             "Content",
             "Content/Textures/Meter.otex.json",
             FileSystemPath.From(Path.Combine(workspace.Root, "Content", "Textures", "Meter.otex.json")),
-            "/Content/Textures/Meter.otex",
             ContentCookInputRole.Dependency);
         var scene = new SceneDescriptorGenerationResult(
-            AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
+            AssetPath.Parse("/Content/Scenes/Main.oscene"),
             Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json"),
             "/Content/Scenes/Main.oscene",
             [texture],
             Diagnostics: []);
         var manifest = new ContentImportManifestBuilder().BuildSceneManifest(scope, scene);
         _ = manifest.Jobs.Select(static job => job.Type).Should().Equal("texture-descriptor", "scene-descriptor");
-        _ = manifest.Jobs[0].Layout!.VirtualMountRoot.Should().Be("/Content");
-        _ = manifest.Jobs[0].Layout!.TextureDescriptorsDirectory.Should().BeNull();
+        _ = manifest.Jobs[0].VirtualPath.Should().Be("/Content/Textures/Meter.otex");
+        _ = manifest.Jobs[0].Layout.Should().Be(new ContentImportLayout("/Content"));
         _ = manifest.Jobs[1].DependsOn.Should().Equal(manifest.Jobs[0].Id);
     }
 
@@ -126,11 +123,11 @@ public sealed class ContentImportManifestBuilderTests
         var scope = CreateScope(workspace) with
         {
             InputDependencies = System.Collections.Immutable.ImmutableDictionary<AssetPath, System.Collections.Immutable.ImmutableArray<AssetPath>>.Empty
-                .Add(AssetPath.Parse("/Content/Geometry/Cube.ogeo"), [AssetPath.Parse("/Content/Materials/Red.omat.json")]),
+                .Add(AssetPath.Parse("/Content/Geometry/Cube.ogeo"), [AssetPath.Parse("/Content/Materials/Red.omat")]),
         };
         var sceneDescriptorPath = Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json");
         var sceneDescriptor = new SceneDescriptorGenerationResult(
-            AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
+            AssetPath.Parse("/Content/Scenes/Main.oscene"),
             sceneDescriptorPath,
             "/Content/Scenes/Main.oscene",
             [
@@ -159,7 +156,7 @@ public sealed class ContentImportManifestBuilderTests
         using var workspace = new ManifestWorkspace();
         var scope = CreateScope(workspace);
         var sceneDescriptor = new SceneDescriptorGenerationResult(
-            AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
+            AssetPath.Parse("/Content/Scenes/Main.oscene"),
             Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json"),
             "/Content/Scenes/Main.oscene",
             [CreateMaterialInput(workspace, @"Content\Materials\Red.omat.json")],
@@ -205,7 +202,7 @@ public sealed class ContentImportManifestBuilderTests
             ],
         };
         var sceneDescriptor = new SceneDescriptorGenerationResult(
-            AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
+            AssetPath.Parse("/Content/Scenes/Main.oscene"),
             Path.Combine(workspace.Root, ".pipeline", "Scenes", "Main.oscene.json"),
             "/Content/Scenes/Main.oscene",
             [CreateMaterialInput(workspace, "Content/Materials/Red.omat.json")],
@@ -221,12 +218,11 @@ public sealed class ContentImportManifestBuilderTests
 
     private static ContentCookInput CreateMaterialInput(ManifestWorkspace workspace, string sourceRelativePath)
         => new(
-            AssetPath.Parse("/" + sourceRelativePath.Replace('\\', '/')),
+            AssetPath.Parse("/" + sourceRelativePath.Replace('\\', '/')[..^5]),
             ContentCookAssetKind.Material,
             "Content",
             sourceRelativePath,
             FileSystemPath.From(Path.Combine(workspace.Root, sourceRelativePath.Replace('\\', Path.DirectorySeparatorChar))),
-            "/" + sourceRelativePath.Replace('\\', '/')[..^5],
             ContentCookInputRole.Dependency);
 
     private static ContentCookInput CreateGeometryInput(ManifestWorkspace workspace, string sourceRelativePath)
@@ -236,7 +232,6 @@ public sealed class ContentImportManifestBuilderTests
             "Content",
             sourceRelativePath,
             FileSystemPath.From(Path.Combine(workspace.Root, sourceRelativePath.Replace('\\', Path.DirectorySeparatorChar))),
-            "/Content/Geometry/Cube.ogeo",
             ContentCookInputRole.GeneratedDescriptor);
 
     private static ContentCookScope CreateScope(ManifestWorkspace workspace)
@@ -247,12 +242,11 @@ public sealed class ContentImportManifestBuilderTests
             new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
             [
                 new ContentCookInput(
-                    AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
+                    AssetPath.Parse("/Content/Scenes/Main.oscene"),
                     ContentCookAssetKind.Scene,
                     "Content",
                     "Content/Scenes/Main.oscene.json",
                     FileSystemPath.From(Path.Combine(workspace.Root, "Content", "Scenes", "Main.oscene.json")),
-                    "/Content/Scenes/Main.oscene",
                     ContentCookInputRole.Primary),
             ],
             CookTargetKind.CurrentScene)

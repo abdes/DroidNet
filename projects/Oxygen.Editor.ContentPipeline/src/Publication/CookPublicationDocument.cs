@@ -24,7 +24,7 @@ internal sealed record CookPublicationDocument(
     ImmutableArray<CookProvenance.Product> Products,
     CookPublicationInputs? CookInputs)
 {
-    internal const int CurrentVersion = 3;
+    internal const int CurrentVersion = 4;
 
     internal static JsonSerializerOptions JsonOptions { get; } = new()
     {

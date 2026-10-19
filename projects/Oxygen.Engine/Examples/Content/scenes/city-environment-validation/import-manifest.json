@@ -7,6 +7,7 @@
       "id": "material.MatCityAsphalt",
       "type": "material-descriptor",
       "source": "./MatCityAsphalt.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityAsphalt.omat",
       "name": "MatCityAsphalt",
       "content_hashing": true
     },
@@ -14,6 +15,7 @@
       "id": "material.MatCityPavement",
       "type": "material-descriptor",
       "source": "./MatCityPavement.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityPavement.omat",
       "name": "MatCityPavement",
       "content_hashing": true
     },
@@ -21,6 +23,7 @@
       "id": "material.MatCityConcreteWarm",
       "type": "material-descriptor",
       "source": "./MatCityConcreteWarm.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityConcreteWarm.omat",
       "name": "MatCityConcreteWarm",
       "content_hashing": true
     },
@@ -28,6 +31,7 @@
       "id": "material.MatCityConcreteCool",
       "type": "material-descriptor",
       "source": "./MatCityConcreteCool.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityConcreteCool.omat",
       "name": "MatCityConcreteCool",
       "content_hashing": true
     },
@@ -35,6 +39,7 @@
       "id": "material.MatCityLimestone",
       "type": "material-descriptor",
       "source": "./MatCityLimestone.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityLimestone.omat",
       "name": "MatCityLimestone",
       "content_hashing": true
     },
@@ -42,6 +47,7 @@
       "id": "material.MatCityBrickRed",
       "type": "material-descriptor",
       "source": "./MatCityBrickRed.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityBrickRed.omat",
       "name": "MatCityBrickRed",
       "content_hashing": true
     },
@@ -49,6 +55,7 @@
       "id": "material.MatCityBrickBuff",
       "type": "material-descriptor",
       "source": "./MatCityBrickBuff.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityBrickBuff.omat",
       "name": "MatCityBrickBuff",
       "content_hashing": true
     },
@@ -56,6 +63,7 @@
       "id": "material.MatCityGlassBlue",
       "type": "material-descriptor",
       "source": "./MatCityGlassBlue.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityGlassBlue.omat",
       "name": "MatCityGlassBlue",
       "content_hashing": true
     },
@@ -63,6 +71,7 @@
       "id": "material.MatCityGlassTeal",
       "type": "material-descriptor",
       "source": "./MatCityGlassTeal.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityGlassTeal.omat",
       "name": "MatCityGlassTeal",
       "content_hashing": true
     },
@@ -70,6 +79,7 @@
       "id": "material.MatCityGlassBronze",
       "type": "material-descriptor",
       "source": "./MatCityGlassBronze.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityGlassBronze.omat",
       "name": "MatCityGlassBronze",
       "content_hashing": true
     },
@@ -77,6 +87,7 @@
       "id": "material.MatCityMetalPanel",
       "type": "material-descriptor",
       "source": "./MatCityMetalPanel.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityMetalPanel.omat",
       "name": "MatCityMetalPanel",
       "content_hashing": true
     },
@@ -84,6 +95,7 @@
       "id": "material.MatCitySlateDark",
       "type": "material-descriptor",
       "source": "./MatCitySlateDark.material.json",
+      "virtual_path": "/.cooked/Materials/MatCitySlateDark.omat",
       "name": "MatCitySlateDark",
       "content_hashing": true
     },
@@ -91,6 +103,7 @@
       "id": "material.MatCityRoofGravel",
       "type": "material-descriptor",
       "source": "./MatCityRoofGravel.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityRoofGravel.omat",
       "name": "MatCityRoofGravel",
       "content_hashing": true
     },
@@ -98,6 +111,7 @@
       "id": "material.MatCityGrass",
       "type": "material-descriptor",
       "source": "./MatCityGrass.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityGrass.omat",
       "name": "MatCityGrass",
       "content_hashing": true
     },
@@ -105,6 +119,7 @@
       "id": "material.MatCityTreeCanopy",
       "type": "material-descriptor",
       "source": "./MatCityTreeCanopy.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityTreeCanopy.omat",
       "name": "MatCityTreeCanopy",
       "content_hashing": true
     },
@@ -112,6 +127,7 @@
       "id": "material.MatCityBark",
       "type": "material-descriptor",
       "source": "./MatCityBark.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityBark.omat",
       "name": "MatCityBark",
       "content_hashing": true
     },
@@ -119,6 +135,7 @@
       "id": "material.MatCityWater",
       "type": "material-descriptor",
       "source": "./MatCityWater.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityWater.omat",
       "name": "MatCityWater",
       "content_hashing": true
     },
@@ -126,6 +143,7 @@
       "id": "material.MatCityWoodTank",
       "type": "material-descriptor",
       "source": "./MatCityWoodTank.material.json",
+      "virtual_path": "/.cooked/Materials/MatCityWoodTank.omat",
       "name": "MatCityWoodTank",
       "content_hashing": true
     },
@@ -133,6 +151,7 @@
       "id": "geometry.GeoCityCube",
       "type": "geometry-descriptor",
       "source": "./GeoCityCube.geometry.json",
+      "virtual_path": "/.cooked/Geometry/GeoCityCube.ogeo",
       "name": "GeoCityCube",
       "content_hashing": true,
       "depends_on": ["material.MatCityConcreteWarm"]
@@ -141,6 +160,7 @@
       "id": "geometry.GeoCityCylinder",
       "type": "geometry-descriptor",
       "source": "./GeoCityCylinder.geometry.json",
+      "virtual_path": "/.cooked/Geometry/GeoCityCylinder.ogeo",
       "name": "GeoCityCylinder",
       "content_hashing": true,
       "depends_on": ["material.MatCityConcreteWarm"]
@@ -149,6 +169,7 @@
       "id": "geometry.GeoCityCone",
       "type": "geometry-descriptor",
       "source": "./GeoCityCone.geometry.json",
+      "virtual_path": "/.cooked/Geometry/GeoCityCone.ogeo",
       "name": "GeoCityCone",
       "content_hashing": true,
       "depends_on": ["material.MatCityConcreteWarm"]
@@ -157,6 +178,7 @@
       "id": "geometry.GeoCitySphere",
       "type": "geometry-descriptor",
       "source": "./GeoCitySphere.geometry.json",
+      "virtual_path": "/.cooked/Geometry/GeoCitySphere.ogeo",
       "name": "GeoCitySphere",
       "content_hashing": true,
       "depends_on": ["material.MatCityConcreteWarm"]
@@ -165,6 +187,7 @@
       "id": "scene.CityEnvironmentValidation",
       "type": "scene-descriptor",
       "source": "./CityEnvironmentValidation.scene.json",
+      "virtual_path": "/.cooked/Scenes/CityEnvironmentValidation.oscene",
       "name": "CityEnvironmentValidation",
       "content_hashing": true,
       "depends_on": [

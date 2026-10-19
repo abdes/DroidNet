@@ -12,8 +12,10 @@
 #include <cstring>
 #include <exception>
 #include <filesystem>
+#include <iterator>
 #include <limits>
 #include <optional>
+#include <span>
 #include <string>
 #include <string_view>
 #include <unordered_map>
@@ -43,6 +45,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/OxCo/Co.h>
@@ -69,7 +72,7 @@ namespace {
   };
 
   struct PayloadResolution final {
-    data::AssetKey payload_asset_key = {};
+    data::AssetKey payload_asset_key;
     phys::ShapePayloadType payload_type = phys::ShapePayloadType::kInvalid;
   };
 
@@ -202,63 +205,32 @@ namespace {
     return std::nullopt;
   }
 
-  [[nodiscard]] auto NormalizeRelPath(std::string relpath) -> std::string
-  {
-    return std::filesystem::path(std::move(relpath))
-      .lexically_normal()
-      .generic_string();
-  }
-
+  //! Places the descriptor at the job's identity.
+  /*!
+   A descriptor may state its identity too; it must be the one the job cooks.
+  */
   [[nodiscard]] auto ResolveDescriptorTarget(const ImportRequest& request,
-    const json& descriptor_doc, const std::filesystem::path& source_path,
-    ImportSession& session) -> std::optional<DescriptorTarget>
+    const json& descriptor_doc, ImportSession& session)
+    -> std::optional<DescriptorTarget>
   {
-    auto target = DescriptorTarget {};
-
-    if (descriptor_doc.contains("virtual_path")) {
-      target.virtual_path
-        = descriptor_doc.at("virtual_path").get<std::string>();
-      if (!internal::IsCanonicalVirtualPath(target.virtual_path)) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.shape.virtual_path_invalid",
-          "virtual_path must be canonical", "virtual_path");
-        return std::nullopt;
-      }
-      if (!internal::TryVirtualPathToRelPath(
-            request, target.virtual_path, target.relpath)) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.shape.virtual_path_unmounted",
-          "virtual_path is outside mounted cooked roots", "virtual_path");
-        return std::nullopt;
-      }
-      target.relpath = NormalizeRelPath(std::move(target.relpath));
-      return target;
-    }
-
-    auto name = std::string {};
-    auto name_object_path = std::string {};
-    if (request.job_name.has_value() && !request.job_name->empty()) {
-      name = *request.job_name;
-    } else if (descriptor_doc.contains("name")) {
-      name = descriptor_doc.at("name").get<std::string>();
-      name_object_path = "name";
-    } else {
-      name = source_path.stem().string();
-    }
-    if (name.empty()) {
-      name = "collision_shape";
-    }
-
-    target.relpath
-      = request.loose_cooked_layout.CollisionShapeDescriptorRelPath(name);
-    target.virtual_path
-      = request.loose_cooked_layout.CollisionShapeVirtualPath(name);
-    if (auto refused = internal::CheckAssetVirtualPath(
-          request, target.virtual_path, std::move(name_object_path))) {
-      session.AddDiagnostic(std::move(*refused));
+    auto placement
+      = internal::PlaceAsset(request, data::kCollisionShapeDescriptorExtension);
+    if (!placement.has_value()) {
+      session.AddDiagnostic(std::move(placement.error()));
       return std::nullopt;
     }
-    return target;
+    if (descriptor_doc.contains("virtual_path")
+      && descriptor_doc.at("virtual_path").get<std::string>()
+        != placement->virtual_path) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.shape.identity_conflict",
+        "The descriptor's virtual_path differs from the job's", "virtual_path");
+      return std::nullopt;
+    }
+    return DescriptorTarget {
+      .relpath = std::move(placement->descriptor_relpath),
+      .virtual_path = std::move(placement->virtual_path),
+    };
   }
 
   [[nodiscard]] auto ResolveAssetKey(const ImportRequest& request,
@@ -433,7 +405,7 @@ namespace {
 
 #pragma pack(push, 1)
   struct AuthoredShapeBlobHeader final {
-    char magic[4] = { 'O', 'P', 'S', 'B' };
+    std::array<char, 4> magic = { 'O', 'P', 'S', 'B' };
     uint8_t version = 1U;
     uint8_t shape_type = 0U;
     uint8_t payload_type = 0U;
@@ -448,7 +420,7 @@ namespace {
     std::vector<std::byte>& out_bytes) -> bool
   {
     const auto payload = descriptor_doc.dump();
-    if (payload.size() > (std::numeric_limits<uint32_t>::max)()) {
+    if (payload.size() > std::numeric_limits<uint32_t>::max()) {
       return false;
     }
 
@@ -461,8 +433,8 @@ namespace {
     out_bytes.resize(sizeof(header) + payload.size());
     std::memcpy(out_bytes.data(), &header, sizeof(header));
     if (!payload.empty()) {
-      std::memcpy(
-        out_bytes.data() + sizeof(header), payload.data(), payload.size());
+      std::ranges::copy(std::as_bytes(std::span(payload)),
+        std::next(out_bytes.begin(), sizeof(header)));
     }
     return true;
   }
@@ -506,24 +478,24 @@ namespace {
     }
   }
 
-  auto CopyVec3(const json& doc, const std::string_view field, float (&out)[3])
-    -> void
+  auto CopyVec3(const json& doc, const std::string_view field,
+    const std::span<float, 3> out) -> void
   {
     if (!doc.contains(field)) {
       return;
     }
     const auto values = doc.at(field).get<std::array<float, 3>>();
-    std::ranges::copy(values, out);
+    std::ranges::copy(values, out.begin());
   }
 
-  auto CopyQuat(const json& doc, const std::string_view field, float (&out)[4])
-    -> void
+  auto CopyQuat(const json& doc, const std::string_view field,
+    const std::span<float, 4> out) -> void
   {
     if (!doc.contains(field)) {
       return;
     }
     const auto values = doc.at(field).get<std::array<float, 4>>();
-    std::ranges::copy(values, out);
+    std::ranges::copy(values, out.begin());
   }
 
   auto ApplyShapeSpecificParameters(ImportSession& session,
@@ -545,7 +517,8 @@ namespace {
     case phys::ShapeType::kBox: {
       const auto half_extents
         = descriptor_doc.at("half_extents").get<std::array<float, 3>>();
-      std::ranges::copy(half_extents, descriptor.shape_params.box.half_extents);
+      std::ranges::copy(half_extents,
+        std::ranges::begin(descriptor.shape_params.box.half_extents));
       break;
     }
     case phys::ShapeType::kCylinder:
@@ -563,7 +536,8 @@ namespace {
     case phys::ShapeType::kPlane: {
       const auto normal
         = descriptor_doc.at("normal").get<std::array<float, 3>>();
-      std::ranges::copy(normal, descriptor.shape_params.plane.normal);
+      std::ranges::copy(
+        normal, std::ranges::begin(descriptor.shape_params.plane.normal));
       descriptor.shape_params.plane.distance
         = descriptor_doc.at("distance").get<float>();
       break;
@@ -576,10 +550,10 @@ namespace {
         = descriptor_doc.at("limits_min").get<std::array<float, 3>>();
       const auto limits_max
         = descriptor_doc.at("limits_max").get<std::array<float, 3>>();
-      std::ranges::copy(
-        limits_min, descriptor.shape_params.world_boundary.limits_min);
-      std::ranges::copy(
-        limits_max, descriptor.shape_params.world_boundary.limits_max);
+      std::ranges::copy(limits_min,
+        std::ranges::begin(descriptor.shape_params.world_boundary.limits_min));
+      std::ranges::copy(limits_max,
+        std::ranges::begin(descriptor.shape_params.world_boundary.limits_max));
       if (limits_min.at(0) > limits_max.at(0)
         || limits_min.at(1) > limits_max.at(1)
         || limits_min.at(2) > limits_max.at(2)) {
@@ -816,15 +790,15 @@ auto CollisionShapeDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  const auto target = ResolveDescriptorTarget(
-    Request(), descriptor_doc, Request().source_path, session);
+  const auto target
+    = ResolveDescriptorTarget(Request(), descriptor_doc, session);
   if (!target.has_value()) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
       "Collision shape descriptor target resolution failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  const auto primary_inspection = FindPrimaryInspection(contexts);
+  const auto* const primary_inspection = FindPrimaryInspection(contexts);
   if (primary_inspection == nullptr) {
     AddDiagnostic(session, Request(), ImportSeverity::kError,
       "physics.shape.primary_source_missing",

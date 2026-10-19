@@ -7,6 +7,7 @@
       "id": "material.CameraSwitchMat",
       "type": "material-descriptor",
       "source": "./CameraSwitchMat.material.json",
+      "virtual_path": "/.cooked/Materials/CameraSwitchMat.omat",
       "name": "CameraSwitchMat",
       "content_hashing": true
     },
@@ -14,6 +15,7 @@
       "id": "geometry.CameraSwitchCube",
       "type": "geometry-descriptor",
       "source": "./CameraSwitchCube.geometry.json",
+      "virtual_path": "/.cooked/Geometry/CameraSwitchCube.ogeo",
       "name": "CameraSwitchCube",
       "content_hashing": true,
       "depends_on": ["material.CameraSwitchMat"]
@@ -22,6 +24,7 @@
       "id": "script.camera_switch",
       "type": "script",
       "source": "./camera_switch.lua",
+      "virtual_path": "/.cooked/Scripts/camera_switch.oscript",
       "name": "camera_switch",
       "compile": false,
       "script_storage": "external",
@@ -36,6 +39,7 @@
       "id": "scene.camera_switch",
       "type": "scene-descriptor",
       "source": "./camera_switch.scene.json",
+      "virtual_path": "/.cooked/Scenes/camera_switch.oscene",
       "name": "camera_switch",
       "content_hashing": true,
       "depends_on": ["geometry.CameraSwitchCube", "input.camera_switch"]

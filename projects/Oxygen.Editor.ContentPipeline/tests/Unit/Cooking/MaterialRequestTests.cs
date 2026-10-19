@@ -28,7 +28,7 @@ public sealed class MaterialRequestTests
 
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
-                AssetPath.Parse("/Content/Materials/Wood.omat.json"),
+                AssetPath.Parse("/Content/Materials/Wood.omat"),
                 ProjectRoot: projects.ActiveProject!.ProjectRoot,
                 MountName: string.Empty,
                 SourceRelativePath: "Content/Materials/Wood.omat.json"),
@@ -50,13 +50,13 @@ public sealed class MaterialRequestTests
     {
         var projects = CreateProjectContext();
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
-        var request = new MaterialCookRequest(AssetPath.Parse("/Content/Materials/Wood.omat.json"), projects.ActiveProject!.ProjectRoot, "Content", "Content/Materials/Wood.omat.json");
+        var request = new MaterialCookRequest(AssetPath.Parse("/Content/Materials/Wood.omat"), projects.ActiveProject!.ProjectRoot, "Content", "Content/Materials/Wood.omat.json");
         request = mismatch switch
         {
             "project" => request with { ProjectRoot = FileSystemPath.From(projects.ActiveProject!.ProjectRoot.FullPath + "-other") },
             "mount" => request with { MountName = "Other" },
             "source" => request with { SourceRelativePath = "Content/Materials/Other.omat.json" },
-            _ => request with { MaterialSourceUri = AssetPath.Parse("/Content/Geometry/Cube.ogeo.json") },
+            _ => request with { Material = AssetPath.Parse("/Content/Geometry/Cube.ogeo") },
         };
 
         var service = new MaterialCookService(pipeline.Object, projects, NullLogger<MaterialCookService>.Instance);
@@ -82,7 +82,7 @@ public sealed class MaterialRequestTests
     public async Task ReadMaterialStateUsesSharedCookFacts(AssetCookFreshness freshness, bool published, bool verified, bool dirty, MaterialCookState expected)
     {
         var projects = CreateProjectContext();
-        var uri = AssetPath.Parse("/Content/Material.omat.json");
+        var uri = AssetPath.Parse("/Content/Material.omat");
         var source = projects.ActiveProject!.ProjectRoot.Combine("Content/Material.omat.json");
         var state = new AssetCookStatus(
             uri,

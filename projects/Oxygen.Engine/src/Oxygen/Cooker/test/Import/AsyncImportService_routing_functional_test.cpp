@@ -83,6 +83,7 @@ NOLINT_TEST_F(AsyncImportServiceRoutingTest,
 
   auto request = ImportRequest {};
   request.source_path = "unrecognized.asset";
+  request.asset_virtual_path = "/.cooked/Materials/BadMat.omat";
   request.cooked_root
     = TempDir() / "oxygen_material_descriptor_routing_submit_test";
   std::filesystem::create_directories(*request.cooked_root);

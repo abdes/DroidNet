@@ -37,7 +37,7 @@ public sealed class ScriptCookTests
         return Script
         """;
 
-    private static readonly AssetPath SceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
+    private static readonly AssetPath SceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene");
     private static readonly AssetPath MoveScript = AssetPath.Parse("/Content/Player/move.oscript");
 
     public TestContext TestContext { get; set; } = null!;

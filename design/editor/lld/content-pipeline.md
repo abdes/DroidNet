@@ -162,12 +162,11 @@ Rules:
 
 ```csharp
 public sealed record ContentCookInput(
-    Uri AssetUri,
+    AssetPath AssetUri,
     ContentCookAssetKind Kind,
     string MountName,
     string SourceRelativePath,
-    string SourceAbsolutePath,
-    string? OutputVirtualPath,
+    FileSystemPath SourceAbsolutePath,
     ContentCookInputRole Role);
 
 public enum ContentCookInputRole
@@ -178,8 +177,13 @@ public enum ContentCookInputRole
 }
 ```
 
-`OutputVirtualPath` is the runtime virtual path without `.json`, for example
-`/Content/Materials/Red.omat` or `/Content/Scenes/Main.oscene`.
+`AssetUri` is the identity the source stands for, its path without the authoring
+`.json`: `/Content/Materials/Red.omat` for `Red.omat.json`,
+`/Content/Input/Player.input` for `Player.input.json`,
+`/Content/Models/Ship.glb` for a model. The source file is `SourceRelativePath`.
+A source that cooks one asset cooks it at that identity: its import job names it
+as `virtual_path`, and the cooker writes the descriptor there. Cook results,
+provenance and run status key a source by the same identity.
 
 ### 7.3 Scene Descriptor Adapter
 
@@ -1398,8 +1402,8 @@ owns how the pipeline cooks it.
 - **Jobs.** Every `*.input.json` and `*.input-action.json` under an authoring
   mount is one `input` job.
 - **Placement.** The job's layout sets `descriptors_dir` empty and
-  `input_subdir` to the source file's mount-relative folder, as
-  `CreateJobLayout` does for materials. `Jump` declared in
+  `input_subdir` to the source file's mount-relative folder, until the file's
+  products are named under it. `Jump` declared in
   `Content/Gameplay/Player.input.json` cooks to `/Content/Gameplay/Jump.oiact`
   and round-trips to `asset:///Content/Gameplay/Jump.oiact`.
 - **Several outputs per source.** The import report lists every asset an input

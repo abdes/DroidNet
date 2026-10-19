@@ -81,12 +81,15 @@ namespace {
   class MaterialDescriptorImportJobTest : public ImportServiceTest {
   protected:
     auto MakeRequest(const std::filesystem::path& cooked_root,
-      std::string descriptor_json, std::string_view job_name = "woodfloor007")
-      -> ImportRequest
+      std::string descriptor_json,
+      std::string_view asset_virtual_path
+      = "/.cooked/Materials/woodfloor007.omat",
+      std::string_view job_name = "woodfloor007") -> ImportRequest
     {
       auto request = ImportRequest {};
       request.source_path = "inline://material-descriptor";
       request.job_name = std::string(job_name);
+      request.asset_virtual_path = std::string(asset_virtual_path);
       request.cooked_root = cooked_root;
       request.loose_cooked_layout.virtual_mount_root = "/.cooked";
       request.material_descriptor = ImportRequest::MaterialDescriptorPayload {
@@ -95,6 +98,25 @@ namespace {
       return request;
     }
   };
+
+  //! A material job whose request names no identity cannot place its
+  //! descriptor and is refused.
+  NOLINT_TEST_F(
+    MaterialDescriptorImportJobTest, RequestWithoutAssetVirtualPathIsRefused)
+  {
+    const auto cooked_root = TempDir() / "missing_asset_virtual_path";
+    std::filesystem::create_directories(cooked_root);
+    auto request = MakeRequest(cooked_root, R"({ "name": "woodfloor007" })");
+    request.asset_virtual_path.clear();
+
+    const auto report = Import(std::move(request));
+
+    ASSERT_HAS_VALUE(report);
+    EXPECT_FALSE(report->success);
+    EXPECT_EQ(report->materials_written, 0U);
+    EXPECT_TRUE(HasDiagnosticCode(
+      report->diagnostics, "import.asset_virtual_path_missing"));
+  }
 
   NOLINT_TEST_F(MaterialDescriptorImportJobTest,
     CompilesEmissionColorAndIntensityWithoutBinary16Rounding)
@@ -108,7 +130,7 @@ namespace {
         "emissive_intensity": 9.7
       }
     })",
-      "HdrEmission"));
+      "/.cooked/Materials/HdrEmission.omat", "HdrEmission"));
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
     const auto bytes
@@ -233,7 +255,8 @@ namespace {
       const auto cooked_root
         = TempDir() / ("tiles_" + context.filename().string());
       std::filesystem::create_directories(cooked_root);
-      auto request = MakeRequest(cooked_root, kDescriptor, "Tiles");
+      auto request = MakeRequest(
+        cooked_root, kDescriptor, "/.cooked/Materials/Tiles.omat", "Tiles");
       request.cooked_context_roots = { context };
 
       // Act

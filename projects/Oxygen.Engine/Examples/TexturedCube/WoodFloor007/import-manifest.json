@@ -1,7 +1,7 @@
 {
   "$schema": "../../../src/Oxygen/Cooker/Import/Schemas/oxygen.import-manifest.schema.json",
   "version": 1,
-  "output": "F:/projects/DroidNet/projects/Oxygen.Engine/Examples/TexturedCube/.cooked",
+  "output": "../.cooked",
   "defaults": {
     "texture": {
       "content_hashing": true,
@@ -19,30 +19,35 @@
       "id": "woodfloor007.color",
       "type": "texture-descriptor",
       "source": "woodfloor007_color.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_color.otex",
       "name": "woodfloor007_color"
     },
     {
       "id": "woodfloor007.ao",
       "type": "texture-descriptor",
       "source": "woodfloor007_ao.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_ao.otex",
       "name": "woodfloor007_ao"
     },
     {
       "id": "woodfloor007.roughness",
       "type": "texture-descriptor",
       "source": "woodfloor007_roughness.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_roughness.otex",
       "name": "woodfloor007_roughness"
     },
     {
       "id": "woodfloor007.normal",
       "type": "texture-descriptor",
       "source": "woodfloor007_normal.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/woodfloor007_normal.otex",
       "name": "woodfloor007_normal"
     },
     {
       "id": "woodfloor007.material",
       "type": "material-descriptor",
       "source": "woodfloor007.material.json",
+      "virtual_path": "/.cooked/Materials/woodfloor007.omat",
       "name": "woodfloor007",
       "depends_on": [
         "woodfloor007.color",

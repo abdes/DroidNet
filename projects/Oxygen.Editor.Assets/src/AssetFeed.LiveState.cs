@@ -5,7 +5,6 @@
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
@@ -17,8 +16,7 @@ public sealed partial class AssetFeed
 
     private static bool Includes(CookRunSnapshot run, AssetEntry item)
     {
-        // The run keys its assets by source file; an asset is the identity its sources stand for.
-        if (run.Assets.Keys.Any(source => AssetFileTypes.ToIdentity(source) == item.Identity)
+        if (run.Assets.ContainsKey(item.Identity)
             || (item.ImportSource is { } imported && (run.Request.ScopeUri == imported || run.Assets.ContainsKey(imported))))
         {
             return true;
@@ -29,7 +27,7 @@ public sealed partial class AssetFeed
         {
             CookTargetKind.Project => true,
             CookTargetKind.Folder => scope is not null && item.Identity != scope && item.Identity.IsSameOrInside(scope),
-            _ => scope is not null && AssetFileTypes.ToIdentity(scope) == item.Identity,
+            _ => scope == item.Identity,
         };
     }
 

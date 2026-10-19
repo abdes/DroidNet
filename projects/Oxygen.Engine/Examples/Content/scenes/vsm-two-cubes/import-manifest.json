@@ -7,6 +7,7 @@
       "id": "material.cube_red",
       "type": "material-descriptor",
       "source": "../bottle-on-box/cube_red.material.json",
+      "virtual_path": "/.cooked/Materials/cube_red.omat",
       "name": "cube_red",
       "content_hashing": true
     },
@@ -14,6 +15,7 @@
       "id": "geometry.cube",
       "type": "geometry-descriptor",
       "source": "../bottle-on-box/cube.geometry.json",
+      "virtual_path": "/.cooked/Geometry/cube.ogeo",
       "name": "cube",
       "content_hashing": true,
       "depends_on": ["material.cube_red"]
@@ -22,6 +24,7 @@
       "id": "scene.VsmTwoCubes",
       "type": "scene-descriptor",
       "source": "./VsmTwoCubes.scene.json",
+      "virtual_path": "/.cooked/Scenes/VsmTwoCubes.oscene",
       "name": "VsmTwoCubes",
       "content_hashing": true,
       "depends_on": ["geometry.cube"]

@@ -65,6 +65,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
         {
           "type": "material-descriptor",
           "source": "Materials/wood.material.json",
+          "virtual_path": "/.cooked/Materials/WoodFloor.omat",
           "name": "wood-job",
           "content_hashing": true
         }
@@ -84,6 +85,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "wood-job" });
+  EXPECT_EQ(request->asset_virtual_path, "/.cooked/Materials/WoodFloor.omat");
   ASSERT_HAS_VALUE(request->material_descriptor);
 
   // Descriptor intent overrides defaults; Release enforces content hashing.
@@ -94,8 +96,10 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
   EXPECT_EQ(normalized.at("name").get<std::string>(), "WoodFloor");
 }
 
+//! The job's `virtual_path` is the identity; the shared layout only carries the
+//! container conventions and never chooses where the descriptor goes.
 NOLINT_TEST(ImportManifestMaterialDescriptorTest,
-  AppliesSharedLayoutOverridesToMaterialDescriptorRequests)
+  SharedLayoutDoesNotChooseMaterialDescriptorIdentity)
 {
   const ScopedTempDir temp;
   const auto manifest_path
@@ -126,7 +130,8 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       "jobs": [
         {
           "type": "material-descriptor",
-          "source": "Materials/wood.material.json"
+          "source": "Materials/wood.material.json",
+          "virtual_path": "/.cooked/Wood/Floor.omat"
         }
       ]
     })");
@@ -136,10 +141,12 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     = ImportManifest::Load(manifest_path, std::nullopt, errors);
   ASSERT_HAS_VALUE(manifest) << errors.str();
   ASSERT_EQ(manifest->jobs.size(), 1U);
+  EXPECT_EQ(manifest->jobs.at(0).virtual_path, "/.cooked/Wood/Floor.omat");
 
   auto request_errors = std::ostringstream {};
   const auto request = manifest->jobs.at(0).BuildRequest(request_errors);
   ASSERT_HAS_VALUE(request) << request_errors.str();
+  EXPECT_EQ(request->asset_virtual_path, "/.cooked/Wood/Floor.omat");
   EXPECT_EQ(request->loose_cooked_layout.materials_subdir,
     "DescriptorMaterialsDefault");
 }
@@ -169,12 +176,14 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
         {
           "id": "wood.color",
           "type": "texture-descriptor",
-          "source": "woodfloor007_color.texture.json"
+          "source": "woodfloor007_color.texture.json",
+          "virtual_path": "/.cooked/Textures/WoodFloor_Color.otex"
         },
         {
           "id": "wood.material",
           "type": "material-descriptor",
           "source": "Materials/wood.material.json",
+          "virtual_path": "/.cooked/Materials/WoodFloor.omat",
           "depends_on": ["wood.color"]
         }
       ]
@@ -252,7 +261,8 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
       "jobs": [
         {
           "type": "material-descriptor",
-          "source": "Materials/bad.material.json"
+          "source": "Materials/bad.material.json",
+          "virtual_path": "/.cooked/Materials/Bad.omat"
         }
       ]
     })");
@@ -270,8 +280,8 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest,
     ::testing::HasSubstr("material.descriptor.schema_validation_failed"));
 }
 
-//! Per-job folders preserve nested identities without changing the shared
-//! container.
+//! Per-job layout overrides keep the global defaults for what they omit, while
+//! each job's identity comes from its own `virtual_path`.
 NOLINT_TEST(
   ImportManifestMaterialDescriptorTest, JobLayoutOverridesRetainGlobalDefaults)
 {
@@ -297,6 +307,7 @@ NOLINT_TEST(
         {
           { "type", "material-descriptor" },
           { "source", "shared.material.json" },
+          { "virtual_path", "/Content/Materials/A/Shared.omat" },
           {
             "layout",
             {
@@ -308,6 +319,7 @@ NOLINT_TEST(
         {
           { "type", "material-descriptor" },
           { "source", "shared.material.json" },
+          { "virtual_path", "/Content/Materials/B/Shared.omat" },
           {
             "layout",
             {
@@ -319,6 +331,7 @@ NOLINT_TEST(
         {
           { "type", "material-descriptor" },
           { "source", "shared.material.json" },
+          { "virtual_path", "/Content/Shared.omat" },
         },
       }),
     },
@@ -329,12 +342,15 @@ NOLINT_TEST(
   ASSERT_HAS_VALUE(manifest) << errors.str();
   const auto requests = manifest->BuildRequests(errors);
   ASSERT_EQ(requests.size(), 3U) << errors.str();
-  EXPECT_EQ(requests.at(0).loose_cooked_layout.MaterialVirtualPath("Shared"),
-    "/Content/Materials/A/Shared.omat");
-  EXPECT_EQ(requests.at(1).loose_cooked_layout.MaterialVirtualPath("Shared"),
-    "/Content/Materials/B/Shared.omat");
-  EXPECT_EQ(requests.at(2).loose_cooked_layout.MaterialVirtualPath("Shared"),
-    "/Content/Descriptors/Common/Shared.omat");
+  EXPECT_EQ(
+    requests.at(0).asset_virtual_path, "/Content/Materials/A/Shared.omat");
+  EXPECT_EQ(
+    requests.at(1).asset_virtual_path, "/Content/Materials/B/Shared.omat");
+  EXPECT_EQ(requests.at(2).asset_virtual_path, "/Content/Shared.omat");
+  EXPECT_EQ(requests.at(0).loose_cooked_layout.materials_subdir, "Materials/A");
+  EXPECT_EQ(requests.at(1).loose_cooked_layout.materials_subdir, "Materials/B");
+  EXPECT_EQ(requests.at(2).loose_cooked_layout.materials_subdir, "Common");
+  EXPECT_EQ(requests.at(2).loose_cooked_layout.descriptors_dir, "Descriptors");
   EXPECT_EQ(requests.at(0).cooked_root, requests.at(1).cooked_root);
   EXPECT_EQ(requests.at(0).loose_cooked_layout.resources_dir,
     requests.at(2).loose_cooked_layout.resources_dir);
@@ -357,6 +373,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, RejectsMalformedJobLayout)
             {
               { "type", "material-descriptor" },
               { "source", "shared.material.json" },
+              { "virtual_path", "/.cooked/Materials/Shared.omat" },
               { "layout", layout },
             },
           }),
@@ -387,6 +404,7 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, CarriesCookedContextRoots)
         {
           "type": "material-descriptor",
           "source": "Materials/tiles.material.json",
+          "virtual_path": "/.cooked/Materials/Tiles.omat",
           "cooked_context_roots": ["Libraries/Textures"]
         }
       ]
@@ -405,6 +423,67 @@ NOLINT_TEST(ImportManifestMaterialDescriptorTest, CarriesCookedContextRoots)
   EXPECT_EQ(request->cooked_context_roots,
     (std::vector<std::filesystem::path> {
       engine, root / "Libraries/Textures" }));
+}
+
+//! A single-asset job names the asset it cooks; without an identity the
+//! manifest is refused.
+NOLINT_TEST(
+  ImportManifestMaterialDescriptorTest, RejectsSingleAssetJobWithoutVirtualPath)
+{
+  const ScopedTempDir temp;
+  const auto manifest_path
+    = temp.Path() / "missing_virtual_path" / "import_manifest.json";
+  WriteText(manifest_path,
+    R"({
+      "version": 1,
+      "jobs": [
+        {
+          "type": "material-descriptor",
+          "source": "Materials/wood.material.json"
+        }
+      ]
+    })");
+
+  auto errors = std::ostringstream {};
+  const auto manifest
+    = ImportManifest::Load(manifest_path, std::nullopt, errors);
+  EXPECT_FALSE(manifest.has_value());
+  EXPECT_THAT(
+    errors.str(), ::testing::HasSubstr("import.manifest.virtual_path_missing"));
+}
+
+//! A container job produces several assets and cannot carry one identity.
+NOLINT_TEST(
+  ImportManifestMaterialDescriptorTest, RejectsContainerJobWithVirtualPath)
+{
+  const ScopedTempDir temp;
+  const auto manifest_path
+    = temp.Path() / "container_virtual_path" / "import_manifest.json";
+  for (const auto* type : { "gltf", "fbx" }) {
+    WriteText(manifest_path,
+      json {
+        { "version", 1 },
+        {
+          "jobs",
+          json::array({
+            {
+              { "type", type },
+              { "source", "scene.src" },
+              { "virtual_path", "/.cooked/Materials/Wood.omat" },
+            },
+          }),
+        },
+      }
+        .dump());
+
+    auto errors = std::ostringstream {};
+    const auto manifest
+      = ImportManifest::Load(manifest_path, std::nullopt, errors);
+    EXPECT_FALSE(manifest.has_value()) << type;
+    EXPECT_THAT(errors.str(),
+      ::testing::HasSubstr("import.manifest.virtual_path_not_allowed"))
+      << type;
+  }
 }
 
 } // namespace

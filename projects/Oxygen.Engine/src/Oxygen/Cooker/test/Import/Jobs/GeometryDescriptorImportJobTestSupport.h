@@ -84,9 +84,15 @@ inline constexpr std::string_view kAuthoredSlotId
 
 inline auto MakeGeometryRequest(const std::filesystem::path& source_path,
   const std::filesystem::path& cooked_root, const json& descriptor_doc,
-  std::vector<std::filesystem::path> cooked_context_roots = {}) -> ImportRequest
+  std::vector<std::filesystem::path> cooked_context_roots = {},
+  std::string asset_virtual_path = {}) -> ImportRequest
 {
+  if (asset_virtual_path.empty()) {
+    asset_virtual_path = "/.cooked/Geometry/"
+      + descriptor_doc.at("name").get<std::string>() + ".ogeo";
+  }
   auto request = ImportRequest {};
+  request.asset_virtual_path = std::move(asset_virtual_path);
   request.source_path = source_path.lexically_normal();
   request.cooked_root = cooked_root;
   request.cooked_context_roots = std::move(cooked_context_roots);

@@ -64,6 +64,9 @@ public sealed partial class ContentPipelineService(
     public Task<ContentCookResult> CookCurrentSceneAsync(AssetPath sceneAssetUri, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(sceneAssetUri);
+
+        // A request may name a source file; the cook, its run and its results name the asset the file stands for.
+        sceneAssetUri = AssetFileTypes.ToIdentity(sceneAssetUri);
         return this.cookCoordinator.RunCookAsync(
             new(CookTargetKind.CurrentScene, sceneAssetUri) { CoalescePending = true, OriginContext = this.projectContextService.ActiveProject },
             (operation, token) => this.CookCurrentSceneCoreAsync(operation, sceneAssetUri, token),
@@ -74,6 +77,9 @@ public sealed partial class ContentPipelineService(
     public Task<ContentCookResult> CookAssetAsync(AssetPath assetUri, CancellationToken cancellationToken, ProjectContext? expectedProject = null)
     {
         ArgumentNullException.ThrowIfNull(assetUri);
+
+        // A request may name a source file; the cook, its run and its results name the asset the file stands for.
+        assetUri = AssetFileTypes.ToIdentity(assetUri);
         return this.cookCoordinator.RunCookAsync(
             new(CookTargetKind.Asset, assetUri) { CoalescePending = true, OriginContext = expectedProject ?? this.projectContextService.ActiveProject },
             (operation, token) => expectedProject is not null && (operation.Project.ProjectId != expectedProject.ProjectId
@@ -132,7 +138,7 @@ public sealed partial class ContentPipelineService(
                     Code = ScriptDiagnosticCodes.InputReferenceUnsupported,
                     Message = $"{input.SourceAbsolutePath.Name} uses {string.Join(", ", foreign.Select(static name => "'" + name + "'"))}, which it does not declare. Declare every action an input file uses in that file; input files cannot share actions yet.",
                     AffectedPath = input.SourceAbsolutePath.FullPath,
-                    AffectedVirtualPath = input.OutputVirtualPath,
+                    AffectedVirtualPath = input.AssetUri.VirtualPath,
                 });
             }
         }
@@ -247,7 +253,7 @@ public sealed partial class ContentPipelineService(
     private static bool Produced(ContentCookInput input, CookedAssetEntry asset, NativeImportResult import)
         => input.Kind is ContentCookAssetKind.ForeignSource or ContentCookAssetKind.Input
             ? import.ProductsBySource.TryGetValue(input.SourceRelativePath, out var products) && products.Contains(asset.VirtualPath)
-            : string.Equals(input.OutputVirtualPath, asset.VirtualPath, StringComparison.Ordinal);
+            : string.Equals(input.AssetUri.VirtualPath, asset.VirtualPath, StringComparison.Ordinal);
 
     private static List<ContentCookedAsset> CreateCookedAssets(
         ContentCookScope scope,
@@ -271,7 +277,7 @@ public sealed partial class ContentPipelineService(
         {
             foreach (var input in scope.Inputs.Where(static input => input.Kind == ContentCookAssetKind.Texture))
             {
-                var virtualPath = input.OutputVirtualPath ?? throw new InvalidDataException("A texture requires an explicit output identity.");
+                var virtualPath = input.AssetUri.VirtualPath;
                 var descriptor = inventory.Resources.SingleOrDefault(resource => string.Equals(resource.Kind, "texture", StringComparison.Ordinal) && string.Equals(resource.VirtualPath, virtualPath, StringComparison.Ordinal))
                     ?? throw new InvalidDataException($"Native cooking did not produce texture '{virtualPath}'.");
                 result.Add(new(input.AssetUri, AssetPath.Parse(virtualPath), ContentCookAssetKind.Texture, input.MountName, virtualPath)

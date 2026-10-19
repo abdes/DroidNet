@@ -87,7 +87,6 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
                 mountName,
                 ToProjectRelativePath(scope.InputRoot, descriptor.DescriptorPath),
                 FileSystemPath.From(descriptor.DescriptorPath),
-                descriptor.DescriptorVirtualPath,
                 ContentCookInputRole.GeneratedDescriptor);
             var sceneJob = scope.NativeJobs.GetValueOrDefault(descriptor.SceneAssetUri) ?? this.BuildJob(sceneDescriptorInput, dependencyIds);
             jobs.Add(sceneJob with { DependsOn = dependencyIds });
@@ -132,7 +131,9 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             Name: input.Kind == ContentCookAssetKind.Input ? null : Path.GetFileNameWithoutExtension(Path.GetFileNameWithoutExtension(input.SourceRelativePath)))
         {
             Layout = CreateJobLayout(input),
-            VirtualPath = input.Kind == ContentCookAssetKind.Texture ? input.OutputVirtualPath : null,
+
+            // A source that cooks one asset names it; the cooker places its descriptor there.
+            VirtualPath = input.Kind == ContentCookAssetKind.Input ? null : input.AssetUri.VirtualPath,
         };
 
         // Scripts cook to debug bytecode that records their source, so the player runs the bytecode and reloads
@@ -204,31 +205,15 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             : mountName;
     }
 
-    private static ContentImportLayout? CreateJobLayout(ContentCookInput input)
+    // A job cooks into its source's mount. An input file's actions and contexts also cook into the file's own folder
+    // until they are named under it.
+    private static ContentImportLayout CreateJobLayout(ContentCookInput input)
     {
-        if (input.OutputVirtualPath is not { } output)
+        var layout = new ContentImportLayout(AssetPath.Create(input.MountName).VirtualPath);
+        return input.Kind != ContentCookAssetKind.Input ? layout : layout with
         {
-            return null;
-        }
-
-        var mount = AssetPath.Create(input.MountName).VirtualPath;
-        if (!output.StartsWith(mount + "/", StringComparison.Ordinal))
-        {
-            throw new ArgumentException("The descriptor output must remain within its authoring mount.", nameof(input));
-        }
-
-        var relative = output[(mount.Length + 1)..];
-        var folder = Path.GetDirectoryName(relative)?.Replace('\\', '/') ?? string.Empty;
-        var layout = new ContentImportLayout(mount) { DescriptorsDirectory = string.Empty };
-        return input.Kind switch
-        {
-            ContentCookAssetKind.Material => layout with { MaterialsDirectory = folder },
-            ContentCookAssetKind.Geometry => layout with { GeometryDirectory = folder },
-            ContentCookAssetKind.Scene => layout with { ScenesDirectory = folder },
-            ContentCookAssetKind.Texture => layout,
-            ContentCookAssetKind.Input => layout with { InputDirectory = folder },
-            ContentCookAssetKind.Script => layout with { ScriptsDirectory = folder },
-            _ => null,
+            DescriptorsDirectory = string.Empty,
+            InputDirectory = input.AssetUri.Parent is { IsMount: false } folder ? folder.RelativePath : string.Empty,
         };
     }
 
@@ -236,9 +221,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
     // authoring roots, so the path is recorded relative to the mount.
     private static string GetScriptSourceRoot(ContentCookInput input)
     {
-        var mount = AssetPath.Create(input.MountName).VirtualPath;
-        var output = input.OutputVirtualPath ?? throw new ArgumentException("A script needs its output path.", nameof(input));
-        var depth = output[(mount.Length + 1)..].Count(static character => character == '/');
+        var depth = input.AssetUri.RelativePath.Count(static character => character == '/');
         var root = input.SourceAbsolutePath.Parent!.FullPath;
         for (var level = 0; level < depth; level++)
         {

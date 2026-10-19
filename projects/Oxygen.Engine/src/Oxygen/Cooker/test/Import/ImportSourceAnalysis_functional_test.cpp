@@ -150,11 +150,13 @@ namespace {
       auto material_job = ImportManifestJob {};
       material_job.id = "material";
       material_job.job_type = "material-descriptor";
+      material_job.virtual_path = "/.cooked/Materials/Stone.omat";
       material_job.material_descriptor.descriptor_path = material.string();
       manifest.jobs.push_back(material_job);
       auto scene_job = ImportManifestJob {};
       scene_job.id = "scene";
       scene_job.job_type = "scene-descriptor";
+      scene_job.virtual_path = "/.cooked/Scenes/Scene.oscene";
       scene_job.scene_descriptor.descriptor_path = scene.string();
       manifest.jobs.push_back(scene_job);
       report_ = manifest.AnalyzeSources();
@@ -327,8 +329,8 @@ namespace {
     ASSERT_EQ(result.observations.size(), 1U);
   }
 
-  //! A script file is the only input of its job; the script asset named after
-  //! the file is the output in the job's layout.
+  //! A script file is the only input of its job; the script asset at the job's
+  //! identity is its output.
   NOLINT_TEST_F(ImportSourceAnalysisTest, ScriptFileIsTheInputOfItsScriptAsset)
   {
     const auto script = Write("move.lua", "return {}");
@@ -338,8 +340,7 @@ namespace {
     job.job_type = "script";
     job.script.source_path = script.string();
     job.loose_cooked_layout.virtual_mount_root = "/Content";
-    job.loose_cooked_layout.descriptors_dir = "";
-    job.loose_cooked_layout.scripts_subdir = "Player";
+    job.virtual_path = "/Content/Player/move.oscript";
     manifest.jobs.push_back(job);
 
     const auto report = manifest.AnalyzeSources();

@@ -59,6 +59,11 @@ Close readers of the mutable main library, edit the authored descriptors, then:
 ./cook_scenes.ps1 -All -NoTUI
 ```
 
+Each job that cooks one asset (a material, geometry, scene, script, texture or
+physics descriptor) names the asset in `virtual_path`, and the cooker writes its
+descriptor there below `/.cooked`. Descriptors reference each other by those
+paths, so a new job states the path its users reference.
+
 Scenes reference `/Engine` assets (basic shapes, the default material) from the
 engine content pak, which every cook receives as a cooked context root. An
 installed SDK uses its `share/oxygen/engine.pak`; a source checkout builds the

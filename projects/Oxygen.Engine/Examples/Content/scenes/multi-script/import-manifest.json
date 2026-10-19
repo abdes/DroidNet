@@ -7,6 +7,7 @@
       "id": "material.ScriptedCubeMat",
       "type": "material-descriptor",
       "source": "./ScriptedCubeMat.material.json",
+      "virtual_path": "/.cooked/Materials/ScriptedCubeMat.omat",
       "name": "ScriptedCubeMat",
       "content_hashing": true
     },
@@ -14,6 +15,7 @@
       "id": "material.CompanionOrbMat",
       "type": "material-descriptor",
       "source": "./CompanionOrbMat.material.json",
+      "virtual_path": "/.cooked/Materials/CompanionOrbMat.omat",
       "name": "CompanionOrbMat",
       "content_hashing": true
     },
@@ -21,6 +23,7 @@
       "id": "script.OrbitShapesScript",
       "type": "script",
       "source": "./orbit-shapes.lua",
+      "virtual_path": "/.cooked/Scripts/orbit-shapes.oscript",
       "name": "OrbitShapesScript",
       "compile": false,
       "script_storage": "external",
@@ -30,6 +33,7 @@
       "id": "script.TimeOfDayScript",
       "type": "script",
       "source": "./day-night.lua",
+      "virtual_path": "/.cooked/Scripts/day-night.oscript",
       "name": "TimeOfDayScript",
       "compile": false,
       "script_storage": "external",
@@ -44,6 +48,7 @@
       "id": "scene.multi_script_scene",
       "type": "scene-descriptor",
       "source": "./multi_script_scene.scene.json",
+      "virtual_path": "/.cooked/Scenes/multi_script_scene.oscene",
       "name": "multi_script_scene",
       "content_hashing": true,
       "depends_on": [

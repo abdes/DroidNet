@@ -41,7 +41,7 @@ public sealed class CookPublicationWorkflowTests
         await using var previewLifetime = preview.ConfigureAwait(false);
         using var registration = publication.RegisterPreview(workspace.ProjectContext, () => Task.FromResult<ICookPublicationPreview?>(preview));
 
-        var failed = await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var failed = await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = failed.Status.Should().Be(OperationStatus.Failed);
         _ = failed.IsPublished.Should().BeFalse();
@@ -57,7 +57,7 @@ public sealed class CookPublicationWorkflowTests
         _ = preview.Mounts.Should().Be(2);
         _ = api.Imported.Should().OnlyContain(execution => execution.Manifest.Output.Contains(Path.Combine(".cooked", "generations"), StringComparison.Ordinal));
         registration.Dispose();
-        AssertCookSucceeded(await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat.json"), this.TestContext.CancellationToken).ConfigureAwait(false));
+        AssertCookSucceeded(await pipeline.CookAssetAsync(AssetPath.Parse("/Content/Materials/Blue.omat"), this.TestContext.CancellationToken).ConfigureAwait(false));
     }
 
     /// <summary>Recovery skips live operation ownership and restores the same journal after its owner releases it.</summary>

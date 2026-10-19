@@ -39,7 +39,7 @@ public sealed class TextureCookTests
         byte[] image = [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 255, 255, 255];
         await File.WriteAllBytesAsync(Path.Combine(workspace.Root, "Content/Textures/Meter.tga"), image, this.TestContext.CancellationToken).ConfigureAwait(false);
         var texture = AssetPath.Parse("/Content/Textures/Meter.otex");
-        var textureSource = AssetPath.Parse("/Content/Textures/Meter.otex.json");
+        var textureSource = AssetPath.Parse("/Content/Textures/Meter.otex");
         workspace.Scene.SetEnvironment(new SceneEnvironmentData
         {
             PostProcess = new PostProcessEnvironmentData { AutoExposureMeteringMask = texture },
@@ -91,7 +91,7 @@ public sealed class TextureCookTests
             1,
             root,
             new("/Content"),
-            [new("invalid", "texture-descriptor", "Invalid.otex.json", [], Output: null, Name: "Invalid")]);
+            [new("invalid", "texture-descriptor", "Invalid.otex.json", [], Output: null, Name: "Invalid") { VirtualPath = "/Other/Meter.otex" }]);
         var invalid = await api.ImportAsync(new(Guid.NewGuid(), workspace.Root, Path.Combine(workspace.Root, ".invalid-native"), invalidManifest), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = invalid.Succeeded.Should().BeFalse();
         _ = ReadOutputIdentities(workspace.Root).Should().BeEquivalentTo(beforeInvalidImport);

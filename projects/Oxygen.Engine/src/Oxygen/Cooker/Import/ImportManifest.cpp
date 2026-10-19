@@ -5,6 +5,7 @@
 //===----------------------------------------------------------------------===//
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <exception>
@@ -14,6 +15,7 @@
 #include <optional>
 #include <ostream>
 #include <ranges>
+#include <span>
 #include <sstream>
 #include <string>
 #include <string_view>
@@ -515,12 +517,56 @@ namespace {
     return true;
   }
 
+  //! True for a job that cooks exactly one asset, named by its virtual path.
+  auto IsSingleAssetJob(const std::string_view job_type) -> bool
+  {
+    static constexpr auto kSingleAssetJobs = std::array<std::string_view, 8> {
+      "material-descriptor",
+      "geometry-descriptor",
+      "scene-descriptor",
+      "script",
+      "texture",
+      "texture-descriptor",
+      "physics-material-descriptor",
+      "collision-shape-descriptor",
+    };
+    return std::ranges::contains(kSingleAssetJobs, job_type);
+  }
+
+  //! Reads the identity a single-asset job cooks; a container job has none.
+  auto ReadJobVirtualPath(const json& job, ImportManifestJob& manifest_job,
+    std::ostream& errors) -> bool
+  {
+    const auto single = IsSingleAssetJob(manifest_job.job_type);
+    if (!job.contains("virtual_path")) {
+      if (single) {
+        errors << "ERROR [import.manifest.virtual_path_missing]: "
+               << manifest_job.job_type
+               << " job requires 'virtual_path', the identity of the asset "
+                  "it cooks\n";
+        return false;
+      }
+      return true;
+    }
+    if (!single) {
+      errors << "ERROR [import.manifest.virtual_path_not_allowed]: "
+             << manifest_job.job_type
+             << " job produces several assets and takes no 'virtual_path'\n";
+      return false;
+    }
+    if (!job.at("virtual_path").is_string()
+      || job.at("virtual_path").get_ref<const std::string&>().empty()) {
+      errors << "ERROR: job.virtual_path must be a non-empty string\n";
+      return false;
+    }
+    manifest_job.virtual_path = job.at("virtual_path").get<std::string>();
+    manifest_job.texture.virtual_path = manifest_job.virtual_path;
+    return true;
+  }
+
   auto ApplyTextureOverrides(const json& obj, TextureImportSettings& settings,
     std::ostream& errors) -> bool
   {
-    if (!ReadStringField(obj, "virtual_path", settings.virtual_path, errors)) {
-      return false;
-    }
     if (obj.contains("sources")) {
       if (!obj.at("sources").is_array()) {
         errors << "ERROR: 'sources' must be an array\n";
@@ -781,10 +827,6 @@ namespace {
     }
     if (!ReadStringField(
           obj, "materials_subdir", layout.materials_subdir, errors)) {
-      return false;
-    }
-    if (!ReadStringField(
-          obj, "scripts_subdir", layout.scripts_subdir, errors)) {
       return false;
     }
     if (!ReadStringField(obj, "input_subdir", layout.input_subdir, errors)) {
@@ -1598,6 +1640,10 @@ auto ImportManifest::Parse(const std::string_view text,
       return std::nullopt;
     }
 
+    if (!ReadJobVirtualPath(job, manifest_job, error_stream)) {
+      return std::nullopt;
+    }
+
     if (has_bindings) {
       if (is_script_sidecar_job && !job.at("bindings").is_array()) {
         error_stream << "ERROR: script-sidecar job.bindings must be an array\n";
@@ -1839,6 +1885,7 @@ auto ImportManifestJob::BuildRequest(std::ostream& error_stream,
       return std::nullopt;
     }
     request->loose_cooked_layout = loose_cooked_layout;
+    request->asset_virtual_path = virtual_path;
     request->captured_inputs = captured_inputs;
     request->source_key = source_key;
     if (!id.empty()) {

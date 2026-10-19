@@ -41,15 +41,14 @@ auto ImportRequest::GetSceneName() const -> std::string
 
 auto ImportRequest::GetTextureDescriptorRelPath() const -> std::string
 {
-  if (!texture_virtual_path.empty()) {
+  if (!asset_virtual_path.empty()) {
     auto relative = std::string {};
-    if (!internal::IsCanonicalVirtualPath(texture_virtual_path)
-      || !internal::TryVirtualPathToRelPath(
-        *this, texture_virtual_path, relative)
+    if (!internal::IsCanonicalVirtualPath(asset_virtual_path)
+      || !internal::TryVirtualPathToRelPath(*this, asset_virtual_path, relative)
       || std::filesystem::path(relative).extension() != ".otex") {
       throw std::invalid_argument(
         "Texture virtual_path must name an .otex descriptor within its mount: "
-        + texture_virtual_path);
+        + asset_virtual_path);
     }
     return relative;
   }

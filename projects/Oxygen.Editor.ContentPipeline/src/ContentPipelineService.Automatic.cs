@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
@@ -27,6 +28,9 @@ public sealed partial class ContentPipelineService
     {
         ArgumentNullException.ThrowIfNull(assetUri);
         ArgumentNullException.ThrowIfNull(expectedProject);
+
+        // A saved or removed file names its source; the cook, its run and its results name the asset it stands for.
+        assetUri = AssetFileTypes.ToIdentity(assetUri);
         return this.cookCoordinator.RunCookAsync(
             new(CookTargetKind.Asset, assetUri, IsAutomatic: true)
             {

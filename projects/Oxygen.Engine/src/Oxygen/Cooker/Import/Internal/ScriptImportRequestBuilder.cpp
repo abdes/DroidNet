@@ -159,6 +159,7 @@ auto BuildScriptAssetRequest(const ScriptAssetImportSettings& settings,
   if (!request.has_value()) {
     return std::nullopt;
   }
+  request->asset_virtual_path = settings.virtual_path;
 
   const auto compile_mode = ParseScriptCompileMode(settings.compile_mode);
   if (!compile_mode.has_value()) {

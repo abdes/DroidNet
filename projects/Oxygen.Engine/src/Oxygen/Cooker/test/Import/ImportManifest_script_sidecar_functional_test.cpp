@@ -136,8 +136,17 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
         }
       },
       "jobs": [
-        { "type": "script", "source": "Authoring/main.lua" },
-        { "type": "script", "source": "Other/main.lua", "source_root": "Other" }
+        {
+          "type": "script",
+          "source": "Authoring/main.lua",
+          "virtual_path": "/.cooked/Scripts/AuthoringMain.oscript"
+        },
+        {
+          "type": "script",
+          "source": "Other/main.lua",
+          "source_root": "Other",
+          "virtual_path": "/.cooked/Scripts/OtherMain.oscript"
+        }
       ]
     })");
   std::ostringstream errors;
@@ -208,6 +217,7 @@ NOLINT_TEST(
         {
           "type": "script",
           "source": "main.luau",
+          "virtual_path": "/.cooked/Scripts/Main.oscript",
           "output": ")"
       + cooked_root_json + R"(",
           "bindings": [
@@ -247,7 +257,8 @@ NOLINT_TEST(ImportManifestScriptSidecarTest,
       "jobs": [
         {
           "type": "script",
-          "source": "main.luau"
+          "source": "main.luau",
+          "virtual_path": "/.cooked/Scripts/Main.oscript"
         },
         {
           "type": "script-sidecar",

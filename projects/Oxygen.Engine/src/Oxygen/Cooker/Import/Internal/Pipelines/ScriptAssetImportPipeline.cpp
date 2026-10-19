@@ -36,8 +36,10 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptAssetImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Meta/Scripting/ScriptCompileMode.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
@@ -59,7 +61,6 @@ namespace {
   using data::AssetType;
   using data::loose_cooked::FileKind;
   using data::pak::core::DataBlobSizeT;
-  using data::pak::core::kNoResourceIndex;
   using data::pak::core::OffsetT;
   using data::pak::core::ResourceIndexT;
   using data::pak::scripting::ScriptAssetDesc;
@@ -125,15 +126,18 @@ namespace {
     return true;
   }
 
-  auto InitScriptDescriptorContext(
-    const ImportRequest& request, ScriptDescriptorContext& context) -> void
+  auto InitScriptDescriptorContext(ImportSession& session,
+    const ImportRequest& request, ScriptDescriptorContext& context) -> bool
   {
+    auto placement
+      = internal::PlaceAsset(request, data::kScriptDescriptorExtension);
+    if (!placement.has_value()) {
+      session.AddDiagnostic(std::move(placement.error()));
+      return false;
+    }
+    auto& [virtual_path, descriptor_relpath] = *placement;
     const auto script_name
       = script_import::DeriveScriptName(request.source_path);
-    const auto descriptor_relpath
-      = script_import::BuildScriptDescriptorRelPath(request, script_name);
-    const auto virtual_path
-      = request.loose_cooked_layout.ScriptVirtualPath(script_name);
 
     const auto key = oxygen::data::AssetKey::FromVirtualPath(virtual_path);
 
@@ -144,9 +148,10 @@ namespace {
     descriptor.header.name_offset = context.strings.Add(script_name);
 
     context.key = key;
-    context.virtual_path = virtual_path;
-    context.descriptor_relpath = descriptor_relpath;
+    context.virtual_path = std::move(virtual_path);
+    context.descriptor_relpath = std::move(descriptor_relpath);
     context.descriptor = descriptor;
+    return true;
   }
 
   auto ToImportSeverity(const scripting::DiagnosticSeverity severity)
@@ -651,9 +656,9 @@ auto ScriptAssetImportPipeline::Process(WorkItem& item) -> co::Co<bool>
   }
 
   auto descriptor_context = ScriptDescriptorContext {};
-  InitScriptDescriptorContext(req, descriptor_context);
-  if (!AnalyzeDeclarations(
-        *session, req, item.source_bytes, descriptor_context)) {
+  if (!InitScriptDescriptorContext(*session, req, descriptor_context)
+    || !AnalyzeDeclarations(
+      *session, req, item.source_bytes, descriptor_context)) {
     co_return false;
   }
 

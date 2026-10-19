@@ -35,15 +35,15 @@ public sealed class SourceDependencyDiscoveryTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var geometryAsset = AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo");
-        var geometrySource = AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo.json");
-        var materialSource = AssetPath.Parse("/Content/Materials/Red.omat.json");
+        var geometrySource = AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo");
+        var materialSource = AssetPath.Parse("/Content/Materials/Red.omat");
         WriteAuthoredGeometry(workspace, withBuffer: true);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json.import.json", "{\"Version\":1}");
         AddGeometryNode(workspace, geometryAsset, "First");
         AddGeometryNode(workspace, geometryAsset, "Second");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
+        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
 
         var graph = await discovery.DiscoverAsync(workspace.ProjectContext, [CookInputResolver.Resolve(workspace.ProjectContext, sceneUri, ContentCookInputRole.Primary)], this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -79,7 +79,7 @@ public sealed class SourceDependencyDiscoveryTests
     public async Task DiscoveryTracksTypedSceneReferencesAsCookedOutputs()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
+        var sceneUri = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var scriptOutputUri = AssetPath.Parse("/Content/Scripts/Orbit.oscript");
         var actionOutputUri = AssetPath.Parse("/Content/Input/Jump.oiact");
         var mappingOutputUri = AssetPath.Parse("/Content/Input/Gameplay.oimap");
@@ -137,7 +137,7 @@ public sealed class SourceDependencyDiscoveryTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        var input = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Materials/Red.omat.json"), ContentCookInputRole.Primary);
+        var input = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Materials/Red.omat"), ContentCookInputRole.Primary);
         var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
         var capture = new CookInputSnapshotCapture(workspace.Documents, workspace.CookCoordinator);
         var attempts = 0;
@@ -180,10 +180,10 @@ public sealed class SourceDependencyDiscoveryTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         WriteAuthoredGeometry(workspace, withBuffer: false);
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        var material = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Materials/Red.omat.json"), ContentCookInputRole.Primary);
+        var material = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Materials/Red.omat"), ContentCookInputRole.Primary);
         AddGeometryNode(workspace, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Uses red");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var scene = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Scenes/Main.oscene.json"), ContentCookInputRole.Primary);
+        var scene = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Scenes/Main.oscene"), ContentCookInputRole.Primary);
         var dirtyScene = SavedState(scene.SourceAbsolutePath.FullPath) with { IsDirty = true };
         using var sceneRegistration = workspace.Documents.Register(scene.SourceAbsolutePath, _ => Task.FromResult<CookDocumentReadLease?>(new(dirtyScene, static () => { })));
         var discovery = new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
@@ -191,7 +191,7 @@ public sealed class SourceDependencyDiscoveryTests
         _ = graph.Assets.Should().ContainSingle();
         var dirtyMaterial = SavedState(material.SourceAbsolutePath.FullPath) with { IsDirty = true };
         using var materialRegistration = workspace.Documents.Register(material.SourceAbsolutePath, _ => Task.FromResult<CookDocumentReadLease?>(new(dirtyMaterial, static () => { })));
-        var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo.json"), ContentCookInputRole.Primary);
+        var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), ContentCookInputRole.Primary);
         Func<Task> discover = () => discovery.DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken);
         var failure = await discover.Should().ThrowAsync<global::Oxygen.Editor.ContentPipeline.Cooking.CookInputsNeedSaveException>().ConfigureAwait(false);
         _ = failure.Which.Documents.Should().ContainSingle().Which.SourcePath.Should().Be(dirtyMaterial.SourcePath);
@@ -208,7 +208,7 @@ public sealed class SourceDependencyDiscoveryTests
         AddGeometryNode(workspace, published, "Published");
         AddGeometryNode(workspace, engine, "Engine");
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var scene = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Scenes/Main.oscene.json"), ContentCookInputRole.Primary);
+        var scene = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Scenes/Main.oscene"), ContentCookInputRole.Primary);
 
         var graph = await new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents)).DiscoverAsync(workspace.ProjectContext, [scene], this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -248,8 +248,8 @@ public sealed class SourceDependencyDiscoveryTests
 
         _ = result.Status.Should().Be(OperationStatus.Succeeded, string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.TechnicalMessage ?? diagnostic.Message)));
         _ = result.CookedAssets.Should().HaveCount(sceneCook ? 3 : 2);
-        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Materials/Red.omat.json"));
-        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo.json"));
+        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Materials/Red.omat"));
+        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"));
     }
 
     /// <summary>Source traversal cannot capture files outside the retained project.</summary>
@@ -263,7 +263,7 @@ public sealed class SourceDependencyDiscoveryTests
         var descriptor = JsonNode.Parse(workspace.ReadText(source))!;
         descriptor["buffers"]![0]!["uri"] = "../../../outside.bin";
         workspace.WriteText(source, descriptor.ToJsonString());
-        var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/" + source), ContentCookInputRole.Primary);
+        var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/" + source[..^5]), ContentCookInputRole.Primary);
         var graph = await new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents)).DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = graph.Diagnostics.Should().ContainSingle(diagnostic => diagnostic.Message.Contains("outside the project", StringComparison.Ordinal) && diagnostic.AffectedVirtualPath == geometry.AssetUri.VirtualPath);
     }
@@ -281,7 +281,7 @@ public sealed class SourceDependencyDiscoveryTests
         var bufferPath = Path.Combine(workspace.Root, "Content", "Geometry", "mesh.bin");
         descriptor["buffers"]![0]!["uri"] = bufferPath;
         workspace.WriteText(source, descriptor.ToJsonString());
-        var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/" + source), ContentCookInputRole.Primary);
+        var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/" + source[..^5]), ContentCookInputRole.Primary);
 
         var graph = await new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents)).DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -311,16 +311,16 @@ public sealed class SourceDependencyDiscoveryTests
             workspace.WriteText($"Content/Textures/{name}.png", "saved image bytes");
         }
 
-        var materialUri = AssetPath.Parse("/" + source);
+        var materialUri = AssetPath.Parse("/" + source[..^5]);
         var input = CookInputResolver.Resolve(workspace.ProjectContext, materialUri, ContentCookInputRole.Primary);
         var graph = await new CookDependencyDiscovery(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents)).DiscoverAsync(workspace.ProjectContext, [input], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = graph.Diagnostics.Should().BeEmpty();
         _ = graph.Assets.Should().HaveCount(4);
         _ = graph.Dependencies[materialUri].Should().BeEquivalentTo(new[]
         {
-            AssetPath.Parse("/Content/Textures/Shared.otex.json"),
-            AssetPath.Parse("/Content/Textures/Metal.otex.json"),
-            AssetPath.Parse("/Content/Textures/Rough.otex.json"),
+            AssetPath.Parse("/Content/Textures/Shared.otex"),
+            AssetPath.Parse("/Content/Textures/Metal.otex"),
+            AssetPath.Parse("/Content/Textures/Rough.otex"),
             AssetPath.Parse("/Library/Textures/Emit.otex"),
         });
         _ = graph.Files.Count(static file => file.RelativePath.EndsWith(".png", StringComparison.Ordinal)).Should().Be(3);
@@ -354,7 +354,7 @@ public sealed class SourceDependencyDiscoveryTests
         _ = result.Status.Should().Be(OperationStatus.Failed);
         var diagnostic = result.Diagnostics.Should().ContainSingle(diagnostic =>
             diagnostic.Code == "material.texture_reference_invalid"
-            && diagnostic.AffectedVirtualPath == "/Content/Materials/Red.omat.json"
+            && diagnostic.AffectedVirtualPath == "/Content/Materials/Red.omat"
             && diagnostic.AffectedPath == Path.Combine(workspace.Root, "Content", "Textures", "Red.otex.json")).Which;
         _ = diagnostic.Message.Should().Contain("texture channel 'base_color' texture descriptor is missing");
         _ = api.ImportedManifest.Should().BeNull();
@@ -382,7 +382,7 @@ public sealed class SourceDependencyDiscoveryTests
         _ = result.Status.Should().Be(OperationStatus.Failed);
         _ = result.Diagnostics.Should().ContainSingle(diagnostic =>
             diagnostic.Code == "material.texture_reference_invalid"
-            && diagnostic.AffectedVirtualPath == "/Content/Materials/Red.omat.json"
+            && diagnostic.AffectedVirtualPath == "/Content/Materials/Red.omat"
             && diagnostic.AffectedPath == Path.Combine(workspace.Root, "Content", "Textures", "Red_1.png"));
         _ = api.ImportedManifest.Should().BeNull();
     }
@@ -402,7 +402,7 @@ public sealed class SourceDependencyDiscoveryTests
 
         _ = result.Status.Should().Be(OperationStatus.Failed);
         _ = result.Diagnostics.Should().HaveCount(2);
-        _ = result.Diagnostics.Select(static diagnostic => diagnostic.AffectedVirtualPath).Should().BeEquivalentTo("/Content/Materials/First.omat.json", "/Content/Materials/Second.omat.json");
+        _ = result.Diagnostics.Select(static diagnostic => diagnostic.AffectedVirtualPath).Should().BeEquivalentTo("/Content/Materials/First.omat", "/Content/Materials/Second.omat");
         _ = workspace.CookCoordinator.Runs.Single().Assets.Values.Should().OnlyContain(static asset => asset.State == global::Oxygen.Editor.ContentPipeline.Cooking.CookAssetState.Failed);
         _ = api.ImportedManifest.Should().BeNull();
     }

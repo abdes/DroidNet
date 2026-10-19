@@ -7,6 +7,7 @@
       "id": "material.ProcCubeBaseMat",
       "type": "material-descriptor",
       "source": "./ProcCubeBaseMat.material.json",
+      "virtual_path": "/.cooked/Materials/ProcCubeBaseMat.omat",
       "name": "ProcCubeBaseMat",
       "content_hashing": true
     },
@@ -14,6 +15,7 @@
       "id": "material.ProcCubeAccentMat",
       "type": "material-descriptor",
       "source": "./ProcCubeAccentMat.material.json",
+      "virtual_path": "/.cooked/Materials/ProcCubeAccentMat.omat",
       "name": "ProcCubeAccentMat",
       "content_hashing": true
     },
@@ -21,6 +23,7 @@
       "id": "script.SceneProcCubesScript",
       "type": "script",
       "source": "./proc_cubes.lua",
+      "virtual_path": "/.cooked/Scripts/proc_cubes.oscript",
       "name": "SceneProcCubesScript",
       "compile": false,
       "script_storage": "external",
@@ -30,6 +33,7 @@
       "id": "scene.SceneProcCubes",
       "type": "scene-descriptor",
       "source": "./SceneProcCubes.scene.json",
+      "virtual_path": "/.cooked/Scenes/SceneProcCubes.oscene",
       "name": "SceneProcCubes",
       "content_hashing": true,
       "depends_on": [

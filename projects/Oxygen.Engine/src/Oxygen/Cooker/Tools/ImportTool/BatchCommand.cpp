@@ -39,7 +39,6 @@
 #include <Oxygen/Base/Logging.h>
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Base/ObserverPtr.h>
-#include <Oxygen/Base/ScopeGuard.h>
 #include <Oxygen/Clap/Command.h>
 #include <Oxygen/Clap/Fluent/CommandBuilder.h>
 #include <Oxygen/Clap/Fluent/DSL.h>
@@ -72,7 +71,6 @@ namespace oxygen::content::import::tool {
 namespace {
 
   using nlohmann::ordered_json;
-  using oxygen::ScopeGuard;
   using oxygen::clap::CommandBuilder;
   using oxygen::clap::Option;
 
@@ -127,6 +125,7 @@ namespace {
     return fmt::format("#{}", DisplayJobNumber(job_index));
   }
 
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - local helper
   auto ParseJsonObject(const std::string_view text,
     const std::string_view context, nlohmann::json& doc, std::string& error)
     -> bool
@@ -159,115 +158,13 @@ namespace {
     return ParseJsonObject(source->text, context, doc, error);
   }
 
-  auto ResolvePhysicsMaterialProducedVirtualPath(const PreparedJob& job,
-    std::string& virtual_path, std::string& error) -> bool
-  {
-    try {
-      if (!job.request.physics_material_descriptor.has_value()) {
-        error = "Missing request.physics_material_descriptor payload";
-        return false;
-      }
-
-      auto descriptor_doc = nlohmann::json {};
-      if (!ParseJsonObject(
-            job.request.physics_material_descriptor->normalized_descriptor_json,
-            "physics-material-descriptor", descriptor_doc, error)) {
-        return false;
-      }
-
-      if (descriptor_doc.contains("virtual_path")) {
-        virtual_path = descriptor_doc.at("virtual_path").get<std::string>();
-        return true;
-      }
-
-      auto name = std::string {};
-      if (job.request.job_name.has_value() && !job.request.job_name->empty()) {
-        name = *job.request.job_name;
-      } else if (descriptor_doc.contains("name")) {
-        name = descriptor_doc.at("name").get<std::string>();
-      } else {
-        name = job.request.source_path.stem().string();
-      }
-      if (name.empty()) {
-        name = "physics_material";
-      }
-      virtual_path
-        = job.request.loose_cooked_layout.PhysicsMaterialVirtualPath(name);
-      return true;
-    } catch (const std::exception& ex) {
-      error = fmt::format(
-        "physics-material-descriptor output inference failed: {}", ex.what());
-      return false;
-    }
-  }
-
-  auto ResolveCollisionShapeProducedVirtualPath(const PreparedJob& job,
-    std::string& virtual_path, std::string& error) -> bool
-  {
-    try {
-      if (!job.request.collision_shape_descriptor.has_value()) {
-        error = "Missing request.collision_shape_descriptor payload";
-        return false;
-      }
-
-      auto descriptor_doc = nlohmann::json {};
-      if (!ParseJsonObject(
-            job.request.collision_shape_descriptor->normalized_descriptor_json,
-            "collision-shape-descriptor", descriptor_doc, error)) {
-        return false;
-      }
-
-      if (descriptor_doc.contains("virtual_path")) {
-        virtual_path = descriptor_doc.at("virtual_path").get<std::string>();
-        return true;
-      }
-
-      auto name = std::string {};
-      if (job.request.job_name.has_value() && !job.request.job_name->empty()) {
-        name = *job.request.job_name;
-      } else if (descriptor_doc.contains("name")) {
-        name = descriptor_doc.at("name").get<std::string>();
-      } else {
-        name = job.request.source_path.stem().string();
-      }
-      if (name.empty()) {
-        name = "collision_shape";
-      }
-      virtual_path
-        = job.request.loose_cooked_layout.CollisionShapeVirtualPath(name);
-      return true;
-    } catch (const std::exception& ex) {
-      error = fmt::format(
-        "collision-shape-descriptor output inference failed: {}", ex.what());
-      return false;
-    }
-  }
-
   auto ResolveSceneProducedVirtualPath(const PreparedJob& job,
+    // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - local helper
     std::string& virtual_path, std::string& error) -> bool
   {
     try {
       if (job.job_type == "scene-descriptor") {
-        if (!job.request.scene_descriptor.has_value()) {
-          error = "Missing request.scene_descriptor payload";
-          return false;
-        }
-
-        auto descriptor_doc = nlohmann::json {};
-        if (!ParseJsonObject(
-              job.request.scene_descriptor->normalized_descriptor_json,
-              "scene-descriptor", descriptor_doc, error)) {
-          return false;
-        }
-        if (!descriptor_doc.contains("name")
-          || !descriptor_doc.at("name").is_string()) {
-          error = "scene-descriptor requires a string 'name'";
-          return false;
-        }
-
-        const auto scene_name = descriptor_doc.at("name").get<std::string>();
-        virtual_path
-          = job.request.loose_cooked_layout.SceneVirtualPath(scene_name);
+        virtual_path = job.request.asset_virtual_path;
         return true;
       }
 
@@ -404,22 +301,13 @@ namespace {
   {
     produced_virtual_path.reset();
 
+    // A physics descriptor job produces the asset its request names.
+    if (job.job_type == "physics-material-descriptor"
+      || job.job_type == "collision-shape-descriptor") {
+      produced_virtual_path = job.request.asset_virtual_path;
+      return true;
+    }
     auto virtual_path = std::string {};
-    if (job.job_type == "physics-material-descriptor") {
-      if (!ResolvePhysicsMaterialProducedVirtualPath(
-            job, virtual_path, error)) {
-        return false;
-      }
-      produced_virtual_path = std::move(virtual_path);
-      return true;
-    }
-    if (job.job_type == "collision-shape-descriptor") {
-      if (!ResolveCollisionShapeProducedVirtualPath(job, virtual_path, error)) {
-        return false;
-      }
-      produced_virtual_path = std::move(virtual_path);
-      return true;
-    }
     if (job.job_type == "scene-descriptor" || job.job_type == "fbx"
       || job.job_type == "gltf") {
       if (!ResolveSceneProducedVirtualPath(job, virtual_path, error)) {
@@ -623,38 +511,7 @@ namespace {
     return job_index + 1;
   }
 
-  auto PrintDiagnostics(const ImportReport& report, const size_t job_index,
-    std::string_view source_path,
-    const oxygen::observer_ptr<IMessageWriter>& writer) -> void
-  {
-    if (report.success) {
-      return;
-    }
-
-    writer->Error(fmt::format("ERROR: import failed (job={}, source={})",
-      DisplayJobNumber(job_index), source_path));
-    for (const auto& diag : report.diagnostics) {
-      const auto message = fmt::format("- {}: {}", diag.code, diag.message);
-      switch (diag.severity) {
-      case ImportSeverity::kInfo:
-        writer->Info(message);
-        break;
-      case ImportSeverity::kWarning:
-        writer->Warning(message);
-        break;
-      case ImportSeverity::kError:
-        writer->Error(message);
-        break;
-      }
-    }
-  }
-
   // --- Logic Helpers (Restored) ---
-
-  constexpr auto PhaseCount() -> size_t
-  {
-    return static_cast<size_t>(ImportPhase::kFailed) + 1U;
-  }
 
   using WorkerTotals = std::array<uint32_t, 7>;
 
@@ -1322,10 +1179,9 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
                                       import_service, &progress_traces,
                                       &submit_times, &dependents,
                                       &dependency_remaining, worker_totals](
-                                      std::stop_token st) -> void {
+                                      const std::stop_token& st) -> void {
     DCHECK_NOTNULL_F(import_service, "Import service must be set by main");
 
-    size_t submitted = 0;
     size_t completed = 0;
     size_t failures = 0;
     size_t in_flight = 0;
@@ -1780,7 +1636,6 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
             job_views.at(job_index).items_completed = 0U;
             job_views.at(job_index).items_total = 0U;
             job_active.at(job_index) = true;
-            submitted++;
             in_flight++;
           } else {
             ready_queue.push_front(job_index);
@@ -1802,7 +1657,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
         std::scoped_lock lock(common_context->mutex);
         if (!shutdown_requested && in_flight == 0U && ready_queue.empty()
           && completed < jobs.size()) {
-          common_context->state.recent_logs.push_back(
+          common_context->state.recent_logs.emplace_back(
             "Dependency scheduler stalled with unfinished jobs");
           common_context->exit_code = 2;
           stalled = true;
@@ -1839,7 +1694,7 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
   });
 
   // 5. Run TUI or Headless
-  if (!(global_options_ != nullptr && global_options_->no_tui)) {
+  if (global_options_ == nullptr || !global_options_->no_tui) {
     // TUI mode: the writer is muted by main to avoid console output.
     BatchImportScreen screen;
     screen.SetDataProvider([common_context] -> BatchViewModel {

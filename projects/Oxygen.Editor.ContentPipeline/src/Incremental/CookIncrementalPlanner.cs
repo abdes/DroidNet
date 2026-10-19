@@ -42,7 +42,7 @@ internal static class CookIncrementalPlanner
     /// <summary>Compares captured inputs with verified output facts without performing more I/O.</summary>
     public static CookIncrementalPlan CreatePlan(string producer, IReadOnlyList<CookSnapshotInput> inputs,
         CookDependencyGraph graph, CookProvenance previous, ImmutableDictionary<string, CookedInventoryReport> inventories,
-        IReadOnlySet<string>? rebuiltRoots = null, IReadOnlySet<AssetPath>? removedSources = null)
+        IReadOnlySet<string>? rebuiltRoots = null, IReadOnlySet<AssetPath>? removedSources = null, IReadOnlySet<AssetPath>? rebuiltSources = null)
     {
         var fingerprints = graph.Assets.ToImmutableDictionary(static input => input.AssetUri, input => Fingerprint(input, producer, inputs, graph));
 
@@ -70,7 +70,10 @@ internal static class CookIncrementalPlanner
             }
         }
 
+        // A removed source has nothing to reuse, and a source the repair cooks again, such as a user of a removed
+        // product, must cook to report what it lost even though its own inputs did not change.
         var reused = previous.Products.Where(product => removedSources?.Contains(product.SourceUri) != true
+            && rebuiltSources?.Contains(product.SourceUri) != true
             && fingerprints.TryGetValue(product.SourceUri, out var fingerprint)
             && string.Equals(fingerprint, product.ReuseFingerprint, StringComparison.Ordinal)
             && product.Outputs.Length != 0
@@ -115,7 +118,6 @@ internal static class CookIncrementalPlanner
             Version = 1,
             Source = input.AssetUri.ToUriString(),
             input.Kind,
-            input.OutputVirtualPath,
             Producer = producer,
             Files = files.Select(file => new
             {

@@ -4,6 +4,7 @@
 // SPDX-License-Identifier: BSD-3-Clause
 //===----------------------------------------------------------------------===//
 
+#include <algorithm>
 #include <cctype>
 #include <chrono>
 #include <cstddef>
@@ -42,7 +43,6 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Core/Detail/FormatUtils.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
@@ -623,9 +623,8 @@ namespace {
       .environment_references = {},
       .instance_paths = {},
     };
-    const auto scene_virtual_path
-      = context.request.loose_cooked_layout.SceneVirtualPath(
-        prepared.scene_name);
+    // The job placed the scene at its identity before linking it.
+    const auto& scene_virtual_path = context.request.asset_virtual_path;
     for (size_t i = 0; i < prepared.build.nodes.size(); ++i) {
       prepared.build.nodes.at(i).node_id = BuildNodeAssetKey(
         context.request, scene_virtual_path, static_cast<uint32_t>(i));
@@ -827,11 +826,12 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       ImportPhase::kFailed, 1.0F, "Scene descriptor preparation failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
-  if (auto refused = internal::CheckAssetVirtualPath(Request(),
-        Request().loose_cooked_layout.SceneVirtualPath(source->name), "name")) {
-    session.AddDiagnostic(std::move(*refused));
+  auto placement
+    = internal::PlaceAsset(Request(), data::kSceneDescriptorExtension);
+  if (!placement.has_value()) {
+    session.AddDiagnostic(std::move(placement.error()));
     ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Scene descriptor name refused");
+      ImportPhase::kFailed, 1.0F, "Scene virtual path refused");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
@@ -907,9 +907,8 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
 
   auto& prepared = *prepared_opt;
   if (!co_await CheckInstanceCycles(context,
-        data::AssetKey::FromVirtualPath(
-          Request().loose_cooked_layout.SceneVirtualPath(prepared.scene_name)),
-        prepared, *CookedReader())) {
+        data::AssetKey::FromVirtualPath(placement->virtual_path), prepared,
+        *CookedReader())) {
     ReportPhaseProgress(
       ImportPhase::kFailed, 1.0F, "Scene descriptor instances a cycle");
     co_return co_await FinalizeWithTelemetry(session);
@@ -931,6 +930,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     prepared.environment_systems, std::move(request_for_pipeline),
     observer_ptr { &GetNamingService() }, StopToken());
   item.environment_references = std::move(prepared.environment_references);
+  item.placement = std::move(*placement);
 
   co_await pipeline.Submit(std::move(item));
   pipeline.Close();

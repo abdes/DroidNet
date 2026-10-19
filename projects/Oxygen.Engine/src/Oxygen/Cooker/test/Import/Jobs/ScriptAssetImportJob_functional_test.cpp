@@ -178,7 +178,7 @@ namespace {
 
     EXPECT_TRUE(report.success);
 
-    const auto descriptor_path = cooked_root / "Scripts" / "hello.oscript";
+    const auto descriptor_path = cooked_root / "hello.oscript";
     EXPECT_TRUE(std::filesystem::exists(descriptor_path));
 
     const auto inspection = LoadInspection(cooked_root);
@@ -220,7 +220,7 @@ namespace {
 
     EXPECT_TRUE(report.success);
 
-    const auto descriptor_path = cooked_root / "Scripts" / "external.oscript";
+    const auto descriptor_path = cooked_root / "external.oscript";
     ASSERT_TRUE(std::filesystem::exists(descriptor_path));
 
     const auto inspection = LoadInspection(cooked_root);
@@ -270,8 +270,7 @@ namespace {
       source_path_relative, cooked_root, ScriptStorageMode::kExternal, false));
     EXPECT_TRUE(report.success);
 
-    const auto descriptor_path
-      = cooked_root / "Scripts" / "relative_source.oscript";
+    const auto descriptor_path = cooked_root / "relative_source.oscript";
     ASSERT_TRUE(std::filesystem::exists(descriptor_path));
 
     const auto desc = ReadScriptDescriptor(descriptor_path);
@@ -307,7 +306,7 @@ namespace {
     EXPECT_TRUE(report.success);
 
     const auto descriptor_path
-      = cooked_root_absolute / "Scripts" / "relative_cooked_root.oscript";
+      = cooked_root_absolute / "relative_cooked_root.oscript";
     ASSERT_TRUE(std::filesystem::exists(descriptor_path));
 
     const auto desc = ReadScriptDescriptor(descriptor_path);
@@ -371,7 +370,7 @@ namespace {
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
 
-    const auto descriptor_path = cooked_root / "Scripts" / "compile_ok.oscript";
+    const auto descriptor_path = cooked_root / "compile_ok.oscript";
     ASSERT_TRUE(std::filesystem::exists(descriptor_path));
     const auto desc = ReadScriptDescriptor(descriptor_path);
     ASSERT_NE(desc.source_resource_index, kNoResourceReference);
@@ -439,8 +438,7 @@ namespace {
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(report->diagnostics, "script.S0201"));
 
-    const auto descriptor_path
-      = cooked_root / "Scripts" / "compile_fail.oscript";
+    const auto descriptor_path = cooked_root / "compile_fail.oscript";
     EXPECT_FALSE(std::filesystem::exists(descriptor_path));
   }
 
@@ -480,14 +478,11 @@ namespace {
     // Assert
     ASSERT_HAS_VALUE(report);
     ASSERT_TRUE(report->success);
-    const auto desc
-      = ReadScriptDescriptor(cooked_root / "Scripts" / "combo.oscript");
+    const auto desc = ReadScriptDescriptor(cooked_root / "combo.oscript");
     EXPECT_NE(desc.bytecode_resource_index, kNoResourceReference);
     EXPECT_EQ(desc.source_resource_index, kNoResourceReference);
     EXPECT_EQ(desc.flags, ScriptAssetFlags::kAllowExternalSource);
-    EXPECT_FALSE(
-      ReadExternalSourcePath(cooked_root / "Scripts" / "combo.oscript")
-        .empty());
+    EXPECT_FALSE(ReadExternalSourcePath(cooked_root / "combo.oscript").empty());
   }
 
   //! Declared parameters cook after the descriptor with their types,
@@ -520,7 +515,7 @@ return Orbit
 
     // Assert
     ASSERT_TRUE(report.success);
-    const auto bytes = ReadBytes(cooked_root / "Scripts" / "orbit.oscript");
+    const auto bytes = ReadBytes(cooked_root / "orbit.oscript");
     ASSERT_GE(bytes.size(), sizeof(ScriptAssetDesc));
     auto desc = ScriptAssetDesc {};
     std::memcpy(&desc, bytes.data(), sizeof(desc));
@@ -582,8 +577,7 @@ return Orbit
       });
     ASSERT_NE(diagnostic, report.diagnostics.end());
     EXPECT_NE(diagnostic->message.find("computed.luau:3:"), std::string::npos);
-    EXPECT_FALSE(
-      std::filesystem::exists(cooked_root / "Scripts" / "computed.oscript"));
+    EXPECT_FALSE(std::filesystem::exists(cooked_root / "computed.oscript"));
   }
 
   NOLINT_TEST_F(
@@ -651,10 +645,8 @@ return Orbit
       static_cast<AssetType>(assets_b.front().asset_type), AssetType::kScript);
     EXPECT_EQ(assets_a.front().key, assets_b.front().key);
 
-    const auto descriptor_a
-      = ReadBytes(cooked_root_a / "Scripts" / "stable.oscript");
-    const auto descriptor_b
-      = ReadBytes(cooked_root_b / "Scripts" / "stable.oscript");
+    const auto descriptor_a = ReadBytes(cooked_root_a / "stable.oscript");
+    const auto descriptor_b = ReadBytes(cooked_root_b / "stable.oscript");
     EXPECT_EQ(descriptor_a, descriptor_b);
   }
 

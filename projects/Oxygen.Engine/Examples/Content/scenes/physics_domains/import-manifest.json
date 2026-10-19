@@ -6,66 +6,77 @@
       "id": "floor.material",
       "type": "material-descriptor",
       "source": "../bottle-on-box/floor_default.material.json",
+      "virtual_path": "/.cooked/Materials/floor_default.omat",
       "name": "floor_default"
     },
     {
       "id": "cube.material",
       "type": "material-descriptor",
       "source": "../bottle-on-box/cube_red.material.json",
+      "virtual_path": "/.cooked/Materials/cube_red.omat",
       "name": "cube_red"
     },
     {
       "id": "sphere.material",
       "type": "material-descriptor",
       "source": "../bottle-on-box/sphere_blue.material.json",
+      "virtual_path": "/.cooked/Materials/sphere_blue.omat",
       "name": "sphere_blue"
     },
     {
       "id": "chassis.material",
       "type": "material-descriptor",
       "source": "./chassis_green.material.json",
+      "virtual_path": "/.cooked/Materials/chassis_green.omat",
       "name": "chassis_green"
     },
     {
       "id": "wheel.material",
       "type": "material-descriptor",
       "source": "./wheel_dark.material.json",
+      "virtual_path": "/.cooked/Materials/wheel_dark.omat",
       "name": "wheel_dark"
     },
     {
       "id": "ramp.material",
       "type": "material-descriptor",
       "source": "./ramp_orange.material.json",
+      "virtual_path": "/.cooked/Materials/ramp_orange.omat",
       "name": "ramp_orange"
     },
     {
       "id": "softbody.material",
       "type": "material-descriptor",
       "source": "./softbody_pink.material.json",
+      "virtual_path": "/.cooked/Materials/softbody_pink.omat",
       "name": "softbody_pink"
     },
     {
       "id": "softbody_jelly.material",
       "type": "material-descriptor",
       "source": "./softbody_jelly.material.json",
+      "virtual_path": "/.cooked/Materials/softbody_jelly.omat",
       "name": "softbody_jelly"
     },
     {
       "id": "character.material",
       "type": "material-descriptor",
       "source": "./character_teal.material.json",
+      "virtual_path": "/.cooked/Materials/character_teal.omat",
       "name": "character_teal"
     },
     {
       "id": "stack.material",
       "type": "material-descriptor",
       "source": "./stack_yellow.material.json",
+      "virtual_path": "/.cooked/Materials/stack_yellow.omat",
       "name": "stack_yellow"
     },
     {
       "id": "floor.geometry",
       "type": "geometry-descriptor",
       "source": "../bottle-on-box/floor.geometry.json",
+      "virtual_path": "/.cooked/Geometry/floor.ogeo",
       "name": "floor",
       "depends_on": ["floor.material"]
     },
@@ -73,6 +84,7 @@
       "id": "cube.geometry",
       "type": "geometry-descriptor",
       "source": "../bottle-on-box/cube.geometry.json",
+      "virtual_path": "/.cooked/Geometry/cube.ogeo",
       "name": "cube",
       "depends_on": ["cube.material"]
     },
@@ -80,6 +92,7 @@
       "id": "sphere.geometry",
       "type": "geometry-descriptor",
       "source": "../bottle-on-box/sphere.geometry.json",
+      "virtual_path": "/.cooked/Geometry/sphere.ogeo",
       "name": "sphere",
       "depends_on": ["sphere.material"]
     },
@@ -87,6 +100,7 @@
       "id": "chassis_box.geometry",
       "type": "geometry-descriptor",
       "source": "./chassis_box.geometry.json",
+      "virtual_path": "/.cooked/Geometry/chassis_box.ogeo",
       "name": "chassis_box",
       "depends_on": ["chassis.material"]
     },
@@ -94,6 +108,7 @@
       "id": "cylinder_wheel.geometry",
       "type": "geometry-descriptor",
       "source": "./cylinder_wheel.geometry.json",
+      "virtual_path": "/.cooked/Geometry/cylinder_wheel.ogeo",
       "name": "cylinder_wheel",
       "depends_on": ["wheel.material"]
     },
@@ -101,6 +116,7 @@
       "id": "ramp.geometry",
       "type": "geometry-descriptor",
       "source": "./ramp.geometry.json",
+      "virtual_path": "/.cooked/Geometry/ramp_geo.ogeo",
       "name": "ramp_geo",
       "depends_on": ["ramp.material"]
     },
@@ -108,6 +124,7 @@
       "id": "character_capsule.geometry",
       "type": "geometry-descriptor",
       "source": "./character_capsule.geometry.json",
+      "virtual_path": "/.cooked/Geometry/character_capsule.ogeo",
       "name": "character_capsule",
       "depends_on": ["character.material"]
     },
@@ -115,6 +132,7 @@
       "id": "softbody_sphere.geometry",
       "type": "geometry-descriptor",
       "source": "./softbody_sphere.geometry.json",
+      "virtual_path": "/.cooked/Geometry/softbody_sphere.ogeo",
       "name": "softbody_sphere",
       "depends_on": ["softbody.material"]
     },
@@ -122,6 +140,7 @@
       "id": "softbody_cube.geometry",
       "type": "geometry-descriptor",
       "source": "./softbody_cube.geometry.json",
+      "virtual_path": "/.cooked/Geometry/softbody_cube.ogeo",
       "name": "softbody_cube",
       "depends_on": ["softbody_jelly.material"]
     },
@@ -129,6 +148,7 @@
       "id": "stack_cube.geometry",
       "type": "geometry-descriptor",
       "source": "./stack_cube.geometry.json",
+      "virtual_path": "/.cooked/Geometry/stack_cube.ogeo",
       "name": "stack_cube",
       "depends_on": ["stack.material"]
     },
@@ -136,6 +156,7 @@
       "id": "scene.physics_domains",
       "type": "scene-descriptor",
       "source": "./physics_domains.scene.json",
+      "virtual_path": "/.cooked/Scenes/physics_domains.oscene",
       "name": "physics_domains",
       "depends_on": [
         "floor.geometry",
@@ -155,6 +176,7 @@
       "id": "scene.physics_domains_vsm_benchmark",
       "type": "scene-descriptor",
       "source": "./physics_domains_vsm_benchmark.scene.json",
+      "virtual_path": "/.cooked/Scenes/physics_domains_vsm_benchmark.oscene",
       "name": "physics_domains_vsm_benchmark",
       "depends_on": [
         "floor.geometry",
@@ -174,6 +196,7 @@
       "id": "script.physics_domains_controller",
       "type": "script",
       "source": "./physics_domains_controller.lua",
+      "virtual_path": "/.cooked/Scripts/physics_domains_controller.oscript",
       "name": "physics_domains_controller",
       "compile": false,
       "script_storage": "external",
@@ -183,6 +206,7 @@
       "id": "script.physics_domains_benchmark_camera",
       "type": "script",
       "source": "./physics_domains_benchmark_camera.lua",
+      "virtual_path": "/.cooked/Scripts/physics_domains_benchmark_camera.oscript",
       "name": "physics_domains_benchmark_camera",
       "compile": false,
       "script_storage": "external",
@@ -358,24 +382,28 @@
       "id": "physics.material.ground",
       "type": "physics-material-descriptor",
       "source": "./ground.physics-material.json",
+      "virtual_path": "/.cooked/Physics/Materials/physics_domains_ground.opmat",
       "name": "physics_domains_ground"
     },
     {
       "id": "physics.material.dynamic",
       "type": "physics-material-descriptor",
       "source": "./dynamic.physics-material.json",
+      "virtual_path": "/.cooked/Physics/Materials/dynamic.opmat",
       "name": "dynamic"
     },
     {
       "id": "physics.material.bouncy",
       "type": "physics-material-descriptor",
       "source": "./bouncy.physics-material.json",
+      "virtual_path": "/.cooked/Physics/Materials/bouncy.opmat",
       "name": "bouncy"
     },
     {
       "id": "physics.shape.floor",
       "type": "collision-shape-descriptor",
       "source": "./floor.shape.json",
+      "virtual_path": "/.cooked/Physics/Shapes/floor.ocshape",
       "name": "floor_shape",
       "depends_on": ["physics.material.ground"]
     },
@@ -383,6 +411,7 @@
       "id": "physics.shape.actor",
       "type": "collision-shape-descriptor",
       "source": "./actor.shape.json",
+      "virtual_path": "/.cooked/Physics/Shapes/actor.ocshape",
       "name": "actor_shape",
       "depends_on": ["physics.material.dynamic"]
     },
@@ -390,6 +419,7 @@
       "id": "physics.shape.chassis",
       "type": "collision-shape-descriptor",
       "source": "./chassis.shape.json",
+      "virtual_path": "/.cooked/Physics/Shapes/chassis.ocshape",
       "name": "chassis_shape",
       "depends_on": ["physics.material.dynamic"]
     },
@@ -397,6 +427,7 @@
       "id": "physics.shape.wheel",
       "type": "collision-shape-descriptor",
       "source": "./wheel.shape.json",
+      "virtual_path": "/.cooked/Physics/Shapes/wheel.ocshape",
       "name": "wheel_shape",
       "depends_on": ["physics.material.dynamic"]
     },
@@ -404,6 +435,7 @@
       "id": "physics.shape.ramp",
       "type": "collision-shape-descriptor",
       "source": "./ramp.shape.json",
+      "virtual_path": "/.cooked/Physics/Shapes/ramp.ocshape",
       "name": "ramp_shape",
       "depends_on": ["physics.material.ground"]
     },
@@ -411,6 +443,7 @@
       "id": "physics.shape.stack_cube",
       "type": "collision-shape-descriptor",
       "source": "./stack_cube.shape.json",
+      "virtual_path": "/.cooked/Physics/Shapes/stack_cube.ocshape",
       "name": "stack_cube_shape",
       "depends_on": ["physics.material.dynamic"]
     },
@@ -418,6 +451,7 @@
       "id": "physics.shape.trigger_zone",
       "type": "collision-shape-descriptor",
       "source": "./trigger_zone.shape.json",
+      "virtual_path": "/.cooked/Physics/Shapes/trigger_zone.ocshape",
       "name": "trigger_zone_shape",
       "depends_on": ["physics.material.dynamic"]
     },
@@ -425,6 +459,7 @@
       "id": "physics.shape.sphere_bouncy",
       "type": "collision-shape-descriptor",
       "source": "./sphere_bouncy.shape.json",
+      "virtual_path": "/.cooked/Physics/Shapes/sphere_bouncy.ocshape",
       "name": "sphere_bouncy_shape",
       "depends_on": ["physics.material.bouncy"]
     },
@@ -432,6 +467,7 @@
       "id": "physics.shape.cube_unit_dynamic",
       "type": "collision-shape-descriptor",
       "source": "./cube_unit_dynamic.shape.json",
+      "virtual_path": "/.cooked/Physics/Shapes/cube_unit_dynamic.ocshape",
       "name": "cube_unit_dynamic_shape",
       "depends_on": ["physics.material.dynamic"]
     },

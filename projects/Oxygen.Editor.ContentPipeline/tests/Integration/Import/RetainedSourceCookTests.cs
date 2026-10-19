@@ -72,7 +72,7 @@ public sealed class RetainedSourceCookTests
         _ = result.IsPublished.Should().BeTrue();
         _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == first);
         _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == second);
-        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Materials/Authored.omat.json"));
+        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/Content/Materials/Authored.omat"));
     }
 
     /// <summary>Changing source bytes updates native output and persists discovery so the next cook is a no-op.</summary>

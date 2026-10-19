@@ -62,7 +62,7 @@ public sealed class ReferenceLeaseTests
         };
         try
         {
-            var work = service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
+            var work = service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken);
             if (terminationFailure)
             {
                 await AssertReaderRetainedUntilDrainAsync(this.TestContext, work, consumer, openForWrite, drain).ConfigureAwait(false);

@@ -370,7 +370,6 @@ auto RetainedModelImport::MakeRecipe(const SceneImportSettings& settings,
         { "scenes_subdir", layout.scenes_subdir },
         { "geometry_subdir", layout.geometry_subdir },
         { "materials_subdir", layout.materials_subdir },
-        { "scripts_subdir", layout.scripts_subdir },
         { "input_subdir", layout.input_subdir },
         { "texture_descriptors_subdir", layout.texture_descriptors_subdir },
         { "buffer_descriptors_subdir", layout.buffer_descriptors_subdir },
@@ -475,6 +474,7 @@ auto RetainedModelImport::SaveRecipe(const std::filesystem::path& record_path,
 
 auto RetainedModelImport::SaveRecipeFile(
   const std::filesystem::path& record_path,
+  // NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - public API order
   const std::filesystem::path& content_root,
   const std::filesystem::path& recipe_path, const ImportFormat expected_format)
   -> void
@@ -723,7 +723,10 @@ auto RetainedModelImport::ValidateCandidate(const ImportReport& report) -> void
   state_->serialized_candidate = record.dump(2);
 }
 
+// The exported signature takes the token by value; a stop_token is a cheap
+// shared handle.
 auto RetainedModelImport::Publish(
+  // NOLINTNEXTLINE(performance-unnecessary-value-param)
   ImportReport& report, const std::stop_token stop_token) -> void
 {
   const auto& cooked_root = state_->request.cooked_root;

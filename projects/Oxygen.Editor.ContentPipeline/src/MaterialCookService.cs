@@ -4,7 +4,6 @@
 
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -30,25 +29,25 @@ public sealed partial class MaterialCookService(
         cancellationToken.ThrowIfCancellationRequested();
         if (!this.IsCurrentMaterialRequest(request, out var project))
         {
-            this.LogRejected(request.MaterialSourceUri);
-            return new(request.MaterialSourceUri, CookedMaterialUri: null, MaterialCookState.Rejected, OperationId: null);
+            this.LogRejected(request.Material);
+            return new(request.Material, CookedMaterialUri: null, MaterialCookState.Rejected, OperationId: null);
         }
 
-        var result = await this.pipeline.CookAssetAsync(request.MaterialSourceUri, cancellationToken, project).ConfigureAwait(false);
+        var result = await this.pipeline.CookAssetAsync(request.Material, cancellationToken, project).ConfigureAwait(false);
         var cooked = result.CookedAssets.Concat(result.ReusedAssets).FirstOrDefault(asset => asset.Kind == ContentCookAssetKind.Material
-            && asset.CookedAssetUri == AssetFileTypes.ToIdentity(request.MaterialSourceUri));
+            && asset.CookedAssetUri == request.Material);
         var succeeded = result.Status is OperationStatus.Succeeded or OperationStatus.SucceededWithWarnings;
         var state = !succeeded || cooked is null ? MaterialCookState.Failed
             : result.InputsAreCurrent == false ? MaterialCookState.Stale : MaterialCookState.Cooked;
-        this.LogCompleted(request.MaterialSourceUri, result.OperationId, state);
-        return new(request.MaterialSourceUri, cooked?.CookedAssetUri, state, result.OperationId) { Cook = result };
+        this.LogCompleted(request.Material, result.OperationId, state);
+        return new(request.Material, cooked?.CookedAssetUri, state, result.OperationId) { Cook = result };
     }
 
     private bool IsCurrentMaterialRequest(MaterialCookRequest request, out ProjectContext? project)
     {
         project = this.projectContextService.ActiveProject;
         if (project is null
-            || request.MaterialSourceUri is null
+            || request.Material is null
             || request.ProjectRoot is null || string.IsNullOrWhiteSpace(request.MountName)
             || string.IsNullOrWhiteSpace(request.SourceRelativePath) || Path.IsPathRooted(request.SourceRelativePath))
         {
@@ -62,7 +61,7 @@ public sealed partial class MaterialCookService(
                 return false;
             }
 
-            var input = CookInputResolver.Resolve(project, request.MaterialSourceUri, ContentCookInputRole.Primary);
+            var input = CookInputResolver.Resolve(project, request.Material, ContentCookInputRole.Primary);
             return input.Kind == ContentCookAssetKind.Material
                 && string.Equals(input.MountName, request.MountName, StringComparison.Ordinal)
                 && input.SourceAbsolutePath == project.ProjectRoot.Combine(request.SourceRelativePath);

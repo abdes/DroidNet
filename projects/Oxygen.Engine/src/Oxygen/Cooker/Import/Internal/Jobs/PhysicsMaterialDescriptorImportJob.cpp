@@ -31,6 +31,7 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/PakFormat_physics.h>
 #include <Oxygen/OxCo/Co.h>
@@ -119,58 +120,32 @@ namespace {
     return PhysicsCombineMode::kAverage;
   }
 
+  //! Places the descriptor at the job's identity.
+  /*!
+   A descriptor may state its identity too; it must be the one the job cooks.
+  */
   [[nodiscard]] auto ResolveDescriptorTarget(const ImportRequest& request,
-    const json& descriptor_doc, const std::filesystem::path& source_path,
-    ImportSession& session) -> std::optional<DescriptorTarget>
+    const json& descriptor_doc, ImportSession& session)
+    -> std::optional<DescriptorTarget>
   {
-    auto target = DescriptorTarget {};
-
-    if (descriptor_doc.contains("virtual_path")) {
-      target.virtual_path
-        = descriptor_doc.at("virtual_path").get<std::string>();
-      if (!internal::IsCanonicalVirtualPath(target.virtual_path)) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.material.virtual_path_invalid",
-          "virtual_path must be canonical", "virtual_path");
-        return std::nullopt;
-      }
-      if (!internal::TryVirtualPathToRelPath(
-            request, target.virtual_path, target.relpath)) {
-        AddDiagnostic(session, request, ImportSeverity::kError,
-          "physics.material.virtual_path_unmounted",
-          "virtual_path is outside mounted cooked roots", "virtual_path");
-        return std::nullopt;
-      }
-      target.relpath = std::filesystem::path(std::move(target.relpath))
-                         .lexically_normal()
-                         .generic_string();
-      return target;
-    }
-
-    auto name = std::string {};
-    auto name_object_path = std::string {};
-    if (request.job_name.has_value() && !request.job_name->empty()) {
-      name = *request.job_name;
-    } else if (descriptor_doc.contains("name")) {
-      name = descriptor_doc.at("name").get<std::string>();
-      name_object_path = "name";
-    } else {
-      name = source_path.stem().string();
-    }
-    if (name.empty()) {
-      name = "physics_material";
-    }
-
-    target.relpath
-      = request.loose_cooked_layout.PhysicsMaterialDescriptorRelPath(name);
-    target.virtual_path
-      = request.loose_cooked_layout.PhysicsMaterialVirtualPath(name);
-    if (auto refused = internal::CheckAssetVirtualPath(
-          request, target.virtual_path, std::move(name_object_path))) {
-      session.AddDiagnostic(std::move(*refused));
+    auto placement = internal::PlaceAsset(
+      request, data::kPhysicsMaterialDescriptorExtension);
+    if (!placement.has_value()) {
+      session.AddDiagnostic(std::move(placement.error()));
       return std::nullopt;
     }
-    return target;
+    if (descriptor_doc.contains("virtual_path")
+      && descriptor_doc.at("virtual_path").get<std::string>()
+        != placement->virtual_path) {
+      AddDiagnostic(session, request, ImportSeverity::kError,
+        "physics.material.identity_conflict",
+        "The descriptor's virtual_path differs from the job's", "virtual_path");
+      return std::nullopt;
+    }
+    return DescriptorTarget {
+      .relpath = std::move(placement->descriptor_relpath),
+      .virtual_path = std::move(placement->virtual_path),
+    };
   }
 
   [[nodiscard]] auto ResolveAssetKey(const ImportRequest& request,
@@ -251,8 +226,8 @@ auto PhysicsMaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     co_return co_await FinalizeWithTelemetry(session);
   }
 
-  const auto target = ResolveDescriptorTarget(
-    Request(), descriptor_doc, Request().source_path, session);
+  const auto target
+    = ResolveDescriptorTarget(Request(), descriptor_doc, session);
   if (!target.has_value()) {
     ReportPhaseProgress(ImportPhase::kFailed, 1.0F,
       "Physics material descriptor target resolution failed");

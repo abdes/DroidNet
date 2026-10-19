@@ -68,7 +68,10 @@ public sealed class ContentPipelineContractTests
                     Source: "Content/Materials/Red.omat.json",
                     DependsOn: [],
                     Output: null,
-                    Name: "Red"),
+                    Name: "Red")
+                {
+                    VirtualPath = "/Content/Materials/Red.omat",
+                },
             ]);
 
         var json = JsonSerializer.Serialize(manifest);
@@ -149,7 +152,10 @@ public sealed class ContentPipelineContractTests
                     Source: "Content/Scenes/Main.oscene.json",
                     DependsOn: ["missing-dependency"],
                     Output: null,
-                    Name: "Main"),
+                    Name: "Main")
+                {
+                    VirtualPath = "/Content/Scenes/Main.oscene",
+                },
             ]);
 
         var diagnostics = validator.Validate(Guid.NewGuid(), manifest);

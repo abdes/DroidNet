@@ -21,16 +21,18 @@ internal static class ControlledSourceAnalysis
 
     private static NativeSourceAnalysisJob Describe(string root, ContentImportJob job)
     {
-        var (kind, extension, folder) = job.Type switch
+        var kind = job.Type switch
         {
-            "material-descriptor" => ("material", ".omat", job.Layout!.MaterialsDirectory),
-            "scene-descriptor" => ("scene", ".oscene", job.Layout!.ScenesDirectory),
+            "material-descriptor" => "material",
+            "scene-descriptor" => "scene",
             _ => throw new InvalidOperationException($"Provide explicit dependency facts for '{job.Type}'."),
         };
         var source = Path.GetFullPath(job.AttributedSource, root);
         var metadata = CookSavedSourceReader.ReadMetadata(source);
         var digest = Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(source)));
-        var output = string.Join('/', new[] { job.Layout!.VirtualMountRoot.TrimEnd('/'), folder?.Trim('/'), job.Name + extension }.Where(static part => !string.IsNullOrEmpty(part)));
+
+        // A single-asset job's output is the identity it names.
+        var output = job.VirtualPath ?? throw new InvalidOperationException($"Job '{job.Id}' names no virtual path.");
         return new(job.Id, job.Type, source, Complete: true,
             [new(output, kind, "/", Required: true)],
             References: [],

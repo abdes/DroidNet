@@ -30,7 +30,7 @@ public sealed class MaterialCookTests
         var service = CreateService(workspace);
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
-                AssetPath.Parse("/Content/Materials/Wood.omat.json"),
+                AssetPath.Parse("/Content/Materials/Wood.omat"),
                 FileSystemPath.From(workspace.Root),
                 "Content",
                 "Content/Materials/Wood.omat.json"),
@@ -67,7 +67,7 @@ public sealed class MaterialCookTests
 
         var service = CreateService(workspace);
         var request = new MaterialCookRequest(
-            AssetPath.Parse("/Content/Materials/Wood.omat.json"),
+            AssetPath.Parse("/Content/Materials/Wood.omat"),
             FileSystemPath.From(workspace.Root),
             "Content",
             "Content/Materials/Wood.omat.json");
@@ -107,7 +107,7 @@ public sealed class MaterialCookTests
         var service = CreateService(workspace);
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
-                AssetPath.Parse("/Content/Materials/Gold.omat.json"),
+                AssetPath.Parse("/Content/Materials/Gold.omat"),
                 FileSystemPath.From(workspace.Root),
                 "Content",
                 "Authoring/Materials/Gold.omat.json"),
@@ -139,7 +139,7 @@ public sealed class MaterialCookTests
             .WithTextureReference("base_color", AssetPath.Parse("/Content/Textures/Surface.otex"))).ConfigureAwait(false);
         var service = CreateService(workspace);
         var request = new MaterialCookRequest(
-            AssetPath.Parse("/Content/Materials/Textured.omat.json"),
+            AssetPath.Parse("/Content/Materials/Textured.omat"),
             FileSystemPath.From(workspace.Root),
             "Content",
             "Content/Materials/Textured.omat.json");
@@ -155,9 +155,9 @@ public sealed class MaterialCookTests
         _ = second.State.Should().Be(MaterialCookState.Cooked);
         _ = secondTextureInput.DiscoveryHash.Should().NotBe(firstTextureInput.DiscoveryHash);
         _ = second.Cook.CookedAssets.Should().Contain(asset => asset.Kind == ContentCookAssetKind.Texture
-            && asset.SourceAssetUri == AssetPath.Parse("/Content/Textures/Surface.otex.json"));
+            && asset.SourceAssetUri == AssetPath.Parse("/Content/Textures/Surface.otex"));
         _ = second.Cook.CookedAssets.Concat(second.Cook.ReusedAssets).Should().Contain(asset => asset.Kind == ContentCookAssetKind.Material
-            && asset.SourceAssetUri == request.MaterialSourceUri);
+            && asset.SourceAssetUri == request.Material);
     }
 
     /// <summary>Missing texture descriptors report the owning material and schema channel.</summary>
@@ -173,7 +173,7 @@ public sealed class MaterialCookTests
 
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
-                AssetPath.Parse("/Content/Materials/Broken.omat.json"),
+                AssetPath.Parse("/Content/Materials/Broken.omat"),
                 FileSystemPath.From(workspace.Root),
                 "Content",
                 "Content/Materials/Broken.omat.json"),
@@ -182,7 +182,7 @@ public sealed class MaterialCookTests
         _ = result.State.Should().Be(MaterialCookState.Failed);
         _ = result.Cook!.Diagnostics.Should().Contain(diagnostic =>
             diagnostic.Code == "material.texture_reference_invalid"
-            && diagnostic.Message.Contains("/Content/Materials/Broken.omat.json", StringComparison.Ordinal)
+            && diagnostic.Message.Contains("/Content/Materials/Broken.omat", StringComparison.Ordinal)
             && diagnostic.Message.Contains("base_color", StringComparison.Ordinal)
             && diagnostic.Message.Contains("texture descriptor is missing", StringComparison.Ordinal));
     }
@@ -202,7 +202,7 @@ public sealed class MaterialCookTests
 
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
-                AssetPath.Parse("/Content/Materials/Invalid.omat.json"),
+                AssetPath.Parse("/Content/Materials/Invalid.omat"),
                 FileSystemPath.From(workspace.Root),
                 "Content",
                 "Content/Materials/Invalid.omat.json"),
@@ -211,7 +211,7 @@ public sealed class MaterialCookTests
         _ = result.State.Should().Be(MaterialCookState.Failed);
         _ = result.Cook!.Diagnostics.Should().Contain(diagnostic =>
             diagnostic.Code == MaterialSourceCodes.SchemaMismatch
-            && diagnostic.AffectedVirtualPath == "/Content/Materials/Invalid.omat.json");
+            && diagnostic.AffectedVirtualPath == "/Content/Materials/Invalid.omat");
     }
 
     private static MaterialCookService CreateService(MaterialWorkspace workspace)

@@ -35,6 +35,7 @@ namespace {
     request.job_name = "DemoScene";
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+    request.asset_virtual_path = "/.cooked/Scenes/DemoScene.oscene";
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
       .normalized_descriptor_json = R"({"version":)"
         + std::to_string(internal::kSceneDescriptorVersion)

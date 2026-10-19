@@ -584,6 +584,15 @@ Job rules:
 
 - each job requires `type`
 - non-sidecar jobs require `source`
+- a job that cooks one asset (`material-descriptor`, `geometry-descriptor`,
+  `scene-descriptor`, `script`, `texture`, `texture-descriptor`,
+  `physics-material-descriptor`, `collision-shape-descriptor`) requires
+  `virtual_path`, the asset's identity. Its descriptor is written at that path
+  below the mount (`/.cooked/Materials/Wood.omat` lives at
+  `Materials/Wood.omat`), and its key derives from it. A descriptor that states
+  its own `virtual_path` must name the same one. A job that produces several
+  assets (`gltf`, `fbx`, `input`) takes none; the layout names its products.
+- the single-file `texture` and `script` commands require `--virtual-path`
 - `texture-descriptor` jobs:
   - use `source` as descriptor JSON path
   - support texture tuning keys (`intent`, `mip_policy`, `output_format`, etc.)
@@ -608,7 +617,9 @@ Job rules:
   - optional `output`
   - allowed keys are exactly: `id`, `type`, `source`, `depends_on`, `output`
 - layout overrides are shared across all importers via manifest `layout` or
-  `defaults.layout` (for example `input_subdir`)
+  `defaults.layout` (for example `input_subdir`). They place the products of
+  models and input files, and resource tables; they do not place a single-asset
+  job's descriptor.
 - `script-sidecar` requires exactly one of:
   - `source`
   - `bindings` (inline array)

@@ -6,6 +6,7 @@ using Microsoft.UI.Xaml;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspection;
@@ -31,22 +32,14 @@ public sealed record InspectionAssetRow(CookedRootReport Root, CookedAssetEntry 
     /// <summary>Gets the root-qualified row identity.</summary>
     public string Key => this.Root.Inspection.CookedRoot + "|" + this.Asset.VirtualPath;
 
-    /// <summary>Gets the human-readable asset name.</summary>
-    public string Name => this.Origin is { } origin ? InspectionAssetLink.DisplayName(origin.SourceAssetUri)
-        : AssetPath.TryParse(this.Asset.VirtualPath, out var cooked) ? InspectionAssetLink.DisplayName(cooked) : this.Asset.VirtualPath;
+    /// <summary>Gets the asset's own name: a model or an input file produces several, each named for itself.</summary>
+    public string Name => AssetPath.TryParse(this.Asset.VirtualPath, out var cooked) ? InspectionAssetLink.DisplayName(cooked) : this.Asset.VirtualPath;
 
     /// <summary>Gets the asset type and physical mount.</summary>
-    public string Subtitle => this.Asset.Kind + " · " + this.Root.Name;
+    public string Subtitle => this.Kind + " · " + this.Root.Name;
 
-    /// <summary>Gets the existing browser icon type.</summary>
-    public AssetKind Kind => this.Asset.Kind switch
-    {
-        ContentCookAssetKind.Material => AssetKind.Material,
-        ContentCookAssetKind.Geometry => AssetKind.Geometry,
-        ContentCookAssetKind.Scene => AssetKind.Scene,
-        ContentCookAssetKind.Texture => AssetKind.Texture,
-        _ => AssetKind.Unknown,
-    };
+    /// <summary>Gets the asset type, as the Content Browser names it and draws its icon.</summary>
+    public AssetKind Kind => AssetKinds.FromFileName(this.Asset.VirtualPath);
 
     /// <summary>Gets the full cooked asset reference.</summary>
     public string ReferenceText => "asset://" + this.Asset.VirtualPath;

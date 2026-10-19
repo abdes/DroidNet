@@ -7,6 +7,7 @@
       "id": "material.MatEmissiveRed",
       "type": "material-descriptor",
       "source": "./MatEmissiveRed.material.json",
+      "virtual_path": "/.cooked/Materials/MatEmissiveRed.omat",
       "name": "MatEmissiveRed",
       "content_hashing": true
     },
@@ -14,6 +15,7 @@
       "id": "material.MatEmissiveGreen",
       "type": "material-descriptor",
       "source": "./MatEmissiveGreen.material.json",
+      "virtual_path": "/.cooked/Materials/MatEmissiveGreen.omat",
       "name": "MatEmissiveGreen",
       "content_hashing": true
     },
@@ -21,6 +23,7 @@
       "id": "material.MatEmissiveBlue",
       "type": "material-descriptor",
       "source": "./MatEmissiveBlue.material.json",
+      "virtual_path": "/.cooked/Materials/MatEmissiveBlue.omat",
       "name": "MatEmissiveBlue",
       "content_hashing": true
     },
@@ -28,6 +31,7 @@
       "id": "material.MatEmissiveTextured",
       "type": "material-descriptor",
       "source": "./MatEmissiveTextured.material.json",
+      "virtual_path": "/.cooked/Materials/MatEmissiveTextured.omat",
       "name": "MatEmissiveTextured",
       "content_hashing": true
     },
@@ -35,6 +39,7 @@
       "id": "texture.MatEmissiveMasked_mask",
       "type": "texture-descriptor",
       "source": "./MatEmissiveMasked_mask.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/MatEmissiveMasked_mask.otex",
       "name": "MatEmissiveMasked_mask",
       "content_hashing": true
     },
@@ -42,6 +47,7 @@
       "id": "material.MatEmissiveMasked",
       "type": "material-descriptor",
       "source": "./MatEmissiveMasked.material.json",
+      "virtual_path": "/.cooked/Materials/MatEmissiveMasked.omat",
       "name": "MatEmissiveMasked",
       "content_hashing": true,
       "depends_on": ["texture.MatEmissiveMasked_mask"]
@@ -50,6 +56,7 @@
       "id": "material.MatReference",
       "type": "material-descriptor",
       "source": "./MatReference.material.json",
+      "virtual_path": "/.cooked/Materials/MatReference.omat",
       "name": "MatReference",
       "content_hashing": true
     },
@@ -57,6 +64,7 @@
       "id": "geometry.GeoEmissiveRed",
       "type": "geometry-descriptor",
       "source": "./GeoEmissiveRed.geometry.json",
+      "virtual_path": "/.cooked/Geometry/GeoEmissiveRed.ogeo",
       "name": "GeoEmissiveRed",
       "content_hashing": true,
       "depends_on": ["material.MatEmissiveRed"]
@@ -65,6 +73,7 @@
       "id": "geometry.GeoEmissiveGreen",
       "type": "geometry-descriptor",
       "source": "./GeoEmissiveGreen.geometry.json",
+      "virtual_path": "/.cooked/Geometry/GeoEmissiveGreen.ogeo",
       "name": "GeoEmissiveGreen",
       "content_hashing": true,
       "depends_on": ["material.MatEmissiveGreen"]
@@ -73,6 +82,7 @@
       "id": "geometry.GeoEmissiveBlue",
       "type": "geometry-descriptor",
       "source": "./GeoEmissiveBlue.geometry.json",
+      "virtual_path": "/.cooked/Geometry/GeoEmissiveBlue.ogeo",
       "name": "GeoEmissiveBlue",
       "content_hashing": true,
       "depends_on": ["material.MatEmissiveBlue"]
@@ -81,6 +91,7 @@
       "id": "geometry.GeoEmissiveTextured",
       "type": "geometry-descriptor",
       "source": "./GeoEmissiveTextured.geometry.json",
+      "virtual_path": "/.cooked/Geometry/GeoEmissiveTextured.ogeo",
       "name": "GeoEmissiveTextured",
       "content_hashing": true,
       "depends_on": ["material.MatEmissiveTextured"]
@@ -89,6 +100,7 @@
       "id": "geometry.GeoEmissiveMasked",
       "type": "geometry-descriptor",
       "source": "./GeoEmissiveMasked.geometry.json",
+      "virtual_path": "/.cooked/Geometry/GeoEmissiveMasked.ogeo",
       "name": "GeoEmissiveMasked",
       "content_hashing": true,
       "depends_on": ["material.MatEmissiveMasked"]
@@ -97,6 +109,7 @@
       "id": "geometry.GeoReference",
       "type": "geometry-descriptor",
       "source": "./GeoReference.geometry.json",
+      "virtual_path": "/.cooked/Geometry/GeoReference.ogeo",
       "name": "GeoReference",
       "content_hashing": true,
       "depends_on": ["material.MatReference"]
@@ -105,6 +118,7 @@
       "id": "scene.EmissiveScene",
       "type": "scene-descriptor",
       "source": "./EmissiveScene.scene.json",
+      "virtual_path": "/.cooked/Scenes/EmissiveScene.oscene",
       "name": "EmissiveScene",
       "content_hashing": true,
       "depends_on": [

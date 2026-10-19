@@ -62,7 +62,7 @@ public sealed class InputFileCookingTests : IDisposable
 
         _ = input.Kind.Should().Be(ContentCookAssetKind.Input);
         _ = input.SourceRelativePath.Should().Be("Content/Gameplay/Player.input.json");
-        _ = input.OutputVirtualPath.Should().Be("/Content/Gameplay/Player.input.json");
+        _ = input.AssetUri.Should().Be(AssetPath.Parse("/Content/Gameplay/Player.input"), "an input file stands for its path without the authoring .json");
     }
 
     [TestMethod]

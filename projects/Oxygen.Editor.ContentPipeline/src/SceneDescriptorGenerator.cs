@@ -43,7 +43,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
 
         var sceneInput = FindSceneInput(scope);
         var descriptorPath = GetDerivedSceneDescriptorPath(scope, sceneInput);
-        var descriptorVirtualPath = ContentPipelinePaths.ToCookedScenePath(AssetFileTypes.ToIdentity(sceneInput.AssetUri));
+        var descriptorVirtualPath = ContentPipelinePaths.ToCookedScenePath(sceneInput.AssetUri);
         var diagnostics = new List<DiagnosticRecord>();
         var operationId = Guid.NewGuid();
         var aerialStart = scene.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters;

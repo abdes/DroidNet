@@ -33,7 +33,6 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
-#include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
 #include <Oxygen/Cooker/Pak/PakBuildRequest.h>
 #include <Oxygen/Cooker/Pak/PakBuilder.h>
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
@@ -126,14 +125,19 @@ namespace {
   class SceneDescriptorImportJobTest : public ImportServiceTest {
   protected:
     auto MakeRequest(const std::filesystem::path& cooked_root,
-      const std::string& descriptor_json,
-      std::string_view job_name = "DemoScene") -> ImportRequest
+      const std::string& descriptor_json, std::string asset_virtual_path = {})
+      -> ImportRequest
     {
       auto document = nlohmann::json::parse(descriptor_json);
       document.emplace("version", internal::kSceneDescriptorVersion);
+      if (asset_virtual_path.empty()) {
+        // By default a scene is cooked at the identity its own name spells.
+        asset_virtual_path = "/.cooked/Scenes/"
+          + document.at("name").get<std::string>() + ".oscene";
+      }
       auto request = ImportRequest {};
       request.source_path = "inline://scene-descriptor";
-      request.job_name = std::string(job_name);
+      request.asset_virtual_path = std::move(asset_virtual_path);
       request.cooked_root = cooked_root;
       request.loose_cooked_layout.virtual_mount_root = "/.cooked";
       request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
@@ -204,8 +208,8 @@ namespace {
     namespace world = data::pak::world;
     const auto root = TempDir() / "composed_scene";
     std::filesystem::create_directories(root);
-    const auto model = Import(MakeRequest(
-      root, R"({"name":"Model","nodes":[{"name":"part"}]})", "Model"));
+    const auto model = Import(
+      MakeRequest(root, R"({"name":"Model","nodes":[{"name":"part"}]})"));
     ASSERT_HAS_VALUE(model);
     ASSERT_TRUE(model->success);
     WriteText(root / "Input/gameplay.oimap", "context");
@@ -303,15 +307,14 @@ namespace {
     };
     const auto cook = [&](const std::string_view name,
                         const std::string_view instanced) -> bool {
-      const auto report
-        = Import(MakeRequest(root, scene(name, instanced), name));
+      const auto report = Import(MakeRequest(root, scene(name, instanced)));
       return report.has_value() && report->success;
     };
     ASSERT_TRUE(cook("A", ""));
     ASSERT_TRUE(cook("B", "A"));
 
     for (const auto* const instanced : { "A", "B" }) {
-      const auto report = Import(MakeRequest(root, scene("A", instanced), "A"));
+      const auto report = Import(MakeRequest(root, scene("A", instanced)));
       ASSERT_HAS_VALUE(report);
       EXPECT_FALSE(report->success) << instanced;
       EXPECT_TRUE(HasDiagnosticCode(
@@ -645,8 +648,7 @@ namespace {
       const auto report = Import(std::move(request));
       ASSERT_HAS_VALUE(report);
       ASSERT_TRUE(report->success);
-      const auto bytes = ReadBytes(
-        output / LooseCookedLayout {}.SceneDescriptorRelPath("Scene"));
+      const auto bytes = ReadBytes(output / "Scenes/Scene.oscene");
       const auto scene = data::SceneAsset(
         data::AssetKey {}, std::span<const std::byte>(bytes));
       const auto renderables
@@ -674,7 +676,8 @@ namespace {
     const auto* const descriptor = R"({"name":"Scene","nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,"geometry_ref":"/Art/Geometry/Mesh.ogeo"}]})";
     for (const auto own_wins : { true, false }) {
-      auto request = MakeRequest(output, descriptor);
+      auto request
+        = MakeRequest(output, descriptor, "/Art/Scenes/Scene.oscene");
       request.loose_cooked_layout.virtual_mount_root = "/Art";
       request.cooked_context_roots = own_wins
         ? std::vector<std::filesystem::path> { library, output }
@@ -682,8 +685,7 @@ namespace {
       const auto report = Import(std::move(request));
       ASSERT_HAS_VALUE(report);
       ASSERT_TRUE(report->success);
-      const auto bytes = ReadBytes(
-        output / LooseCookedLayout {}.SceneDescriptorRelPath("Scene"));
+      const auto bytes = ReadBytes(output / "Scenes/Scene.oscene");
       const auto scene = data::SceneAsset(
         data::AssetKey {}, std::span<const std::byte>(bytes));
       const auto renderables
@@ -765,10 +767,7 @@ namespace {
     EXPECT_FALSE(HasDiagnosticCode(
       report->diagnostics, "scene.descriptor.reference_missing"));
 
-    auto layout = LooseCookedLayout {};
-    const auto expected_relpath = layout.SceneDescriptorRelPath("DemoScene");
-    const auto scene_path
-      = cooked_root / std::filesystem::path(expected_relpath);
+    const auto scene_path = cooked_root / "Scenes/DemoScene.oscene";
     EXPECT_TRUE(std::filesystem::exists(scene_path));
 
     const auto scene_bytes = ReadBytes(scene_path);
@@ -853,10 +852,7 @@ namespace {
     EXPECT_TRUE(report->success);
     EXPECT_EQ(report->scenes_written, 1U);
 
-    auto layout = LooseCookedLayout {};
-    const auto scene_path = cooked_root
-      / std::filesystem::path(
-        layout.SceneDescriptorRelPath("DirectionalTuning"));
+    const auto scene_path = cooked_root / "Scenes/DirectionalTuning.oscene";
     ASSERT_TRUE(std::filesystem::exists(scene_path));
 
     const auto scene_bytes = ReadBytes(scene_path);
@@ -1074,10 +1070,7 @@ namespace {
     EXPECT_TRUE(report->success);
     EXPECT_EQ(report->scenes_written, 1U);
 
-    auto layout = LooseCookedLayout {};
-    const auto scene_path = cooked_root
-      / std::filesystem::path(
-        layout.SceneDescriptorRelPath("EnvironmentScene"));
+    const auto scene_path = cooked_root / "Scenes/EnvironmentScene.oscene";
     ASSERT_TRUE(std::filesystem::exists(scene_path));
 
     const auto scene_bytes = ReadBytes(scene_path);
@@ -1208,13 +1201,12 @@ namespace {
             { "exposure_enabled", exposure == 1 },
           });
           SCOPED_TRACE(document.dump());
-          const auto report
-            = Import(MakeRequest(root, document.dump(), "Environment"));
+          const auto report = Import(MakeRequest(
+            root, document.dump(), "/.cooked/Scenes/Environment.oscene"));
           ASSERT_HAS_VALUE(report);
           ASSERT_TRUE(report->success);
           EXPECT_EQ(report->scenes_written, 1U);
-          const auto path
-            = root / LooseCookedLayout {}.SceneDescriptorRelPath("Environment");
+          const auto path = root / "Scenes/Environment.oscene";
           const auto bytes = ReadBytes(path);
           const auto scene = data::SceneAsset(
             data::AssetKey {}, std::span<const std::byte>(bytes));
@@ -1351,8 +1343,7 @@ namespace {
     // Assert
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
-    const auto scene_path
-      = output / LooseCookedLayout {}.SceneDescriptorRelPath("Scene");
+    const auto scene_path = output / "Scenes/Scene.oscene";
     const auto scene = data::SceneAsset(
       data::AssetKey::FromVirtualPath("/.cooked/Scenes/Scene.oscene"),
       ReadBytes(scene_path));

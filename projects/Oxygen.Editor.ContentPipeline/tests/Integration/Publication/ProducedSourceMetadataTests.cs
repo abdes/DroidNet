@@ -162,7 +162,6 @@ public sealed class ProducedSourceMetadataTests
             "Content",
             "Content/SourceMedia/DCC/Model/model.gltf",
             FileSystemPath.From(Path.Combine(project.Root, "Content/SourceMedia/DCC/Model/model.gltf")),
-            OutputVirtualPath: null,
             ContentCookInputRole.Primary);
         ImmutableArray<CookSnapshotInput> consumed = [new(AssetUri: null, FileSystemPath.From(Path.Combine(project.Root, update.RelativePath)), update.RelativePath, update.BeforeHash)];
         var graph = new CookDependencyGraph(

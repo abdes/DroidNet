@@ -63,6 +63,7 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
         {
           "type": "collision-shape-descriptor",
           "source": "Physics/floor_box.shape.json",
+          "virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape",
           "name": "floor_box_job",
           "content_hashing": true
         }
@@ -82,6 +83,8 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
   ASSERT_HAS_VALUE(request->cooked_root);
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "floor_box_job" });
+  EXPECT_EQ(
+    request->asset_virtual_path, "/.cooked/Physics/Shapes/floor_box.ocshape");
   ASSERT_HAS_VALUE(request->collision_shape_descriptor);
 
   // Descriptor-level content_hashing overrides defaults/job settings.
@@ -121,12 +124,14 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
         {
           "id": "physics.material.ground",
           "type": "physics-material-descriptor",
-          "source": "Physics/ground.material.json"
+          "source": "Physics/ground.material.json",
+          "virtual_path": "/.cooked/Physics/Materials/ground.opmat"
         },
         {
           "id": "physics.shape.floor",
           "type": "collision-shape-descriptor",
           "source": "Physics/floor_box.shape.json",
+          "virtual_path": "/.cooked/Physics/Shapes/floor_box.ocshape",
           "depends_on": ["physics.material.ground"]
         }
       ]
@@ -203,7 +208,8 @@ NOLINT_TEST(ImportManifestCollisionShapeDescriptorTest,
       "jobs": [
         {
           "type": "collision-shape-descriptor",
-          "source": "Physics/bad.shape.json"
+          "source": "Physics/bad.shape.json",
+          "virtual_path": "/.cooked/Physics/Shapes/bad_shape.ocshape"
         }
       ]
     })");

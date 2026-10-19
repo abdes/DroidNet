@@ -66,6 +66,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
         {
           "type": "physics-material-descriptor",
           "source": "Physics/ground.material.json",
+          "virtual_path": "/.cooked/Physics/Materials/ground.opmat",
           "name": "ground_material_job",
           "content_hashing": true
         }
@@ -86,6 +87,8 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(
     request->job_name, std::optional<std::string> { "ground_material_job" });
+  EXPECT_EQ(
+    request->asset_virtual_path, "/.cooked/Physics/Materials/ground.opmat");
   ASSERT_HAS_VALUE(request->physics_material_descriptor);
 
   // Descriptor-level content_hashing overrides manifest defaults/job settings.
@@ -133,6 +136,7 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
           "id": "physics.material.ground",
           "type": "physics-material-descriptor",
           "source": "Physics/ground.material.json",
+          "virtual_path": "/.cooked/Physics/Materials/ground.opmat",
           "depends_on": ["buffers.shared"]
         }
       ]
@@ -207,7 +211,8 @@ NOLINT_TEST(ImportManifestPhysicsMaterialDescriptorTest,
       "jobs": [
         {
           "type": "physics-material-descriptor",
-          "source": "Physics/bad.material.json"
+          "source": "Physics/bad.material.json",
+          "virtual_path": "/.cooked/Physics/Materials/bad.opmat"
         }
       ]
     })");

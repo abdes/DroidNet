@@ -7,6 +7,7 @@
       "id": "material.MatCube",
       "type": "material-descriptor",
       "source": "./MatCube.material.json",
+      "virtual_path": "/.cooked/Materials/MatCube.omat",
       "name": "MatCube",
       "content_hashing": true
     },
@@ -14,6 +15,7 @@
       "id": "texture.MatCubeB_mask",
       "type": "texture-descriptor",
       "source": "./MatCubeB_mask.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/MatCubeB_mask.otex",
       "name": "MatCubeB_mask",
       "content_hashing": true
     },
@@ -21,6 +23,7 @@
       "id": "material.MatCubeB",
       "type": "material-descriptor",
       "source": "./MatCubeB.material.json",
+      "virtual_path": "/.cooked/Materials/MatCubeB.omat",
       "name": "MatCubeB",
       "content_hashing": true,
       "depends_on": ["texture.MatCubeB_mask"]
@@ -29,6 +32,7 @@
       "id": "material.MatCubeC",
       "type": "material-descriptor",
       "source": "./MatCubeC.material.json",
+      "virtual_path": "/.cooked/Materials/MatCubeC.omat",
       "name": "MatCubeC",
       "content_hashing": true
     },
@@ -36,6 +40,7 @@
       "id": "material.MatCubeD",
       "type": "material-descriptor",
       "source": "./MatCubeD.material.json",
+      "virtual_path": "/.cooked/Materials/MatCubeD.omat",
       "name": "MatCubeD",
       "content_hashing": true
     },
@@ -43,6 +48,7 @@
       "id": "scene.EngineAssets",
       "type": "scene-descriptor",
       "source": "./EngineAssets.scene.json",
+      "virtual_path": "/.cooked/Scenes/EngineAssets.oscene",
       "name": "EngineAssets",
       "content_hashing": true,
       "depends_on": [

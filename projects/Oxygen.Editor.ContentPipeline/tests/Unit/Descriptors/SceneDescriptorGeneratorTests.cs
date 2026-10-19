@@ -838,12 +838,11 @@ public sealed partial class SceneDescriptorGeneratorTests
             new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
             [
                 new ContentCookInput(
-                    AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
+                    AssetPath.Parse("/Content/Scenes/Main.oscene"),
                     ContentCookAssetKind.Scene,
                     "Content",
                     "Content/Scenes/Main.oscene.json",
                     FileSystemPath.From(sceneSource),
-                    "/Content/Scenes/Main.oscene",
                     ContentCookInputRole.Primary),
             ],
             CookTargetKind.CurrentScene);

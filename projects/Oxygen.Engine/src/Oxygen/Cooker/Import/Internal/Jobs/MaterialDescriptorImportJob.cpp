@@ -24,6 +24,9 @@
 #include <Oxygen/Cooker/Import/Internal/Utils/MountedCookedSources.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/TextureReferenceResolver.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
+#include <Oxygen/Core/Meta/Data/ResourceIndex.h>
+#include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -111,17 +114,17 @@ auto MaterialDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
       ImportPhase::kFailed, 1.0F, "Material descriptor preparation failed");
     co_return co_await FinalizeWithTelemetry(session);
   }
-  if (auto refused
-    = internal::CheckAssetVirtualPath(Request(),
-      Request().loose_cooked_layout.MaterialVirtualPath(prepared->storage_name),
-      "name")) {
-    session.AddDiagnostic(std::move(*refused));
+  auto placement
+    = internal::PlaceAsset(Request(), data::kMaterialDescriptorExtension);
+  if (!placement.has_value()) {
+    session.AddDiagnostic(std::move(placement.error()));
     ReportPhaseProgress(
-      ImportPhase::kFailed, 1.0F, "Material descriptor name refused");
+      ImportPhase::kFailed, 1.0F, "Material virtual path refused");
     co_return co_await FinalizeWithTelemetry(session);
   }
 
   auto item = MaterialPipeline::WorkItem {};
+  item.placement = std::move(*placement);
   item.source_id = Request().source_path.string();
   item.request = Request();
   item.naming_service = observer_ptr { &GetNamingService() };

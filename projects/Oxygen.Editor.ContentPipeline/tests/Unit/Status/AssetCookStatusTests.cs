@@ -112,7 +112,7 @@ public sealed class AssetCookStatusTests
     public async Task UnresolvableAssetIsInvalidWithoutFailingTheOthers()
     {
         using var project = new StatusProject();
-        var outside = AssetPath.Parse("/Outside/Material.omat.json");
+        var outside = AssetPath.Parse("/Outside/Material.omat");
 
         var statuses = await project.CreateReader().ReadAsync(project.Project, [StatusProject.SourceUri, outside], this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -134,7 +134,7 @@ public sealed class AssetCookStatusTests
     public async Task DiagnosticNamesAnAssetInAFolderWithSpacesByItsVirtualPath(bool inProject)
     {
         using var project = new StatusProject();
-        var path = inProject ? "/Content/New folder (2)/Wet Rubber.omat.json" : "/Outside/New folder (2)/Wet Rubber.omat.json";
+        var path = inProject ? "/Content/New folder (2)/Wet Rubber.omat" : "/Outside/New folder (2)/Wet Rubber.omat";
         var uri = AssetPath.Parse(path);
 
         var statuses = await project.CreateReader().ReadAsync(project.Project, [uri], this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -154,7 +154,7 @@ public sealed class AssetCookStatusTests
         var geometry = """
             {"$schema":"oxygen.geometry-descriptor.v1","name":"Geometry","bounds":{"min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},"lods":[{"name":"LOD0","mesh_type":"procedural","bounds":{"min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},"procedural":{"generator":"Cube","mesh_name":"Cube","params":{}},"submeshes":[{"name":"Main","material_ref":"/Content/Material.omat","slot_id":"146b1397-c3e0-bc20-fce3-c55e470b4086","views":[{"view_ref":"__all__"}]}]}]}
             """;
-        var uri = AssetPath.Parse("/Content/Geometry.ogeo.json");
+        var uri = AssetPath.Parse("/Content/Geometry.ogeo");
         await File.WriteAllTextAsync(Path.Combine(project.Root, "Content", "Geometry.ogeo.json"), geometry, this.TestContext.CancellationToken).ConfigureAwait(false);
         await project.PublishAsync(this.TestContext.CancellationToken, uri, [StatusProject.SourceUri]).ConfigureAwait(false);
         var reader = project.CreateReader();
@@ -249,7 +249,7 @@ public sealed class AssetCookStatusTests
 
     private sealed partial class StatusProject : IDisposable
     {
-        public static readonly AssetPath SourceUri = AssetPath.Parse("/Content/Material.omat.json");
+        public static readonly AssetPath SourceUri = AssetPath.Parse("/Content/Material.omat");
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("oxygen-status-");
         private readonly NativeAtomicFileStore files = new(new Testably.Abstractions.RealFileSystem());
         private readonly Testing.TemporaryNativeArtifacts native;
@@ -338,7 +338,7 @@ public sealed class AssetCookStatusTests
             await File.WriteAllTextAsync(Path.Combine(root, "container.index.bin"), "index", cancellationToken).ConfigureAwait(false);
             var outputs = graph.Assets.Select(asset =>
             {
-                var cooked = asset.OutputVirtualPath ?? throw new InvalidOperationException("Expected a cooked path.");
+                var cooked = asset.AssetUri.VirtualPath;
                 return new ContentCookedAsset(asset.AssetUri, AssetPath.Parse(cooked), asset.Kind, "Content", cooked);
             }).ToArray();
             var indexed = new List<CookedAssetEntry>();
@@ -417,10 +417,10 @@ public sealed class AssetCookStatusTests
 
             private CookSourceFacts Describe(ContentCookInput source)
             {
-                var output = source.OutputVirtualPath ?? throw new InvalidOperationException("The fixture requires a descriptor output.");
+                var output = source.AssetUri.VirtualPath;
                 ContentPipeline.Import.NativeLogicalDependency[] references = source.AssetUri == primary.AssetUri
                     ? [.. dependencies.Select(uri => new global::Oxygen.Editor.ContentPipeline.Import.NativeLogicalDependency(
-                        CookInputResolver.Resolve(project, uri, ContentCookInputRole.Dependency).OutputVirtualPath ?? throw new InvalidOperationException("The fixture requires a material output."),
+                        CookInputResolver.Resolve(project, uri, ContentCookInputRole.Dependency).AssetUri.VirtualPath,
                         "material",
                         "/",
                         Required: true))]

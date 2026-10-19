@@ -234,6 +234,7 @@ namespace {
     auto request = ImportRequest {};
     request.source_path = "inline://scene-descriptor";
     request.job_name = std::string(scene_name);
+    request.asset_virtual_path = std::string(kSceneVirtualPath);
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.scene_descriptor = ImportRequest::SceneDescriptorPayload {
@@ -257,6 +258,7 @@ namespace {
     auto request = ImportRequest {};
     request.source_path = "inline://physics-material";
     request.job_name = "ground.physics-material";
+    request.asset_virtual_path = std::string(kMaterialVirtualPath);
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.physics_material_descriptor
@@ -298,6 +300,7 @@ namespace {
     auto request = ImportRequest {};
     request.source_path = "inline://collision-shape";
     request.job_name = "chassis-compound";
+    request.asset_virtual_path = std::string(kShapeVirtualPath);
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
     request.collision_shape_descriptor

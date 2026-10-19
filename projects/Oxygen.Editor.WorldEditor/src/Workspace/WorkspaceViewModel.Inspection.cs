@@ -9,7 +9,6 @@ using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.World.Workspace;
 
@@ -30,11 +29,10 @@ public partial class WorkspaceViewModel
             return false;
         }
 
-        // An asset's run names its source; the inspection names the asset that source stands for.
         var scope = run.Request.TargetKind == CookTargetKind.Project ? null : run.Request.ScopeUri;
         var request = this.messenger.Send(new OpenCookedInspectionRequestMessage(project, scope, validate: false)
         {
-            Asset = run.Request.TargetKind is CookTargetKind.Asset or CookTargetKind.CurrentScene && scope is not null ? AssetFileTypes.ToIdentity(scope) : null,
+            Asset = run.Request.TargetKind is CookTargetKind.Asset or CookTargetKind.CurrentScene ? scope : null,
             DisplayName = run.DisplayName,
         });
         return request.HasReceivedResponse && await request.Response.ConfigureAwait(true);

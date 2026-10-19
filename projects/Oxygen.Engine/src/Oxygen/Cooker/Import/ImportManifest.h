@@ -56,6 +56,13 @@ struct ImportManifestJob {
   std::string id;
   std::vector<std::string> depends_on;
 
+  //! Identity of the asset a single-asset job cooks; empty for a container.
+  /*!
+   Required for material, geometry, scene, script, texture, physics material and
+   collision shape jobs: their descriptor is written at this virtual path.
+  */
+  std::string virtual_path;
+
   //! Declared primary input, available even when preparation fails or is
   //! unsupported.
   OXGN_COOK_NDAPI auto SourcePath() const -> std::filesystem::path;

@@ -27,6 +27,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -108,6 +109,10 @@ public:
     ImportRequest request;
     observer_ptr<NamingService> naming_service;
     std::stop_token stop_token;
+
+    //! A scene descriptor job's placement at its identity.
+    /*! A model's scene has none: the layout places it by name. */
+    std::optional<internal::AssetPlacement> placement {};
 
     template <SceneStageAdapter Adapter>
     [[nodiscard]] static auto MakeWorkItem(std::shared_ptr<Adapter> adapter,

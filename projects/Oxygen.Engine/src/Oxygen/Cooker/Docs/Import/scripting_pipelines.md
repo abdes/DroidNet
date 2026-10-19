@@ -134,9 +134,11 @@ For each `WorkItem`, the worker performs the following tasks:
 
 1. **Validation**: Enforces `.import_kind == kScriptAsset`. Ensures that if
    `compile_scripts=true`, a valid `script_compile_callback` was mapped.
-2. **Setup Descriptor**: Builds the base `ScriptAssetDesc` with `AssetKey`
-   resolution (Random vs Deterministic) and stores the script name in the
-   descriptor string table.
+2. **Setup Descriptor**: Places the descriptor at the request's identity
+   (`asset_virtual_path`), derives the `AssetKey` from that virtual path, builds
+   the base `ScriptAssetDesc` and stores the script name in the descriptor
+   string table. A request without an identity fails with
+   `import.asset_virtual_path_missing`.
 3. **Compilation Mode**: If required, yields to the compiler to generate the
    bytecode payload representation from `source_bytes`.
 4. **Data Embedding** (When StorageMode = `kEmbedded`):

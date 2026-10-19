@@ -8,6 +8,7 @@
       "id": "SdkMarble_base_color",
       "type": "texture-descriptor",
       "source": "./SdkMarble_base_color.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/SdkMarble_base_color.otex",
       "name": "SdkMarble_base_color",
       "content_hashing": true
     },
@@ -15,6 +16,7 @@
       "id": "SdkMarble_normal",
       "type": "texture-descriptor",
       "source": "./SdkMarble_normal.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/SdkMarble_normal.otex",
       "name": "SdkMarble_normal",
       "content_hashing": true
     },
@@ -22,6 +24,7 @@
       "id": "SdkMarble_roughness",
       "type": "texture-descriptor",
       "source": "./SdkMarble_roughness.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/SdkMarble_roughness.otex",
       "name": "SdkMarble_roughness",
       "content_hashing": true
     },
@@ -29,6 +32,7 @@
       "id": "SdkMarble",
       "type": "material-descriptor",
       "source": "./SdkMarble.material.json",
+      "virtual_path": "/.cooked/Materials/SdkMarble.omat",
       "name": "SdkMarble",
       "depends_on": [
         "SdkMarble_base_color",
@@ -40,6 +44,7 @@
       "id": "SdkWood_base_color",
       "type": "texture-descriptor",
       "source": "./SdkWood_base_color.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/SdkWood_base_color.otex",
       "name": "SdkWood_base_color",
       "content_hashing": true
     },
@@ -47,6 +52,7 @@
       "id": "SdkWood_normal",
       "type": "texture-descriptor",
       "source": "./SdkWood_normal.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/SdkWood_normal.otex",
       "name": "SdkWood_normal",
       "content_hashing": true
     },
@@ -54,6 +60,7 @@
       "id": "SdkWood_roughness",
       "type": "texture-descriptor",
       "source": "./SdkWood_roughness.texture.json",
+      "virtual_path": "/.cooked/Resources/Textures/SdkWood_roughness.otex",
       "name": "SdkWood_roughness",
       "content_hashing": true
     },
@@ -61,6 +68,7 @@
       "id": "SdkWood",
       "type": "material-descriptor",
       "source": "./SdkWood.material.json",
+      "virtual_path": "/.cooked/Materials/SdkWood.omat",
       "name": "SdkWood",
       "depends_on": [
         "SdkWood_base_color",
@@ -72,6 +80,7 @@
       "id": "SdkCube",
       "type": "geometry-descriptor",
       "source": "./SdkCube.geometry.json",
+      "virtual_path": "/.cooked/Geometry/SdkCube.ogeo",
       "name": "SdkCube",
       "depends_on": ["SdkMarble"]
     },
@@ -79,6 +88,7 @@
       "id": "SdkCubeB",
       "type": "geometry-descriptor",
       "source": "./SdkCubeB.geometry.json",
+      "virtual_path": "/.cooked/Geometry/SdkCubeB.ogeo",
       "name": "SdkCubeB",
       "depends_on": ["SdkWood"]
     },
@@ -86,6 +96,7 @@
       "id": "SdkCubeC",
       "type": "geometry-descriptor",
       "source": "./SdkCubeC.geometry.json",
+      "virtual_path": "/.cooked/Geometry/SdkCubeC.ogeo",
       "name": "SdkCubeC",
       "depends_on": ["SdkMarble"]
     },
@@ -93,6 +104,7 @@
       "id": "SdkCubeD",
       "type": "geometry-descriptor",
       "source": "./SdkCubeD.geometry.json",
+      "virtual_path": "/.cooked/Geometry/SdkCubeD.ogeo",
       "name": "SdkCubeD",
       "depends_on": ["SdkWood"]
     },
@@ -100,6 +112,7 @@
       "id": "scene",
       "type": "scene-descriptor",
       "source": "./SdkMaterials.scene.json",
+      "virtual_path": "/.cooked/Scenes/SdkMaterials.oscene",
       "name": "SdkMaterials",
       "depends_on": ["SdkCube", "SdkCubeB", "SdkCubeC", "SdkCubeD"]
     }

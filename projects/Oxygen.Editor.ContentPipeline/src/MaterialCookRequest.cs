@@ -9,13 +9,13 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>
 /// Request to cook a single material source descriptor.
 /// </summary>
-/// <param name="MaterialSourceUri">The material source asset URI.</param>
+/// <param name="Material">The material's identity.</param>
 /// <param name="ProjectRoot">The absolute project root.</param>
 /// <param name="MountName">The authoring mount that owns the material source.</param>
 /// <param name="SourceRelativePath">The project-relative material source path.</param>
 /// <param name="FailFast">Whether pipeline failures should abort immediately.</param>
 public sealed record MaterialCookRequest(
-    AssetPath MaterialSourceUri,
+    AssetPath Material,
     FileSystemPath ProjectRoot,
     string MountName,
     string SourceRelativePath,

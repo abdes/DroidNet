@@ -60,6 +60,7 @@ namespace {
     request.source_path = source_root / "ground.material.json";
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+    request.asset_virtual_path = "/.cooked/Physics/Materials/ground.opmat";
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
           .normalized_descriptor_json = R"({
@@ -118,6 +119,7 @@ namespace {
     request.source_path = source_root / "bad.material.json";
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+    request.asset_virtual_path = "/.cooked/Physics/Materials/bad.opmat";
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
           .normalized_descriptor_json = R"({
@@ -134,66 +136,73 @@ namespace {
       report->diagnostics, "physics.material.schema_validation_failed"));
   }
 
-  //! A physics material request named `name` in its descriptor.
-  auto MakeNamedRequest(const std::filesystem::path& cooked_root,
-    const std::string& name) -> ImportRequest
+  //! A physics material request cooked at `virtual_path`, its descriptor
+  //! stating `document`.
+  auto MakeIdentityRequest(const std::filesystem::path& cooked_root,
+    const std::string& virtual_path, const nlohmann::json& document)
+    -> ImportRequest
   {
     auto request = ImportRequest {};
     request.source_path = cooked_root.parent_path() / "source_data" / "m.json";
     request.cooked_root = cooked_root;
     request.loose_cooked_layout.virtual_mount_root = "/.cooked";
+    request.asset_virtual_path = virtual_path;
     request.physics_material_descriptor
       = ImportRequest::PhysicsMaterialDescriptorPayload {
-          .normalized_descriptor_json
-          = nlohmann::json { { "name", name } }.dump(),
+          .normalized_descriptor_json = document.dump(),
         };
     return request;
   }
 
   NOLINT_TEST_F(PhysicsMaterialDescriptorImportJobTest,
-    NameFollowingTheSegmentRuleIsCookedAsSpelled)
+    IdentityFollowingTheSegmentRuleIsCookedAsSpelled)
   {
-    const auto cooked_root = TempDir() / "segment_rule_name";
+    const auto cooked_root = TempDir() / "segment_rule_identity";
     std::filesystem::create_directories(cooked_root);
 
-    const auto report
-      = Import(MakeNamedRequest(cooked_root, "Wet Ground.v2 (2)"));
+    const auto report = Import(MakeIdentityRequest(cooked_root,
+      "/.cooked/Physics/Materials/Wet Ground.v2 (2).opmat",
+      nlohmann::json { { "name", "ground" } }));
     ASSERT_HAS_VALUE(report);
     EXPECT_TRUE(report->success);
     EXPECT_TRUE(std::ranges::any_of(
       report->outputs, [](const ImportOutputRecord& output) -> bool {
-        return output.path.ends_with("/Wet Ground.v2 (2).opmat");
+        return output.path == "Physics/Materials/Wet Ground.v2 (2).opmat";
       }));
   }
 
-  NOLINT_TEST_F(
-    PhysicsMaterialDescriptorImportJobTest, OverlongNameIsRefusedWithRuleCode)
+  NOLINT_TEST_F(PhysicsMaterialDescriptorImportJobTest,
+    IdentityWithOverlongSegmentIsRefusedWithRuleCode)
   {
-    const auto cooked_root = TempDir() / "overlong_name";
+    const auto cooked_root = TempDir() / "overlong_identity";
     std::filesystem::create_directories(cooked_root);
 
-    // The schema cannot count bytes; the leaf exceeds the 255-byte segment.
-    const auto report
-      = Import(MakeNamedRequest(cooked_root, std::string(255U, 'x')));
+    // The leaf exceeds the 255-byte segment bound.
+    const auto report = Import(MakeIdentityRequest(cooked_root,
+      "/.cooked/Physics/Materials/" + std::string(255U, 'x') + ".opmat",
+      nlohmann::json { { "name", "ground" } }));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(
       HasDiagnosticCode(report->diagnostics, "vpath.segment.too_long"));
   }
 
-  NOLINT_TEST_F(
-    PhysicsMaterialDescriptorImportJobTest, JobNameIsRefusedWithRuleCode)
+  NOLINT_TEST_F(PhysicsMaterialDescriptorImportJobTest,
+    DocumentVirtualPathDifferingFromTheRequestIsRefused)
   {
-    const auto cooked_root = TempDir() / "refused_job_name";
+    const auto cooked_root = TempDir() / "identity_conflict";
     std::filesystem::create_directories(cooked_root);
 
-    auto request = MakeNamedRequest(cooked_root, "ground");
-    request.job_name = "Ground:1";
-    const auto report = Import(std::move(request));
+    const auto report = Import(MakeIdentityRequest(cooked_root,
+      "/.cooked/Physics/Materials/ground.opmat",
+      nlohmann::json {
+        { "name", "ground" },
+        { "virtual_path", "/.cooked/Physics/Materials/other.opmat" },
+      }));
     ASSERT_HAS_VALUE(report);
     EXPECT_FALSE(report->success);
     EXPECT_TRUE(HasDiagnosticCode(
-      report->diagnostics, "vpath.segment.reserved_character"));
+      report->diagnostics, "physics.material.identity_conflict"));
   }
 
 } // namespace

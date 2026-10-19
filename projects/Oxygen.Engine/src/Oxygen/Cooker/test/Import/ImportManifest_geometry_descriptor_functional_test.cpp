@@ -74,6 +74,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
         {
           "type": "geometry-descriptor",
           "source": "Geometry/cube.geometry.json",
+          "virtual_path": "/.cooked/Geometry/Cube.ogeo",
           "name": "cube-job",
           "content_hashing": true
         }
@@ -96,6 +97,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
     << "Expected request->cooked_root to contain a value";
   EXPECT_EQ(request->source_path, descriptor_path.lexically_normal());
   EXPECT_EQ(request->job_name, std::optional<std::string> { "cube-job" });
+  EXPECT_EQ(request->asset_virtual_path, "/.cooked/Geometry/Cube.ogeo");
   ASSERT_HAS_VALUE(request->geometry_descriptor)
     << "Expected request->geometry_descriptor to contain a value";
   ASSERT_EQ(request->cooked_context_roots.size(), 1U);
@@ -154,6 +156,7 @@ NOLINT_TEST(ImportManifestGeometryDescriptorTest,
           "id": "proc.cube",
           "type": "geometry-descriptor",
           "source": "Geometry/cube.geometry.json",
+          "virtual_path": "/.cooked/Geometry/Cube.ogeo",
           "depends_on": ["shared.buffers"]
         }
       ]

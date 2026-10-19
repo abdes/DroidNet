@@ -98,8 +98,7 @@ NOLINT_TEST(TextureDescriptorImportRequestBuilderTest,
 
   ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_TRUE(errors.str().empty());
-  EXPECT_EQ(
-    request.value().texture_virtual_path, "/Content/Textures/brick.otex");
+  EXPECT_EQ(request.value().asset_virtual_path, "/Content/Textures/brick.otex");
   ASSERT_HAS_VALUE(request->cooked_root)
     << "Expected cooked root to be present";
   EXPECT_TRUE(request->cooked_root->is_absolute());

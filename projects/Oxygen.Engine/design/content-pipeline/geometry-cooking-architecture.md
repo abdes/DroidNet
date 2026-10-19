@@ -967,7 +967,6 @@ messages written to `error_stream`. Error codes follow the pattern
 | Material   | `geometry.material.virtual_path_unmounted`     | Material path outside all mounted cooked roots              |
 | Material   | `geometry.material.type_mismatch`              | Index entry exists but asset type is not `kMaterial`        |
 | Material   | `geometry.material.missing`                    | No `.omat` file found for virtual path                      |
-| Material   | `geometry.material.index_resolution_required`  | Random key policy used without index                        |
 | Procedural | `geometry.procedural.params_invalid`           | `BuildProceduralParamBlob` failed to encode params          |
 | Procedural | `geometry.procedural.generation_failed`        | `GenerateMeshBuffers` rejected descriptor params            |
 | Procedural | `geometry.procedural.mesh_too_large`           | Generated vertex/index count exceeds `uint32_t`             |
@@ -976,7 +975,6 @@ messages written to `error_stream`. Error codes follow the pattern
 | Asset      | `geometry.asset.virtual_path_invalid`          | Non-canonical virtual path in `skeleton_ref`                |
 | Asset      | `geometry.asset.virtual_path_unmounted`        | Asset path outside all mounted cooked roots                 |
 | Asset      | `geometry.asset.missing`                       | Asset file not found in any mount                           |
-| Asset      | `geometry.asset.index_resolution_required`     | Random key policy used without index for asset ref          |
 
 ---
 

@@ -189,8 +189,8 @@ public sealed partial class ContentPipelineService
     private async Task<DiagnosticRecord?> FindImportedOutputCollisionAsync(Guid operationId, ContentCookScope scope, ContentCookInput source, NativeSceneImportSettings settings, CancellationToken cancellationToken)
     {
         var prefixes = settings.OutputPrefixes;
-        var conflictingInput = scope.Inputs.FirstOrDefault(input => input.AssetUri != source.AssetUri
-            && input.OutputVirtualPath is { } output && prefixes.Any(prefix => output.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
+        var conflictingInput = scope.Inputs.FirstOrDefault(input => input.AssetUri != source.AssetUri && input.Kind != ContentCookAssetKind.ForeignSource
+            && prefixes.Any(prefix => input.AssetUri.VirtualPath.StartsWith(prefix, StringComparison.OrdinalIgnoreCase)));
         if (conflictingInput is not null)
         {
             return Collision(conflictingInput.AssetUri.ToString());

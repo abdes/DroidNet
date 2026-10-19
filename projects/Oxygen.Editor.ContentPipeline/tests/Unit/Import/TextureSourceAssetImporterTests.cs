@@ -32,7 +32,7 @@ public sealed class TextureSourceAssetImporterTests
             var descriptorPath = Path.Combine(expectedDirectory, "Wood.otex.json");
             using var descriptor = JsonDocument.Parse(await File.ReadAllBytesAsync(descriptorPath).ConfigureAwait(false));
 
-            _ = assetUri.Should().Be(AssetPath.Parse("/Content/Textures/Wood.otex.json"));
+            _ = assetUri.Should().Be(AssetPath.Parse("/Content/Textures/Wood.otex"), "the import names the texture, not its descriptor file");
             _ = File.ReadAllBytes(Path.Combine(expectedDirectory, "Wood.png")).Should().Equal([1, 2, 3]);
             _ = descriptor.RootElement.GetProperty("source").GetString().Should().Be("Wood.png");
             _ = descriptor.RootElement.GetProperty("virtual_path").GetString().Should().Be("/Content/Textures/Wood.otex");
@@ -95,7 +95,7 @@ public sealed class TextureSourceAssetImporterTests
             await File.WriteAllBytesAsync(image, [4, 5, 6]).ConfigureAwait(false);
             var assetUri = await TextureSourceAssetImporter.CreateAsync(request).ConfigureAwait(false);
 
-            _ = assetUri.Should().Be(AssetPath.Parse("/Content/Textures/Recovered.otex.json"));
+            _ = assetUri.Should().Be(AssetPath.Parse("/Content/Textures/Recovered.otex"));
             _ = File.Exists(Path.Combine(root, "Content", "Textures", "Recovered.otex.json")).Should().BeTrue();
         }
         finally

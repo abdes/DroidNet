@@ -70,7 +70,6 @@ internal sealed partial record CookProvenance
         if (source.AssetUri != product.SourceUri || !Enum.IsDefined(source.Kind) || !Enum.IsDefined(source.Role)
             || !ValidRelativePath(source.SourceRelativePath)
             || string.IsNullOrWhiteSpace(source.MountName) || source.OutputNamespaces.IsDefault
-            || (source.OutputVirtualPath is { } output && !ValidVirtualPath(output))
             || product.SourceFiles.IsEmpty || product.DeclaredOutputs.IsEmpty)
         {
             return false;

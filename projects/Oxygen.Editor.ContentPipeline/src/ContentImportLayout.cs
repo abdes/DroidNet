@@ -7,7 +7,8 @@ using System.Text.Json.Serialization;
 namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>
-/// Loose cooked layout fields serialized to the native manifest schema.
+/// Loose cooked layout fields serialized to the native manifest schema: where a model's or an input file's products
+/// go by type. A source that cooks one asset names its identity on its job instead.
 /// </summary>
 /// <param name="VirtualMountRoot">The native virtual mount root, for example <c>/Content</c>.</param>
 public sealed record ContentImportLayout(
@@ -18,30 +19,20 @@ public sealed record ContentImportLayout(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? DescriptorsDirectory { get; init; }
 
-    /// <summary>Gets the mount-relative folder for material descriptors.</summary>
+    /// <summary>Gets the mount-relative folder for a model's materials.</summary>
     [JsonPropertyName("materials_subdir")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? MaterialsDirectory { get; init; }
 
-    /// <summary>Gets the mount-relative folder for geometry descriptors.</summary>
+    /// <summary>Gets the mount-relative folder for a model's geometry.</summary>
     [JsonPropertyName("geometry_subdir")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? GeometryDirectory { get; init; }
 
-    /// <summary>Gets the mount-relative folder for scene descriptors.</summary>
+    /// <summary>Gets the mount-relative folder for a model's scene.</summary>
     [JsonPropertyName("scenes_subdir")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? ScenesDirectory { get; init; }
-
-    /// <summary>Gets the folder for unnamed texture descriptors, relative to the native resources directory.</summary>
-    [JsonPropertyName("texture_descriptors_subdir")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? TextureDescriptorsDirectory { get; init; }
-
-    /// <summary>Gets the folder for scripts, relative to the descriptors directory.</summary>
-    [JsonPropertyName("scripts_subdir")]
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? ScriptsDirectory { get; init; }
 
     /// <summary>Gets the folder for input actions and mapping contexts, relative to the descriptors directory.</summary>
     [JsonPropertyName("input_subdir")]

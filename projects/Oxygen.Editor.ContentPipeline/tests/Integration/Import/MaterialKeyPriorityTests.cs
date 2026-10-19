@@ -62,7 +62,8 @@ public sealed class MaterialKeyPriorityTests
         var result = await service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.InputSnapshot!.CookedDependencies.Should().NotContain(input => input.SourceName == "Materials");
-        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/" + material));
+        var materialUri = AssetPath.Parse("/" + material[..^5]);
+        _ = result.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == materialUri);
         await this.VerifySharedProjectConsumersAsync(consumer, materials, service, materialProducer, api).ConfigureAwait(false);
     }
 

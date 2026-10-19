@@ -117,7 +117,7 @@ public sealed class SourceAnalysisReuseTests
             new SceneDescriptorGenerator(),
             new FixedCookScopeProvider(workspace.Root),
             new CookDocumentRegistry());
-        var input = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Scenes/Main.oscene.json"), ContentCookInputRole.Primary);
+        var input = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Scenes/Main.oscene"), ContentCookInputRole.Primary);
         var snapshot = new CookInputSnapshot(operation, Path.Combine(workspace.Root, ".build", "captured"), artifacts.Fingerprint, "captured-scene-test", [], []);
 
         var prepared = await analyzer.PrepareCapturedScenesAsync([input], snapshot, this.TestContext.CancellationToken).ConfigureAwait(false);

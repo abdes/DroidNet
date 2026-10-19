@@ -64,7 +64,7 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
         _ = model.Assets.Should().ContainSingle().Which.Name.Should().Be("Red");
         _ = model.SelectedAsset!.Origin.Should().NotBeNull();
         await model.ShowAssetCommand.ExecuteAsync(model.SelectedAsset.Origin!.SourceAssetUri).ConfigureAwait(true);
-        _ = navigated.Should().Be(model.SelectedAsset.Origin.SourceAssetUri);
+        _ = navigated.Should().Be(AssetPath.Parse("/Content/Materials/Red.omat"), "a source is named by its identity, its path without the authoring .json");
         var sections = view.FindDescendant<SelectorBar>()!;
         sections.SelectedItem = sections.Items[1];
         _ = model.Section.Should().Be(1);
@@ -80,6 +80,23 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
         pipeline.Verify(value => value.InspectCookedOutputAsync(scope.Scope, It.IsAny<CancellationToken>(), It.IsAny<bool>(), project), Times.Exactly(2));
         pipeline.VerifyNoOtherCalls();
     });
+
+    /// <summary>A row names its own product and type, so the products of one model or input file stay apart.</summary>
+    [TestMethod]
+    public void RowsNameTheirOwnProductAndType()
+    {
+        var root = CreateInspectionReport(CreateQueryProject().ActiveProject!, validate: false).Roots[0];
+        var model = AssetPath.Parse("/Content/Models/Lantern.glb");
+        var input = AssetPath.Parse("/Content/Input/Player.input");
+
+        var brass = new InspectionAssetRow(root, new("/Content/Models/Lantern.glb/Brass.omat", ContentCookAssetKind.Material), new(AssetPath.Parse("/Content/Models/Lantern.glb/Brass.omat"), model, []));
+        var jump = new InspectionAssetRow(root, new("/Content/Input/Player.input/Jump.oiact", ContentCookAssetKind.Unknown), new(AssetPath.Parse("/Content/Input/Player.input/Jump.oiact"), input, []));
+        var onFoot = new InspectionAssetRow(root, new("/Content/Input/Player.input/OnFoot.oimap", ContentCookAssetKind.Unknown), new(AssetPath.Parse("/Content/Input/Player.input/OnFoot.oimap"), input, []));
+
+        _ = (brass.Name, brass.Kind).Should().Be(("Brass", AssetKind.Material));
+        _ = (jump.Name, jump.Kind).Should().Be(("Jump", AssetKind.InputAction));
+        _ = (onFoot.Name, onFoot.Kind).Should().Be(("OnFoot", AssetKind.InputMappingContext));
+    }
 
     /// <summary>Superseded and disposed report requests drain without displaying late results or starting overlapping reads.</summary>
     /// <returns>The asynchronous panel-lifetime regression.</returns>
@@ -162,8 +179,8 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
     private static CookedOutputReport CreateInspectionReport(ProjectContext project, bool validate)
     {
         var root = project.ProjectRoot.Combine(".cooked").Combine("Content").FullPath;
-        var red = AssetPath.Parse("/Content/Materials/Red.omat.json");
-        var main = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
+        var red = AssetPath.Parse("/Content/Materials/Red.omat");
+        var main = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var assets = new[]
         {
             new CookedAssetEntry("/Content/Scenes/Main.oscene", ContentCookAssetKind.Scene),
@@ -171,7 +188,7 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
         };
         CookedFileEntry[] files = [new("container.index.bin", 1024), new("Scenes/Main.oscene", 256), new("Materials/Red.omat", 128)];
         var inspection = new CookInspectionResult(root, Succeeded: true, SourceIdentity: Guid.NewGuid(), assets, files, Diagnostics: []);
-        CookedAssetProvenance[] origins = [new(AssetPath.Parse("/Content/Scenes/Main.oscene"), main, [red]), new(AssetPath.Parse("/Content/Materials/Red.omat"), red, []),];
+        CookedAssetProvenance[] origins = [new(main, main, [red]), new(red, red, []),];
         var rootReport = new CookedRootReport("Content", IsPresent: true, inspection, validate ? new(root, Succeeded: true, []) : null, origins);
         return new(project.ProjectId, ScopeUri: null, DateTimeOffset.UtcNow, [rootReport]);
     }

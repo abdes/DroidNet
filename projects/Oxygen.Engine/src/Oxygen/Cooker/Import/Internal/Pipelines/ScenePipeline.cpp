@@ -29,6 +29,7 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
@@ -105,6 +106,17 @@ namespace {
     -> AssetKey
   {
     return oxygen::data::AssetKey::FromVirtualPath(virtual_path);
+  }
+
+  //! A scene descriptor job's identity, or a model scene's layout by name.
+  [[nodiscard]] auto ScenePlacement(const ScenePipeline::WorkItem& item,
+    const std::string_view scene_name) -> internal::AssetPlacement
+  {
+    const auto& layout = item.request.loose_cooked_layout;
+    return item.placement.value_or(internal::AssetPlacement {
+      .virtual_path = layout.SceneVirtualPath(scene_name),
+      .descriptor_relpath = layout.SceneDescriptorRelPath(scene_name),
+    });
   }
 
   auto SortSceneComponents(SceneBuild& build) -> void
@@ -685,9 +697,8 @@ auto ScenePipeline::Worker() -> co::Co<>
         SortSceneComponents(stage_outcome.result.build);
 
         const auto scene_name = item.request.GetSceneName();
-        const auto virtual_path
-          = item.request.loose_cooked_layout.SceneVirtualPath(scene_name);
-        const auto scene_key = BuildSceneAssetKey(virtual_path);
+        const auto scene_key
+          = BuildSceneAssetKey(ScenePlacement(item, scene_name).virtual_path);
 
         outcome = SerializeScene(scene_name, scene_key,
           stage_outcome.result.build, item.environment_systems,
@@ -733,11 +744,8 @@ auto ScenePipeline::Worker() -> co::Co<>
     };
 
     if (outcome.success) {
-      const auto scene_name = item.request.GetSceneName();
-      const auto virtual_path
-        = item.request.loose_cooked_layout.SceneVirtualPath(scene_name);
-      const auto relpath
-        = item.request.loose_cooked_layout.SceneDescriptorRelPath(scene_name);
+      auto [virtual_path, relpath]
+        = ScenePlacement(item, item.request.GetSceneName());
 
       result.cooked = CookedScenePayload {
         .scene_key = BuildSceneAssetKey(virtual_path),

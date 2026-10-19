@@ -24,6 +24,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
@@ -108,6 +109,10 @@ public:
     ImportRequest request;
     observer_ptr<NamingService> naming_service;
     std::stop_token stop_token;
+
+    //! A material descriptor job's placement at its identity.
+    /*! A model's materials have none: the layout places them by name. */
+    std::optional<internal::AssetPlacement> placement {};
   };
 
   //! Work completion result.

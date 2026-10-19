@@ -69,10 +69,10 @@ public sealed class InputFileCookTests
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.CookedAssets.ToDictionary(static asset => asset.CookedAssetUri.VirtualPath, static asset => asset.SourceAssetUri.VirtualPath).Should().BeEquivalentTo(new Dictionary<string, string>
         {
-            ["/Content/Gameplay/Jump.oiact"] = "/Content/Gameplay/Player.input.json",
-            ["/Content/Gameplay/Gameplay.oimap"] = "/Content/Gameplay/Player.input.json",
-            ["/Content/Gameplay/Boost.oiact"] = "/Content/Gameplay/Vehicle.input.json",
-            ["/Content/Gameplay/Driving.oimap"] = "/Content/Gameplay/Vehicle.input.json",
+            ["/Content/Gameplay/Jump.oiact"] = "/Content/Gameplay/Player.input",
+            ["/Content/Gameplay/Gameplay.oimap"] = "/Content/Gameplay/Player.input",
+            ["/Content/Gameplay/Boost.oiact"] = "/Content/Gameplay/Vehicle.input",
+            ["/Content/Gameplay/Driving.oimap"] = "/Content/Gameplay/Vehicle.input",
         });
     }
 

@@ -60,11 +60,8 @@ NOLINT_TEST(LooseCookedLayoutTest, DefaultsToStandardFileAndDirectoryNames)
   EXPECT_EQ(layout.scenes_subdir, "Scenes");
   EXPECT_EQ(layout.geometry_subdir, "Geometry");
   EXPECT_EQ(layout.materials_subdir, "Materials");
-  EXPECT_EQ(layout.scripts_subdir, "Scripts");
   EXPECT_EQ(layout.input_subdir, "Input");
   EXPECT_EQ(layout.physics_dir, "Physics");
-  EXPECT_EQ(layout.physics_materials_subdir, "Materials");
-  EXPECT_EQ(layout.physics_shapes_subdir, "Shapes");
   EXPECT_EQ(layout.physics_resources_subdir, "Resources");
 }
 
@@ -78,17 +75,11 @@ NOLINT_TEST(LooseCookedLayoutTest, AppendsAssetExtensionToDescriptorFileNames)
     LooseCookedLayout::SceneDescriptorFileName("MyScene"), "MyScene.oscene");
   EXPECT_EQ(LooseCookedLayout::PhysicsSceneDescriptorFileName("MyScene"),
     "MyScene.opscene");
-  EXPECT_EQ(LooseCookedLayout::ScriptDescriptorFileName("MyScript"),
-    "MyScript.oscript");
   EXPECT_EQ(
     LooseCookedLayout::InputActionDescriptorFileName("Jump"), "Jump.oiact");
   EXPECT_EQ(
     LooseCookedLayout::InputMappingContextDescriptorFileName("Gameplay"),
     "Gameplay.oimap");
-  EXPECT_EQ(LooseCookedLayout::PhysicsMaterialDescriptorFileName("Ground"),
-    "Ground.opmat");
-  EXPECT_EQ(LooseCookedLayout::CollisionShapeDescriptorFileName("Floor"),
-    "Floor.ocshape");
   EXPECT_EQ(LooseCookedLayout::PhysicsResourceDescriptorFileName("JointA"),
     "JointA.opres");
 }
@@ -100,11 +91,6 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kGeometry), "Geometry");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScene), "Scenes");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kPhysicsScene), "Scenes");
-  EXPECT_EQ(
-    layout.DescriptorDirFor(AssetType::kPhysicsMaterial), "Physics/Materials");
-  EXPECT_EQ(
-    layout.DescriptorDirFor(AssetType::kCollisionShape), "Physics/Shapes");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScript), "Scripts");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputAction), "Input");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kInputMappingContext), "Input");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kUnknown), "");
@@ -113,7 +99,6 @@ NOLINT_TEST(LooseCookedLayoutTest, DescriptorDirForYieldsExpectedDirs)
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kMaterial), "Assets/Materials");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kGeometry), "Assets/Geometry");
   EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScene), "Assets/Scenes");
-  EXPECT_EQ(layout.DescriptorDirFor(AssetType::kScript), "Assets/Scripts");
 
   // Setting empty subdirs
   layout.materials_subdir = "";
@@ -136,10 +121,6 @@ NOLINT_TEST(LooseCookedLayoutTest, BuildsDescriptorRelPathFromSubdirAndFileName)
   EXPECT_EQ(layout.GeometryDescriptorRelPath("G1"), "Geometry/G1.ogeo");
   EXPECT_EQ(layout.SceneDescriptorRelPath("S1"), "Scenes/S1.oscene");
   EXPECT_EQ(layout.PhysicsSceneDescriptorRelPath("S1"), "Scenes/S1.opscene");
-  EXPECT_EQ(layout.PhysicsMaterialDescriptorRelPath("Ground"),
-    "Physics/Materials/Ground.opmat");
-  EXPECT_EQ(layout.CollisionShapeDescriptorRelPath("Floor"),
-    "Physics/Shapes/Floor.ocshape");
   EXPECT_EQ(layout.PhysicsResourceDescriptorRelPath("JointA"),
     "Physics/Resources/JointA.opres");
 }
@@ -158,10 +139,6 @@ NOLINT_TEST(LooseCookedLayoutTest, VirtualPathsJoinCorrectly)
 
   layout.virtual_mount_root = "MyMount";
   EXPECT_EQ(layout.MaterialVirtualPath("M1"), "/MyMount/Materials/M1.omat");
-  EXPECT_EQ(layout.PhysicsMaterialVirtualPath("Ground"),
-    "/MyMount/Physics/Materials/Ground.opmat");
-  EXPECT_EQ(layout.CollisionShapeVirtualPath("Floor"),
-    "/MyMount/Physics/Shapes/Floor.ocshape");
   EXPECT_EQ(layout.PhysicsResourceVirtualPath("JointA"),
     "/MyMount/Physics/Resources/JointA.opres");
 }

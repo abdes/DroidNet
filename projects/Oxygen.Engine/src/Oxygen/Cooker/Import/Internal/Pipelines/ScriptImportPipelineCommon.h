@@ -37,12 +37,6 @@ inline auto DeriveScriptName(const std::filesystem::path& source_path)
   return "Script";
 }
 
-inline auto BuildScriptDescriptorRelPath(const ImportRequest& request,
-  const std::string_view script_name) -> std::string
-{
-  return request.loose_cooked_layout.ScriptDescriptorRelPath(script_name);
-}
-
 inline auto BuildScriptsTableRelPath(const ImportRequest& request)
   -> std::string
 {

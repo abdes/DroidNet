@@ -70,14 +70,7 @@ internal static class CookInputResolver
             throw new InvalidDataException($"Cook dependency '{uri}' does not resolve to a retained authoring file in this project.");
         }
 
-        // An input file's output is the file itself, whose folder receives its actions and mapping contexts.
-        var output = kind switch
-        {
-            ContentCookAssetKind.ForeignSource => null,
-            ContentCookAssetKind.Input => location.Path.VirtualPath,
-            _ => ContentPipelinePaths.ToNativeDescriptorPath(identity, Path.GetExtension(identity.Name)),
-        };
-        return new(location.Path, kind, location.Path.Mount, relative, location.File, output, role);
+        return new(identity, kind, identity.Mount, relative, location.File, role);
     }
 
     /// <summary>Resolves a script to its source: <c>/Content/Player/move.oscript</c> cooks from
@@ -99,7 +92,7 @@ internal static class CookInputResolver
         }
 
         var relative = Path.GetRelativePath(project.ProjectRoot.FullPath, source.File.FullPath).Replace('\\', '/');
-        return new(identity, ContentCookAssetKind.Script, source.Path.Mount, relative, source.File, identity.VirtualPath, role);
+        return new(identity, ContentCookAssetKind.Script, source.Path.Mount, relative, source.File, role);
     }
 
     // The cook reads the files of authoring mounts only; a mount's own folder is not a source.

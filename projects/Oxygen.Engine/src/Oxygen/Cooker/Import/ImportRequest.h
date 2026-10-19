@@ -138,8 +138,15 @@ struct ImportRequest final {
   //! Pending synchronous preparation reads, transferred to the job observer.
   std::vector<ImportSourceObservation> preparation_inputs {};
 
-  //! Explicit standalone texture descriptor identity; empty uses hashed naming.
-  std::string texture_virtual_path {};
+  //! Identity of the one asset a single-asset job cooks.
+  /*!
+   A material, geometry, scene, script, texture, physics material or collision
+   shape job writes its descriptor at this virtual path, inside
+   `loose_cooked_layout.virtual_mount_root`, and derives the asset key from it.
+   A container job (a model or an input file) leaves it empty and names its
+   products itself.
+  */
+  std::string asset_virtual_path {};
 
   //! Optional additional source files for multi-source imports.
   std::vector<ImportSource> additional_sources {};
@@ -156,15 +163,10 @@ struct ImportRequest final {
 
   //! Loose cooked container layout conventions.
   /*!
-   Destination container layout used by the cook pipeline.
-
-   This controls where the importer should place descriptor files for
-    different asset types (scene/geometry/materials) and where it
-   should write bulk resource blobs (tables/data).
-
-   @note To place all descriptors into a single folder, set `descriptors_dir`
-    to that folder and set all *\*_subdir fields (for example, `scenes_subdir`,
-    `geometry_subdir`, `materials_subdir`) to empty strings.
+   Destination container layout used by the cook pipeline: the virtual mount
+   root, where a container's products go by type, and where bulk resource
+   blobs (tables/data) are written. A single-asset job's descriptor is placed
+   at `asset_virtual_path` instead.
   */
   LooseCookedLayout loose_cooked_layout = {};
 

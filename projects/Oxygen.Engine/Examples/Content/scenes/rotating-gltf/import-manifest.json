@@ -22,6 +22,7 @@
     {
       "type": "script",
       "source": "./rotate.lua",
+      "virtual_path": "/.cooked/Scripts/rotate.oscript",
       "name": "rotate",
       "compile": false,
       "script_storage": "embedded",
@@ -37,6 +38,7 @@
       "id": "scene.rotating_gltf",
       "type": "scene-descriptor",
       "source": "./rotating_gltf.scene.json",
+      "virtual_path": "/.cooked/Scenes/rotating_gltf.oscene",
       "name": "rotating_gltf",
       "content_hashing": true,
       "depends_on": ["scene.backpack", "scene.chest", "rotate.input"]

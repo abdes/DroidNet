@@ -7,6 +7,7 @@
 #pragma once
 
 #include <algorithm>
+#include <expected>
 #include <filesystem>
 #include <optional>
 #include <string>
@@ -90,6 +91,64 @@ inline auto TryVirtualPathToRelPath(const ImportRequest& request,
   const auto mount_root
     = NormalizeVirtualMountRoot(request.loose_cooked_layout.virtual_mount_root);
   return TryVirtualPathToRelPath(mount_root, virtual_path, relpath);
+}
+
+//! Where a single-asset job writes its descriptor.
+struct AssetPlacement final {
+  //! The asset's identity, from which its key derives.
+  std::string virtual_path;
+
+  //! The descriptor's path, relative to the cooked root.
+  std::string descriptor_relpath;
+};
+
+//! Places a single-asset job's descriptor at the identity its request carries.
+/*!
+ The cooked layout is the identity: the descriptor of `/Mount/X/Y.ext` lives at
+ `X/Y.ext` under the mount's cooked root. The identity must be a virtual path
+ the engine accepts, inside the job's mount and ending in `extension`.
+
+ @return The placement, or the diagnostic refusing the identity:
+   `import.asset_virtual_path_missing`, the rule's `vpath.*` code, or
+   `import.asset_virtual_path_invalid` for a path outside the mount or of
+   another type.
+*/
+inline auto PlaceAsset(
+  const ImportRequest& request, const std::string_view extension)
+  -> std::expected<AssetPlacement, ImportDiagnostic>
+{
+  const auto& virtual_path = request.asset_virtual_path;
+  const auto refuse
+    = [&](std::string code, std::string message) -> ImportDiagnostic {
+    return ImportDiagnostic {
+      .severity = ImportSeverity::kError,
+      .code = std::move(code),
+      .message = std::move(message),
+      .source_path = request.source_path.string(),
+      .object_path = "virtual_path",
+    };
+  };
+  if (virtual_path.empty()) {
+    return std::unexpected(refuse("import.asset_virtual_path_missing",
+      "The job names no virtual_path for the asset it cooks"));
+  }
+  if (const auto error = oxygen::content::ValidateVirtualPath(virtual_path)) {
+    return std::unexpected(refuse(oxygen::content::to_string(*error),
+      "The engine refuses the asset's virtual path: " + virtual_path));
+  }
+  auto relpath = std::string {};
+  if (!TryVirtualPathToRelPath(request, virtual_path, relpath)
+    || !virtual_path.ends_with(extension)) {
+    return std::unexpected(refuse("import.asset_virtual_path_invalid",
+      "The asset's virtual path must name a '" + std::string(extension)
+        + "' asset under the mount '"
+        + request.loose_cooked_layout.virtual_mount_root
+        + "': " + virtual_path));
+  }
+  return AssetPlacement {
+    .virtual_path = virtual_path,
+    .descriptor_relpath = std::move(relpath),
+  };
 }
 
 inline auto BuildMountedCookedRoots(const ImportRequest& request)

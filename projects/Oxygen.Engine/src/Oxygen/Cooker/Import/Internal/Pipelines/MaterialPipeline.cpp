@@ -11,6 +11,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <cstring>
+#include <iterator>
 #include <optional>
 #include <span>
 #include <stop_token>
@@ -28,6 +29,7 @@
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MaterialPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
+#include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/ShaderType.h>
 #include <Oxygen/Data/AssetReferences.h>
@@ -47,8 +49,8 @@ namespace oxygen::content::import {
 namespace {
 
   struct MaterialUvTransformDesc {
-    float uv_scale[2] = { 1.0F, 1.0F };
-    float uv_offset[2] = { 0.0F, 0.0F };
+    std::array<float, 2> uv_scale = { 1.0F, 1.0F };
+    std::array<float, 2> uv_offset = { 0.0F, 0.0F };
     float uv_rotation_radians = 0.0F;
     uint8_t uv_set = 0;
   };
@@ -61,8 +63,8 @@ namespace {
 
   struct BuildOutcome {
     data::AssetReferences references;
-    std::vector<std::byte> bytes {};
-    std::vector<ImportDiagnostic> diagnostics {};
+    std::vector<std::byte> bytes;
+    std::vector<ImportDiagnostic> diagnostics;
     bool canceled = false;
     bool has_error = false;
   };
@@ -108,7 +110,7 @@ namespace {
   }
 
   [[nodiscard]] auto BuildDefinesString(const bool alpha_test_enabled)
-    -> std::string
+    -> std::string_view
   {
     if (!alpha_test_enabled) {
       return {};
@@ -138,7 +140,7 @@ namespace {
       .shader_type = static_cast<uint8_t>(ShaderType::kPixel),
       .source_path = "Vortex/Stages/Translucency/ForwardMesh_PS.hlsl",
       .entry_point = "PS",
-      .defines = defines,
+      .defines = std::string(defines),
       .shader_hash = 0,
     });
 
@@ -396,7 +398,10 @@ namespace {
     if (bytes.size() < kOffset + sizeof(content_hash)) {
       return;
     }
-    std::memcpy(bytes.data() + kOffset, &content_hash, sizeof(content_hash));
+    std::ranges::copy(
+      std::as_bytes(std::span<const data::pak::core::ContentHashDigest, 1>(
+        &content_hash, 1)),
+      std::next(bytes.begin(), kOffset));
   }
 
   [[nodiscard]] auto ComputeContentHashOnThreadPool(co::ThreadPool& thread_pool,
@@ -421,7 +426,7 @@ namespace {
   }
 
   [[nodiscard]] auto BuildMaterialPayload(const MaterialSource& material,
-    const std::string_view source_id, const std::stop_token stop_token,
+    const std::string_view source_id, const std::stop_token& stop_token,
     std::vector<ImportDiagnostic> diagnostics) -> BuildOutcome
   {
     DLOG_F(1, "Building material payload: {}", material.name);
@@ -653,17 +658,20 @@ auto MaterialPipeline::Worker() -> co::Co<>
     };
 
     const auto cook_start = std::chrono::steady_clock::now();
-    const auto virtual_path
-      = item.request.loose_cooked_layout.MaterialVirtualPath(
-        item.material.storage_name);
-    const auto descriptor_relpath
-      = item.request.loose_cooked_layout.MaterialDescriptorRelPath(
-        item.material.storage_name);
+    const auto& layout = item.request.loose_cooked_layout;
+    const auto [virtual_path, descriptor_relpath]
+      = item.placement.value_or(internal::AssetPlacement {
+        .virtual_path = layout.MaterialVirtualPath(item.material.storage_name),
+        .descriptor_relpath
+        = layout.MaterialDescriptorRelPath(item.material.storage_name),
+      });
     const auto material_key = ResolveMaterialKey(item.request, virtual_path);
 
     BuildOutcome build_outcome;
     if (config_.use_thread_pool) {
       build_outcome = co_await thread_pool_.Run(
+        // The only escaping exception is an abort-worthy alignment bug.
+        // NOLINTNEXTLINE(bugprone-exception-escape)
         [material = item.material, source_id = item.source_id,
           stop_token = item.stop_token](
           co::ThreadPool::CancelToken canceled) noexcept -> BuildOutcome {

@@ -35,7 +35,7 @@ public sealed class LibraryInspectionLifetimeTests
         var runner = new ContextLeaseRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
-        var source = AssetPath.Parse("/Content/Materials/Shared.omat.json");
+        var source = AssetPath.Parse("/Content/Materials/Shared.omat");
         AssertCookSucceeded(await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false));
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         Action openForWrite = () =>

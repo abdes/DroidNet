@@ -17,20 +17,8 @@ public sealed record InspectionAssetLink(AssetPath Asset)
     /// <summary>Gets the complete reference for selection/copy and tooltips.</summary>
     public string Path => this.Asset.VirtualPath;
 
-    /// <summary>Formats a source or cooked filename while preserving engine generator names.</summary>
+    /// <summary>Formats a source or cooked file name without its type suffix.</summary>
     /// <param name="asset">The asset identity.</param>
     /// <returns>The readable asset name.</returns>
-    internal static string DisplayName(AssetPath asset)
-    {
-        var name = asset.Name;
-        foreach (var suffix in new[] { AssetFileTypes.MaterialDescriptor, AssetFileTypes.GeometryDescriptor, AssetFileTypes.SceneDescriptor, AssetFileTypes.Material, AssetFileTypes.Geometry, AssetFileTypes.Scene })
-        {
-            if (name.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
-            {
-                return name[..^suffix.Length];
-            }
-        }
-
-        return name;
-    }
+    internal static string DisplayName(AssetPath asset) => AssetFileTypes.RemoveSuffix(asset.Name);
 }

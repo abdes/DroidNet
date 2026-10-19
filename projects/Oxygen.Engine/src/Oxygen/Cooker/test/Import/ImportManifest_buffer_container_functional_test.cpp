@@ -128,7 +128,8 @@ NOLINT_TEST(ImportManifestBufferContainerTest,
         {
           "id": "prep.textures",
           "type": "texture",
-          "source": "albedo.png"
+          "source": "albedo.png",
+          "virtual_path": "/.cooked/Textures/Albedo.otex"
         },
         {
           "id": "lego.buffers",

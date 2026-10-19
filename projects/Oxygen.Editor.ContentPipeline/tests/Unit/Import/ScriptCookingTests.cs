@@ -56,7 +56,6 @@ public sealed class ScriptCookingTests : IDisposable
         _ = input.Kind.Should().Be(ContentCookAssetKind.Script);
         _ = input.AssetUri.Should().Be(MoveScript);
         _ = input.SourceRelativePath.Should().Be("Content/Player/move.lua");
-        _ = input.OutputVirtualPath.Should().Be("/Content/Player/move.oscript");
     }
 
     [TestMethod]
@@ -72,7 +71,8 @@ public sealed class ScriptCookingTests : IDisposable
         _ = job.CompileMode.Should().Be("debug");
         _ = job.ScriptStorage.Should().Be("external");
         _ = job.SourceRoot.Should().Be(Path.Combine(this.root, "Content").Replace('\\', '/'));
-        _ = job.Layout.Should().Be(new ContentImportLayout("/Content") { DescriptorsDirectory = string.Empty, ScriptsDirectory = "Player" });
+        _ = job.VirtualPath.Should().Be(MoveScript.VirtualPath, "the cooker places a script at its identity");
+        _ = job.Layout.Should().Be(new ContentImportLayout("/Content"));
     }
 
     [TestMethod]
@@ -132,7 +132,7 @@ public sealed class ScriptCookingTests : IDisposable
         var scope = this.CreateScope() with { Inputs = [.. this.CreateScope().Inputs, script] };
         var binding = new ScriptSidecarBinding(1, Guid.NewGuid().ToString("D"), "/Content/Player/move.oscript", 0, [new ScriptSidecarParam("speed", "float", 2.5f)]);
         var descriptor = new SceneDescriptorGenerationResult(
-            AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
+            AssetPath.Parse("/Content/Scenes/Main.oscene"),
             Path.Combine(this.root, ".pipeline", "Scenes", "Main.oscene.json"),
             "/Content/Scenes/Main.oscene",
             Dependencies: [],
@@ -164,7 +164,7 @@ public sealed class ScriptCookingTests : IDisposable
     {
         var site = new ScriptBindingSite(NodeId.New(), "Player", Guid.NewGuid(), SlotNumber: 1, ["follow", "speed"]);
         var descriptor = new SceneDescriptorGenerationResult(
-            AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
+            AssetPath.Parse("/Content/Scenes/Main.oscene"),
             Path.Combine(this.root, ".pipeline", "Scenes", "Main.oscene.json"),
             "/Content/Scenes/Main.oscene",
             Dependencies: [],
@@ -218,12 +218,11 @@ public sealed class ScriptCookingTests : IDisposable
             new ProjectCookScope(context.ProjectId, FileSystemPath.From(this.root), Path.Combine(this.root, ".cooked")),
             [
                 new ContentCookInput(
-                    AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
+                    AssetPath.Parse("/Content/Scenes/Main.oscene"),
                     ContentCookAssetKind.Scene,
                     "Content",
                     "Content/Scenes/Main.oscene.json",
                     FileSystemPath.From(Path.Combine(this.root, "Content", "Scenes", "Main.oscene.json")),
-                    "/Content/Scenes/Main.oscene",
                     ContentCookInputRole.Primary),
             ],
             CookTargetKind.CurrentScene)

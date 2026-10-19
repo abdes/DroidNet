@@ -18,6 +18,7 @@
 #include <nlohmann/json.hpp>
 
 #include <Oxygen/Cooker/Import/EngineContent.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
 #include <Oxygen/Data/MaterialSlotId.h>
@@ -48,15 +49,15 @@ constexpr auto kShapes = std::array {
   EngineShape { .name = "ArrowGizmo", .folder = kInternal },
 };
 
-// One layout per job places its output at `/Engine/<folder>/<name>`.
-auto Layout(const std::string_view subdir_key, const std::string_view folder)
-  -> json
+// Every job cooks into the `/Engine` mount.
+auto Layout() -> json { return { { "virtual_mount_root", kMount } }; }
+
+// A job's asset is `/Engine/<folder>/<name><extension>`, and is placed there.
+auto EngineVirtualPath(const std::string_view folder,
+  const std::string_view name, const std::string_view extension) -> std::string
 {
-  return {
-    { "virtual_mount_root", kMount },
-    { "descriptors_dir", "" },
-    { subdir_key, folder },
-  };
+  return std::string(kMount) + "/" + std::string(folder) + "/"
+    + std::string(name) + std::string(extension);
 }
 
 auto DefaultMaterialDescriptor() -> json
@@ -156,7 +157,7 @@ auto GeometryDescriptor(const EngineShape& shape) -> json
 auto WriteJson(const std::filesystem::path& path, const json& value) -> void
 {
   std::filesystem::create_directories(path.parent_path());
-  auto stream = std::ofstream(path, std::ios::binary | std::ios::trunc);
+  auto stream = std::ofstream(path, std::ios::binary);
   stream << value.dump(2) << '\n';
   stream.close();
   if (!stream) {
@@ -182,6 +183,7 @@ auto GetEngineShapes() noexcept -> std::span<const EngineShape>
   return kShapes;
 }
 
+// NOLINTNEXTLINE(bugprone-easily-swappable-parameters) - public API order
 auto WriteEngineContentSources(const std::filesystem::path& directory,
   const std::filesystem::path& cooked_root) -> EngineContentManifests
 {
@@ -192,8 +194,13 @@ auto WriteEngineContentSources(const std::filesystem::path& directory,
     {
       { "type", "material-descriptor" },
       { "source", material_source.generic_string() },
+      {
+        "virtual_path",
+        EngineVirtualPath(kMaterials, kDefaultMaterialName,
+          oxygen::data::kMaterialDescriptorExtension),
+      },
       { "name", kDefaultMaterialName },
-      { "layout", Layout("materials_subdir", kMaterials) },
+      { "layout", Layout() },
     },
   });
 
@@ -205,8 +212,13 @@ auto WriteEngineContentSources(const std::filesystem::path& directory,
     geometry_jobs.push_back({
       { "type", "geometry-descriptor" },
       { "source", source.generic_string() },
+      {
+        "virtual_path",
+        EngineVirtualPath(
+          shape.folder, shape.name, oxygen::data::kGeometryDescriptorExtension),
+      },
       { "name", shape.name },
-      { "layout", Layout("geometry_subdir", shape.folder) },
+      { "layout", Layout() },
     });
   }
 

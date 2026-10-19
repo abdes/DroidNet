@@ -46,7 +46,6 @@
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSourceSnapshot.h>
 #include <Oxygen/Cooker/Import/Internal/MaterialSource.h>
-#include <Oxygen/Cooker/Import/Internal/Pipelines/ScriptImportPipelineCommon.h>
 #include <Oxygen/Cooker/Import/Internal/SceneSource.h>
 #include <Oxygen/Cooker/Import/Internal/SourceAnalysisRunner.h>
 #include <Oxygen/Cooker/Import/Internal/TextureSourceAssembly_internal.h>
@@ -341,17 +340,14 @@ namespace {
   }
 
   //! Analyzes a script job: the script file is the only input, and the
-  //! script asset, named after the file, is the output in the job's layout.
+  //! script asset at the job's identity is its output.
   auto PrepareScriptJob(const ImportManifestJob& job, AnalysisContext& context)
     -> void
   {
     auto& report = *context.report;
     report.source_path = job.script.source_path;
     context.AddFile(report.source_path);
-    context.Output(
-      job.loose_cooked_layout.ScriptVirtualPath(
-        detail::script_import::DeriveScriptName(report.source_path)),
-      Kind::kScript);
+    context.Output(job.virtual_path, Kind::kScript);
   }
 
   auto PrepareJob(const ImportManifestJob& job, AnalysisContext& context)
@@ -375,8 +371,7 @@ namespace {
       if (!source) {
         co_return false;
       }
-      context.Output(
-        layout.MaterialVirtualPath(source->storage_name), Kind::kMaterial);
+      context.Output(job.virtual_path, Kind::kMaterial);
       for (const auto& slot : MaterialSource::TextureSlots()) {
         const auto& binding = source->textures.*slot.binding;
         if (binding.assigned) {
@@ -394,7 +389,7 @@ namespace {
       if (!source) {
         co_return false;
       }
-      context.Output(layout.GeometryVirtualPath(source->name), Kind::kGeometry);
+      context.Output(job.virtual_path, Kind::kGeometry);
       auto local = std::unordered_set<std::string> {};
       for (const auto& buffer : source->buffers) {
         local.insert(buffer.source_id);
@@ -447,11 +442,7 @@ namespace {
       if (!source) {
         co_return false;
       }
-      // The scene pipeline derives its name from this authored name as a path.
-      auto scene_request = ImportRequest {};
-      scene_request.source_path = source->name;
-      context.Output(
-        layout.SceneVirtualPath(scene_request.GetSceneName()), Kind::kScene);
+      context.Output(job.virtual_path, Kind::kScene);
       for (size_t i = 0; i < source->renderables.size(); ++i) {
         const auto& renderable = source->renderables.at(i);
         const auto location = "renderables[" + std::to_string(i) + "]";

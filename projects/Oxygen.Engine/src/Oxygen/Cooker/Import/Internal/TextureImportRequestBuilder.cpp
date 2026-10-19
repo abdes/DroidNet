@@ -24,7 +24,7 @@ auto TextureImportSettings::Prepare(std::ostream& error_stream) const
   const auto& settings = *this;
   ImportRequest request {};
   request.source_path = settings.source_path;
-  request.texture_virtual_path = settings.virtual_path;
+  request.asset_virtual_path = settings.virtual_path;
 
   if (!settings.job_name.empty()) {
     request.job_name = settings.job_name;

@@ -15,7 +15,6 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="MountName">The authoring mount name.</param>
 /// <param name="SourceRelativePath">The project-relative source path.</param>
 /// <param name="SourceAbsolutePath">The absolute source path.</param>
-/// <param name="OutputVirtualPath">The expected native virtual output path, when known.</param>
 /// <param name="Role">The input role.</param>
 public sealed record ContentCookInput(
     AssetPath AssetUri,
@@ -23,7 +22,6 @@ public sealed record ContentCookInput(
     string MountName,
     string SourceRelativePath,
     FileSystemPath SourceAbsolutePath,
-    string? OutputVirtualPath,
     ContentCookInputRole Role)
 {
     /// <summary>Gets the disjoint output folders owned by an imported source.</summary>
@@ -33,10 +31,7 @@ public sealed record ContentCookInput(
     /// <remarks>An input file's actions and contexts are known only from the provenance of its last cook.</remarks>
     /// <param name="virtualPath">The native output identity.</param>
     /// <returns>Whether this input is the asset or owns the model output folder that holds it.</returns>
-    public bool OwnsOutput(string virtualPath) => this.Kind switch
-    {
-        ContentCookAssetKind.ForeignSource => this.OutputNamespaces.Any(prefix => virtualPath.StartsWith(prefix, StringComparison.Ordinal))
-            || (this.OutputNamespaces.IsEmpty && this.OutputVirtualPath is { } prefix && virtualPath.StartsWith(prefix, StringComparison.Ordinal)),
-        _ => string.Equals(this.OutputVirtualPath, virtualPath, StringComparison.Ordinal),
-    };
+    public bool OwnsOutput(string virtualPath) => this.Kind == ContentCookAssetKind.ForeignSource
+        ? this.OutputNamespaces.Any(prefix => virtualPath.StartsWith(prefix, StringComparison.Ordinal))
+        : string.Equals(this.AssetUri.VirtualPath, virtualPath, StringComparison.Ordinal);
 }

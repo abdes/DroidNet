@@ -163,7 +163,6 @@ public sealed partial class ContentPipelineService
         var source = scope.Inputs.Single() with
         {
             MountName = original.MountPoint,
-            OutputVirtualPath = null,
             OutputNamespaces = original.OutputPrefixes,
         };
         var incoming = request.ReplacementCandidatePath ?? request.SourcePath;

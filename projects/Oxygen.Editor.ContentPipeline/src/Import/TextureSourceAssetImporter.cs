@@ -52,7 +52,7 @@ public static class TextureSourceAssetImporter
     /// <summary>Creates an image texture descriptor under a project authoring mount.</summary>
     /// <param name="request">The selected image, destination, name and native cook settings.</param>
     /// <param name="cancellationToken">Cancels the copy before the descriptor is published.</param>
-    /// <returns>The authored descriptor asset URI consumed by the normal cook pipeline.</returns>
+    /// <returns>The texture's identity, which the descriptor names and the cook pipeline cooks.</returns>
     public static async Task<AssetPath> CreateAsync(TextureSourceImportRequest request, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
@@ -97,7 +97,7 @@ public static class TextureSourceAssetImporter
                 await output.WriteAsync(descriptorBytes, cancellationToken).ConfigureAwait(false);
             }
 
-            return target.AssetUri;
+            return target.VirtualPath;
         }
         catch (OperationCanceledException)
         {

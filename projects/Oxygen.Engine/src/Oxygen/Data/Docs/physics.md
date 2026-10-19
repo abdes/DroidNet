@@ -59,11 +59,10 @@ Because the mount root is part of the identity,
 
 **Semantics.**
 
-- The path is **virtual**: it has no mandatory correspondence to the physical
-  filesystem layout. A loose cooked root mounted at `/.cooked` stores
-  `Rubber.opmat` under its configured `physics_materials_subdir`; the virtual
-  path `/.cooked/Physics/Materials/Rubber.opmat` is derived from the layout's
-  `virtual_mount_root` field, not from the filesystem path of the file.
+- The cooked layout follows the path: the job that cooks a physics material
+  names its identity, and its descriptor is written there below the mount. A
+  loose cooked root mounted at `/.cooked` stores
+  `/.cooked/Physics/Materials/Rubber.opmat` at `Physics/Materials/Rubber.opmat`.
 - A rename of any part of the virtual path — mount root, domain, asset name, or
   type suffix — produces a **new identity**. Cooked artifacts referencing the
   old `AssetKey` become dangling. This is intentional: it requires explicit

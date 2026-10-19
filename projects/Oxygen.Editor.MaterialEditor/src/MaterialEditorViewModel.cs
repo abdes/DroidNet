@@ -485,7 +485,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             ? location.File.GetPathBelow(project.ProjectRoot)
             : location.Path.RelativePath;
         _ = await this.cookService.CookMaterialAsync(
-            new MaterialCookRequest(location.Path, project.ProjectRoot, location.Path.Mount, relativePath),
+            new MaterialCookRequest(this.document.File.Asset, project.ProjectRoot, location.Path.Mount, relativePath),
             CancellationToken.None).ConfigureAwait(true);
     }
 

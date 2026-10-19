@@ -7,6 +7,7 @@
       "id": "material.MatInstanced",
       "type": "material-descriptor",
       "source": "./MatInstanced.material.json",
+      "virtual_path": "/.cooked/Materials/MatInstanced.omat",
       "name": "MatInstanced",
       "content_hashing": true
     },
@@ -14,6 +15,7 @@
       "id": "geometry.GeoInstancedCube",
       "type": "geometry-descriptor",
       "source": "./GeoInstancedCube.geometry.json",
+      "virtual_path": "/.cooked/Geometry/GeoInstancedCube.ogeo",
       "name": "GeoInstancedCube",
       "content_hashing": true,
       "depends_on": ["material.MatInstanced"]
@@ -22,6 +24,7 @@
       "id": "scene.InstancingTestScene",
       "type": "scene-descriptor",
       "source": "./InstancingTestScene.scene.json",
+      "virtual_path": "/.cooked/Scenes/InstancingTestScene.oscene",
       "name": "InstancingTestScene",
       "content_hashing": true,
       "depends_on": ["geometry.GeoInstancedCube"]

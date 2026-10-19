@@ -35,6 +35,7 @@
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Core/Types/AssetKey.h>
+#include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/PakFormat.h>
@@ -88,6 +89,14 @@ inline auto ExpectPackagingSummaryMatchesDiagnostics(const ImportReport& report)
     CountSeverity(report.diagnostics, ImportSeverity::kError));
 }
 
+//! The identity these tests give a script: its name at the mount root.
+inline auto CanonicalScriptVirtualPath(std::string_view script_name)
+  -> std::string
+{
+  return ImportRequest {}.loose_cooked_layout.virtual_mount_root + "/"
+    + std::string(script_name) + std::string(data::kScriptDescriptorExtension);
+}
+
 inline auto MakeScriptRequest(const std::filesystem::path& source_path,
   const std::filesystem::path& cooked_root, const ScriptStorageMode storage,
   const bool compile_scripts = false) -> ImportRequest
@@ -99,6 +108,8 @@ inline auto MakeScriptRequest(const std::filesystem::path& source_path,
   request.options.scripting.compile_scripts = compile_scripts;
   request.options.scripting.script_storage = storage;
   request.options.scripting.source_root = cooked_root.parent_path();
+  request.asset_virtual_path
+    = CanonicalScriptVirtualPath(source_path.stem().string());
   return request;
 }
 
@@ -114,12 +125,6 @@ inline auto MakeSidecarRequest(const std::filesystem::path& source_path,
   request.options.scripting.target_scene_virtual_path
     = std::move(scene_virtual_path);
   return request;
-}
-
-inline auto CanonicalScriptVirtualPath(std::string_view script_name)
-  -> std::string
-{
-  return ImportRequest {}.loose_cooked_layout.ScriptVirtualPath(script_name);
 }
 
 inline auto CanonicalSceneVirtualPath(std::string_view scene_name)

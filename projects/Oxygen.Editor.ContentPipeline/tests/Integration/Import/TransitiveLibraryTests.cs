@@ -64,13 +64,13 @@ public sealed class TransitiveLibraryTests
         var materialUri = AssetPath.Parse("/" + material[..^5]);
         if (projectWins)
         {
-            _ = cooked.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == AssetPath.Parse("/" + material));
+            _ = cooked.CookedAssets.Should().Contain(asset => asset.SourceAssetUri == materialUri);
             _ = cooked.InputSnapshot!.CookedDependencies.Should().NotContain(input => input.AssetUri == materialUri);
         }
         else
         {
             _ = cooked.InputSnapshot!.CookedDependencies.Should().Contain(input => input.AssetUri == materialUri && input.SourceName == "Materials");
-            _ = cooked.CookedAssets.Should().NotContain(asset => asset.SourceAssetUri == AssetPath.Parse("/" + material));
+            _ = cooked.CookedAssets.Should().NotContain(asset => asset.SourceAssetUri == materialUri);
         }
 
         _ = (await service.ReadAsync(context, [scene], this.TestContext.CancellationToken).ConfigureAwait(false)).Single().Freshness.Should().Be(AssetCookFreshness.Current);

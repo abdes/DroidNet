@@ -37,7 +37,7 @@ public sealed class CookedOutputInspectionTests
         var root = report.Roots.Should().ContainSingle().Subject;
         _ = root.Inspection.Assets.Should().ContainSingle().Which.Kind.Should().Be(ContentCookAssetKind.Scene);
         _ = root.Validation!.Succeeded.Should().BeTrue();
-        var scene = root.Provenance.Single(origin => origin.SourceAssetUri == AssetPath.Parse("/Content/Scenes/Main.oscene.json"));
+        var scene = root.Provenance.Single(origin => origin.SourceAssetUri == AssetPath.Parse("/Content/Scenes/Main.oscene"));
         _ = scene.Dependencies.Should().NotBeEmpty();
         _ = root.Inspection.Files.Should().NotBeEmpty();
         _ = api.Imported.Should().HaveCount(imports);
