@@ -60,8 +60,16 @@ class SourceAnalysisCliTests(unittest.TestCase):
         (self.root / "scene.json").write_text(EMPTY_SCENE, encoding="utf-8")
         manifest = self.manifest(
             [
-                {"type": "material-descriptor", "source": "material.json"},
-                {"type": "scene-descriptor", "source": "scene.json"},
+                {
+                    "type": "material-descriptor",
+                    "source": "material.json",
+                    "virtual_path": "/.cooked/Materials/Stone.omat",
+                },
+                {
+                    "type": "scene-descriptor",
+                    "source": "scene.json",
+                    "virtual_path": "/.cooked/Scenes/Empty.oscene",
+                },
             ]
         )
         report = self.root / "analysis.json"
@@ -76,7 +84,13 @@ class SourceAnalysisCliTests(unittest.TestCase):
         source = self.root / "rubber.physics-material.json"
         source.write_text('{"name":"Rubber"}', encoding="utf-8")
         manifest = self.manifest(
-            [{"type": "physics-material-descriptor", "source": source.name}]
+            [
+                {
+                    "type": "physics-material-descriptor",
+                    "source": source.name,
+                    "virtual_path": "/.cooked/Physics/rubber.opmat",
+                }
+            ]
         )
         report = self.root / "failure.json"
         result = self.analyze(manifest, report)
@@ -89,7 +103,15 @@ class SourceAnalysisCliTests(unittest.TestCase):
 
     @unittest.skipUnless(os.name == "nt", "Windows case-insensitive path identity")
     def test_report_cannot_create_a_missing_source_through_case_alias(self):
-        manifest = self.manifest([{"type": "texture", "source": "Missing.PNG"}])
+        manifest = self.manifest(
+            [
+                {
+                    "type": "texture",
+                    "source": "Missing.PNG",
+                    "virtual_path": "/.cooked/Textures/Missing.otex",
+                }
+            ]
+        )
         report = self.root / "missing.png"
         result = self.analyze(manifest, report)
         self.assertNotEqual(result.returncode, 0)
@@ -99,7 +121,14 @@ class SourceAnalysisCliTests(unittest.TestCase):
         for suffix in ("posx", "negx", "posy", "negy", "posz", "negz"):
             (self.root / f"sky_{suffix}.png").write_bytes(b"not decoded")
         manifest = self.manifest(
-            [{"type": "texture", "source": "sky.png", "cubemap": True}]
+            [
+                {
+                    "type": "texture",
+                    "source": "sky.png",
+                    "cubemap": True,
+                    "virtual_path": "/.cooked/Textures/sky.otex",
+                }
+            ]
         )
         ordinary_report = self.root / "cube-analysis.json"
         result = self.analyze(manifest, ordinary_report)
@@ -209,19 +238,32 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         source = self.root / "material.json"
         original = '{"name":"Published"}'
         source.write_text(original, encoding="utf-8")
-        entry = self.capture(source.name, '{"name":"Replacement"}')
-        jobs = [{"type": "material-descriptor", "source": source.name}]
+        replacement = "/.cooked/Textures/Replacement.otex"
+        entry = self.capture(
+            source.name,
+            json.dumps(
+                {
+                    "name": "Published",
+                    "textures": {"base_color": {"virtual_path": replacement}},
+                }
+            ),
+        )
+        jobs = [
+            {
+                "type": "material-descriptor",
+                "source": source.name,
+                "virtual_path": "/.cooked/Materials/Stone.omat",
+            }
+        ]
         result = self.analyze(jobs)
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         first = json.loads((self.root / "analysis.json").read_text(encoding="utf-8"))
         job = first["jobs"][0]
         self.assertTrue(first["complete"])
         self.assertEqual(Path(job["source_path"]), source)
-        self.assertTrue(
-            any(
-                output["virtual_path"].endswith("/Replacement.omat")
-                for output in job["outputs"]
-            )
+        self.assertEqual(
+            [reference["virtual_path"] for reference in job["references"]],
+            [replacement],
         )
         self.assertEqual(source.read_text(encoding="utf-8"), original)
 
@@ -237,7 +279,13 @@ class CapturedInputBatchCliTests(unittest.TestCase):
     def test_analysis_protects_all_capture_inputs_from_report_overwrite(self):
         used = self.capture("material.json", '{"name":"Replacement"}')
         unused = self.capture("other.json", '{"name":"Unconsumed"}')
-        jobs = [{"type": "material-descriptor", "source": "material.json"}]
+        jobs = [
+            {
+                "type": "material-descriptor",
+                "source": "material.json",
+                "virtual_path": "/.cooked/Materials/Stone.omat",
+            }
+        ]
         for entry in (used, unused):
             target = Path(entry["file"]["path"])
             before = target.read_bytes()
@@ -259,7 +307,13 @@ class CapturedInputBatchCliTests(unittest.TestCase):
     def test_analysis_rejects_uncaptured_live_inputs_and_changed_captures(self):
         source = self.root / "material.json"
         source.write_text('{"name":"Live"}', encoding="utf-8")
-        jobs = [{"type": "material-descriptor", "source": source.name}]
+        jobs = [
+            {
+                "type": "material-descriptor",
+                "source": source.name,
+                "virtual_path": "/.cooked/Materials/Stone.omat",
+            }
+        ]
         result = self.analyze(jobs)
         self.assertNotEqual(result.returncode, 0)
         report = json.loads((self.root / "analysis.json").read_text(encoding="utf-8"))
@@ -279,8 +333,16 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         self.capture("scene.json", EMPTY_SCENE)
         result = self.batch(
             [
-                {"type": "material-descriptor", "source": "material.json"},
-                {"type": "scene-descriptor", "source": "scene.json"},
+                {
+                    "type": "material-descriptor",
+                    "source": "material.json",
+                    "virtual_path": "/.cooked/Materials/Stone.omat",
+                },
+                {
+                    "type": "scene-descriptor",
+                    "source": "scene.json",
+                    "virtual_path": "/.cooked/Scenes/Empty.oscene",
+                },
             ]
         )
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
@@ -330,6 +392,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
             {
                 "type": "material-descriptor",
                 "source": "material.json",
+                "virtual_path": "/.cooked/Materials/RedMaterial.omat",
                 "depends_on": ["texture"],
             },
         ]
@@ -458,16 +521,19 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                     "id": "material",
                     "type": "material-descriptor",
                     "source": "material.json",
+                    "virtual_path": "/.cooked/Materials/Stone.omat",
                 },
                 {
                     "id": "geometry",
                     "type": "geometry-descriptor",
                     "source": "geometry.json",
+                    "virtual_path": "/.cooked/Geometry/Triangle.ogeo",
                     "depends_on": ["material"],
                 },
                 {
                     "type": "scene-descriptor",
                     "source": "scene.json",
+                    "virtual_path": "/.cooked/Scenes/TriangleScene.oscene",
                     "depends_on": ["geometry"],
                 },
             ]
@@ -479,7 +545,13 @@ class CapturedInputBatchCliTests(unittest.TestCase):
     def test_undeclared_descriptor_cannot_fall_back_to_live_source(self):
         (self.root / "material.json").write_text('{"name":"Live"}', encoding="utf-8")
         result = self.batch(
-            [{"type": "material-descriptor", "source": "material.json"}]
+            [
+                {
+                    "type": "material-descriptor",
+                    "source": "material.json",
+                    "virtual_path": "/.cooked/Materials/Stone.omat",
+                }
+            ]
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("not captured", result.stdout + result.stderr)
@@ -488,7 +560,13 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         entry = self.capture("material.json", '{"name":"Stone"}')
         Path(entry["file"]["path"]).write_text('{"name":"Other"}', encoding="utf-8")
         result = self.batch(
-            [{"type": "material-descriptor", "source": "material.json"}]
+            [
+                {
+                    "type": "material-descriptor",
+                    "source": "material.json",
+                    "virtual_path": "/.cooked/Materials/Stone.omat",
+                }
+            ]
         )
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("digest mismatch", result.stdout + result.stderr)
@@ -499,7 +577,12 @@ class CapturedInputBatchCliTests(unittest.TestCase):
         (self.root / "physics.json").write_text('{"bindings":{}}', encoding="utf-8")
         result = self.batch(
             [
-                {"id": "scene", "type": "scene-descriptor", "source": "scene.json"},
+                {
+                    "id": "scene",
+                    "type": "scene-descriptor",
+                    "source": "scene.json",
+                    "virtual_path": "/.cooked/Scenes/Empty.oscene",
+                },
                 {
                     "id": "physics",
                     "type": "physics-sidecar",
