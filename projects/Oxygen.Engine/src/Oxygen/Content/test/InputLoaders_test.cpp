@@ -262,7 +262,9 @@ NOLINT_TEST_F(
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
     = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.header.strings.offset = desc.trigger_aux.offset;
+  desc.header.strings.offset
+    = static_cast<oxygen::data::pak::core::StringTableOffsetT>(
+      desc.trigger_aux.offset);
   desc.header.strings.size = 2;
 
   InputActionMappingRecord mapping {};
@@ -314,7 +316,9 @@ NOLINT_TEST_F(
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
     = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.header.strings.offset = desc.trigger_aux.offset;
+  desc.header.strings.offset
+    = static_cast<oxygen::data::pak::core::StringTableOffsetT>(
+      desc.trigger_aux.offset);
   desc.header.strings.size = 2;
 
   InputActionMappingRecord mapping {};
@@ -361,7 +365,9 @@ NOLINT_TEST_F(
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
     = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.header.strings.offset = desc.trigger_aux.offset;
+  desc.header.strings.offset
+    = static_cast<oxygen::data::pak::core::StringTableOffsetT>(
+      desc.trigger_aux.offset);
   desc.header.strings.size = 2;
 
   InputActionMappingRecord mapping {};
@@ -411,7 +417,9 @@ NOLINT_TEST_F(
   desc.trigger_aux.count = 0;
   desc.trigger_aux.entry_size
     = sizeof(oxygen::data::pak::input::InputTriggerAuxRecord);
-  desc.header.strings.offset = desc.trigger_aux.offset;
+  desc.header.strings.offset
+    = static_cast<oxygen::data::pak::core::StringTableOffsetT>(
+      desc.trigger_aux.offset);
   desc.header.strings.size = 2;
 
   InputActionMappingRecord mapping {};
