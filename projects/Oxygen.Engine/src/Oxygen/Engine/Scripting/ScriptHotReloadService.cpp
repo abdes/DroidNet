@@ -87,11 +87,13 @@ auto ScriptHotReloadService::WatchLoop() -> co::Co<>
 
   // Initial scan of all roots
   for (const auto& root : roots) {
-    LOG_F(INFO, "starting watch on {}", root.generic_string());
+    // A configured root, such as the repository-local default, need not exist.
     if (!std::filesystem::exists(root)) {
-      LOG_F(WARNING, "root does not exist: {}", root.string());
+      LOG_F(INFO, "script source root does not exist, not watched: {}",
+        root.generic_string());
       continue;
     }
+    LOG_F(INFO, "starting watch on {}", root.generic_string());
 
     for (const auto& entry :
       std::filesystem::recursive_directory_iterator(root)) {
