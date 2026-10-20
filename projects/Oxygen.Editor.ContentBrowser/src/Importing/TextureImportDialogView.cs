@@ -104,17 +104,28 @@ public sealed class TextureImportDialogView : UserControl
     {
         _ = sender;
         _ = args;
-        this.dialog = this.FindAscendant<ContentDialog>();
-        this.viewModel.PropertyChanged += this.OnViewModelChanged;
-        this.UpdateReview();
+        this.UpdateSubscription();
     }
 
     private void OnUnloaded(object sender, RoutedEventArgs args)
     {
         _ = sender;
         _ = args;
+        this.UpdateSubscription();
+    }
+
+    // A dialog can raise its content's Unloaded after a later Loaded when it hosts the content again, so the
+    // subscription follows IsLoaded rather than the order of the events.
+    private void UpdateSubscription()
+    {
         this.viewModel.PropertyChanged -= this.OnViewModelChanged;
         this.dialog = null;
+        if (this.IsLoaded)
+        {
+            this.dialog = this.FindAscendant<ContentDialog>();
+            this.viewModel.PropertyChanged += this.OnViewModelChanged;
+            this.UpdateReview();
+        }
     }
 
     private void OnViewModelChanged(object? sender, PropertyChangedEventArgs args)

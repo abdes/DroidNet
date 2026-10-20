@@ -56,8 +56,10 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         this.SourceDimensions = ImageDimensions.TryRead(this.SourcePath);
         this.sourceFaces = TextureSourceAssetImporter.FindCubeFaces(this.SourcePath);
         var stem = Path.GetFileNameWithoutExtension(sourcePath);
-        this.Name = this.sourceFaces is null ? stem : TextureSourceAssetImporter.StripFaceSuffix(stem);
-        this.DestinationFolder = destinationFolder;
+
+        // The fields, not the properties: each property revalidates, which needs both values.
+        this.name = this.sourceFaces is null ? stem : TextureSourceAssetImporter.StripFaceSuffix(stem);
+        this.destinationFolder = destinationFolder;
         this.Revalidate();
     }
 
