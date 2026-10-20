@@ -127,19 +127,17 @@ public sealed class FileSystemAssetCatalogTests
         // Prime snapshot
         _ = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var received = new List<AssetChange>();
-        using var sub = catalog.Changes.Subscribe(received.Add);
+        using var changes = new ChangeRecorder(catalog.Changes);
 
         // Act
         events.Emit(new FileSystemCatalogEvent(
             FileSystemCatalogEventKind.Renamed,
             FullPath: @"C:\Project\Content\Textures\Wood02.png",
             OldFullPath: @"C:\Project\Content\Textures\Wood01.png"));
-
-        // Allow the buffer window to flush.
-        await Task.Delay(150, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await changes.WaitForAsync(static received => received.Count != 0, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // Assert
+        var received = changes.Received;
         _ = received.Should().ContainSingle(c => c.Kind == AssetChangeKind.Relocated);
         _ = received.Single(c => c.Kind == AssetChangeKind.Relocated).PreviousIdentity
             .Should().Be(AssetPath.Parse("/Content/Textures/Wood01.png"));
@@ -167,8 +165,7 @@ public sealed class FileSystemAssetCatalogTests
             events);
         _ = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var received = new List<AssetChange>();
-        using var sub = catalog.Changes.Subscribe(received.Add);
+        using var changes = new ChangeRecorder(catalog.Changes);
 
         // Act: an atomic save writes a hidden temporary file, then moves it over the destination.
         events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Created, @"C:\Project\Content\Materials\.oxygen-0123.tmp"));
@@ -176,10 +173,10 @@ public sealed class FileSystemAssetCatalogTests
             FileSystemCatalogEventKind.Renamed,
             FullPath: @"C:\Project\Content\Materials\Wood.omat.json",
             OldFullPath: @"C:\Project\Content\Materials\.oxygen-0123.tmp"));
-        await Task.Delay(150, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await changes.WaitForAsync(static received => received.Count != 0, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // Assert
-        _ = received.Should().ContainSingle()
+        _ = changes.Received.Should().ContainSingle()
             .Which.Should().Be(new AssetChange(AssetChangeKind.Updated, AssetPath.Parse("/Content/Materials/Wood.omat.json")));
     }
 
@@ -265,16 +262,15 @@ public sealed class FileSystemAssetCatalogTests
         var (fs, events, catalog) = await CreatePrimedAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         using var source = events;
         using var catalogLifetime = catalog;
-        var received = new List<AssetChange>();
-        using var sub = catalog.Changes.Subscribe(received.Add);
+        using var changes = new ChangeRecorder(catalog.Changes);
 
         await fs.File.WriteAllTextAsync(@"C:\Project\Content\Textures\Stone.png", "s", this.TestContext.CancellationToken).ConfigureAwait(false);
         events.Emit(renamed
             ? new FileSystemCatalogEvent(FileSystemCatalogEventKind.Renamed, @"C:\Project\Content\Textures\Stone.png", @"C:\Elsewhere\Stone.png")
             : new FileSystemCatalogEvent(FileSystemCatalogEventKind.Created, @"C:\Project\Content\Textures\Stone.png"));
-        await Task.Delay(300, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await changes.WaitForAsync(static received => received.Count != 0, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = received.Should().Equal(new AssetChange(AssetChangeKind.Added, AssetPath.Parse("/Content/Textures/Stone.png")));
+        _ = changes.Received.Should().Equal(new AssetChange(AssetChangeKind.Added, AssetPath.Parse("/Content/Textures/Stone.png")));
     }
 
     /// <summary>
@@ -288,19 +284,19 @@ public sealed class FileSystemAssetCatalogTests
         var (fs, events, catalog) = await CreatePrimedAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         using var source = events;
         using var catalogLifetime = catalog;
-        var received = new List<AssetChange>();
-        using var sub = catalog.Changes.Subscribe(received.Add);
+        using var changes = new ChangeRecorder(catalog.Changes);
         fs.File.Move(@"C:\Project\Content\Textures\Wood01.png", @"C:\Project\Content\Meshes\Wood01.png");
 
         await catalog.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Deleted, @"C:\Project\Content\Textures\Wood01.png"));
         events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Created, @"C:\Project\Content\Meshes\Wood01.png"));
-        await Task.Delay(300, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var sentinel = await SettleAsync(fs, events, changes, @"C:\Project\Content\Sentinel.png", this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = received.Should().BeEquivalentTo(
+        _ = changes.Received.Should().BeEquivalentTo(
             [
                 new AssetChange(AssetChangeKind.Removed, AssetPath.Parse("/Content/Textures/Wood01.png")),
                 new AssetChange(AssetChangeKind.Added, AssetPath.Parse("/Content/Meshes/Wood01.png")),
+                sentinel,
             ]);
     }
 
@@ -312,18 +308,17 @@ public sealed class FileSystemAssetCatalogTests
     [TestMethod]
     public async Task FolderChangedEventIsNotAFolderChangeOrAFile()
     {
-        var (_, events, catalog) = await CreatePrimedAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        var (fs, events, catalog) = await CreatePrimedAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         using var source = events;
         using var catalogLifetime = catalog;
-        var received = new List<AssetChange>();
-        using var sub = catalog.Changes.Subscribe(received.Add);
+        using var changes = new ChangeRecorder(catalog.Changes);
         var folders = new List<AssetPath>();
         using var folderSub = catalog.FolderChanges.Subscribe(folders.Add);
 
         events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Changed, @"C:\Project\Content\Textures"));
-        await Task.Delay(300, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var sentinel = await SettleAsync(fs, events, changes, @"C:\Project\Content\Meshes\Sentinel.geo", this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = received.Should().BeEmpty();
+        _ = changes.Received.Should().Equal(sentinel);
         _ = folders.Should().BeEmpty();
         _ = (await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false))
             .Select(static record => record.Identity).Should().NotContain(AssetPath.Parse("/Content/Textures"));
@@ -344,17 +339,16 @@ public sealed class FileSystemAssetCatalogTests
             new FileSystemAssetCatalogOptions { RootFolderPath = FileSystemPath.From(@"C:\Project"), MountPoint = "project", ExcludedFolders = ["Content"] },
             events);
         var listed = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var received = new List<AssetChange>();
-        using var sub = catalog.Changes.Subscribe(received.Add);
+        using var changes = new ChangeRecorder(catalog.Changes);
         var folders = new List<AssetPath>();
         using var folderSub = catalog.FolderChanges.Subscribe(folders.Add);
 
         fs.Directory.Delete(@"C:\Project\Content\Textures", recursive: true);
         events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Deleted, @"C:\Project\Content\Textures"));
-        await Task.Delay(300, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var sentinel = await SettleAsync(fs, events, changes, @"C:\Project\Sentinel.md", this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = listed.Select(static record => record.Identity).Should().Equal(AssetPath.Parse("/project/Readme.md"));
-        _ = received.Should().BeEmpty();
+        _ = changes.Received.Should().Equal(sentinel);
         _ = folders.Should().BeEmpty();
     }
 
@@ -373,6 +367,73 @@ public sealed class FileSystemAssetCatalogTests
             events);
         _ = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), cancellationToken).ConfigureAwait(false);
         return (fs, events, catalog);
+    }
+
+    // Reports a file arriving after the events under test. Batches apply in order, so once the catalog reports it, the
+    // earlier events were applied.
+    private static async Task<AssetChange> SettleAsync(MockFileSystem fs, ManualEventSource events, ChangeRecorder changes, string sentinel, CancellationToken cancellationToken)
+    {
+        await fs.File.WriteAllTextAsync(sentinel, "s", cancellationToken).ConfigureAwait(false);
+        events.Emit(new FileSystemCatalogEvent(FileSystemCatalogEventKind.Created, sentinel));
+        var path = FileSystemPath.From(sentinel);
+        await changes.WaitForAsync(received => received.Any(change => change.Kind == AssetChangeKind.Added && change.Identity.Name == path.Name), cancellationToken).ConfigureAwait(false);
+        return changes.Received.Last(change => change.Identity.Name == path.Name);
+    }
+
+    /// <summary>Records a catalog's asset changes; a test waits until they satisfy what it expects.</summary>
+    private sealed class ChangeRecorder : IDisposable
+    {
+        private readonly List<AssetChange> received = [];
+        private readonly List<(Func<IReadOnlyList<AssetChange>, bool> Done, TaskCompletionSource Signal)> waits = [];
+        private readonly IDisposable subscription;
+
+        public ChangeRecorder(IObservable<AssetChange> changes)
+            => this.subscription = changes.Subscribe(change =>
+            {
+                lock (this.received)
+                {
+                    this.received.Add(change);
+                    this.Signal();
+                }
+            });
+
+        public IReadOnlyList<AssetChange> Received
+        {
+            get
+            {
+                lock (this.received)
+                {
+                    return [.. this.received];
+                }
+            }
+        }
+
+        /// <summary>Waits until the received changes satisfy a condition, for at most five seconds.</summary>
+        /// <param name="done">The condition over every change received so far.</param>
+        /// <param name="cancellationToken">Cancels the wait.</param>
+        /// <returns>Completes when the condition holds.</returns>
+        public Task WaitForAsync(Func<IReadOnlyList<AssetChange>, bool> done, CancellationToken cancellationToken)
+        {
+            var signal = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+            lock (this.received)
+            {
+                this.waits.Add((done, signal));
+                this.Signal();
+            }
+
+            return signal.Task.WaitAsync(TimeSpan.FromSeconds(5), cancellationToken);
+        }
+
+        public void Dispose() => this.subscription.Dispose();
+
+        private void Signal()
+        {
+            foreach (var wait in this.waits.Where(wait => wait.Done(this.received)).ToArray())
+            {
+                _ = this.waits.Remove(wait);
+                _ = wait.Signal.TrySetResult();
+            }
+        }
     }
 
     /// <summary>Records a catalog's folder changes; completes once the expected number arrived.</summary>
