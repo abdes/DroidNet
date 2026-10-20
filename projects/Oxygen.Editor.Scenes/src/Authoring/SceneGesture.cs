@@ -152,6 +152,9 @@ public sealed class SceneGesture
         this.authoring.RaiseChanges(this.Changes(EditPhase.Cancel));
     }
 
+    private static PropertyEdit Differences(PropertyEdit before, PropertyEdit current)
+        => PropertyEdit.Of(before.Where(entry => !current.TryGetRaw(entry.Key, out var value) || !Equals(entry.Value, value)));
+
     private SceneEditResult Preview(SetProperties values)
     {
         if (this.rules.IsSceneKind || !values.Edits.Keys.ToHashSet().SetEquals(this.nodes.Keys) || !this.EditsOnlyItsProperties(values.Edits.Values))
@@ -244,9 +247,6 @@ public sealed class SceneGesture
             static pair => pair.Key,
             pair => Differences(pair.Value.Before, PropertyWrites.Read(this.rules, pair.Value.Target, this.captured)));
     }
-
-    private static PropertyEdit Differences(PropertyEdit before, PropertyEdit current)
-        => PropertyEdit.Of(before.Where(entry => !current.TryGetRaw(entry.Key, out var value) || !Equals(entry.Value, value)));
 
     private IReadOnlyList<SceneChange> Changes(EditPhase phase)
         => this.rules.IsSceneKind

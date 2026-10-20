@@ -129,7 +129,7 @@ public static class SceneSkyFields
 
     /// <summary>Adds the backdrop, sky sphere and sky light descriptors.</summary>
     /// <param name="descriptors">The catalog being built.</param>
-    public static void AddDescriptors(List<PropertyDescriptor> descriptors)
+    public static void AddDescriptors(ICollection<PropertyDescriptor> descriptors)
     {
         descriptors.Add(Environment(
             Backdrop,
@@ -140,13 +140,13 @@ public static class SceneSkyFields
                 : ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentSkyInvalid, "Choose an atmosphere, a cubemap or a solid color backdrop."),
             "segmented"));
         descriptors.Add(Environment(SolidColorLightsScene, SolidColorLightsSceneOf, WriteSolidColorLightsScene, static _ => ValidationResult.Ok, "toggle"));
-        descriptors.Add(Environment(SolidColor, SolidColorOf, WriteSolidColor, value => ValidateVector("Solid color", 0f, null, value), "color-rgb"));
+        descriptors.Add(Environment(SolidColor, SolidColorOf, WriteSolidColor, value => ValidateVector("Solid color", 0f, maximum: null, value), "color-rgb"));
 
         descriptors.Add(Sphere(SkySphereCubemap, static s => s.Cubemap, static (s, v) => s with { Cubemap = v }, static _ => ValidationResult.Ok, "asset-picker"));
-        descriptors.Add(Sphere(SkySphereIlluminanceLux, static s => s.IlluminanceLux, static (s, v) => s with { IlluminanceLux = v }, static value => ValidateFloat("Sky illuminance", 0f, null, value), "numberbox"));
-        descriptors.Add(Sphere(SkySphereIntensity, static s => s.Intensity, static (s, v) => s with { Intensity = v }, static value => ValidateFloat("Sky sphere intensity", 0f, null, value), "numberbox"));
-        descriptors.Add(Sphere(SkySphereRotationRadians, static s => s.RotationRadians, static (s, v) => s with { RotationRadians = v }, static value => ValidateFloat("Sky sphere rotation", null, null, value), "numberbox"));
-        descriptors.Add(Sphere(SkySphereTintRgb, static s => s.TintRgb, static (s, v) => s with { TintRgb = v }, static value => ValidateVector("Sky sphere tint", 0f, null, value), "color-rgb"));
+        descriptors.Add(Sphere(SkySphereIlluminanceLux, static s => s.IlluminanceLux, static (s, v) => s with { IlluminanceLux = v }, static value => ValidateFloat("Sky illuminance", 0f, maximum: null, value), "numberbox"));
+        descriptors.Add(Sphere(SkySphereIntensity, static s => s.Intensity, static (s, v) => s with { Intensity = v }, static value => ValidateFloat("Sky sphere intensity", 0f, maximum: null, value), "numberbox"));
+        descriptors.Add(Sphere(SkySphereRotationRadians, static s => s.RotationRadians, static (s, v) => s with { RotationRadians = v }, static value => ValidateFloat("Sky sphere rotation", minimum: null, maximum: null, value), "numberbox"));
+        descriptors.Add(Sphere(SkySphereTintRgb, static s => s.TintRgb, static (s, v) => s with { TintRgb = v }, static value => ValidateVector("Sky sphere tint", 0f, maximum: null, value), "color-rgb"));
 
         descriptors.Add(Light(SkyLightEnabled, static s => s.Enabled, static (s, v) => s with { Enabled = v }, static _ => ValidationResult.Ok, "toggle"));
         descriptors.Add(Light(
@@ -158,16 +158,16 @@ public static class SceneSkyFields
                 : ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentSkyInvalid, "Sky light source is not valid."),
             "segmented"));
         descriptors.Add(Light(SkyLightCubemap, static s => s.Cubemap, static (s, v) => s with { Cubemap = v }, static _ => ValidationResult.Ok, "asset-picker"));
-        descriptors.Add(Light(SkyLightCubemapIlluminanceLux, static s => s.CubemapIlluminanceLux, static (s, v) => s with { CubemapIlluminanceLux = v }, static value => ValidateFloat("Sky light cubemap illuminance", 0f, null, value), "numberbox"));
-        descriptors.Add(Light(SkyLightIntensity, static s => s.Intensity, static (s, v) => s with { Intensity = v }, static value => ValidateFloat("Sky light intensity", 0f, null, value), "numberbox"));
-        descriptors.Add(Light(SkyLightTintRgb, static s => s.TintRgb, static (s, v) => s with { TintRgb = v }, static value => ValidateVector("Sky light tint", 0f, null, value), "color-rgb"));
-        descriptors.Add(Light(SkyLightDiffuseIntensity, static s => s.DiffuseIntensity, static (s, v) => s with { DiffuseIntensity = v }, static value => ValidateFloat("Sky light diffuse", 0f, null, value), "numberbox"));
-        descriptors.Add(Light(SkyLightSpecularIntensity, static s => s.SpecularIntensity, static (s, v) => s with { SpecularIntensity = v }, static value => ValidateFloat("Sky light specular", 0f, null, value), "numberbox"));
-        descriptors.Add(Light(SkyLightCubemapAngleRadians, static s => s.CubemapAngleRadians, static (s, v) => s with { CubemapAngleRadians = v }, static value => ValidateFloat("Sky light cubemap rotation", null, null, value), "numberbox"));
-        descriptors.Add(Light(SkyLightLowerHemisphereColor, static s => s.LowerHemisphereColor, static (s, v) => s with { LowerHemisphereColor = v }, static value => ValidateVector("Lower hemisphere color", 0f, null, value), "color-rgb"));
+        descriptors.Add(Light(SkyLightCubemapIlluminanceLux, static s => s.CubemapIlluminanceLux, static (s, v) => s with { CubemapIlluminanceLux = v }, static value => ValidateFloat("Sky light cubemap illuminance", 0f, maximum: null, value), "numberbox"));
+        descriptors.Add(Light(SkyLightIntensity, static s => s.Intensity, static (s, v) => s with { Intensity = v }, static value => ValidateFloat("Sky light intensity", 0f, maximum: null, value), "numberbox"));
+        descriptors.Add(Light(SkyLightTintRgb, static s => s.TintRgb, static (s, v) => s with { TintRgb = v }, static value => ValidateVector("Sky light tint", 0f, maximum: null, value), "color-rgb"));
+        descriptors.Add(Light(SkyLightDiffuseIntensity, static s => s.DiffuseIntensity, static (s, v) => s with { DiffuseIntensity = v }, static value => ValidateFloat("Sky light diffuse", 0f, maximum: null, value), "numberbox"));
+        descriptors.Add(Light(SkyLightSpecularIntensity, static s => s.SpecularIntensity, static (s, v) => s with { SpecularIntensity = v }, static value => ValidateFloat("Sky light specular", 0f, maximum: null, value), "numberbox"));
+        descriptors.Add(Light(SkyLightCubemapAngleRadians, static s => s.CubemapAngleRadians, static (s, v) => s with { CubemapAngleRadians = v }, static value => ValidateFloat("Sky light cubemap rotation", minimum: null, maximum: null, value), "numberbox"));
+        descriptors.Add(Light(SkyLightLowerHemisphereColor, static s => s.LowerHemisphereColor, static (s, v) => s with { LowerHemisphereColor = v }, static value => ValidateVector("Lower hemisphere color", 0f, maximum: null, value), "color-rgb"));
         descriptors.Add(Light(SkyLightLowerHemisphereIsSolidColor, static s => s.LowerHemisphereIsSolidColor, static (s, v) => s with { LowerHemisphereIsSolidColor = v }, static _ => ValidationResult.Ok, "toggle"));
         descriptors.Add(Light(SkyLightLowerHemisphereBlendAlpha, static s => s.LowerHemisphereBlendAlpha, static (s, v) => s with { LowerHemisphereBlendAlpha = v }, static value => ValidateFloat("Lower hemisphere blend", 0f, 1f, value), "numberbox"));
-        descriptors.Add(Light(SkyLightVolumetricScatteringIntensity, static s => s.VolumetricScatteringIntensity, static (s, v) => s with { VolumetricScatteringIntensity = v }, static value => ValidateFloat("Sky light volumetric scattering", 0f, null, value), "numberbox"));
+        descriptors.Add(Light(SkyLightVolumetricScatteringIntensity, static s => s.VolumetricScatteringIntensity, static (s, v) => s with { VolumetricScatteringIntensity = v }, static value => ValidateFloat("Sky light volumetric scattering", 0f, maximum: null, value), "numberbox"));
         descriptors.Add(Light(SkyLightAffectReflections, static s => s.AffectReflections, static (s, v) => s with { AffectReflections = v }, static _ => ValidationResult.Ok, "toggle"));
     }
 
@@ -178,11 +178,11 @@ public static class SceneSkyFields
         => new[]
         {
             Enum.IsDefined(value.Source) ? ValidationResult.Ok : ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentSkyInvalid, "Sky sphere source is not valid."),
-            ValidateVector("Solid color", 0f, null, value.SolidColorRgb),
-            ValidateFloat("Sky illuminance", 0f, null, value.IlluminanceLux),
-            ValidateFloat("Sky sphere intensity", 0f, null, value.Intensity),
-            ValidateFloat("Sky sphere rotation", null, null, value.RotationRadians),
-            ValidateVector("Sky sphere tint", 0f, null, value.TintRgb),
+            ValidateVector("Solid color", 0f, maximum: null, value.SolidColorRgb),
+            ValidateFloat("Sky illuminance", 0f, maximum: null, value.IlluminanceLux),
+            ValidateFloat("Sky sphere intensity", 0f, maximum: null, value.Intensity),
+            ValidateFloat("Sky sphere rotation", minimum: null, maximum: null, value.RotationRadians),
+            ValidateVector("Sky sphere tint", 0f, maximum: null, value.TintRgb),
         }.Where(static result => !result.IsValid).Select(static result => result.Message).FirstOrDefault();
 
     /// <summary>Validates a complete sky light record.</summary>
@@ -192,27 +192,27 @@ public static class SceneSkyFields
         => new[]
         {
             Enum.IsDefined(value.Source) ? ValidationResult.Ok : ValidationResult.Fail(SceneDiagnosticCodes.EnvironmentSkyInvalid, "Sky light source is not valid."),
-            ValidateFloat("Sky light cubemap illuminance", 0f, null, value.CubemapIlluminanceLux),
-            ValidateFloat("Sky light intensity", 0f, null, value.Intensity),
-            ValidateVector("Sky light tint", 0f, null, value.TintRgb),
-            ValidateFloat("Sky light diffuse", 0f, null, value.DiffuseIntensity),
-            ValidateFloat("Sky light specular", 0f, null, value.SpecularIntensity),
-            ValidateFloat("Sky light cubemap rotation", null, null, value.CubemapAngleRadians),
-            ValidateVector("Lower hemisphere color", 0f, null, value.LowerHemisphereColor),
+            ValidateFloat("Sky light cubemap illuminance", 0f, maximum: null, value.CubemapIlluminanceLux),
+            ValidateFloat("Sky light intensity", 0f, maximum: null, value.Intensity),
+            ValidateVector("Sky light tint", 0f, maximum: null, value.TintRgb),
+            ValidateFloat("Sky light diffuse", 0f, maximum: null, value.DiffuseIntensity),
+            ValidateFloat("Sky light specular", 0f, maximum: null, value.SpecularIntensity),
+            ValidateFloat("Sky light cubemap rotation", minimum: null, maximum: null, value.CubemapAngleRadians),
+            ValidateVector("Lower hemisphere color", 0f, maximum: null, value.LowerHemisphereColor),
             ValidateFloat("Lower hemisphere blend", 0f, 1f, value.LowerHemisphereBlendAlpha),
-            ValidateFloat("Sky light volumetric scattering", 0f, null, value.VolumetricScatteringIntensity),
+            ValidateFloat("Sky light volumetric scattering", 0f, maximum: null, value.VolumetricScatteringIntensity),
         }.Where(static result => !result.IsValid).Select(static result => result.Message).FirstOrDefault();
 
     /// <summary>Gets the overlay schema pointer for a sky property pointer.</summary>
-    /// <param name="pointer">The property's JSON pointer.</param>
+    /// <param name="propertyPointer">The property's JSON pointer.</param>
     /// <returns>The schema pointer, or <see langword="null"/> for a non-sky property.</returns>
-    public static string? SchemaPointer(string pointer)
-        => pointer.StartsWith("/backdrop/", StringComparison.Ordinal)
-            ? "#/definitions/editor_scene_environment/backdrop/" + pointer["/backdrop/".Length..]
-            : pointer.StartsWith("/sky_sphere/", StringComparison.Ordinal)
-            ? "#/definitions/sky_sphere_environment/" + SchemaKey(pointer["/sky_sphere/".Length..])
-            : pointer.StartsWith("/sky_light/", StringComparison.Ordinal)
-            ? "#/definitions/sky_light_environment/" + SchemaKey(pointer["/sky_light/".Length..])
+    public static string? SchemaPointer(string propertyPointer)
+        => propertyPointer.StartsWith("/backdrop/", StringComparison.Ordinal)
+            ? "#/definitions/editor_scene_environment/backdrop/" + propertyPointer["/backdrop/".Length..]
+            : propertyPointer.StartsWith("/sky_sphere/", StringComparison.Ordinal)
+            ? "#/definitions/sky_sphere_environment/" + SchemaKey(propertyPointer["/sky_sphere/".Length..])
+            : propertyPointer.StartsWith("/sky_light/", StringComparison.Ordinal)
+            ? "#/definitions/sky_light_environment/" + SchemaKey(propertyPointer["/sky_light/".Length..])
             : null;
 
     private static string SchemaKey(string key)

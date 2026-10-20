@@ -24,12 +24,16 @@ internal static class SceneTransformMath
     private const float Tolerance = 1e-4f;
 
     /// <summary>Composes the local TRS of a transform component.</summary>
+    /// <param name="transform">The transform component whose local scale, rotation and position are composed.</param>
+    /// <returns>The local matrix, composed as <c>scale * rotation * translation</c>.</returns>
     internal static Matrix4x4 LocalMatrix(TransformComponent transform)
         => Matrix4x4.CreateScale(transform.LocalScale)
            * Matrix4x4.CreateFromQuaternion(transform.LocalRotation)
            * Matrix4x4.CreateTranslation(transform.LocalPosition);
 
     /// <summary>Computes the world transform of a node, honouring <see cref="SceneNode.IgnoreParentTransform"/>.</summary>
+    /// <param name="node">The node whose world transform is computed.</param>
+    /// <returns>The node's local matrix composed with its ancestors', or the local matrix alone for a root or a node that ignores its parent.</returns>
     internal static Matrix4x4 WorldMatrix(SceneNode node)
     {
         var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();

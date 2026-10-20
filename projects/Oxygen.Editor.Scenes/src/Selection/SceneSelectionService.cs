@@ -9,7 +9,10 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Selection;
 
-/// <inheritdoc />
+/// <summary>
+/// The editor's single owner of scene selection: one stored <see cref="SceneSelectionContext"/> per document, which
+/// every panel reads and writes, and a change event for each write.
+/// </summary>
 public sealed class SceneSelectionService : ISceneSelectionService
 {
     // One stored context per document: kind, ordered node/folder ids and the explicit primary.
@@ -37,7 +40,7 @@ public sealed class SceneSelectionService : ISceneSelectionService
                 orderedIds,
                 [],
                 orderedIds[^1],
-PrimaryFolderId: null);
+                PrimaryFolderId: null);
 
         this.PublishCore(documentId, context, source);
     }
@@ -53,10 +56,9 @@ PrimaryFolderId: null);
         }
 
         var byId = scene.AllNodes.ToDictionary(node => node.Id);
-        return context.SelectedNodeIds
+        return [.. context.SelectedNodeIds
             .Where(byId.ContainsKey)
-            .Select(id => byId[id])
-            .ToArray();
+            .Select(id => byId[id])];
     }
 
     /// <inheritdoc />
@@ -106,7 +108,7 @@ PrimaryFolderId: null);
             && primaryNode == context.PrimaryNodeId
             && primaryFolder == context.PrimaryFolderId)
         {
-            return survivingIds.Select(id => byId[id]).ToArray();
+            return [.. survivingIds.Select(id => byId[id])];
         }
 
         var updated = new SceneSelectionContext(
@@ -116,7 +118,7 @@ PrimaryFolderId: null);
             primaryNode,
             primaryFolder);
         this.PublishCore(documentId, updated, "Reconcile");
-        return survivingIds.Select(id => byId[id]).ToArray();
+        return [.. survivingIds.Select(id => byId[id])];
     }
 
     /// <inheritdoc />

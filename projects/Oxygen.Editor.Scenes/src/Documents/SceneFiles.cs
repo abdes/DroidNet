@@ -25,7 +25,7 @@ public static class SceneFiles
         ArgumentNullException.ThrowIfNull(project);
         var records = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), cancellationToken).ConfigureAwait(true);
         return [.. records
-            .Where(static record => AssetFileTypes.Find(record.Identity.Name)?.Suffix == AssetFileTypes.SceneDescriptor)
+            .Where(static record => string.Equals(AssetFileTypes.Find(record.Identity.Name)?.Suffix, AssetFileTypes.SceneDescriptor, StringComparison.Ordinal))
             .Select(record => project.Find(record.Identity))
             .OfType<ProjectAssetLocation>()
             .Where(static location => location.MountKind == ProjectMountKind.Authoring)

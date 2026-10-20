@@ -112,6 +112,7 @@ public sealed record SetMaterialSlot : ISceneEdit
         {
             scope.WarnIfDeleted([Resolve(scope, this.Assignments[id]).Material], id);
         }
+
         return new SceneEditApplication.Applied(new SetMaterialSlot(before), [.. before.Keys.Select(static id => new SceneChange.MaterialSlotsChanged(id))]);
     }
 

@@ -7,11 +7,11 @@ using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core;
 
@@ -126,7 +126,7 @@ public sealed class TransformRulesTests
         _ = raised.Properties.Should().BeEquivalentTo([Transform.RotationX.Id, Transform.RotationY.Id, Transform.RotationZ.Id]);
     }
 
-    private static SceneData SceneWithA1(Vector3 eulerDegrees)
+    private static SceneFileData SceneWithA1(Vector3 eulerDegrees)
         => SampleScene.Builder()
             .Without(SampleScene.A1)
             .Node(

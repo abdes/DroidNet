@@ -11,6 +11,7 @@ namespace Oxygen.Editor.Scenes.Changes;
 /// <remarks>
 /// A change carries no values: consumers read them from the scene, which already holds them when the change is raised.
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "A closed union: the private constructor admits only the nested cases, which consumers match as SceneChange.NodesAdded and so on.")]
 public abstract record SceneChange
 {
     private SceneChange()

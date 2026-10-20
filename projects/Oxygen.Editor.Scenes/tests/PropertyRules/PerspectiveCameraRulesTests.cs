@@ -140,6 +140,6 @@ public sealed class PerspectiveCameraRulesTests
         SceneAssert.Unchanged(fixture, before);
     }
 
-    private static SetProperties Edit(params (NodeId node, PropertyEdit edit)[] edits)
-        => new(edits.ToDictionary(static pair => pair.node, static pair => pair.edit), "Cameras");
+    private static SetProperties Edit(params (NodeId Node, PropertyEdit Edit)[] edits)
+        => new(edits.ToDictionary(static pair => pair.Node, static pair => pair.Edit), "Cameras");
 }

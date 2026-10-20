@@ -28,7 +28,7 @@ public sealed record SetScriptSlots(NodeId Node, ImmutableArray<ScriptSlot> Slot
     SceneEditValidation ISceneEdit.Validate(SceneEditScope scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        if (ScriptingOf(scope) is null)
+        if (this.ScriptingOf(scope) is null)
         {
             return SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.ComponentMissing, "The node no longer has a Scripting component.", this.Node));
         }
@@ -68,7 +68,7 @@ public sealed record SetScriptSlots(NodeId Node, ImmutableArray<ScriptSlot> Slot
             return SceneDiagnostic.Error(SceneEditCodes.EntryMissing, "Every script slot needs an identity.");
         }
 
-        if (slots.Select(static slot => slot.Id).Distinct().Count() != slots.Length)
+        if (slots.Select(static slot => slot.Id).Distinct().Take(slots.Length + 1).Count() != slots.Length)
         {
             return SceneDiagnostic.Error(SceneEditCodes.EntryDuplicate, "Two script slots share one identity.");
         }

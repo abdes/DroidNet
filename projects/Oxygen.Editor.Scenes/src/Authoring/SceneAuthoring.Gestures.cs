@@ -19,7 +19,7 @@ public sealed partial class SceneAuthoring
     /// Gets a value indicating whether an open gesture shows the scene changed from where it began, so a save or a cook
     /// must wait for it; a drag returned to its start does not count.
     /// </summary>
-    public bool HasEditsInProgress => this.gestures.Any(static gesture => gesture.HasChanges());
+    public bool HasEditsInProgress => this.gestures.Exists(static gesture => gesture.HasChanges());
 
     /// <summary>Gets the scene, for the gestures and edits that run through this authoring.</summary>
     internal SceneEditScope Scope => this.scope;

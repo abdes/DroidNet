@@ -81,6 +81,7 @@ public sealed record RestoreMaterialSlots : ISceneEdit
         {
             scope.WarnIfDeleted(slots.Select(slot => scope.Resolve(slot.Assignment.Material)), id);
         }
+
         var removals = this.Slots.ToDictionary(static pair => pair.Key, static pair => (IReadOnlyList<MaterialSlotTarget>)[.. pair.Value.Select(static slot => slot.Assignment.Target)]);
         return new SceneEditApplication.Applied(new RemoveMaterialSlots(removals), [.. this.Slots.Keys.Select(static id => new SceneChange.MaterialSlotsChanged(id))]);
     }

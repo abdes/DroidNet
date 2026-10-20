@@ -35,6 +35,7 @@ public sealed class SceneDocumentKind(
     /// The scene takes its name from its file. Its node identities must be present and unique, and its explorer layout
     /// must name each folder once and only nodes of the scene, each once.
     /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2000:Dispose objects before losing scope", Justification = "The decoded SceneContent is handed to the DocumentDecodeResult, whose consumer (the opened document) owns and disposes it; nothing between its construction and the return can throw.")]
     public async Task<DocumentDecodeResult> DecodeAsync(DocumentFile file, ReadOnlyMemory<byte> content, DocumentDecodeContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(file);
@@ -75,8 +76,8 @@ public sealed class SceneDocumentKind(
     }
 
     private static bool IsLayoutValid(IEnumerable<ExplorerEntryData>? entries, HashSet<NodeId> nodeIds, HashSet<FolderId> folderIds, HashSet<NodeId> layoutNodeIds)
-        => entries is null || entries.All(entry =>
+        => entries?.All(entry =>
             (entry.FolderId is not { } folder || folderIds.Add(folder))
             && (entry.NodeId is not { } node || (nodeIds.Contains(node) && layoutNodeIds.Add(node)))
-            && IsLayoutValid(entry.Children, nodeIds, folderIds, layoutNodeIds));
+            && IsLayoutValid(entry.Children, nodeIds, folderIds, layoutNodeIds)) != false;
 }

@@ -14,14 +14,10 @@ namespace Oxygen.Editor.Scenes.Layout;
 /// </remarks>
 public sealed record SceneFileData : SceneData
 {
-    /// <summary>Initializes a new instance of the <see cref="SceneFileData"/> record.</summary>
     public SceneFileData()
     {
     }
 
-    /// <summary>Initializes a new instance of the <see cref="SceneFileData"/> record from a scene and its layout.</summary>
-    /// <param name="scene">The scene's data.</param>
-    /// <param name="explorerLayout">The scene's explorer layout, or <see langword="null"/> for none.</param>
     [SetsRequiredMembers]
     public SceneFileData(SceneData scene, IList<ExplorerEntryData>? explorerLayout)
         : base(scene)

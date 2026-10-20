@@ -49,6 +49,24 @@ internal sealed class DirectionalLightRules : IComponentRules
         return slotChanged ? SlotConflict(scene, candidates) : null;
     }
 
+    /// <inheritdoc/>
+    /// <remarks>A light added to a node that is not rotated points down at its default angle instead of along the horizon.</remarks>
+    public IReadOnlyList<ISceneEdit> OnAdd(SceneNode node)
+    {
+        if (node.Components.OfType<TransformComponent>().FirstOrDefault() is not { } transform || transform.LocalRotation != Quaternion.Identity)
+        {
+            return [];
+        }
+
+        var euler = TransformConverter.QuaternionToEulerDegrees(DirectionalLightComponent.DefaultLocalRotation);
+        var rotation = new PropertyEdit.Builder()
+            .Set(SceneProperties.Transform.RotationX, euler.X)
+            .Set(SceneProperties.Transform.RotationY, euler.Y)
+            .Set(SceneProperties.Transform.RotationZ, euler.Z)
+            .Build();
+        return [new SetProperties(new Dictionary<NodeId, PropertyEdit> { [node.Id] = rotation }, "Point Light Down")];
+    }
+
     /// <summary>Checks that each atmosphere slot keeps one owner once the candidate lights take their slots.</summary>
     /// <param name="scene">The scene.</param>
     /// <param name="candidates">The directional lights to check in place of the scene's, by node; a node may have none yet.</param>
@@ -86,23 +104,5 @@ internal sealed class DirectionalLightRules : IComponentRules
         }
 
         return null;
-    }
-
-    /// <inheritdoc/>
-    /// <remarks>A light added to a node that is not rotated points down at its default angle instead of along the horizon.</remarks>
-    public IReadOnlyList<ISceneEdit> OnAdd(SceneNode node)
-    {
-        if (node.Components.OfType<TransformComponent>().FirstOrDefault() is not { } transform || transform.LocalRotation != Quaternion.Identity)
-        {
-            return [];
-        }
-
-        var euler = TransformConverter.QuaternionToEulerDegrees(DirectionalLightComponent.DefaultLocalRotation);
-        var rotation = new PropertyEdit.Builder()
-            .Set(SceneProperties.Transform.RotationX, euler.X)
-            .Set(SceneProperties.Transform.RotationY, euler.Y)
-            .Set(SceneProperties.Transform.RotationZ, euler.Z)
-            .Build();
-        return [new SetProperties(new Dictionary<NodeId, PropertyEdit> { [node.Id] = rotation }, "Point Light Down")];
     }
 }

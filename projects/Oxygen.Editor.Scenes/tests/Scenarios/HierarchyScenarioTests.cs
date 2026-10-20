@@ -145,7 +145,7 @@ public sealed class HierarchyScenarioTests
                 new RemoveFolder(SampleScene.F, PromoteChildren: false),
             ]);
 
-    private static (Vector3 position, Quaternion rotation, Vector3 scale) LocalOf(AuthoringFixture fixture, NodeId node)
+    private static (Vector3 Position, Quaternion Rotation, Vector3 Scale) LocalOf(AuthoringFixture fixture, NodeId node)
     {
         var transform = fixture.Node(node).Components.OfType<TransformComponent>().Single();
         return (transform.LocalPosition, transform.LocalRotation, transform.LocalScale);

@@ -18,7 +18,7 @@ namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 /// </remarks>
 public sealed partial class SingleThreadContext : SynchronizationContext, IDisposable
 {
-    private readonly BlockingCollection<(SendOrPostCallback callback, object? state)> queue = [];
+    private readonly BlockingCollection<(SendOrPostCallback Callback, object? State)> queue = [];
     private readonly Thread thread;
     private Exception? failure;
 

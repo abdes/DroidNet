@@ -83,7 +83,9 @@ public static class SceneComponents
     /// <returns>The kind.</returns>
     /// <exception cref="ArgumentException">The component's kind cannot be added.</exception>
     public static string KindOf(GameComponent component)
-        => component switch
+    {
+        ArgumentNullException.ThrowIfNull(component);
+        return component switch
         {
             GeometryComponent => Geometry,
             World.Components.PerspectiveCamera => PerspectiveCamera,
@@ -93,8 +95,9 @@ public static class SceneComponents
             SpotLightComponent => SpotLight,
             LocalFogVolumeComponent => LocalFogVolume,
             ScriptingComponent => Scripting,
-            _ => throw new ArgumentException($"A {component?.GetType().Name} cannot be added.", nameof(component)),
+            _ => throw new ArgumentException($"A {component.GetType().Name} cannot be added.", nameof(component)),
         };
+    }
 
     private static IComponentRules? RulesOf(GameComponent component)
         => component switch

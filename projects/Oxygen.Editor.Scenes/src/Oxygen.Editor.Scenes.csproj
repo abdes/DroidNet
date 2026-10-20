@@ -9,6 +9,7 @@
         <Description>Oxygen.Editor.Scenes holds scene authoring without any UI: the scene document kind, scene edits run by each document's SceneAuthoring, selection, node lock and visibility, and the engine sync port.</Description>
         <PackageTags>editor;scenes;authoring</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>

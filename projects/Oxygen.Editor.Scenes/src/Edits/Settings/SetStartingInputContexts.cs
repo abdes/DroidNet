@@ -71,9 +71,10 @@ public sealed record SetStartingInputContexts : ISceneEdit
             return SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, invalid);
         }
 
-        return contexts.Select(static entry => entry.Context).Distinct().Count() != contexts.Count
-            ? SceneDiagnostic.Error(SceneEditCodes.EntryDuplicate, "An input context can start only once.")
-            : null;
+        return contexts.Select(static entry
+            => entry.Context).Distinct().Take(contexts.Count + 1).Count() != contexts.Count
+                ? SceneDiagnostic.Error(SceneEditCodes.EntryDuplicate, "An input context can start only once.")
+                : null;
     }
 
     private IReadOnlyList<StartingInputContextData> Resolved(SceneEditScope scope)

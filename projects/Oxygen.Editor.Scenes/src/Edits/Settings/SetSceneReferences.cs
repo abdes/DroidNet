@@ -71,7 +71,7 @@ public sealed record SetSceneReferences : ISceneEdit
             return SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, typed);
         }
 
-        return references.ExtraAssets.Any(static asset => asset is null || asset.IsMount)
+        return references.ExtraAssets.Any(static asset => asset?.IsMount != false)
             ? SceneDiagnostic.Error(SceneEditCodes.AssetReferenceInvalid, "An extra asset must name an asset below a mount.")
             : null;
     }

@@ -7,6 +7,7 @@ using Oxygen.Editor.Scenes.Changes;
 namespace Oxygen.Editor.Scenes.Authoring;
 
 /// <summary>What applying an edit did.</summary>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1034:Nested types should not be visible", Justification = "A closed union: the private constructor admits only the nested cases, which consumers match as SceneEditApplication.Applied and SceneEditApplication.Rejected.")]
 public abstract record SceneEditApplication
 {
     private SceneEditApplication()

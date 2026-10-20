@@ -31,12 +31,12 @@ public static class SceneNodeCopies
         ArgumentNullException.ThrowIfNull(roots);
         var ids = new Dictionary<NodeId, NodeId>();
         var renewed = roots.Select(root => Renew(WithTransform(SerializationCopies.Copy(root), transforms), ids)).ToList();
-        var copies = renewed.Select(data =>
+        var copies = renewed.ConvertAll(data =>
         {
             var node = SceneNode.CreateAndHydrate(scene, data);
             CopiedNodeReferences.RemapSubtree(node, ids);
             return node.Dehydrate();
-        }).ToList();
+        });
         return new NodeCopies(copies, ids);
     }
 
@@ -101,8 +101,8 @@ public static class SceneNodeCopies
         Func<TPosition, int, TPosition> withIndex)
         where TPosition : notnull
     {
-        var positions = sources.Select(positionOf).ToList();
-        var indexes = positions.Select(indexOf).ToList();
+        var positions = sources.ConvertAll(node => positionOf(node));
+        var indexes = positions.ConvertAll(position => indexOf(position));
         var result = new TPosition[positions.Count];
         foreach (var group in Enumerable.Range(0, positions.Count).GroupBy(i => containerOf(positions[i])))
         {

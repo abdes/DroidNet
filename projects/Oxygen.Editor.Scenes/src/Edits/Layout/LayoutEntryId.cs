@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Runtime.InteropServices;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Managed.Core;
 
@@ -10,6 +11,7 @@ namespace Oxygen.Editor.Scenes.Edits.Layout;
 /// <summary>An explorer layout entry: a node's entry or a folder.</summary>
 /// <param name="Node">The node, for a node's entry.</param>
 /// <param name="Folder">The folder, for a folder.</param>
+[StructLayout(LayoutKind.Auto)]
 public readonly record struct LayoutEntryId(NodeId? Node, FolderId? Folder)
 {
     /// <summary>Gets the entry of a node.</summary>

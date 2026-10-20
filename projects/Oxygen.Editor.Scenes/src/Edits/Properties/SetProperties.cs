@@ -88,6 +88,7 @@ public sealed record SetProperties : ISceneEdit
             if (replaced.Count > 0)
             {
                 reverts[node] = replaced;
+
                 // Coupled properties are listed with the changed ones: normalizing one Euler axis can move the others' reading.
                 changes.Add(new SceneChange.PropertiesChanged(node, [.. rules.Coupled(edit.Ids).Union(replaced.Ids)], EditPhase.Commit));
             }

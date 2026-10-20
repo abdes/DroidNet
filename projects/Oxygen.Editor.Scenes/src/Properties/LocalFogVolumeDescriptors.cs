@@ -16,12 +16,7 @@ public sealed class LocalFogVolumeDescriptors
 {
     private LocalFogVolumeDescriptors()
     {
-        this.EnabledDescriptor = new(
-            id: new PropertyId<bool>(SceneProperties.LocalFogVolumeKind, "/enabled"),
-            reader: static target => ((LocalFogVolumeComponent)target).Enabled,
-            writer: static (target, value) => ((LocalFogVolumeComponent)target).Enabled = value,
-            validator: static _ => ValidationResult.Ok,
-            annotation: Annotation("enabled", new EditorAnnotation { Group = "Local Fog Volume", Label = "Enabled", Renderer = "toggle" }));
+        this.EnabledDescriptor = CreateEnabledDescriptor();
         this.RadialFogExtinctionDescriptor = FloatDescriptor(
             "/radial_fog_extinction",
             "Density",
@@ -69,26 +64,8 @@ public sealed class LocalFogVolumeDescriptors
             static volume => volume.FogEmissive,
             static (volume, value) => volume.FogEmissive = value,
             maximum: null);
-        this.SortPriorityDescriptor = new(
-            id: new PropertyId<int>(SceneProperties.LocalFogVolumeKind, "/sort_priority"),
-            reader: static target => ((LocalFogVolumeComponent)target).SortPriority,
-            writer: static (target, value) => ((LocalFogVolumeComponent)target).SortPriority = value,
-            validator: static value => value is >= -127 and <= 127
-                ? ValidationResult.Ok
-                : ValidationResult.Fail(SceneDiagnosticCodes.LocalFogVolumeInvalid, "Sort priority must be between -127 and 127."),
-            annotation: Annotation("sort_priority", new EditorAnnotation { Group = "Local Fog Volume", Label = "Sort Priority", Renderer = "numberbox", Step = 1 }));
-        this.ById = new Dictionary<PropertyId, PropertyDescriptor>
-        {
-            [this.EnabledDescriptor.Id] = this.EnabledDescriptor,
-            [this.RadialFogExtinctionDescriptor.Id] = this.RadialFogExtinctionDescriptor,
-            [this.HeightFogExtinctionDescriptor.Id] = this.HeightFogExtinctionDescriptor,
-            [this.HeightFogFalloffDescriptor.Id] = this.HeightFogFalloffDescriptor,
-            [this.HeightFogOffsetDescriptor.Id] = this.HeightFogOffsetDescriptor,
-            [this.FogPhaseGDescriptor.Id] = this.FogPhaseGDescriptor,
-            [this.FogAlbedoDescriptor.Id] = this.FogAlbedoDescriptor,
-            [this.FogEmissiveDescriptor.Id] = this.FogEmissiveDescriptor,
-            [this.SortPriorityDescriptor.Id] = this.SortPriorityDescriptor,
-        };
+        this.SortPriorityDescriptor = CreateSortPriorityDescriptor();
+        this.ById = this.IndexById();
     }
 
     /// <summary>Gets the descriptor for volume enablement.</summary>
@@ -124,6 +101,24 @@ public sealed class LocalFogVolumeDescriptors
     /// <summary>Builds the canonical local fog volume descriptor catalog.</summary>
     /// <returns>The descriptor catalog.</returns>
     public static LocalFogVolumeDescriptors Build() => new();
+
+    private static PropertyDescriptor<bool> CreateEnabledDescriptor()
+        => new(
+            id: new PropertyId<bool>(SceneProperties.LocalFogVolumeKind, "/enabled"),
+            reader: static target => ((LocalFogVolumeComponent)target).Enabled,
+            writer: static (target, value) => ((LocalFogVolumeComponent)target).Enabled = value,
+            validator: static _ => ValidationResult.Ok,
+            annotation: Annotation("enabled", new EditorAnnotation { Group = "Local Fog Volume", Label = "Enabled", Renderer = "toggle" }));
+
+    private static PropertyDescriptor<int> CreateSortPriorityDescriptor()
+        => new(
+            id: new PropertyId<int>(SceneProperties.LocalFogVolumeKind, "/sort_priority"),
+            reader: static target => ((LocalFogVolumeComponent)target).SortPriority,
+            writer: static (target, value) => ((LocalFogVolumeComponent)target).SortPriority = value,
+            validator: static value => value is >= -127 and <= 127
+                ? ValidationResult.Ok
+                : ValidationResult.Fail(SceneDiagnosticCodes.LocalFogVolumeInvalid, "Sort priority must be between -127 and 127."),
+            annotation: Annotation("sort_priority", new EditorAnnotation { Group = "Local Fog Volume", Label = "Sort Priority", Renderer = "numberbox", Step = 1 }));
 
     private static PropertyDescriptor<float> FloatDescriptor(
         string pointer,
@@ -176,4 +171,18 @@ public sealed class LocalFogVolumeDescriptors
 
     private static EditorAnnotation Annotation(string property, EditorAnnotation fallback)
         => SceneEditorSchemaAnnotations.Get("#/definitions/local_fog_volume/" + property, fallback);
+
+    private Dictionary<PropertyId, PropertyDescriptor> IndexById()
+        => new()
+        {
+            [this.EnabledDescriptor.Id] = this.EnabledDescriptor,
+            [this.RadialFogExtinctionDescriptor.Id] = this.RadialFogExtinctionDescriptor,
+            [this.HeightFogExtinctionDescriptor.Id] = this.HeightFogExtinctionDescriptor,
+            [this.HeightFogFalloffDescriptor.Id] = this.HeightFogFalloffDescriptor,
+            [this.HeightFogOffsetDescriptor.Id] = this.HeightFogOffsetDescriptor,
+            [this.FogPhaseGDescriptor.Id] = this.FogPhaseGDescriptor,
+            [this.FogAlbedoDescriptor.Id] = this.FogAlbedoDescriptor,
+            [this.FogEmissiveDescriptor.Id] = this.FogEmissiveDescriptor,
+            [this.SortPriorityDescriptor.Id] = this.SortPriorityDescriptor,
+        };
 }

@@ -23,7 +23,7 @@ namespace Oxygen.Editor.Scenes.Documents;
 /// Disposing the content retires its authoring: edits already running finish, and no new edit starts on it. A reload
 /// replaces the content, and closing the document disposes it.
 /// </remarks>
-public sealed class SceneContent : IDocumentContent, IDisposable
+public sealed partial class SceneContent : IDocumentContent, IDisposable
 {
     /// <summary>Initializes a new instance of the <see cref="SceneContent"/> class.</summary>
     /// <param name="scene">The decoded scene.</param>
@@ -51,6 +51,9 @@ public sealed class SceneContent : IDocumentContent, IDisposable
     /// <summary>Gets the authoring that executes every change to the scene.</summary>
     public SceneAuthoring Authoring { get; }
 
+    /// <inheritdoc/>
+    public bool HasEditsInProgress => this.Authoring.HasEditsInProgress;
+
     /// <summary>Gets the content of a scene document.</summary>
     /// <param name="document">The document.</param>
     /// <returns>The document's scene content.</returns>
@@ -71,9 +74,6 @@ public sealed class SceneContent : IDocumentContent, IDisposable
             ? name[..^AssetFileTypes.SceneDescriptor.Length]
             : Path.GetFileNameWithoutExtension(name);
     }
-
-    /// <inheritdoc/>
-    public bool HasEditsInProgress => this.Authoring.HasEditsInProgress;
 
     /// <inheritdoc/>
     public Task FinishEditsAsync(CancellationToken cancellationToken) => this.Authoring.FinishEditsAsync();
@@ -107,13 +107,10 @@ public sealed class SceneContent : IDocumentContent, IDisposable
     }
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        this.Authoring.Dispose();
-    }
+    public void Dispose() => this.Authoring.Dispose();
 
     // Script slots have no runtime projection; the projector attaches the re-pointed geometry once it is mounted.
-    private static IReadOnlyList<SceneChange> Relocate(Scene scene, DocumentRelocation relocation)
+    private static List<SceneChange> Relocate(Scene scene, DocumentRelocation relocation)
     {
         var nodes = scene.AllNodes.Where(node => SceneReferenceRetargeting.RetargetNode(node, relocation.MapAsset)).ToArray();
         if (SceneReferenceRetargeting.Retarget(scene.References, relocation.MapAsset) is { } references)

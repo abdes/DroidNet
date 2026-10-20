@@ -209,6 +209,7 @@ public sealed partial class SceneAuthoring : IDisposable
     }
 
     // The history runs the entry; the entry's replay leaves its result behind for the caller.
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1508:Avoid dead conditional code", Justification = "this.history.Undo/Redo invokes SceneHistoryEntry.Apply, which re-enters this.Replay and sets this.replayed (ReplayChecked or Refuse) before the call returns; the analyzer cannot see through the history.")]
     private SceneEditResult Step(bool undo)
     {
         if (this.IsRetired)

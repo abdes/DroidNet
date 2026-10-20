@@ -7,6 +7,7 @@ using System.Numerics;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
@@ -221,6 +222,6 @@ public sealed class SceneEnvironmentRulesTests
             },
         };
 
-    private static SceneData SceneWith(SceneEnvironmentData environment)
+    private static SceneFileData SceneWith(SceneEnvironmentData environment)
         => SampleScene.Builder().Environment(environment).Build();
 }

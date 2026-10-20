@@ -240,7 +240,7 @@ public sealed record SceneClipboard
     // cycle is the built batch's to refuse.
     private SceneDiagnostic? CutItems(IList<ExplorerEntryData> layout, out List<ExplorerEntryData> items)
     {
-        items = new List<ExplorerEntryData>(this.Entries.Count);
+        items = [with(this.Entries.Count)];
         (bool Known, NodeId? Scope) source = default;
         foreach (var id in this.Entries.Select(SceneLayout.IdOf))
         {
@@ -274,7 +274,7 @@ public sealed record SceneClipboard
         }
 
         var copies = SceneNodeCopies.Copy(scene, preserveWorld ? this.WorldNodes! : this.Nodes);
-        items = this.Entries.Select(entry => SceneNodeCopies.RemapEntry(entry, copies.Ids)).ToList();
+        items = [.. this.Entries.Select(entry => SceneNodeCopies.RemapEntry(entry, copies.Ids))];
         var data = copies.Roots.ToDictionary(static root => root.Id);
         var rootNodes = scene.RootNodes.Count;
         var rootEntries = layout.Count;

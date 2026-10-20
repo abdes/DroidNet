@@ -53,14 +53,12 @@ internal sealed class SceneEnvironmentRules : IComponentRules
     /// <param name="candidate">The environment.</param>
     /// <returns>Why it breaks a rule, or <see langword="null"/> when it follows them all.</returns>
     internal static string? ProblemOf(SceneEnvironmentData candidate)
-    {
-        return candidate.Background is { Enabled: true } background && !IsDisplayColor(background.ColorRgb)
+        => candidate.Background is { Enabled: true } background && !IsDisplayColor(background.ColorRgb)
             ? "The background color must be between 0 and 1."
             : (candidate.SkySphere is { } sphere ? SceneSkyFields.ValidateSkySphere(sphere) : null)
                 ?? (candidate.SkyLight is { } light ? SceneSkyFields.ValidateSkyLight(light) : null)
                 ?? (candidate.SkyAtmosphere is { } sky && !IsFinite(sky) ? "Sky atmosphere values must be finite." : null)
                 ?? (candidate.PostProcess is { } post ? SceneDescriptorGenerator.ValidatePostProcess(post) : null);
-    }
 
     private static bool IsDisplayColor(Vector3 value) => IsFinite(value) && value == Vector3.Clamp(value, Vector3.Zero, Vector3.One);
 

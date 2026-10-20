@@ -106,16 +106,7 @@ public sealed class PerspectiveCameraDescriptors
     /// <returns>The descriptor catalog.</returns>
     public static PerspectiveCameraDescriptors Build()
         => new(
-            fieldOfViewDegrees: FloatDescriptor(
-                "/field_of_view_degrees",
-                "Field of View",
-                static camera => camera.FieldOfView,
-                static (camera, value) => camera.FieldOfView = value,
-                static value => !float.IsFinite(value)
-                    ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")
-                    : value is < 1f or > 179f
-                        ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Field of view must be between 1 and 179 degrees.")
-                        : ValidationResult.Ok),
+            fieldOfViewDegrees: CreateFieldOfView(),
             aspectRatio: FloatDescriptor(
                 "/aspect_ratio",
                 "Aspect Ratio",
@@ -144,16 +135,7 @@ public sealed class PerspectiveCameraDescriptors
                 static value => float.IsFinite(value)
                     ? ValidationResult.Ok
                     : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")),
-            aspectMode: new(
-                id: new PropertyId<CameraAspectMode>(SceneProperties.PerspectiveCameraKind, "/aspect_mode"),
-                reader: static target => ((PerspectiveCamera)target).AspectMode,
-                writer: static (target, value) => ((PerspectiveCamera)target).AspectMode = value,
-                validator: static value => Enum.IsDefined(value)
-                    ? ValidationResult.Ok
-                    : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Unknown camera aspect mode."),
-                annotation: SceneEditorSchemaAnnotations.Get(
-                    "#/definitions/perspective_camera/aspect_mode",
-                    new EditorAnnotation { Group = "Projection", Label = "Aspect Mode", Renderer = "combobox" })),
+            aspectMode: CreateAspectMode(),
             apertureF: FloatDescriptor(
                 "/aperture_f",
                 "Aperture",
@@ -172,6 +154,30 @@ public sealed class PerspectiveCameraDescriptors
                 static camera => camera.Iso,
                 static (camera, value) => camera.Iso = value,
                 Positive("ISO must be greater than zero.")));
+
+    private static PropertyDescriptor<float> CreateFieldOfView()
+        => FloatDescriptor(
+            "/field_of_view_degrees",
+            "Field of View",
+            static camera => camera.FieldOfView,
+            static (camera, value) => camera.FieldOfView = value,
+            static value => !float.IsFinite(value)
+                ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")
+                : value is < 1f or > 179f
+                    ? ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Field of view must be between 1 and 179 degrees.")
+                    : ValidationResult.Ok);
+
+    private static PropertyDescriptor<CameraAspectMode> CreateAspectMode()
+        => new(
+            id: new PropertyId<CameraAspectMode>(SceneProperties.PerspectiveCameraKind, "/aspect_mode"),
+            reader: static target => ((PerspectiveCamera)target).AspectMode,
+            writer: static (target, value) => ((PerspectiveCamera)target).AspectMode = value,
+            validator: static value => Enum.IsDefined(value)
+                ? ValidationResult.Ok
+                : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Unknown camera aspect mode."),
+            annotation: SceneEditorSchemaAnnotations.Get(
+                "#/definitions/perspective_camera/aspect_mode",
+                new EditorAnnotation { Group = "Projection", Label = "Aspect Mode", Renderer = "combobox" }));
 
     private static Func<float, ValidationResult> Positive(string message)
         => value => !float.IsFinite(value)
