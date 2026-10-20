@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
+using DroidNet.TestHelpers;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -19,6 +20,7 @@ using static Oxygen.Editor.WorldEditor.TestSupport.CatalogWorkload;
 namespace Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests.Cooking;
 
 [TestClass]
+[ReleaseOnly]
 public sealed partial class CookFeedbackTimingBenchmarks : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;

@@ -135,7 +135,13 @@ class WindowsBuildTools(unittest.TestCase):
 
 
 class TestFailurePropagation(unittest.TestCase):
-    def run_process(self, arguments: list[str], timeout: float = 10):
+    def run_process(
+        self,
+        arguments: list[str],
+        timeout: float = 10,
+        tier: str = "Unit",
+        configuration: str = "Debug",
+    ):
         with tempfile.TemporaryDirectory() as directory:
             project = Path(directory) / "Process.Tests.csproj"
             project.touch()
@@ -145,12 +151,16 @@ class TestFailurePropagation(unittest.TestCase):
                 "EnableMSTestRunner": "true",
                 "TargetDir": str(Path(sys.executable).parent),
                 "TargetName": Path(sys.executable).stem,
+                "DroidNetTestTier": tier,
             }
             invocation = TaskInvocation("Invoke-Tests", invoke_tests)
             config = TraversalConfig(
                 start_location=Path(directory),
                 tasks=[invocation],
-                forwarded_arguments={"timeout": timeout},
+                forwarded_arguments={
+                    "timeout": timeout,
+                    "configuration": configuration,
+                },
                 extra_arguments=arguments,
             )
             with (
@@ -176,6 +186,19 @@ class TestFailurePropagation(unittest.TestCase):
         result = self.run_process(["-c", "import time; time.sleep(10)"], 0.1)
         self.assertFalse(result.success)
         self.assertIsInstance(result.failures[0].exception, subprocess.TimeoutExpired)
+
+    @unittest.skipUnless(os.name == "nt", "Windows executable runner")
+    def test_benchmarks_are_skipped_in_debug(self):
+        result = self.run_process(["-c", "raise SystemExit(7)"], tier="Benchmarks")
+        self.assertTrue(result.success)
+
+    @unittest.skipUnless(os.name == "nt", "Windows executable runner")
+    def test_benchmarks_run_in_release(self):
+        result = self.run_process(
+            ["-c", "raise SystemExit(7)"], tier="Benchmarks", configuration="Release"
+        )
+        self.assertFalse(result.success)
+        self.assertEqual(result.failures[0].exception.returncode, 7)
 
 
 @unittest.skipUnless(os.name == "nt", "Visual Studio MSBuild required")

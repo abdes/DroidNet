@@ -64,6 +64,11 @@
         <IncludeInSolutionFile Condition="'$(DroidNetTestScope)' != 'All' And '$(DroidNetTestScope)' != '$(DroidNetTestTier)'">false</IncludeInSolutionFile>
     </PropertyGroup>
 
+    <!-- Benchmarks are [ReleaseOnly]; this test always runs, so a Debug run does not end with "zero tests ran". -->
+    <ItemGroup Condition="'$(DroidNetTestTier)' == 'Benchmarks'">
+        <Compile Include="$(MyTopLevelDirectory)projects/TestHelpers/benchmarks/ReleaseOnlyBuildTests.cs" Link="TestHelpers/ReleaseOnlyBuildTests.cs" />
+    </ItemGroup>
+
     <!--
         Code Quality
 

@@ -2,12 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.TestHelpers;
 using DroidNet.Tests;
 using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests.SceneEditor;
 
 [TestClass]
+[ReleaseOnly]
 public sealed class DocumentViewportStressTests : VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;

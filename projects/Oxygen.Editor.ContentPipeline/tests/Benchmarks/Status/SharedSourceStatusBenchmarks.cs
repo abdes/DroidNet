@@ -2,11 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.TestHelpers;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 
 namespace Oxygen.Editor.ContentPipeline.Benchmarks.Tests.Status;
 
 [TestClass]
+[ReleaseOnly]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Scenario-based MSTest method names separate the operation and expected behavior.")]
 public sealed class SharedSourceStatusBenchmarks

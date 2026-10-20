@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
+using DroidNet.TestHelpers;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.Assets.TestSupport;
@@ -24,6 +25,7 @@ namespace Oxygen.Editor.Assets.Benchmarks.Tests;
 
 /// <summary>Measures how long the asset feed takes to publish a large project.</summary>
 [TestClass]
+[ReleaseOnly]
 public sealed class AssetFeedWorkloadBenchmarks
 {
     /// <summary>Gets or sets the running test context.</summary>

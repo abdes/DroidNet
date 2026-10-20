@@ -7,6 +7,7 @@ using System.Globalization;
 using System.Reactive.Linq;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
+using DroidNet.TestHelpers;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
@@ -30,6 +31,7 @@ using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 namespace Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests.Workspace;
 
 [TestClass]
+[ReleaseOnly]
 public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;

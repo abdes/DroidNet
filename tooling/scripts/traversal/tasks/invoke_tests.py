@@ -43,6 +43,7 @@ def invoke_tests(project: Path, context: TraversalContext) -> None:
                 "TargetName",
                 "EnableMSTestRunner",
                 "RunSettingsFilePath",
+                "DroidNetTestTier",
             ],
             configuration=configuration,
             target_framework=framework,
@@ -50,6 +51,15 @@ def invoke_tests(project: Path, context: TraversalContext) -> None:
         native = project.suffix.lower() == ".vcxproj"
         test_property = "IsTestProject" if native else "IsTestApplication"
         if values[test_property].lower() != "true":
+            continue
+        # Benchmarks measure optimized code; a Debug run only costs time.
+        if (
+            configuration.lower() == "debug"
+            and values["DroidNetTestTier"].lower() == "benchmarks"
+        ):
+            context.logger.info(
+                "Invoke-Tests: skipped benchmarks in Debug: %s", project.name
+            )
             continue
         if native:
             executable = Path(values["TargetPath"])
