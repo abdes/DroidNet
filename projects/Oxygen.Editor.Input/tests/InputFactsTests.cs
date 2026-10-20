@@ -97,6 +97,31 @@ public sealed partial class InputFactsTests : IDisposable
     }
 
     [TestMethod]
+    public async Task ACheckReadsASourceWhoseFileChangedSinceItWasRead()
+    {
+        _ = this.project.WriteFile(PlayerFile, InputTemplates.New("Player"));
+        await this.OpenAsync().ConfigureAwait(false);
+
+        // The file changed, and its change has not reached the facts yet.
+        _ = this.project.WriteFile(PlayerFile, "not json");
+        this.facts.Check([AssetPath.Parse(PlayerFile), AssetPath.Parse("/Content/Scripts/Orbit.lua")]);
+
+        _ = this.facts.Problems.Should().ContainSingle().Which.Code.Should().Be(InputSourceCodes.NotJson);
+    }
+
+    [TestMethod]
+    public async Task ACheckKeepsAnUnchangedSourceAsItWasRead()
+    {
+        _ = this.project.WriteFile(PlayerFile, InputTemplates.New("Player"));
+        await this.OpenAsync().ConfigureAwait(false);
+        var read = this.facts.Find(Player);
+
+        this.facts.Check([AssetPath.Parse(PlayerFile)]);
+
+        _ = this.facts.Find(Player).Should().BeSameAs(read);
+    }
+
+    [TestMethod]
     public async Task DeclaringAnActionClearsTheProblemsOfTheSourcesThatNameIt()
     {
         _ = this.project.WriteFile(PlayerFile, InputTemplates.New("Player").Replace("\"action\": \"Jump\"", "\"action\": \"/Content/Input/Common.input/Fire.oiact\"", StringComparison.Ordinal));

@@ -10,6 +10,9 @@ namespace Oxygen.Editor.Scripting;
 /// </summary>
 public interface IScriptAnalyzer
 {
+    /// <summary>Gets a value indicating whether the analyzer can be loaded now, without waiting.</summary>
+    public bool IsAvailable { get; }
+
     /// <summary>Waits until the analyzer can be loaded, such as once the engine SDK it loads from is verified.</summary>
     /// <param name="cancellationToken">A token that cancels the wait.</param>
     /// <returns>A task that completes when the analyzer is available.</returns>

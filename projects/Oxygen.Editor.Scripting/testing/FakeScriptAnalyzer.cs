@@ -21,6 +21,9 @@ public sealed class FakeScriptAnalyzer : IScriptAnalyzer
     private readonly ConcurrentQueue<AnalysisHold> holds = new();
     private TaskCompletionSource available = CreateAvailable(isAvailable: true);
 
+    /// <inheritdoc />
+    public bool IsAvailable => this.available.Task.IsCompleted;
+
     /// <summary>Gets the source names analyzed, in order.</summary>
     public IReadOnlyCollection<string> Analyzed => this.analyzed;
 

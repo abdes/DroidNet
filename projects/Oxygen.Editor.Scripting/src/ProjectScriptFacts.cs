@@ -133,6 +133,19 @@ internal sealed partial class ProjectScriptFacts : IDisposable
         }
     }
 
+    /// <summary>Analyzes the scripts of some source files whose content differs from their last analysis.</summary>
+    /// <param name="sources">The source files, as the catalog names them; those that are not scripts are ignored.</param>
+    /// <param name="cancellationToken">A token that cancels the analysis.</param>
+    /// <returns>A task that completes when they have been analyzed.</returns>
+    public async Task CheckAsync(IEnumerable<AssetPath> sources, CancellationToken cancellationToken)
+    {
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.closed);
+        foreach (var (identity, file) in sources.Select(this.SourceOf).OfType<(AssetPath Identity, FileSystemPath File)>().Distinct())
+        {
+            await this.AnalyzeAsync(identity, file, force: false, cancellation.Token).ConfigureAwait(false);
+        }
+    }
+
     /// <inheritdoc />
     public void Dispose()
     {

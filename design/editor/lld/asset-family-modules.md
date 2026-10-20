@@ -632,11 +632,13 @@ public interface IScripts : IAssetProblemSource
     Script? Find(AssetPath script);                          // /Content/Player/move.oscript
     IReadOnlyCollection<Script> All { get; }
     Task<ScriptRead> ReadLibraryAsync(AssetPath script, CancellationToken cancellationToken);
+    Task CheckAsync(IReadOnlyCollection<AssetPath> sources, CancellationToken cancellationToken); // analyze what is behind its file
     Task RefreshAsync(bool force, CancellationToken cancellationToken);
 }
 
 public interface IScriptAnalyzer          // implemented by LivePreview
 {
+    bool IsAvailable { get; }
     Task WaitUntilAvailableAsync(CancellationToken cancellationToken);
     ScriptAnalysis Analyze(string sourceName, ReadOnlySpan<byte> source, string? definitions);
 }
@@ -651,6 +653,7 @@ public interface IInputSources : IAssetProblemSource
 {
     event EventHandler<InputSourceChangedEventArgs>? Changed; // Container null: the project changed
     InputContainer? Find(AssetPath container);               // /Content/Input/Player.input
+    void Check(IReadOnlyCollection<AssetPath> sources);      // read what changed since it was read
     IReadOnlyCollection<InputContainer> All { get; }
 }
 ```

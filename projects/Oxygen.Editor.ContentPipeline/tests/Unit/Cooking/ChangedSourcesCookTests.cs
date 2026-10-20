@@ -65,7 +65,7 @@ public sealed class ChangedSourcesCookTests
         _ = run.Request.IsAutomatic.Should().BeTrue();
     }
 
-    /// <summary>Each source left out for its errors is named in the run that cooks the others.</summary>
+    /// <summary>Each source left out for its errors, or those of a source it uses, is named in the run that cooks the others.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
     public async Task SkippedSourcesAreNamedInTheRun()
@@ -78,14 +78,23 @@ public sealed class ChangedSourcesCookTests
             new CookChanges
             {
                 Sources = [AssetPath.Parse("/Content/Materials/Red.omat.json")],
-                Skipped = [new SkippedCookSource { Source = AssetPath.Parse("/Content/Scripts/Orbit.lua"), ErrorCount = 2 }],
+                Skipped =
+                [
+                    new SkippedCookSource { Source = AssetPath.Parse("/Content/Scripts/Orbit.lua"), ErrorCount = 2 },
+                    new SkippedCookSource
+                    {
+                        Source = AssetPath.Parse("/Content/Scenes/Main.oscene.json"),
+                        ErrorCount = 2,
+                        Dependencies = [AssetPath.Parse("/Content/Scripts/Orbit.lua")],
+                    },
+                ],
             },
             workspace.ProjectContext,
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var skipped = workspace.CookCoordinator.Runs.Single().Diagnostics.Should().ContainSingle(issue => issue.Code == ContentPipelineService.SkippedForProblemsCode).Which;
-        _ = skipped.Severity.Should().Be(DiagnosticSeverity.Info);
-        _ = skipped.AffectedVirtualPath.Should().Be("/Content/Scripts/Orbit.oscript");
+        var skipped = workspace.CookCoordinator.Runs.Single().Diagnostics.Where(static issue => issue.Code == ContentPipelineService.SkippedForProblemsCode).ToList();
+        _ = skipped.Should().OnlyContain(static issue => issue.Severity == DiagnosticSeverity.Info);
+        _ = skipped.Select(static issue => issue.AffectedVirtualPath).Should().Equal("/Content/Scripts/Orbit.oscript", "/Content/Scenes/Main.oscene");
     }
 
     /// <summary>A source moved or deleted before its run starts leaves the run instead of failing it.</summary>

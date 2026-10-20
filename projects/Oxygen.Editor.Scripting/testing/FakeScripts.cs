@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 
@@ -15,6 +16,7 @@ public sealed class FakeScripts : IScripts
 {
     private readonly Dictionary<AssetPath, Script> scripts = [];
     private readonly Dictionary<AssetPath, Func<CancellationToken, Task<ScriptRead>>> library = [];
+    private readonly Dictionary<AssetPath, Script> pending = [];
 
     /// <inheritdoc />
     public event EventHandler<ScriptChangedEventArgs>? Changed;
@@ -30,6 +32,9 @@ public sealed class FakeScripts : IScripts
 
     /// <summary>Gets the number of library reads.</summary>
     public int LibraryReads { get; private set; }
+
+    /// <summary>Gets the sources of each <see cref="CheckAsync"/>, in order.</summary>
+    public IList<IReadOnlyCollection<AssetPath>> Checks { get; } = [];
 
     /// <summary>Gets the <c>force</c> argument of each <see cref="RefreshAsync"/>, in order.</summary>
     public IList<bool> Refreshes { get; } = [];
@@ -50,6 +55,22 @@ public sealed class FakeScripts : IScripts
     }
 
     /// <inheritdoc />
+    /// <remarks>Publishes the pending analysis of each script a source names, as the real facts analyze a source
+    /// whose analysis is behind its file.</remarks>
+    public Task CheckAsync(IReadOnlyCollection<AssetPath> sources, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        this.Checks.Add(sources);
+        foreach (var identity in sources.Select(AssetFileTypes.ToIdentity).Where(this.pending.ContainsKey).ToList())
+        {
+            _ = this.pending.Remove(identity, out var script);
+            _ = this.Add(script!);
+        }
+
+        return Task.CompletedTask;
+    }
+
+    /// <inheritdoc />
     public Task RefreshAsync(bool force, CancellationToken cancellationToken = default)
     {
         this.Refreshes.Add(force);
@@ -65,6 +86,15 @@ public sealed class FakeScripts : IScripts
         this.scripts[script.Identity] = script;
         this.Raise(script.Identity);
         return script;
+    }
+
+    /// <summary>Holds the analysis of a script that has not finished yet; the next <see cref="CheckAsync"/> that
+    /// names its source publishes it.</summary>
+    /// <param name="script">The script as its analysis will report it.</param>
+    public void SetPending(Script script)
+    {
+        ArgumentNullException.ThrowIfNull(script);
+        this.pending[script.Identity] = script;
     }
 
     /// <summary>Removes a script of the project.</summary>

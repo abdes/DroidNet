@@ -350,6 +350,44 @@ public sealed partial class ScriptFactsTests : IDisposable
     }
 
     [TestMethod]
+    public async Task ACheckAnalyzesASourceWhoseAnalysisIsBehindItsFile()
+    {
+        _ = this.project.WriteFile(MoveFile, MoveSource);
+        await this.OpenAsync().ConfigureAwait(false);
+
+        // The file changed, and its change has not reached the facts yet.
+        _ = this.project.WriteFile(MoveFile, BrokenSource);
+        await this.facts.CheckAsync([AssetPath.Parse(MoveFile), AssetPath.Parse("/Content/Materials/Wood.omat.json")], this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = this.facts.Problems.Should().ContainSingle().Which.Code.Should().Be("S0101");
+    }
+
+    [TestMethod]
+    public async Task ACheckDoesNotAnalyzeAnUnchangedSourceAgain()
+    {
+        _ = this.project.WriteFile(MoveFile, MoveSource);
+        await this.OpenAsync().ConfigureAwait(false);
+
+        await this.facts.CheckAsync([AssetPath.Parse(MoveFile)], this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = this.analyzer.Analyzed.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task ACheckAnalyzesNothingWhileTheAnalyzerIsUnavailable()
+    {
+        _ = this.project.WriteFile(MoveFile, MoveSource);
+        await this.OpenAsync().ConfigureAwait(false);
+        this.analyzer.MakeUnavailable();
+
+        _ = this.project.WriteFile(MoveFile, BrokenSource);
+        await this.facts.CheckAsync([AssetPath.Parse(MoveFile)], this.TestContext.CancellationToken).WaitAsync(Patience, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = this.analyzer.Analyzed.Should().ContainSingle();
+        _ = this.facts.Problems.Should().BeEmpty();
+    }
+
+    [TestMethod]
     public async Task ReadingALibraryScriptWithNoProjectOpenFindsNothing()
     {
         var read = await this.facts.ReadLibraryAsync(AssetPath.Parse("/Engine/Scripts/rotate.oscript"), this.TestContext.CancellationToken).ConfigureAwait(false);

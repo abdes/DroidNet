@@ -72,6 +72,13 @@ public sealed partial class InputFacts : IInputSources, IDisposable
     public IReadOnlyList<AssetProblem> Problems => Volatile.Read(ref this.snapshot).Problems;
 
     /// <inheritdoc />
+    public void Check(IReadOnlyCollection<AssetPath> sources)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        Volatile.Read(ref this.current)?.Refresh(sources);
+    }
+
+    /// <inheritdoc />
     public InputContainer? Find(AssetPath container)
     {
         ArgumentNullException.ThrowIfNull(container);

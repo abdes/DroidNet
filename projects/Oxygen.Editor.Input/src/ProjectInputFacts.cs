@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
+using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
@@ -66,6 +67,16 @@ internal sealed partial class ProjectInputFacts(ProjectContext project, Action<I
     public void Update(AssetChange change)
     {
         ArgumentNullException.ThrowIfNull(change);
+
+        // A move changes two sources: the one it left and the one it made.
+        this.Refresh([change.PreviousIdentity, change.Identity]);
+    }
+
+    /// <summary>Reads again some source files, and publishes the result when one of them changed.</summary>
+    /// <param name="sources">The source files, as the catalog names them; those that are not input sources are ignored.</param>
+    public void Refresh(IEnumerable<AssetPath?> sources)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
         lock (this.gate)
         {
             if (this.disposed)
@@ -74,8 +85,8 @@ internal sealed partial class ProjectInputFacts(ProjectContext project, Action<I
             }
 
             var before = this.entries;
-            var sources = new[] { change.PreviousIdentity, change.Identity }.Select(this.SourceOf).OfType<(AssetPath Identity, FileSystemPath File)>().ToList();
-            foreach (var (identity, file) in sources)
+            var read = sources.Select(this.SourceOf).OfType<(AssetPath Identity, FileSystemPath File)>().Distinct().ToList();
+            foreach (var (identity, file) in read)
             {
                 // The file is read whatever the change says: changes can arrive out of order, and the file is the truth.
                 this.entries = this.Read(identity, file) is { } entry ? this.entries.SetItem(identity, entry) : this.entries.Remove(identity);
@@ -83,8 +94,7 @@ internal sealed partial class ProjectInputFacts(ProjectContext project, Action<I
 
             if (!ReferenceEquals(before, this.entries))
             {
-                // A move changes two sources: the one it left and the one it made.
-                publish(InputSnapshot.Create(project, this.entries), sources is [var only] ? only.Identity : null);
+                publish(InputSnapshot.Create(project, this.entries), read is [var only] ? only.Identity : null);
             }
         }
     }
@@ -127,14 +137,21 @@ internal sealed partial class ProjectInputFacts(ProjectContext project, Action<I
                 ? (AssetFileTypes.ToIdentity(path), file)
                 : null;
 
-    // The file as it is now: null when it is gone; the entry read before when it cannot be read now, as while the
-    // editor that saved it still holds it, since its next change reads it again.
+    // The file as it is now: null when it is gone; the entry read before when it is unchanged, or when it cannot be
+    // read now, as while the editor that saved it still holds it, since its next change reads it again.
     private InputSourceEntry? Read(AssetPath identity, FileSystemPath file)
     {
         try
         {
-            var report = InputSourceReader.Check(project.FileSystem.File.ReadAllBytes(file.FullPath));
-            return new InputSourceEntry(file, report.Source is { } source ? new InputContainer(identity, source) : null, report.Problems);
+            var bytes = project.FileSystem.File.ReadAllBytes(file.FullPath);
+            var hash = Convert.ToHexString(SHA256.HashData(bytes));
+            if (this.entries.GetValueOrDefault(identity) is { } known && known.File == file && string.Equals(known.Hash, hash, StringComparison.Ordinal))
+            {
+                return known;
+            }
+
+            var report = InputSourceReader.Check(bytes);
+            return new InputSourceEntry(file, report.Source is { } source ? new InputContainer(identity, source) : null, report.Problems, hash);
         }
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
         {

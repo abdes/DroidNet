@@ -272,9 +272,13 @@ replaces the in-memory pause.
 
 The family modules check their sources (scripts, input sources) and publish the
 problems in their facts ([asset family modules](asset-family-modules.md)). Cook
-on change skips an input whose facts report errors: they show in Problems and
-beside the asset, the run that cooks the other changes names it, and the change
-that fixes them cooks it. A saved script cooks on change like any other input.
+on change skips an input whose facts report errors, or that uses one, such as a
+scene whose script has errors: they show in Problems and beside the asset, the
+run that cooks the other changes names it, and the change that fixes them cooks
+it. Before choosing a run's inputs, the cook brings the facts of every file the
+run reads up to date with the file, so an analysis still behind a change does
+not let a broken input through. A saved script cooks on change like any other
+input.
 Script analysis is native and needs the engine's type definitions, so Scripting
 runs it through its `IScriptAnalyzer` port, which LivePreview implements.
 

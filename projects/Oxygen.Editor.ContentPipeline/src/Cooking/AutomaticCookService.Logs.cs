@@ -34,7 +34,7 @@ public sealed partial class AutomaticCookService
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "{Count} changed sources were not cooked: their facts report errors ({Sources}); the change that fixes them cooks them.")]
+        Message = "{Count} changed sources were not cooked: they, or sources they use, have errors ({Sources}); the change that fixes them cooks them.")]
     private static partial void LogSkippedForErrors(ILogger logger, int count, string sources);
 
     private void LogSkippedForErrors(List<SkippedCookSource> skipped)

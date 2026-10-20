@@ -17,6 +17,7 @@ namespace Oxygen.Editor.Input.Testing;
 public sealed class FakeInputSources : IInputSources
 {
     private readonly Dictionary<AssetPath, InputContainer> containers = [];
+    private IReadOnlyList<AssetProblem>? pending;
 
     /// <inheritdoc />
     public event EventHandler<InputSourceChangedEventArgs>? Changed;
@@ -29,6 +30,23 @@ public sealed class FakeInputSources : IInputSources
 
     /// <inheritdoc />
     public IReadOnlyList<AssetProblem> Problems { get; private set; } = [];
+
+    /// <summary>Gets the sources of each <see cref="Check"/>, in order.</summary>
+    public IList<IReadOnlyCollection<AssetPath>> Checks { get; } = [];
+
+    /// <inheritdoc />
+    /// <remarks>Publishes the pending problems, as the real facts read a source whose file changed since it was
+    /// read.</remarks>
+    public void Check(IReadOnlyCollection<AssetPath> sources)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        this.Checks.Add(sources);
+        if (this.pending is { } problems)
+        {
+            this.pending = null;
+            this.SetProblems(problems);
+        }
+    }
 
     /// <inheritdoc />
     public InputContainer? Find(AssetPath container)
@@ -59,6 +77,14 @@ public sealed class FakeInputSources : IInputSources
         {
             this.Changed?.Invoke(this, new InputSourceChangedEventArgs(identity));
         }
+    }
+
+    /// <summary>Holds problems that a read in progress will report; the next <see cref="Check"/> publishes them.</summary>
+    /// <param name="problems">The problems.</param>
+    public void SetPendingProblems(IReadOnlyList<AssetProblem> problems)
+    {
+        ArgumentNullException.ThrowIfNull(problems);
+        this.pending = problems;
     }
 
     /// <summary>Replaces the problems.</summary>

@@ -51,4 +51,12 @@ public sealed partial class ScriptFacts
     private static partial void LogScriptAnalysisFailed(ILogger logger, AssetPath script, Exception exception);
 
     private void LogScriptAnalysisFailed(AssetPath script, Exception exception) => LogScriptAnalysisFailed(this.logger, script, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Could not bring the facts of {Count} script sources up to date")]
+    private static partial void LogScriptCheckFailed(ILogger logger, int count, Exception exception);
+
+    private void LogScriptCheckFailed(int count, Exception exception) => LogScriptCheckFailed(this.logger, count, exception);
 }

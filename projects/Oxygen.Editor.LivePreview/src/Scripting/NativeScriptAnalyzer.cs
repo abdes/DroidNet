@@ -36,6 +36,9 @@ public sealed class NativeScriptAnalyzer : IScriptAnalyzer, IDisposable
     }
 
     /// <inheritdoc />
+    public bool IsAvailable => this.ready.Task.IsCompleted;
+
+    /// <inheritdoc />
     public Task WaitUntilAvailableAsync(CancellationToken cancellationToken) => this.ready.Task.WaitAsync(cancellationToken);
 
     /// <inheritdoc />

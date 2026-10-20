@@ -64,13 +64,15 @@ public sealed partial class ContentPipelineService
         foreach (var source in skipped)
         {
             var errors = source.ErrorCount == 1 ? "1 error" : string.Create(CultureInfo.CurrentCulture, $"{source.ErrorCount} errors");
+            var cause = source.Dependencies.Count == 0 ? $"it has {errors}"
+                : $"it uses {string.Join(", ", source.Dependencies.Select(static used => $"'{used.Name}'"))}, which {(source.Dependencies.Count == 1 ? "has" : "have")} {errors}";
             var skip = new DiagnosticRecord
             {
                 OperationId = operation.OperationId,
                 Domain = FailureDomain.AssetCook,
                 Severity = DiagnosticSeverity.Info,
                 Code = SkippedForProblemsCode,
-                Message = $"'{source.Source.Name}' was not cooked: it has {errors}, listed in Problems. The change that fixes them cooks it.",
+                Message = $"'{source.Source.Name}' was not cooked: {cause}, listed in Problems. The change that fixes them cooks it.",
                 AffectedVirtualPath = AssetFileTypes.ToIdentity(source.Source).VirtualPath,
                 AffectedPath = operation.Project.Find(source.Source)?.File.FullPath,
             };

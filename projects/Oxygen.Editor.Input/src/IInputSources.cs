@@ -24,6 +24,12 @@ public interface IInputSources : IAssetProblemSource
     /// <summary>Gets every input source of the project that matches the engine's input schema.</summary>
     public IReadOnlyCollection<InputContainer> All { get; }
 
+    /// <summary>Brings the facts of some source files up to date with the files.</summary>
+    /// <remarks>A source whose file changed since it was read, such as one whose change is still being read, is read
+    /// now; files that are not input sources of the open project are ignored.</remarks>
+    /// <param name="sources">The source files, as the catalog names them, such as <c>/Content/Input/Player.input.json</c>.</param>
+    public void Check(IReadOnlyCollection<AssetPath> sources);
+
     /// <summary>Finds an input source.</summary>
     /// <param name="container">The source's identity, such as <c>/Content/Input/Player.input</c>.</param>
     /// <returns>The source, or <see langword="null"/> when the project has no such source or it does not match the

@@ -29,9 +29,11 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// publishes the content again without it, and if it was never cooked there is nothing to do.
 /// <para>
 /// A run fails as a whole when one of its inputs fails, so a source whose family facts (scripts, input sources) report
-/// errors is left out and named in the run; its problems are in Problems. It cooks with the change that fixes them,
-/// or, when that change came before its facts caught up, once its facts report no errors. A run stopped for a cook the
-/// user asked for returns its sources to the next run, which cooks those that cook did not cover.
+/// errors, or that uses a source with errors, such as a scene whose script has errors, is left out and named in the
+/// run; the problems are in Problems. The facts of the sources a run reads are brought up to date with their files
+/// first, so an analysis still behind a change does not let a broken source through. A skipped source cooks once none
+/// of the sources it was checked with has errors. A run stopped for a cook the user asked for returns its sources to
+/// the next run, which cooks those that cook did not cover.
 /// </para>
 /// </remarks>
 public sealed partial class AutomaticCookService : IAutomaticCookService, IDisposable
@@ -54,7 +56,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     private readonly Lock sync = new();
     private readonly Dictionary<AssetPath, string> changed = [];
     private readonly HashSet<AssetPath> waiting = [];
-    private readonly HashSet<AssetPath> skipped = [];
+    private readonly Dictionary<AssetPath, AssetPath[]> skipped = [];
     private readonly ITimer window;
     private readonly IDisposable projectSubscription;
     private readonly IDisposable settingsSubscription;
@@ -168,6 +170,10 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         return source is not null;
     }
 
+    // The other sources in a source's dependency closure, as the catalog names them.
+    private static AssetPath[] UsedSources(ProjectContext project, AssetPath source, AssetCookStatus status)
+        => [.. status.SourcePaths.Select(path => project.FindByFilePath(path)?.Path).OfType<AssetPath>().Where(used => used != source).Distinct()];
+
     private void OnProjectChanged(ProjectContext? value)
     {
         CancellationTokenSource ended;
@@ -221,8 +227,8 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         }
     }
 
-    // A skipped source whose facts no longer report errors is a change: its fixing change may have come before the
-    // facts caught up with it.
+    // A skipped source is a change once no source it was checked with has errors: the fixing change may have been to a
+    // script it uses, or may have come before the facts caught up with it.
     private void OnProblemsChanged(object? sender, EventArgs args)
     {
         lock (this.sync)
@@ -232,7 +238,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
                 return;
             }
 
-            foreach (var source in this.skipped.Where(source => this.ErrorCount(source) == 0).ToList())
+            foreach (var source in this.skipped.Where(item => item.Value.All(checkedSource => this.ErrorCount(checkedSource) == 0)).Select(static item => item.Key).ToList())
             {
                 this.Note(current, source);
             }
@@ -389,7 +395,6 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         this.LogWriterIdle(waitStarted);
     }
 
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed status read cooks the sources instead of leaving them stale.")]
     private async Task<CookChanges?> SelectAsync(ProjectContext current, List<AssetPath> sources, CancellationToken lifetime)
     {
         this.LogCheckingChangedSources(sources);
@@ -399,7 +404,37 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
             return null;
         }
 
-        var stale = sources;
+        if (await this.ReadStaleAsync(current, sources, lifetime).ConfigureAwait(false) is not { } stale)
+        {
+            return null;
+        }
+
+        if (!this.CookOnChange)
+        {
+            this.LogNotCooked(stale.Count);
+            return null;
+        }
+
+        // The facts of a file the run reads may still be behind its change: they are brought up to date first.
+        AssetPath[] read = [.. stale.SelectMany(static item => item.Uses.Prepend(item.Source)).Distinct()];
+        try
+        {
+            this.inputs.Check(read);
+            await this.scripts.CheckAsync(read, lifetime).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
+        {
+            return null;
+        }
+
+        return this.LeaveOutSourcesWithErrors(current, stale);
+    }
+
+    // The changed sources whose published output does not match the files, each with the other sources it uses; null
+    // when the project closed.
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed status read cooks the sources instead of leaving them stale.")]
+    private async Task<List<(AssetPath Source, AssetPath[] Uses)>?> ReadStaleAsync(ProjectContext current, List<AssetPath> sources, CancellationToken lifetime)
+    {
         try
         {
             var read = await this.statuses.ReadAsync(current, sources, lifetime).ConfigureAwait(false);
@@ -410,7 +445,6 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
             var gone = read.Where(static status => (status.Freshness == AssetCookFreshness.MissingSource && !status.HasPublishedOutput)
                     || status.Diagnostics.Any(static issue => string.Equals(issue.Code, AssetCookStatusReader.InputUnresolvedCode, StringComparison.Ordinal)))
                 .Select(static status => status.AssetUri).ToHashSet();
-            stale = [.. sources.Where(asset => !cooked.Contains(asset) && !gone.Contains(asset))];
             if (cooked.Count > 0)
             {
                 this.LogAlreadyCooked(cooked.Count);
@@ -420,6 +454,10 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
             {
                 this.LogSourcesGone(gone.Count);
             }
+
+            var statuses = read.DistinctBy(static status => status.AssetUri).ToDictionary(static status => status.AssetUri);
+            return [.. sources.Where(asset => !cooked.Contains(asset) && !gone.Contains(asset))
+                .Select(asset => (asset, statuses.TryGetValue(asset, out var status) ? UsedSources(current, asset, status) : []))];
         }
         catch (OperationCanceledException) when (lifetime.IsCancellationRequested)
         {
@@ -428,18 +466,13 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         catch (Exception exception)
         {
             this.LogStatusUnavailable(exception, sources.Count);
+            return [.. sources.Select(static asset => (asset, Array.Empty<AssetPath>()))];
         }
-
-        if (!this.CookOnChange)
-        {
-            this.LogNotCooked(stale.Count);
-            return null;
-        }
-
-        return this.LeaveOutSourcesWithErrors(current, stale);
     }
 
-    private CookChanges? LeaveOutSourcesWithErrors(ProjectContext current, List<AssetPath> stale)
+    // A source with errors, or one that uses a source with errors, such as a scene whose script has errors, would fail
+    // the run; it is left out until the facts of every source it was checked with report none.
+    private CookChanges? LeaveOutSourcesWithErrors(ProjectContext current, List<(AssetPath Source, AssetPath[] Uses)> stale)
     {
         List<AssetPath> cook = [];
         List<SkippedCookSource> skip = [];
@@ -450,18 +483,18 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
                 return null;
             }
 
-            foreach (var source in stale)
+            foreach (var (source, uses) in stale)
             {
                 var errors = this.ErrorCount(source);
-                if (errors > 0)
-                {
-                    skip.Add(new SkippedCookSource { Source = source, ErrorCount = errors });
-                    _ = this.skipped.Add(source);
-                }
-                else
+                AssetPath[] broken = errors > 0 ? [] : [.. uses.Where(used => this.ErrorCount(used) > 0)];
+                if (errors == 0 && broken.Length == 0)
                 {
                     cook.Add(source);
+                    continue;
                 }
+
+                skip.Add(new SkippedCookSource { Source = source, ErrorCount = errors > 0 ? errors : broken.Sum(this.ErrorCount), Dependencies = broken });
+                this.skipped[source] = [source, .. uses];
             }
         }
 

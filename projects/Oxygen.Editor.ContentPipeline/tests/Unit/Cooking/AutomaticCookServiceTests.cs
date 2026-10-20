@@ -474,6 +474,68 @@ public sealed class AutomaticCookServiceTests
         _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).Sources.Should().Equal(Orbit);
     }
 
+    /// <summary>Facts still behind a breaking change are brought up to date before the run, which leaves the source out.</summary>
+    /// <returns>The asynchronous late-facts regression.</returns>
+    [TestMethod]
+    public async Task FactsBehindABreakingChangeAreCheckedBeforeTheRun()
+    {
+        using var fixture = new Fixture();
+        fixture.Scripts.SetPending(OrbitScript(errors: 1));
+        fixture.Inputs.SetPendingProblems([InputError()]);
+        using var service = fixture.CreateService();
+
+        fixture.Change(AssetChangeKind.Updated, Orbit);
+        fixture.Change(AssetChangeKind.Updated, Player);
+        fixture.Change(AssetChangeKind.Updated, Wood);
+        fixture.Time.Advance(AutomaticCookService.QuietWindow);
+
+        var call = await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false);
+        _ = call.Sources.Should().Equal(Wood);
+        _ = call.Changes.Skipped.Select(static skipped => skipped.Source).Should().BeEquivalentTo([Orbit, Player]);
+    }
+
+    /// <summary>A source that uses a source with errors, such as a scene whose script has errors, is left out and names it.</summary>
+    /// <returns>The asynchronous dependency regression.</returns>
+    [TestMethod]
+    public async Task SourceThatUsesASourceWithErrorsIsLeftOut()
+    {
+        using var fixture = new Fixture();
+        fixture.Uses[Main] = [Orbit];
+        _ = fixture.Scripts.Add(OrbitScript(errors: 2));
+        using var service = fixture.CreateService();
+
+        fixture.Change(AssetChangeKind.Updated, Main);
+        fixture.Change(AssetChangeKind.Updated, Wood);
+        fixture.Time.Advance(AutomaticCookService.QuietWindow);
+
+        var call = await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false);
+        _ = call.Sources.Should().Equal(Wood);
+        var skipped = call.Changes.Skipped.Should().ContainSingle().Which;
+        _ = (skipped.Source, skipped.ErrorCount).Should().Be((Main, 2));
+        _ = skipped.Dependencies.Should().Equal(Orbit);
+        _ = fixture.Scripts.Checks.Should().ContainSingle().Which.Should().Contain(Orbit, "the facts of what the run reads are checked");
+    }
+
+    /// <summary>A source left out for a dependency's errors cooks once that dependency's errors are fixed.</summary>
+    /// <returns>The asynchronous dependency-fix regression.</returns>
+    [TestMethod]
+    public async Task SourceLeftOutForADependencyCooksWhenItIsFixed()
+    {
+        using var fixture = new Fixture();
+        fixture.Uses[Main] = [Orbit];
+        _ = fixture.Scripts.Add(OrbitScript(errors: 1));
+        using var service = fixture.CreateService();
+        fixture.Change(AssetChangeKind.Updated, Main);
+        fixture.Change(AssetChangeKind.Updated, Wood);
+        fixture.Time.Advance(AutomaticCookService.QuietWindow);
+        _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).Sources.Should().Equal(Wood);
+
+        _ = fixture.Scripts.Add(OrbitScript(errors: 0));
+        fixture.Time.Advance(AutomaticCookService.QuietWindow);
+
+        _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).Sources.Should().Equal(Main);
+    }
+
     private static ContentCookResult Succeeded() => new(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null);
 
     private static Script OrbitScript(int errors, int warnings = 0) => new()
@@ -549,6 +611,8 @@ public sealed class AutomaticCookServiceTests
         public HashSet<AssetPath> NeverCooked { get; } = [];
 
         public HashSet<AssetPath> Unresolved { get; } = [];
+
+        public Dictionary<AssetPath, AssetPath[]> Uses { get; } = [];
 
         public Exception? StatusFailure { get; set; }
 
@@ -631,7 +695,10 @@ public sealed class AutomaticCookServiceTests
                 [],
                 this.Unresolved.Contains(asset)
                     ? [new DiagnosticRecord { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = AssetCookStatusReader.InputUnresolvedCode, Message = "Unsupported cook dependency." }]
-                    : ImmutableArray<DiagnosticRecord>.Empty);
+                    : ImmutableArray<DiagnosticRecord>.Empty)
+            {
+                SourcePaths = [.. this.Uses.GetValueOrDefault(asset, []).Prepend(asset).Select(this.SourcePath)],
+            };
     }
 
     /// <summary>One run the service asked the pipeline for.</summary>

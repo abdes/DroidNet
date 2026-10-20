@@ -34,6 +34,17 @@ public interface IScripts : IAssetProblemSource
     /// <returns>The read.</returns>
     public Task<ScriptRead> ReadLibraryAsync(AssetPath script, CancellationToken cancellationToken = default);
 
+    /// <summary>Brings the facts of some script sources up to date with their files.</summary>
+    /// <remarks>
+    /// A source whose content differs from its last analysis, such as one whose change is still being analyzed, is
+    /// analyzed now; the others, and files that are not scripts of the open project, are left as they are. While the
+    /// analyzer is not available, nothing is analyzed and the task completes at once.
+    /// </remarks>
+    /// <param name="sources">The source files, as the catalog names them, such as <c>/Content/Player/move.lua</c>.</param>
+    /// <param name="cancellationToken">A token that cancels the analysis.</param>
+    /// <returns>A task that completes when the facts of those sources match their files.</returns>
+    public Task CheckAsync(IReadOnlyCollection<AssetPath> sources, CancellationToken cancellationToken = default);
+
     /// <summary>Analyzes every script of the open project again.</summary>
     /// <param name="force">Whether to analyze a script whose source has not changed.</param>
     /// <param name="cancellationToken">A token that cancels the analysis.</param>

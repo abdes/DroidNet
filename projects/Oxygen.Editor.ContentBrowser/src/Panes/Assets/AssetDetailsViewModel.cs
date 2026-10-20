@@ -12,7 +12,6 @@ using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;

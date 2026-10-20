@@ -138,6 +138,34 @@ public sealed partial class ScriptFacts : IScripts, IDisposable
     }
 
     /// <inheritdoc />
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A failed check is logged; the facts stay as they were, and the cook reports what is wrong with the file.")]
+    public async Task CheckAsync(IReadOnlyCollection<AssetPath> sources, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        if (!this.analyzer.IsAvailable || Volatile.Read(ref this.current) is not { } facts)
+        {
+            return;
+        }
+
+        try
+        {
+            await facts.CheckAsync(sources, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            throw;
+        }
+        catch (OperationCanceledException)
+        {
+            // The project closed.
+        }
+        catch (Exception exception)
+        {
+            this.LogScriptCheckFailed(sources.Count, exception);
+        }
+    }
+
+    /// <inheritdoc />
     public Task RefreshAsync(bool force, CancellationToken cancellationToken = default)
         => Volatile.Read(ref this.current) is { } facts
             ? Task.Run(() => this.ScanAsync(facts, force, cancellationToken), cancellationToken)
