@@ -5,12 +5,16 @@
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.Scenes.Tests.TestSupport;
+namespace Oxygen.Editor.ContentPipeline.Testing;
 
 /// <summary>
-/// The project's asset moves and deletions. <see cref="Resolve"/> and <see cref="WasDeleted"/> read the same state, which
-/// a test may change between two edits.
+/// An <see cref="IAssetRedirects"/> for tests: the project's asset moves and deletions a test records.
+/// <see cref="Resolve"/> and <see cref="WasDeleted"/> read the same state, which a test may change between two edits.
 /// </summary>
+/// <remarks>
+/// No asset exists at a moved-from or deleted path: <see cref="AssetRedirects"/> does not redirect a reference whose
+/// asset still exists, and a test that needs that case records no move for it.
+/// </remarks>
 public sealed class FakeAssetRedirects : IAssetRedirects
 {
     private readonly Lock gate = new();

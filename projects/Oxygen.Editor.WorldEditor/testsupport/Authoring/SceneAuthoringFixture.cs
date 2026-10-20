@@ -5,6 +5,7 @@
 using CommunityToolkit.Mvvm.Messaging;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
@@ -13,6 +14,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Workspace;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
@@ -27,8 +29,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     public SceneAuthoringFixture(WorkspaceInteractionService? interaction = null)
     {
         this.interaction = interaction;
-        this.Projects.Activate(SceneTabs.Project);
-        _ = this.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<AssetPath>(), It.IsAny<CancellationToken>())).ReturnsAsync((ProjectContext _, AssetPath asset, CancellationToken _) => new GeometryMaterialSlotMetadata(asset, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64), [new(TargetFor(asset).SlotId, "Surface", [new(0, 0, Guid.Empty)])]));
+        this.PublishSurface(EngineAssets.BasicShape("Cube"));
         var scene = new Scene
         {
             Name = "UI Test Scene",
@@ -46,6 +47,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun" });
         scene.RootNodes.Add(node);
         this.Tab = SceneTabs.Open(scene, interaction);
+        this.Projects.Activate(this.Tab.Project);
         this.Scene = this.Tab.Scene;
         this.Node = this.Tab.NodeOf(node);
         this.Camera = this.Node.Components.OfType<PerspectiveCamera>().Single();
@@ -69,7 +71,8 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     /// <summary>Gets the shared selection authority wired into the Explorer and Inspector.</summary>
     public SceneSelectionService Selection { get; } = new();
 
-    public Mock<IGeometryMaterialSlotProvider> Slots { get; } = new();
+    /// <summary>Gets the material slot inventories the views read; only the geometry the fixture publishes is cooked.</summary>
+    public FakeMaterialSlotProvider Slots { get; } = new();
 
     public Scene Scene { get; }
 
@@ -84,5 +87,14 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
 
     public static MaterialSlotTarget TargetFor(AssetPath geometry) => new(geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
 
-    public void Dispose() => this.Tab.Dispose();
+    /// <summary>Publishes the inventory of a geometry as one "Surface" slot, the one <see cref="TargetFor"/> names.</summary>
+    /// <param name="geometry">The geometry.</param>
+    public void PublishSurface(AssetPath geometry)
+        => this.Slots.Publish(new GeometryMaterialSlotMetadata(geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64), [new(TargetFor(geometry).SlotId, "Surface", [new(0, 0, Guid.Empty)])]));
+
+    public void Dispose()
+    {
+        this.Slots.Dispose();
+        this.Tab.Dispose();
+    }
 }

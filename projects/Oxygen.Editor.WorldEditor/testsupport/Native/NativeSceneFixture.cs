@@ -63,145 +63,8 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal sealed class NativeSceneFixture : IAsyncDisposable
 {
-    public CookingPanelViewModel CreateTimingCookingPanel(CatalogWorkloadServices services) => new(services.Runs, services.Pipeline, services.Projects, Mock.Of<ICookingWorkspaceActions>(), this.hosting);
-
-    public IDisposable RegisterMainCookDocument(CatalogWorkloadServices services)
-        => new OpenDocumentCookInputs(this.sceneDocuments, services.Documents);
-
-    /// <summary>Has the open scene follow the relocations a service commits, as its scene editor would.</summary>
-    /// <param name="relocation">The relocation service.</param>
-    /// <returns>The registration to dispose when the scene stops following.</returns>
-    public IDisposable FollowRelocations(Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService relocation)
-        => relocation.AddParticipant(new RelocationFollower(this));
-
-    /// <summary>Saves a scene a test changed in memory, outside the commands, and shows it as reloaded from its file.</summary>
-    /// <param name="cancellationToken">Cancels the reload and the engine's synchronization.</param>
-    /// <returns>The task that completes once the saved scene is shown.</returns>
-    public async Task SaveSceneChangedInMemoryAsync(CancellationToken cancellationToken)
-    {
-        this.Model.SetScene(value: null);
-        WriteSceneFile(this.Document.File.Path, new SceneFileData(this.Source.Dehydrate(), this.Layout));
-        _ = (await this.Document.CheckFileAsync(cancellationToken).ConfigureAwait(true)).Should().Be(DocumentFileState.Reloaded);
-        await this.AdoptContentAsync(cancellationToken).ConfigureAwait(true);
-    }
-
-    /// <summary>Has another program save the scene with the legacy aerial start, and reloads it.</summary>
-    /// <returns>The task that completes once the reloaded scene is shown.</returns>
-    public async Task SetSavedLegacyAerialStartAsync()
-    {
-        this.Model.SetScene(value: null);
-        var data = this.Source.Dehydrate();
-        var environment = data.Environment;
-        WriteSceneFile(this.Document.File.Path, new SceneFileData(data with { Environment = environment with { SkyAtmosphere = environment.SkyAtmosphere with { AerialPerspectiveStartDepthMeters = -1 } } }, this.Layout));
-        var reload = await this.Document.ReloadAsync().ConfigureAwait(true);
-        _ = reload.Succeeded.Should().BeTrue(reload.Problem);
-        await this.AdoptContentAsync(CancellationToken.None).ConfigureAwait(true);
-    }
-
-    public async Task<(AssetPath asset, string key)> CookTestMaterialAsync(string name, CancellationToken cancellationToken, System.Numerics.Vector4? baseColor = null, FileSystemPath? projectRoot = null)
-    {
-        var root = projectRoot ?? this.ProjectRoot;
-        var path = root.Combine("Content").Combine("Materials").Combine($"{name}.omat.json");
-        _ = Directory.CreateDirectory(path.Parent!.FullPath);
-        var color = baseColor ?? System.Numerics.Vector4.One;
-        var factor = System.Text.Json.JsonSerializer.Serialize(new[] { color.X, color.Y, color.Z, color.W });
-        var source = $$"""
-                { "name": "{{name}}",
-                  "parameters": { "base_color": {{factor}}, "metalness": 0, "roughness": 0.5 } }
-                """;
-        await File.WriteAllTextAsync(path.FullPath, source, cancellationToken).ConfigureAwait(true);
-        var native = this.MaterialPipelineFor(root);
-        var asset = AssetPath.Parse($"/Content/Materials/{name}.omat");
-        var result = await native.Pipeline.CookAssetAsync(asset, cancellationToken).ConfigureAwait(true);
-        _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
-        var cookedRoot = await this.GetCookedRootAsync(root, cancellationToken).ConfigureAwait(true);
-        using var indexStream = File.OpenRead(cookedRoot.Combine("container.index.bin").FullPath);
-        var cooked = LooseCookedIndex.Read(indexStream).Assets.Single(value => value.VirtualPath == asset.VirtualPath);
-        if (projectRoot is null)
-        {
-            var row = new Oxygen.Editor.Assets.AssetEntry(asset, name, Oxygen.Editor.Assets.AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Mounted, asset.VirtualPath, SourcePath: null, path, cookedRoot.Combine("Materials").Combine($"{name}.omat"), AssetGuid: null, [], IsSelectable: true);
-            this.feedAssets.OnNext([.. this.feedAssets.Value, row]);
-        }
-
-        var keyBytes = new byte[16];
-        cooked.AssetKey.WriteBytes(keyBytes);
-        return (asset, new Guid(keyBytes, bigEndian: true).ToString());
-    }
-
-    /// <summary>Changes the project's content mounts through the project's preview session, as the workspace does.</summary>
-    /// <param name="project">The project with the mounts and order to apply.</param>
-    /// <param name="cancellationToken">Cancels the change.</param>
-    /// <returns>The task that completes once the change is saved, mounted and active.</returns>
-    public async Task ApplyContentPriorityAsync(ProjectContext project, CancellationToken cancellationToken)
-    {
-        var desired = new ProjectInfo(project.ProjectId, project.Name, project.Category, project.ProjectRoot.FullPath, project.Thumbnail)
-        {
-            AuthoringMounts = [.. project.AuthoringMounts],
-            LocalFolderMounts = [.. project.LocalFolderMounts],
-            CookedContentOrder = [.. project.CookedContentOrder],
-        };
-        if (this.contentSession is null)
-        {
-            var catalog = new Mock<IAssetPublicationTarget>();
-            _ = catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-            this.contentSession = this.CreatePreviewSession(this.materialPipeline.Publication, this.materialCookCoordinator, this.projectContexts, catalog.Object);
-            _ = (await this.contentSession.StartAsync(this.projectContexts.ActiveProject!, cancellationToken).ConfigureAwait(true)).Should().BeTrue("{0}", this.contentSession.Failure);
-        }
-
-        _ = (await this.contentSession.ChangeMountsAsync(this.projectContexts.ActiveProject!, desired, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
-    }
-
-    public DocumentHostViewModel CreateDocumentTransitionHost(IContainer container, EditorDocumentService documents, CatalogWorkloadServices services, WindowId windowId)
-    {
-        var publisher = new Mock<IOperationResultPublisher>();
-        _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
-        var appearance = new Mock<ISettingsService<IAppearanceSettings>>();
-        _ = appearance.SetupGet(value => value.Settings).Returns(new AppearanceSettings());
-        container.RegisterInstance(appearance.Object);
-        container.RegisterInstance<IMessenger>(this.messenger);
-        container.RegisterInstance(this.Preview);
-        container.RegisterInstance(Mock.Of<IDocumentInputCommitter>());
-        container.RegisterInstance(Mock.Of<IDocumentConflictPrompt>());
-        container.RegisterInstance<IContentPipelineService>(services.Pipeline);
-        container.RegisterInstance<IProjectContextService>(services.Projects);
-        container.RegisterInstance<IAssetFeed>(this.AssetCatalog.Object);
-        var preferences = new Oxygen.Editor.World.Workspace.PreviewSettingsService(this.engine, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), services.Projects, publisher.Object, new OperationStatusReducer());
-        container.RegisterInstance(preferences);
-        var materials = new MaterialEdits(this.materialValidation, publisher.Object);
-        var cook = new MaterialCookService(services.Pipeline, services.Projects, NullLogger<MaterialCookService>.Instance);
-        DocumentEditorDescriptor[] editors =
-        [
-            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, windowId, this.engine, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, this.messenger, preferences)) { IsClosable = false },
-            new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Projects, new RealFileSystem(), windowId: windowId)),
-        ];
-        this.TransitionArea = new DocumentArea(documents, this.sceneDocuments, editors, windowId, static _ => { });
-        container.RegisterInstance<IDocumentArea>(this.TransitionArea);
-        var views = new Mock<IViewLocator>();
-        _ = views.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is SceneEditorViewModel ? new SceneEditorView() : new MaterialEditorView());
-        return new(documents, this.TransitionArea, this.sceneDocuments, views.Object, this.engine, new DocumentCloseCoordinator(Mock.Of<IDocumentClosePrompt>(), publisher.Object), Mock.Of<IWindowManagerService>(), windowId);
-    }
-
-    /// <summary>Gets the document area of the window that shows the transition host, once it was created.</summary>
-    public DocumentArea? TransitionArea { get; private set; }
-
-    public DocumentManager CreateTransitionDocumentManager(IProjectContextService projects, WindowId windowId)
-        => new(this.TransitionArea!, this.messenger, projects, Mock.Of<Oxygen.Editor.Data.Services.IProjectUsageService>(), windowId, this.sceneDocuments, Mock.Of<IAssetRelocationService>());
-
-    /// <summary>Waits until the engine shows the transition's scene document, which builds its editor's panes.</summary>
-    /// <param name="cancellationToken">Cancels the wait.</param>
-    /// <returns>The task that completes once the scene is shown.</returns>
-    public Task NotifyTransitionSceneReadyAsync(CancellationToken cancellationToken) => this.SynchronizeAsync(stale: null, cancellationToken);
-
-    /// <summary>Starts the preview cooks that follow what the open scene documents reference, as the workspace does.</summary>
-    /// <param name="services">The project's cook services.</param>
-    /// <param name="provider">The asset feed the demand resolves references with.</param>
-    /// <returns>The demand; disposing it cancels its cooks.</returns>
-    public IDisposable CreateImportedAssetDemand(CatalogWorkloadServices services, AssetFeed provider)
-        => ContentDemands.Start(this.sceneDocuments, provider, services.Pipeline, services.Projects);
-
     private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("OxygenEnvironmentField-");
     private readonly ProjectManagerService manager = new(new NativeStorageProvider(new RealFileSystem()));
-    private readonly EngineService engine;
     private readonly bool ownsEngine;
     private readonly Oxygen.Testing.TemporaryNativeArtifacts? compatibility;
     private readonly IDisposable? sharedResults;
@@ -209,11 +72,9 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private readonly EngineProbe probe;
     private readonly IOperationResultPublisher previewResults;
     private readonly Project loadedProject;
-    private IScenePreview? preview;
-    private readonly ProjectContextService projectContexts = new();
     private readonly ContentCookCoordinator materialCookCoordinator;
     private readonly Oxygen.Testing.NativeContentPipelineFixture materialPipeline;
-    private readonly Mock<IGeometryMaterialSlotProvider> materialSlotProvider = new();
+    private readonly ActiveSlotProvider materialSlotProvider;
     private readonly Dictionary<FileSystemPath, (ContentCookCoordinator Coordinator, Oxygen.Testing.NativeContentPipelineFixture Pipeline)> foreignMaterialPipelines = [];
     private readonly TestDocumentArea area = new();
     private readonly MaterialValidation materialValidation = new();
@@ -221,8 +82,8 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private readonly StrongReferenceMessenger messenger = new();
     private readonly HostingContext hosting;
     private readonly BehaviorSubject<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>> feedAssets = new([]);
-    private readonly OpenDocuments sceneDocuments;
     private readonly SceneDocumentKind sceneKind;
+    private IScenePreview? preview;
     private RuntimeSceneTarget? target;
     private IGeometryMaterialSlotProvider activeMaterialSlotProvider;
     private PreviewSession? contentSession;
@@ -255,23 +116,22 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             var settings = new Mock<DroidNet.Config.ISettingsService<IEngineStartupSettings>>();
             _ = settings.SetupGet(value => value.Settings).Returns(engineSettings ?? new EngineStartupSettings());
             this.compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
-            this.engine = new EngineService(this.hosting, results, loggerFactory, engineSettings: settings.Object, nativeCompatibility: this.compatibility);
+            this.Runtime = new EngineService(this.hosting, results, loggerFactory, engineSettings: settings.Object, nativeCompatibility: this.compatibility);
         }
         else
         {
-            this.engine = SharedNativeEngine.Engine;
+            this.Runtime = SharedNativeEngine.Engine;
             this.sharedResults = SharedNativeEngine.RouteResults(this.Results);
         }
 
-        (this.previewEngine, this.probe) = EngineProbe.Of(this.engine);
+        (this.previewEngine, this.probe) = EngineProbe.Of(this.Runtime);
         this.loadedProject = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png") { AuthoringMounts = [new("Content", "Content")], });
         File.WriteAllText(Path.Combine(this.directory.FullName, "Project.oxy"), ProjectInfo.ToJson(this.loadedProject.ProjectInfo));
-        this.projectContexts.Activate(ProjectContext.FromProjectInfo(this.loadedProject.ProjectInfo));
-        this.materialCookCoordinator = new(this.projectContexts, NullLogger<ContentCookCoordinator>.Instance);
-        this.materialPipeline = new(this.projectContexts, this.materialCookCoordinator, new CookDocumentRegistry());
+        this.Projects.Activate(ProjectContext.FromProjectInfo(this.loadedProject.ProjectInfo));
+        this.materialCookCoordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
+        this.materialPipeline = new(this.Projects, this.materialCookCoordinator, new CookDocumentRegistry());
         this.activeMaterialSlotProvider = this.materialPipeline.Pipeline;
-        _ = this.materialSlotProvider.Setup(provider => provider.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<AssetPath>(), It.IsAny<CancellationToken>()))
-            .Returns((ProjectContext context, AssetPath asset, CancellationToken token) => this.activeMaterialSlotProvider.ReadAsync(context, asset, token));
+        this.materialSlotProvider = new ActiveSlotProvider(this);
         var mode = automatic ? ExposureMode.Auto : ExposureMode.Manual;
         this.Source = Scene.CreateAndHydrate(new SceneData { Id = SceneId.New(), Name = "Environment", Environment = new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = mode } }, });
         seed?.Invoke(this.Source);
@@ -279,18 +139,19 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         _ = this.AssetCatalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         // The scene is a document of the project, saved where the editor saves scenes.
-        this.sceneKind = new SceneDocumentKind(this.projectContexts.ActiveProject!);
+        this.sceneKind = new SceneDocumentKind(this.Projects.ActiveProject!);
         this.materialKind = new MaterialDocumentKind(this.materialValidation);
-        this.sceneDocuments = new OpenDocuments([this.sceneKind, this.materialKind], new ImmediateReadFileStore(new NativeAtomicFileStore(new RealFileSystem())));
+        this.OpenDocuments = new OpenDocuments([this.sceneKind, this.materialKind], new ImmediateReadFileStore(new NativeAtomicFileStore(new RealFileSystem())));
         this.previewResults = results;
         this.OpenScene(this.WriteScene(this.Source, layout?.Invoke(this.Source)));
         this.Model = new EnvironmentViewModel(() => this.Authoring);
         this.Model.SetScene(this.Source);
     }
 
-    public Scene Source { get; private set; }
+    /// <summary>Gets the document area of the window that shows the transition host, once it was created.</summary>
+    public DocumentArea? TransitionArea { get; private set; }
 
-    private IScenePreview Preview => this.preview ?? throw new InvalidOperationException("The fixture shows its scene once it initializes.");
+    public Scene Source { get; private set; }
 
     /// <summary>Gets what edits the document's scene.</summary>
     public SceneAuthoring Authoring => ((SceneContent)this.Document.Content).Authoring;
@@ -305,7 +166,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     public DocumentTab Tab { get; private set; }
 
     /// <summary>Gets the open documents of the fixture's project session: its scene and the materials a test opens.</summary>
-    public OpenDocuments OpenDocuments => this.sceneDocuments;
+    public OpenDocuments OpenDocuments { get; }
 
     public EnvironmentViewModel Model { get; }
 
@@ -315,16 +176,317 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     public FileSystemPath ProjectRoot => FileSystemPath.From(this.directory.FullName);
 
-    public ProjectContextService Projects => this.projectContexts;
+    public ProjectContextService Projects { get; } = new();
+
+    public EngineService Runtime { get; }
+
+    private IScenePreview Preview => this.preview ?? throw new InvalidOperationException("The fixture shows its scene once it initializes.");
+
+    public CookingPanelViewModel CreateTimingCookingPanel(CatalogWorkloadServices services) => new(services.Runs, services.Pipeline, services.Projects, Mock.Of<ICookingWorkspaceActions>(), this.hosting);
+
+    public IDisposable RegisterMainCookDocument(CatalogWorkloadServices services)
+        => new OpenDocumentCookInputs(this.OpenDocuments, services.Documents);
+
+    /// <summary>Has the open scene follow the relocations a service commits, as its scene editor would.</summary>
+    /// <param name="relocation">The relocation service.</param>
+    /// <returns>The registration to dispose when the scene stops following.</returns>
+    public IDisposable FollowRelocations(Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService relocation)
+        => relocation.AddParticipant(new RelocationFollower(this));
+
+    /// <summary>Saves a scene a test changed in memory, outside the commands, and shows it as reloaded from its file.</summary>
+    /// <param name="cancellationToken">Cancels the reload and the engine's synchronization.</param>
+    /// <returns>The task that completes once the saved scene is shown.</returns>
+    public async Task SaveSceneChangedInMemoryAsync(CancellationToken cancellationToken)
+    {
+        this.Model.SetScene(value: null);
+        WriteSceneFile(this.Document.File.Path, new SceneFileData(this.Source.Dehydrate(), this.Layout));
+        _ = (await this.Document.CheckFileAsync(cancellationToken).ConfigureAwait(true)).Should().Be(DocumentFileState.Reloaded);
+        await this.AdoptContentAsync(cancellationToken).ConfigureAwait(true);
+    }
+
+    /// <summary>Has another program save the scene with the legacy aerial start, and reloads it.</summary>
+    /// <returns>The task that completes once the reloaded scene is shown.</returns>
+    public async Task SetSavedLegacyAerialStartAsync()
+    {
+        this.Model.SetScene(value: null);
+        var data = this.Source.Dehydrate();
+        var environment = data.Environment;
+        WriteSceneFile(this.Document.File.Path, new SceneFileData(data with { Environment = environment with { SkyAtmosphere = environment.SkyAtmosphere with { AerialPerspectiveStartDepthMeters = -1 } } }, this.Layout));
+        var reload = await this.Document.ReloadAsync().ConfigureAwait(true);
+        _ = reload.Succeeded.Should().BeTrue(reload.Problem);
+        await this.AdoptContentAsync(CancellationToken.None).ConfigureAwait(true);
+    }
+
+    public async Task<(AssetPath Asset, string Key)> CookTestMaterialAsync(string name, CancellationToken cancellationToken, System.Numerics.Vector4? baseColor = null, FileSystemPath? projectRoot = null)
+    {
+        var root = projectRoot ?? this.ProjectRoot;
+        var path = root.Combine("Content").Combine("Materials").Combine($"{name}.omat.json");
+        _ = Directory.CreateDirectory(path.Parent!.FullPath);
+        var color = baseColor ?? System.Numerics.Vector4.One;
+        var factor = System.Text.Json.JsonSerializer.Serialize(new[] { color.X, color.Y, color.Z, color.W });
+        var source = $$"""
+                { "name": "{{name}}",
+                  "parameters": { "base_color": {{factor}}, "metalness": 0, "roughness": 0.5 } }
+                """;
+        await File.WriteAllTextAsync(path.FullPath, source, cancellationToken).ConfigureAwait(true);
+        var native = this.MaterialPipelineFor(root);
+        var asset = AssetPath.Parse($"/Content/Materials/{name}.omat");
+        var result = await native.Pipeline.CookAssetAsync(asset, cancellationToken).ConfigureAwait(true);
+        _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
+        var cookedRoot = await this.GetCookedRootAsync(root, cancellationToken).ConfigureAwait(true);
+        var indexStream = File.OpenRead(cookedRoot.Combine("container.index.bin").FullPath);
+        await using var indexLifetime = indexStream.ConfigureAwait(true);
+        var cooked = LooseCookedIndex.Read(indexStream).Assets.Single(value => string.Equals(value.VirtualPath, asset.VirtualPath, StringComparison.Ordinal));
+        if (projectRoot is null)
+        {
+            var row = new Oxygen.Editor.Assets.AssetEntry(asset, name, Oxygen.Editor.Assets.AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Mounted, asset.VirtualPath, SourcePath: null, path, cookedRoot.Combine("Materials").Combine($"{name}.omat"), AssetGuid: null, [], IsSelectable: true);
+            this.feedAssets.OnNext([.. this.feedAssets.Value, row]);
+        }
+
+        var keyBytes = new byte[16];
+        cooked.AssetKey.WriteBytes(keyBytes);
+        return (asset, new Guid(keyBytes, bigEndian: true).ToString());
+    }
+
+    /// <summary>Changes the project's content mounts through the project's preview session, as the workspace does.</summary>
+    /// <param name="project">The project with the mounts and order to apply.</param>
+    /// <param name="cancellationToken">Cancels the change.</param>
+    /// <returns>The task that completes once the change is saved, mounted and active.</returns>
+    public async Task ApplyContentPriorityAsync(ProjectContext project, CancellationToken cancellationToken)
+    {
+        var desired = new ProjectInfo(project.ProjectId, project.Name, project.Category, project.ProjectRoot.FullPath, project.Thumbnail)
+        {
+            AuthoringMounts = [.. project.AuthoringMounts],
+            LocalFolderMounts = [.. project.LocalFolderMounts],
+            CookedContentOrder = [.. project.CookedContentOrder],
+        };
+        if (this.contentSession is null)
+        {
+            var catalog = new Mock<IAssetPublicationTarget>();
+            _ = catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
+            this.contentSession = this.CreatePreviewSession(this.materialPipeline.Publication, this.materialCookCoordinator, this.Projects, catalog.Object);
+            _ = (await this.contentSession.StartAsync(this.Projects.ActiveProject!, cancellationToken).ConfigureAwait(true)).Should().BeTrue("{0}", this.contentSession.Failure);
+        }
+
+        _ = (await this.contentSession.ChangeMountsAsync(this.Projects.ActiveProject!, desired, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+    }
+
+    public DocumentHostViewModel CreateDocumentTransitionHost(IContainer container, EditorDocumentService documents, CatalogWorkloadServices services, WindowId windowId)
+    {
+        var publisher = new Mock<IOperationResultPublisher>();
+        _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
+        var appearance = new Mock<ISettingsService<IAppearanceSettings>>();
+        _ = appearance.SetupGet(value => value.Settings).Returns(new AppearanceSettings());
+        container.RegisterInstance(appearance.Object);
+        container.RegisterInstance<IMessenger>(this.messenger);
+        container.RegisterInstance(this.Preview);
+        container.RegisterInstance(Mock.Of<IDocumentInputCommitter>());
+        container.RegisterInstance(Mock.Of<IDocumentConflictPrompt>());
+        container.RegisterInstance<IContentPipelineService>(services.Pipeline);
+        container.RegisterInstance<IProjectContextService>(services.Projects);
+        container.RegisterInstance<IAssetFeed>(this.AssetCatalog.Object);
+        var preferences = new Oxygen.Editor.World.Workspace.PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), services.Projects, publisher.Object, new OperationStatusReducer());
+        container.RegisterInstance(preferences);
+        var materials = new MaterialEdits(this.materialValidation, publisher.Object);
+        var cook = new MaterialCookService(services.Pipeline, services.Projects, NullLogger<MaterialCookService>.Instance);
+        DocumentEditorDescriptor[] editors =
+        [
+            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, windowId, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, this.messenger, preferences)) { IsClosable = false },
+            new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Projects, new RealFileSystem(), windowId: windowId)),
+        ];
+        this.TransitionArea = new DocumentArea(documents, this.OpenDocuments, editors, windowId, static _ => { });
+        container.RegisterInstance<IDocumentArea>(this.TransitionArea);
+        var views = new Mock<IViewLocator>();
+        _ = views.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is SceneEditorViewModel ? new SceneEditorView() : new MaterialEditorView());
+        return new(documents, this.TransitionArea, this.OpenDocuments, views.Object, this.Runtime, new DocumentCloseCoordinator(Mock.Of<IDocumentClosePrompt>(), publisher.Object), Mock.Of<IWindowManagerService>(), windowId);
+    }
+
+    public DocumentManager CreateTransitionDocumentManager(IProjectContextService projects, WindowId windowId)
+        => new(this.TransitionArea!, this.messenger, projects, Mock.Of<Oxygen.Editor.Data.Services.IProjectUsageService>(), windowId, this.OpenDocuments, Mock.Of<IAssetRelocationService>());
+
+    /// <summary>Waits until the engine shows the transition's scene document, which builds its editor's panes.</summary>
+    /// <param name="cancellationToken">Cancels the wait.</param>
+    /// <returns>The task that completes once the scene is shown.</returns>
+    public Task NotifyTransitionSceneReadyAsync(CancellationToken cancellationToken) => this.SynchronizeAsync(stale: null, cancellationToken);
+
+    /// <summary>Starts the preview cooks that follow what the open scene documents reference, as the workspace does.</summary>
+    /// <param name="services">The project's cook services.</param>
+    /// <param name="provider">The asset feed the demand resolves references with.</param>
+    /// <returns>The demand; disposing it cancels its cooks.</returns>
+    public IDisposable CreateImportedAssetDemand(CatalogWorkloadServices services, AssetFeed provider)
+        => ContentDemands.Start(this.OpenDocuments, provider, services.Pipeline, services.Projects);
 
     public async Task<MaterialSlotTarget> ReadSingleMaterialSlotAsync(NodeId nodeId, CancellationToken cancellationToken)
     {
         var node = this.Source.RootNodes.Select(root => SceneTraversal.FindNodeById(root, nodeId)).OfType<SceneNode>().Single();
         var uri = node.Components.OfType<GeometryComponent>().Single().Geometry;
-        var inventory = await this.materialPipeline.Pipeline.ReadAsync(this.projectContexts.ActiveProject!, uri, cancellationToken).ConfigureAwait(true);
+        var inventory = await this.materialPipeline.Pipeline.ReadAsync(this.Projects.ActiveProject!, uri, cancellationToken).ConfigureAwait(true);
         _ = inventory.Should().NotBeNull("the native fixture geometry must have a current slot inventory");
         var slot = inventory!.Slots.Should().ContainSingle().Which;
         return new(uri, slot.SlotId, inventory.LayoutRevision);
+    }
+
+    public async Task<FileSystemPath> GetCookedRootAsync(FileSystemPath projectRoot, CancellationToken token)
+    {
+        var info = await this.manager.LoadProjectInfoAsync(projectRoot.FullPath).ConfigureAwait(true) ?? throw new InvalidOperationException("The native fixture project has not been saved.");
+        using var publication = await this.MaterialPipelineFor(projectRoot).Publication.AcquireReadAsync(ProjectContext.FromProjectInfo(info), token).ConfigureAwait(true);
+        return publication.FindProjectRoot("Content") ?? throw new InvalidOperationException("The fixture has not cooked its Content mount.");
+    }
+
+    public async Task RefreshCookedRootsAsync(bool mountPublished = true)
+    {
+        using var selected = await this.materialPipeline.Publication.AcquireReadAsync(this.Projects.ActiveProject!, CancellationToken.None).ConfigureAwait(true);
+        var bindings = mountPublished ? selected.Roots.Zip(selected.RootPaths).Select(static entry => new RuntimeCookedRoot(entry.Second, RuntimeCookedRootKind.LooseFolder)).ToArray() : [];
+        await this.Runtime.RefreshProjectCookedRootsAsync(bindings, selected.Retain()).ConfigureAwait(true);
+    }
+
+    public Task SuspendCookedContentAsync() => this.Runtime.SuspendCookedContentAsync();
+
+    public SceneNodeEditorViewModel CreateInspectorHost(IList<SceneNode> selection, Oxygen.Editor.Assets.IAssetFeed? assets = null, IGeometryMaterialSlotProvider? materialSlots = null)
+    {
+        this.activeMaterialSlotProvider = materialSlots ?? this.materialPipeline.Pipeline;
+        this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
+        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.area, default, assets ?? this.AssetCatalog.Object, this.Preview, new SceneSelectionService(), this.materialSlotProvider, this.Projects, new RealFileSystem(), new FakeInputSources());
+    }
+
+    /// <summary>Opens the fixture's scene on a running engine, starting the shared engine only if it is not running.</summary>
+    /// <param name="cancellationToken">Cancels startup and synchronization.</param>
+    /// <param name="mountPublished">Whether the project's published content is mounted before synchronization.</param>
+    /// <returns>The initialization task.</returns>
+    public async Task InitializeAsync(CancellationToken cancellationToken, bool mountPublished = false)
+    {
+        if (this.ownsEngine)
+        {
+            await SharedNativeEngine.StandDownAsync().ConfigureAwait(true);
+            _ = (await this.Runtime.InitializeAsync(cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+            this.Runtime.TargetFps = 60;
+            await this.Runtime.StartAsync().ConfigureAwait(true);
+        }
+        else
+        {
+            _ = (await SharedNativeEngine.EnsureRunningAsync(cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+        }
+
+        if (mountPublished)
+        {
+            await this.RefreshCookedRootsAsync().ConfigureAwait(true);
+        }
+
+        // One preview shows a scene on an engine, as in a workspace: the fixture's starts once it initializes.
+        this.preview ??= ScenePreviews.Create(this.previewEngine, this.OpenDocuments, operationResults: this.previewResults);
+
+        await this.SynchronizeAsync(stale: null, cancellationToken).ConfigureAwait(true);
+    }
+
+    public async Task<RuntimeEnvironmentState> ReadNativeAsync(CancellationToken cancellationToken)
+    {
+        var observedTarget = this.target ?? throw new InvalidOperationException("The scene must synchronize before native observation.");
+        var observed = await this.Runtime.WorldCommands.ObserveEnvironmentAsync(Guid.NewGuid(), observedTarget, cancellationToken).ConfigureAwait(true);
+        _ = observed.Outcome.Succeeded.Should().BeTrue();
+        _ = observed.State.Should().NotBeNull();
+        _ = observed.State!.Exists.Should().BeTrue();
+        _ = observed.State.AtmosphereExists.Should().BeTrue();
+        _ = observed.State.PostProcessExists.Should().BeTrue();
+        return observed.State;
+    }
+
+    public async Task SaveAndReopenAsync(CancellationToken cancellationToken)
+    {
+        var saved = await this.Document.SaveAsync(cancellationToken).ConfigureAwait(true);
+        _ = saved.Succeeded.Should().BeTrue(saved.Message);
+        _ = this.Document.IsDirty.Should().BeFalse();
+        var file = this.Document.File;
+        var stale = this.target;
+        this.CloseScene();
+        this.OpenScene(file);
+        this.Model.SetScene(this.Source);
+        await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
+        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. this.Source.RootNodes]));
+    }
+
+    public async Task<RuntimeNodeState> ReadNodeAsync(NodeId nodeId, CancellationToken cancellationToken)
+    {
+        var observedTarget = this.target ?? throw new InvalidOperationException("The scene must synchronize before native observation.");
+        var observed = await this.Runtime.WorldCommands.ObserveNodeAsync(Guid.NewGuid(), observedTarget, nodeId, cancellationToken).ConfigureAwait(true);
+        _ = observed.Outcome.Succeeded.Should().BeTrue();
+        _ = observed.State.Should().NotBeNull();
+        return observed.State!;
+    }
+
+    public async Task SwitchToNewSceneAsync(int cascades, CancellationToken cancellationToken)
+    {
+        var stale = this.target;
+        this.CloseScene();
+        var next = Scene.CreateAndHydrate(new SceneData { Id = SceneId.New(), Name = "Next scene" });
+        SeedShadowTransitionScene(next, cascades);
+        this.OpenScene(this.WriteScene(next));
+        this.Model.SetScene(this.Source);
+        await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
+    }
+
+    public async Task<SceneEditorViewModel> CreateSceneEditorAsync(IContainer container)
+    {
+        var publisher = new Mock<IOperationResultPublisher>();
+        _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
+        var preferences = new Oxygen.Editor.World.Workspace.PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.Projects, publisher.Object, new OperationStatusReducer());
+        await preferences.RestoreAsync(this.Projects.ActiveProject!).ConfigureAwait(true);
+        return new(this.Tab, this.area, default, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), Mock.Of<IContentPipelineService>(), container, this.messenger, preferences);
+    }
+
+    /// <summary>Starts the project's preview session over the cook services, as the workspace does.</summary>
+    /// <param name="services">The project's cook services.</param>
+    /// <param name="catalog">The asset catalog that shows the mounted publication.</param>
+    /// <returns>The started session; disposing it releases the project's cooked content.</returns>
+    public async Task<PreviewSession> StartWorkspacePreviewAsync(CatalogWorkloadServices services, IAssetPublicationTarget catalog)
+    {
+        var session = this.CreatePreviewSession(services.Publication, services.Runs, services.Projects, catalog);
+        _ = (await session.StartAsync(services.Projects.ActiveProject!).ConfigureAwait(true)).Should().BeTrue("{0}", session.Failure);
+        return session;
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        this.Model.Dispose();
+        await this.Model.PendingEdits.ConfigureAwait(true);
+        if (this.contentSession is not null)
+        {
+            await this.contentSession.DisposeAsync().ConfigureAwait(true);
+        }
+
+        this.OpenDocuments.Dispose();
+        (this.preview as IDisposable)?.Dispose();
+        this.feedAssets.Dispose();
+        try
+        {
+            if (this.ownsEngine)
+            {
+                await this.Runtime.DisposeAsync().ConfigureAwait(true);
+            }
+            else
+            {
+                this.sharedResults!.Dispose();
+                await SharedNativeEngine.ResetAsync().ConfigureAwait(true);
+            }
+        }
+        finally
+        {
+            this.materialPipeline.Dispose();
+            this.materialCookCoordinator.Dispose();
+            foreach (var (coordinator, pipeline) in this.foreignMaterialPipelines.Values)
+            {
+                pipeline.Dispose();
+                coordinator.Dispose();
+            }
+
+            this.compatibility?.Dispose();
+            this.directory.Delete(recursive: true);
+        }
+    }
+
+    private static void WriteSceneFile(FileSystemPath path, SceneFileData data)
+    {
+        _ = Directory.CreateDirectory(path.Parent!.FullPath);
+        File.WriteAllBytes(path.FullPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData));
     }
 
     private Oxygen.Testing.NativeContentPipelineFixture MaterialPipelineFor(FileSystemPath root)
@@ -349,132 +511,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         }
 
         return value.Pipeline;
-    }
-
-    public async Task<FileSystemPath> GetCookedRootAsync(FileSystemPath projectRoot, CancellationToken token)
-    {
-        var info = await this.manager.LoadProjectInfoAsync(projectRoot.FullPath).ConfigureAwait(true) ?? throw new InvalidOperationException("The native fixture project has not been saved.");
-        using var publication = await this.MaterialPipelineFor(projectRoot).Publication.AcquireReadAsync(ProjectContext.FromProjectInfo(info), token).ConfigureAwait(true);
-        return publication.FindProjectRoot("Content") ?? throw new InvalidOperationException("The fixture has not cooked its Content mount.");
-    }
-
-    public async Task RefreshCookedRootsAsync(bool mountPublished = true)
-    {
-        using var selected = await this.materialPipeline.Publication.AcquireReadAsync(this.projectContexts.ActiveProject!, CancellationToken.None).ConfigureAwait(true);
-        var bindings = mountPublished ? selected.Roots.Zip(selected.RootPaths).Select(static entry => new RuntimeCookedRoot(entry.Second, RuntimeCookedRootKind.LooseFolder)).ToArray() : [];
-        await this.engine.RefreshProjectCookedRootsAsync(bindings, selected.Retain()).ConfigureAwait(true);
-    }
-
-    public Task SuspendCookedContentAsync() => this.engine.SuspendCookedContentAsync();
-
-    public SceneNodeEditorViewModel CreateInspectorHost(IList<SceneNode> selection, Oxygen.Editor.Assets.IAssetFeed? assets = null, IGeometryMaterialSlotProvider? materialSlots = null)
-    {
-        this.activeMaterialSlotProvider = materialSlots ?? this.materialPipeline.Pipeline;
-        this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.area, default, assets ?? this.AssetCatalog.Object, this.Preview, new SceneSelectionService(), this.materialSlotProvider.Object, this.projectContexts, new RealFileSystem(), new FakeInputSources());
-    }
-
-    /// <summary>Opens the fixture's scene on a running engine, starting the shared engine only if it is not running.</summary>
-    /// <param name="cancellationToken">Cancels startup and synchronization.</param>
-    /// <param name="mountPublished">Whether the project's published content is mounted before synchronization.</param>
-    /// <returns>The initialization task.</returns>
-    public async Task InitializeAsync(CancellationToken cancellationToken, bool mountPublished = false)
-    {
-        if (this.ownsEngine)
-        {
-            await SharedNativeEngine.StandDownAsync().ConfigureAwait(true);
-            _ = (await this.engine.InitializeAsync(cancellationToken).ConfigureAwait(true)).Should().BeTrue();
-            this.engine.TargetFps = 60;
-            await this.engine.StartAsync().ConfigureAwait(true);
-        }
-        else
-        {
-            _ = (await SharedNativeEngine.EnsureRunningAsync(cancellationToken).ConfigureAwait(true)).Should().BeTrue();
-        }
-
-        if (mountPublished)
-        {
-            await this.RefreshCookedRootsAsync().ConfigureAwait(true);
-        }
-
-        // One preview shows a scene on an engine, as in a workspace: the fixture's starts once it initializes.
-        this.preview ??= ScenePreviews.Create(this.previewEngine, this.sceneDocuments, operationResults: this.previewResults);
-
-        await this.SynchronizeAsync(stale: null, cancellationToken).ConfigureAwait(true);
-    }
-
-    public async Task<RuntimeEnvironmentState> ReadNativeAsync(CancellationToken cancellationToken)
-    {
-        var observedTarget = this.target ?? throw new InvalidOperationException("The scene must synchronize before native observation.");
-        var observed = await this.engine.WorldCommands.ObserveEnvironmentAsync(Guid.NewGuid(), observedTarget, cancellationToken).ConfigureAwait(true);
-        _ = observed.Outcome.Succeeded.Should().BeTrue();
-        _ = observed.State.Should().NotBeNull();
-        _ = observed.State!.Exists.Should().BeTrue();
-        _ = observed.State.AtmosphereExists.Should().BeTrue();
-        _ = observed.State.PostProcessExists.Should().BeTrue();
-        return observed.State;
-    }
-
-    public async Task SaveAndReopenAsync(CancellationToken cancellationToken)
-    {
-        var saved = await this.Document.SaveAsync(cancellationToken).ConfigureAwait(true);
-        _ = saved.Succeeded.Should().BeTrue(saved.Message);
-        _ = this.Document.IsDirty.Should().BeFalse();
-        var file = this.Document.File;
-        var stale = this.target;
-        this.CloseScene();
-        this.OpenScene(file);
-        this.Model.SetScene(this.Source);
-        await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
-        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage(this.Source.RootNodes.ToList()));
-    }
-
-    public async Task<RuntimeNodeState> ReadNodeAsync(NodeId nodeId, CancellationToken cancellationToken)
-    {
-        var observedTarget = this.target ?? throw new InvalidOperationException("The scene must synchronize before native observation.");
-        var observed = await this.engine.WorldCommands.ObserveNodeAsync(Guid.NewGuid(), observedTarget, nodeId, cancellationToken).ConfigureAwait(true);
-        _ = observed.Outcome.Succeeded.Should().BeTrue();
-        _ = observed.State.Should().NotBeNull();
-        return observed.State!;
-    }
-
-    public async ValueTask DisposeAsync()
-    {
-        this.Model.Dispose();
-        await this.Model.PendingEdits.ConfigureAwait(true);
-        if (this.contentSession is { } session)
-        {
-            await session.DisposeAsync().ConfigureAwait(true);
-        }
-
-        this.sceneDocuments.Dispose();
-        (this.preview as IDisposable)?.Dispose();
-        this.feedAssets.Dispose();
-        try
-        {
-            if (this.ownsEngine)
-            {
-                await this.engine.DisposeAsync().ConfigureAwait(true);
-            }
-            else
-            {
-                this.sharedResults!.Dispose();
-                await SharedNativeEngine.ResetAsync().ConfigureAwait(true);
-            }
-        }
-        finally
-        {
-            this.materialPipeline.Dispose();
-            this.materialCookCoordinator.Dispose();
-            foreach (var foreign in this.foreignMaterialPipelines.Values)
-            {
-                foreign.Pipeline.Dispose();
-                foreign.Coordinator.Dispose();
-            }
-
-            this.compatibility?.Dispose();
-            this.directory.Delete(recursive: true);
-        }
     }
 
     // Waits until the engine shows the current document's scene in an activation other than the stale one.
@@ -504,23 +540,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         }
     }
 
-    public async Task SwitchToNewSceneAsync(int cascades, CancellationToken cancellationToken)
-    {
-        var stale = this.target;
-        this.CloseScene();
-        var next = Scene.CreateAndHydrate(new SceneData { Id = SceneId.New(), Name = "Next scene" });
-        SeedShadowTransitionScene(next, cascades);
-        this.OpenScene(this.WriteScene(next));
-        this.Model.SetScene(this.Source);
-        await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
-    }
-
-    private static void WriteSceneFile(FileSystemPath path, SceneFileData data)
-    {
-        _ = Directory.CreateDirectory(path.Parent!.FullPath);
-        File.WriteAllBytes(path.FullPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData));
-    }
-
     // Saves a scene built in memory as a scene file of the project, named after the scene.
     private DocumentFile WriteScene(Scene scene, IList<ExplorerEntryData>? layout = null)
     {
@@ -533,7 +552,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     [System.Diagnostics.CodeAnalysis.MemberNotNull(nameof(Document), nameof(Tab), nameof(Source))]
     private void OpenScene(DocumentFile file)
     {
-        var opening = this.sceneDocuments.OpenAsync(file);
+        var opening = this.OpenDocuments.OpenAsync(file);
         if (!opening.IsCompletedSuccessfully || opening.Result.Document is not { Content: SceneContent content } document)
         {
             throw new InvalidOperationException($"The fixture scene '{file.Path}' did not open: {(opening.IsCompletedSuccessfully ? opening.Result.Problem : "the open did not complete at once")}.");
@@ -550,7 +569,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     {
         this.Model.SetScene(value: null);
         _ = this.area.CloseAsync(this.Document);
-        this.sceneDocuments.Close(this.Document);
+        this.OpenDocuments.Close(this.Document);
     }
 
     // A reload replaced the document's scene: show it, and have the engine show it once it showed the previous one.
@@ -566,10 +585,21 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     private async Task FollowRelocationAsync(Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationChange change)
     {
-        if (DocumentRelocations.Map(this.Document, change, this.projectContexts.ActiveProject!, out _) is { } relocation)
+        if (DocumentRelocations.Map(this.Document, change, this.Projects.ActiveProject!, out _) is { } relocation)
         {
             await this.Document.FollowRelocationAsync(relocation).ConfigureAwait(true);
         }
+    }
+
+    // The session follows the fixture's scene project, whose loaded mounts an accepted mount change updates.
+    private PreviewSession CreatePreviewSession(CookPublicationService publication, IContentCookCoordinator coordinator, IProjectContextService projects, IAssetPublicationTarget catalog)
+    {
+        var projectManager = new Mock<IProjectManagerService>();
+        _ = projectManager.SetupGet(value => value.CurrentProject).Returns(this.loadedProject);
+        _ = projectManager.Setup(value => value.LoadProjectInfoAsync(It.IsAny<string>())).Returns((string root) => this.manager.LoadProjectInfoAsync(root));
+        var publisher = new Mock<IOperationResultPublisher>();
+        _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
+        return new PreviewSession(this.previewEngine, publication, new CookedContentMountService(), catalog, coordinator, projects, projectManager.Object, publisher.Object, new OperationStatusReducer());
     }
 
     /// <summary>Follows relocations on the fixture's UI thread; the relocation calls participants from a worker.</summary>
@@ -579,54 +609,32 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             => owner.hosting.Dispatcher.DispatchAsync(() => owner.FollowRelocationAsync(change));
     }
 
+    /// <summary>Reads material slot inventories from the provider the inspector host was created with.</summary>
+    private sealed class ActiveSlotProvider(NativeSceneFixture owner) : IGeometryMaterialSlotProvider
+    {
+        public Task<GeometryMaterialSlotMetadata?> ReadAsync(ProjectContext project, AssetPath geometryUri, CancellationToken cancellationToken = default)
+            => owner.activeMaterialSlotProvider.ReadAsync(project, geometryUri, cancellationToken);
+    }
+
     /// <summary>Reads files at once and writes them atomically, so a document can open in a constructor.</summary>
     private sealed class ImmediateReadFileStore(DroidNet.Storage.IAtomicFileStore writer) : DroidNet.Storage.IAtomicFileStore
     {
         public Task<DroidNet.Storage.FileSnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
-        {
-            if (!File.Exists(path))
-            {
-                return Task.FromResult(new DroidNet.Storage.FileSnapshot([], DroidNet.Storage.FileVersion.Missing));
-            }
-
-            var bytes = File.ReadAllBytes(path);
-            return Task.FromResult(new DroidNet.Storage.FileSnapshot([.. bytes], new DroidNet.Storage.FileVersion(Exists: true, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes)))));
-        }
+            => Task.FromResult(SnapshotOf(path));
 
         public Task<DroidNet.Storage.FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> content, DroidNet.Storage.FileVersion expected, CancellationToken cancellationToken = default)
             => writer.WriteAsync(path, content, expected, cancellationToken);
-    }
 
-    public EngineService Runtime => this.engine;
+        // Reads before returning, so the open that awaits it completes at once.
+        private static DroidNet.Storage.FileSnapshot SnapshotOf(string path)
+        {
+            if (!File.Exists(path))
+            {
+                return new DroidNet.Storage.FileSnapshot([], DroidNet.Storage.FileVersion.Missing);
+            }
 
-    public async Task<SceneEditorViewModel> CreateSceneEditorAsync(IContainer container)
-    {
-        var publisher = new Mock<IOperationResultPublisher>();
-        _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
-        var preferences = new Oxygen.Editor.World.Workspace.PreviewSettingsService(this.engine, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.projectContexts, publisher.Object, new OperationStatusReducer());
-        await preferences.RestoreAsync(this.projectContexts.ActiveProject!).ConfigureAwait(true);
-        return new(this.Tab, this.area, default, this.engine, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), Mock.Of<IContentPipelineService>(), container, this.messenger, preferences);
-    }
-
-    /// <summary>Starts the project's preview session over the cook services, as the workspace does.</summary>
-    /// <param name="services">The project's cook services.</param>
-    /// <param name="catalog">The asset catalog that shows the mounted publication.</param>
-    /// <returns>The started session; disposing it releases the project's cooked content.</returns>
-    public async Task<PreviewSession> StartWorkspacePreviewAsync(CatalogWorkloadServices services, IAssetPublicationTarget catalog)
-    {
-        var session = this.CreatePreviewSession(services.Publication, services.Runs, services.Projects, catalog);
-        _ = (await session.StartAsync(services.Projects.ActiveProject!).ConfigureAwait(true)).Should().BeTrue("{0}", session.Failure);
-        return session;
-    }
-
-    // The session follows the fixture's scene project, whose loaded mounts an accepted mount change updates.
-    private PreviewSession CreatePreviewSession(CookPublicationService publication, IContentCookCoordinator coordinator, IProjectContextService projects, IAssetPublicationTarget catalog)
-    {
-        var manager = new Mock<IProjectManagerService>();
-        _ = manager.SetupGet(value => value.CurrentProject).Returns(this.loadedProject);
-        _ = manager.Setup(value => value.LoadProjectInfoAsync(It.IsAny<string>())).Returns((string root) => this.manager.LoadProjectInfoAsync(root));
-        var publisher = new Mock<IOperationResultPublisher>();
-        _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
-        return new PreviewSession(this.previewEngine, publication, new CookedContentMountService(), catalog, coordinator, projects, manager.Object, publisher.Object, new OperationStatusReducer());
+            var bytes = File.ReadAllBytes(path);
+            return new DroidNet.Storage.FileSnapshot([.. bytes], new DroidNet.Storage.FileVersion(Exists: true, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))));
+        }
     }
 }

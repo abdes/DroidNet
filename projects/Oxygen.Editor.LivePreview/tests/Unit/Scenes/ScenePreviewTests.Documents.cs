@@ -6,9 +6,12 @@ using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
 
@@ -26,7 +29,7 @@ public sealed partial class ScenePreviewTests
         var raisedOn = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         fixture.Preview.ReadyChanged += (_, _) => raisedOn.TrySetResult(Environment.CurrentManagedThreadId);
 
-        var document = await owner.RunAsync(() => fixture.Documents.OpenAsync(fixture.Documents.NewScene())).ConfigureAwait(false);
+        var document = await owner.RunAsync(() => fixture.Documents.OpenAsync(new Scene { Name = "Test Scene" }.Dehydrate())).ConfigureAwait(false);
         var thread = await raisedOn.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = thread.Should().Be(owner.ThreadId);
@@ -38,7 +41,7 @@ public sealed partial class ScenePreviewTests
     public async Task AViewCreatedLater_ReadsReadinessWithoutAnEvent()
     {
         using var fixture = new PreviewFixture();
-        var document = await fixture.Documents.OpenAsync(fixture.Documents.NewScene()).ConfigureAwait(false);
+        var document = await fixture.Documents.OpenAsync(new Scene { Name = "Test Scene" }.Dehydrate()).ConfigureAwait(false);
 
         _ = fixture.Preview.IsReady(document.Id).Should().BeTrue();
         _ = fixture.Preview.PendingFieldCount(document.Id).Should().Be(0);
@@ -48,8 +51,8 @@ public sealed partial class ScenePreviewTests
     public async Task OpeningAnotherScene_ShowsItAndClosingItShowsTheSceneStillOpen()
     {
         using var fixture = new PreviewFixture();
-        var first = await fixture.Documents.OpenAsync(fixture.Documents.NewScene("First")).ConfigureAwait(false);
-        var second = await fixture.Documents.OpenAsync(fixture.Documents.NewScene("Second")).ConfigureAwait(false);
+        var first = await fixture.Documents.OpenAsync(new Scene { Name = "First" }.Dehydrate()).ConfigureAwait(false);
+        var second = await fixture.Documents.OpenAsync(new Scene { Name = "Second" }.Dehydrate()).ConfigureAwait(false);
 
         _ = fixture.Preview.IsReady(second.Id).Should().BeTrue();
         _ = fixture.Preview.IsReady(first.Id).Should().BeFalse("the engine shows one scene: the document opened last");
@@ -66,7 +69,7 @@ public sealed partial class ScenePreviewTests
     public async Task ClosingTheShownDocument_RetiresItsEngineScene()
     {
         using var fixture = new PreviewFixture();
-        var document = await fixture.Documents.OpenAsync(fixture.Documents.NewScene()).ConfigureAwait(false);
+        var document = await fixture.Documents.OpenAsync(new Scene { Name = "Test Scene" }.Dehydrate()).ConfigureAwait(false);
         var shown = fixture.World.Activations.Single();
         var changes = new List<ScenePreviewEventArgs>();
         fixture.Preview.ReadyChanged += (_, args) => changes.Add(args);
@@ -83,15 +86,16 @@ public sealed partial class ScenePreviewTests
     public async Task ReloadedDocument_ShowsItsNewContent()
     {
         using var fixture = new PreviewFixture();
-        var built = fixture.Documents.NewScene();
+        var built = new Scene { Name = "Test Scene" };
         var node = new SceneNode(built) { Name = "Cube" };
         built.RootNodes.Add(node);
-        var document = await fixture.Documents.OpenAsync(built).ConfigureAwait(false);
+        var document = await fixture.Documents.OpenAsync(built.Dehydrate()).ConfigureAwait(false);
         var before = PreviewFixture.SceneOf(document);
         node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(5, 0, 0);
         fixture.Requests.Clear();
 
-        await fixture.Documents.ReloadAsync(document, built).ConfigureAwait(false);
+        fixture.Documents.Write(document.File, built.Dehydrate());
+        _ = await document.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = PreviewFixture.SceneOf(document).Should().NotBeSameAs(before);
         _ = fixture.Preview.IsReady(document.Id).Should().BeTrue();
@@ -103,7 +107,7 @@ public sealed partial class ScenePreviewTests
     public async Task EngineThatStops_LeavesNothingReady()
     {
         using var fixture = new PreviewFixture();
-        var document = await fixture.Documents.OpenAsync(fixture.Documents.NewScene()).ConfigureAwait(false);
+        var document = await fixture.Documents.OpenAsync(new Scene { Name = "Test Scene" }.Dehydrate()).ConfigureAwait(false);
 
         fixture.Engine.ChangeState(EngineServiceState.ShuttingDown);
 
@@ -115,8 +119,8 @@ public sealed partial class ScenePreviewTests
     {
         var engine = new FakeEngine(EngineServiceState.Running);
         await using var lifetime = engine.ConfigureAwait(false);
-        using var documents = new SceneDocuments();
-        var document = await documents.OpenAsync(documents.NewScene()).ConfigureAwait(false);
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
+        var document = await documents.OpenAsync(new Scene { Name = "Test Scene" }.Dehydrate()).ConfigureAwait(false);
 
         using var preview = new ScenePreview(engine, documents.Open);
 
@@ -127,8 +131,8 @@ public sealed partial class ScenePreviewTests
     public async Task SkyLightOfADocumentNotShown_IsNotObserved()
     {
         using var fixture = new PreviewFixture();
-        var first = await fixture.Documents.OpenAsync(fixture.Documents.NewScene("First")).ConfigureAwait(false);
-        _ = await fixture.Documents.OpenAsync(fixture.Documents.NewScene("Second")).ConfigureAwait(false);
+        var first = await fixture.Documents.OpenAsync(new Scene { Name = "First" }.Dehydrate()).ConfigureAwait(false);
+        _ = await fixture.Documents.OpenAsync(new Scene { Name = "Second" }.Dehydrate()).ConfigureAwait(false);
 
         var observed = await fixture.Preview.ObserveSkyLightAsync(first.Id, this.TestContext.CancellationToken).ConfigureAwait(false);
 

@@ -78,7 +78,7 @@ public sealed partial class SceneExplorerAuthoringTests
         var global = new HistoryKeeper(this);
         _ = histories.SetupGet(value => value.GlobalHistory).Returns(global);
         var contexts = new ProjectContextService();
-        contexts.Activate(SceneTabs.Project);
+        contexts.Activate(harness.Project);
         using var explorer = harness.Build(relocation.Object, histories.Object, contexts);
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var root = explorer.Scene!;
@@ -172,6 +172,10 @@ public sealed partial class SceneExplorerAuthoringTests
 
         /// <summary>Gets the open documents that hold the harness's first scene.</summary>
         public Editor.Documents.OpenDocuments OpenDocuments => this.openDocuments[0].Documents;
+
+        /// <summary>Gets the project that holds the harness's first scene.</summary>
+        public ProjectContext Project => this.openDocuments[0].Project;
+
         /// <summary>Gets the history of the harness's first scene.</summary>
         public HistoryKeeper History => this.openDocuments[0].Document.History;
 

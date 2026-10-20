@@ -2,17 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.Scenes.Tests.TestSupport;
+namespace Oxygen.Editor.ContentPipeline.Testing;
 
 /// <summary>
-/// The cooked material slot inventories of geometries. A geometry with no inventory reads as <see langword="null"/>
-/// (not cooked); one set to fail throws, as an unreadable inventory does.
+/// An <see cref="IGeometryMaterialSlotProvider"/> for tests: the cooked material slot inventories a test publishes. A
+/// geometry with no inventory reads as <see langword="null"/> (not cooked); one set to fail throws, as an unreadable
+/// inventory does.
 /// </summary>
+/// <remarks>Inventories do not depend on the project a read names.</remarks>
 public sealed partial class FakeMaterialSlotProvider : IGeometryMaterialSlotProvider, IDisposable
 {
     private readonly Lock gate = new();
@@ -21,35 +22,29 @@ public sealed partial class FakeMaterialSlotProvider : IGeometryMaterialSlotProv
     private MaterialSlotReadGate? held;
 
     /// <summary>
-    /// Gets a project context for the edits that read inventories; this provider ignores it.
-    /// </summary>
-    public static ProjectContext Project { get; } = new()
-    {
-        ProjectId = Guid.Empty,
-        Name = "Test",
-        Category = Category.Games,
-        ProjectRoot = FileSystemPath.From(Path.GetTempPath()),
-        AuthoringMounts = [],
-        LocalFolderMounts = [],
-    };
-
-    /// <summary>
     /// Publishes the inventory of a geometry, replacing any earlier one.
     /// </summary>
     /// <param name="geometry">The geometry.</param>
     /// <param name="layoutRevision">The inventory's layout revision.</param>
     /// <param name="slots">The slot ids.</param>
     public void Publish(AssetPath geometry, string layoutRevision, params IEnumerable<Guid> slots)
-    {
-        var metadata = new GeometryMaterialSlotMetadata(
+        => this.Publish(new GeometryMaterialSlotMetadata(
             geometry,
             NativeGeometryKey: Guid.Empty,
             layoutRevision,
-            [.. slots.Select(static slot => new GeometryMaterialSlot(slot, slot.ToString(), []))]);
+            [.. slots.Select(static slot => new GeometryMaterialSlot(slot, slot.ToString(), []))]));
+
+    /// <summary>
+    /// Publishes an inventory of its geometry, replacing any earlier one.
+    /// </summary>
+    /// <param name="inventory">The inventory, with its slots' names and submesh ranges.</param>
+    public void Publish(GeometryMaterialSlotMetadata inventory)
+    {
+        ArgumentNullException.ThrowIfNull(inventory);
         lock (this.gate)
         {
-            this.inventories[geometry] = metadata;
-            _ = this.failures.Remove(geometry);
+            this.inventories[inventory.GeometryUri] = inventory;
+            _ = this.failures.Remove(inventory.GeometryUri);
         }
     }
 

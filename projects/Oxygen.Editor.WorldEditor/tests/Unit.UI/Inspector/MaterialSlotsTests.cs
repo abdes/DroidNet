@@ -3,10 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Pickers;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.WorldEditor.TestSupport;
@@ -31,7 +29,7 @@ internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTes
         {
             SlotId = Guid.Parse("10000000-0000-0000-0000-000000000002"),
         };
-        _ = fixture.Authoring.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), geometry, It.IsAny<CancellationToken>())).ReturnsAsync(new GeometryMaterialSlotMetadata(geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), first.LayoutRevision, [new(first.SlotId, "Surface", [new(0, 0, Guid.Empty)]), new(second.SlotId, "Surface", [new(0, 1, Guid.Empty), new(1, 2, Guid.Empty)])]));
+        fixture.Authoring.Slots.Publish(new GeometryMaterialSlotMetadata(geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), first.LayoutRevision, [new(first.SlotId, "Surface", [new(0, 0, Guid.Empty)]), new(second.SlotId, "Surface", [new(0, 1, Guid.Empty), new(1, 2, Guid.Empty)])]));
         fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = first, Material = AssetPath.Parse("/Content/Materials/Body.omat") });
         using var host = fixture.Authoring.CreateInspectorHost("Geometry", assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
@@ -64,7 +62,7 @@ internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTes
         var product = material! with { Identity = paint, DisplayName = "Paint", CookStatus = material.CookStatus! with { AssetUri = paint } };
         _ = fixture.Assets.SetupGet(value => value.Items).Returns(System.Reactive.Linq.Observable.Return<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>>([geometry!, material, product]));
         var target = SceneAuthoringFixture.TargetFor(fixture.Geometry.Geometry);
-        _ = fixture.Authoring.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), fixture.Geometry.Geometry, It.IsAny<CancellationToken>())).ReturnsAsync(new GeometryMaterialSlotMetadata(fixture.Geometry.Geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), target.LayoutRevision, [new(target.SlotId, "Surface", [new(0, 0, Guid.Empty)])]));
+        fixture.Authoring.Slots.Publish(new GeometryMaterialSlotMetadata(fixture.Geometry.Geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), target.LayoutRevision, [new(target.SlotId, "Surface", [new(0, 0, Guid.Empty)])]));
         using var host = fixture.Authoring.CreateInspectorHost("Geometry", assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
@@ -80,7 +78,7 @@ internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTes
     public Task MaterialPickerShowsUnavailableInventory() => EnqueueAsync(async () =>
     {
         using var fixture = new GeometryFixture();
-        _ = fixture.Authoring.Slots.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<AssetPath>(), It.IsAny<CancellationToken>())).ReturnsAsync((GeometryMaterialSlotMetadata?)null);
+        fixture.Authoring.Slots.Remove(fixture.Geometry.Geometry);
         using var host = fixture.Authoring.CreateInspectorHost("Geometry", assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);

@@ -5,16 +5,20 @@
 using System.Text.Json;
 using DroidNet.Documents;
 using DroidNet.TimeMachine;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Scripting;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 
@@ -31,8 +35,9 @@ public sealed partial class AuthoringFixture : IDisposable
 {
     private readonly object historyRoot;
 
-    private AuthoringFixture(DocumentId document, SceneContent content, object historyRoot, HistoryKeeper history, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, SingleThreadContext? thread)
+    private AuthoringFixture(TestProject project, DocumentId document, SceneContent content, object historyRoot, HistoryKeeper history, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, SingleThreadContext? thread)
     {
+        this.Project = project;
         this.Document = document;
         this.Content = content;
         this.historyRoot = historyRoot;
@@ -42,6 +47,9 @@ public sealed partial class AuthoringFixture : IDisposable
         this.Thread = thread;
         this.Changes = new ChangeRecorder(content.Authoring);
     }
+
+    /// <summary>Gets the project the scene belongs to.</summary>
+    public TestProject Project { get; }
 
     /// <summary>Gets the decoded document content.</summary>
     public SceneContent Content { get; }
@@ -86,9 +94,10 @@ public sealed partial class AuthoringFixture : IDisposable
         var redirects = new FakeAssetRedirects();
         var root = new object();
         var history = new HistoryKeeper(root);
+        var project = TestProject.Create(new MockFileSystem());
         var document = DocumentId.New();
-        var content = await DecodeAsync(data, document, interaction, redirects, history).ConfigureAwait(true);
-        return new AuthoringFixture(document, content, root, history, interaction, redirects, thread: null);
+        var content = await DecodeAsync(project, data, document, interaction, redirects, history).ConfigureAwait(true);
+        return new AuthoringFixture(project, document, content, root, history, interaction, redirects, thread: null);
     }
 
     /// <summary>
@@ -106,9 +115,10 @@ public sealed partial class AuthoringFixture : IDisposable
             var redirects = new FakeAssetRedirects();
             var root = new object();
             var history = new HistoryKeeper(root);
+            var project = TestProject.Create(new MockFileSystem());
             var document = DocumentId.New();
-            var content = await thread.RunAsync(() => DecodeAsync(data, document, interaction, redirects, history)).ConfigureAwait(false);
-            return new AuthoringFixture(document, content, root, history, interaction, redirects, thread);
+            var content = await thread.RunAsync(() => DecodeAsync(project, data, document, interaction, redirects, history)).ConfigureAwait(false);
+            return new AuthoringFixture(project, document, content, root, history, interaction, redirects, thread);
         }
         catch
         {
@@ -176,11 +186,11 @@ public sealed partial class AuthoringFixture : IDisposable
         GC.KeepAlive(this.historyRoot);
     }
 
-    private static async Task<SceneContent> DecodeAsync(SceneData data, DocumentId document, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, HistoryKeeper history)
+    private static async Task<SceneContent> DecodeAsync(TestProject project, SceneData data, DocumentId document, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, HistoryKeeper history)
     {
-        var kind = new SceneDocumentKind(FakeMaterialSlotProvider.Project, interaction, redirects);
+        var kind = new SceneDocumentKind(project.Context, interaction, redirects);
         var file = new DocumentFile(
-            FileSystemPath.From(Path.Combine(Path.GetTempPath(), "Content", data.Name + AssetFileTypes.SceneDescriptor)),
+            project.PathOf($"/Content/{data.Name}{AssetFileTypes.SceneDescriptor}"),
             AssetPath.Parse($"/Content/{data.Name}{AssetFileTypes.Scene}"));
         var bytes = JsonSerializer.SerializeToUtf8Bytes(data as SceneFileData ?? new SceneFileData(data, explorerLayout: null), SceneFileJsonContext.Default.SceneFileData);
         var result = await kind.DecodeAsync(file, bytes, new DocumentDecodeContext(document, history), CancellationToken.None).ConfigureAwait(true);

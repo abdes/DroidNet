@@ -5,17 +5,20 @@
 using System.Numerics;
 using System.Text.Json;
 using AwesomeAssertions;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Scenes.Tests.Scenarios;
 
@@ -96,7 +99,7 @@ public sealed class PropertyScenarioTests
     [TestMethod]
     public async Task InspectorEditThenSave_FinishesTheGestureFirst()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
         var authoring = SceneContent.Of(document).Authoring;
         var gesture = await authoring.BeginGestureAsync([SampleScene.A], [SceneProperties.Transform.PositionX.Id], "Position").ConfigureAwait(false);

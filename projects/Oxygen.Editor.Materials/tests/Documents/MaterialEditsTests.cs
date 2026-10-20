@@ -4,7 +4,7 @@
 
 using AwesomeAssertions;
 using Moq;
-using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Materials.Properties;
 using Oxygen.Editor.Schemas;
@@ -213,9 +213,9 @@ public sealed class MaterialEditsTests
     public async Task UndoFollowsATextureThatMovedSinceTheEdit()
     {
         using var materials = new MaterialDocuments();
-        var redirects = new Mock<IAssetRedirects>();
-        _ = redirects.Setup(value => value.Resolve(It.IsAny<AssetPath>())).Returns((AssetPath texture) => AssetPath.Parse(texture.VirtualPath.Replace("/Bark.", "/Oak.", StringComparison.Ordinal)));
-        var edits = new MaterialEdits(materials.Validation, redirects: redirects.Object);
+        var redirects = new FakeAssetRedirects();
+        redirects.Move(AssetPath.Parse("/Content/Textures/Bark.otex"), AssetPath.Parse("/Content/Textures/Oak.otex"));
+        var edits = new MaterialEdits(materials.Validation, redirects: redirects);
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = edits.SetTexture(document, "base_color", AssetPath.Parse("/Content/Textures/Bark.otex"));
         _ = edits.SetTexture(document, "base_color", AssetPath.Parse("/Content/Textures/Stone.otex"));

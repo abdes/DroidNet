@@ -53,7 +53,7 @@ public sealed partial class ScenePreviewTests
     public async Task SceneProjection_PreservesCameraUnits(CameraAspectMode aspectMode)
     {
         using var fixture = new PreviewFixture();
-        var built = fixture.Documents.NewScene();
+        var built = new Scene { Name = "Test Scene" };
         var camera = new SceneNode(built) { Name = "Camera" };
         built.RootNodes.Add(camera);
         camera.Components.Add(new PerspectiveCamera { Name = "Perspective Camera", FieldOfView = 60, AspectMode = aspectMode, AspectRatio = 1.5f, NearPlane = 0.25f, FarPlane = 500 });
@@ -74,7 +74,7 @@ public sealed partial class ScenePreviewTests
     public async Task SceneProjection_AttachesOrthographicCameraAndProjectsAuthoredFlags()
     {
         using var fixture = new PreviewFixture();
-        var built = fixture.Documents.NewScene();
+        var built = new Scene { Name = "Test Scene" };
         var parent = new SceneNode(built) { Name = "Hidden parent", IsVisible = false, CastsShadows = true, ReceivesShadows = false };
         var child = new SceneNode(built) { Name = "Shown child", IsVisible = true };
         parent.AddChild(child);
@@ -111,7 +111,7 @@ public sealed partial class ScenePreviewTests
     public async Task SavedMaterialProjection_UsesRetainedIdentity()
     {
         using var fixture = new PreviewFixture();
-        var built = fixture.Documents.NewScene();
+        var built = new Scene { Name = "Test Scene" };
         var node = new SceneNode(built) { Name = "Saved geometry" };
         built.RootNodes.Add(node);
         var target = new MaterialSlotTarget(

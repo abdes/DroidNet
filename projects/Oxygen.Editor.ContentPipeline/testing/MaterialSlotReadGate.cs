@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Scenes.Tests.TestSupport;
+namespace Oxygen.Editor.ContentPipeline.Testing;
 
 /// <summary>
 /// Holds the reads of a <see cref="FakeMaterialSlotProvider"/> until released.

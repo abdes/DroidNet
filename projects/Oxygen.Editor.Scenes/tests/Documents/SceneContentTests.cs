@@ -5,16 +5,19 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Scenes.Tests.Documents;
 
@@ -30,7 +33,7 @@ public sealed class SceneContentTests
     [TestMethod]
     public async Task Decode_AuthoringRecordsIntoTheContextHistory()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
 
         var result = await SceneContent.Of(document).Authoring.ExecuteAsync(new RenameNode(SampleScene.B, "Box")).ConfigureAwait(false);
@@ -44,7 +47,7 @@ public sealed class SceneContentTests
     [TestMethod]
     public async Task Of_ReturnsTheDocumentsContent()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
 
         var content = SceneContent.Of(document);
@@ -55,7 +58,7 @@ public sealed class SceneContentTests
     [TestMethod]
     public async Task HasEditsInProgress_FollowsTheOpenGesture()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var content = SceneContent.Of(await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false));
         var gesture = await BeginMoveOfAAsync(content).ConfigureAwait(false);
 
@@ -70,7 +73,7 @@ public sealed class SceneContentTests
     [TestMethod]
     public async Task FinishEdits_CommitsTheOpenGesture()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
         var content = SceneContent.Of(document);
         var gesture = await BeginMoveOfAAsync(content).ConfigureAwait(false);
@@ -87,7 +90,7 @@ public sealed class SceneContentTests
     [TestMethod]
     public async Task Reload_RetiresTheOldAuthoring()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
         var old = SceneContent.Of(document).Authoring;
 
@@ -101,7 +104,7 @@ public sealed class SceneContentTests
     [TestMethod]
     public async Task Reload_NewAuthoringRecordsIntoTheSameClearedHistory()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
         _ = await SceneContent.Of(document).Authoring.ExecuteAsync(new RenameNode(SampleScene.B, "Box")).ConfigureAwait(false);
         var recorders = new List<ChangeRecorder>();
@@ -121,7 +124,7 @@ public sealed class SceneContentTests
     [TestMethod]
     public async Task Reload_CancelsTheOpenGesture()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
         var gesture = await BeginMoveOfAAsync(SceneContent.Of(document)).ConfigureAwait(false);
 
@@ -134,7 +137,7 @@ public sealed class SceneContentTests
     [TestMethod]
     public async Task Close_RetiresTheAuthoring()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
         var authoring = SceneContent.Of(document).Authoring;
         _ = await authoring.ExecuteAsync(new RenameNode(SampleScene.B, "Box")).ConfigureAwait(false);
@@ -149,7 +152,7 @@ public sealed class SceneContentTests
     [TestMethod]
     public async Task EditedScene_SavesAndReopensEqual()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
         _ = await SceneContent.Of(document).Authoring.ExecuteAsync(new RenameNode(SampleScene.B, "Box")).ConfigureAwait(false);
         var saved = await document.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(false);

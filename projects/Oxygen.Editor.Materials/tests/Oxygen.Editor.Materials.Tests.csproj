@@ -10,6 +10,7 @@
 
     <ItemGroup>
         <ProjectReference Include="..\src\Oxygen.Editor.Materials.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\testing\Oxygen.Editor.ContentPipeline.Testing.csproj" />
     </ItemGroup>
 
     <ItemGroup>

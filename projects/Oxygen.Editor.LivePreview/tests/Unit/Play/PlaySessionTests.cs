@@ -11,10 +11,13 @@ using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.LivePreview.Play;
-using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.LivePreview.Tests.Play;
 
@@ -31,7 +34,7 @@ public sealed partial class PlaySessionTests
     public async Task MissingPlayer_FailsAtTheLaunchStep()
     {
         using var fixture = new PlayFixture(installedPlayer: false);
-        var document = await fixture.Documents.OpenAsync(fixture.Documents.NewScene()).ConfigureAwait(false);
+        var document = await fixture.Documents.OpenAsync(new Scene { Name = "Test Scene" }.Dehydrate()).ConfigureAwait(false);
 
         await fixture.Session.PlayAsync(document.Id).ConfigureAwait(false);
 
@@ -44,7 +47,7 @@ public sealed partial class PlaySessionTests
     public async Task UnsavedDocument_IsRefusedAtTheSaveStep()
     {
         using var fixture = new PlayFixture(installedPlayer: true);
-        var document = await fixture.Documents.OpenAsync(fixture.Documents.NewScene()).ConfigureAwait(false);
+        var document = await fixture.Documents.OpenAsync(new Scene { Name = "Test Scene" }.Dehydrate()).ConfigureAwait(false);
         document.History.AddChange(new DroidNet.TimeMachine.Changes.SimpleAction(static () => { }) { Key = "edit" });
 
         await fixture.Session.PlayAsync(document.Id).ConfigureAwait(false);
@@ -59,7 +62,7 @@ public sealed partial class PlaySessionTests
     public async Task SceneThatDoesNotCook_FailsAtTheCookStep()
     {
         using var fixture = new PlayFixture(installedPlayer: true);
-        var document = await fixture.Documents.OpenAsync(fixture.Documents.NewScene()).ConfigureAwait(false);
+        var document = await fixture.Documents.OpenAsync(new Scene { Name = "Test Scene" }.Dehydrate()).ConfigureAwait(false);
         _ = fixture.Pipeline.Setup(value => value.CookCurrentSceneAsync(document.File.Asset, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.CurrentScene, OperationStatus.Failed, [], [], Inspection: null, Validation: null));
 
@@ -88,7 +91,7 @@ public sealed partial class PlaySessionTests
         public PlayFixture(bool installedPlayer)
         {
             var projects = new ProjectContextService();
-            projects.Activate(this.Documents.Project);
+            projects.Activate(this.Documents.Project.Context);
             this.coordinator = new ContentCookCoordinator(projects, NullLogger<ContentCookCoordinator>.Instance);
             var files = new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
             var publication = new CookPublicationService(this.coordinator, projects, files, Mock.Of<IProjectManagerService>(), new EngineContentPakFixture());
@@ -104,7 +107,7 @@ public sealed partial class PlaySessionTests
             this.Session.PlayerExecutable = player;
         }
 
-        public SceneDocuments Documents { get; } = new();
+        public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
 
         public Mock<IContentPipelineService> Pipeline { get; } = new();
 

@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Managed.Assets;
@@ -46,7 +47,8 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
         var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var model = new GeometryViewModel(CreateStatusHosting(), provider.Object, Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
+        using var slots = new FakeMaterialSlotProvider();
+        using var model = new GeometryViewModel(CreateStatusHosting(), provider.Object, slots, Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
         {
             IsExpanded = true,
         };

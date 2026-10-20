@@ -10,6 +10,7 @@ using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using Moq;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Scenes;
@@ -21,7 +22,6 @@ using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
@@ -41,7 +41,8 @@ public sealed class SceneNodeEditorViewModelTests
         using var tab = SceneTabs.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
         _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(2);
-        using var sut = CreateSut(preview.Object, tab, [node]);
+        using var slots = new FakeMaterialSlotProvider();
+        using var sut = CreateSut(preview.Object, slots, tab, [node]);
 
         _ = sut.PendingLiveSyncEditCount.Should().Be(2);
         _ = sut.HasPendingLiveSyncEdits.Should().BeTrue();
@@ -67,7 +68,8 @@ public sealed class SceneNodeEditorViewModelTests
         interaction.SetLocked(parent.Id, isLocked: true);
 
         using var tab = SceneTabs.Open(child.Scene);
-        using var sut = CreateSut(Mock.Of<IScenePreview>(), tab, [child], interaction);
+        using var slots = new FakeMaterialSlotProvider();
+        using var sut = CreateSut(Mock.Of<IScenePreview>(), slots, tab, [child], interaction);
 
         _ = sut.SelectedNode!.Id.Should().Be(child.Id);
         _ = sut.HasLockedSelection.Should().BeTrue();
@@ -82,7 +84,8 @@ public sealed class SceneNodeEditorViewModelTests
         using var tab = SceneTabs.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
         _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(0);
-        using var sut = CreateSut(preview.Object, tab, [node]);
+        using var slots = new FakeMaterialSlotProvider();
+        using var sut = CreateSut(preview.Object, slots, tab, [node]);
         _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(1);
 
         preview.Raise(value => value.PendingFieldsChanged += null, preview.Object, new ScenePreviewEventArgs(tab.DocumentId));
@@ -100,7 +103,8 @@ public sealed class SceneNodeEditorViewModelTests
         using var tab = SceneTabs.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
         _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(1);
-        using var sut = CreateSut(preview.Object, tab, [node]);
+        using var slots = new FakeMaterialSlotProvider();
+        using var sut = CreateSut(preview.Object, slots, tab, [node]);
         _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(0);
 
         preview.Raise(value => value.PendingFieldsChanged += null, preview.Object, new ScenePreviewEventArgs(tab.DocumentId));
@@ -117,7 +121,8 @@ public sealed class SceneNodeEditorViewModelTests
         using var tab = SceneTabs.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
         _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(1);
-        using var sut = CreateSut(preview.Object, tab, [node]);
+        using var slots = new FakeMaterialSlotProvider();
+        using var sut = CreateSut(preview.Object, slots, tab, [node]);
         var other = DroidNet.Documents.DocumentId.New();
         _ = preview.Setup(value => value.PendingFieldCount(other)).Returns(0);
 
@@ -147,6 +152,7 @@ public sealed class SceneNodeEditorViewModelTests
 
     private static SceneNodeEditorViewModel CreateSut(
         IScenePreview scenePreview,
+        FakeMaterialSlotProvider slots,
         SceneTab tab,
         IList<SceneNode> selectedNodes,
         WorkspaceInteractionService? interaction = null)
@@ -182,17 +188,14 @@ public sealed class SceneNodeEditorViewModelTests
             Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             scenePreview,
             selectionService,
-            Mock.Of<ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),
+            slots,
             Mock.Of<IProjectContextService>(),
             new MockFileSystem(),
             new FakeInputSources(),
             interaction: interaction);
     }
 
-    private static Scene CreateScene()
-    {
-        return new Scene { Name = "Test Scene" };
-    }
+    private static Scene CreateScene() => new() { Name = "Test Scene" };
 
     private static SceneNode CreateNode(Scene scene)
     {

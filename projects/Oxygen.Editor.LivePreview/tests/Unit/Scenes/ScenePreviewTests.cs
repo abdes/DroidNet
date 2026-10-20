@@ -23,7 +23,7 @@ public sealed partial class ScenePreviewTests
     public async Task UpdateNodeTransform_WhenEngineNotRunning_ReturnsSkippedNotRunning()
     {
         using var fixture = new PreviewFixture(EngineServiceState.Ready);
-        var scene = fixture.Documents.NewScene();
+        var scene = new Scene { Name = "Test Scene" };
         var node = new SceneNode(scene) { Name = "Cube" };
         var reads = fixture.Engine.WorldReads;
 
@@ -41,7 +41,7 @@ public sealed partial class ScenePreviewTests
     {
         using var fixture = new PreviewFixture();
         fixture.Engine.HasWorld = false;
-        var scene = fixture.Documents.NewScene();
+        var scene = new Scene { Name = "Test Scene" };
         var node = new SceneNode(scene) { Name = "Cube" };
 
         var outcome = await fixture.Preview.UpdateNodeTransformAsync(scene, node, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -54,7 +54,7 @@ public sealed partial class ScenePreviewTests
     public async Task UpdateNodeTransform_WhenCancelled_ReturnsCancelledWithoutReadingEngineState()
     {
         using var fixture = new PreviewFixture();
-        var scene = fixture.Documents.NewScene();
+        var scene = new Scene { Name = "Test Scene" };
         var node = new SceneNode(scene) { Name = "Cube" };
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync().ConfigureAwait(false);
@@ -71,7 +71,7 @@ public sealed partial class ScenePreviewTests
     public async Task RenameNode_WhenEngineNotRunning_ReturnsSkippedNotRunning()
     {
         using var fixture = new PreviewFixture(EngineServiceState.Ready);
-        var scene = fixture.Documents.NewScene();
+        var scene = new Scene { Name = "Test Scene" };
         var node = new SceneNode(scene) { Name = "Cube" };
         var reads = fixture.Engine.WorldReads;
 
@@ -138,7 +138,7 @@ public sealed partial class ScenePreviewTests
     public async Task AttachOrthographicCamera_WhenEngineNotRunning_ReturnsSkippedNotRunning()
     {
         using var fixture = new PreviewFixture(EngineServiceState.Ready);
-        var scene = fixture.Documents.NewScene();
+        var scene = new Scene { Name = "Test Scene" };
         var node = new SceneNode(scene) { Name = "Camera" };
         node.Components.Add(new OrthographicCamera { Name = "Camera" });
         var reads = fixture.Engine.WorldReads;
@@ -183,7 +183,7 @@ public sealed partial class ScenePreviewTests
     public async Task UpdateEnvironment_WhenCancelled_ReturnsCancelledWithoutReadingEngineState()
     {
         using var fixture = new PreviewFixture();
-        var scene = fixture.Documents.NewScene();
+        var scene = new Scene { Name = "Test Scene" };
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync().ConfigureAwait(false);
         var (states, worlds) = (fixture.Engine.StateReads, fixture.Engine.WorldReads);

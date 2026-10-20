@@ -8,12 +8,15 @@ using Moq;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
 
@@ -40,7 +43,7 @@ internal sealed partial class PreviewFixture : IDisposable
         this.Preview = new ScenePreview(this.Engine, this.Documents.Open, operationResults: publisher.Object);
     }
 
-    public SceneDocuments Documents { get; } = new();
+    public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
 
     public FakeEngine Engine { get; }
 
@@ -79,7 +82,7 @@ internal sealed partial class PreviewFixture : IDisposable
     /// <returns>The document's scene, its cube and the document.</returns>
     public async Task<(Scene Scene, SceneNode Node, Document Document)> OpenCubeAsync(float x)
     {
-        var scene = this.Documents.NewScene(string.Create(CultureInfo.InvariantCulture, $"Scene {this.opened.Count + 1}"));
+        var scene = new Scene { Name = string.Create(CultureInfo.InvariantCulture, $"Scene {this.opened.Count + 1}") };
         var node = new SceneNode(scene) { Name = "Cube" };
         scene.RootNodes.Add(node);
         node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(x, 0, 0);
@@ -97,7 +100,7 @@ internal sealed partial class PreviewFixture : IDisposable
         this.Engine.SetState(EngineServiceState.Ready);
         try
         {
-            var document = await this.Documents.OpenAsync(scene).ConfigureAwait(false);
+            var document = await this.Documents.OpenAsync(scene.Dehydrate()).ConfigureAwait(false);
             this.opened.Add(document);
             return document;
         }

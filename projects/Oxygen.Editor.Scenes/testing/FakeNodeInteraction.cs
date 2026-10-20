@@ -6,7 +6,7 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.Scenes.Tests.TestSupport;
+namespace Oxygen.Editor.Scenes.Testing;
 
 /// <summary>
 /// The editor's lock and hide state for one scene: what a test sets is what the scene's edits read, and what

@@ -4,16 +4,18 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.LivePreview.Scenes;
-using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.LivePreview.Tests.TestSupport.Native;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Interop;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.LivePreview.Integration.UI.Tests.Scenes;
 
@@ -32,11 +34,11 @@ public sealed class ScenePreviewEngineTests : DroidNet.Tests.VisualUserInterface
         var engine = await SharedEngine.EnsureRunningAsync(timeout.Token).ConfigureAwait(true);
         try
         {
-            using var documents = new SceneDocuments();
+            using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
             using var preview = new ScenePreview(engine, documents.Open);
-            var built = documents.NewScene();
+            var built = new Scene { Name = "Test Scene" };
             built.RootNodes.Add(new SceneNode(built) { Name = "Cube" });
-            var document = await documents.OpenAsync(built).ConfigureAwait(true);
+            var document = await documents.OpenAsync(built.Dehydrate()).ConfigureAwait(true);
             await PreviewWaits.UntilReadyAsync(preview, document.Id, timeout.Token).ConfigureAwait(true);
             var node = SceneContent.Of(document).Scene.RootNodes.Single();
 

@@ -84,7 +84,7 @@ public sealed partial class ScenePreviewTests
     public async Task ClearedMaterialOverride_IsClearedInTheEngine()
     {
         using var fixture = new PreviewFixture();
-        var built = fixture.Documents.NewScene();
+        var built = new Scene { Name = "Test Scene" };
         var cube = new SceneNode(built) { Name = "Cube" };
         built.RootNodes.Add(cube);
         var target = new MaterialSlotTarget(EngineAssets.BasicShape("Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
@@ -105,7 +105,7 @@ public sealed partial class ScenePreviewTests
     public async Task ImportedGeometry_IsAttachedInTheEngine()
     {
         using var fixture = new PreviewFixture();
-        var built = fixture.Documents.NewScene();
+        var built = new Scene { Name = "Test Scene" };
         var node = new SceneNode(built) { Name = "Crate" };
         built.RootNodes.Add(node);
         node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") });

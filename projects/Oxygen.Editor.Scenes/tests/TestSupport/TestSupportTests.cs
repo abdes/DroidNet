@@ -6,7 +6,6 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 
@@ -68,33 +67,6 @@ public sealed class TestSupportTests
         SceneAssert.Applied(result);
         _ = probe.Log.Calls.Select(static call => call.ThreadId).Should().AllBeEquivalentTo(fixture.Thread!.ThreadId);
         _ = fixture.Changes.All.Should().ContainSingle().Which.ThreadId.Should().Be(fixture.Thread.ThreadId);
-    }
-
-    [TestMethod]
-    public async Task MaterialSlotReads_WaitForTheGate()
-    {
-        using var provider = new FakeMaterialSlotProvider();
-        provider.Publish(SampleScene.CubeGeometry, SampleScene.CubeLayoutRevision, SampleScene.CubeSlot);
-        var gate = provider.HoldReads();
-
-        var read = provider.ReadAsync(FakeMaterialSlotProvider.Project, SampleScene.CubeGeometry, this.TestContext.CancellationToken);
-        await gate.ReadPending.ConfigureAwait(false);
-        var heldWhilePending = read.IsCompleted;
-        gate.Release();
-
-        _ = heldWhilePending.Should().BeFalse();
-        _ = (await read.ConfigureAwait(false))!.Slots.Should().ContainSingle().Which.SlotId.Should().Be(SampleScene.CubeSlot);
-    }
-
-    [TestMethod]
-    public void Redirects_FollowEveryMove()
-    {
-        var redirects = new FakeAssetRedirects();
-        redirects.Move(SampleScene.CubeGeometry, SampleScene.SphereGeometry);
-        var moved = AssetPath.Parse("/Content/Ball.ogeo");
-        redirects.Move(SampleScene.SphereGeometry, moved);
-
-        _ = redirects.Resolve(SampleScene.CubeGeometry).Should().Be(moved);
     }
 
     // "A(A1 ...)" is a node with layout children, "F+(...)" an expanded folder, "G-(...)" a collapsed one.

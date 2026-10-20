@@ -3,11 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.ContentPipeline.Testing;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Assets;
 
@@ -20,6 +23,8 @@ public sealed class MaterialSlotInventoryTests
 {
     private static readonly AssetPath BlueMaterial = AssetPath.Parse("/Content/Blue.omat");
 
+    private readonly TestProject project = TestProject.Create(new MockFileSystem());
+
     public TestContext TestContext { get; set; }
 
     private static MaterialSlotTarget CubeTarget => new(SampleScene.CubeGeometry, SampleScene.CubeSlot, SampleScene.CubeLayoutRevision);
@@ -30,7 +35,7 @@ public sealed class MaterialSlotInventoryTests
         using var provider = new FakeMaterialSlotProvider();
         provider.Publish(SampleScene.CubeGeometry, SampleScene.CubeLayoutRevision, SampleScene.CubeSlot);
 
-        var built = await MaterialSlotEdits.SetAsync(provider, FakeMaterialSlotProvider.Project, [SampleScene.Mesh], CubeTarget, BlueMaterial, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var built = await MaterialSlotEdits.SetAsync(provider, this.project.Context, [SampleScene.Mesh], CubeTarget, BlueMaterial, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = built.Error.Should().BeNull();
         var edit = built.Edit.Should().BeOfType<SetMaterialSlot>().Subject;
@@ -43,7 +48,7 @@ public sealed class MaterialSlotInventoryTests
     {
         using var provider = new FakeMaterialSlotProvider();
 
-        var built = await MaterialSlotEdits.SetAsync(provider, FakeMaterialSlotProvider.Project, [SampleScene.Mesh], CubeTarget, BlueMaterial, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var built = await MaterialSlotEdits.SetAsync(provider, this.project.Context, [SampleScene.Mesh], CubeTarget, BlueMaterial, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = built.Edit.Should().BeNull();
         _ = built.Error.Should().NotBeNull();
@@ -58,7 +63,7 @@ public sealed class MaterialSlotInventoryTests
         using var provider = new FakeMaterialSlotProvider();
         provider.Publish(SampleScene.CubeGeometry, SampleScene.CubeLayoutRevision, SampleScene.CubeSlot);
         using var gate = provider.HoldReads();
-        var reading = MaterialSlotEdits.SetAsync(provider, FakeMaterialSlotProvider.Project, [SampleScene.Mesh], CubeTarget, BlueMaterial, this.TestContext.CancellationToken);
+        var reading = MaterialSlotEdits.SetAsync(provider, this.project.Context, [SampleScene.Mesh], CubeTarget, BlueMaterial, this.TestContext.CancellationToken);
         await gate.ReadPending.ConfigureAwait(false);
         _ = await fixture.Authoring.ExecuteAsync(new SetGeometry([SampleScene.Mesh], SampleScene.SphereGeometry)).ConfigureAwait(false);
         gate.Release();

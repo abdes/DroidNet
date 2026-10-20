@@ -20,6 +20,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -90,7 +91,8 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
     {
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateImportedSourceRow(configured: false)]);
         var provider = CreateQueryProvider(updates);
-        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, Mock.Of<Oxygen.Editor.ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(), Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
+        using var slots = new FakeMaterialSlotProvider();
+        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, slots, Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
         var view = new GeometryView
         {
             ViewModel = geometry,

@@ -10,7 +10,9 @@
         <ProjectReference Include="..\..\src\Oxygen.Editor.LivePreview.csproj" />
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions" />
-        <Compile Include="../TestSupport/SceneDocuments.cs" Link="TestSupport/SceneDocuments.cs" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Scenes\testing\Oxygen.Editor.Scenes.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\testing\Oxygen.Editor.Projects.Testing.csproj" />
         <Compile Include="../TestSupport/Native/*.cs" Link="TestSupport/Native/%(Filename)%(Extension)" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Core/testsupport/TemporaryNativeArtifacts.cs" Link="Fixtures/TemporaryNativeArtifacts.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeContentPipelineFixture.cs" Link="Fixtures/NativeContentPipelineFixture.cs" />

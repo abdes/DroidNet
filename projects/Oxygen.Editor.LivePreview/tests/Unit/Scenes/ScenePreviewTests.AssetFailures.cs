@@ -55,7 +55,7 @@ public sealed partial class ScenePreviewTests
         fixture.Engine.ContentStatus = new RuntimeContentSnapshot(Guid.NewGuid(), 1, RuntimeContentState.Mounted, [new(generation, RuntimeCookedRootKind.LooseFolder)]);
         var current = true;
         fixture.World.IsCurrentFailure = _ => current;
-        var built = fixture.Documents.NewScene("Masked scene");
+        var built = new Scene { Name = "Masked scene" };
         var mask = AssetPath.Create(mount, "Textures/Meter.otex");
         built.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { AutoExposureMeteringMask = mask } });
         var document = await fixture.OpenAsync(built).ConfigureAwait(false);

@@ -10,16 +10,18 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Content;
-using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Edits.Components;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.LivePreview.Tests.Content;
 
@@ -56,7 +58,8 @@ public sealed partial class SceneContentDemandTests
         await Task.Delay(100, this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.Requests.Clear();
 
-        await fixture.Documents.ReloadAsync(document, built).ConfigureAwait(false);
+        fixture.Documents.Write(document.File, built.Dehydrate());
+        _ = await document.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = fixture.Demanded.Should().BeEquivalentTo([Geometry, Material]);
     }
@@ -149,7 +152,7 @@ public sealed partial class SceneContentDemandTests
 
         public DemandFixture()
         {
-            this.projects.Activate(this.Documents.Project);
+            this.projects.Activate(this.Documents.Project.Context);
             _ = this.assets.SetupGet(value => value.Items).Returns(Observable.Return<IReadOnlyList<AssetEntry>>([]));
             _ = this.assets.Setup(value => value.ResolveAsync(It.IsAny<AssetPath>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((AssetPath asset, CancellationToken _) => Entry(asset, this.Freshness));
@@ -164,7 +167,7 @@ public sealed partial class SceneContentDemandTests
             this.demand = new SceneContentDemand(this.Documents.Open, this.assets.Object, this.pipeline.Object, this.projects);
         }
 
-        public SceneDocuments Documents { get; } = new();
+        public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
 
         public AssetCookFreshness Freshness { get; init; } = AssetCookFreshness.NeedsCooking;
 
@@ -174,7 +177,7 @@ public sealed partial class SceneContentDemandTests
 
         public async Task<(Document Document, Scene Built)> OpenAsync(bool withGeometry, bool withTargetedOverride = false)
         {
-            var built = this.Documents.NewScene();
+            var built = new Scene { Name = "Test Scene" };
             var node = new SceneNode(built) { Name = "Cube" };
             built.RootNodes.Add(node);
             if (withGeometry)
@@ -192,18 +195,18 @@ public sealed partial class SceneContentDemandTests
                 node.Components.Add(geometry);
             }
 
-            var document = await this.Documents.OpenAsync(built).ConfigureAwait(false);
+            var document = await this.Documents.OpenAsync(built.Dehydrate()).ConfigureAwait(false);
             await Task.Yield();
             return (document, built);
         }
 
         public async Task<(Document Document, Scene Built)> OpenEngineCubeAsync()
         {
-            var built = this.Documents.NewScene();
+            var built = new Scene { Name = "Test Scene" };
             var node = new SceneNode(built) { Name = "Cube" };
             built.RootNodes.Add(node);
             node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") });
-            var document = await this.Documents.OpenAsync(built).ConfigureAwait(false);
+            var document = await this.Documents.OpenAsync(built.Dehydrate()).ConfigureAwait(false);
             await Task.Yield();
             return (document, built);
         }

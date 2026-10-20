@@ -25,7 +25,7 @@ internal sealed partial class ImportAdapterWorkspace : IDisposable
 
     public string ToolPath { get; }
 
-    public Testing.TemporaryNativeArtifacts Compatibility { get; }
+    public Oxygen.Testing.TemporaryNativeArtifacts Compatibility { get; }
 
     public void Dispose()
     {

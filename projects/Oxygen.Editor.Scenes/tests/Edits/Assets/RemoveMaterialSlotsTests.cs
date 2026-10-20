@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Assets;
@@ -29,7 +30,7 @@ public sealed class RemoveMaterialSlotsTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         using var provider = new FakeMaterialSlotProvider();
         provider.Publish(SampleScene.CubeGeometry, SampleScene.CubeLayoutRevision, Guid.NewGuid());
-        var built = await MaterialSlotEdits.ClearUnresolvedAsync(provider, FakeMaterialSlotProvider.Project, fixture.Scene, [SampleScene.Mesh], this.TestContext.CancellationToken).ConfigureAwait(false);
+        var built = await MaterialSlotEdits.ClearUnresolvedAsync(provider, fixture.Project.Context, fixture.Scene, [SampleScene.Mesh], this.TestContext.CancellationToken).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(built.Edit!).ConfigureAwait(false);

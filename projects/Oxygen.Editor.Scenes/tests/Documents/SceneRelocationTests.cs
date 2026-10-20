@@ -4,12 +4,15 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Scenes.Tests.Documents;
 
@@ -29,7 +32,7 @@ public sealed class SceneRelocationTests
     [TestMethod]
     public async Task GeometryMoved_RetargetsAndRaisesGeometryChangedWithoutAnEntry()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
         using var changes = new ChangeRecorder(SceneContent.Of(document).Authoring);
 
@@ -44,7 +47,7 @@ public sealed class SceneRelocationTests
     [TestMethod]
     public async Task CubemapMoved_RaisesScenePropertiesChanged()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var data = SampleScene.Builder()
             .Environment(new SceneEnvironmentData { SkySphere = new SkySphereEnvironmentData { Enabled = true, Cubemap = Sky } })
             .Build();
@@ -63,7 +66,7 @@ public sealed class SceneRelocationTests
     [TestMethod]
     public async Task AfterRetire_ChangesNothing()
     {
-        using var documents = new SceneDocuments();
+        using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
         var replaced = SceneContent.Of(document);
         using var changes = new ChangeRecorder(replaced.Authoring);

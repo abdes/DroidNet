@@ -2,42 +2,23 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
-using System.Text.Json;
-using DroidNet.Documents;
-using DroidNet.Storage;
 using Oxygen.Editor.ContentPipeline.Relocation;
-using Oxygen.Editor.Documents;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Layout;
-using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 /// <summary>Opens a scene a test built in memory as a scene document, and gives the document, its tab and its scene.</summary>
 /// <remarks>
-/// The scene is written to a file held in memory and opened through the scene kind, as the editor opens it. The document
+/// The scene is written to a file of an in-memory project and opened through the scene kind, as the editor opens it. The document
 /// therefore edits a scene of its own: a test takes the document's scene and nodes from the <see cref="SceneTab"/>.
 /// </remarks>
 internal static class SceneTabs
 {
-    private static readonly FileSystemPath Root = FileSystemPath.From(@"C:\SceneTabs");
-
-    /// <summary>Gets the project whose Content mount holds the scene files.</summary>
-    public static ProjectContext Project { get; } = new()
-    {
-        ProjectId = Guid.NewGuid(),
-        Name = "Scene tabs",
-        Category = Category.Games,
-        ProjectRoot = Root,
-        AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-        LocalFolderMounts = [],
-    };
-
     /// <summary>Opens a scene as a document of its own.</summary>
     /// <param name="scene">The scene the document's file records.</param>
     /// <param name="interaction">The lock and hide state the document's edits respect, if any.</param>
@@ -47,42 +28,18 @@ internal static class SceneTabs
     public static SceneTab Open(Scene scene, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IList<ExplorerEntryData>? layout = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var kind = new SceneDocumentKind(Project, interaction, redirects);
-        var files = new MemoryFileStore();
-        var name = string.IsNullOrEmpty(scene.Name) ? "Scene" : scene.Name;
-        var file = new DocumentFile(Root.Combine("Content").Combine(name + ".oscene.json"), AssetPath.Parse($"/Content/{name}.oscene"));
-        files.Put(file.Path.FullPath, scene, layout);
-        return new SceneTab(kind, files, file);
-    }
-
-    /// <summary>Holds files in memory.</summary>
-    internal sealed class MemoryFileStore : IAtomicFileStore
-    {
-        private readonly Dictionary<string, FileSnapshot> files = [with(StringComparer.OrdinalIgnoreCase)];
-
-        /// <summary>Writes what a scene records to a file, as another program would.</summary>
-        /// <param name="path">The file's path.</param>
-        /// <param name="scene">The scene.</param>
-        /// <param name="layout">The explorer layout the file records beside the scene, if any.</param>
-        public void Put(string path, Scene scene, IList<ExplorerEntryData>? layout = null)
+        var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\SceneTabs"), interaction, redirects);
+        try
         {
-            var content = JsonSerializer.SerializeToUtf8Bytes(new SceneFileData(scene.Dehydrate(), layout), SceneFileJsonContext.Default.SceneFileData);
-            this.files[path] = new FileSnapshot(ImmutableArray.Create(content), VersionOf(content));
+            var name = string.IsNullOrEmpty(scene.Name) ? "Scene" : scene.Name;
+            var file = documents.FileOf(name);
+            documents.Write(file, scene.Dehydrate(), layout);
+            return new SceneTab(documents, file);
         }
-
-        public Task<FileSnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
-            => Task.FromResult(this.files.TryGetValue(path, out var snapshot)
-                ? snapshot
-                : new FileSnapshot([], new FileVersion(Exists: false, string.Empty)));
-
-        public Task<FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> content, FileVersion expected, CancellationToken cancellationToken = default)
+        catch
         {
-            var version = VersionOf(content.Span);
-            this.files[path] = new FileSnapshot(ImmutableArray.Create(content.Span), version);
-            return Task.FromResult(version);
+            documents.Dispose();
+            throw;
         }
-
-        private static FileVersion VersionOf(ReadOnlySpan<byte> content)
-            => new(Exists: true, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(content)));
     }
 }
