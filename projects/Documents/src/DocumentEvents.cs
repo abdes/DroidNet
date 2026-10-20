@@ -10,7 +10,7 @@ using Microsoft.UI;
 namespace DroidNet.Documents;
 
 /// <summary>
-///     Event arguments for <see cref="IDocumentService.DocumentOpened"/>.
+///     Event arguments for <see cref="IDocumentTabSource.DocumentOpened"/>.
 /// </summary>
 public sealed class DocumentOpenedEventArgs(WindowId windowId, IDocumentMetadata metadata, int indexHint, bool shouldSelect) : EventArgs
 {

@@ -43,7 +43,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 1" };
@@ -130,7 +130,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
         var ctx = ManagedWindowFactory.CreateForWindow(window);
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var meta = new TestDocumentMetadata { Title = "Pre-opened" };
         _ = await ds.OpenDocumentAsync(ctx.Id, meta, -1, shouldSelect: true).ConfigureAwait(false);
 
@@ -157,7 +157,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 2" };
@@ -185,7 +185,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "VetoDoc" };
@@ -216,7 +216,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "ForceDoc" };
@@ -244,7 +244,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 3" };
@@ -269,7 +269,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var first = new TestDocumentMetadata { Title = "First" };
@@ -299,7 +299,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Attached Doc" };
@@ -322,7 +322,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc to Detach" };
@@ -346,7 +346,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 4" };
@@ -372,7 +372,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 5" };
@@ -400,7 +400,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 6" };
@@ -423,7 +423,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var closed = new TestDocumentMetadata { Title = "Closed" };
@@ -450,7 +450,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 7" };
@@ -472,7 +472,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService { RefusesDetach = true };
+        var ds = new TestDocumentTabSource { RefusesDetach = true };
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Stays" };
@@ -497,7 +497,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "Doc 2" };
@@ -523,7 +523,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
 
         var window = VisualUserInterfaceTestsApp.MainWindow;
-        var ds = new TestDocumentService();
+        var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
         using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
         var meta = new TestDocumentMetadata { Title = "SvcVetoDoc" };
@@ -558,9 +558,9 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         }
     }
 
-    private static Mock<IDocumentService> CreateStatefulServiceMock(WindowId windowId, IReadOnlyList<IDocumentMetadata> documents, DocumentId? activeDocumentId)
+    private static Mock<IDocumentTabSource> CreateStatefulServiceMock(WindowId windowId, IReadOnlyList<IDocumentMetadata> documents, DocumentId? activeDocumentId)
     {
-        var mock = new Mock<IDocumentService>(MockBehavior.Loose);
+        var mock = new Mock<IDocumentTabSource>(MockBehavior.Loose);
         var stateMock = mock.As<IDocumentServiceState>();
         _ = stateMock
             .Setup(s => s.GetOpenDocuments(windowId))
@@ -604,7 +604,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         };
     }
 
-    private sealed class TestDocumentService : IDocumentService
+    private sealed class TestDocumentTabSource : IDocumentTabSource
     {
         private readonly Dictionary<DocumentId, IDocumentMetadata> store = [];
 

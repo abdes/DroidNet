@@ -10,12 +10,12 @@ using Microsoft.UI;
 namespace DroidNet.Samples.Aura.MultiWindow;
 
 /// <summary>
-///     Minimal in-sample document service for the MultiWindow demo. Implements enough of the
-///     IDocumentService contract to support opening, selecting and closing documents;
+///     Minimal in-sample document tab source for the MultiWindow demo. Implements enough of the
+///     IDocumentTabSource contract to support opening, selecting and closing documents;
 ///     it's intentionally small and not intended for production.
 /// </summary>
 [SuppressMessage("Usage", "CA1812:AvoidUninstantiatedInternalClasses", Justification = "Instantiated via DI")]
-internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceState
+internal sealed class DemoDocumentTabSource : IDocumentTabSource, IDocumentServiceState
 {
     private readonly Dictionary<WindowId, Dictionary<DocumentId, IDocumentMetadata>> windowDocs = [];
     private readonly Dictionary<WindowId, DocumentId> activeDocuments = [];
@@ -46,7 +46,7 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
         var docs = this.GetOrCreateWindowDocuments(windowId);
         docs[id] = metadata;
 
-        Debug.WriteLine($"DemoDocumentService.OpenDocumentAsync: window={windowId.Value}, DocumentId={id}, Title='{metadata.Title}', ShouldSelect={shouldSelect}");
+        Debug.WriteLine($"DemoDocumentTabSource.OpenDocumentAsync: window={windowId.Value}, DocumentId={id}, Title='{metadata.Title}', ShouldSelect={shouldSelect}");
         this.DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(windowId, metadata, indexHint, shouldSelect));
         if (shouldSelect)
         {
@@ -59,11 +59,11 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
     /// <inheritdoc/>
     public async Task<bool> CloseDocumentAsync(WindowId windowId, DocumentId documentId, bool force = false)
     {
-        Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId}, Force={force}");
+        Debug.WriteLine($"DemoDocumentTabSource.CloseDocumentAsync: DocumentId={documentId}, Force={force}");
 
         if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.TryGetValue(documentId, out var metadata))
         {
-            Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId} not found");
+            Debug.WriteLine($"DemoDocumentTabSource.CloseDocumentAsync: DocumentId={documentId} not found");
             return false;
         }
 
@@ -76,7 +76,7 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
             var allowed = await closingArgs.WaitForVetoResultAsync().ConfigureAwait(false);
             if (!allowed)
             {
-                Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId} vetoed");
+                Debug.WriteLine($"DemoDocumentTabSource.CloseDocumentAsync: DocumentId={documentId} vetoed");
                 return false;
             }
         }
@@ -93,7 +93,7 @@ internal sealed class DemoDocumentService : IDocumentService, IDocumentServiceSt
             _ = this.activeDocuments.Remove(windowId);
         }
 
-        Debug.WriteLine($"DemoDocumentService.CloseDocumentAsync: DocumentId={documentId} - closed, raising DocumentClosed");
+        Debug.WriteLine($"DemoDocumentTabSource.CloseDocumentAsync: DocumentId={documentId} - closed, raising DocumentClosed");
         this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
         return true;
     }

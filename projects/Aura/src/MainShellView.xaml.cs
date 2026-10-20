@@ -39,7 +39,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
     // Holds the subscription for titlebar/layout observables so we can dispose it on Unloaded
     private IDisposable? titlebarSubscription;
-    private IDocumentService? cachedDocumentService;
+    private IDocumentTabSource? cachedTabSource;
     private DocumentTabPresenter? documentTabPresenter;
 
     private Window? titleBarWindow;
@@ -256,8 +256,8 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
     private void AttachDocumentServiceHandlers()
     {
-        var ds = this.ViewModel?.DocumentService;
-        if (ReferenceEquals(ds, this.cachedDocumentService))
+        var ds = this.ViewModel?.DocumentTabSource;
+        if (ReferenceEquals(ds, this.cachedTabSource))
         {
             return; // nothing to do
         }
@@ -267,7 +267,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
         if (ds is null)
         {
-            this.cachedDocumentService = null;
+            this.cachedTabSource = null;
             return;
         }
 
@@ -275,11 +275,11 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         // This prevents creating unnecessary presenters for windows like the Project Browser.
         if (this.ViewModel?.Context?.Decorations?.TitleBar?.WithDocumentTabs != true)
         {
-            this.cachedDocumentService = null;
+            this.cachedTabSource = null;
             return;
         }
 
-        this.cachedDocumentService = ds;
+        this.cachedTabSource = ds;
         if (this.ViewModel?.Context is not null)
         {
             this.documentTabPresenter = new DocumentTabPresenter(this.DocumentTabStrip, ds, this.ViewModel.Context, this.DispatcherQueue, this.logger);
@@ -288,10 +288,10 @@ public sealed partial class MainShellView : INotifyPropertyChanged
 
     private void DetachDocumentServiceHandlers()
     {
-        if (this.cachedDocumentService is not null)
+        if (this.cachedTabSource is not null)
         {
             // Presenter owns event subscriptions; nothing to unsubscribe here.
-            this.cachedDocumentService = null;
+            this.cachedTabSource = null;
         }
 
         // Dispose the presenter which will unsubscribe from events and clear tabs

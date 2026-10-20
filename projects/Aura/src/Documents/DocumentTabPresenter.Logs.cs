@@ -9,7 +9,7 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Aura.Documents;
 
 /// <summary>
-///     Presents documents in a TabStrip by wiring <see cref="IDocumentService"/> events to the UI
+///     Presents documents in a TabStrip by wiring <see cref="IDocumentTabSource"/> events to the UI
 ///     and forwarding user interactions (selection/close) to the service.
 /// </summary>
 public partial class DocumentTabPresenter
@@ -17,7 +17,7 @@ public partial class DocumentTabPresenter
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Requesting the document service to close document with Id={DocumentId}.")]
+        Message = "Requesting the document tab source to close document with Id={DocumentId}.")]
     private static partial void LogDocumentCloseRequested(ILogger logger, DocumentId documentId);
 
     [Conditional("DEBUG")]
@@ -37,7 +37,7 @@ public partial class DocumentTabPresenter
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Requesting the document service to detach document with Id={DocumentId}.")]
+        Message = "Requesting the document tab source to detach document with Id={DocumentId}.")]
     private static partial void LogDocumentDetachRequested(ILogger logger, DocumentId documentId);
 
     [Conditional("DEBUG")]

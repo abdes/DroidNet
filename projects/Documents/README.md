@@ -16,7 +16,7 @@ DroidNet.Documents provides the core interfaces and event contracts for document
 ## Features
 
 - **DocumentId**: The identity of an open document and of its one tab.
-- **IDocumentService**: Main contract for document lifecycle events (open, close, activate).
+- **IDocumentTabSource**: Main contract for document lifecycle events (open, close, activate).
 - **IDocumentMetadata**: What a tab shows: identity, title, icon and dirty state, read-only and observable through `INotifyPropertyChanged`.
 - **IDocumentServiceState**: Query open/active documents per window.
 - **Event Args**: Rich event argument types for document operations, including async close veto.
@@ -25,13 +25,13 @@ DroidNet.Documents provides the core interfaces and event contracts for document
 
 ## Usage
 
-1. **Implement `IDocumentService`** in your app to manage document state and raise events.
+1. **Implement `IDocumentTabSource`** in your app to manage document state and raise events.
 2. **Subscribe** to events in the UI layer (Aura) to update tab strips and window lists.
 3. **Implement `IDocumentMetadata`** over your document's state and raise `PropertyChanged` when it changes; the tab follows it.
 4. **Support async close** by handling veto tasks in `DocumentClosingEventArgs`.
 
 ```csharp
-public class MyDocumentService : IDocumentService, IDocumentServiceState
+public class MyDocumentTabSource : IDocumentTabSource, IDocumentServiceState
 {
  // Implement event raising and state queries
 }
@@ -42,7 +42,7 @@ public class MyDocumentService : IDocumentService, IDocumentServiceState
 ## API Surface
 
 - `DocumentId`
-- `IDocumentService`
+- `IDocumentTabSource`
 - `IDocumentMetadata`
 - `IDocumentServiceState`
 - Event args: `DocumentOpenedEventArgs`, `DocumentClosingEventArgs`, etc.

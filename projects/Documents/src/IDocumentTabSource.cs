@@ -7,7 +7,7 @@ using Microsoft.UI;
 namespace DroidNet.Documents;
 
 /// <summary>
-///     Application-facing document service contract. The app implements this interface and raises
+///     Application-facing contract that feeds the document tabs of each window. The app implements it and raises
 ///     events using <see cref="IDocumentMetadata"/>. Aura (the UI layer) subscribes to the events
 ///     to drive the TabStrip UI and maintain window document lists, and follows each open tab's
 ///     <see cref="System.ComponentModel.INotifyPropertyChanged.PropertyChanged"/> for its title,
@@ -33,7 +33,7 @@ namespace DroidNet.Documents;
 ///         or detach documents as needed.</item>
 ///     </list>
 /// </remarks>
-public interface IDocumentService
+public interface IDocumentTabSource
 {
     /// <summary>
     ///     Raised when a document is opened on a window.

@@ -152,8 +152,8 @@ public static partial class Program
         // Register menu providers using standard DI patterns
         _ = container.RegisterMenus();
 
-        // Register a minimal in-demo document service for the sample
-        container.Register<IDocumentService, DemoDocumentService>(Reuse.Singleton);
+        // Register a minimal in-demo document tab source for the sample
+        container.Register<IDocumentTabSource, DemoDocumentTabSource>(Reuse.Singleton);
 
         // Register secondary window types as transient (Main window is singleton)
         _ = container.AddWindow<Window>();

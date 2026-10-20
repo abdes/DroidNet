@@ -8,7 +8,7 @@ using Microsoft.UI;
 namespace Oxygen.Editor.Documents;
 
 /// <summary>Extends document lifecycle with an all-or-cancel workspace close preparation.</summary>
-public interface IEditorDocumentService : IDocumentService
+public interface IEditorDocumentService : IDocumentTabSource
 {
     /// <summary>Prepares all documents before the owning workspace is torn down.</summary>
     /// <param name="windowId">The workspace window.</param>

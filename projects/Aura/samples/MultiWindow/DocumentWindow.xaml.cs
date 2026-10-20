@@ -17,22 +17,22 @@ namespace DroidNet.Samples.Aura.MultiWindow;
 [SuppressMessage("Usage", "CA1812:AvoidUninstantiatedInternalClasses", Justification = "Instantiated via DI")]
 internal sealed partial class DocumentWindow : Window
 {
-    private readonly IDocumentService? documentService;
+    private readonly IDocumentTabSource? tabSource;
     private readonly IWindowManagerService? windowManagerService;
     private readonly ILogger logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="DocumentWindow"/> class.
     /// </summary>
-    /// <param name="documentService">The service used for document management operations.</param>
+    /// <param name="tabSource">The service used for document management operations.</param>
     /// <param name="windowManagerService">The service used for window management operations.</param>
     /// <param name="loggerFactory">The factory used to create logger instances.</param>
-    public DocumentWindow(IDocumentService? documentService = null, IWindowManagerService? windowManagerService = null, ILoggerFactory? loggerFactory = null)
+    public DocumentWindow(IDocumentTabSource? tabSource = null, IWindowManagerService? windowManagerService = null, ILoggerFactory? loggerFactory = null)
     {
         this.InitializeComponent();
         this.Title = "Document Window";
 
-        this.documentService = documentService;
+        this.tabSource = tabSource;
         this.windowManagerService = windowManagerService;
         this.logger = loggerFactory?.CreateLogger<DocumentWindow>() ?? NullLogger<DocumentWindow>.Instance;
 

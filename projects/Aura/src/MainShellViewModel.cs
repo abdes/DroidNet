@@ -48,7 +48,7 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
     private readonly DispatcherQueue dispatcherQueue;
     private readonly ISettingsService<IAppearanceSettings> appearanceSettingsService;
     private readonly IWindowManagerService? windowManagerService;
-    private readonly IDocumentService? documentService;
+    private readonly IDocumentTabSource? tabSource;
     private readonly AssetResolverService assets;
     private MenuItemData? themesMenuItem;
 
@@ -64,7 +64,7 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
     /// <param name="assets">The asset resolver service used to resolve asset URIs for icons and images.</param>
     /// <param name="appearanceSettingsService">The appearance settings service used to manage theme settings.</param>
     /// <param name="windowManagerService">Optional window manager service for accessing window context and menu.</param>
-    /// <param name="documentService">Optional document service implemented by the host application.</param>
+    /// <param name="tabSource">Optional document tab source implemented by the host application.</param>
     /// <param name="tabDragCoordinator">Optional tab drag coordinator used for cross-window tab drag operations.</param>
     /// <param name="loggerFactory">
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
@@ -75,7 +75,7 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
         AssetResolverService assets,
         ISettingsService<IAppearanceSettings> appearanceSettingsService,
         IWindowManagerService? windowManagerService = null,
-        IDocumentService? documentService = null,
+        IDocumentTabSource? tabSource = null,
         ITabDragCoordinator? tabDragCoordinator = null,
         ILoggerFactory? loggerFactory = null)
     {
@@ -89,7 +89,7 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
 
         this.appearanceSettingsService = appearanceSettingsService;
         this.windowManagerService = windowManagerService;
-        this.documentService = documentService;
+        this.tabSource = tabSource;
         this.DragCoordinator = tabDragCoordinator;
         appearanceSettingsService.PropertyChanged += this.AppearanceSettings_PropertyChanged;
 
@@ -102,10 +102,10 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
     }
 
     /// <summary>
-    ///     Gets the optional document service implemented by the host application. This property
-    ///     may be null when the application does not register an IDocumentService implementation.
+    ///     Gets the optional document tab source implemented by the host application. This property
+    ///     may be null when the application does not register an IDocumentTabSource implementation.
     /// </summary>
-    public IDocumentService? DocumentService => this.documentService;
+    public IDocumentTabSource? DocumentTabSource => this.tabSource;
 
     /// <summary>
     /// Gets the optional window manager service used for multi-window coordination. Exposed

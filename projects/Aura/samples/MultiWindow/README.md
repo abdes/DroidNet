@@ -39,7 +39,7 @@ This sample demonstrates Aura's comprehensive multi-window management capabiliti
   document window). This flow intentionally does not allow vetoes from the app
   so the UI remains responsive.
 - **Close** - Explicit close requests (clicking a tab's close button) call into
-  the app via the IDocumentService.CloseDocumentAsync API, which raises a
+  the app via the IDocumentTabSource.CloseDocumentAsync API, which raises a
   DocumentClosing event. The app can return a veto by adding a Task to the event
   args which returns false (e.g., to block close while saving or when the
   document is dirty). CloseDocumentAsync will await veto tasks unless forced
@@ -349,30 +349,30 @@ This sample integrates with several Aura components:
 
 1. Create a new window class:
 
-    ```csharp
-    public sealed partial class CustomWindow : Window
-    {
-        public CustomWindow(IMyService service)
-        {
-            this.InitializeComponent();
-            // Use injected services
-        }
-    }
-    ```
+   ```csharp
+   public sealed partial class CustomWindow : Window
+   {
+       public CustomWindow(IMyService service)
+       {
+           this.InitializeComponent();
+           // Use injected services
+       }
+   }
+   ```
 
 2. Register the window:
 
-    ```csharp
-    serviceCollection.AddWindow<CustomWindow>();
-    ```
+   ```csharp
+   serviceCollection.AddWindow<CustomWindow>();
+   ```
 
 3. Create instances:
 
-    ```csharp
-    await windowManager.CreateWindowAsync<CustomWindow>(
-        windowType: "Custom",
-        title: "My Custom Window");
-    ```
+   ```csharp
+   await windowManager.CreateWindowAsync<CustomWindow>(
+       windowType: "Custom",
+       title: "My Custom Window");
+   ```
 
 ### Custom Window Factory
 

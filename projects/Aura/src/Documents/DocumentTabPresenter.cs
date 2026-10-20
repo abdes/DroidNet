@@ -15,7 +15,7 @@ namespace DroidNet.Aura.Documents;
 
 /// <summary>
 ///     Presents documents inside a <see cref="Controls.TabStrip"/> by translating <see
-///     cref="IDocumentService"/> lifecycle events into tab operations and mirroring user actions
+///     cref="IDocumentTabSource"/> lifecycle events into tab operations and mirroring user actions
 ///     back to the service. Each tab follows its metadata's
 ///     <see cref="System.ComponentModel.INotifyPropertyChanged.PropertyChanged"/>, raised on any thread, until the tab
 ///     closes or detaches or the presenter is disposed. It optionally hydrates existing documents when the service also
@@ -24,7 +24,7 @@ namespace DroidNet.Aura.Documents;
 public sealed partial class DocumentTabPresenter : IDisposable
 {
     private readonly Controls.TabStrip tabStrip;
-    private readonly IDocumentService documentService;
+    private readonly IDocumentTabSource tabSource;
     private readonly IManagedWindow hostWindow;
     private readonly DispatcherQueue dispatcher;
     private readonly ILogger logger;
@@ -39,17 +39,17 @@ public sealed partial class DocumentTabPresenter : IDisposable
     ///     Initializes a new instance of the <see cref="DocumentTabPresenter"/> class. Initializes
     ///     a new presenter and immediately attaches all event handlers. The constructor is
     ///     responsible for the one-shot snapshot hydration, so callers should pass in an <see
-    ///     cref="IDocumentService"/> that already reflects the current state of the host window.
+    ///     cref="IDocumentTabSource"/> that already reflects the current state of the host window.
     /// </summary>
     /// <param name="tabStrip">The TabStrip control to present document tabs.</param>
-    /// <param name="documentService">The document service supplying lifecycle events.</param>
+    /// <param name="tabSource">The document service supplying lifecycle events.</param>
     /// <param name="hostWindow">The host window context that owns the presented tabs.</param>
     /// <param name="dispatcher">The dispatcher used to marshal UI updates.</param>
     /// <param name="logger">Optional logger.</param>
-    public DocumentTabPresenter(Controls.TabStrip tabStrip, IDocumentService documentService, IManagedWindow hostWindow, DispatcherQueue dispatcher, ILogger? logger = null)
+    public DocumentTabPresenter(Controls.TabStrip tabStrip, IDocumentTabSource tabSource, IManagedWindow hostWindow, DispatcherQueue dispatcher, ILogger? logger = null)
     {
         this.tabStrip = tabStrip ?? throw new ArgumentNullException(nameof(tabStrip));
-        this.documentService = documentService ?? throw new ArgumentNullException(nameof(documentService));
+        this.tabSource = tabSource ?? throw new ArgumentNullException(nameof(tabSource));
         this.hostWindow = hostWindow ?? throw new ArgumentNullException(nameof(hostWindow));
         this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         this.logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<DocumentTabPresenter>.Instance;
@@ -60,11 +60,11 @@ public sealed partial class DocumentTabPresenter : IDisposable
             this.tabStrip.WindowId = this.hostWindow.Id;
         }
 
-        this.documentService.DocumentOpened += this.OnDocumentOpened;
-        this.documentService.DocumentClosed += this.OnDocumentClosed;
-        this.documentService.DocumentDetached += this.OnDocumentDetached;
-        this.documentService.DocumentAttached += this.OnDocumentAttached;
-        this.documentService.DocumentActivated += this.OnDocumentActivated;
+        this.tabSource.DocumentOpened += this.OnDocumentOpened;
+        this.tabSource.DocumentClosed += this.OnDocumentClosed;
+        this.tabSource.DocumentDetached += this.OnDocumentDetached;
+        this.tabSource.DocumentAttached += this.OnDocumentAttached;
+        this.tabSource.DocumentActivated += this.OnDocumentActivated;
 
         this.tabStrip.TabCloseRequested += this.TabStrip_TabCloseRequested;
         this.tabStrip.TabDetachRequested += this.TabStrip_TabDetachRequested;
@@ -76,11 +76,11 @@ public sealed partial class DocumentTabPresenter : IDisposable
     /// <inheritdoc/>
     public void Dispose()
     {
-        this.documentService.DocumentOpened -= this.OnDocumentOpened;
-        this.documentService.DocumentClosed -= this.OnDocumentClosed;
-        this.documentService.DocumentDetached -= this.OnDocumentDetached;
-        this.documentService.DocumentAttached -= this.OnDocumentAttached;
-        this.documentService.DocumentActivated -= this.OnDocumentActivated;
+        this.tabSource.DocumentOpened -= this.OnDocumentOpened;
+        this.tabSource.DocumentClosed -= this.OnDocumentClosed;
+        this.tabSource.DocumentDetached -= this.OnDocumentDetached;
+        this.tabSource.DocumentAttached -= this.OnDocumentAttached;
+        this.tabSource.DocumentActivated -= this.OnDocumentActivated;
 
         this.tabStrip.TabCloseRequested -= this.TabStrip_TabCloseRequested;
         this.tabStrip.TabDetachRequested -= this.TabStrip_TabDetachRequested;
@@ -116,7 +116,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
             return;
         }
 
-        _ = this.documentService.SelectDocumentAsync(this.hostWindow.Id, documentId);
+        _ = this.tabSource.SelectDocumentAsync(this.hostWindow.Id, documentId);
     }
 
     private async void TabStrip_TabCloseRequested(object? sender, Controls.TabCloseRequestedEventArgs e)
@@ -133,7 +133,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         var id = DocumentId.FromValue(item.ContentId);
         this.LogDocumentCloseRequested(id);
-        var closed = await this.documentService.CloseDocumentAsync(this.hostWindow.Id, id, force: false).ConfigureAwait(true);
+        var closed = await this.tabSource.CloseDocumentAsync(this.hostWindow.Id, id, force: false).ConfigureAwait(true);
         this.LogDocumentCloseVerdict(id, closed);
     }
 
@@ -152,7 +152,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
         // A refused detach raises no event, so the tab stays where it is.
         var id = DocumentId.FromValue(item.ContentId);
         this.LogDocumentDetachRequested(id);
-        _ = await this.documentService.DetachDocumentAsync(this.hostWindow.Id, id).ConfigureAwait(true);
+        _ = await this.tabSource.DetachDocumentAsync(this.hostWindow.Id, id).ConfigureAwait(true);
     }
 
     private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
@@ -232,7 +232,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
     private void InitializeFromServiceSnapshot()
     {
-        if (this.documentService is not IDocumentServiceState stateProvider)
+        if (this.tabSource is not IDocumentServiceState stateProvider)
         {
             return;
         }
@@ -274,7 +274,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         var tab = TabItemExtensions.CreateTabItemFromMetadata(docId, metadata);
         tab.Command = new AsyncRelayCommand(async ()
-            => await this.documentService.SelectDocumentAsync(this.hostWindow.Id, docId)
+            => await this.tabSource.SelectDocumentAsync(this.hostWindow.Id, docId)
             .ConfigureAwait(true));
         var index = this.ClampInsertIndex(insertAt);
         this.tabStrip.Items.Insert(index, tab);

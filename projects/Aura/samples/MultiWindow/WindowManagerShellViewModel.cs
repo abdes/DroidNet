@@ -42,7 +42,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     private readonly IWindowFactory windowFactory;
     private readonly IWindowManagerService windowManager;
     private readonly DispatcherQueue dispatcherQueue;
-    private readonly IDocumentService? documentService;
+    private readonly IDocumentTabSource? tabSource;
     private readonly Dictionary<DocumentId, IDocumentMetadata> documents = [];
     private readonly Dictionary<WindowId, DocumentId> windowActiveDocument = [];
     private readonly IDisposable windowEventsSubscription;
@@ -56,20 +56,20 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     /// <param name="hostingContext">The hosting context containing dispatcher information.</param>
     /// <param name="windowFactory">The window factory for creating new windows.</param>
     /// <param name="windowManager">The window manager service.</param>
-    /// <param name="documentService">Optional document service for demo scenarios.</param>
+    /// <param name="tabSource">Optional document tab source for demo scenarios.</param>
     public WindowManagerShellViewModel(
         IRouter router,
         HostingContext hostingContext,
         IWindowFactory windowFactory,
         IWindowManagerService windowManager,
-        IDocumentService? documentService = null)
+        IDocumentTabSource? tabSource = null)
     {
         ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher, nameof(hostingContext));
 
         this.windowFactory = windowFactory;
         this.windowManager = windowManager;
         this.dispatcherQueue = hostingContext.Dispatcher;
-        this.documentService = documentService;
+        this.tabSource = tabSource;
 
         this.Outlets.Add(OutletName.Primary, (nameof(this.ContentViewModel), null));
 
@@ -82,13 +82,13 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
             .Subscribe(evt =>
                 _ = this.dispatcherQueue.TryEnqueue(() => this.OnWindowLifecycleEvent(evt)));
 
-        // Subscribe to document service events (if present) to update document metadata display
-        if (this.documentService is not null)
+        // Subscribe to document tab source events (if present) to update document metadata display
+        if (this.tabSource is not null)
         {
-            this.documentService.DocumentOpened += this.OnDocOpened;
-            this.documentService.DocumentClosing += this.OnDocClosing;
-            this.documentService.DocumentActivated += this.OnDocActivated;
-            this.documentService.DocumentClosed += this.OnDocClosed;
+            this.tabSource.DocumentOpened += this.OnDocOpened;
+            this.tabSource.DocumentClosing += this.OnDocClosing;
+            this.tabSource.DocumentActivated += this.OnDocActivated;
+            this.tabSource.DocumentClosed += this.OnDocClosed;
         }
 
         // Initialize the window list
@@ -168,12 +168,12 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         if (disposing)
         {
             this.windowEventsSubscription.Dispose();
-            if (this.documentService is not null)
+            if (this.tabSource is not null)
             {
-                this.documentService.DocumentOpened -= this.OnDocOpened;
-                this.documentService.DocumentClosing -= this.OnDocClosing;
-                this.documentService.DocumentActivated -= this.OnDocActivated;
-                this.documentService.DocumentClosed -= this.OnDocClosed;
+                this.tabSource.DocumentOpened -= this.OnDocOpened;
+                this.tabSource.DocumentClosing -= this.OnDocClosing;
+                this.tabSource.DocumentActivated -= this.OnDocActivated;
+                this.tabSource.DocumentClosed -= this.OnDocClosed;
             }
 
             foreach (var metadata in this.documents.Values)
@@ -223,7 +223,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
             // Also create a document metadata entry for the document window and the main window
             // using the same DocumentId so the document tab in the main shell and the document
             // window represent the same document instance.
-            if (this.documentService is not null)
+            if (this.tabSource is not null)
             {
                 var docCtx = this.windowManager.GetWindow(window.AppWindow.Id);
                 var mainCtx = this.windowManager.OpenWindows.FirstOrDefault(wc => wc.Category == WindowCategory.Main);
@@ -236,8 +236,8 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                     };
 
                     // Open the document for the document window first, then add a tab to the main window
-                    _ = await this.documentService.OpenDocumentAsync(docCtx.Id, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
-                    _ = await this.documentService.OpenDocumentAsync(mainCtx.Id, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
+                    _ = await this.tabSource.OpenDocumentAsync(docCtx.Id, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
+                    _ = await this.tabSource.OpenDocumentAsync(mainCtx.Id, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
                 }
             }
         }

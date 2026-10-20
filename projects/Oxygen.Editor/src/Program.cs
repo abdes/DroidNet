@@ -337,7 +337,7 @@ public static partial class Program
         container.Register<IRecentProjectAdapter, RecentProjectAdapter>(Reuse.Singleton);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
         container.Register<EditorDocumentService>(Reuse.Singleton);
-        container.RegisterMapping<IDocumentService, EditorDocumentService>();
+        container.RegisterMapping<IDocumentTabSource, EditorDocumentService>();
         container.RegisterMapping<IEditorDocumentService, EditorDocumentService>();
         container.Register<DocumentCloseCoordinator>(Reuse.Singleton);
         container.Register<IDocumentClosePrompt, DocumentClosePrompt>(Reuse.Singleton);
