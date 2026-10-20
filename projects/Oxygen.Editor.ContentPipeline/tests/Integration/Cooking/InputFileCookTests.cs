@@ -55,6 +55,23 @@ public sealed class InputFileCookTests
             + string.Join("; ", again.Diagnostics.Select(static issue => issue.Code + ": " + (issue.TechnicalMessage ?? issue.Message))));
     }
 
+    /// <summary>An input source cooks by its identity, as cook on change names a source that changed.</summary>
+    /// <returns>The asynchronous cook.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task AnInputSourceCooksByItsIdentity()
+    {
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        workspace.WriteText("Content/Gameplay/Player.input.json", Player);
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var service = CreateInputService(workspace, compatibility);
+
+        var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Gameplay/Player.input"), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = result.IsPublished.Should().BeTrue(Describe(result));
+        _ = File.Exists(workspace.CookedPath("Content/Gameplay/Player.input/Jump.oiact")).Should().BeTrue();
+    }
+
     /// <summary>Two input sources in one folder that declare the same names cook four products, each attributed to its
     /// source.</summary>
     /// <returns>The asynchronous cook.</returns>

@@ -269,10 +269,12 @@ public sealed partial class ContentPipelineService(
 
     private static ContentCookAssetKind GetAssetKind(AssetPath assetUri)
     {
-        // A script is named by its identity and cooks from its source, which the resolver finds.
+        // A script and an input source are named by their identity (Orbit.oscript, Player.input) and cook from their
+        // source, which the resolver finds.
         var kind = ContentCookAssetKinds.Of(assetUri.Name);
         return kind != ContentCookAssetKind.Unknown ? kind
             : assetUri.Name.EndsWith(AssetFileTypes.Script, StringComparison.Ordinal) ? ContentCookAssetKind.Script
+            : ContentCookAssetKinds.Of(assetUri.WithAuthoringSuffix().Name) == ContentCookAssetKind.Input ? ContentCookAssetKind.Input
             : throw new ArgumentException($"Unsupported content cook asset URI '{assetUri}'.", nameof(assetUri));
     }
 
