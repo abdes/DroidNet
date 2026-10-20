@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using System.IO.Abstractions;
 using System.Reactive.Concurrency;
 using DroidNet.Controls;
 using Oxygen.Editor.Assets;
@@ -31,6 +32,8 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     /// <param name="observeEnvironment">Reads the runtime environment that renders a scene.</param>
     /// <param name="inputContextSource">Reads what the project says about a mapping context.</param>
     /// <param name="revealAsset">Shows an asset in the Content Browser.</param>
+    /// <param name="fileSystem">The file system that holds the project's texture descriptors; with the catalog, it
+    /// lists the cube textures.</param>
     public EnvironmentViewModel(
         Func<SceneAuthoring?>? authoringProvider = null,
         IAssetFeed? assetProvider = null,
@@ -38,12 +41,13 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         IScheduler? observerScheduler = null,
         Func<Scene, CancellationToken, Task<SkyLightObservation?>>? observeEnvironment = null,
         Func<AssetPath, InputContextSource>? inputContextSource = null,
-        Func<AssetPath, Task>? revealAsset = null)
+        Func<AssetPath, Task>? revealAsset = null,
+        IFileSystem? fileSystem = null)
     {
         this.observeEnvironment = observeEnvironment;
         this.EditOwner = new(authoringProvider, this.RefreshFromScene, this.ValidationFeedback);
         var scheduler = observerScheduler ?? ImmediateScheduler.Instance;
-        var cubeTextures = CubemapPickerModel.CubeTextures(assetProvider);
+        var cubeTextures = assetProvider is not null && fileSystem is not null ? CubemapPickerModel.CubeTextures(assetProvider, fileSystem) : null;
         this.Backdrop = new(this.EditOwner, cubeTextures, scheduler);
         this.SkyLight = new(this.EditOwner, cubeTextures, scheduler);
         this.SkyAtmosphere = new(this.EditOwner);

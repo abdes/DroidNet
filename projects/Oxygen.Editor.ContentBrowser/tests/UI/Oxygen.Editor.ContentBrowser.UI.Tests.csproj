@@ -9,6 +9,7 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentBrowser/src/Oxygen.Editor.ContentBrowser.csproj" />
         <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Fixtures/LooseCookedIndexFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserControls.cs" Link="Support/BrowserControls.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserQuerySupport.cs" Link="Support/BrowserQuerySupport.cs" />

@@ -5,7 +5,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.Textures;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -47,8 +47,8 @@ public sealed partial class MaterialEditorViewModel
             this.AssetStatus = items.Find(this.document.File.Asset);
             // A project texture names its image; a packaged or library texture states its shape.
             this.availableTextures = [.. AssetRule.For(AssetKind.Texture).Apply(items)
-                .Where(static item => item.DescriptorPath is { } descriptorPath
-                    ? TextureSourceAssetImporter.HasSourceImage(descriptorPath.FullPath)
+                .Where(item => item.DescriptorPath is { } descriptorPath
+                    ? Texture.TryRead(this.fileSystem, descriptorPath)?.HasSourceImage(this.fileSystem, descriptorPath) == true
                     : item.CookedMetadata?.Texture is { Is2D: true })];
             foreach (var channel in this.TextureChannels)
             {

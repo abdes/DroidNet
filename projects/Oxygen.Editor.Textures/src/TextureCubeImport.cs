@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ContentPipeline.Import;
+namespace Oxygen.Editor.Textures;
 
 /// <summary>Cube import settings for a single source image.</summary>
 /// <param name="Layout">How the image lays out the faces.</param>

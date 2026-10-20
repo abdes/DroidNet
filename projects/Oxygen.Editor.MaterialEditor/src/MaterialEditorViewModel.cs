@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Security.Cryptography;
@@ -42,6 +43,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private readonly MaterialEdits edits;
     private readonly IMaterialCookService cookService;
     private readonly IProjectContextService projects;
+    private readonly IFileSystem fileSystem;
     private readonly ILogger logger;
     private readonly IAssetFeed assets;
     private readonly IDocumentInputCommitter? inputCommitter;
@@ -68,6 +70,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <param name="uiScheduler">Marshals status updates to the document's UI thread.</param>
     /// <param name="cookService">Cooks the material on request.</param>
     /// <param name="projects">The active project, which locates the material's file for a cook or a copy.</param>
+    /// <param name="fileSystem">The file system that holds the project's textures, read to offer only those with their images.</param>
     /// <param name="loggerFactory">Optional logger factory.</param>
     /// <param name="inputCommitter">Completes the focused numeric control before snapshot capture.</param>
     /// <param name="windowId">The owner window, for its input and prompts.</param>
@@ -81,6 +84,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         IScheduler uiScheduler,
         IMaterialCookService cookService,
         IProjectContextService projects,
+        IFileSystem fileSystem,
         ILoggerFactory? loggerFactory = null,
         IDocumentInputCommitter? inputCommitter = null,
         WindowId windowId = default,
@@ -95,6 +99,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.edits = edits ?? throw new ArgumentNullException(nameof(edits));
         this.cookService = cookService ?? throw new ArgumentNullException(nameof(cookService));
         this.projects = projects ?? throw new ArgumentNullException(nameof(projects));
+        this.fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<MaterialEditorViewModel>();
         this.assets = assetProvider ?? throw new ArgumentNullException(nameof(assetProvider));
         this.inputCommitter = inputCommitter;

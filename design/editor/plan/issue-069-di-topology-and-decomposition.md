@@ -2,7 +2,8 @@
 
 Status: `in progress` — Phase 0 and S1.1 to S1.7 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
-Scenes, LivePreview) are done; S1.8 is next. Phase 1 follows
+Scenes, LivePreview) are done; S1.8 is in progress (Textures has landed; see the ledger in section 6). Phase 1
+follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -11,7 +12,7 @@ replace section 7 of the spec: there are no `Authoring` or
 `Authoring.Abstractions` projects, `Oxygen.Editor.WorldEditor` is dissolved, and
 the Shell is the application frame.
 
-Last Updated: 2026-10-20 01:32
+Last Updated: 2026-10-20
 
 Issue: [#69](https://github.com/abdes/DroidNet/issues/69)
 
@@ -486,6 +487,60 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   hand-built test containers move to the shared host-equivalent builder in
   `TestHelpers`. Gate: tooling tests.
 
+  Test practice, decided with the reviewer during S1.8 (Textures is the pilot)
+  and applied by every slice that touches a test:
+  - **Module test kits.** A module that other modules test against publishes
+    `projects/<Module>/testing/<Module>.Testing.csproj`, referenced only by test
+    projects, as `TestHelpers` is: builders of its public types and in-memory
+    fakes of its ports, maintained by the module and checked against the real
+    service. Other tests reference the kit; they do not hand-build the type,
+    re-mock the port in each test, or link the module's `testsupport` files.
+    `Oxygen.Editor.Projects.Testing` (`TestProject`: a project and its mount
+    folders on any `IFileSystem`, `WriteFile` and `PathOf` by virtual path) is
+    the first; Scripting (`IScripts`, `IScriptAnalyzer`,
+    `IScriptLibrary`) and Input (`IInputSources`) follow with S1.8.
+  - **File system.** Unit tests of logic over files run on Testably's
+    `MockFileSystem`; the real disk is for integration tests (atomic replace,
+    watcher timing, locking, native tools). Code a slice writes or moves takes
+    `IFileSystem`.
+  - **Models** take required identity members and optional `init` members, not
+    long positional constructors.
+  - **Codes, not text.** Every refusal in code a slice moves carries a contract
+    code (`TextureImportCodes`, `TextureImportException.Code`), and tests assert
+    the code.
+
+  What the S1.8 survey measured (651 test files), for this slice to finish:
+  - `ProjectContext` is hand-built (six `required` members) in about 34 test
+    files and 6 `testsupport` files, and `ProjectContextService` plus
+    `Activate` in 19; shared builders of their own exist in `CookWorkspace`
+    (32 users), `BrowserTestData` (15), `AssetWorkspace` (12),
+    `SceneTabs.Project` (11), `CookCoordinatorScenario` (7),
+    `PublicationProject` (6) and `GenerationScenario` (5). All move to
+    `TestProject`; Phase 4's removal of `IProjectContextService` then changes
+    the kit only.
+  - Editor source reads files three ways: `File`/`Directory` statics in about 90
+    files (ContentPipeline most), DroidNet.Storage in 28, `IFileSystem` in 3. So
+    about 90 test files make their own `%TEMP%` root with `try/finally`, 61 pass
+    `RealFileSystem`, and 3 use `MockFileSystem`. Unifying Storage and
+    `IFileSystem` is a separate decision, not part of #69.
+  - About 45 test files assert message, tooltip or title text.
+  - View models with long hand-wired constructors spread every new dependency
+    over their tests: `AssetsViewModel` (13 arguments, 4 test sites),
+    `MaterialEditorViewModel` (12, 3 sites), `SceneNodeEditorViewModel` (15, 2
+    sites); `EnvironmentViewModel` takes only optional arguments. Three of those
+    sites are fixtures linked as source into other test projects, each of which
+    then needs the fixture's packages. The shared host-equivalent builder
+    constructs them from registrations instead.
+  - Test projects that link another module's `testsupport` files: WorldEditor
+    Unit.UI (ContentBrowser `BrowserControls`, `BrowserQuerySupport`,
+    `BrowserTestData`; ContentPipeline `EngineContentPakFixture`; Managed.Assets
+    `LooseCookedIndexFixture`), Benchmarks.UI and Integration.UI
+    (ContentPipeline `NativeContentPipelineFixture`, Managed.\* fixtures),
+    ContentBrowser UI, LivePreview Unit and Integration.UI, Assets Unit,
+    Integration and Benchmarks (`EngineContentPakFixture`), and MaterialEditor
+    (`NativeContentPipelineFixture`, `TemporaryNativeArtifacts`). S1.14 removes
+    them.
+
 ### Phase 2: scope factory and topology test
 
 - **S2.1** `DroidNet.Composition`: `ScopeFactory`, `ScopeHandle`, module and
@@ -563,5 +618,45 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 
 ## 6. Status ledger
 
-Progress is tracked in the issue's phase checklist. This plan is updated when a
-slice lands only if the slice changes the plan.
+Status values: `done`, `in progress`, `not started`. Update the row in the commit
+that lands the work. Checked against the tree on 2026-10-20.
+
+| Slice                                       | Status        | Notes                                                        |
+| ------------------------------------------- | ------------- | ------------------------------------------------------------ |
+| S0.1 Startup hygiene                        | `done`        |                                                              |
+| S1.1 Assets                                 | `done`        | Remaining items listed in the slice move with S1.8 and S1.11 |
+| S1.2 Cook on change                         | `done`        |                                                              |
+| S1.3 Foreground cooks                       | `done`        |                                                              |
+| S1.4a Global history                        | `done`        |                                                              |
+| S1.4 Pipeline workflows out of UI           | `done`        |                                                              |
+| S1.4c Removing one cooked product           | `done`        | `1e32de33f`                                                  |
+| S1.5 Document kinds                         | `done`        |                                                              |
+| S1.6 Scenes                                 | `done`        |                                                              |
+| S1.7 LivePreview                            | `done`        |                                                              |
+| S1.8 Asset family modules                   | `in progress` | See the sub-slice table below                                |
+| S1.9 Cook on change over checked inputs     | `not started` | Needs S1.8 facts                                             |
+| S1.10 Shell                                 | `not started` |                                                              |
+| S1.11 Unsaved documents                     | `not started` | Needs S1.10                                                  |
+| S1.12 Features                              | `not started` | One row per feature when it starts                           |
+| S1.13 Dissolve the World Editor             | `not started` |                                                              |
+| S1.14 Test boundaries                       | `not started` |                                                              |
+| S1.15 Enforcement                           | `not started` | Test practice decided in S1.8; Textures pilots it            |
+| S2.1 to S2.3 Scope factory and topology     | `not started` |                                                              |
+| S3.1 Registration modules                   | `not started` |                                                              |
+| S4.1 to S4.3 Project Session                | `not started` |                                                              |
+| S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                              |
+| S6.1 to S6.3 Service location and messenger | `not started` |                                                              |
+| S7 Documentation                            | `not started` |                                                              |
+
+### S1.8 sub-slices
+
+| #   | Commit         | Status        | Notes                                                                               |
+| --- | -------------- | ------------- | ----------------------------------------------------------------------------------- |
+| 1   | Problem source | `not started` | No `IAssetProblemSource` in the tree                                                |
+| 2   | Textures       | `done`        | Pilot of the S1.15 test practice                                                    |
+| 3   | Input          | `not started` | No `Oxygen.Editor.Input` project; `InputFileCheck` still in `WorldEditor/Scripting` |
+| 4   | Scripting      | `not started` | `WorldEditor/Scripting` still present                                               |
+| 5   | Templates      | `not started` | No `AuthoredAssetTemplate`                                                          |
+
+Landed before the sub-slices, as part of the same direction: Materials module,
+checked URIs, source-collision reporting from the cook (`5d5c2bc0e`).

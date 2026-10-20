@@ -4,34 +4,36 @@
 
 using System.Buffers.Binary;
 using System.Globalization;
+using System.IO.Abstractions;
 using System.Text;
 
-namespace Oxygen.Editor.ContentPipeline.Import;
+namespace Oxygen.Editor.Textures;
 
 /// <summary>Reads image pixel dimensions from the file header without decoding pixels.</summary>
-public static class ImageDimensions
+internal static class ImageDimensions
 {
     private const int HeaderBytes = 64 * 1024;
 
     /// <summary>Reads the width and height of a PNG, JPEG, BMP, TGA or Radiance HDR image.</summary>
+    /// <param name="fileSystem">The file system that holds the image.</param>
     /// <param name="path">The image file.</param>
     /// <returns>The dimensions, or null when the header cannot be read.</returns>
-    public static (int Width, int Height)? TryRead(string path)
+    public static (int Width, int Height)? TryRead(IFileSystem fileSystem, string path)
     {
         try
         {
-            using var stream = File.OpenRead(path);
+            using var stream = fileSystem.File.OpenRead(path);
             var buffer = new byte[(int)Math.Min(HeaderBytes, stream.Length)];
             stream.ReadExactly(buffer);
-            return Path.GetExtension(path).ToLowerInvariant() switch
-            {
-                ".png" => Png(buffer),
-                ".jpg" or ".jpeg" => Jpeg(buffer),
-                ".bmp" => Bmp(buffer),
-                ".tga" => Tga(buffer),
-                ".hdr" => Radiance(buffer),
-                _ => null,
-            };
+            var extension = Path.GetExtension(path);
+            return Is(".png") ? Png(buffer)
+                : Is(".jpg") || Is(".jpeg") ? Jpeg(buffer)
+                : Is(".bmp") ? Bmp(buffer)
+                : Is(".tga") ? Tga(buffer)
+                : Is(".hdr") ? Radiance(buffer)
+                : null;
+
+            bool Is(string suffix) => string.Equals(extension, suffix, StringComparison.OrdinalIgnoreCase);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or EndOfStreamException)
         {

@@ -16,8 +16,10 @@ using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Textures;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentBrowser.UI.Tests.Importing;
 
@@ -74,7 +76,8 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             new StrongReferenceMessenger(),
             dialogs.Object,
             windows.Object,
-            Mock.Of<IAssetShell>())
+            Mock.Of<IAssetShell>(),
+            new TextureImport(new MockFileSystem()))
         {
             IsOperationResultVisible = true,
         };

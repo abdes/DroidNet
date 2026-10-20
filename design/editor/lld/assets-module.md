@@ -191,10 +191,9 @@ broken is listed as it is, and one no catalog knows is listed as missing
 engine-internal one.
 
 Facts a picker shows beside an asset are small readers over an entry:
-`MaterialPreviewColor.TryRead` in Assets, and the texture descriptor facts
-(`TextureSourceAssetImporter.ReadCubeDescriptor`, `HasSourceImage`) in
-ContentPipeline, over the `TextureSourceReader` of Managed.Assets, which owns
-that format. The status beside a name is `AssetStatusText.ForEntry`.
+`MaterialPreviewColor.TryRead` in Assets, and the texture facts (`Texture`'s
+`IsCube`, `StoresRadiance` and `HasSourceImage`) in Textures, over the
+`TextureSourceReader` of Managed.Assets, which owns that format. The status beside a name is `AssetStatusText.ForEntry`.
 
 ### 5.5 What the explorer owns
 

@@ -6,8 +6,8 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Dialogs;
-using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Textures;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Importing;
@@ -21,15 +21,16 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
 
     private static readonly IReadOnlyDictionary<CubeLayout, string> LayoutNames = new Dictionary<CubeLayout, string>
     {
-        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.Panorama] = "Panorama 2:1",
-        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.HorizontalStrip] = "Horizontal strip 6:1",
-        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.VerticalStrip] = "Vertical strip 1:6",
-        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.HorizontalCross] = "Horizontal cross 4:3",
-        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.VerticalCross] = "Vertical cross 3:4",
-        [Oxygen.Editor.ContentPipeline.Import.CubeLayout.SixFaces] = "Six face files",
+        [Oxygen.Editor.Textures.CubeLayout.Panorama] = "Panorama 2:1",
+        [Oxygen.Editor.Textures.CubeLayout.HorizontalStrip] = "Horizontal strip 6:1",
+        [Oxygen.Editor.Textures.CubeLayout.VerticalStrip] = "Vertical strip 1:6",
+        [Oxygen.Editor.Textures.CubeLayout.HorizontalCross] = "Horizontal cross 4:3",
+        [Oxygen.Editor.Textures.CubeLayout.VerticalCross] = "Vertical cross 3:4",
+        [Oxygen.Editor.Textures.CubeLayout.SixFaces] = "Six face files",
     };
 
     private readonly ProjectContext project;
+    private readonly TextureImport textureImport;
     private readonly IDialogService dialogs;
     private readonly IReadOnlyList<string>? sourceFaces;
     private string name = string.Empty;
@@ -47,18 +48,20 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     /// <param name="project">The active project.</param>
     /// <param name="sourcePath">The selected image.</param>
     /// <param name="destinationFolder">The initial authoring destination.</param>
+    /// <param name="textureImport">The texture import, which reads the image and checks the request.</param>
     /// <param name="dialogs">The folder picker service.</param>
-    public TextureImportDialogViewModel(ProjectContext project, string sourcePath, string destinationFolder, IDialogService dialogs)
+    public TextureImportDialogViewModel(ProjectContext project, string sourcePath, string destinationFolder, TextureImport textureImport, IDialogService dialogs)
     {
         this.project = project ?? throw new ArgumentNullException(nameof(project));
+        this.textureImport = textureImport ?? throw new ArgumentNullException(nameof(textureImport));
         this.dialogs = dialogs ?? throw new ArgumentNullException(nameof(dialogs));
         this.SourcePath = Path.GetFullPath(sourcePath);
-        this.SourceDimensions = ImageDimensions.TryRead(this.SourcePath);
-        this.sourceFaces = TextureSourceAssetImporter.FindCubeFaces(this.SourcePath);
+        this.SourceDimensions = this.textureImport.ReadDimensions(this.SourcePath);
+        this.sourceFaces = this.textureImport.FindCubeFaces(this.SourcePath);
         var stem = Path.GetFileNameWithoutExtension(sourcePath);
 
         // The fields, not the properties: each property revalidates, which needs both values.
-        this.name = this.sourceFaces is null ? stem : TextureSourceAssetImporter.StripFaceSuffix(stem);
+        this.name = this.sourceFaces is null ? stem : TextureImport.StripFaceSuffix(stem);
         this.destinationFolder = destinationFolder;
         this.Revalidate();
     }
@@ -67,7 +70,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     public string SourcePath { get; }
 
     /// <summary>Gets the native intents available for a standalone image.</summary>
-    public IReadOnlyList<string> Intents { get; } = ["albedo", "normal", "roughness", "metallic", "ao", "orm", "emissive", "opacity", "data", "height", "hdr_env", "hdr_probe"];
+    public IReadOnlyList<string> Intents => TextureImport.Intents;
 
     /// <summary>Gets the texture shapes the import can produce.</summary>
     public IReadOnlyList<string> Shapes { get; } = [Texture2DShape, CubeShape];
@@ -126,13 +129,13 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     /// <summary>Gets the layout the chosen or detected layout resolves to, or null when detection failed.</summary>
     public CubeLayout? ResolvedCubeLayout
         => string.Equals(this.cubeLayout, AutoLayout, StringComparison.Ordinal)
-            ? this.sourceFaces is not null ? Oxygen.Editor.ContentPipeline.Import.CubeLayout.SixFaces
-            : this.SourceDimensions is { } size ? TextureSourceAssetImporter.DetectCubeLayout(size.Width, size.Height) : null
+            ? this.sourceFaces is not null ? Oxygen.Editor.Textures.CubeLayout.SixFaces
+            : this.SourceDimensions is { } size ? TextureImport.DetectCubeLayout(size.Width, size.Height) : null
             : LayoutNames.First(entry => string.Equals(entry.Value, this.cubeLayout, StringComparison.Ordinal)).Key;
 
     /// <summary>Gets a description of the detected layout for the automatic choice.</summary>
     public string DetectedLayoutText
-        => this.sourceFaces is { } faces && this.ResolvedCubeLayout == Oxygen.Editor.ContentPipeline.Import.CubeLayout.SixFaces
+        => this.sourceFaces is { } faces && this.ResolvedCubeLayout == Oxygen.Editor.Textures.CubeLayout.SixFaces
             ? "Faces +X, -X, +Y, -Y, +Z, -Z: " + string.Join(", ", faces.Select(Path.GetFileName)) + "."
             : this.SourceDimensions is not { } size ? "Image size unknown; choose the layout."
             : this.ResolvedCubeLayout is { } layout && string.Equals(this.cubeLayout, AutoLayout, StringComparison.Ordinal)
@@ -140,7 +143,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
             : string.Create(CultureInfo.InvariantCulture, $"{size.Width} × {size.Height}");
 
     /// <summary>Gets a value indicating whether the resolved layout is a panorama, which needs a face size.</summary>
-    public bool IsPanorama => this.ResolvedCubeLayout == Oxygen.Editor.ContentPipeline.Import.CubeLayout.Panorama;
+    public bool IsPanorama => this.ResolvedCubeLayout == Oxygen.Editor.Textures.CubeLayout.Panorama;
 
     /// <summary>Gets or sets the cube face size for a panorama, in pixels.</summary>
     public int FaceSize
@@ -156,10 +159,10 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     }
 
     /// <summary>Gets supported native color spaces.</summary>
-    public IReadOnlyList<string> ColorSpaces { get; } = ["srgb", "linear"];
+    public IReadOnlyList<string> ColorSpaces => TextureImport.ColorSpaces;
 
     /// <summary>Gets supported native texture formats.</summary>
-    public IReadOnlyList<string> Formats { get; } = ["rgba8", "rgba8_srgb", "bc7", "bc7_srgb", "rgba16f", "rgba32f"];
+    public IReadOnlyList<string> Formats => TextureImport.Formats;
 
     /// <summary>Gets or sets the named texture asset stem.</summary>
     public string Name
@@ -252,9 +255,9 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         {
             try
             {
-                return TextureSourceImportTarget.Resolve(this.CreateRequest()).VirtualPath.VirtualPath;
+                return this.textureImport.ResolveTarget(this.CreateRequest()).VirtualPath.VirtualPath;
             }
-            catch (ArgumentException)
+            catch (Exception ex) when (ex is TextureImportException or ArgumentException)
             {
                 return string.Empty;
             }
@@ -262,7 +265,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
     }
 
     /// <summary>Gets the validated import request.</summary>
-    public TextureSourceImportRequest? Request => this.CanAccept ? this.CreateRequest() : null;
+    public TextureImportRequest? Request => this.CanAccept ? this.CreateRequest() : null;
 
     /// <summary>Rechecks the reviewed request before accepting the dialog.</summary>
     /// <returns>Whether the import may proceed.</returns>
@@ -313,11 +316,11 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
         }
     }
 
-    private TextureSourceImportRequest CreateRequest()
+    private TextureImportRequest CreateRequest()
         => new(this.project, this.SourcePath, ImportDestination.Parse(this.DestinationFolder), this.Name.Trim(), this.Intent, this.ColorSpace, this.Format)
         {
             Cube = this.isCube && this.ResolvedCubeLayout is { } layout
-                ? new TextureCubeImport(layout, layout == Oxygen.Editor.ContentPipeline.Import.CubeLayout.Panorama ? this.faceSize : null)
+                ? new TextureCubeImport(layout, layout == Oxygen.Editor.Textures.CubeLayout.Panorama ? this.faceSize : null)
                 : null,
         };
 
@@ -334,8 +337,8 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
 
         try
         {
-            var target = TextureSourceImportTarget.Resolve(this.CreateRequest());
-            if (target.ImagePaths.Any(File.Exists) || File.Exists(target.DescriptorPath))
+            var target = this.textureImport.ResolveTarget(this.CreateRequest());
+            if (this.textureImport.IsTaken(target))
             {
                 this.Error = "A texture asset with this name already exists in the destination.";
                 this.OnPropertyChanged(nameof(this.OutputVirtualPath));
@@ -345,7 +348,7 @@ public sealed partial class TextureImportDialogViewModel : ObservableObject
             this.Error = string.Empty;
             this.CanAccept = true;
         }
-        catch (Exception ex) when (ex is ArgumentException or IOException or UnauthorizedAccessException)
+        catch (Exception ex) when (ex is TextureImportException or ArgumentException or IOException or UnauthorizedAccessException)
         {
             this.Error = ex.Message;
         }

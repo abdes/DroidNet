@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ContentPipeline.Import;
+namespace Oxygen.Editor.Textures;
 
 /// <summary>How a single image lays out the six faces of a cube texture.</summary>
 public enum CubeLayout

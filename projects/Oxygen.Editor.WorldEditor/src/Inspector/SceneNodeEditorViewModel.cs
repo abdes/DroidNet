@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.IO.Abstractions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
@@ -81,6 +82,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="selectionService">The authoritative document selection owner, used to hydrate the typed context at startup.</param>
     /// <param name="materialSlots">The current native geometry slot inventories.</param>
     /// <param name="projectContexts">The active project lifetime.</param>
+    /// <param name="fileSystem">The file system that holds the project's files.</param>
     /// <param name="interaction">The shared editor lock owner.</param>
     /// <param name="scriptAnalysis">The script analysis, for script slot parameters and problems.</param>
     /// <param name="codeEditor">The code editor, for editing a slot's script.</param>
@@ -100,6 +102,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         ISceneSelectionService selectionService,
         IGeometryMaterialSlotProvider materialSlots,
         IProjectContextService projectContexts,
+        IFileSystem fileSystem,
         ILoggerFactory? loggerFactory = null,
         WorkspaceInteractionService? interaction = null,
         IScriptAnalysisService? scriptAnalysis = null,
@@ -137,7 +140,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             hosting.DispatcherScheduler,
             this.ObserveSkyLightAsync,
             context => projectContexts.ActiveProject is { } project ? InputContextSources.Find(project, context) : InputContextSource.External,
-            asset => this.RevealAssetAsync(projectContexts, asset));
+            asset => this.RevealAssetAsync(projectContexts, asset),
+            fileSystem);
         this.renderingEditor = new NodeRenderingViewModel(this.AuthoringOf);
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;

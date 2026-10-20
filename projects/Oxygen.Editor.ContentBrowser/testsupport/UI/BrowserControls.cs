@@ -20,7 +20,9 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Textures;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserQuerySupport;
 
 namespace Oxygen.Editor.ContentBrowser.TestSupport;
@@ -53,7 +55,8 @@ internal sealed class BrowserControls : DroidNet.Tests.VisualUserInterfaceTests
             messenger,
             Mock.Of<IDialogService>(),
             Mock.Of<IWindowManagerService>(),
-            Mock.Of<IAssetShell>());
+            Mock.Of<IAssetShell>(),
+            new TextureImport(new MockFileSystem()));
     }
 
     internal static void AssertBrowserRowState(ListViewBase selector, AssetBrowserRow row, Control container, object? focus, double offset, AssetsLayoutViewModel model, AssetEntry expected)

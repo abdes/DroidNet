@@ -22,6 +22,7 @@ using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 
@@ -182,6 +183,7 @@ public sealed class SceneNodeEditorViewModelTests
             selectionService,
             Mock.Of<ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),
             Mock.Of<IProjectContextService>(),
+            new MockFileSystem(),
             interaction: interaction);
     }
 

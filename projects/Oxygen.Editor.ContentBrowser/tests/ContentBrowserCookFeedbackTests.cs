@@ -7,7 +7,9 @@ using CommunityToolkit.Mvvm.Messaging;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Textures;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -38,7 +40,8 @@ public sealed partial class ContentBrowserCookFeedbackTests
             new StrongReferenceMessenger(),
             Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(),
             Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>(),
-            Mock.Of<IAssetShell>())
+            Mock.Of<IAssetShell>(),
+            new TextureImport(new MockFileSystem()))
         {
             IsOperationResultVisible = true,
             OperationResultTitle = "Cook Project",

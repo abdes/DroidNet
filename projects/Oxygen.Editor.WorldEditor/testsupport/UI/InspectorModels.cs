@@ -19,6 +19,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
@@ -101,7 +102,8 @@ internal static class InspectorModels
             assetProvider ?? Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             CreateStatusHosting().DispatcherScheduler,
             Mock.Of<IMaterialCookService>(),
-            Mock.Of<IProjectContextService>());
+            Mock.Of<IProjectContextService>(),
+            new MockFileSystem());
     }
 
     private static void ReplaceComponent<TBase>(SceneAuthoringFixture fixture, GameComponent replacement)

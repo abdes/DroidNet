@@ -5,7 +5,7 @@
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentPipeline.Import;
+namespace Oxygen.Editor.Textures;
 
 /// <summary>A user's reviewed image-to-texture import request.</summary>
 /// <param name="Project">The project whose authoring mount receives the texture.</param>
@@ -15,7 +15,7 @@ namespace Oxygen.Editor.ContentPipeline.Import;
 /// <param name="Intent">The native texture semantic.</param>
 /// <param name="ColorSpace">The native decode color space.</param>
 /// <param name="Format">The native output format.</param>
-public sealed record TextureSourceImportRequest(
+public sealed record TextureImportRequest(
     ProjectContext Project,
     string SourcePath,
     AssetPath DestinationFolder,

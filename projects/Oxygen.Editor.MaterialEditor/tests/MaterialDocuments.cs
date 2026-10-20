@@ -74,6 +74,7 @@ internal sealed class MaterialDocuments : IDisposable
             System.Reactive.Concurrency.ImmediateScheduler.Instance,
             Mock.Of<IMaterialCookService>(),
             Mock.Of<IProjectContextService>(),
+            new RealFileSystem(),
             inputCommitter: inputCommitter);
 
     public void Dispose()

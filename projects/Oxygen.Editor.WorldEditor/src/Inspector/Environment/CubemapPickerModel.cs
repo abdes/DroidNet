@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.IO.Abstractions;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.Textures;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Managed.Core;
 
@@ -70,14 +71,15 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     /// Creates the catalog's cube textures in display order, shared by every cubemap field of one
     /// inspector: the descriptors are read once per catalog update and the last list is replayed.
     /// </summary>
-    /// <param name="assetProvider">The shared content catalog, or null when none is available.</param>
-    /// <returns>The shared feed, or null without a catalog.</returns>
-    internal static IObservable<IReadOnlyList<CubeTextureAsset>>? CubeTextures(IAssetFeed? assetProvider)
-        => assetProvider?.Items
-            .Select(static assets => (IReadOnlyList<CubeTextureAsset>)AssetRule.For(AssetKind.Texture).Apply(assets)
-                .Select(static asset => (Asset: asset, Cube: DescribeCube(asset)))
+    /// <param name="assetProvider">The shared content catalog.</param>
+    /// <param name="fileSystem">The file system that holds the project's texture descriptors.</param>
+    /// <returns>The shared feed.</returns>
+    internal static IObservable<IReadOnlyList<CubeTextureAsset>> CubeTextures(IAssetFeed assetProvider, IFileSystem fileSystem)
+        => assetProvider.Items
+            .Select(assets => (IReadOnlyList<CubeTextureAsset>)AssetRule.For(AssetKind.Texture).Apply(assets)
+                .Select(asset => (Asset: asset, Cube: DescribeCube(fileSystem, asset)))
                 .Where(static entry => entry.Cube is not null)
-                .Select(static entry => new CubeTextureAsset(entry.Asset, entry.Cube!.Value.StoresRadiance))
+                .Select(static entry => new CubeTextureAsset(entry.Asset, entry.Cube!.Value))
                 .ToArray())
             .Replay(1)
             .RefCount();
@@ -94,10 +96,11 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     }
 
     // A project texture's descriptor says whether it is a cube; a packaged or library texture's cooked record does.
-    private static CubeDescriptorInfo? DescribeCube(AssetEntry asset)
-        => asset.DescriptorPath is { } descriptorPath ? TextureSourceAssetImporter.ReadCubeDescriptor(descriptorPath.FullPath)
-            : asset.CookedMetadata?.Texture is { IsCube: true } texture ? new CubeDescriptorInfo(texture.StoresRadiance)
-            : null;
+    // The value is whether the cube keeps float radiance, or null when the asset is not a cube.
+    private static bool? DescribeCube(IFileSystem fileSystem, AssetEntry asset)
+        => asset.DescriptorPath is { } descriptorPath
+            ? Texture.TryRead(fileSystem, descriptorPath) is { IsCube: true } texture ? texture.StoresRadiance : null
+            : asset.CookedMetadata?.Texture is { IsCube: true } cooked ? cooked.StoresRadiance : null;
 
     private void UpdateRows(IReadOnlyList<CubeTextureAsset> cubemaps)
     {

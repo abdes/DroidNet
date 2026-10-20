@@ -468,6 +468,9 @@ public static partial class Program
         container.Register<MaterialDocumentKind>(Reuse.Singleton);
         container.Register<MaterialEdits>(Reuse.Singleton);
 
+        // Textures: image import for every window.
+        container.Register<Textures.TextureImport>(Reuse.Singleton);
+
         // The session's asset relocations, resolved by undo, redo and paste in every open document. Created here, so
         // a workspace child container never creates a second instance that the root's services would not see.
         container.Register<ContentPipeline.Relocation.AssetRedirects>(Reuse.Singleton);

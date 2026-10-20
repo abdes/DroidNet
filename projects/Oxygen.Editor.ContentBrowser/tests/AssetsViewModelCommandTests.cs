@@ -11,9 +11,11 @@ using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Textures;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -196,6 +198,7 @@ public sealed class AssetsViewModelCommandTests
             Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(),
             Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>(),
             Mock.Of<IAssetShell>(),
+            new TextureImport(new MockFileSystem()),
             relocation);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(false);
         return (browser, state, messenger);

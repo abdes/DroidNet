@@ -23,6 +23,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Textures;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -44,6 +45,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="dialogService">The existing dialog and folder-picker service.</param>
 /// <param name="windowManagerService">The window manager service.</param>
 /// <param name="shell">The clipboard and File Explorer actions.</param>
+/// <param name="textureImport">Imports images as textures.</param>
 /// <param name="relocation">The rename, move, copy and delete workflow; without it those commands are unavailable.</param>
 /// <param name="creation">New Script, New Input File and New Scene; without it those commands are unavailable.</param>
 /// <param name="codeEditor">The code editor that opens scripts and input files; without it Edit is unavailable.</param>
@@ -61,6 +63,7 @@ public partial class AssetsViewModel(
     IDialogService dialogService,
     IWindowManagerService windowManagerService,
     IAssetShell shell,
+    TextureImport textureImport,
     Relocation.IAssetRelocationWorkflow? relocation = null,
     Authoring.AuthoredAssetCreation? creation = null,
     Scripts.ICodeEditorService? codeEditor = null) : AbstractOutletContainer, IRoutingAware
@@ -249,7 +252,7 @@ public partial class AssetsViewModel(
         }
 
         var destination = this.GetSelectedTextureFolder(project);
-        var model = new TextureImportDialogViewModel(project, sourcePath, destination, dialogService);
+        var model = new TextureImportDialogViewModel(project, sourcePath, destination, textureImport, dialogService);
         var view = new TextureImportDialogView(model);
         var button = await dialogService.ShowAsync(new DialogSpec("Import texture", view)
         {
@@ -266,7 +269,7 @@ public partial class AssetsViewModel(
         this.IsOperationResultVisible = false;
         try
         {
-            var textureUri = await TextureSourceAssetImporter.CreateAsync(request).ConfigureAwait(true);
+            var textureUri = await textureImport.CreateAsync(request).ConfigureAwait(true);
             await this.RunSourceImportAsync(
                 project,
                 () => contentPipelineService.CookAssetAsync(textureUri, CancellationToken.None, project),
@@ -276,6 +279,10 @@ public partial class AssetsViewModel(
         catch (OperationCanceledException)
         {
             // The active texture import is cancelled before publication.
+        }
+        catch (TextureImportException error)
+        {
+            this.PublishFailure(ContentPipelineOperationKinds.Import, "Import texture", error.Message, error.Code, request.DestinationFolder, error, showInBrowser: false);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or InvalidOperationException)
         {
@@ -768,7 +775,7 @@ public partial class AssetsViewModel(
             }
 
             var modelTypes = AssetFileTypes.Suffixes(AssetFileCategory.Model).ToList();
-            var textureTypes = TextureSourceAssetImporter.SupportedExtensions.ToList();
+            var textureTypes = TextureImport.SupportedExtensions.ToList();
             var filters = new Dictionary<string, IList<string>>(StringComparer.Ordinal);
             if (models && textures)
             {
@@ -795,7 +802,7 @@ public partial class AssetsViewModel(
 
             if (await dialogService.PickFileAsync(picker, window.AppWindow.Id).ConfigureAwait(true) is { } path)
             {
-                if (TextureSourceAssetImporter.IsSupportedImage(path))
+                if (TextureImport.IsSupportedImage(path))
                 {
                     await this.ImportImageSourceAsync(project, path).ConfigureAwait(true);
                 }
