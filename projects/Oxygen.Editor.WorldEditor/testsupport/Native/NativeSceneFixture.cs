@@ -10,7 +10,6 @@ using System.Reactive.Subjects;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Settings;
-using DroidNet.Aura.Windowing;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
@@ -48,7 +47,6 @@ using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Cooking;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneEditor;
@@ -159,6 +157,8 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     /// <summary>Gets the document area of the window that shows the transition host, once it was created.</summary>
     public DocumentArea? TransitionArea { get; private set; }
+
+    public DocumentService? TransitionDocuments { get; private set; }
 
     public Scene Source { get; private set; }
 
@@ -275,7 +275,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         _ = (await this.contentSession.ChangeMountsAsync(this.Projects.ActiveProject!, desired, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
     }
 
-    public DocumentHostViewModel CreateDocumentTransitionHost(IContainer container, EditorDocumentService documents, CatalogWorkloadServices services, WindowId windowId)
+    public DocumentAreaViewModel CreateDocumentTransitionHost(IContainer container, DocumentTabs documents, CatalogWorkloadServices services, WindowId windowId)
     {
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
@@ -285,7 +285,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         container.RegisterInstance<IMessenger>(this.messenger);
         container.RegisterInstance(this.Preview);
         container.RegisterInstance(Mock.Of<IDocumentInputCommitter>());
-        container.RegisterInstance(Mock.Of<IDocumentConflictPrompt>());
         container.RegisterInstance<IContentPipelineService>(services.Pipeline);
         container.RegisterInstance<IProjectContextService>(services.Projects);
         container.RegisterInstance<IAssetFeed>(this.AssetCatalog.Object);
@@ -295,18 +294,24 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         var cook = new MaterialCookService(services.Pipeline, services.Projects, NullLogger<MaterialCookService>.Instance);
         DocumentEditorDescriptor[] editors =
         [
-            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, windowId, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, this.messenger, preferences)) { IsClosable = false },
-            new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Projects, windowId: windowId)),
+            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, windowId, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, this.messenger, preferences)) { IsClosable = false, IsOnePerArea = true },
+            new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Projects)),
         ];
         this.TransitionArea = new DocumentArea(documents, this.OpenDocuments, editors, windowId, static _ => { });
         container.RegisterInstance<IDocumentArea>(this.TransitionArea);
+        this.TransitionDocuments = new DocumentService(
+            this.TransitionArea,
+            documents,
+            this.OpenDocuments,
+            new ProjectDocumentFiles(services.Projects),
+            Mock.Of<IDocumentClosePrompt>(),
+            Mock.Of<IDocumentInputCommitter>(),
+            publisher.Object);
+        container.RegisterInstance<IDocumentService>(this.TransitionDocuments);
         var views = new Mock<IViewLocator>();
         _ = views.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is SceneEditorViewModel ? new SceneEditorView() : new MaterialEditorView());
-        return new(documents, this.TransitionArea, this.OpenDocuments, views.Object, this.Runtime, new DocumentCloseCoordinator(Mock.Of<IDocumentClosePrompt>(), publisher.Object), Mock.Of<IWindowManagerService>(), windowId);
+        return new DocumentAreaViewModel(this.TransitionDocuments, this.TransitionArea, Mock.Of<IDocumentConfirmations>(), views.Object);
     }
-
-    public DocumentManager CreateTransitionDocumentManager(IProjectContextService projects, WindowId windowId)
-        => new(this.TransitionArea!, this.messenger, projects, Mock.Of<Oxygen.Editor.Data.Services.IProjectUsageService>(), windowId, this.OpenDocuments, Mock.Of<IAssetRelocationService>());
 
     /// <summary>Waits until the engine shows the transition's scene document, which builds its editor's panes.</summary>
     /// <param name="cancellationToken">Cancels the wait.</param>

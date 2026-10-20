@@ -79,10 +79,10 @@ Feature UI              editors, explorers, inspectors, passive panels
 Shared feature UI       Oxygen.Editor.Pickers
 Domain services         Scenes, Assets, LivePreview, ContentPipeline, Projects
                         families: Scripting, Input, Textures, Materials
-UI kit                  Oxygen.Editor.Controls, Oxygen.Editor.Routing
+UI kit                  Oxygen.Editor.Controls
 Foundation              World, Documents, Schemas, Data, Runtime, Interop,
                         Managed.Core, Managed.Assets, Storage, Composition,
-                        Aura, Docking, Routing
+                        Aura, Docking, Routing, Oxygen.Editor.Routing
 ```
 
 References point down only. A feature references the Shell, the domain modules
@@ -92,6 +92,10 @@ the UI kit and foundation, never the Shell or a feature. A domain module referen
 and foundation, never the Shell or a feature. The Shell references foundation
 only. The composition root references everything and is the only project that
 does.
+
+`Oxygen.Editor.Routing` is foundation: it is the local routing over DroidNet
+Routing that the Shell's layout and the panels' own navigation both use, and it
+knows no editor module.
 
 ### 5.3 Naming conventions
 
@@ -145,7 +149,7 @@ flowchart TB
         Sto["Storage"]
         RT["Runtime"]
         Int["Interop"]
-        Lib["Aura, Docking, Routing,<br/>DroidNet.Documents, Composition"]
+        Lib["Aura, Docking, Routing, Oxygen.Editor.Routing,<br/>DroidNet.Documents, Composition"]
     end
     App --> Features
     App --> Live

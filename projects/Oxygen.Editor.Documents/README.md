@@ -40,6 +40,17 @@ if (opened.Document is { } document)
 }
 ```
 
+## Ports
+
+Two ports give documents what the project knows, without a reference to the
+modules that know it; ContentPipeline implements both.
+
+- `IDocumentFiles` finds the file an authored asset is edited in, and the
+  document file at a path inside the project's content folders.
+- `IDocumentRelocations` follows the relocations the editor makes: what each open
+  document follows, before the relocation completes, and the files a change
+  deleted.
+
 ## Identity
 
 A document has one id, its `Document.Id`, a `DocumentId` from

@@ -72,6 +72,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.MaterialEditor\src\Oxygen.Editor.MaterialEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ProjectBrowser\src\Oxygen.Editor.ProjectBrowser.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Shell\src\Oxygen.Editor.Shell.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Storage\src\Storage.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.WorldEditor\src\Oxygen.Editor.WorldEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />

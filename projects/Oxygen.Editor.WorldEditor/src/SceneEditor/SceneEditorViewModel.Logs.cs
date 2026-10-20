@@ -153,16 +153,4 @@ public partial class SceneEditorViewModel
 
     private void LogSceneHelpersFailed(Exception exception)
         => LogSceneHelpersFailed(this.logger, exception, this.Document.Id);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Scene editor '{Scene}' cannot follow asset relocations: no relocation service in its workspace.")]
-    private partial void LogRelocationUnavailable(string scene);
-
-
-
-    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Open scene '{Scene}' has nothing to follow: {Reason}.")]
-    private static partial void LogRelocationSkipped(ILogger logger, string scene, string reason);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogRelocationSkipped(string scene, string reason)
-        => LogRelocationSkipped(this.logger, scene, reason);
 }

@@ -91,6 +91,7 @@
             <dnc:DynamicTree
                 x:Name="ProjectTree"
                 Grid.Row="0"
+                AreClipboardShortcutsEnabled="False"
                 IsEnabled="{x:Bind ViewModel.CanChangeMounts, Mode=OneWay}"
                 ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
                 TrailingContentTemplateSelector="{StaticResource ReadOnlyBadgeTemplateSelector}"

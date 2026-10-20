@@ -17,6 +17,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Textures;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -69,7 +70,7 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             new StrongReferenceMessenger(),
             dialogs.Object,
             windows.Object,
-            Mock.Of<IAssetShell>(),
+            Mock.Of<IDesktopIntegration>(),
             new TextureImport(new MockFileSystem()))
         {
             IsOperationResultVisible = true,

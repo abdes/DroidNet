@@ -11,7 +11,7 @@ using Oxygen.Editor.Documents;
 namespace Oxygen.Editor.Shell.Documents;
 
 /// <summary>
-///     The document area of one window, over the tabs of <see cref="IEditorDocumentService"/> in that window.
+///     The document area of one window, over the tabs of <see cref="IDocumentTabs"/> in that window.
 /// </summary>
 /// <remarks>
 ///     Every document of <see cref="OpenDocuments"/> that gets a tab here gets a <see cref="DocumentTab"/>. When that tab
@@ -19,7 +19,7 @@ namespace Oxygen.Editor.Shell.Documents;
 /// </remarks>
 public sealed partial class DocumentArea : IDocumentArea, IDisposable
 {
-    private readonly IEditorDocumentService tabs;
+    private readonly IDocumentTabs tabs;
     private readonly OpenDocuments documents;
     private readonly WindowId window;
     private readonly Action<WindowId> bringForward;
@@ -42,7 +42,7 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
     ///     <paramref name="documents"/> does not open.
     /// </exception>
     public DocumentArea(
-        IEditorDocumentService tabs,
+        IDocumentTabs tabs,
         OpenDocuments documents,
         IEnumerable<DocumentEditorDescriptor> editors,
         WindowId window,
@@ -60,6 +60,7 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<DocumentArea>();
         this.editors = Validate(documents.Kinds, editors);
 
+        this.tabs.DocumentOpened += this.OnTabOpened;
         this.tabs.DocumentActivated += this.OnTabActivated;
         this.tabs.DocumentClosed += this.OnTabClosed;
     }
@@ -67,11 +68,26 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
     /// <inheritdoc/>
     public event EventHandler? ActiveDocumentChanged;
 
+    /// <summary>
+    ///     Raised when a document's tab is added to this area, before it is selected.
+    /// </summary>
+    internal event EventHandler<DocumentTabEventArgs>? TabAdded;
+
+    /// <summary>
+    ///     Raised when a document's tab leaves this area, before the document closes.
+    /// </summary>
+    internal event EventHandler<DocumentTabEventArgs>? TabRemoved;
+
     /// <inheritdoc/>
     public IReadOnlyList<Document> Documents => [.. this.shown.Select(static tab => tab.Document)];
 
     /// <inheritdoc/>
     public Document? ActiveDocument { get; private set; }
+
+    /// <summary>
+    ///     Gets the window whose document area this is.
+    /// </summary>
+    internal WindowId Window => this.window;
 
     /// <inheritdoc/>
     public async Task<bool> ShowAsync(Document document)
@@ -128,6 +144,7 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
         }
 
         this.disposed = true;
+        this.tabs.DocumentOpened -= this.OnTabOpened;
         this.tabs.DocumentActivated -= this.OnTabActivated;
         this.tabs.DocumentClosed -= this.OnTabClosed;
         foreach (var tab in this.shown)
@@ -137,6 +154,20 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
 
         this.shown.Clear();
     }
+
+    /// <summary>
+    ///     Gets the editor descriptor of a kind that documents of this area open with.
+    /// </summary>
+    /// <param name="kind">The kind.</param>
+    /// <returns>The kind's descriptor.</returns>
+    internal DocumentEditorDescriptor EditorOf(IDocumentKind kind) => this.editors[kind];
+
+    /// <summary>
+    ///     Gets the tab of a document shown in this area.
+    /// </summary>
+    /// <param name="document">The document.</param>
+    /// <returns>The tab, or <see langword="null"/> when the document has no tab here.</returns>
+    internal DocumentTab? TabOf(Document document) => this.Find(document.Id);
 
     private static Dictionary<IDocumentKind, DocumentEditorDescriptor> Validate(
         IReadOnlyList<IDocumentKind> kinds,
@@ -175,6 +206,14 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
         return true;
     }
 
+    private void OnTabOpened(object? sender, DocumentOpenedEventArgs args)
+    {
+        if (args.WindowId == this.window && args.Metadata is DocumentTab tab && this.shown.Contains(tab))
+        {
+            this.TabAdded?.Invoke(this, new DocumentTabEventArgs(tab));
+        }
+    }
+
     private void OnTabActivated(object? sender, DocumentActivatedEventArgs args)
     {
         if (args.WindowId == this.window)
@@ -191,11 +230,13 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
             return;
         }
 
-        tab.Dispose();
         if (ReferenceEquals(this.ActiveDocument, tab.Document))
         {
-            this.SetActive(null);
+            this.SetActive(document: null);
         }
+
+        this.TabRemoved?.Invoke(this, new DocumentTabEventArgs(tab));
+        tab.Dispose();
 
         this.LogDocumentClosed(tab.Document.Kind.Name, tab.Document.Title, tab.Document.IsDirty);
         this.documents.Close(tab.Document);

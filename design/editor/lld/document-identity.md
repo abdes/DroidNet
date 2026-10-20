@@ -226,11 +226,14 @@ any of them:
 - The Cooking panel and Play find documents through `OpenDocuments` and save
   them through the document service's save by asset (5.8).
 
-The input committer (`IDocumentInputCommitter`), the close prompt, the conflict
-prompt, `DocumentCloseItem` and the close coordinator are part of the Shell's
-document service ([editor-documents.md](editor-documents.md#51-decisions),
-decision 2). They act on the part's window, so they take no `WindowId`, and they
-take the `DocumentTab`; the close prompt shows each document's asset.
+The input committer (`IDocumentInputCommitter`), the close prompt,
+`DocumentCloseItem` and the close coordinator are part of the Shell's document
+service ([editor-documents.md](editor-documents.md#51-decisions), decision 2).
+They act on the part's window, so they take no `WindowId`, and they take the
+`DocumentTab`; the close prompt shows each document's asset. A document whose
+file changed on disk is resolved by the document service for every kind
+(Reload, Keep Mine, Save a Copy), from the document area's banner or from the
+close prompt; editors have no conflict handling of their own.
 
 `IDocumentArea` is the first part of the Shell's context service
 ([editor-shell.md](../review/editor-shell.md#4-services-offered-to-parts)),
@@ -251,13 +254,13 @@ the editor contribution of
   prompts (5.7); an editor never builds or looks up a tab. `CreateEditor`
   refuses a tab of another kind.
 
-The workspace composition registers each kind with `OpenDocuments` and its
-descriptor beside it (`WorkspaceViewModel.Documents.cs` registers the scene and
-material descriptors). The host creates an editor from `tab.Editor`; it has no
-switch over kinds and no `Create*Editor` per kind. The editor contract is
-`IAsyncSaveable`, `IDocumentCloseParticipant` and
-`IDocumentConflictParticipant`, keyed by `DocumentId` in the host and the close
-coordinator. The coordinator's check that a document changed while it was being
+The workspace composition registers each kind with `OpenDocuments`, and the
+module that edits the kind contributes its descriptor through an
+`IDocumentEditorProvider` (`SceneEditorProvider`, `MaterialEditorProvider`). The
+document service creates an editor from `tab.Editor`; it has no switch over
+kinds and no `Create*Editor` per kind. The editor contract is `IAsyncSaveable`
+and `IDocumentCloseParticipant`, keyed by `DocumentId` in the document service
+and the close coordinator. The coordinator's check that a document changed while it was being
 saved reads the tab's `IsDirty`, which is `Document.IsDirty`, after
 `SaveForCloseAsync`: `Document.SaveAsync` records the history position its
 capture saw, so an edit made during the write keeps the document dirty.
@@ -309,22 +312,20 @@ Materials are documents of the material kind. The model is `Material` in
   (`AssetStatusText` over `IAssetFeed`) and `Document.IsDirty`. The Cook command
   calls `IMaterialCookService.CookMaterialAsync` with the location Projects
   resolves for `Document.File.Asset`.
-- Presence and outside changes: the editor subscribes to `IAssetCatalog.Changes`
-  for its file and calls `Document.CheckFileAsync`, as the scene editor does.
-- Relocation: the editor's relocation participant maps the change with
-  `DocumentRelocations.Map` (`Oxygen.Editor.ContentPipeline.Relocation`, shared
-  by both editors) and calls `Document.FollowRelocationAsync`.
+- Presence, outside changes and relocations are the Shell's document service's,
+  for every kind: it checks the file on the catalog's changes and follows the
+  relocations `DocumentRelocations.Map` maps
+  (`Oxygen.Editor.ContentPipeline.Relocation`).
 - New Material goes through ContentPipeline's asset authoring with
   `MaterialTemplates.Asset`, whose content is `MaterialTemplates.New(name)`.
   The Content Explorer's `AuthoredAssetCreation` offers "New Material" beside
-  "New Scene", then sends `OpenMaterialRequestMessage`.
+  "New Scene", then opens it through the Shell's placement.
 
 File versions, save against the version read, conflicts, Keep Mine, quiet
 reload, follow a relocation, save a copy and dirty come from `Document`; the
-material has no document service of its own. The editor's conflict handling
-(`IDocumentConflictParticipant` over `Document.ReloadAsync` and
-`Document.SaveCopyAsync`), its rebinding on `ContentReplaced`, and its
-`Activate`/`Deactivate` for the host stay in the editor.
+material has no document service of its own. Its rebinding on
+`ContentReplaced`, and its `Activate`/`Deactivate` when its view leaves the
+document area, stay in the editor.
 
 ### 5.10 The cook's view of open documents
 
@@ -351,12 +352,17 @@ cancels a running inspection when the workspace disposes it.
 ### 5.12 One scene per window
 
 The rule is a placement rule of the scene editor
-([document-kinds.md](document-kinds.md#51-decisions), decision 9), in the World
-Editor's `DocumentManager`: opening a scene asks about the open scene's unsaved
-edits (`PrepareCloseAsync`), reads the incoming scene before the current one
-closes so a file that does not open keeps the current scene, then commits the
-close and installs the new scene (`ReplaceSceneAsync`, `InstallSceneAsync`).
-Closability comes from the descriptor (5.8), not from a document type string.
+([document-kinds.md](document-kinds.md#51-decisions), decision 9): its
+descriptor allows one document per area (`IsOnePerArea`), and the Shell's
+document service applies it to any kind that asks for it. Opening a scene asks
+about the open scene's unsaved edits (`PrepareCloseAsync`), reads the incoming
+scene before the current one closes so a file that does not open keeps the
+current scene, then commits the close and shows the new scene; a newer request
+supersedes an older one that has not shown its scene. What only scenes need
+stays with the scene editor (`SceneDocumentLifetime`): the project remembers
+its last scene, and a scene that failed to replace the one it closed leaves the
+window without a scene, from which the previous one opens again. Closability
+comes from the descriptor (5.8), not from a document type string.
 
 ## 6. Ownership
 
@@ -415,9 +421,9 @@ scope is built (5.8). A refused detach leaves the tab in place (5.4).
 
 All edges point down:
 
-- `Oxygen.Editor.Shell` references `Oxygen.Editor.Documents` and
-  `DroidNet.Documents`, and not Aura: `IDocumentTabSource` and `WindowId` come
-  from `DroidNet.Documents` and the Windows App SDK.
+- `Oxygen.Editor.Shell` references `Oxygen.Editor.Documents`,
+  `DroidNet.Documents` and, for its windows, dialogs and docking, Aura and
+  Docking; it references foundation modules only.
 - `Oxygen.Editor.Documents` references `DroidNet.Documents` for `DocumentId`
   alone.
 - `Oxygen.Editor.ContentPipeline` references `Oxygen.Editor.Documents`.

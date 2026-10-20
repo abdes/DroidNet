@@ -10,7 +10,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Windows.System;
-using Windows.UI.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
@@ -60,9 +59,6 @@ public sealed partial class ProjectLayoutView
         }
     }
 
-    private static bool IsControlDown()
-        => Microsoft.UI.Input.InputKeyboardSource.GetKeyStateForCurrentThread(VirtualKey.Control).HasFlag(CoreVirtualKeyStates.Down);
-
     // Shown as the Scene Explorer shows its menu: on the row's item part, focused, at the pointer.
     private void OnItemContextRequested(object? sender, TreeItemContextRequestedEventArgs args)
     {
@@ -88,25 +84,17 @@ public sealed partial class ProjectLayoutView
         _ = ContextMenu.Show(anchor, menu, position);
     }
 
-    // The tree leaves Delete and, with nothing on its own clipboard, Ctrl+V unhandled; the asset list's shortcuts are
-    // scoped to the asset list, so the tree handles both here.
+    // The tree leaves Delete unhandled and the asset list's Delete is scoped to the list, so the tree deletes its
+    // selected folders here. Its clipboard keys are the window's commands, which the view model runs.
     private async void OnTreeKeyDown(object sender, KeyRoutedEventArgs args)
     {
-        if (args.Handled || this.ViewModel is not { } model)
+        if (args.Handled || this.ViewModel is not { } model || args.Key != VirtualKey.Delete)
         {
             return;
         }
 
-        if (args.Key == VirtualKey.Delete)
-        {
-            args.Handled = true;
-            await model.DeleteSelectedFoldersAsync().ConfigureAwait(true);
-        }
-        else if (args.Key == VirtualKey.V && IsControlDown())
-        {
-            args.Handled = true;
-            await model.PasteIntoFocusedFolderAsync().ConfigureAwait(true);
-        }
+        args.Handled = true;
+        await model.DeleteSelectedFoldersAsync().ConfigureAwait(true);
     }
 
     private async void OnRenameRequested(object? sender, ProjectItemRenameRequestedEventArgs args)

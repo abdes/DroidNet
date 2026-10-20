@@ -23,10 +23,8 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Assets.Authoring.Materials;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Windows.ApplicationModel.DataTransfer;
-using WindowId = Microsoft.UI.WindowId;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -34,7 +32,7 @@ namespace Oxygen.Editor.MaterialEditor;
 /// View model for the editor of a material document. It edits the document's <see cref="MaterialContent"/> through
 /// <see cref="MaterialEdits"/>, and follows the document's state, reloads and relocations.
 /// </summary>
-public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentConflictParticipant, IDisposable
+public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDisposable
 {
     private static readonly TimeSpan WheelIdleDelay = TimeSpan.FromMilliseconds(250);
     private readonly DocumentTab tab;
@@ -45,8 +43,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private readonly ILogger logger;
     private readonly IAssetFeed assets;
     private readonly IDocumentInputCommitter? inputCommitter;
-    private readonly WindowId windowId;
-    private readonly IDocumentConflictPrompt? conflictPrompt;
     private readonly SemaphoreSlim editGate = new(1, 1);
     private Task<bool>? pendingSave;
     private MaterialContent? observedContent;
@@ -71,10 +67,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// textures, read to offer only those with their images.</param>
     /// <param name="loggerFactory">Optional logger factory.</param>
     /// <param name="inputCommitter">Completes the focused numeric control before snapshot capture.</param>
-    /// <param name="windowId">The owner window, for its input and prompts.</param>
-    /// <param name="conflictPrompt">Presents recovery actions after an ordinary Save conflict.</param>
-    /// <param name="relocation">Keeps the open material in step with asset relocations; optional.</param>
-    /// <param name="catalog">Reports when the material's file changes, goes or returns outside the editor; optional.</param>
     public MaterialEditorViewModel(
         DocumentTab tab,
         MaterialEdits edits,
@@ -83,11 +75,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         IMaterialCookService cookService,
         IProjectContextService projects,
         ILoggerFactory? loggerFactory = null,
-        IDocumentInputCommitter? inputCommitter = null,
-        WindowId windowId = default,
-        IDocumentConflictPrompt? conflictPrompt = null,
-        Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation = null,
-        IAssetCatalog? catalog = null)
+        IDocumentInputCommitter? inputCommitter = null)
     {
         this.tab = tab ?? throw new ArgumentNullException(nameof(tab));
         this.document = tab.Document.Content is MaterialContent
@@ -99,8 +87,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<MaterialEditorViewModel>();
         this.assets = assetProvider ?? throw new ArgumentNullException(nameof(assetProvider));
         this.inputCommitter = inputCommitter;
-        this.windowId = windowId;
-        this.conflictPrompt = conflictPrompt;
         this.MaterialUriText = this.document.File.Asset.ToUriString();
         this.TextureChannels =
         [
@@ -125,8 +111,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.document.ContentReplaced += this.OnDocumentContentReplaced;
         this.ObserveContent();
         this.ReadFromContent();
-        this.relocationParticipant = relocation?.AddParticipant(new RelocationParticipant(this, Microsoft.UI.Dispatching.DispatcherQueue.GetForCurrentThread()));
-        this.WatchSourcePresence(catalog);
     }
 
     /// <summary>
@@ -234,8 +218,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.document.StateChanged -= this.OnDocumentStateChanged;
         this.document.ContentReplaced -= this.OnDocumentContentReplaced;
         this.ObserveContent(null);
-        this.StopWatchingSourcePresence();
-        this.relocationParticipant?.Dispose();
         this.assetStatusSubscription.Dispose();
         this.assetStatusLifetime.Cancel();
         this.EndEditSession(NumberBoxEditCompletionKind.Cancel);
@@ -250,12 +232,11 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     {
         if (this.inputCommitter is not null)
         {
-            await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
+            await this.inputCommitter.CommitAsync().ConfigureAwait(true);
         }
 
         this.EndEditSession(NumberBoxEditCompletionKind.Commit);
         this.isClosing = true;
-        await this.pendingConflict.ConfigureAwait(true);
         if (this.pendingSave is { } save)
         {
             _ = await save.ConfigureAwait(true);
@@ -271,10 +252,10 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     /// <inheritdoc />
     /// <remarks>The document area closes the document once its tab has closed; a discarded gesture ends here.</remarks>
-    public async Task CloseAsync(bool discard)
+    public Task CloseAsync(bool discard)
     {
-        await this.pendingConflict.ConfigureAwait(true);
         this.EndEditSession(discard ? NumberBoxEditCompletionKind.Cancel : NumberBoxEditCompletionKind.Commit);
+        return Task.CompletedTask;
     }
 
     /// <inheritdoc />
@@ -348,8 +329,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             {
                 _ = await save.ConfigureAwait(true);
             }
-
-            await this.pendingConflict.ConfigureAwait(true);
         }
         catch (Exception exception)
         {
@@ -385,17 +364,14 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     {
         if (!this.isClosing && !this.isDisposed)
         {
+            // A save that meets a newer file leaves the document changed on disk; the document area's banner offers the way out.
             _ = await this.SaveCoreAsync().ConfigureAwait(true);
-            if (this.HasSaveConflict && !this.isClosing && !this.isDisposed && this.conflictPrompt is not null)
-            {
-                await this.conflictPrompt.ShowAsync(this.windowId, this.tab, this).ConfigureAwait(true);
-            }
         }
     }
 
     private void OnTextureSelectionChanged(MaterialTextureChannel channel, AssetPath? texture)
     {
-        if (!this.isLoading && !this.isClosing && !this.isDisposed && !this.isResolvingConflict && this.acceptsInput)
+        if (!this.isLoading && !this.isClosing && !this.isDisposed && this.acceptsInput)
         {
             _ = this.ApplyTextureReferenceAsync(channel, texture);
         }
@@ -438,10 +414,9 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     private async Task<bool> SaveSnapshotAsync()
     {
-        await this.pendingConflict.ConfigureAwait(true);
         if (this.inputCommitter is not null)
         {
-            await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
+            await this.inputCommitter.CommitAsync().ConfigureAwait(true);
         }
 
         this.EndEditSession(NumberBoxEditCompletionKind.Commit);
@@ -455,17 +430,15 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
         if (!result.Succeeded)
         {
-            this.HasSaveConflict |= result.Outcome == DocumentSaveOutcome.Conflict;
             this.StatusText = result.Outcome switch
             {
-                DocumentSaveOutcome.Conflict => "The file changed outside this document. Reload it or save a separate copy.",
+                DocumentSaveOutcome.Conflict => "The file changed outside the editor. Reload it, keep your changes or save a copy.",
                 _ => $"Save failed. Your changes are still open. {result.Message}",
             };
             return false;
         }
 
         this.RefreshFromDocument();
-        this.HasSaveConflict = false;
         this.StatusText = this.IsDirty ? "Saved; newer changes remain unsaved" : string.Empty;
         return !this.IsDirty;
     }
@@ -574,7 +547,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
     private void ApplyEdit(PropertyEdit edit)
     {
-        if (this.isLoading || this.isClosing || this.isDisposed || this.isResolvingConflict || !this.acceptsInput)
+        if (this.isLoading || this.isClosing || this.isDisposed || !this.acceptsInput)
         {
             return;
         }

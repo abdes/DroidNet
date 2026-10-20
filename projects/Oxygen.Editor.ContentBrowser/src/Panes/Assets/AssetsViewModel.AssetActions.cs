@@ -4,10 +4,8 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentBrowser.Relocation;
@@ -422,7 +420,15 @@ public partial class AssetsViewModel
     }
 
     [RelayCommand]
-    private void ShowCookingJobs() => _ = messenger.Send(new ShowCookingJobsRequestMessage());
+    private void ShowCookingJobs() => _ = placement?.ShowPanelAsync("cook");
+
+    private async Task OpenDocumentAsync(AssetPath asset)
+    {
+        if (placement is not null)
+        {
+            _ = await placement.OpenDocumentAsync(asset).ConfigureAwait(true);
+        }
+    }
 
     /// <summary>What a selected row is on disk, for deciding which commands apply.</summary>
     /// <param name="VirtualPath">The writable authoring path, or null for read-only and cooked-only rows.</param>

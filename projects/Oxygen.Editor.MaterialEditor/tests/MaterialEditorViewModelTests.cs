@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using DroidNet.Controls;
 using Moq;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
 
@@ -95,7 +96,7 @@ public sealed partial class MaterialEditorViewModelTests
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
         MaterialEditorViewModel? editor = null;
         var committer = new Mock<IDocumentInputCommitter>();
-        _ = committer.Setup(value => value.CommitAsync(It.IsAny<Microsoft.UI.WindowId>()))
+        _ = committer.Setup(value => value.CommitAsync())
             .Returns(() =>
             {
                 editor!.MetallicFactor = 0.4;
@@ -111,7 +112,7 @@ public sealed partial class MaterialEditorViewModelTests
         _ = saved.PbrMetallicRoughness.MetallicFactor.Should().Be(0.4f);
     }
 
-    /// <summary>A reload shows the file's values and leaves no conflict.</summary>
+    /// <summary>When its document reloads, the editor shows the file's values.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task AReloadShowsTheFilesValues()
@@ -122,12 +123,13 @@ public sealed partial class MaterialEditorViewModelTests
         editor.MetallicFactor = 0.9;
         await WaitForEditsAsync(document, entries: 1).ConfigureAwait(false);
 
-        var result = await editor.ReloadFromDiskAsync().ConfigureAwait(false);
+        // The document service reloads the document; the editor follows the content it gets.
+        var result = await document.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
         _ = editor.MetallicFactor.Should().Be(0.0);
         _ = editor.IsDirty.Should().BeFalse();
-        _ = editor.HasSaveConflict.Should().BeFalse();
+        _ = document.IsChangedOnDisk.Should().BeFalse();
     }
 
     /// <summary>When its document follows a relocation, the editor shows the material's new name, asset and textures.</summary>

@@ -32,6 +32,12 @@ public sealed class DocumentEditorDescriptor(IDocumentKind kind, Func<DocumentTa
     public Uri? IconUri { get; init; }
 
     /// <summary>
+    ///     Gets a value indicating whether a window shows at most one document of this kind. Opening another one in the
+    ///     window replaces it: the shown document closes first, after its unsaved changes are asked about.
+    /// </summary>
+    public bool IsOnePerArea { get; init; }
+
+    /// <summary>
     ///     Creates the editor of a document shown in a tab.
     /// </summary>
     /// <param name="tab">The tab of the document to edit; the document's kind is <see cref="Kind"/>.</param>

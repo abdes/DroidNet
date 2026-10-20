@@ -13,6 +13,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
@@ -46,7 +47,7 @@ public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInt
         var projects = CreateQueryProject();
         var state = new ContentBrowserState();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
-        using var details = new AssetDetailsViewModel(state, projects, Mock.Of<IAssetShell>());
+        using var details = new AssetDetailsViewModel(state, projects, Mock.Of<IDesktopIntegration>());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {

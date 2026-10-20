@@ -17,6 +17,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World.Inspection;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
@@ -128,16 +129,14 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         };
         var messenger = new StrongReferenceMessenger();
         OpenCookedInspectionRequestMessage? requested = null;
-        var sourceOpens = 0;
+        var placement = new Mock<IPlacementService>();
         var listener = new object();
         messenger.Register<OpenCookedInspectionRequestMessage>(listener, (_, message) =>
         {
             requested = message;
             message.Reply(Task.FromResult(true));
         });
-        messenger.Register<OpenMaterialRequestMessage>(listener, (_, _) => sourceOpens++);
-        messenger.Register<OpenSceneRequestMessage>(listener, (_, _) => sourceOpens++);
-        using var browser = CreateBrowserModel(provider.Object, projects, state, layout, layoutView, messenger);
+        using var browser = CreateBrowserModel(provider.Object, projects, state, layout, layoutView, messenger, placement: placement.Object);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         browser.LoadContent(layout, "right");
         await LoadTestContentAsync(layoutView).ConfigureAwait(true);
@@ -147,7 +146,7 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         _ = requested.Should().NotBeNull();
         _ = requested!.Asset.Should().Be(uri);
         _ = requested.Scope.Should().Be(uri);
-        _ = sourceOpens.Should().Be(0);
+        placement.Verify(value => value.OpenDocumentAsync(It.IsAny<AssetPath>(), It.IsAny<WindowPlacement>(), It.IsAny<CancellationToken>()), Times.Never);
     });
 
     /// <summary>A packaged engine asset has useful read-only information and no meaningless validation action.</summary>

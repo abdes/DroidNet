@@ -3,14 +3,15 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.Documents.Tests;
+namespace Oxygen.Editor.Shell.Unit.Tests.Documents;
 
-/// <summary>Exercises real document lifecycle entry points with authoring and dialog boundaries.</summary>
+/// <summary>Exercises the close of document tabs through each window's close coordinator, with stand-in editors and prompt.</summary>
 [TestClass]
 public sealed class DocumentCloseWorkflowTests
 {
@@ -19,17 +20,16 @@ public sealed class DocumentCloseWorkflowTests
     [TestMethod]
     public async Task CancelTabClosePreservesDocumentAndActiveContext()
     {
-        var fixture = new Fixture((_, _) => Task.FromResult(false));
+        using var fixture = new Fixture(_ => Task.FromResult(false));
         var original = await fixture.OpenAsync("Original").ConfigureAwait(false);
         var closedEvents = 0;
         fixture.Service.DocumentClosed += (_, _) => closedEvents++;
 
-        _ = (await fixture.Service.CloseDocumentAsync(Window, original.Metadata.DocumentId).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.Service.CloseDocumentAsync(Window, original.Tab.DocumentId).ConfigureAwait(false)).Should().BeFalse();
 
-        _ = fixture.Service.GetOpenDocuments(Window).Should().ContainSingle().Which.Should().BeSameAs(original.Metadata);
-        _ = fixture.Service.GetActiveDocumentId(Window).Should().Be(original.Metadata.DocumentId);
-        _ = original.Metadata.IsDirty.Should().BeTrue();
-        _ = original.History.Should().Equal("edit");
+        _ = fixture.Service.GetOpenDocuments(Window).Should().ContainSingle().Which.Should().BeSameAs(original.Tab);
+        _ = fixture.Service.GetActiveDocumentId(Window).Should().Be(original.Tab.DocumentId);
+        _ = original.Tab.IsDirty.Should().BeTrue();
         _ = original.CloseCalls.Should().Be(0);
         _ = original.IsPreparing.Should().BeFalse();
         _ = closedEvents.Should().Be(0);
@@ -38,9 +38,8 @@ public sealed class DocumentCloseWorkflowTests
     [TestMethod]
     public async Task WorkspaceSavesSelectedDocumentsBeforeAnyDiscardOrClose()
     {
-        var fixture = new Fixture(async (items, workspace) =>
+        using var fixture = new Fixture(async items =>
         {
-            _ = workspace.Should().BeTrue();
             _ = items.Should().OnlyContain(item => item.IsSelected);
             items[1].IsSelected = false;
             return await items[0].SaveAsync().ConfigureAwait(false);
@@ -51,13 +50,13 @@ public sealed class DocumentCloseWorkflowTests
         using var transaction = await fixture.Service.PrepareCloseAllAsync(Window).ConfigureAwait(false);
         _ = transaction.Should().NotBeNull();
         _ = fixture.Service.GetOpenDocuments(Window).Should().HaveCount(2);
-        _ = discarded.History.Should().Equal("edit");
+        _ = discarded.Tab.IsDirty.Should().BeTrue();
         _ = saved.CloseCalls.Should().Be(0);
         _ = discarded.CloseCalls.Should().Be(0);
 
         _ = (await transaction!.CommitAsync().ConfigureAwait(false)).Should().BeTrue();
 
-        _ = saved.SavedValue.Should().Be("edit");
+        _ = saved.Saved.Should().BeTrue();
         _ = saved.Discarded.Should().BeFalse();
         _ = discarded.Discarded.Should().BeTrue();
         _ = fixture.Service.GetOpenDocuments(Window).Should().BeEmpty();
@@ -66,7 +65,7 @@ public sealed class DocumentCloseWorkflowTests
     [TestMethod]
     public async Task SaveFailureThenCancelDiscardsNothingAndKeepsSuccessfulSaves()
     {
-        var fixture = new Fixture(async (items, workspace) =>
+        using var fixture = new Fixture(async items =>
         {
             _ = (await items[0].SaveAsync().ConfigureAwait(false)).Should().BeTrue();
             _ = (await items[1].SaveAsync().ConfigureAwait(false)).Should().BeFalse();
@@ -84,9 +83,9 @@ public sealed class DocumentCloseWorkflowTests
         _ = transaction.Should().BeNull();
         _ = fixture.Service.GetOpenDocuments(Window).Should().HaveCount(3);
         _ = fixture.Service.GetActiveDocumentId(Window).Should().Be(activeId);
-        _ = saved.Metadata.IsDirty.Should().BeFalse();
-        _ = failed.Metadata.IsDirty.Should().BeTrue();
-        _ = uncheckedDocument.History.Should().Equal("edit");
+        _ = saved.Tab.IsDirty.Should().BeFalse();
+        _ = failed.Tab.IsDirty.Should().BeTrue();
+        _ = uncheckedDocument.Tab.IsDirty.Should().BeTrue();
         _ = fixture.Participants.Should().OnlyContain(participant => participant.CloseCalls == 0 && !participant.IsPreparing);
         fixture.Results.Verify(
             publisher => publisher.Publish(It.Is<OperationResult>(result =>
@@ -97,16 +96,16 @@ public sealed class DocumentCloseWorkflowTests
     [TestMethod]
     public async Task FailedSaveCanBeRetriedBeforeClose()
     {
-        var fixture = new Fixture(async (items, workspace) =>
+        using var fixture = new Fixture(async items =>
         {
             _ = (await items[0].SaveAsync().ConfigureAwait(false)).Should().BeFalse();
             return await items[0].SaveAsync().ConfigureAwait(false);
         });
         var document = await fixture.OpenAsync("Retry").ConfigureAwait(false);
         var attempt = 0;
-        document.Save = () => Task.FromResult(++attempt == 2);
+        document.Save = async () => ++attempt == 2 && (await document.Tab.Document.SaveAsync().ConfigureAwait(false)).Succeeded;
 
-        _ = (await fixture.Service.CloseDocumentAsync(Window, document.Metadata.DocumentId).ConfigureAwait(false)).Should().BeTrue();
+        _ = (await fixture.Service.CloseDocumentAsync(Window, document.Tab.DocumentId).ConfigureAwait(false)).Should().BeTrue();
         _ = attempt.Should().Be(2);
         _ = document.Discarded.Should().BeFalse();
     }
@@ -115,7 +114,7 @@ public sealed class DocumentCloseWorkflowTests
     public async Task LaterDocumentVetoPreventsWorkspacePromptAndAllTeardown()
     {
         var promptCalled = false;
-        var fixture = new Fixture((_, _) =>
+        using var fixture = new Fixture(_ =>
         {
             promptCalled = true;
             return Task.FromResult(false);
@@ -124,7 +123,7 @@ public sealed class DocumentCloseWorkflowTests
         var vetoed = await fixture.OpenAsync("Vetoed").ConfigureAwait(false);
         fixture.Service.DocumentClosing += (_, args) =>
         {
-            if (args.Metadata.DocumentId == vetoed.Metadata.DocumentId)
+            if (args.Metadata.DocumentId == vetoed.Tab.DocumentId)
             {
                 args.AddVetoTask(Task.FromResult(false));
             }
@@ -141,7 +140,7 @@ public sealed class DocumentCloseWorkflowTests
     [TestMethod]
     public async Task AbandonedPreparedWorkspaceClosePreservesUncheckedDocuments()
     {
-        var fixture = new Fixture((items, workspace) =>
+        using var fixture = new Fixture(items =>
         {
             foreach (var item in items)
             {
@@ -160,8 +159,7 @@ public sealed class DocumentCloseWorkflowTests
         }
 
         _ = document.IsPreparing.Should().BeFalse();
-        _ = document.Metadata.IsDirty.Should().BeTrue();
-        _ = document.History.Should().Equal("edit");
+        _ = document.Tab.IsDirty.Should().BeTrue();
         _ = document.CloseCalls.Should().Be(0);
     }
 
@@ -169,31 +167,32 @@ public sealed class DocumentCloseWorkflowTests
     public async Task PendingDecisionRejectsOverlappingCloseOpenAndActivation()
     {
         var answer = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
-        var fixture = new Fixture((_, _) => answer.Task);
+        using var fixture = new Fixture(_ => answer.Task);
         var document = await fixture.OpenAsync("Pending").ConfigureAwait(false);
-        var close = fixture.Service.CloseDocumentAsync(Window, document.Metadata.DocumentId);
+        var close = fixture.Service.CloseDocumentAsync(Window, document.Tab.DocumentId);
 
-        _ = (await fixture.Service.CloseDocumentAsync(Window, document.Metadata.DocumentId).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.Service.CloseDocumentAsync(Window, document.Tab.DocumentId).ConfigureAwait(false)).Should().BeFalse();
         _ = (await fixture.Service.OpenDocumentAsync(Window, new TestDocumentMetadata()).ConfigureAwait(false)).Should().BeFalse();
-        _ = (await fixture.Service.SelectDocumentAsync(Window, document.Metadata.DocumentId).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.Service.SelectDocumentAsync(Window, document.Tab.DocumentId).ConfigureAwait(false)).Should().BeFalse();
         answer.SetResult(false);
         _ = (await close.ConfigureAwait(false)).Should().BeFalse();
-        _ = (await fixture.Service.SelectDocumentAsync(Window, document.Metadata.DocumentId).ConfigureAwait(false)).Should().BeTrue();
+        _ = (await fixture.Service.SelectDocumentAsync(Window, document.Tab.DocumentId).ConfigureAwait(false)).Should().BeTrue();
     }
 
     [TestMethod]
     public async Task EditArrivingDuringSaveCannotBeMarkedSavedAndClosed()
     {
-        var fixture = new Fixture(async (items, workspace) => await items[0].SaveAsync().ConfigureAwait(false));
+        using var fixture = new Fixture(async items => await items[0].SaveAsync().ConfigureAwait(false));
         var document = await fixture.OpenAsync("Newer edits").ConfigureAwait(false);
-        document.Save = () =>
+        document.Save = async () =>
         {
-            document.History.Add("newer");
-            return Task.FromResult(true);
+            var saved = (await document.Tab.Document.SaveAsync().ConfigureAwait(false)).Succeeded;
+            document.Tab.Document.History.AddChange("Newer", static () => { });
+            return saved;
         };
 
-        _ = (await fixture.Service.CloseDocumentAsync(Window, document.Metadata.DocumentId).ConfigureAwait(false)).Should().BeFalse();
-        _ = document.Metadata.IsDirty.Should().BeTrue();
+        _ = (await fixture.Service.CloseDocumentAsync(Window, document.Tab.DocumentId).ConfigureAwait(false)).Should().BeFalse();
+        _ = document.Tab.IsDirty.Should().BeTrue();
         _ = document.CloseCalls.Should().Be(0);
         fixture.Results.Verify(publisher => publisher.Publish(It.IsAny<OperationResult>()), Times.Once);
     }
@@ -202,7 +201,7 @@ public sealed class DocumentCloseWorkflowTests
     public async Task ProjectReplacement_LaterWindowVetoPreservesEveryWindow()
     {
         var promptCount = 0;
-        var fixture = new Fixture((items, _) =>
+        using var fixture = new Fixture(items =>
         {
             foreach (var item in items)
             {
@@ -218,15 +217,15 @@ public sealed class DocumentCloseWorkflowTests
         using var transaction = await fixture.Service.PrepareCloseAllWindowsAsync().ConfigureAwait(false);
 
         _ = transaction.Should().BeNull();
-        _ = fixture.Service.GetOpenDocuments(Window).Should().ContainSingle().Which.Should().BeSameAs(first.Metadata);
-        _ = fixture.Service.GetOpenDocuments(otherWindow).Should().ContainSingle().Which.Should().BeSameAs(second.Metadata);
+        _ = fixture.Service.GetOpenDocuments(Window).Should().ContainSingle().Which.Should().BeSameAs(first.Tab);
+        _ = fixture.Service.GetOpenDocuments(otherWindow).Should().ContainSingle().Which.Should().BeSameAs(second.Tab);
         _ = fixture.Participants.Should().OnlyContain(participant => participant.CloseCalls == 0 && !participant.IsPreparing);
     }
 
     [TestMethod]
     public async Task ProjectReplacement_AllWindowsRemainOpenUntilApprovedCommit()
     {
-        var fixture = new Fixture((items, _) =>
+        using var fixture = new Fixture(items =>
         {
             foreach (var item in items)
             {
@@ -249,46 +248,68 @@ public sealed class DocumentCloseWorkflowTests
         _ = fixture.Participants.Should().OnlyContain(participant => participant.CloseCalls == 1);
     }
 
-    private sealed class Fixture
+    /// <summary>Open note documents with an unsaved edit each, shown in the tabs of one or two windows.</summary>
+    private sealed class Fixture(Func<IReadOnlyList<DocumentCloseItem>, Task<bool>> prompt) : IDisposable
     {
-        private readonly DocumentCloseCoordinator coordinator;
-
-        public Fixture(Func<IReadOnlyList<DocumentCloseItem>, bool, Task<bool>> prompt)
-        {
-            this.coordinator = new DocumentCloseCoordinator(new Prompt(prompt), this.Results.Object);
-            this.Service = new EditorDocumentService(closeCoordinator: this.coordinator);
-        }
+        private readonly Notes notes = new();
+        private readonly Dictionary<WindowId, DocumentCloseCoordinator> coordinators = [];
+        private readonly List<IDisposable> coordinatorUses = [];
 
         public Mock<IOperationResultPublisher> Results { get; } = new();
 
-        public EditorDocumentService Service { get; }
+        public DocumentTabs Service { get; } = new();
 
         public List<Participant> Participants { get; } = [];
 
         public async Task<Participant> OpenAsync(string title, bool closable = true, WindowId? window = null)
         {
-            var metadata = new TestDocumentMetadata { Title = title, IsClosable = closable, IsDirty = true };
-            var participant = new Participant(metadata);
-            _ = (await this.Service.OpenDocumentAsync(window ?? Window, metadata).ConfigureAwait(false)).Should().BeTrue();
-            this.coordinator.Register(window ?? Window, metadata.DocumentId, participant);
+            var target = window ?? Window;
+            var document = await this.notes.OpenAsync(title, CancellationToken.None).ConfigureAwait(false);
+            document.History.AddChange("Edit", static () => { });
+            var tab = new DocumentTab(document, new DocumentEditorDescriptor(this.notes.Kind, static _ => new object()) { IsClosable = closable });
+            var participant = new Participant(tab);
+            _ = (await this.Service.OpenDocumentAsync(target, tab).ConfigureAwait(false)).Should().BeTrue();
+            this.CoordinatorOf(target).Register(tab, participant);
             this.Participants.Add(participant);
             return participant;
         }
+
+        public void Dispose()
+        {
+            this.coordinatorUses.ForEach(static use => use.Dispose());
+            this.notes.Dispose();
+        }
+
+        private DocumentCloseCoordinator CoordinatorOf(WindowId window)
+        {
+            if (!this.coordinators.TryGetValue(window, out var coordinator))
+            {
+                coordinator = new DocumentCloseCoordinator(new Prompt(prompt), this.Results.Object);
+                this.coordinators.Add(window, coordinator);
+                this.coordinatorUses.Add(this.Service.UseCloseCoordinator(window, coordinator));
+            }
+
+            return coordinator;
+        }
     }
 
-    private sealed class Prompt(Func<IReadOnlyList<DocumentCloseItem>, bool, Task<bool>> show) : IDocumentClosePrompt
+    private sealed class Prompt(Func<IReadOnlyList<DocumentCloseItem>, Task<bool>> show) : IDocumentClosePrompt
     {
-        public Task<bool> ConfirmAsync(WindowId windowId, IReadOnlyList<DocumentCloseItem> documents, bool isWorkspaceClose)
-            => show(documents, isWorkspaceClose);
+        public Task<bool> ConfirmAsync(IReadOnlyList<DocumentCloseItem> documents) => show(documents);
     }
 
-    private sealed class Participant(TestDocumentMetadata metadata) : IDocumentCloseParticipant
+    /// <summary>Stands in for a document's editor at close: it saves the document, or discards its edits.</summary>
+    private sealed class Participant : IDocumentCloseParticipant
     {
-        public TestDocumentMetadata Metadata { get; } = metadata;
+        public Participant(DocumentTab tab)
+        {
+            this.Tab = tab;
+            this.Save = async () => (await tab.Document.SaveAsync().ConfigureAwait(false)).Succeeded;
+        }
 
-        public List<string> History { get; } = ["edit"];
+        public DocumentTab Tab { get; }
 
-        public string? SavedValue { get; private set; }
+        public bool Saved { get; private set; }
 
         public int CloseCalls { get; private set; }
 
@@ -296,7 +317,7 @@ public sealed class DocumentCloseWorkflowTests
 
         public bool IsPreparing { get; private set; }
 
-        public Func<Task<bool>> Save { get; set; } = () => Task.FromResult(true);
+        public Func<Task<bool>> Save { get; set; }
 
         public Task PrepareForCloseAsync()
         {
@@ -306,23 +327,14 @@ public sealed class DocumentCloseWorkflowTests
 
         public async Task<bool> SaveForCloseAsync()
         {
-            // As a document's save does, only the edits the save captured are marked saved.
-            var captured = this.History.Count;
-            if (!await this.Save().ConfigureAwait(false))
-            {
-                return false;
-            }
-
-            this.SavedValue = string.Join(',', this.History.Take(captured));
-            this.Metadata.IsDirty = this.History.Count != captured;
-            return true;
+            this.Saved = await this.Save().ConfigureAwait(false);
+            return this.Saved;
         }
 
         public Task CloseAsync(bool discard)
         {
             this.CloseCalls++;
             this.Discarded = discard;
-            this.History.Clear();
             return Task.CompletedTask;
         }
 

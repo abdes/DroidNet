@@ -39,7 +39,8 @@ overlays are planned for ED-M08.4–M08.6. They are intentionally not ED-M02 blo
 The current editor has:
 
 - a WorldEditor workspace route with a center renderer outlet.
-- `DocumentHostViewModel` and `SceneEditorViewModel` hosting scene documents.
+- the Shell's `DocumentAreaViewModel` and `SceneEditorViewModel` hosting scene
+  documents.
 - `SceneEditorViewModel` creates `ViewportViewModel` instances according to
   `SceneViewLayout`.
 - layout menus for one, two, three, and four pane variants.

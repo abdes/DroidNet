@@ -4,10 +4,8 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Documents;
 using DroidNet.TimeMachine;
 using DryIoc;
-using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
@@ -24,37 +22,37 @@ using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
-/// <summary>Verifies scene conflict actions through the real document view model.</summary>
+/// <summary>Verifies how the scene editor saves, closes and follows its document's content.</summary>
 [TestClass]
 internal sealed partial class SceneEditorConflictTests
 {
     /// <summary>Gets or sets the test context.</summary>
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>A reload after a save conflict installs the scene on disk, ends the conflict and tells the views.</summary>
+    /// <summary>A reload after a save conflict gives the editor the scene on disk, which it saves again.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
-    public async Task ConflictReloadInstallsTheSceneOnDisk()
+    public async Task ReloadAfterAConflictGivesTheEditorTheSceneOnDisk()
     {
         using var fixture = await Fixture.CreateAsync(this.TestContext, active: true).ConfigureAwait(false);
         await fixture.Editor.PrepareForCloseAsync().ConfigureAwait(false);
         _ = (await fixture.Editor.SaveForCloseAsync().ConfigureAwait(false)).Should().BeFalse();
-        _ = fixture.Editor.HasSaveConflict.Should().BeTrue();
+        _ = fixture.Editor.Document.IsChangedOnDisk.Should().BeTrue();
 
-        var reload = await fixture.Editor.ReloadFromDiskAsync().ConfigureAwait(false);
+        // The document service reloads the document; the editor follows the content it gets.
+        var reload = await fixture.Editor.Document.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = reload.Succeeded.Should().BeTrue(reload.Message);
-        _ = fixture.Editor.HasSaveConflict.Should().BeFalse();
+        _ = reload.Succeeded.Should().BeTrue(reload.Problem);
+        _ = fixture.Editor.Document.IsChangedOnDisk.Should().BeFalse();
         var current = ((SceneContent)fixture.Editor.Document.Content).Scene;
         _ = current.Should().NotBeSameAs(fixture.Scene);
         _ = current!.RootNodes.Should().ContainSingle().Which.Name.Should().Be("Outside");
         _ = fixture.Editor.Document.IsDirty.Should().BeFalse();
-        fixture.Prompt.Verify(value => value.ShowAsync(It.IsAny<WindowId>(), It.IsAny<IDocumentMetadata>(), It.IsAny<IDocumentConflictParticipant>()), Times.Never);
         fixture.Editor.ResumeEditing();
         _ = (await fixture.Editor.SaveForCloseAsync().ConfigureAwait(false)).Should().BeTrue();
     }
 
-    /// <summary>Saving a copy writes a separate scene and leaves the original dirty and in conflict.</summary>
+    /// <summary>A copy of a scene in conflict is a separate scene; the original stays dirty and in conflict.</summary>
     /// <returns>The test task.</returns>
     [TestMethod]
     public async Task SceneCopyRetainsOriginalDirtyStateAndConflict()
@@ -62,32 +60,15 @@ internal sealed partial class SceneEditorConflictTests
         using var fixture = await Fixture.CreateAsync(this.TestContext, active: true).ConfigureAwait(false);
         _ = await fixture.Editor.SaveForCloseAsync().ConfigureAwait(false);
 
-        var copy = await fixture.Editor.SaveCopyAsync("Copy").ConfigureAwait(false);
+        var copy = await fixture.Editor.Document.SaveCopyAsync(fixture.Files.FileOf("Copy"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = copy.Succeeded.Should().BeTrue(copy.Message);
         _ = fixture.Files.Read("Copy").Name.Should().Be("Copy");
         _ = fixture.Editor.Document.IsDirty.Should().BeTrue();
-        _ = fixture.Editor.HasSaveConflict.Should().BeTrue();
+        _ = fixture.Editor.Document.IsChangedOnDisk.Should().BeTrue();
         _ = fixture.Editor.Document.File.Path.Should().Be(fixture.Files.PathOf("Main"));
         _ = (await fixture.Editor.SaveForCloseAsync().ConfigureAwait(false)).Should().BeFalse();
-        _ = fixture.Editor.HasSaveConflict.Should().BeTrue();
-    }
-
-    /// <summary>A close request waits for already-submitted reload work before retiring the document.</summary>
-    /// <returns>The test task.</returns>
-    [TestMethod]
-    public async Task CloseWaitsForPendingSceneRecovery()
-    {
-        using var fixture = await Fixture.CreateAsync(this.TestContext, active: false).ConfigureAwait(false);
-        var read = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        fixture.Store.BeforeRead = _ => read.Task;
-        var reload = fixture.Editor.ReloadFromDiskAsync();
-        var close = fixture.Editor.CloseAsync(discard: true);
-
-        _ = close.IsCompleted.Should().BeFalse();
-        read.SetResult();
-        _ = (await reload.ConfigureAwait(false)).Succeeded.Should().BeTrue();
-        await close.ConfigureAwait(false);
+        _ = fixture.Editor.Document.IsChangedOnDisk.Should().BeTrue();
     }
 
     private sealed partial class Fixture : IDisposable
@@ -115,8 +96,6 @@ internal sealed partial class SceneEditorConflictTests
         public Mock<IScenePreview> Preview { get; } = new();
 
         public GatedFileStore Store { get; }
-
-        public Mock<IDocumentConflictPrompt> Prompt { get; } = new();
 
         public CapturingResults Results { get; } = new();
 
@@ -154,7 +133,6 @@ internal sealed partial class SceneEditorConflictTests
             projects.Activate(this.Files.Context);
             this.container.RegisterInstance<IProjectContextService>(projects);
             _ = this.Preview.Setup(value => value.IsReady(this.Tab.DocumentId)).Returns(synchronized);
-            _ = this.Prompt.Setup(value => value.ShowAsync(It.IsAny<WindowId>(), It.IsAny<IDocumentMetadata>(), It.IsAny<IDocumentConflictParticipant>())).Returns(Task.CompletedTask);
             var documents = new TestDocumentArea(this.Tab.Document);
             if (!active)
             {
@@ -162,7 +140,7 @@ internal sealed partial class SceneEditorConflictTests
             }
 
             var input = new Mock<IDocumentInputCommitter>();
-            _ = input.Setup(value => value.CommitAsync(It.IsAny<WindowId>())).Callback(() => commitInput?.Invoke()).Returns(Task.CompletedTask);
+            _ = input.Setup(value => value.CommitAsync()).Callback(() => commitInput?.Invoke()).Returns(Task.CompletedTask);
             var previewSettingsService = previewSettings ?? new World.Workspace.PreviewSettingsService(
                     Mock.Of<IEngineService>(),
                     Mock.Of<Data.Services.IEditorSettingsManager>(),
@@ -181,8 +159,7 @@ internal sealed partial class SceneEditorConflictTests
                 Mock.Of<IContentPipelineService>(),
                 this.container,
                 this.Messenger,
-                previewSettingsService,
-                conflictPrompt: this.Prompt.Object);
+                previewSettingsService);
         }
     }
 

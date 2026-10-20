@@ -23,6 +23,7 @@ using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using IContainer = DryIoc.IContainer;
@@ -222,7 +223,7 @@ public sealed partial class ContentBrowserViewModel(
 
             this.childContainer.RegisterDelegate<ContentBrowserState>(
                 _ => new() { Query = this.Query, Presentation = this.Presentation }, Reuse.Singleton);
-            this.childContainer.Register<IAssetShell, WindowsAssetShell>(Reuse.Singleton);
+            this.childContainer.Register<IDesktopIntegration, WindowsDesktopIntegration>(Reuse.Singleton);
             this.childContainer.Register<Relocation.IAssetRelocationWorkflow, Relocation.AssetRelocationWorkflow>(Reuse.Singleton);
             this.childContainer.Register<AssetDetailsViewModel>(Reuse.Singleton);
             this.childContainer.Register<Authoring.AuthoredAssetCreation>(Reuse.Singleton);

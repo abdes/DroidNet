@@ -61,6 +61,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly IProjectContextService? projectContexts;
     private readonly Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation;
     private readonly Oxygen.Editor.Shell.Documents.IHistoryService? histories;
+    private readonly Oxygen.Editor.Shell.Windows.IPlacementService? placement;
     private readonly SceneExplorerProjection projection = new();
     private readonly SemaphoreSlim searchGate = new(1, 1);
     private readonly System.Threading.Lock searchLifetimeLock = new();
@@ -148,6 +149,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="projectContexts">Optional project context used to scope project-owned Explorer state.</param>
     /// <param name="relocation">Optional relocation service that renames the scene's file.</param>
     /// <param name="histories">Optional history service whose global history records a scene file rename.</param>
+    /// <param name="placement">Optional placement, which shows a scene document that becomes active in the window's place for its scene.</param>
     public SceneExplorerViewModel(
         IProjectManagerService projectManager,
         IMessenger messenger,
@@ -162,11 +164,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         Workspace.WorkspaceInteractionService? interaction = null,
         IProjectContextService? projectContexts = null,
         Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation = null,
-        Oxygen.Editor.Shell.Documents.IHistoryService? histories = null)
+        Oxygen.Editor.Shell.Documents.IHistoryService? histories = null,
+        Oxygen.Editor.Shell.Windows.IPlacementService? placement = null)
         : base(loggerFactory)
     {
         this.relocation = relocation;
         this.histories = histories;
+        this.placement = placement;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.interaction = interaction;
@@ -1148,12 +1152,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         this.LogDocumentActivated(sceneDocument.Id);
 
-        // Scene replacement belongs to the document owner; tab activation must not bypass its
-        // close guards or previous-graph retirement.
-        var request = this.messenger.Send(new Oxygen.Editor.ContentBrowser.Messages.OpenSceneRequestMessage(sceneDocument.File.Asset));
-        if (request.HasReceivedResponse)
+        // Scene replacement belongs to the Shell's document service; tab activation must not bypass its close guards
+        // or the retirement of the previous scene.
+        if (this.placement is { } placement)
         {
-            _ = await request.Response.ConfigureAwait(true);
+            _ = await placement.OpenDocumentAsync(sceneDocument.File.Asset).ConfigureAwait(true);
         }
     }
 

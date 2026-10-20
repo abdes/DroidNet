@@ -7,7 +7,7 @@ using DroidNet.TimeMachine;
 namespace Oxygen.Editor.Shell.Documents;
 
 /// <summary>Holds a session's global history and drops its entries when the session ends.</summary>
-public sealed class HistoryService : IHistoryService, IDisposable
+public sealed partial class HistoryService : IHistoryService, IDisposable
 {
     /// <summary>Initializes a new instance of the <see cref="HistoryService"/> class.</summary>
     public HistoryService()

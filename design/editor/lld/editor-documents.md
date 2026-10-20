@@ -359,9 +359,10 @@ and preview work goes ahead of automatic work.
 
 ## 7. Data Contracts
 
-- `IDocumentService` (Shell, implemented by `DocumentService`) replaces
-  `IEditorDocumentService`; the Aura-facing contract of `DroidNet.Documents` is
-  `IDocumentTabSource` (5.1, decision 2).
+- `IDocumentService` (Shell, implemented by `DocumentService`) is the document
+  service parts use; inside the Shell, `DocumentTabs` implements the Aura-facing
+  contract of `DroidNet.Documents`, `IDocumentTabSource`, for every window (5.1,
+  decision 2).
 - `IUnsavedDocuments` (`Oxygen.Editor.Documents`): given file paths, the open
   documents that edit them with unsaved changes (5.3.3).
 - **Cook on change** is a project setting (`ProjectSettings.CookOnChange`), on

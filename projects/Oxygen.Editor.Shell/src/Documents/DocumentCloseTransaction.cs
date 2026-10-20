@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Documents;
+namespace Oxygen.Editor.Shell.Documents;
 
 /// <summary>
 /// Holds prepared documents until closure is approved. Disposing without committing preserves them.
 /// </summary>
-public sealed partial class DocumentCloseTransaction : IDisposable
+public sealed class DocumentCloseTransaction : IDisposable
 {
     private readonly Func<Task<bool>> commit;
     private readonly Action release;

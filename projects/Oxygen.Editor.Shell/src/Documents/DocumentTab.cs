@@ -16,7 +16,7 @@ namespace Oxygen.Editor.Shell.Documents;
 ///     <see cref="PropertyChanged"/> on the thread that raised them, which is the thread that owns the document. The
 ///     document area creates the tab when it shows the document and disposes it when the tab closes.
 /// </remarks>
-public sealed class DocumentTab : IDocumentMetadata, IDisposable
+public sealed partial class DocumentTab : IDocumentMetadata, IDisposable
 {
     private string title;
     private bool isDirty;

@@ -28,7 +28,6 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Diagnostics;
-using Oxygen.Editor.Documents;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
@@ -38,8 +37,8 @@ using Oxygen.Editor.ProjectBrowser.Views;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -337,13 +336,12 @@ public static partial class Program
         container.Register<IProjectCreationService, ProjectCreationService>(Reuse.Singleton);
         container.Register<IRecentProjectAdapter, RecentProjectAdapter>(Reuse.Singleton);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
-        container.Register<EditorDocumentService>(Reuse.Singleton);
-        container.RegisterMapping<IDocumentTabSource, EditorDocumentService>();
-        container.RegisterMapping<IEditorDocumentService, EditorDocumentService>();
-        container.Register<DocumentCloseCoordinator>(Reuse.Singleton);
-        container.Register<IDocumentClosePrompt, DocumentClosePrompt>(Reuse.Singleton);
-        container.Register<IDocumentConflictPrompt, DocumentConflictPrompt>(Reuse.Singleton);
-        container.Register<IDocumentInputCommitter, DocumentInputCommitter>(Reuse.Singleton);
+        container.Register<IProjectFolder, ActiveProjectFolder>(Reuse.Singleton);
+
+        // The tabs of every window, which Aura draws; each window's document service makes its close decisions.
+        container.Register<DocumentTabs>(Reuse.Singleton);
+        container.RegisterMapping<IDocumentTabSource, DocumentTabs>();
+        container.RegisterMapping<IDocumentTabs, DocumentTabs>();
     }
 
     private static void RegisterDiagnosticsServices(IContainer container)

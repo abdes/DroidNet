@@ -12,6 +12,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Textures;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
@@ -196,7 +197,7 @@ public sealed class AssetsViewModelCommandTests
             messenger,
             Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(),
             Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>(),
-            Mock.Of<IAssetShell>(),
+            Mock.Of<IDesktopIntegration>(),
             new TextureImport(new MockFileSystem()),
             relocation);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(false);

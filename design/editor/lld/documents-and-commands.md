@@ -45,9 +45,10 @@ Useful existing pieces:
 
 - `Documents` and `Oxygen.Editor.Documents` provide generic document metadata,
   document service events, and editor document service tests.
-- `DocumentManager` opens scene documents and can select an already-open scene.
-- `DocumentHostViewModel` resolves the active editor view and now deactivates
-  scene views during document switches.
+- The Shell's `IDocumentService` opens documents, replacing the window's scene
+  when a scene opens, and selects an already-open document.
+- The Shell's `DocumentAreaViewModel` resolves the active editor view and
+  deactivates the leaving editor's view during document switches.
 - `SceneEditorViewModel` implements `IAsyncSaveable`, tracks document metadata,
   updates dirty state from the undo stack, and saves through
   `ProjectManagerService.SaveSceneAsync`.
@@ -357,23 +358,21 @@ deterministic storage-gated validation scenarios.
 
 ### Unsaved Document Closure
 
-`EditorDocumentService` prepares closure before removing documents or raising
-`DocumentClosed`. Its existing asynchronous `DocumentClosing` vetoes apply to
-both individual closes and every document in a workspace close. Scene replacement
-uses this same path with `force: false`.
+The Shell's `DocumentTabs` prepares closure before removing tabs or raising
+`DocumentClosed`. Its asynchronous `DocumentClosing` vetoes apply to both
+individual closes and every document in a window's close. Scene replacement uses
+this same path with `force: false`.
 
-`DocumentCloseCoordinator` owns editor close preparation and the registered
-`IDocumentCloseParticipant` authoring owners. Participants drain pending saves
-and material edits, expose save success, and close only after an explicit
-decision. View-model disposal releases resources; it does not authorize discard.
-The material participant maps the tab identity to the material service identity.
+Each window's `DocumentCloseCoordinator`, which the window's document service
+registers with the tabs, owns editor close preparation and the
+`IDocumentCloseParticipant` editors. Participants drain pending saves and edits,
+expose save success, and close only after an explicit decision. View-model
+disposal releases resources; it does not authorize discard.
 
-The WorldEditor `DocumentClosePrompt` supplies two presentations:
-
-- Individual tab closure and scene replacement: Save, Discard, Cancel.
-- Workspace/window closure: one list of dirty documents, all selected by
-  default, with Save Selected, Discard All, and Cancel in a Close workspace dialog.
-  The dialog explains that unchecked documents' changes will be discarded.
+The Shell's `DocumentClosePrompt` asks one question for a tab, a window and a
+project replacement alike: _Save changes to 2 documents?_ with Save, Don't Save
+and Cancel. Each document is listed with its asset; when there are several, a
+check box chooses which ones Save saves, and the others are discarded.
 
 Selected saves run while the dialog remains open. Failed saves show a per-document
 message and publish an operation result. Retry preserves already successful
@@ -381,13 +380,13 @@ saves; Cancel preserves all open documents, unsaved authoring state, history,
 selection, and active context. Successful saves are not rolled back by Cancel.
 No unchecked document is discarded while any selected save is failing.
 
-`WorkspaceCloseCoordinator` prepares all documents during Aura's cancelable
-`WindowClosing` event. Aura awaits every handler before running completion
-callbacks: approval commits the document transaction; a veto disposes preparation
-without closing documents. Duplicate close requests cannot bypass a pending
-decision. Document opening, detaching, and activation are rejected while the
-window's close transaction is pending. Edits detected during a selected save
-remain dirty and prevent that close from proceeding.
+The Shell's `WindowCloseCoordinator` prepares all documents during Aura's
+cancelable `WindowClosing` event. Aura awaits every handler before running
+completion callbacks: approval commits the document transaction; a veto
+disposes preparation without closing documents. Duplicate close requests cannot
+bypass a pending decision. Document opening, detaching, and activation are
+rejected while the window's close transaction is pending. Edits detected during
+a selected save remain dirty and prevent that close from proceeding.
 
 Automated coverage exercises cancellation and scene replacement through the real
 document service, selected workspace saves and discards, late vetoes, overlapping

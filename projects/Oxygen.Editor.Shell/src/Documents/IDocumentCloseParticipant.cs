@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Documents;
+namespace Oxygen.Editor.Shell.Documents;
 
 /// <summary>
 /// Provides authoring operations for an editor document during an approved close workflow.

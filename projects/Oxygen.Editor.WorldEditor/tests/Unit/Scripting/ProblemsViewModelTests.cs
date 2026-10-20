@@ -5,7 +5,6 @@
 using AwesomeAssertions;
 using DroidNet.Documents;
 using Moq;
-using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Play;
@@ -13,6 +12,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Scripting.Testing;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.World.Problems;
 using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Assets.Diagnostics;

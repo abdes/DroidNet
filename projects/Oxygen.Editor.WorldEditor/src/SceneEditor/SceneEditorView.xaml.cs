@@ -9,6 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Oxygen.Editor.LevelEditor;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 
 namespace Oxygen.Editor.World.SceneEditor;
@@ -17,7 +18,7 @@ namespace Oxygen.Editor.World.SceneEditor;
 ///     Represents the view for editing scenes in the Oxygen World Editor.
 /// </summary>
 [ViewModel(typeof(SceneEditorViewModel))]
-public sealed partial class SceneEditorView : UserControl
+public sealed partial class SceneEditorView : UserControl, IDocumentEditorView
 {
     private readonly Dictionary<ViewportViewModel, Viewport> viewportControls = [];
     private readonly SemaphoreSlim viewportControlsGate = new(initialCount: 1, maxCount: 1);

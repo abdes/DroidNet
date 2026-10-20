@@ -145,10 +145,6 @@ projects/Oxygen.Editor.World/src/
 │   ├── ProjectLayoutViewModel.cs          # Project tree navigation
 │   └── [Layout Views]                     # Tile/list layout implementations
 │
-├── Editors/                               # Document and tab management
-│   ├── DocumentHostViewModel.cs           # Tabbed document manager
-│   └── TabbedDocumentItem.cs              # Document item model
-│
 ├── Messages/                              # Inter-module communication
 │   ├── SceneNodeSelectionChangedMessage.cs
 │   └── SceneNodeSelectionRequestMessage.cs
@@ -182,10 +178,8 @@ projects/Oxygen.Editor.World/src/
 ├── Utils/                                 # Utility services
 │   └── ThumbnailGenerator.cs              # Asset thumbnail generation
 │
-└── Workspace/                             # Docking workspace
-    ├── WorkspaceViewModel.cs              # Main workspace coordinator
-    ├── DockingWorkspaceViewModel.cs       # Docking layout manager
-    └── DockViewFactory.cs                 # Dock view factory
+└── Workspace/                             # The scene workspace, over the Shell's docking workspace
+    └── WorkspaceViewModel.cs              # Main workspace coordinator
 ```
 
 ## Key Features

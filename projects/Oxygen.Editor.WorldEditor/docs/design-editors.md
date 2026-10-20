@@ -1,4 +1,3 @@
-
 # World Editor Scene Document & Viewport Management
 
 This document describes the architecture for managing scene documents and viewports in the WorldEditor, using Aura document tabs and overlay menus for viewport configuration. Rendering integration is out of scope for this plan.
@@ -9,7 +8,7 @@ This document describes the architecture for managing scene documents and viewpo
 graph TB
     subgraph "Editor UI Layer"
         AuraTabs["Aura Document Tabs"]
-        DocHostVM["DocumentHostViewModel"]
+        DocHostVM["DocumentAreaViewModel (Shell)"]
         SceneTab["SceneDocumentTab"]
     end
 

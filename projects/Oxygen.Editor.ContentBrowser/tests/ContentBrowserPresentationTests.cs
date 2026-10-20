@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
@@ -238,7 +239,7 @@ public sealed class ContentBrowserPresentationTests
         };
     }
 
-    private sealed class RecordingShell : IAssetShell
+    private sealed class RecordingShell : IDesktopIntegration
     {
         public string? Copied { get; private set; }
 

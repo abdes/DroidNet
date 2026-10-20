@@ -13,19 +13,6 @@
     x:Name="MaterialEditorRoot"
     mc:Ignorable="d">
 
-    <UserControl.KeyboardAccelerators>
-        <KeyboardAccelerator
-            Key="Z"
-            Invoked="UndoInvoked"
-            Modifiers="Control"
-            ScopeOwner="{x:Bind MaterialEditorRoot}" />
-        <KeyboardAccelerator
-            Key="Y"
-            Invoked="RedoInvoked"
-            Modifiers="Control"
-            ScopeOwner="{x:Bind MaterialEditorRoot}" />
-    </UserControl.KeyboardAccelerators>
-
     <UserControl.Resources>
         <ResourceDictionary>
             <Thickness x:Key="TextControlBorderThemeThickness">0</Thickness>

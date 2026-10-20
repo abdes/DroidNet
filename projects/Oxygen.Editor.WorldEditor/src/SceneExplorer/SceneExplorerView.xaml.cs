@@ -222,34 +222,6 @@ public sealed partial class SceneExplorerView
     private bool HasTextFocus()
         => this.XamlRoot is { } root && IsTextContext(FocusManager.GetFocusedElement(root) as DependencyObject);
 
-    private async void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-    {
-        if (this.HasTextFocus())
-        {
-            return;
-        }
-
-        args.Handled = true;
-        if (!this.ShouldConsumeWorkspaceAccelerator() && this.ViewModel is { } model)
-        {
-            await model.UndoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-        }
-    }
-
-    private async void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-    {
-        if (this.HasTextFocus())
-        {
-            return;
-        }
-
-        args.Handled = true;
-        if (!this.ShouldConsumeWorkspaceAccelerator() && this.ViewModel is { } model)
-        {
-            await model.RedoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-        }
-    }
-
     private async void DeleteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
     {
         if (this.HasTextFocus())

@@ -125,14 +125,6 @@
     </UserControl.Resources>
 
     <UserControl.KeyboardAccelerators>
-        <KeyboardAccelerator
-            Key="Z"
-            Invoked="UndoInvoked"
-            Modifiers="Control" />
-        <KeyboardAccelerator
-            Key="Y"
-            Invoked="RedoInvoked"
-            Modifiers="Control" />
         <KeyboardAccelerator Key="Delete" Invoked="DeleteInvoked" />
     </UserControl.KeyboardAccelerators>
 

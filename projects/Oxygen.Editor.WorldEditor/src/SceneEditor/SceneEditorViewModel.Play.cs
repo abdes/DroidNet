@@ -8,7 +8,8 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.LivePreview.Play;
-using Oxygen.Editor.World.Documents;
+using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Play;
 
@@ -32,13 +33,13 @@ public partial class SceneEditorViewModel
             return;
         }
 
-        this.Play = new ScenePlayToolbarViewModel(session, this.Document.Id, this.SaveAllForPlayAsync, this.messenger);
+        this.Play = new ScenePlayToolbarViewModel(session, this.Document.Id, this.SaveAllForPlayAsync, this.container.Resolve<IPlacementService>(IfUnresolved.ReturnDefault));
         this.RefreshPlayScene();
     }
 
     // Play saves every document with unsaved changes through the ordinary Save and its conflict handling.
     private Task<bool> SaveAllForPlayAsync()
-        => this.container.Resolve<DocumentHostViewModel>(IfUnresolved.ReturnDefault) is { } host ? host.SaveAllAsync() : Task.FromResult(true);
+        => this.container.Resolve<IDocumentService>(IfUnresolved.ReturnDefault) is { } documents ? documents.SaveAllAsync() : Task.FromResult(true);
 
     // Also follows the current authoring, which a reload replaces.
     private void RefreshPlayScene()

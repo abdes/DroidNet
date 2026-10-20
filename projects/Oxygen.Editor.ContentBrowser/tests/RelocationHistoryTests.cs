@@ -8,6 +8,7 @@ using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
@@ -83,5 +84,5 @@ public sealed class RelocationHistoryTests
             Mock.Of<IAssetRelocationService>(),
             histories,
             Mock.Of<IDialogService>(),
-            Mock.Of<IAssetShell>());
+            Mock.Of<IDesktopIntegration>());
 }

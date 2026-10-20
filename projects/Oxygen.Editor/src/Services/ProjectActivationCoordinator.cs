@@ -27,7 +27,7 @@ internal sealed partial class ProjectActivationCoordinator(
     IRecentProjectAdapter recentProjects,
     ITemplateUsageService templateUsage,
     IProjectBrowserService projectBrowser,
-    Oxygen.Editor.Documents.IEditorDocumentService documents,
+    Oxygen.Editor.Shell.Documents.IDocumentTabs documents,
     IOperationResultPublisher operationResults,
     IStatusReducer statusReducer,
     IExceptionDiagnosticAdapter exceptionAdapter,

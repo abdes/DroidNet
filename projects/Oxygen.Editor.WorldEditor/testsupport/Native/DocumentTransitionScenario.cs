@@ -6,10 +6,9 @@ using AwesomeAssertions;
 using DroidNet.Tests;
 using DryIoc;
 using Microsoft.UI;
-using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.MaterialEditor;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -45,12 +44,12 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         fixture.Runtime.TargetFps = targetFps;
         var container = new Container();
         await using var containerLifetime = container.ConfigureAwait(true);
-        var documents = new EditorDocumentService();
+        var documents = new DocumentTabs();
         var window = VisualUserInterfaceTestsApp.MainWindow.AppWindow;
         var originalSize = window.Size;
         using var host = fixture.CreateDocumentTransitionHost(container, documents, services, window.Id);
-        using var manager = fixture.CreateTransitionDocumentManager(services.Projects, window.Id);
-        var root = new DocumentHostView
+        using var service = fixture.TransitionDocuments!;
+        var root = new DocumentAreaView
         {
             ViewModel = host,
             Width = 960,
@@ -65,7 +64,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
             await WaitForDocumentViewportAsync(host, fixture, timeout.Token).ConfigureAwait(true);
             await fixture.SuspendCookedContentAsync().ConfigureAwait(true);
             await fixture.RefreshCookedRootsAsync().ConfigureAwait(true);
-            await RunMaterialTransitionsAsync(fixture, host, manager, documents, material, window.Id, cycles, timeout.Token).ConfigureAwait(true);
+            await RunMaterialTransitionsAsync(fixture, host, service, documents, material, window.Id, cycles, timeout.Token).ConfigureAwait(true);
         }
         finally
         {
@@ -82,7 +81,7 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         _ = fixture.Results.Should().NotContain(result => result.OperationKind == RuntimeOperationKinds.Loop);
     });
 
-    private static async Task WaitForDocumentViewportAsync(DocumentHostViewModel host, NativeSceneFixture fixture, CancellationToken cancellationToken)
+    private static async Task WaitForDocumentViewportAsync(DocumentAreaViewModel host, NativeSceneFixture fixture, CancellationToken cancellationToken)
     {
         while (host.ActiveEditorView is not SceneEditorView { IsLoaded: true } || host.ActiveEditor is not SceneEditorViewModel model || model.Viewports.Count != 1 || !model.Viewports[0].AssignedViewId.IsValid || fixture.Runtime.ActiveSurfaceCount != 1)
         {
@@ -93,14 +92,14 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         await ObserveRenderedFramesAsync(fixture, cancellationToken).ConfigureAwait(true);
     }
 
-    private static async Task RunMaterialTransitionsAsync(NativeSceneFixture fixture, DocumentHostViewModel host, DocumentManager manager, EditorDocumentService documents, AssetPath material, WindowId windowId, int cycles, CancellationToken cancellationToken)
+    private static async Task RunMaterialTransitionsAsync(NativeSceneFixture fixture, DocumentAreaViewModel host, DocumentService service, DocumentTabs documents, AssetPath material, WindowId windowId, int cycles, CancellationToken cancellationToken)
     {
         var mainId = fixture.Document.Id;
         for (var cycle = 0; cycle < cycles; ++cycle)
         {
             var viewport = ((SceneEditorViewModel)host.ActiveEditor!).Viewports.Single();
             var oldView = viewport.AssignedViewId;
-            _ = (await manager.OpenMaterialAsync(material, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+            _ = (await service.OpenAsync(material, cancellationToken).ConfigureAwait(true)).Succeeded.Should().BeTrue();
             while (host.ActiveEditorView is not MaterialEditorView { IsLoaded: true })
             {
                 await Task.Delay(20, cancellationToken).ConfigureAwait(true);

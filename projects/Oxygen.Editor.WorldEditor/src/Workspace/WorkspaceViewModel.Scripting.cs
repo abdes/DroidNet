@@ -4,9 +4,9 @@
 
 using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
-using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.Scripting;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.World.Problems;
 using Oxygen.Managed.Assets.Diagnostics;
 

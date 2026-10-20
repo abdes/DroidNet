@@ -7,6 +7,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Oxygen.Editor.Shell.Layout;
 using Windows.System;
 using Windows.UI.Core;
 

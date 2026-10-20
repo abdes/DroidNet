@@ -75,7 +75,7 @@ EDITOR_LAYERS: dict[str, Layer] = {
     "Oxygen.Editor.Pickers": Layer.SHARED_UI,
     **{name: Layer.DOMAIN for name in DOMAIN_RANK},
     "Oxygen.Editor.Controls": Layer.UI_KIT,
-    "Oxygen.Editor.Routing": Layer.UI_KIT,
+    "Oxygen.Editor.Routing": Layer.FOUNDATION,
     "Oxygen.Editor.World": Layer.FOUNDATION,
     "Oxygen.Editor.Documents": Layer.FOUNDATION,
     "Oxygen.Editor.Schemas": Layer.FOUNDATION,

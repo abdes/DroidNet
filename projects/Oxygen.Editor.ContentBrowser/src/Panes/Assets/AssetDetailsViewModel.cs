@@ -12,6 +12,7 @@ using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
@@ -27,7 +28,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
 
     private readonly ContentBrowserState state;
     private readonly IProjectContextService projects;
-    private readonly IAssetShell shell;
+    private readonly IDesktopIntegration shell;
     private readonly Relocation.IAssetRelocationWorkflow? relocation;
     private readonly IScripts? scripts;
     private readonly IDisposable? scriptChanges;
@@ -45,7 +46,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     public AssetDetailsViewModel(
         ContentBrowserState state,
         IProjectContextService projects,
-        IAssetShell shell,
+        IDesktopIntegration shell,
         Relocation.IAssetRelocationWorkflow? relocation = null,
         IScripts? scripts = null,
         HostingContext? hosting = null)

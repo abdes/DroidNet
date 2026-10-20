@@ -8,7 +8,6 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Cooking;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Managed.Core;
@@ -24,15 +23,15 @@ public partial class WorkspaceViewModel
     /// <inheritdoc />
     public Task<bool> SaveListedAsync(CookRunSnapshot run)
         => this.projectContextService.ActiveProject is { } project && run.ProjectId == project.ProjectId
-            && Dockable.FromId(this.CenterOutletName)?.ViewModel is DocumentHostViewModel host
-            ? host.SaveDocumentsAsync([.. run.UnsavedDocuments.Select(document => project.FindByFilePath(document.SourcePath)?.Identity).OfType<AssetPath>()])
+            && this.documentService is { } documents
+            ? documents.SaveAsync([.. run.UnsavedDocuments.Select(document => project.FindByFilePath(document.SourcePath)?.Identity).OfType<AssetPath>()])
             : Task.FromResult(false);
 
     /// <inheritdoc />
-    public Task<bool> OpenDocumentAsync(FileSystemPath sourcePath)
+    public async Task<bool> OpenDocumentAsync(FileSystemPath sourcePath)
         => this.projectContextService.ActiveProject?.FindByFilePath(sourcePath) is { } location
-            && Dockable.FromId(this.CenterOutletName)?.ViewModel is DocumentHostViewModel host
-            ? host.SelectDocumentAsync(location.Identity) : Task.FromResult(false);
+            && this.documentService is { } documents
+            && (await documents.OpenAsync(location.Identity).ConfigureAwait(true)).Succeeded;
 
     /// <inheritdoc />
     public async Task<bool> GoToPropertyAsync(CookRunSnapshot run, DiagnosticRecord issue)
@@ -45,7 +44,7 @@ public partial class WorkspaceViewModel
             || this.projectContextService.ActiveProject is not { } project
             || this.assetCatalog is not { } catalog
             || await SceneFiles.FindByIdAsync(catalog, project, sceneId).ConfigureAwait(true) is not { } scene
-            || this.documentManager is null
+            || this.documentService is not { } documents
             || issue.AffectedPath is not { } sourcePath || !project.FileSystem.File.Exists(sourcePath))
         {
             return false;
@@ -57,7 +56,7 @@ public partial class WorkspaceViewModel
             explorer.SelectEnvironment(sceneId);
         }
 
-        if (!await this.documentManager.OpenSceneAsync(scene.Identity).ConfigureAwait(true)
+        if (!(await documents.OpenAsync(scene.Identity).ConfigureAwait(true)).Succeeded
             || Dockable.FromId("props") is not { ViewModel: SceneNodeEditorViewModel inspector } properties)
         {
             return false;
@@ -95,22 +94,9 @@ public partial class WorkspaceViewModel
             && Guid.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var node)
                 ? NodeId.FromValue(node) : null;
 
-    private void OnCookingRevealRequested(object? sender, EventArgs args)
-    {
-        if (Dockable.FromId("cook") is { } dockable)
-        {
-            this.RevealTool(dockable);
-        }
-    }
+    private void OnCookingRevealRequested(object? sender, EventArgs args) => _ = this.placement?.ShowPanelAsync("cook");
 
-    private void RevealTool(Dockable dockable)
-    {
-        if (dockable.Owner is { } dock)
-        {
-            this.Docker?.PinDock(dock);
-            dockable.IsActive = true;
-        }
-    }
+    private void RevealTool(Dockable dockable) => _ = this.placement?.ShowPanelAsync(dockable.Id);
 
     // Properties shares a dock with Cooking by default; it moves to its own dock so both stay visible.
     private void SeparateFromCooking(Dockable properties, Dockable? cooking)

@@ -4,14 +4,11 @@
 
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls.OutputConsole.Model;
-using DroidNet.Docking;
 using DryIoc;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Selection;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Play;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
@@ -37,16 +34,9 @@ public partial class WorkspaceViewModel
     /// <param name="panel">The panel; <see cref="PlayPanel.None"/> does nothing.</param>
     internal void Reveal(PlayPanel panel)
     {
-        var dockId = panel switch
+        if (ScenePlayToolbarViewModel.PanelIdOf(panel) is { } panelId)
         {
-            PlayPanel.Problems => ProblemsDockId,
-            PlayPanel.Cooking => "cook",
-            PlayPanel.Output => "log",
-            _ => null,
-        };
-        if (dockId is not null && Dockable.FromId(dockId) is { } dock)
-        {
-            this.RevealTool(dock);
+            _ = this.placement?.ShowPanelAsync(panelId);
         }
     }
 
@@ -56,9 +46,9 @@ public partial class WorkspaceViewModel
     internal async Task<bool> SelectRuntimeProblemNodeAsync(RuntimeScriptProblem problem)
     {
         if (this.playSession?.NodeOf(problem) is not { } target
-            || Dockable.FromId(this.CenterOutletName)?.ViewModel is not DocumentHostViewModel host
-            || !await host.SelectDocumentAsync(target.Document).ConfigureAwait(true)
-            || this.container.Resolve<OpenDocuments>().Find(target.Document) is not { Content: SceneContent content }
+            || this.documentArea is not { } area
+            || area.Documents.FirstOrDefault(document => document.Id == target.Document) is not { Content: SceneContent content } document
+            || !await area.ShowAsync(document).ConfigureAwait(true)
             || content.Scene.AllNodes.FirstOrDefault(node => node.Id == target.Node) is not { } node)
         {
             return false;
@@ -79,7 +69,6 @@ public partial class WorkspaceViewModel
         this.playerOutput = childContainer.Resolve<OutputLogBuffer>(IfUnresolved.ReturnDefault);
         this.playSession.LogReceived += this.OnPlayerLogReceived;
         this.playSession.ProblemsChanged += this.OnRuntimeProblemsChanged;
-        this.messenger?.Register<RevealPlayPanelMessage>(this, (_, message) => this.Reveal(message.Panel));
     }
 
     // The player is quit with the project; the connection's end would quit it too.

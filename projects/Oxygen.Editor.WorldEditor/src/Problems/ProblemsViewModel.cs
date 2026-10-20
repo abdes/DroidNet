@@ -5,10 +5,10 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 

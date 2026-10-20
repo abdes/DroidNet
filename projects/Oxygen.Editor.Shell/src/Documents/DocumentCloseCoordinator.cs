@@ -4,55 +4,56 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Documents;
-using Microsoft.UI;
-using Oxygen.Editor.Documents;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Shell.Documents;
 
-/// <summary>Coordinates save decisions before any editor authoring state is released.</summary>
-/// <param name="prompt">The application-owned close dialog.</param>
-/// <param name="operationResults">The visible operation-result publisher.</param>
-public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOperationResultPublisher operationResults)
+/// <summary>
+/// Makes the close decisions of one window's documents: asks about unsaved documents, saves the chosen ones, and closes
+/// their editors, before any editor state is released.
+/// </summary>
+/// <param name="prompt">Asks the window's user about unsaved documents.</param>
+/// <param name="operationResults">Publishes the failures that keep a document open.</param>
+/// <param name="documents">The document service, which resolves a document whose file changed on disk.</param>
+public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOperationResultPublisher operationResults, IDocumentService? documents = null)
 {
-    private readonly Dictionary<(WindowId Window, DocumentId Document), IDocumentCloseParticipant> participants = [];
+    private readonly Dictionary<DocumentId, ParticipantEntry> participants = [];
 
-    /// <summary>Registers the authoring owner of an open document.</summary>
-    /// <param name="windowId">The owner window.</param>
-    /// <param name="documentId">The tab identity, which may differ from the authoring-service identity.</param>
-    /// <param name="participant">The authoring owner.</param>
-    public void Register(WindowId windowId, DocumentId documentId, IDocumentCloseParticipant participant)
-        => this.participants.Add((windowId, documentId), participant);
+    /// <summary>Registers the editor of a document shown in the window.</summary>
+    /// <param name="tab">The document's tab.</param>
+    /// <param name="participant">The editor.</param>
+    public void Register(DocumentTab tab, IDocumentCloseParticipant participant)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        ArgumentNullException.ThrowIfNull(participant);
+        this.participants.Add(tab.DocumentId, new ParticipantEntry(tab, participant));
+    }
 
-    /// <summary>Unregisters a closed document.</summary>
-    /// <param name="windowId">The owner window.</param>
-    /// <param name="documentId">The tab identity.</param>
-    public void Unregister(WindowId windowId, DocumentId documentId)
-        => this.participants.Remove((windowId, documentId));
+    /// <summary>Unregisters the editor of a closed document.</summary>
+    /// <param name="tab">The document's tab.</param>
+    public void Unregister(DocumentTab tab)
+    {
+        ArgumentNullException.ThrowIfNull(tab);
+        _ = this.participants.Remove(tab.DocumentId);
+    }
 
     /// <summary>Prepares authoring owners and collects decisions without destroying documents.</summary>
-    /// <param name="windowId">The owner window.</param>
-    /// <param name="documents">The documents being closed.</param>
-    /// <param name="isWorkspaceClose">Whether to use the combined dialog.</param>
+    /// <param name="tabs">The tabs being closed.</param>
     /// <param name="force">Whether the caller explicitly requested a forced discard.</param>
     /// <returns>The prepared transaction, or null on cancellation or failure.</returns>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The close boundary must preserve documents and publish failures from authoring and dialog providers.")]
-    internal async Task<DocumentCloseTransaction?> PrepareAsync(
-        WindowId windowId,
-        IReadOnlyList<IDocumentMetadata> documents,
-        bool isWorkspaceClose,
-        bool force)
+    internal async Task<DocumentCloseTransaction?> PrepareAsync(IReadOnlyList<IDocumentMetadata> tabs, bool force)
     {
         var prepared = new List<ParticipantEntry>();
         var retained = false;
         try
         {
-            await this.PrepareParticipantsAsync(windowId, documents, prepared).ConfigureAwait(true);
-            var dirty = prepared.Where(entry => entry.Metadata.IsDirty)
-                .Select(entry => new DocumentCloseItem(entry.Metadata, () => this.SaveAsync(entry), entry.Participant as IDocumentConflictParticipant))
+            await this.PrepareParticipantsAsync(tabs, prepared).ConfigureAwait(true);
+            var dirty = prepared.Where(entry => entry.Tab.IsDirty)
+                .Select(entry => new DocumentCloseItem(entry.Tab, () => this.SaveAsync(entry), documents))
                 .ToArray();
             if (!force && dirty.Length > 0
-                && !await prompt.ConfirmAsync(windowId, dirty, isWorkspaceClose).ConfigureAwait(true))
+                && !await prompt.ConfirmAsync(dirty).ConfigureAwait(true))
             {
                 return null;
             }
@@ -63,7 +64,7 @@ public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOpera
             }
 
             var discards = dirty.Where(item => force || !item.IsSelected)
-                .Select(item => item.Metadata.DocumentId).ToHashSet();
+                .Select(item => item.Tab.DocumentId).ToHashSet();
             retained = true;
             return new DocumentCloseTransaction(
                 () => this.CommitAsync(prepared, discards),
@@ -75,7 +76,7 @@ public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOpera
         }
         catch (Exception ex)
         {
-            this.PublishFailure(prepared.LastOrDefault()?.Metadata, "Document.Close", ex.Message);
+            this.PublishFailure(prepared.LastOrDefault()?.Tab.Title, "Document.Close", ex.Message);
             return null;
         }
         finally
@@ -95,39 +96,38 @@ public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOpera
         }
     }
 
-    private async Task PrepareParticipantsAsync(
-        WindowId windowId, IReadOnlyList<IDocumentMetadata> documents, List<ParticipantEntry> prepared)
+    private async Task PrepareParticipantsAsync(IReadOnlyList<IDocumentMetadata> tabs, List<ParticipantEntry> prepared)
     {
-        foreach (var metadata in documents)
+        foreach (var tab in tabs)
         {
-            if (!this.participants.TryGetValue((windowId, metadata.DocumentId), out var participant))
+            if (!this.participants.TryGetValue(tab.DocumentId, out var entry))
             {
-                if (metadata.IsDirty)
+                if (tab.IsDirty)
                 {
-                    throw new InvalidOperationException($"The editor for '{metadata.Title}' is unavailable. Its unsaved changes cannot be safely closed.");
+                    throw new InvalidOperationException($"The editor for '{tab.Title}' is unavailable. Its unsaved changes cannot be safely closed.");
                 }
 
                 continue;
             }
 
-            prepared.Add(new ParticipantEntry(metadata, participant));
-            await participant.PrepareForCloseAsync().ConfigureAwait(true);
+            prepared.Add(entry);
+            await entry.Participant.PrepareForCloseAsync().ConfigureAwait(true);
         }
     }
 
     private async Task<bool> CommitAsync(IReadOnlyList<ParticipantEntry> prepared, HashSet<DocumentId> discards)
     {
-        var changed = prepared.FirstOrDefault(entry => entry.Metadata.IsDirty && !discards.Contains(entry.Metadata.DocumentId));
+        var changed = prepared.FirstOrDefault(entry => entry.Tab.IsDirty && !discards.Contains(entry.Tab.DocumentId));
         if (changed is not null)
         {
             const string message = "A document changed after the close decision. Review its changes before closing again.";
-            this.PublishFailure(changed.Metadata, "Document.Close", message);
+            this.PublishFailure(changed.Tab.Title, "Document.Close", message);
             return false;
         }
 
         foreach (var entry in prepared)
         {
-            await entry.Participant.CloseAsync(discards.Contains(entry.Metadata.DocumentId)).ConfigureAwait(true);
+            await entry.Participant.CloseAsync(discards.Contains(entry.Tab.DocumentId)).ConfigureAwait(true);
         }
 
         return true;
@@ -140,9 +140,9 @@ public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOpera
         {
             // A save marks saved only what it captured, so an edit made while it wrote keeps the document dirty.
             var saved = await entry.Participant.SaveForCloseAsync().ConfigureAwait(true);
-            if (saved && entry.Metadata.IsDirty)
+            if (saved && entry.Tab.IsDirty)
             {
-                this.PublishFailure(entry.Metadata, "Document.Save", "The document changed while saving. Save again before closing.");
+                this.PublishFailure(entry.Tab.Title, "Document.Save", "The document changed while saving. Save again before closing.");
                 return false;
             }
 
@@ -154,12 +154,12 @@ public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOpera
         }
         catch (Exception ex)
         {
-            this.PublishFailure(entry.Metadata, "Document.Save", ex.Message);
+            this.PublishFailure(entry.Tab.Title, "Document.Save", ex.Message);
             return false;
         }
     }
 
-    private void PublishFailure(IDocumentMetadata? metadata, string operationKind, string message)
+    private void PublishFailure(string? title, string operationKind, string message)
     {
         var operationId = Guid.NewGuid();
         operationResults.Publish(new OperationResult
@@ -168,7 +168,7 @@ public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOpera
             OperationKind = operationKind,
             Status = OperationStatus.Failed,
             Severity = DiagnosticSeverity.Error,
-            Title = metadata is null ? "Document kept open" : $"{metadata.Title} kept open",
+            Title = title is null ? "Document kept open" : $"{title} kept open",
             Message = message,
             CompletedAt = DateTimeOffset.UtcNow,
             Diagnostics =
@@ -185,5 +185,5 @@ public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOpera
         });
     }
 
-    private sealed record ParticipantEntry(IDocumentMetadata Metadata, IDocumentCloseParticipant Participant);
+    private sealed record ParticipantEntry(DocumentTab Tab, IDocumentCloseParticipant Participant);
 }

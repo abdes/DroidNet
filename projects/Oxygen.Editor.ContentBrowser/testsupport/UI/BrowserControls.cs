@@ -20,6 +20,8 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.Textures;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
@@ -37,8 +39,9 @@ internal sealed class BrowserControls : DroidNet.Tests.VisualUserInterfaceTests
     /// <param name="layoutView">The view the layout resolves to.</param>
     /// <param name="messenger">The messenger the pane sends requests on.</param>
     /// <param name="pipeline">The content pipeline; a mock when null.</param>
+    /// <param name="placement">Opens documents and shows panels for the pane, if any.</param>
     /// <returns>The pane, which the caller disposes.</returns>
-    internal static AssetsViewModel CreateBrowserModel(IAssetFeed provider, IProjectContextService projects, ContentBrowserState state, object layout, object layoutView, IMessenger messenger, IContentPipelineService? pipeline = null)
+    internal static AssetsViewModel CreateBrowserModel(IAssetFeed provider, IProjectContextService projects, ContentBrowserState state, object layout, object layoutView, IMessenger messenger, IContentPipelineService? pipeline = null, IPlacementService? placement = null)
     {
         var locator = new Mock<IViewLocator>();
         _ = locator.Setup(value => value.ResolveView(layout)).Returns(layoutView);
@@ -55,8 +58,9 @@ internal sealed class BrowserControls : DroidNet.Tests.VisualUserInterfaceTests
             messenger,
             Mock.Of<IDialogService>(),
             Mock.Of<IWindowManagerService>(),
-            Mock.Of<IAssetShell>(),
-            new TextureImport(new MockFileSystem()));
+            Mock.Of<IDesktopIntegration>(),
+            new TextureImport(new MockFileSystem()),
+            placement: placement);
     }
 
     internal static void AssertBrowserRowState(ListViewBase selector, AssetBrowserRow row, Control container, object? focus, double offset, AssetsLayoutViewModel model, AssetEntry expected)

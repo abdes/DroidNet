@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using DroidNet.Documents;
 
-namespace Oxygen.Editor.Documents.Tests;
+namespace Oxygen.Editor.Shell.Unit.Tests.Documents;
 
 /// <summary>
 /// A tab whose state the test sets, raising <see cref="PropertyChanged"/> as a document's tab does.

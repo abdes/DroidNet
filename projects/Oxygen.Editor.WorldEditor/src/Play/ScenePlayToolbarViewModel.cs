@@ -6,9 +6,9 @@ using System.ComponentModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using Oxygen.Editor.LivePreview.Play;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Play;
@@ -49,20 +49,20 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
     private readonly PlaySession session;
     private readonly DocumentId documentId;
     private readonly Func<Task<bool>> saveAll;
-    private readonly IMessenger messenger;
+    private readonly IPlacementService? placement;
     private bool hasCamera;
 
     /// <summary>Initializes a new instance of the <see cref="ScenePlayToolbarViewModel"/> class.</summary>
     /// <param name="session">The workspace's play sessions.</param>
     /// <param name="documentId">The scene document of this toolbar.</param>
     /// <param name="saveAll">Saves the open documents, through the ordinary Save; false when one stays unsaved.</param>
-    /// <param name="messenger">The workspace messenger, which brings panels forward.</param>
-    public ScenePlayToolbarViewModel(PlaySession session, DocumentId documentId, Func<Task<bool>> saveAll, IMessenger messenger)
+    /// <param name="placement">Brings the panels with a failure's details forward, if any.</param>
+    public ScenePlayToolbarViewModel(PlaySession session, DocumentId documentId, Func<Task<bool>> saveAll, IPlacementService? placement)
     {
         this.session = session;
         this.documentId = documentId;
         this.saveAll = saveAll;
-        this.messenger = messenger;
+        this.placement = placement;
         this.session.PropertyChanged += this.OnSessionChanged;
         _ = this.session.Settings.EnsureLoadedAsync();
     }
@@ -203,6 +203,17 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
         _ => PlayStatusTarget.None,
     };
 
+    /// <summary>Gets the identity of a panel the play bar brings forward.</summary>
+    /// <param name="panel">The panel.</param>
+    /// <returns>The panel's identity; <see langword="null"/> for <see cref="PlayPanel.None"/>.</returns>
+    internal static string? PanelIdOf(PlayPanel panel) => panel switch
+    {
+        PlayPanel.Problems => Workspace.WorkspaceViewModel.ProblemsDockId,
+        PlayPanel.Cooking => "cook",
+        PlayPanel.Output => "log",
+        _ => null,
+    };
+
     /// <summary>Gets the panel with the details of a failure.</summary>
     /// <param name="failure">The failure.</param>
     /// <returns>The panel; <see cref="PlayPanel.None"/> when no panel explains it.</returns>
@@ -277,9 +288,9 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
             PlayStatusTarget.Output => PlayPanel.Output,
             _ => PlayPanel.None,
         };
-        if (panel != PlayPanel.None)
+        if (PanelIdOf(panel) is { } panelId && this.placement is { } placement)
         {
-            _ = this.messenger.Send(new RevealPlayPanelMessage(panel));
+            _ = placement.ShowPanelAsync(panelId);
         }
     }
 

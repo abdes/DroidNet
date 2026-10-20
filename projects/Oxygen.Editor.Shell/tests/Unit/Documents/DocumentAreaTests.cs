@@ -25,7 +25,7 @@ public sealed class DocumentAreaTests
     public async Task ShowAddsATabOnceAndFollowsTheSelection()
     {
         using var notes = new Notes();
-        var tabs = new EditorDocumentService();
+        var tabs = new DocumentTabs();
         using var area = CreateArea(tabs, notes);
         var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
         var outro = await notes.OpenAsync("Outro", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -48,7 +48,7 @@ public sealed class DocumentAreaTests
     public async Task ClosingTheTabClosesTheDocument()
     {
         using var notes = new Notes();
-        var tabs = new EditorDocumentService();
+        var tabs = new DocumentTabs();
         using var area = CreateArea(tabs, notes);
         var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await area.ShowAsync(intro).ConfigureAwait(false);
@@ -66,7 +66,7 @@ public sealed class DocumentAreaTests
     public async Task ShowingADocumentWithATabInAnotherWindowSelectsItThere()
     {
         using var notes = new Notes();
-        var tabs = new EditorDocumentService();
+        var tabs = new DocumentTabs();
         var brought = new List<WindowId>();
         using var first = CreateArea(tabs, notes, Window, brought.Add);
         using var second = CreateArea(tabs, notes, OtherWindow, brought.Add);
@@ -90,7 +90,8 @@ public sealed class DocumentAreaTests
     {
         using var notes = new Notes();
         var coordinator = new DocumentCloseCoordinator(new ApprovingPrompt(), new IgnoredResults());
-        var tabs = new EditorDocumentService(closeCoordinator: coordinator);
+        var tabs = new DocumentTabs();
+        using var coordinatorUse = tabs.UseCloseCoordinator(Window, coordinator);
         using var area = CreateArea(tabs, notes);
         var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
         var outro = await notes.OpenAsync("Outro", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -99,7 +100,7 @@ public sealed class DocumentAreaTests
         foreach (var participant in participants)
         {
             _ = await area.ShowAsync(participant.Document).ConfigureAwait(false);
-            coordinator.Register(Window, participant.Document.Id, participant);
+            coordinator.Register(tabs.GetOpenDocuments(Window).OfType<DocumentTab>().Single(tab => tab.DocumentId == participant.Document.Id), participant);
         }
 
         _ = await area.ShowAsync(kept).ConfigureAwait(false);
@@ -121,7 +122,7 @@ public sealed class DocumentAreaTests
     public async Task ASetWithADocumentNotShownHereIsNotClosed()
     {
         using var notes = new Notes();
-        var tabs = new EditorDocumentService();
+        var tabs = new DocumentTabs();
         using var area = CreateArea(tabs, notes);
         var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
         var outro = await notes.OpenAsync("Outro", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -139,7 +140,7 @@ public sealed class DocumentAreaTests
     public async Task ATabCannotBeDetached()
     {
         using var notes = new Notes();
-        var tabs = new EditorDocumentService();
+        var tabs = new DocumentTabs();
         using var area = CreateArea(tabs, notes);
         var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await area.ShowAsync(intro).ConfigureAwait(false);
@@ -155,7 +156,7 @@ public sealed class DocumentAreaTests
     public void EveryKindNeedsExactlyItsEditor()
     {
         using var notes = new Notes();
-        var tabs = new EditorDocumentService();
+        var tabs = new DocumentTabs();
         var stranger = new Notes.NoteKind();
 
         var missing = () => new DocumentArea(tabs, notes.Documents, [], Window, static _ => { });
@@ -165,7 +166,7 @@ public sealed class DocumentAreaTests
         _ = foreign.Should().Throw<InvalidOperationException>().WithMessage("*names a kind*");
     }
 
-    private static DocumentArea CreateArea(EditorDocumentService tabs, Notes notes, WindowId? window = null, Action<WindowId>? bringForward = null)
+    private static DocumentArea CreateArea(DocumentTabs tabs, Notes notes, WindowId? window = null, Action<WindowId>? bringForward = null)
         => new(tabs, notes.Documents, [Editor(notes.Kind)], window ?? Window, bringForward ?? (static _ => { }));
 
     private static DocumentEditorDescriptor Editor(IDocumentKind kind) => new(kind, static _ => new object());
@@ -194,7 +195,7 @@ public sealed class DocumentAreaTests
 
     private sealed class ApprovingPrompt : IDocumentClosePrompt
     {
-        public Task<bool> ConfirmAsync(WindowId windowId, IReadOnlyList<DocumentCloseItem> documents, bool isWorkspaceClose) => Task.FromResult(true);
+        public Task<bool> ConfirmAsync(IReadOnlyList<DocumentCloseItem> documents) => Task.FromResult(true);
     }
 
     private sealed class IgnoredResults : IOperationResultPublisher

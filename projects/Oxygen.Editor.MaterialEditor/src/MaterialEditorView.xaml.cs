@@ -6,8 +6,8 @@ using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.Shell.Documents;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -15,7 +15,7 @@ namespace Oxygen.Editor.MaterialEditor;
 /// Material editor document view.
 /// </summary>
 [ViewModel(typeof(MaterialEditorViewModel))]
-public sealed partial class MaterialEditorView
+public sealed partial class MaterialEditorView : IDocumentEditorView
 {
     private MaterialEditorViewModel? pickOwner;
     private MaterialEditorViewModel? statusOwner;
@@ -44,6 +44,14 @@ public sealed partial class MaterialEditorView
                 this.ObserveCookStatus();
             }
         };
+    }
+
+    /// <inheritdoc/>
+    /// <remarks>An edit in progress in a number box is committed when it was typed, and cancelled otherwise.</remarks>
+    public Task DeactivateAsync()
+    {
+        this.ViewModel?.Deactivate();
+        return Task.CompletedTask;
     }
 
     private void ObserveCookStatus()
@@ -155,24 +163,6 @@ public sealed partial class MaterialEditorView
             channel.SelectedTexture = choice.Asset;
             this.openTextureFlyout?.Hide();
             this.openTextureFlyout = null;
-        }
-    }
-
-    private void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-    {
-        if (this.ViewModel?.UndoCommand.CanExecute(parameter: null) == true)
-        {
-            this.ViewModel.UndoCommand.Execute(parameter: null);
-            args.Handled = true;
-        }
-    }
-
-    private void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-    {
-        if (this.ViewModel?.RedoCommand.CanExecute(parameter: null) == true)
-        {
-            this.ViewModel.RedoCommand.Execute(parameter: null);
-            args.Handled = true;
         }
     }
 }

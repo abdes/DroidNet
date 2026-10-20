@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Scripting;
+using Oxygen.Editor.Shell.Desktop;
 
 namespace Oxygen.Editor.World.Inspector;
 

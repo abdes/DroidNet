@@ -7,7 +7,6 @@ using DroidNet.Aura.Dialogs;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Input;
@@ -15,7 +14,8 @@ using Oxygen.Editor.Materials;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scripting;
-using Oxygen.Managed.Assets;
+using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -31,8 +31,9 @@ namespace Oxygen.Editor.ContentBrowser.Authoring;
 /// <param name="browserState">The Content Browser state, whose selected folder is the default destination.</param>
 /// <param name="authoring">Proposes and checks the name and folder, and writes the file.</param>
 /// <param name="codeEditor">The code editor service.</param>
-/// <param name="messenger">The messenger that selects the new asset and opens a new scene.</param>
+/// <param name="messenger">The messenger that selects the new asset.</param>
 /// <param name="operationResults">The operation-result publisher.</param>
+/// <param name="placement">Opens a new scene or material; without it they are created and not opened.</param>
 public sealed class AuthoredAssetCreation(
     IDialogService dialogs,
     IProjectContextService projects,
@@ -40,7 +41,8 @@ public sealed class AuthoredAssetCreation(
     IAssetAuthoring authoring,
     ICodeEditorService codeEditor,
     IMessenger messenger,
-    IOperationResultPublisher operationResults)
+    IOperationResultPublisher operationResults,
+    IPlacementService? placement = null)
 {
     /// <summary>Asks for a name and folder and creates a script from the template.</summary>
     /// <returns>The new file, or <see langword="null"/> when cancelled or failed.</returns>
@@ -93,9 +95,10 @@ public sealed class AuthoredAssetCreation(
             DefaultButton = DialogButton.Primary,
             PrimaryAction = async () =>
             {
-                var folder = ReadFolder(folderBox);
-                var invalid = VirtualPath.Validate(folder)?.ToMessage()
-                    ?? await authoring.ValidateAsync(project, kind.Template, nameBox.Text.Trim(), AssetPath.Parse(folder), CancellationToken.None).ConfigureAwait(true);
+                // A folder is a virtual path without an extension, so it is read as one rather than checked as a file's.
+                var invalid = AssetPath.TryParse(ReadFolder(folderBox), out var folder)
+                    ? await authoring.ValidateAsync(project, kind.Template, nameBox.Text.Trim(), folder, CancellationToken.None).ConfigureAwait(true)
+                    : "Choose a folder inside a project content folder, such as /Content/Materials.";
                 error.Text = invalid ?? string.Empty;
                 error.Visibility = invalid is null ? Visibility.Collapsed : Visibility.Visible;
                 return invalid is null;
@@ -126,28 +129,16 @@ public sealed class AuthoredAssetCreation(
 
     private async Task OpenInCodeEditorAsync(ProjectContext project, FileSystemPath path) => _ = await codeEditor.OpenAsync(path.FullPath).ConfigureAwait(true);
 
-    private async Task OpenSceneAsync(ProjectContext project, FileSystemPath path)
+    private Task OpenSceneAsync(ProjectContext project, FileSystemPath path) => this.OpenDocumentAsync(project, path);
+
+    private Task OpenMaterialAsync(ProjectContext project, FileSystemPath path) => this.OpenDocumentAsync(project, path);
+
+    private async Task OpenDocumentAsync(ProjectContext project, FileSystemPath path)
     {
-        if (project.FindByFilePath(path) is not { } location)
+        if (placement is not null && project.FindByFilePath(path) is { } location)
         {
-            return;
+            _ = await placement.OpenDocumentAsync(location.Identity).ConfigureAwait(true);
         }
-
-        var request = messenger.Send(new OpenSceneRequestMessage(location.Identity));
-        if (request.HasReceivedResponse)
-        {
-            _ = await request.Response.ConfigureAwait(true);
-        }
-    }
-
-    private Task OpenMaterialAsync(ProjectContext project, FileSystemPath path)
-    {
-        if (project.FindByFilePath(path) is { } location)
-        {
-            _ = messenger.Send(new OpenMaterialRequestMessage(location.Identity, AssetFileTypes.RemoveSuffix(path.Name)));
-        }
-
-        return Task.CompletedTask;
     }
 
     private async Task RevealAsync(ProjectContext project, FileSystemPath path)

@@ -230,12 +230,6 @@
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Cut" />
                         </dnc:ToolBarButton.Icon>
-                        <dnc:ToolBarButton.KeyboardAccelerators>
-                            <KeyboardAccelerator
-                                Key="X"
-                                Modifiers="Control"
-                                ScopeOwner="{x:Bind ResultsRoot}" />
-                        </dnc:ToolBarButton.KeyboardAccelerators>
                     </dnc:ToolBarButton>
                     <dnc:ToolBarButton
                         dnc:ToolBar.OverflowPriority="2"
@@ -246,12 +240,6 @@
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Copy" />
                         </dnc:ToolBarButton.Icon>
-                        <dnc:ToolBarButton.KeyboardAccelerators>
-                            <KeyboardAccelerator
-                                Key="C"
-                                Modifiers="Control"
-                                ScopeOwner="{x:Bind ResultsRoot}" />
-                        </dnc:ToolBarButton.KeyboardAccelerators>
                     </dnc:ToolBarButton>
                     <dnc:ToolBarButton
                         dnc:ToolBar.OverflowPriority="2"
@@ -262,12 +250,6 @@
                         <dnc:ToolBarButton.Icon>
                             <SymbolIconSource Symbol="Paste" />
                         </dnc:ToolBarButton.Icon>
-                        <dnc:ToolBarButton.KeyboardAccelerators>
-                            <KeyboardAccelerator
-                                Key="V"
-                                Modifiers="Control"
-                                ScopeOwner="{x:Bind ResultsRoot}" />
-                        </dnc:ToolBarButton.KeyboardAccelerators>
                     </dnc:ToolBarButton>
                     <dnc:ToolBarButton
                         dnc:ToolBar.OverflowPriority="2"

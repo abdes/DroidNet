@@ -138,20 +138,10 @@ public partial class ProjectLayoutViewModel
 
     /// <summary>Pastes the Content Browser's clipboard into the focused folder, as the asset list's Paste does.</summary>
     /// <returns>Completion after the paste, or at once when there is nothing to paste or no folder to paste into.</returns>
-    public async Task PasteIntoFocusedFolderAsync()
-    {
-        if (relocation is null || contentBrowserState.Clipboard.Count == 0
-            || (this.FocusedItem?.Item ?? this.SelectedItem) is not { } target || !IsWritable(target) || this.GetVirtualPath(target) is not { } folder)
-        {
-            return;
-        }
-
-        var isCut = contentBrowserState.IsClipboardCut;
-        if (await relocation.PasteAsync(contentBrowserState.Clipboard, isCut, folder).ConfigureAwait(true) is { Succeeded: true } && isCut)
-        {
-            contentBrowserState.ClearClipboard();
-        }
-    }
+    public Task PasteIntoFocusedFolderAsync()
+        => (this.FocusedItem?.Item ?? this.SelectedItem) is { } target && IsWritable(target) && this.GetVirtualPath(target) is { } folder
+            ? this.PasteIntoAsync(folder)
+            : Task.CompletedTask;
 
     /// <summary>Deletes the selected folders, through the same confirmation and Recycle Bin as the asset list.</summary>
     /// <returns>Completion after the delete, or at once when no selected folder can be deleted.</returns>
@@ -165,6 +155,28 @@ public partial class ProjectLayoutViewModel
         var builder = new MenuBuilder();
         if (relocation is not null && this.GetAuthoredFolders([item]) is { Length: > 0 } folders)
         {
+            _ = builder.AddMenuItem(new MenuItemData
+            {
+                Text = "Cut",
+                Icon = new Microsoft.UI.Xaml.Controls.SymbolIconSource { Symbol = Microsoft.UI.Xaml.Controls.Symbol.Cut },
+                Command = new RelayCommand(() => contentBrowserState.SetClipboard(folders, isCut: true)),
+            });
+            _ = builder.AddMenuItem(new MenuItemData
+            {
+                Text = "Copy",
+                Icon = new Microsoft.UI.Xaml.Controls.SymbolIconSource { Symbol = Microsoft.UI.Xaml.Controls.Symbol.Copy },
+                Command = new RelayCommand(() => contentBrowserState.SetClipboard(folders, isCut: false)),
+            });
+            if (contentBrowserState.Clipboard.Count != 0)
+            {
+                _ = builder.AddMenuItem(new MenuItemData
+                {
+                    Text = "Paste",
+                    Icon = new Microsoft.UI.Xaml.Controls.SymbolIconSource { Symbol = Microsoft.UI.Xaml.Controls.Symbol.Paste },
+                    Command = new AsyncRelayCommand(() => this.PasteIntoAsync(folders[0])),
+                });
+            }
+
             _ = builder.AddMenuItem(new MenuItemData
             {
                 Text = "Delete",
@@ -263,6 +275,20 @@ public partial class ProjectLayoutViewModel
 
         this.LogFolderDeleteRequested(folders);
         _ = await relocation.DeleteAsync(folders).ConfigureAwait(true);
+    }
+
+    private async Task PasteIntoAsync(AssetPath folder)
+    {
+        if (relocation is null || contentBrowserState.Clipboard.Count == 0)
+        {
+            return;
+        }
+
+        var isCut = contentBrowserState.IsClipboardCut;
+        if (await relocation.PasteAsync(contentBrowserState.Clipboard, isCut, folder).ConfigureAwait(true) is { Succeeded: true } && isCut)
+        {
+            contentBrowserState.ClearClipboard();
+        }
     }
 
     // A selection without any authored folder leaves the clipboard as it is.

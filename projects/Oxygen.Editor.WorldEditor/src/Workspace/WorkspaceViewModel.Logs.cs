@@ -9,7 +9,7 @@ namespace Oxygen.Editor.World.Workspace;
 /// <summary>Source-generated diagnostics for workspace activation.</summary>
 public partial class WorkspaceViewModel
 {
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Cannot open initial scene {SceneName}: document manager is not available.")]
+    [LoggerMessage(Level = LogLevel.Warning, Message = "Cannot open initial scene {SceneName}: the window has no document service.")]
     private partial void LogInitialSceneManagerUnavailable(string? sceneName);
 
     [LoggerMessage(Level = LogLevel.Warning, Message = "Initial scene {SceneName} was selected for project {ProjectName}, but the document did not open.")]

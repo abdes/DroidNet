@@ -3,26 +3,50 @@
 <Project Sdk="Microsoft.NET.Sdk">
 
     <PropertyGroup>
+        <UseWinUI>true</UseWinUI>
         <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
         <Title>Oxygen Editor Shell</Title>
-        <Description>The editor's shell: the services every editor part shares, such as the session's histories and each window's document area.</Description>
+        <Description>The editor's application frame: the services every editor part shares, such as documents and their areas, histories, layout, commands and desktop integration.</Description>
         <PackageTags>oxygen;gameengine</PackageTags>
         <RootNamespace>Oxygen.Editor.Shell</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
+        <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+        <PackageReference Include="System.Reactive" />
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)/Aura/src/Aura.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Controls/InPlaceEdit/src/Controls.InPlaceEdit.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Docking/src/Docking.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Documents/src/Documents.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Hosting/src/Hosting.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Mvvm/src/Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Data/src/Oxygen.Editor.Data.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Documents/src/Oxygen.Editor.Documents.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Routing/src/Oxygen.Editor.Routing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Assets/src/Oxygen.Managed.Assets.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Core/src/Oxygen.Managed.Core.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Routing/Routing.Abstractions/src/Routing.Abstractions.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Routing/Routing.Router/src/Routing.Router.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Routing/Routing.WinUI/src/Routing.WinUI.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/TimeMachine/src/TimeMachine.csproj" />
+
+        <ProjectReference Include="$(ProjectsRoot)/Mvvm.Generators/src/Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)/Mvvm.Generators.Attributes/src/Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Oxygen.Editor.Shell.Unit.UI.Tests" />
     </ItemGroup>
 
 </Project>

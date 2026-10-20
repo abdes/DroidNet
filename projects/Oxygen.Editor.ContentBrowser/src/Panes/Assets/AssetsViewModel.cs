@@ -23,6 +23,8 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.Textures;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
@@ -49,6 +51,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="relocation">The rename, move, copy and delete workflow; without it those commands are unavailable.</param>
 /// <param name="creation">New Script, New Input File and New Scene; without it those commands are unavailable.</param>
 /// <param name="codeEditor">The code editor that opens scripts and input files; without it Edit is unavailable.</param>
+/// <param name="placement">Opens scenes and materials and shows panels; without it opening them does nothing.</param>
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ViewModelToView vmToViewConverter,
@@ -62,11 +65,12 @@ public partial class AssetsViewModel(
     IMessenger messenger,
     IDialogService dialogService,
     IWindowManagerService windowManagerService,
-    IAssetShell shell,
+    IDesktopIntegration shell,
     TextureImport textureImport,
     Relocation.IAssetRelocationWorkflow? relocation = null,
     Authoring.AuthoredAssetCreation? creation = null,
-    Scripts.ICodeEditorService? codeEditor = null) : AbstractOutletContainer, IRoutingAware
+    ICodeEditorService? codeEditor = null,
+    IPlacementService? placement = null) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
 
@@ -342,8 +346,8 @@ public partial class AssetsViewModel(
         }
         else if (args.InvokedItem.Kind == AssetKind.Scene)
         {
-            // The scene's identity is its file; the workspace's document owner opens it.
-            _ = messenger.Send(new OpenSceneRequestMessage(args.InvokedItem.Identity));
+            // The scene's identity is its file; the Shell opens it in place of the window's scene.
+            await this.OpenDocumentAsync(args.InvokedItem.Identity).ConfigureAwait(true);
         }
         else if (args.InvokedItem.Kind == AssetKind.Folder)
         {
@@ -364,7 +368,7 @@ public partial class AssetsViewModel(
         }
         else if (args.InvokedItem is { Kind: AssetKind.Material, DescriptorPath: not null })
         {
-            _ = messenger.Send(new OpenMaterialRequestMessage(args.InvokedItem.Identity, args.InvokedItem.DisplayName));
+            await this.OpenDocumentAsync(args.InvokedItem.Identity).ConfigureAwait(true);
         }
     }
 

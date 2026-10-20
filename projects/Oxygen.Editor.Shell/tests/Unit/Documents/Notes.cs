@@ -23,15 +23,37 @@ internal sealed class Notes : IDisposable
 
     public OpenDocuments Documents { get; }
 
+    /// <summary>Gets where the notes' files are: every note asset below <c>/Content</c> is a file of the notes folder.</summary>
+    public IDocumentFiles Locations { get; } = new NoteLocations();
+
+    public static AssetPath AssetOf(string name) => AssetPath.Parse($"/Content/{name}.note");
+
+    public static FileSystemPath PathOf(string name) => FileSystemPath.From(Path.Combine(Path.GetTempPath(), "notes", name + ".note"));
+
+    public Task WriteAsync(string name, string text, CancellationToken cancellationToken)
+        => this.Files.WriteAsync(PathOf(name).FullPath, Encoding.UTF8.GetBytes(text), FileVersion.Missing, cancellationToken);
+
     public async Task<Document> OpenAsync(string name, CancellationToken cancellationToken)
     {
-        var path = Path.Combine(Path.GetTempPath(), "notes", name + ".note");
-        _ = await this.Files.WriteAsync(path, Encoding.UTF8.GetBytes(name), FileVersion.Missing, cancellationToken).ConfigureAwait(false);
-        var opened = await this.Documents.OpenAsync(new DocumentFile(FileSystemPath.From(path), AssetPath.Parse($"/Content/{name}.note")), cancellationToken).ConfigureAwait(false);
+        await this.WriteAsync(name, name, cancellationToken).ConfigureAwait(false);
+        var opened = await this.Documents.OpenAsync(new DocumentFile(PathOf(name), AssetOf(name)), cancellationToken).ConfigureAwait(false);
         return opened.Document ?? throw new InvalidOperationException(opened.Problem);
     }
 
     public void Dispose() => this.Documents.Dispose();
+
+    internal sealed class NoteLocations : IDocumentFiles
+    {
+        public DocumentFile? Find(AssetPath asset)
+            => asset.VirtualPath.StartsWith("/Content/", StringComparison.Ordinal) && asset.Name.EndsWith(".note", StringComparison.Ordinal)
+                ? new DocumentFile(PathOf(asset.Name[..^".note".Length]), asset)
+                : null;
+
+        public DocumentFile? Find(FileSystemPath path)
+            => path.Name.EndsWith(".note", StringComparison.Ordinal)
+                ? new DocumentFile(path, AssetOf(path.Name[..^".note".Length]))
+                : null;
+    }
 
     internal sealed class NoteKind : IDocumentKind
     {

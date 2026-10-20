@@ -1,9 +1,9 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0 and S1.1 to S1.9 (Assets, Cook on change,
+Status: `in progress` — Phase 0 and S1.1 to S1.10 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
-Scenes, LivePreview, Asset family modules, Cook on change over checked inputs)
-are done; see the ledger in section 6. Phase 1 follows
+Scenes, LivePreview, Asset family modules, Cook on change over checked inputs,
+Shell) are done; see the ledger in section 6. Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -103,23 +103,23 @@ slices do not reopen them.
 
 ## 3. Placement of what the spec does not place
 
-| Code                                                                                                                                          | Target                           | Cut                                                                                                                                                               |
-| --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `IRuntimeProblemSource`, `PlayRequest`, `PlayStatus*`, `PlayActivity`, `PlayFailure`                                                          | `LivePreview`                    | Play is runtime work; Problems consumes `IRuntimeProblemSource` only                                                                                              |
-| `PlaySessionService`, `PlaySessionSettingsService`, `PlayerConnection`, `PlayerSettingsSync`, `RuntimeProblemReader` and their tests          | `LivePreview`                    | Registered by the LivePreview module, not by `WorkspaceViewModel.Play`                                                                                            |
-| `ICookingWorkspaceActions` (C12, **C16**)                                                                                                     | Shell                            | Replaced by Shell placement and commands (shell design section 4); selecting a node goes through Scenes. `WorkspaceViewModel` keeps implementing both until S1.10 |
-| `PlayTransportBar`, `ScenePlayToolbarViewModel`, `PlayerWindowModeIndexConverter`, `PlayerWindowSizeOption`, `PlayPrimaryAccent`, `PlayPanel` | `SceneEditor`                    | Moves with the scene editor (`SceneEditorView` hosts the bar)                                                                                                     |
-| `Diagnostics/SceneOperationResults`                                                                                                           | `Scenes`                         | Scene operation-result vocabulary                                                                                                                                 |
-| `Diagnostics/RuntimeOperationResults`                                                                                                         | `LivePreview`                    | Runtime operation-result vocabulary                                                                                                                               |
-| `Utils/ThumbnailGenerator`, `ThumbnailTemplateSelector`                                                                                       | `SceneExplorer`                  | As the spec lists for the explorer's thumbnails                                                                                                                   |
-| Script checks of `Scripting/ScriptAnalysisService`, `ScriptToolingPaths`, `ProjectScriptTooling`                                              | `Scripting`                      | The script family's facts and tooling (asset family modules); the native analysis reaches them through `IScriptAnalyzer`, which LivePreview implements            |
-| Native call of `Scripting/ScriptAnalysisService`                                                                                              | `LivePreview`                    | The only domain module that references Runtime and Interop                                                                                                        |
-| `Scripting/InputFileCheck`                                                                                                                    | `Input`                          | The input family's checks (asset family modules)                                                                                                                  |
-| `Scripting/ScriptSlotEdits`                                                                                                                   | `Scenes`, rules in `Scripting`   | Edits a scene's script slots, validated by `ScriptSlotRules`                                                                                                      |
-| Editing part of `MaterialDocumentService` (properties, history entries, persistence)                                                          | `Materials` and `MaterialEditor` | Documents design decision 7: a document type is a family model and an editor                                                                                      |
-| Scene-specific parts of Projects (`SceneSourceVersion`, `GetSceneSourceVersion`, `SceneAssetRenameOperation`, scene staging)                  | `Scenes`                         | Documents design decision 7; Projects keeps asset-to-file resolution only                                                                                         |
-| `OpenDocumentCookInputs`, `CookDocumentRegistry`, cook read leases                                                                            | removed                          | Documents design 5.3.3: the cook reads saved files only and asks `IUnsavedDocuments` which inputs are unsaved                                                     |
-| `IAutomaticCookService.NotifySaved`, `NotifyRenamed`, the automatic-cooking pause                                                             | removed                          | Documents design 5.3.1 and 5.3.2: the cook hears of changes from `IAssetCatalog.Changes`; **Cook on change** is a project setting                                 |
+| Code                                                                                                                                          | Target                           | Cut                                                                                                                                                                               |
+| --------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `IRuntimeProblemSource`, `PlayRequest`, `PlayStatus*`, `PlayActivity`, `PlayFailure`                                                          | `LivePreview`                    | Play is runtime work; Problems consumes `IRuntimeProblemSource` only                                                                                                              |
+| `PlaySessionService`, `PlaySessionSettingsService`, `PlayerConnection`, `PlayerSettingsSync`, `RuntimeProblemReader` and their tests          | `LivePreview`                    | Registered by the LivePreview module, not by `WorkspaceViewModel.Play`                                                                                                            |
+| `ICookingWorkspaceActions` (C12, **C16**)                                                                                                     | Shell                            | Replaced by Shell placement and commands (shell design section 4); selecting a node goes through Scenes. `WorkspaceViewModel` keeps implementing both until S1.12 moves `Cooking` |
+| `PlayTransportBar`, `ScenePlayToolbarViewModel`, `PlayerWindowModeIndexConverter`, `PlayerWindowSizeOption`, `PlayPrimaryAccent`, `PlayPanel` | `SceneEditor`                    | Moves with the scene editor (`SceneEditorView` hosts the bar)                                                                                                                     |
+| `Diagnostics/SceneOperationResults`                                                                                                           | `Scenes`                         | Scene operation-result vocabulary                                                                                                                                                 |
+| `Diagnostics/RuntimeOperationResults`                                                                                                         | `LivePreview`                    | Runtime operation-result vocabulary                                                                                                                                               |
+| `Utils/ThumbnailGenerator`, `ThumbnailTemplateSelector`                                                                                       | `SceneExplorer`                  | As the spec lists for the explorer's thumbnails                                                                                                                                   |
+| Script checks of `Scripting/ScriptAnalysisService`, `ScriptToolingPaths`, `ProjectScriptTooling`                                              | `Scripting`                      | The script family's facts and tooling (asset family modules); the native analysis reaches them through `IScriptAnalyzer`, which LivePreview implements                            |
+| Native call of `Scripting/ScriptAnalysisService`                                                                                              | `LivePreview`                    | The only domain module that references Runtime and Interop                                                                                                                        |
+| `Scripting/InputFileCheck`                                                                                                                    | `Input`                          | The input family's checks (asset family modules)                                                                                                                                  |
+| `Scripting/ScriptSlotEdits`                                                                                                                   | `Scenes`, rules in `Scripting`   | Edits a scene's script slots, validated by `ScriptSlotRules`                                                                                                                      |
+| Editing part of `MaterialDocumentService` (properties, history entries, persistence)                                                          | `Materials` and `MaterialEditor` | Documents design decision 7: a document type is a family model and an editor                                                                                                      |
+| Scene-specific parts of Projects (`SceneSourceVersion`, `GetSceneSourceVersion`, `SceneAssetRenameOperation`, scene staging)                  | `Scenes`                         | Documents design decision 7; Projects keeps asset-to-file resolution only                                                                                                         |
+| `OpenDocumentCookInputs`, `CookDocumentRegistry`, cook read leases                                                                            | removed                          | Documents design 5.3.3: the cook reads saved files only and asks `IUnsavedDocuments` which inputs are unsaved                                                                     |
+| `IAutomaticCookService.NotifySaved`, `NotifyRenamed`, the automatic-cooking pause                                                             | removed                          | Documents design 5.3.1 and 5.3.2: the cook hears of changes from `IAssetCatalog.Changes`; **Cook on change** is a project setting                                                 |
 
 ## 4. Execution slices
 
@@ -233,8 +233,10 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   reveal and the code editor launch, and no longer refreshes its rows after a
   change, except after a scene command. The sources tree and the asset list
   share one clipboard, so a folder copied or cut in the tree pastes as a folder;
-  the tree pastes with Ctrl+V and deletes folders with Delete or its context
-  menu, through the same workflow as the asset list. The asset catalog knows the
+  the tree cuts, copies, pastes and deletes folders from its context menu, and
+  pastes with Ctrl+V and deletes with Delete, through the same workflow as the
+  asset list. Ctrl+X and Ctrl+C cut and copy the asset list's selection
+  wherever the user works in the browser. The asset catalog knows the
   folders of its roots: a folder created, deleted or renamed outside the editor
   makes it read the root again, so the files inside follow, and reports the
   folder through `IAssetFolderSource`, which the tree reloads on. Each file
@@ -463,7 +465,10 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   `PlaySession.LogReceived`, which the workspace bridges to `OutputLogBuffer`
   today), `Problems` (selects a runtime problem's node through
   `ISceneSelectionService` and reveals itself on a runtime error, which the
-  workspace does today), `Cooking`, `CookedInspector` (from `Inspection`),
+  workspace does today), `Cooking` (its `ICookingWorkspaceActions` goes: the
+  panel saves and opens documents through the Shell's document service, shows
+  panels through placement and selects a node through Scenes, and the workspace
+  stops implementing it), `CookedInspector` (from `Inspection`),
   `SceneExplorer` (C3 explorer side), `SceneEditor` (C14, Play UI, and its
   preview, viewport and transform tool settings), `SceneInspector` (from
   `Inspector`); then the Material Editor registers its editor provider, the
@@ -605,6 +610,14 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   cooking, scene stack, script tooling, Play. Each injects `ProjectContext`,
   deletes its `ProjectChanged` reset and uses the session lifetime token.
 - **S4.3** Remove `CurrentProject` and delete `IProjectContextService`.
+- **S4.4** Close and exit (shell design section 6): the Shell's close and exit
+  becomes the only subscriber to Aura's `WindowClosing`. Window participants
+  (the window's documents, today's `WindowCloseCoordinator`, and the saving of
+  window placement, today's `WindowPlacementService` subscription) and
+  application finalizers (engine shutdown, today's `EngineShutdownService`
+  subscription, which loses its window counting) run in its prepare, commit and
+  finalize phases; closing the last workspace window of a session returns to
+  the Start window.
 - Gate: the spec's Phase 4 tests, including the **open check** of the issue:
   close the last workspace window with the Project Browser open and assert the
   process stays up. If WinAppSDK ends the process, stop and raise the shutdown
@@ -669,7 +682,7 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.7 LivePreview                            | `done`        |                                                                                                 |
 | S1.8 Asset family modules                   | `done`        | See the sub-slice table below                                                                   |
 | S1.9 Cook on change over checked inputs     | `done`        |                                                                                                 |
-| S1.10 Shell                                 | `in progress` | Tab source and close coordination moved into the Shell                                          |
+| S1.10 Shell                                 | `done`        | Consistent clipboard and delete commands across parts: #86                                      |
 | S1.11 Unsaved documents                     | `not started` | Needs S1.10                                                                                     |
 | S1.12 Features                              | `not started` | One row per feature when it starts                                                              |
 | S1.13 Dissolve the World Editor             | `not started` |                                                                                                 |
@@ -677,7 +690,7 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; the shared host-equivalent builder lands with S3.1 |
 | S2.1 to S2.3 Scope factory and topology     | `not started` |                                                                                                 |
 | S3.1 Registration modules                   | `not started` |                                                                                                 |
-| S4.1 to S4.3 Project Session                | `not started` |                                                                                                 |
+| S4.1 to S4.4 Project Session                | `not started` |                                                                                                 |
 | S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                                                                 |
 | S6.1 to S6.3 Service location and messenger | `not started` |                                                                                                 |
 | S7 Documentation                            | `not started` |                                                                                                 |

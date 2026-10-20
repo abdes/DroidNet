@@ -23,7 +23,6 @@ using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.SceneEditor;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -32,7 +31,7 @@ namespace Oxygen.Editor.World.SceneEditor;
 /// <summary>
 /// ViewModel for the Scene Editor.
 /// </summary>
-public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentConflictParticipant, IDisposable
+public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDisposable
 {
     private readonly IMessenger messenger;
     private readonly ILogger logger;
@@ -41,7 +40,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly ISettingsService<IEngineStartupSettings>? engineSettings;
     private readonly IScenePreview scenePreview;
     private readonly IDocumentInputCommitter inputCommitter;
-    private readonly IDocumentConflictPrompt? conflictPrompt;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
     private readonly IContentPipelineService contentPipelineService;
@@ -59,7 +57,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// </summary>
     /// <param name="tab">The scene document's tab.</param>
     /// <param name="documentArea">The document area of the editor's window, which says whether the scene is active.</param>
-    /// <param name="windowId">The window identifier, for the window's prompts, input and shortcuts.</param>
+    /// <param name="windowId">The window identifier, for the window's camera messages.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
     /// <param name="scenePreview">Reports when the engine shows the document's scene.</param>
     /// <param name="inputCommitter">Completes the focused inspector control's text input.</param>
@@ -70,8 +68,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="messenger">The messenger used for inter-component communication.</param>
     /// <param name="previewSettings">The shared project preview preferences.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    /// <param name="conflictPrompt">Presents recovery after an ordinary Save conflict.</param>
-    /// <param name="catalog">Reports when the scene's file is removed or restored outside the editor; optional.</param>
     /// <param name="engineSettings">The engine startup settings, whose logging verbosity the editor edits; optional.</param>
     public SceneEditorViewModel(
         DocumentTab tab,
@@ -87,8 +83,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IMessenger messenger,
         Workspace.PreviewSettingsService previewSettings,
         ILoggerFactory? loggerFactory = null,
-        IDocumentConflictPrompt? conflictPrompt = null,
-        IAssetCatalog? catalog = null,
         ISettingsService<IEngineStartupSettings>? engineSettings = null)
     {
         this.engineService = engineService;
@@ -99,7 +93,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         _ = previewSettings.EnsureRestoredAsync();
         this.scenePreview = scenePreview;
         this.inputCommitter = inputCommitter;
-        this.conflictPrompt = conflictPrompt;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.contentPipelineService = contentPipelineService;
@@ -124,7 +117,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.Document.ContentReplaced += this.OnDocumentContentReplaced;
         this.InitializePlay();
         scenePreview.ReadyChanged += this.OnPreviewReadyChanged;
-        this.WatchSourcePresence(catalog);
         if (this.scene is { } loaded && scenePreview.IsReady(this.Document.Id))
         {
             // The engine showed the scene before this editor existed.
@@ -186,18 +178,15 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     {
         if (!this.isClosing && !this.isDisposed)
         {
+            // A save that meets a newer file leaves the document changed on disk; the document area's banner offers the way out.
             _ = await this.SaveForCloseAsync().ConfigureAwait(true);
-            if (this.HasSaveConflict && !this.isClosing && !this.isDisposed && this.conflictPrompt is not null)
-            {
-                await this.conflictPrompt.ShowAsync(this.windowId, this.Tab, this).ConfigureAwait(true);
-            }
         }
     }
 
     /// <inheritdoc/>
     public async Task PrepareForCloseAsync()
     {
-        await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
+        await this.inputCommitter.CommitAsync().ConfigureAwait(true);
         await this.SaveViewportStateForCloseAsync().ConfigureAwait(true);
         await this.PreviewSettings.FlushAsync().ConfigureAwait(true);
         if (this.Authoring is { } authoring)
@@ -206,7 +195,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
 
         this.isClosing = true;
-        await this.pendingConflict.ConfigureAwait(true);
         if (this.pendingSave is { } save)
         {
             _ = await save.ConfigureAwait(true);
@@ -217,19 +205,17 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     public void ResumeEditing() => this.isClosing = false;
 
     /// <inheritdoc/>
-    public async Task CloseAsync(bool discard)
+    public Task CloseAsync(bool discard)
     {
-        await this.pendingConflict.ConfigureAwait(true);
         if (this.Document.IsDirty && !discard)
         {
             throw new InvalidOperationException("The scene has unsaved changes.");
         }
 
         // Closing the document disposes its content, which cancels the gestures still open and retires the authoring.
-        if ((this.Document.IsDirty && !discard) || this.Document.History.IsBusy)
-        {
-            throw new InvalidOperationException("The scene changed while preparing to close. Review its changes before closing.");
-        }
+        return this.Document.History.IsBusy
+            ? throw new InvalidOperationException("The scene changed while preparing to close. Review its changes before closing.")
+            : Task.CompletedTask;
     }
 
     /// <inheritdoc/>
@@ -246,8 +232,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         {
             this.isDisposed = true;
             this.Document.ContentReplaced -= this.OnDocumentContentReplaced;
-            this.StopWatchingSourcePresence();
-            this.DisposeRelocationParticipant();
 
             this.scenePreview.ReadyChanged -= this.OnPreviewReadyChanged;
             this.LogUnregisteringFromMessages(this.Document.Id);
@@ -262,6 +246,9 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             }
 
             this.Viewports.Clear();
+
+            // The document's viewports are owned by its id; the engine drops whatever surface is left of them.
+            _ = this.engineService.ReleaseOwnerSurfacesAsync(new SurfaceOwnerId(this.Document.Id.Value));
         }
     }
 
@@ -270,7 +257,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.RegisterCameraMessages();
         this.RegisterSelectionMessages();
         this.RegisterShortcutMessages();
-        this.RegisterRelocationMessages();
     }
 
     [RelayCommand]
@@ -302,8 +288,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
     private async Task<bool> SaveCoreAsync()
     {
-        await this.pendingConflict.ConfigureAwait(true);
-        await this.inputCommitter.CommitAsync(this.windowId).ConfigureAwait(true);
+        await this.inputCommitter.CommitAsync().ConfigureAwait(true);
         await this.PreviewSettings.FlushAsync().ConfigureAwait(true);
         if (this.scene is null)
         {
@@ -325,7 +310,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             return false;
         }
 
-        this.HasSaveConflict = result.Outcome == DocumentSaveOutcome.Conflict;
         if (!result.Succeeded)
         {
             this.LogSaveFailed();
@@ -398,7 +382,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
         this.scene = current.Scene;
         this.sceneReady = false;
-        this.HasSaveConflict = false;
         this.RefreshPlayScene();
     }
 

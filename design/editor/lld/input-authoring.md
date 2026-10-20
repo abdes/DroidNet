@@ -294,10 +294,10 @@ and three decimals. Defaults are for items the editor creates.
 ([material editor 8.1, 17, 18](material-editor.md#81-material-commands)): open
 by file, edit under the authoring lock, one history entry per committed gesture,
 revision before asynchronous work, atomic save with saved-revision
-acknowledgement, close drains persistence. It implements
-`IDocumentConflictParticipant` (an external edit offers Reload or Save copy) and
-the relocation participant (an open document re-points its path and its
-references without closing).
+acknowledgement, close drains persistence. The Shell's document service resolves
+an external edit (Reload, Keep Mine or Save a Copy) and follows relocations (an
+open document re-points its path and its references without closing) for it, as
+for every kind.
 
 Opening an action or context row opens its source's document and selects that
 asset. A source already open is activated, not opened twice.

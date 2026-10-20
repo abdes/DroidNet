@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core;
 
@@ -32,7 +33,7 @@ public sealed partial class AssetRelocationWorkflow(
     IAssetRelocationService relocation,
     IHistoryService histories,
     IDialogService dialogs,
-    IAssetShell shell,
+    IDesktopIntegration shell,
     ILogger<AssetRelocationWorkflow>? logger = null) : IAssetRelocationWorkflow, IDisposable
 {
     private const int ListedItems = 8;
@@ -245,11 +246,12 @@ public sealed partial class AssetRelocationWorkflow(
         }
     }
 
-    // A rejected or rolled-back undo or redo changed nothing, so its entry stays in the history.
+    // A rejected or rolled-back undo or redo changed nothing, so its entry stays in the history. While another undo or
+    // redo runs, the history replays nothing.
     private async Task<AssetRelocationOutcome?> ReplayAsync(bool undo)
     {
         var label = undo ? this.UndoLabel : this.RedoLabel;
-        if (label is null)
+        if (label is null || this.history.IsBusy)
         {
             return null;
         }

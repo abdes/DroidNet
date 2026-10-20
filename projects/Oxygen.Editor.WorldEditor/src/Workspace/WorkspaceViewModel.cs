@@ -24,6 +24,11 @@ using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Shell.Commands;
+using Oxygen.Editor.Shell.Contributions;
+using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.Shell.Layout;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
@@ -59,7 +64,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
     private readonly ILogger logger;
-    private DocumentManager? documentManager;
+    private SceneDocumentLifetime? sceneLifetime;
+    private IDocumentService? documentService;
+    private IDocumentArea? documentArea;
+    private IPlacementService? placement;
     private IAssetCatalog? assetCatalog;
     private PreviewSettingsService? previewSettings;
     private Oxygen.Editor.World.Workspace.EditingViewMaskService? editingViewMask;
@@ -116,7 +124,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             Path = string.Empty,
             Children = new Routes(
             [
-                new Route { Outlet = "renderer", Path = "dx", ViewModelType = typeof(DocumentHostViewModel) },
+                new Route { Outlet = "renderer", Path = "dx", ViewModelType = typeof(DocumentAreaViewModel) },
                 new Route
                 {
                     Outlet = "se",
@@ -162,16 +170,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     public override async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
         await base.OnNavigatedToAsync(route, navigationContext).ConfigureAwait(true);
-        if (DroidNet.Docking.Dockable.FromId("cook") is { } cookingDock)
-        {
-            cookingDock.Title = "Cooking";
-        }
-
-        if (DroidNet.Docking.Dockable.FromId(InspectorDockId) is { } inspectorDock)
-        {
-            inspectorDock.Title = "Cooked Inspector";
-        }
-
         this.OnScriptingNavigated();
 
         // Ensure messenger is available (resolve from container as fallback)
@@ -262,12 +260,13 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         this.messenger.Register<ShowAssetRequestMessage>(this, (_, message) => message.Reply(this.ShowInspectionAssetAsync(message)));
         this.messenger.Register<OpenCookedInspectionRequestMessage>(this, (_, message) => message.Reply(this.OpenInspectionAsync(message)));
         this.messenger.Register<ChangeContentMountsRequestMessage>(this, (_, message) => message.Reply(this.ChangeContentMountsAsync(message)));
-        this.messenger.Register<ShowCookingJobsRequestMessage>(this, (_, _) => this.OnCookingRevealRequested(this, EventArgs.Empty));
 
-        // The window's open documents, their kinds and editors, and its document area.
+        // The panels and commands of the window, its documents, their kinds and editors, its document area and its
+        // document service, and the placement of documents and panels.
+        RegisterContributions(childContainer);
         RegisterDocuments(childContainer);
-        childContainer.Register<DocumentHostViewModel>(Reuse.Singleton);
-        childContainer.Register<DocumentHostView>(Reuse.Singleton);
+        childContainer.Register<ICommandService, CommandService>(Reuse.Singleton);
+        childContainer.Register<IPlacementService, DockingPlacementService>(Reuse.Singleton);
 
         RegisterContentServices(childContainer);
         this.assetCatalog = childContainer.Resolve<IAssetCatalog>();
@@ -296,11 +295,15 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         _ = childContainer.Resolve<IScenePreview>();
         _ = childContainer.Resolve<PreviewContentDemand>();
 
-        // The host subscribes to the window's tabs before DocumentManager starts handling open requests, and the
-        // manager listens for them even before the router has navigated to an editor.
-        _ = childContainer.Resolve<DocumentHostViewModel>();
-        childContainer.Register<DocumentManager>(Reuse.Singleton);
-        this.documentManager = childContainer.Resolve<DocumentManager>();
+        // The document service follows the window's tabs before anything opens a document, and the window's close asks
+        // about its documents.
+        this.documentService = childContainer.Resolve<IDocumentService>();
+        this.documentArea = childContainer.Resolve<IDocumentArea>();
+        this.placement = childContainer.Resolve<IPlacementService>();
+        _ = childContainer.Resolve<DocumentAreaViewModel>();
+        _ = childContainer.Resolve<WindowCloseCoordinator>();
+        childContainer.Register<SceneDocumentLifetime>(Reuse.Singleton);
+        this.sceneLifetime = childContainer.Resolve<SceneDocumentLifetime>();
 
         childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
         childContainer.Register<SceneExplorerView>(Reuse.Transient);
@@ -353,14 +356,25 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
                 this.cookingPanel = null;
             }
 
-            this.documentManager?.Dispose();
-            this.documentManager = null;
+            this.sceneLifetime?.Dispose();
+            this.sceneLifetime = null;
+            this.documentService = null;
+            this.documentArea = null;
+            this.placement = null;
             this.assetCatalog = null;
             this.messenger?.UnregisterAll(this);
         }
 
         base.Dispose(disposing);
     }
+
+    // The panels whose tabs show a title of their own; the others are titled by their content.
+    private static void RegisterContributions(IContainer childContainer)
+        => childContainer.RegisterDelegate(
+            _ => new ContributionRegistry(
+                [new PanelDescriptor("cook", "Cooking"), new PanelDescriptor(InspectorDockId, "Cooked Inspector")],
+                []),
+            Reuse.Singleton);
 
     private static void RegisterInspectorEditors(IContainer childContainer)
     {
@@ -454,14 +468,14 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             return;
         }
 
-        if (this.documentManager is null)
+        if (this.documentService is null)
         {
             this.LogInitialSceneManagerUnavailable(scene.ToString());
             return;
         }
 
-        var opened = await this.documentManager.OpenSceneAsync(scene).ConfigureAwait(true);
-        if (!opened)
+        var opened = await this.documentService.OpenAsync(scene).ConfigureAwait(true);
+        if (!opened.Succeeded)
         {
             this.LogInitialSceneNotOpened(scene.ToString(), context.Name);
         }

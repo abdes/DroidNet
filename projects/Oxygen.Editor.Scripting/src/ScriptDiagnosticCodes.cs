@@ -17,11 +17,6 @@ public static class ScriptDiagnosticCodes
     public const string CreateFailed = DiagnosticCodes.ScriptPrefix + "CREATE_FAILED";
 
     /// <summary>
-    /// The configured code editor could not be started.
-    /// </summary>
-    public const string EditorLaunchFailed = DiagnosticCodes.ScriptPrefix + "EDITOR_LAUNCH_FAILED";
-
-    /// <summary>
     /// Scripts cannot be analyzed, for example because the engine analyzer is unavailable.
     /// </summary>
     public const string AnalysisUnavailable = DiagnosticCodes.ScriptPrefix + "ANALYSIS_UNAVAILABLE";

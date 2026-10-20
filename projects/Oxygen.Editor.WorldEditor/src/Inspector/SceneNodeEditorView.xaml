@@ -13,16 +13,6 @@
         <ctkcvt:BoolToVisibilityConverter x:Key="HasSelectionToVisibilityConverter" />
         <local:ComponentToGlyphConverter x:Key="ComponentToGlyphConverter" />
     </UserControl.Resources>
-    <UserControl.KeyboardAccelerators>
-        <KeyboardAccelerator
-            Key="Z"
-            Invoked="UndoInvoked"
-            Modifiers="Control" />
-        <KeyboardAccelerator
-            Key="Y"
-            Invoked="RedoInvoked"
-            Modifiers="Control" />
-    </UserControl.KeyboardAccelerators>
     <Grid Padding="4">
         <Grid.Resources>
             <ResourceDictionary Source="ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml" />

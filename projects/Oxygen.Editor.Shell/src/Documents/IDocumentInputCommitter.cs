@@ -2,15 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Microsoft.UI;
+namespace Oxygen.Editor.Shell.Documents;
 
-namespace Oxygen.Editor.Documents;
-
-/// <summary>Finishes the focused control's pending input before a document operation captures authoring data.</summary>
+/// <summary>
+/// Finishes the pending input of the focused control in a part's window, before a document operation captures what the
+/// document holds.
+/// </summary>
 public interface IDocumentInputCommitter
 {
-    /// <summary>Commits valid focused input or restores its last valid value.</summary>
-    /// <param name="windowId">The document's owner window.</param>
-    /// <returns>Completion of control input publication on the UI dispatcher.</returns>
-    public Task CommitAsync(WindowId windowId);
+    /// <summary>Commits the focused control's valid input, or restores its last valid value.</summary>
+    /// <returns>A task that completes once the control has published its input, on the window's UI thread.</returns>
+    public Task CommitAsync();
 }

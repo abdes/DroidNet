@@ -158,44 +158,4 @@ public sealed partial class SceneNodeEditorView : UserControl
             this.ComponentScroll.MaxHeight = rows * 32;
         }
     }
-
-    private async void UndoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-    {
-        _ = sender; // unused
-
-        var vm = this.ViewModel;
-        if (vm is null)
-        {
-            return;
-        }
-
-        if (vm.History.UndoStack.Count == 0)
-        {
-            return;
-        }
-
-        args.Handled = true;
-        await vm.UndoAsync().ConfigureAwait(true);
-        vm.RefreshPropertyEditorValues();
-    }
-
-    private async void RedoInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
-    {
-        _ = sender; // unused
-
-        var vm = this.ViewModel;
-        if (vm is null)
-        {
-            return;
-        }
-
-        if (vm.History.RedoStack.Count == 0)
-        {
-            return;
-        }
-
-        args.Handled = true;
-        await vm.RedoAsync().ConfigureAwait(true);
-        vm.RefreshPropertyEditorValues();
-    }
 }

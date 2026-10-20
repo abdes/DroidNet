@@ -6,12 +6,11 @@ using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls.Menus;
 using DryIoc;
-using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.WorldEditor.TestSupport;
@@ -68,7 +67,7 @@ public sealed partial class SceneEditorQuickAddMenuTests
         {
             this.Metadata = SceneTabs.Open(new Scene { Name = "Quick Add" });
             var input = new Mock<IDocumentInputCommitter>();
-            _ = input.Setup(value => value.CommitAsync(It.IsAny<WindowId>())).Returns(Task.CompletedTask);
+            _ = input.Setup(value => value.CommitAsync()).Returns(Task.CompletedTask);
             this.Editor = new(
                 this.Metadata.Tab,
                 new TestDocumentArea(this.Metadata.Document),
