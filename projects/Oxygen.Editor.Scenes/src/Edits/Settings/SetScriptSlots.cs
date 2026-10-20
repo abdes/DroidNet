@@ -50,7 +50,8 @@ public sealed record SetScriptSlots(NodeId Node, ImmutableArray<ScriptSlot> Slot
             return new SceneEditApplication.Applied(this, []);
         }
 
-        scope.WarnIfDeleted(slots.Select(static slot => slot.Script), this.Node);
+        // A slot references its script and the assets its values name.
+        scope.WarnIfDeleted(slots.SelectMany(static slot => slot.Overrides.Values.Select(static value => value.Asset).Prepend(slot.Script)), this.Node);
         scripting.Slots = slots;
         return new SceneEditApplication.Applied(this with { Slots = before }, [new SceneChange.ScriptSlotsChanged(this.Node)]);
     }

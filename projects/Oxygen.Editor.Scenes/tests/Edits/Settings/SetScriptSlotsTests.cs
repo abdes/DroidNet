@@ -101,6 +101,22 @@ public sealed class SetScriptSlotsTests
         SceneAssert.Unchanged(fixture, before);
     }
 
+    [TestMethod]
+    public async Task ValueNamingADeletedAsset_IsKeptWithAWarning()
+    {
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var surface = AssetPath.Parse("/Content/Surface.omat");
+        fixture.Redirects.Delete(surface);
+        var slot = new ScriptSlot { Id = Guid.NewGuid(), Script = SampleScene.MoveScript }
+            with
+        { Overrides = ImmutableSortedDictionary.Create<string, ScriptValue>(StringComparer.Ordinal).Add("surface", ScriptValue.FromAsset(surface)) };
+
+        var result = await fixture.Authoring.ExecuteAsync(new SetScriptSlots(SampleScene.Script, [slot])).ConfigureAwait(false);
+
+        SceneAssert.Warned(result, SceneEditCodes.AssetReferenceDeleted, SampleScene.Script);
+        _ = SlotsOf(fixture, SampleScene.Script).Single().Overrides["surface"].Asset.Should().Be(surface);
+    }
+
     private static List<ScriptSlot> SlotsOf(AuthoringFixture fixture, NodeId node)
         => [.. fixture.Node(node).Components.OfType<ScriptingComponent>().Single().Slots];
 }
