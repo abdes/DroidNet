@@ -4,7 +4,8 @@
 
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Core;
+using Oxygen.Editor.Projects.Testing;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
@@ -19,13 +20,8 @@ internal static class CookCoordinatorScenario
         return service;
     }
 
-    internal static ProjectContext CreateContext() => new()
-    {
-        ProjectId = Guid.NewGuid(),
-        Name = "Cook coordination",
-        Category = Category.Games,
-        ProjectRoot = FileSystemPath.From(Path.GetTempPath()),
-        AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-        LocalFolderMounts = [],
-    };
+    // The coordinator takes cross-process cook ownership with native file handles under the project root, so the
+    // project is on the disk.
+    internal static ProjectContext CreateContext()
+        => TestProject.Create(new RealFileSystem(), Path.GetTempPath()).Context with { Name = "Cook coordination" };
 }

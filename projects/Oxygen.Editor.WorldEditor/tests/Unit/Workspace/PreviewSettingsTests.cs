@@ -13,6 +13,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
 
@@ -257,7 +258,7 @@ public sealed class PreviewSettingsTests
             fixture.Project.Thumbnail)
         {
             AuthoringMounts = [.. fixture.Project.AuthoringMounts],
-        });
+        }, new MockFileSystem());
         fixture.Projects.Activate(sameProject);
         await service.RestoreAsync(sameProject).ConfigureAwait(false);
         _ = service.FrameRateCap.Should().Be(45);
@@ -460,7 +461,7 @@ public sealed class PreviewSettingsTests
             name, Category.Games, Path.Combine(Path.GetTempPath(), "Oxygen.PreviewPreferences", name), string.Empty)
         {
             AuthoringMounts = [new("Content", "Content")],
-        });
+        }, new MockFileSystem());
 
         public PreviewSettingsService CreateService(IEditorSettingsManager? store = null)
             => new(this.Engine.Object, store ?? new EditorSettingsManager(this.Database), this.Projects, this.publisher.Object, new OperationStatusReducer());

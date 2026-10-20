@@ -11,6 +11,7 @@
 
     <ItemGroup>
         <ProjectReference Include="../../src/Oxygen.Editor.Assets.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions" />

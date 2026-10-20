@@ -10,6 +10,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -22,7 +23,7 @@ public sealed partial class SceneEditorConflictTests
     public async Task CloseWaitsForPreviewEditCommittedByTheFocusedControl()
     {
         var projects = new ProjectContextService();
-        var project = ProjectContext.FromProjectInfo(new ProjectInfo("Preview close", Category.Games, Path.GetTempPath(), string.Empty));
+        var project = ProjectContext.FromProjectInfo(new ProjectInfo("Preview close", Category.Games, Path.GetTempPath(), string.Empty), new MockFileSystem());
         projects.Activate(project);
         var engine = new Mock<IEngineService>();
         _ = engine.SetupGet(value => value.MaxTargetFps).Returns(1000);

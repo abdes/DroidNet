@@ -4,12 +4,14 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
 
@@ -298,15 +300,7 @@ public sealed partial class AssetIdentityReducerTests
     }
 
     private static ProjectContext CreateProjectContext(TempWorkspace workspace)
-        => new()
-        {
-            ProjectId = Guid.NewGuid(),
-            Name = "Test",
-            Category = Category.Games,
-            ProjectRoot = workspace.Root,
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            LocalFolderMounts = [],
-        };
+        => TestProject.Create(new RealFileSystem(), workspace.Root.FullPath).Context with { Name = "Test" };
 
     private static ProjectCookScope CreateCookScope(TempWorkspace workspace, ProjectContext project)
         => new(project.ProjectId, project.ProjectRoot, workspace.SourcePath(".cooked"));

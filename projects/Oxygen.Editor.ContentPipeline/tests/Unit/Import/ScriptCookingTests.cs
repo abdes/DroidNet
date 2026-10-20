@@ -13,6 +13,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 
@@ -52,7 +53,7 @@ public sealed class ScriptCookingTests : IDisposable
     [TestMethod]
     public void ResolveScriptFindsItsSourceAndKeepsItsFolder()
     {
-        var input = CookInputResolver.Resolve(ProjectContext.FromProject(this.project), MoveScript, ContentCookInputRole.Dependency);
+        var input = CookInputResolver.Resolve(ProjectContext.FromProject(this.project, new RealFileSystem()), MoveScript, ContentCookInputRole.Dependency);
 
         _ = input.Kind.Should().Be(ContentCookAssetKind.Script);
         _ = input.AssetUri.Should().Be(MoveScript);
@@ -62,7 +63,7 @@ public sealed class ScriptCookingTests : IDisposable
     [TestMethod]
     public void BuildJobCompilesTheScriptAndRecordsItsSourceUnderTheMount()
     {
-        var input = CookInputResolver.Resolve(ProjectContext.FromProject(this.project), MoveScript, ContentCookInputRole.Dependency);
+        var input = CookInputResolver.Resolve(ProjectContext.FromProject(this.project, new RealFileSystem()), MoveScript, ContentCookInputRole.Dependency);
 
         var job = new ContentImportManifestBuilder().BuildJob(input, []);
 
@@ -128,7 +129,7 @@ public sealed class ScriptCookingTests : IDisposable
     [TestMethod]
     public void BuildSceneManifestsAddsASidecarAfterTheSceneAndItsScripts()
     {
-        var context = ProjectContext.FromProject(this.project);
+        var context = ProjectContext.FromProject(this.project, new RealFileSystem());
         var script = CookInputResolver.Resolve(context, MoveScript, ContentCookInputRole.Dependency);
         var scope = this.CreateScope() with { Inputs = [.. this.CreateScope().Inputs, script] };
         var binding = new ScriptSidecarBinding(1, Guid.NewGuid().ToString("D"), "/Content/Player/move.oscript", 0, [new ScriptSidecarParam("speed", "float", 2.5f)]);
@@ -212,7 +213,7 @@ public sealed class ScriptCookingTests : IDisposable
 
     private ContentCookScope CreateScope()
     {
-        var context = ProjectContext.FromProject(this.project);
+        var context = ProjectContext.FromProject(this.project, new RealFileSystem());
         var key = Guid.CreateVersion7();
         return new ContentCookScope(
             context,

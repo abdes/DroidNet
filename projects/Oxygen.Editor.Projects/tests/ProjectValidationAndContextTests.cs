@@ -88,6 +88,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             Category = Category.Games,
             ProjectRoot = FileSystemPath.From(@"C:\Project"),
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
+            FileSystem = new MockFileSystem(),
             LocalFolderMounts = [],
         };
 
@@ -152,6 +153,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             Category = Category.Games,
             ProjectRoot = FileSystemPath.From(@"C:\Project"),
             AuthoringMounts = [],
+            FileSystem = new MockFileSystem(),
             LocalFolderMounts = [],
         };
 
@@ -341,9 +343,12 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             DefaultSceneId = defaultSceneId,
         };
 
-        var context = ProjectContext.FromProjectInfo(info);
+        var fileSystem = new MockFileSystem();
+
+        var context = ProjectContext.FromProjectInfo(info, fileSystem);
 
         _ = context.DefaultSceneId.Should().Be(defaultSceneId);
+        _ = context.FileSystem.Should().BeSameAs(fileSystem);
     }
 
     [TestMethod]
@@ -742,6 +747,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             Category = Category.Games,
             ProjectRoot = FileSystemPath.From(@"C:\Project"),
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
+            FileSystem = new MockFileSystem(),
             LocalFolderMounts = [],
         };
 

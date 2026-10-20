@@ -8,6 +8,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 
@@ -254,7 +255,7 @@ public sealed class MaterialCookTests
                 AuthoringMounts = [new ProjectMountPoint("Content", authoringFolder)],
             };
             File.WriteAllText(Path.Combine(this.Root, "Project.oxy"), ProjectInfo.ToJson(project));
-            this.ContextService.Activate(ProjectContext.FromProjectInfo(project));
+            this.ContextService.Activate(ProjectContext.FromProjectInfo(project, new RealFileSystem()));
             this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
         }
 

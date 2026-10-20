@@ -29,7 +29,7 @@ public sealed class RuntimeProblemReaderTests
     public RuntimeProblemReaderTests()
     {
         var info = new ProjectInfo("Runtime problems", Category.Games, Root) { AuthoringMounts = [new("Content", "Content")] };
-        this.sut = new RuntimeProblemReader(ProjectContext.FromProjectInfo(info), this.files);
+        this.sut = new RuntimeProblemReader(ProjectContext.FromProjectInfo(info, this.files));
     }
 
     [TestMethod]

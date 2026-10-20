@@ -9,7 +9,9 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspection;
 
@@ -33,13 +35,9 @@ internal sealed class ContentPriorityTests : DroidNet.Tests.VisualUserInterfaceT
             var second = FileSystemPath.From(Directory.CreateDirectory(Path.Combine(directory.FullName, "Second")).FullName);
             await File.WriteAllBytesAsync(first.Combine("container.index.bin").FullPath, [], this.TestContext.CancellationToken).ConfigureAwait(true);
             await File.WriteAllBytesAsync(second.Combine("container.index.bin").FullPath, [], this.TestContext.CancellationToken).ConfigureAwait(true);
-            var project = new ProjectContext
+            var project = TestProject.Create(new RealFileSystem(), directory.FullName).Context with
             {
-                ProjectId = Guid.NewGuid(),
                 Name = "Priority",
-                Category = Category.Games,
-                ProjectRoot = FileSystemPath.From(directory.FullName),
-                AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [new("First", first), new("Second", second)],
             };
             var model = new ContentPriorityViewModel(project);

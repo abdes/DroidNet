@@ -8,7 +8,6 @@ using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -17,9 +16,6 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public sealed partial class SceneDescriptorGenerator
 {
-    // The cook reads the saved input sources.
-    private static readonly InputSourceFiles InputFiles = new(new RealFileSystem());
-
     /// <summary>Resolves the camera node the cooked scene starts viewing through.</summary>
     /// <remarks>
     /// An unset starting camera cooks as the first camera in hierarchy order, which is the camera the editor shows
@@ -56,7 +52,7 @@ public sealed partial class SceneDescriptorGenerator
         var contexts = new List<NativeStartingInputContext>();
         foreach (var entry in scene.StartingInputContexts)
         {
-            var source = StartingContextRules.Describe(scope.Project, entry.Context, container => InputFiles.Read(scope.Project, container));
+            var source = StartingContextRules.Describe(scope.Project, entry.Context, container => new InputSourceFiles(scope.Project.FileSystem).Read(scope.Project, container));
             if (StartingContextRules.Check(entry, source) is { } problem)
             {
                 site.Report(SceneStartingPropertyPaths.StartingInputContexts, problem.Message);

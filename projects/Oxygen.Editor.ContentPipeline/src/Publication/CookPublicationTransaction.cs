@@ -112,7 +112,7 @@ internal sealed partial class CookPublicationTransaction
         }
 
         var configured = projectChange is null ? this.project
-            : ProjectContext.FromProjectInfo(this.ParseProjectConfiguration(projectChange.AfterJson));
+            : ProjectContext.FromProjectInfo(this.ParseProjectConfiguration(projectChange.AfterJson), this.project.FileSystem);
         if (!string.Equals(document.MountConfigurationIdentity, CookPublicationDocument.ConfigurationIdentity(configured), StringComparison.Ordinal))
         {
             throw new InvalidDataException("The candidate publication does not describe its intended mount configuration.");
@@ -293,7 +293,7 @@ internal sealed partial class CookPublicationTransaction
             ?? throw new InvalidDataException("The project's saved configuration is unavailable.");
         var configurationMatches = this.journal.ProjectChange is { } change
             ? string.Equals(ProjectInfo.ToJson(currentProject), ProjectInfo.ToJson(this.ParseProjectConfiguration(change.BeforeJson)), StringComparison.Ordinal)
-            : string.Equals(CookPublicationDocument.ConfigurationIdentity(ProjectContext.FromProjectInfo(currentProject)),
+            : string.Equals(CookPublicationDocument.ConfigurationIdentity(ProjectContext.FromProjectInfo(currentProject, this.project.FileSystem)),
                 CookPublicationDocument.ConfigurationIdentity(this.project), StringComparison.Ordinal);
         if (!configurationMatches)
         {

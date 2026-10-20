@@ -10,6 +10,7 @@ using Oxygen.Editor.Input;
 using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Editor.World.Problems;
@@ -17,6 +18,7 @@ using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 
@@ -168,15 +170,7 @@ public sealed partial class ProblemsViewModelTests
     private ProblemsViewModel CreateModel()
     {
         var projects = new Mock<IProjectContextService>();
-        _ = projects.SetupGet(static service => service.ActiveProject).Returns(new ProjectContext
-        {
-            ProjectId = Guid.Empty,
-            Name = "Test",
-            Category = Oxygen.Editor.Projects.Category.Games,
-            ProjectRoot = FileSystemPath.From(@"C:\Project"),
-            AuthoringMounts = [],
-            LocalFolderMounts = [],
-        });
+        _ = projects.SetupGet(static service => service.ActiveProject).Returns(TestProject.Create(new MockFileSystem()).Context with { ProjectId = Guid.Empty, Name = "Test", AuthoringMounts = [] });
         return new ProblemsViewModel([this.scripts, this.inputs, this.runtime], this.codeEditor.Object, projects.Object)
         {
             NodeSelector = this.runtime.SelectAsync,

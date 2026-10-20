@@ -30,7 +30,8 @@ internal sealed partial class ProjectActivationCoordinator(
     Oxygen.Editor.Documents.IEditorDocumentService documents,
     IOperationResultPublisher operationResults,
     IStatusReducer statusReducer,
-    IExceptionDiagnosticAdapter exceptionAdapter) : IProjectActivationCoordinator, IDisposable
+    IExceptionDiagnosticAdapter exceptionAdapter,
+    System.IO.Abstractions.IFileSystem fileSystem) : IProjectActivationCoordinator, IDisposable
 {
     private const string ProjectOpenOperation = "Project.Open";
     private const string ProjectCreateOperation = "Project.Create";
@@ -305,7 +306,7 @@ internal sealed partial class ProjectActivationCoordinator(
         {
             try
             {
-                await publication.RecoverAsync(ProjectContext.FromProjectInfo(saved), cancellationToken).ConfigureAwait(true);
+                await publication.RecoverAsync(ProjectContext.FromProjectInfo(saved, fileSystem), cancellationToken).ConfigureAwait(true);
             }
             catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException)
             {
@@ -436,7 +437,7 @@ internal sealed partial class ProjectActivationCoordinator(
             return null;
         }
 
-        return ProjectContext.FromProject(this.stagedProject.Project) with
+        return ProjectContext.FromProject(this.stagedProject.Project, fileSystem) with
         {
             OpenInitialScene = openInitialScene,
             InitialScene = initialScene,

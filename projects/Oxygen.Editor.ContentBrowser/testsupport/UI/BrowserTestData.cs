@@ -8,7 +8,9 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentBrowser.TestSupport;
 
@@ -68,7 +70,11 @@ internal static class BrowserTestData
     internal static ProjectContextService CreateQueryProject(bool cookedMount = false)
     {
         var projects = new ProjectContextService();
-        projects.Activate(new() { ProjectId = Guid.NewGuid(), Name = "Query", Category = Category.Games, ProjectRoot = FileSystemPath.From("C:/Query"), AuthoringMounts = cookedMount ? [new("Content", "Content"), new("Cooked", ".cooked")] : [new("Content", "Content")], LocalFolderMounts = [], });
+        projects.Activate(TestProject.Create(new MockFileSystem(), "C:/Query").Context with
+        {
+            Name = "Query",
+            AuthoringMounts = cookedMount ? [new("Content", "Content"), new("Cooked", ".cooked")] : [new("Content", "Content")],
+        });
         return projects;
     }
 

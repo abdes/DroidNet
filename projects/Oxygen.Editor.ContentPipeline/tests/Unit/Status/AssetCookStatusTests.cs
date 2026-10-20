@@ -14,6 +14,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -281,15 +282,7 @@ public sealed class AssetCookStatusTests
 
         public StatusProject()
         {
-            this.Project = new ProjectContext
-            {
-                ProjectId = Guid.NewGuid(),
-                ProjectRoot = FileSystemPath.From(this.Root),
-                Name = "Status",
-                Category = Category.Games,
-                AuthoringMounts = [new("Content", "Content")],
-                LocalFolderMounts = [],
-            };
+            this.Project = TestProject.Create(new Testably.Abstractions.RealFileSystem(), this.Root).Context with { Name = "Status" };
             Directory.CreateDirectory(Path.GetDirectoryName(this.SourcePath)!);
             File.WriteAllText(this.SourcePath, MaterialJson);
             var producer = Path.Combine(this.Root, "producer.bin");

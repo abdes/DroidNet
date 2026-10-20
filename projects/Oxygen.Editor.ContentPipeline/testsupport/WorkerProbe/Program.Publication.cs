@@ -21,7 +21,7 @@ internal static partial class Program
         var manager = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: files);
         var info = await manager.LoadProjectInfoAsync(args[1]).ConfigureAwait(false)
             ?? throw new InvalidDataException("The publication fixture has no saved project.");
-        var project = ProjectContext.FromProjectInfo(info);
+        var project = ProjectContext.FromProjectInfo(info, new RealFileSystem());
         var operation = new ContentCookOperation(Guid.Parse(args[3]), project, 1);
         var boundary = args[4];
         using var ownership = CookOutputLease.AcquireOperation(project.ProjectRoot, operation.OperationId);

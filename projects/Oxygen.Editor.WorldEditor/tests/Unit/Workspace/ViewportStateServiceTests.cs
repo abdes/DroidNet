@@ -17,6 +17,7 @@ using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
 
@@ -183,7 +184,7 @@ public sealed class ViewportStateServiceTests
             name, Category.Games, Path.Combine(Path.GetTempPath(), "Oxygen.ViewportState", name), string.Empty)
         {
             AuthoringMounts = [new("Content", "Content")],
-        });
+        }, new MockFileSystem());
 
         // Each service gets its own store, so nothing is served from another service's cache.
         public ViewportStateService CreateService(IEditorSettingsManager? store = null)

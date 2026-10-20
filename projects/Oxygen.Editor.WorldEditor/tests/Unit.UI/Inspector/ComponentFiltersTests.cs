@@ -22,6 +22,7 @@ using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
 using NumberBox = DroidNet.Controls.NumberBox;
@@ -45,7 +46,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
             new OperationStatusReducer());
         using var fixture = new SceneAuthoringFixture(interaction);
         await interaction.RestoreAsync(
-            ProjectContext.FromProjectInfo(new ProjectInfo("Inspector lock tests", Category.Games, "H:/InspectorLockTests")),
+            ProjectContext.FromProjectInfo(new ProjectInfo("Inspector lock tests", Category.Games, "H:/InspectorLockTests"), new MockFileSystem()),
             fixture.Scene.Id).ConfigureAwait(true);
         using var model = fixture.CreateInspectorHost("Light", realizeViews: true);
         var view = new SceneNodeEditorView { ViewModel = model, Width = 420, Height = 600 };

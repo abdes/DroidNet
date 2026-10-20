@@ -156,7 +156,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             }
         }
 
-        if (project.FindSource(identity) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } source || !File.Exists(source.File.FullPath))
+        if (project.FindSource(identity) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } source)
         {
             return AssetEntry.Missing(identity);
         }

@@ -32,7 +32,7 @@ internal sealed partial class PublicationProject : IDisposable
         {
             AuthoringMounts = [new("Content", "Content"), new("Second", "Second"), new("Unrelated", "Unrelated")],
         };
-        this.Context = ProjectContext.FromProjectInfo(info);
+        this.Context = ProjectContext.FromProjectInfo(info, new RealFileSystem());
         this.Operation = new(Guid.NewGuid(), this.Context, 1);
         this.Write("Project.oxy", ProjectInfo.ToJson(info));
         var roots = ImmutableArray.CreateBuilder<CookPublicationRoot>();

@@ -59,7 +59,7 @@ public sealed partial class CookPublicationService
             cancellationToken).ConfigureAwait(false);
         var saved = await projectManager.LoadProjectInfoAsync(operation.Project.ProjectRoot.FullPath).ConfigureAwait(false)
             ?? throw new InvalidDataException("The saved project is unavailable.");
-        var savedIdentity = CookPublicationDocument.ConfigurationIdentity(ProjectContext.FromProjectInfo(saved));
+        var savedIdentity = CookPublicationDocument.ConfigurationIdentity(ProjectContext.FromProjectInfo(saved, operation.Project.FileSystem));
         if (saved.Id != operation.Project.ProjectId
             || !string.Equals(savedIdentity, CookPublicationDocument.ConfigurationIdentity(operation.Project), StringComparison.Ordinal))
         {

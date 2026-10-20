@@ -19,9 +19,11 @@ using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Cooking;
 
@@ -527,15 +529,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     {
         var projects = new ProjectContextService();
         var projectId = Guid.NewGuid();
-        projects.Activate(new ProjectContext
-        {
-            ProjectId = projectId,
-            Name = "Vortex",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(Path.GetTempPath()),
-            AuthoringMounts = [],
-            LocalFolderMounts = [],
-        });
+        projects.Activate(TestProject.Create(new MockFileSystem(), Path.GetTempPath()).Context with { ProjectId = projectId, Name = "Vortex", AuthoringMounts = [] });
         var operationId = Guid.NewGuid();
         DiagnosticRecord Issue(string name, string message) => new()
         {

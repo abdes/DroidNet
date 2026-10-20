@@ -17,6 +17,7 @@ using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Descriptors;
 
@@ -832,7 +833,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var sceneSource = Path.Combine(workspace.Root, "Content", "Scenes", "Main.oscene.json");
         Directory.CreateDirectory(Path.GetDirectoryName(sceneSource)!);
         File.WriteAllText(sceneSource, "{}");
-        var projectContext = ProjectContext.FromProject(workspace.Project);
+        var projectContext = ProjectContext.FromProject(workspace.Project, new RealFileSystem());
         return new ContentCookScope(
             projectContext,
             new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),

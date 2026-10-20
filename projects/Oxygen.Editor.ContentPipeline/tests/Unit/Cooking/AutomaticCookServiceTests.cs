@@ -11,9 +11,11 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
 
@@ -333,14 +335,10 @@ public sealed class AutomaticCookServiceTests
 
         public Fixture()
         {
-            this.Projects.Activate(new ProjectContext
+            this.Projects.Activate(TestProject.Create(new MockFileSystem()).Context with
             {
-                ProjectId = Guid.NewGuid(),
-                ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
                 Name = "Cook on change",
-                Category = Category.Games,
                 AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
-                LocalFolderMounts = [],
             });
             _ = this.Runs.SetupGet(value => value.Runs).Returns(() => this.InProgress);
             _ = this.Runs.Setup(value => value.WhenWriterIdleAsync(It.IsAny<CancellationToken>()))
@@ -439,7 +437,7 @@ public sealed class AutomaticCookServiceTests
     private sealed record CookCall(AssetPath AssetUri, CancellationToken Token);
 
     /// <summary>A clock the test advances; timers fire on the advancing thread.</summary>
-    private sealed class ManualTime : TimeProvider
+    private sealed class ManualTime : System.TimeProvider
     {
         private readonly List<ManualTimer> timers = [];
         private long now;

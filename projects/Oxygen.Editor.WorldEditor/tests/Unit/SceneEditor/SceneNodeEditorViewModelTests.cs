@@ -63,7 +63,7 @@ public sealed class SceneNodeEditorViewModelTests
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer());
         await interaction.RestoreAsync(
-            ProjectContext.FromProjectInfo(new ProjectInfo("Inspector lock tests", Category.Games, "H:/InspectorLockTests")),
+            ProjectContext.FromProjectInfo(new ProjectInfo("Inspector lock tests", Category.Games, "H:/InspectorLockTests"), new MockFileSystem()),
             scene.Id).ConfigureAwait(false);
         interaction.SetLocked(parent.Id, isLocked: true);
 

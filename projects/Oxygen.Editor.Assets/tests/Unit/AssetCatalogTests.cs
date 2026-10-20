@@ -12,6 +12,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
@@ -309,15 +310,7 @@ public sealed class AssetCatalogTests
         {
             var root = this.directory.FullName;
             var content = Path.Combine(root, "Content");
-            this.project = new ProjectContext
-            {
-                ProjectId = Guid.NewGuid(),
-                Name = "Catalog",
-                Category = Category.Games,
-                ProjectRoot = FileSystemPath.From(root),
-                AuthoringMounts = [new("Content", "Content")],
-                LocalFolderMounts = [],
-            };
+            this.project = TestProject.Create(new RealFileSystem(), root).Context with { Name = "Catalog" };
             var files = new NativeAtomicFileStore(new RealFileSystem());
             var observedFiles = new Mock<IAtomicFileStore>();
             _ = observedFiles.Setup(value => value.ReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))

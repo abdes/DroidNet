@@ -12,6 +12,7 @@ using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Assets.Persistence.Pak;
@@ -188,13 +189,9 @@ public sealed class CookedContentMountTests
             File.WriteAllBytes(Path.Combine(this.ProjectOutput, CookedGeneration.MarkerFileName), []);
             this.First = this.WriteRoot("First", 2);
             this.Second = this.WriteRoot("Second", 3);
-            this.Project = new ProjectContext
+            this.Project = TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
             {
-                ProjectId = Guid.NewGuid(),
                 Name = "Mounts",
-                Category = Category.Games,
-                ProjectRoot = FileSystemPath.From(this.directory.FullName),
-                AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [new("First", FileSystemPath.From(this.First)), new("Second", FileSystemPath.From(this.Second))],
             };
             this.Service = new();

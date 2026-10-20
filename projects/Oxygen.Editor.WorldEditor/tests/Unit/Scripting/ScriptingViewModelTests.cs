@@ -5,6 +5,7 @@
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Editor.World;
@@ -13,6 +14,7 @@ using Oxygen.Editor.World.Inspector.Scripting;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 
@@ -248,15 +250,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
         }
 
         var projects = new ProjectContextService();
-        projects.Activate(new ProjectContext
-        {
-            ProjectId = Guid.NewGuid(),
-            Name = "Project",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(@"C:\Project"),
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            LocalFolderMounts = [],
-        });
+        projects.Activate(TestProject.Create(new MockFileSystem()).Context with { Name = "Project" });
         return new ScriptingViewModel(() => this.tab.Authoring, scripts: this.scripts, projects: projects);
     }
 }

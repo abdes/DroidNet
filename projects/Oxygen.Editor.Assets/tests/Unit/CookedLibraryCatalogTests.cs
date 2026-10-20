@@ -8,6 +8,7 @@ using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
@@ -86,13 +87,9 @@ public sealed class CookedLibraryCatalogTests
             (this.ProjectOutput, var projectIndex) = this.WriteRoot(".cooked/Content", 1);
             (this.First, var firstIndex) = this.WriteRoot("Libraries/First", 2);
             (this.Second, var secondIndex) = this.WriteRoot("Libraries/Second", 3);
-            this.Projects.Activate(new()
+            this.Projects.Activate(TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
             {
-                ProjectId = Guid.NewGuid(),
                 Name = "Libraries",
-                Category = Category.Games,
-                ProjectRoot = FileSystemPath.From(this.directory.FullName),
-                AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [new("First", this.First), new("Second", this.Second)],
             });
             var project = this.Projects.ActiveProject!;

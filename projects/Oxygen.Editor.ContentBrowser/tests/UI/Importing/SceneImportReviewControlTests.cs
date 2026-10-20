@@ -13,7 +13,8 @@ using Microsoft.UI.Xaml.Markup;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Core;
+using Oxygen.Editor.Projects.Testing;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentBrowser.UI.Tests.Importing;
 
@@ -46,15 +47,7 @@ public sealed class SceneImportReviewControlTests : VisualUserInterfaceTests
     [DataRow(ElementTheme.Light, true, 2d)]
     public Task ModelImportReviewShowsInlineValidation(ElementTheme theme, bool replacement, double rasterizationScale) => EnqueueAsync(async () =>
     {
-        var project = new ProjectContext
-        {
-            ProjectId = Guid.NewGuid(),
-            Name = "Import",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
-            AuthoringMounts = [new("Content", "Content")],
-            LocalFolderMounts = [],
-        };
+        var project = TestProject.Create(new RealFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Import" };
         if (replacement)
         {
             await this.CreateRetainedSourceAsync(project).ConfigureAwait(true);

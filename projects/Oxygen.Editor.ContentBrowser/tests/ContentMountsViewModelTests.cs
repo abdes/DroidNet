@@ -8,7 +8,9 @@ using Moq;
 using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -205,13 +207,11 @@ public sealed class ContentMountsViewModelTests
 
     private static ContentMountsViewModel CreateModel(ProjectContext project) => new(project, Mock.Of<IDialogService>(), EnginePak);
 
-    private static ProjectContext CreateProject() => new()
-    {
-        ProjectId = Guid.NewGuid(),
-        Name = "Mounts",
-        Category = Category.Games,
-        ProjectRoot = FileSystemPath.From("C:/Projects/Mounts"),
-        AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
-        LocalFolderMounts = [new("Studio library", FileSystemPath.From("D:/Studio/EnvironmentLibrary"))],
-    };
+    private static ProjectContext CreateProject()
+        => TestProject.Create(new MockFileSystem(), "C:/Projects/Mounts").Context with
+        {
+            Name = "Mounts",
+            AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
+            LocalFolderMounts = [new("Studio library", FileSystemPath.From("D:/Studio/EnvironmentLibrary"))],
+        };
 }

@@ -6,8 +6,10 @@ using System.Text.Json;
 using DroidNet.Storage;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Testing;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
@@ -25,15 +27,8 @@ internal static class GenerationScenario
         return true;
     }
 
-    internal static ProjectContext PublicationContext(string root) => new()
-    {
-        ProjectId = Guid.NewGuid(),
-        ProjectRoot = FileSystemPath.From(root),
-        Name = "Publication",
-        Category = Category.Games,
-        AuthoringMounts = [new("Content", "Content")],
-        LocalFolderMounts = [],
-    };
+    internal static ProjectContext PublicationContext(string root)
+        => TestProject.Create(new RealFileSystem(), root).Context with { Name = "Publication" };
 
     internal static async Task<string> WritePublicationFixtureAsync(ProjectContext project, IAtomicFileStore files, FileVersion expectedHead, CancellationToken token)
     {

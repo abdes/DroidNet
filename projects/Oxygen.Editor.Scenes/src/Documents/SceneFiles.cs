@@ -38,14 +38,13 @@ public static class SceneFiles
     /// <param name="catalog">The project's asset catalog.</param>
     /// <param name="project">The project.</param>
     /// <param name="sceneId">The scene's id.</param>
-    /// <param name="fileSystem">The file system that holds the scene files.</param>
     /// <param name="cancellationToken">Cancels reading the files.</param>
     /// <returns>Where the scene is, or <see langword="null"/> when no scene file holds the id.</returns>
-    public static async Task<ProjectAssetLocation?> FindByIdAsync(IAssetCatalog catalog, ProjectContext project, SceneId sceneId, IFileSystem fileSystem, CancellationToken cancellationToken = default)
+    public static async Task<ProjectAssetLocation?> FindByIdAsync(IAssetCatalog catalog, ProjectContext project, SceneId sceneId, CancellationToken cancellationToken = default)
     {
         foreach (var location in await ListAsync(catalog, project, cancellationToken).ConfigureAwait(true))
         {
-            if (await ReadIdAsync(location.File, fileSystem, cancellationToken).ConfigureAwait(true) == sceneId)
+            if (await ReadIdAsync(location.File, project.FileSystem, cancellationToken).ConfigureAwait(true) == sceneId)
             {
                 return location;
             }

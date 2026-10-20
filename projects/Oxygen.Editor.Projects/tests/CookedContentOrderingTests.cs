@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Projects.Tests;
 
@@ -37,7 +38,7 @@ public sealed class CookedContentOrderingTests
         var restored = ProjectInfo.FromJson(json);
         restored.Location = @"C:\Priority";
         _ = restored.CookedContentOrder.Should().Equal(info.CookedContentOrder);
-        _ = ProjectContext.FromProjectInfo(restored).CookedContentOrder.Should().Equal(new CookedContentSource[]
+        _ = ProjectContext.FromProjectInfo(restored, new MockFileSystem()).CookedContentOrder.Should().Equal(new CookedContentSource[]
         {
             new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.LocalFolder, "New"), new(CookedContentSourceKind.ProjectOutput), new(CookedContentSourceKind.LocalFolder, "Override"),
         });
@@ -62,7 +63,7 @@ public sealed class CookedContentOrderingTests
             new(CookedContentSourceKind.LocalFolder, "Folder"), new(CookedContentSourceKind.PakFile, "Props"), new(CookedContentSourceKind.ProjectOutput),
         });
         _ = restored.PakFileMounts.Should().Equal(info.PakFileMounts);
-        _ = ProjectContext.FromProjectInfo(restored).PakFileMounts.Should().Equal(info.PakFileMounts);
+        _ = ProjectContext.FromProjectInfo(restored, new MockFileSystem()).PakFileMounts.Should().Equal(info.PakFileMounts);
         _ = CookedContentOrdering.Resolve(restored).Should().Equal(info.CookedContentOrder);
     }
 

@@ -5,7 +5,9 @@
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions;
 using static Oxygen.Editor.ContentPipeline.TestSupport.SnapshotScenario;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
@@ -17,15 +19,7 @@ internal sealed partial class CaptureWorkspace : IDisposable
     public CaptureWorkspace()
     {
         Directory.CreateDirectory(this.Root);
-        this.context.Activate(new ProjectContext
-        {
-            ProjectId = Guid.NewGuid(),
-            Name = "Capture tests",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(this.Root),
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            LocalFolderMounts = [],
-        });
+        this.context.Activate(TestProject.Create(new RealFileSystem(), this.Root).Context with { Name = "Capture tests" });
         this.Coordinator = new(this.context, NullLogger<ContentCookCoordinator>.Instance);
         this.Capture = new(this.Documents, this.Coordinator);
     }

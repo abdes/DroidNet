@@ -7,7 +7,9 @@ using DroidNet.Aura.Dialogs;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -149,13 +151,6 @@ public sealed class SceneImportDialogViewModelTests
         }
     }
 
-    private static ProjectContext CreateProject() => new()
-    {
-        ProjectId = Guid.NewGuid(),
-        Name = "Import",
-        Category = Category.Games,
-        ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
-        AuthoringMounts = [new("Content", "Content")],
-        LocalFolderMounts = [],
-    };
+    private static ProjectContext CreateProject()
+        => TestProject.Create(new RealFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Import" };
 }

@@ -19,6 +19,7 @@ public sealed class ProjectAssetFilesTests
         Name = "Demo",
         Category = Category.Games,
         ProjectRoot = FileSystemPath.From(@"C:\Games\Demo"),
+        FileSystem = new MockFileSystem(),
         AuthoringMounts = [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Levels", @"Content\Levels")],
         LocalFolderMounts = [new LocalFolderMount("Shared", FileSystemPath.From(@"D:\Library"))],
     };
@@ -111,8 +112,10 @@ public sealed class ProjectAssetFilesTests
         _ = fileSystem.Directory.CreateDirectory(@"C:\Games\Demo\Content\Materials");
         fileSystem.File.WriteAllText(@"C:\Games\Demo\Content\Materials\Wood.omat.json", "{}");
 
-        _ = Project.FindSource(AssetPath.Parse("/Content/Scripts/Orbit.oscript"), fileSystem)!.Path.Should().Be(AssetPath.Parse("/Content/Scripts/Orbit.luau"));
-        _ = Project.FindSource(AssetPath.Parse("/Content/Materials/Wood.omat"), fileSystem)!.Path.Should().Be(AssetPath.Parse("/Content/Materials/Wood.omat.json"));
-        _ = Project.FindSource(AssetPath.Parse("/Content/Materials/Gone.omat"), fileSystem).Should().BeNull();
+        var project = Project with { FileSystem = fileSystem };
+
+        _ = project.FindSource(AssetPath.Parse("/Content/Scripts/Orbit.oscript"))!.Path.Should().Be(AssetPath.Parse("/Content/Scripts/Orbit.luau"));
+        _ = project.FindSource(AssetPath.Parse("/Content/Materials/Wood.omat"))!.Path.Should().Be(AssetPath.Parse("/Content/Materials/Wood.omat.json"));
+        _ = project.FindSource(AssetPath.Parse("/Content/Materials/Gone.omat")).Should().BeNull();
     }
 }

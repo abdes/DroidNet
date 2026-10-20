@@ -131,7 +131,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         (this.previewEngine, this.probe) = EngineProbe.Of(this.Runtime);
         this.loadedProject = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png") { AuthoringMounts = [new("Content", "Content")], });
         Disk.File.WriteAllText(Disk.Path.Combine(this.directory.FullName, "Project.oxy"), ProjectInfo.ToJson(this.loadedProject.ProjectInfo));
-        this.Projects.Activate(ProjectContext.FromProjectInfo(this.loadedProject.ProjectInfo));
+        this.Projects.Activate(ProjectContext.FromProjectInfo(this.loadedProject.ProjectInfo, Disk));
         this.materialCookCoordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
         this.materialPipeline = new(this.Projects, this.materialCookCoordinator, new CookDocumentRegistry());
         this.activeMaterialSlotProvider = this.materialPipeline.Pipeline;
@@ -336,7 +336,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     public async Task<FileSystemPath> GetCookedRootAsync(FileSystemPath projectRoot, CancellationToken token)
     {
         var info = await this.manager.LoadProjectInfoAsync(projectRoot.FullPath).ConfigureAwait(true) ?? throw new InvalidOperationException("The native fixture project has not been saved.");
-        using var publication = await this.MaterialPipelineFor(projectRoot).Publication.AcquireReadAsync(ProjectContext.FromProjectInfo(info), token).ConfigureAwait(true);
+        using var publication = await this.MaterialPipelineFor(projectRoot).Publication.AcquireReadAsync(ProjectContext.FromProjectInfo(info, Disk), token).ConfigureAwait(true);
         return publication.FindProjectRoot("Content") ?? throw new InvalidOperationException("The fixture has not cooked its Content mount.");
     }
 
@@ -511,7 +511,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
                 AuthoringMounts = [new("Content", "Content")],
             };
             Disk.File.WriteAllText(root.Combine("Project.oxy").FullPath, ProjectInfo.ToJson(info));
-            contexts.Activate(ProjectContext.FromProjectInfo(info));
+            contexts.Activate(ProjectContext.FromProjectInfo(info, Disk));
             var coordinator = new ContentCookCoordinator(contexts, NullLogger<ContentCookCoordinator>.Instance);
             value = (coordinator, new(contexts, coordinator, new CookDocumentRegistry()));
             this.foreignMaterialPipelines.Add(root, value);

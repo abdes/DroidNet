@@ -9,7 +9,9 @@ using Oxygen.Editor.ContentBrowser.ProjectExplorer;
 using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -109,14 +111,10 @@ public sealed class ContentBrowserPresentationTests
     [TestMethod]
     public void FooterDescribesAuthoredAndReadOnlySources()
     {
-        var project = new ProjectContext
+        var project = TestProject.Create(new MockFileSystem(), "C:/Sources").Context with
         {
-            ProjectId = Guid.NewGuid(),
             Name = "Sources",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From("C:/Sources"),
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
-            LocalFolderMounts = [],
         };
         _ = ContentBrowserViewModel.DescribeSource(project, AssetPath.Parse("/Content/Materials")).Should().Be("Authoring source");
         _ = ContentBrowserViewModel.DescribeSource(project, AssetPath.Parse("/Content/Scenes")).Should().Be("Authoring source");

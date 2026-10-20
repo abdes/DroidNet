@@ -11,6 +11,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
 
@@ -24,7 +25,7 @@ public sealed partial class WorkspaceInteractionServiceTests
     [TestMethod]
     public async Task RestoreAsync_LoadsStoredHiddenAndLock()
     {
-        var project = ProjectContext.FromProjectInfo(ProjectInfo);
+        var project = ProjectContext.FromProjectInfo(ProjectInfo, new MockFileSystem());
         var sceneId = SceneId.New();
         var hidden = NodeId.New();
         var locked = NodeId.New();
@@ -54,7 +55,7 @@ public sealed partial class WorkspaceInteractionServiceTests
     [TestMethod]
     public async Task GetLockOwner_ResolvesNearestAncestorOnlyInActiveScene()
     {
-        var project = ProjectContext.FromProjectInfo(ProjectInfo);
+        var project = ProjectContext.FromProjectInfo(ProjectInfo, new MockFileSystem());
         var scene = CreateScene();
         var parent = new SceneNode(scene) { Name = "Locked Parent" };
         var child = new SceneNode(scene) { Name = "Child" };
@@ -75,7 +76,7 @@ public sealed partial class WorkspaceInteractionServiceTests
     [TestMethod]
     public async Task RestoreAsync_IgnoresAnotherProjectsRecord()
     {
-        var project = ProjectContext.FromProjectInfo(ProjectInfo);
+        var project = ProjectContext.FromProjectInfo(ProjectInfo, new MockFileSystem());
         var sceneId = SceneId.New();
         var hidden = NodeId.New();
 
@@ -106,7 +107,7 @@ public sealed partial class WorkspaceInteractionServiceTests
     [TestMethod]
     public async Task SceneSwitchAndRestart_PreservesIndependentStates()
     {
-        var project = ProjectContext.FromProjectInfo(ProjectInfo);
+        var project = ProjectContext.FromProjectInfo(ProjectInfo, new MockFileSystem());
         var sceneA = SceneId.New();
         var sceneB = SceneId.New();
         var nodeA = NodeId.New();
@@ -157,7 +158,7 @@ public sealed partial class WorkspaceInteractionServiceTests
     [TestMethod]
     public async Task InvalidSavedState_PublishesFailureAndKeepsDefaults()
     {
-        var project = ProjectContext.FromProjectInfo(ProjectInfo);
+        var project = ProjectContext.FromProjectInfo(ProjectInfo, new MockFileSystem());
         var settings = new Mock<IEditorSettingsManager>();
         _ = settings.Setup(value => value.LoadSettingAsync(
                 WorkspaceInteractionService.Key,
@@ -179,7 +180,7 @@ public sealed partial class WorkspaceInteractionServiceTests
     [TestMethod]
     public async Task StaleRestoreAfterClear_DoesNotReapplyPriorState()
     {
-        var project = ProjectContext.FromProjectInfo(ProjectInfo);
+        var project = ProjectContext.FromProjectInfo(ProjectInfo, new MockFileSystem());
         var sceneId = SceneId.New();
         var hidden = NodeId.New();
         var load = new TaskCompletionSource<WorkspaceInteractionService.ProjectInteraction?>(
@@ -213,7 +214,7 @@ public sealed partial class WorkspaceInteractionServiceTests
     {
         var settings = new Mock<IEditorSettingsManager>();
         var service = new WorkspaceInteractionService(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
-        await service.RestoreAsync(ProjectContext.FromProjectInfo(ProjectInfo), SceneId.New()).ConfigureAwait(false);
+        await service.RestoreAsync(ProjectContext.FromProjectInfo(ProjectInfo, new MockFileSystem()), SceneId.New()).ConfigureAwait(false);
         service.SetCategories(new SceneCategories(ShowMeshes: false, ShowLights: false, ShowCameras: false));
 
         service.ClearActiveScene();
@@ -226,7 +227,7 @@ public sealed partial class WorkspaceInteractionServiceTests
     [TestMethod]
     public async Task EditingViewMaskService_WarnsOncePerSceneActivation()
     {
-        var project = ProjectContext.FromProjectInfo(ProjectInfo);
+        var project = ProjectContext.FromProjectInfo(ProjectInfo, new MockFileSystem());
         var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
         var interaction = new WorkspaceInteractionService(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         var results = new CapturingOperationResultPublisher();

@@ -38,7 +38,7 @@ internal sealed partial class PreviewProject : IDisposable
         var info = new ProjectInfo("Live preview", Category.Games, this.directory.FullName) { AuthoringMounts = [new("Content", "Content")] };
         _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content"));
         File.WriteAllText(Path.Combine(this.directory.FullName, Oxygen.Editor.Projects.Constants.ProjectFileName), ProjectInfo.ToJson(info));
-        this.Context = ProjectContext.FromProjectInfo(info);
+        this.Context = ProjectContext.FromProjectInfo(info, new RealFileSystem());
         this.Projects.Activate(this.Context);
         this.coordinator = new ContentCookCoordinator(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
         this.native = new Oxygen.Testing.NativeContentPipelineFixture(this.Projects, this.coordinator, new CookDocumentRegistry());

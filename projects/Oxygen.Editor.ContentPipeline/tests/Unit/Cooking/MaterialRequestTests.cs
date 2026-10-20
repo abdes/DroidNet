@@ -8,7 +8,9 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
 
@@ -104,15 +106,7 @@ public sealed class MaterialRequestTests
     private static ProjectContextService CreateProjectContext()
     {
         var projects = new ProjectContextService();
-        projects.Activate(new ProjectContext
-        {
-            ProjectId = Guid.NewGuid(),
-            ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), "MaterialRequest", Guid.NewGuid().ToString("N"))),
-            Name = "Materials",
-            Category = Category.Games,
-            AuthoringMounts = [new("Content", "Content")],
-            LocalFolderMounts = [],
-        });
+        projects.Activate(TestProject.Create(new MockFileSystem()).Context with { Name = "Materials" });
         return projects;
     }
 }

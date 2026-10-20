@@ -12,6 +12,7 @@ using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
@@ -27,14 +28,10 @@ internal sealed class RelocationWorkspace : IDisposable
     public RelocationWorkspace()
     {
         _ = Directory.CreateDirectory(Path.Combine(this.Root, "Content"));
-        this.context.Activate(new ProjectContext
+        this.context.Activate(TestProject.Create(new RealFileSystem(), this.Root).Context with
         {
-            ProjectId = Guid.NewGuid(),
             Name = "Relocation tests",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(this.Root),
             AuthoringMounts = [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Cooked", ".cooked")],
-            LocalFolderMounts = [],
         });
         this.Coordinator = new(this.context, NullLogger<ContentCookCoordinator>.Instance);
         this.Files = new NativeAtomicFileStore(new RealFileSystem());

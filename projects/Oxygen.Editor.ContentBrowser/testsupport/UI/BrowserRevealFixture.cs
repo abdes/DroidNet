@@ -105,6 +105,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
     }
 
     private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-BrowserReveal-");
+    private readonly RealFileSystem fileSystem = new();
     private readonly Container container = new();
     private readonly BehaviorSubject<IReadOnlyList<AssetEntry>> items;
     private readonly Mock<ILogger> logger = new();
@@ -127,12 +128,12 @@ internal sealed partial class BrowserRevealFixture : IDisposable
             info.AuthoringMounts.Add(new(cookedAlias, ".cooked"));
         }
 
-        this.Projects.Activate(ProjectContext.FromProjectInfo(info));
+        this.Projects.Activate(ProjectContext.FromProjectInfo(info, this.fileSystem));
         var messenger = new StrongReferenceMessenger();
         messenger.Register<ChangeContentMountsRequestMessage>(this, (_, message) =>
         {
             this.MountChanges++;
-            this.Projects.Activate(ProjectContext.FromProjectInfo(message.Candidate));
+            this.Projects.Activate(ProjectContext.FromProjectInfo(message.Candidate, this.fileSystem));
             message.Reply(Task.FromResult(true));
         });
         this.container.RegisterInstance<IProjectContextService>(this.Projects);

@@ -116,7 +116,7 @@ public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
     // An asset exists while its source does; a folder while it is on disk.
     private bool Exists(AssetPath identity)
         => this.projects.ActiveProject is { } project && RelocationPaths.FindWritableMount(project, identity) is not null
-            && (project.FindSource(identity) is not null || (RelocationPaths.ToPhysical(project, identity) is { } folder && Directory.Exists(folder.FullPath)));
+            && (project.FindSource(identity) is not null || (RelocationPaths.ToPhysical(project, identity) is { } folder && project.FileSystem.Directory.Exists(folder.FullPath)));
 
     private void Clear()
     {

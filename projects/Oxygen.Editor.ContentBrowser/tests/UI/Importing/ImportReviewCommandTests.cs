@@ -16,6 +16,7 @@ using Oxygen.Editor.ContentBrowser.Importing;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Textures;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -37,15 +38,7 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
     public Task ImportReviewUsesSharedCookingAndHonorsCancel(bool selectSource, bool accept) => EnqueueAsync(async () =>
     {
         var projects = new ProjectContextService();
-        var project = new ProjectContext
-        {
-            ProjectId = Guid.NewGuid(),
-            Name = "Import",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
-            AuthoringMounts = [new("Content", "Content")],
-            LocalFolderMounts = [],
-        };
+        var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Import" };
         projects.Activate(project);
         SceneImportRequest? submitted = null;
         var pipeline = new Mock<IContentPipelineService>();

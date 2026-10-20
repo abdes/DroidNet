@@ -25,7 +25,7 @@ internal sealed partial class CookWorkspace : IDisposable
         };
         this.Project = new Project(projectInfo);
         File.WriteAllText(Path.Combine(this.Root, "Project.oxy"), ProjectInfo.ToJson(projectInfo));
-        this.ProjectContext = ProjectContext.FromProject(this.Project);
+        this.ProjectContext = ProjectContext.FromProject(this.Project, new Testably.Abstractions.RealFileSystem());
         this.Activate(this.ProjectContext);
         this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
         this.Publication = new(this.CookCoordinator, this.ContextService, this.Files, this.Manager, this.EngineContent);

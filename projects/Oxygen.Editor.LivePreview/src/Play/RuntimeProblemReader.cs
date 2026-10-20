@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.IO.Abstractions;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentPipeline.Relocation;
@@ -17,9 +16,8 @@ namespace Oxygen.Editor.LivePreview.Play;
 /// Turns the script diagnostics a running player publishes into Problems entries, rendered with their source lines
 /// in the engine's layout, like the analyzer's.
 /// </summary>
-/// <param name="project">The project whose files the diagnostics' spans name.</param>
-/// <param name="fileSystem">The file system that holds the project.</param>
-internal sealed class RuntimeProblemReader(ProjectContext project, IFileSystem fileSystem)
+/// <param name="project">The project whose files the diagnostics' spans name, read through its file system.</param>
+internal sealed class RuntimeProblemReader(ProjectContext project)
 {
     /// <summary>Reads one diagnostic.</summary>
     /// <param name="diagnostic">The diagnostic, as <c>oxygen.script-diagnostic.schema.json</c> defines it.</param>
@@ -49,13 +47,13 @@ internal sealed class RuntimeProblemReader(ProjectContext project, IFileSystem f
 
         if (sourceName.StartsWith('/'))
         {
-            return AssetPath.TryParse(sourceName, out var asset) && RelocationPaths.ToPhysical(project, asset) is { } physical && fileSystem.File.Exists(physical.FullPath) ? physical.FullPath : null;
+            return AssetPath.TryParse(sourceName, out var asset) && RelocationPaths.ToPhysical(project, asset) is { } physical && project.FileSystem.File.Exists(physical.FullPath) ? physical.FullPath : null;
         }
 
-        return project.AuthoringMounts.Select(mount => fileSystem.Path.Combine(project.ProjectRoot.FullPath, mount.RelativePath, sourceName))
-            .Append(fileSystem.Path.Combine(project.ProjectRoot.FullPath, sourceName))
-            .Select(fileSystem.Path.GetFullPath)
-            .FirstOrDefault(fileSystem.File.Exists);
+        return project.AuthoringMounts.Select(mount => project.FileSystem.Path.Combine(project.ProjectRoot.FullPath, mount.RelativePath, sourceName))
+            .Append(project.FileSystem.Path.Combine(project.ProjectRoot.FullPath, sourceName))
+            .Select(project.FileSystem.Path.GetFullPath)
+            .FirstOrDefault(project.FileSystem.File.Exists);
     }
 
     // The analyzer renders the severity in lowercase, as in "error[S0503]: ...".
@@ -129,7 +127,7 @@ internal sealed class RuntimeProblemReader(ProjectContext project, IFileSystem f
 
         try
         {
-            return fileSystem.File.ReadAllText(path);
+            return project.FileSystem.File.ReadAllText(path);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

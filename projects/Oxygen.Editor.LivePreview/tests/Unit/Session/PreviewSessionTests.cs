@@ -117,7 +117,7 @@ public sealed partial class PreviewSessionTests
             this.Engine = new FakeEngine(state);
             var info = new ProjectInfo("Preview", Category.Games, this.directory.FullName) { AuthoringMounts = [new("Content", "Content")] };
             _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content"));
-            this.projects.Activate(ProjectContext.FromProjectInfo(info));
+            this.projects.Activate(ProjectContext.FromProjectInfo(info, new Testably.Abstractions.RealFileSystem()));
             this.Project = this.projects.ActiveProject!;
             this.coordinator = new ContentCookCoordinator(this.projects, NullLogger<ContentCookCoordinator>.Instance);
             var files = new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());

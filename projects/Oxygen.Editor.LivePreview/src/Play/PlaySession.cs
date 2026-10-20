@@ -17,7 +17,6 @@ using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
-using Testably.Abstractions;
 
 namespace Oxygen.Editor.LivePreview.Play;
 
@@ -34,7 +33,6 @@ namespace Oxygen.Editor.LivePreview.Play;
 public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSource, IDisposable
 {
     // The saved project files the player's diagnostics name, as the player reads them.
-    private static readonly RealFileSystem ProjectFiles = new();
 
     private readonly IProjectContextService projects;
     private readonly IContentPipelineService pipeline;
@@ -249,7 +247,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
         var scenePath = ContentPipelinePaths.ToCookedScenePath(request.SceneAsset);
         var mounts = await this.WriteLaunchFileAsync(project, request, scenePath, cancellationToken).ConfigureAwait(true);
         this.scene = request;
-        this.reader = new RuntimeProblemReader(project, ProjectFiles);
+        this.reader = new RuntimeProblemReader(project);
         var failure = this.player is { } running
             ? await this.PlayInRunningPlayerAsync(running, scenePath, mounts, cancellationToken).ConfigureAwait(true)
             : await this.LaunchPlayerAsync(project, mounts, cancellationToken).ConfigureAwait(true);

@@ -8,6 +8,7 @@ using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Testing;
 using Testably.Abstractions;
@@ -168,15 +169,7 @@ public sealed class CookStagingTests
         {
             this.Operation = new(
                 Guid.NewGuid(),
-                new ProjectContext
-                {
-                    ProjectId = Guid.NewGuid(),
-                    ProjectRoot = FileSystemPath.From(this.Root),
-                    Name = "Staging",
-                    Category = Category.Games,
-                    AuthoringMounts = [new("Content", "Content")],
-                    LocalFolderMounts = [],
-                },
+                TestProject.Create(new RealFileSystem(), this.Root).Context with { Name = "Staging" },
                 1);
         }
 

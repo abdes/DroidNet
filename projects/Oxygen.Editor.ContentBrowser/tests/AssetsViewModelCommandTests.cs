@@ -11,10 +11,12 @@ using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Textures;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
@@ -170,17 +172,14 @@ public sealed class AssetsViewModelCommandTests
         }
     }
 
-    private static async Task<(AssetsViewModel browser, ContentBrowserState state, IMessenger messenger)> CreateBrowserAsync(string root = "C:/Project", IAssetRelocationWorkflow? relocation = null)
+    private static async Task<(AssetsViewModel browser, ContentBrowserState state, IMessenger messenger)> CreateBrowserAsync(string? root = null, IAssetRelocationWorkflow? relocation = null)
     {
         var projects = new ProjectContextService();
-        projects.Activate(new()
+        // A test that names a folder works on the disk; the others in memory.
+        projects.Activate(TestProject.Create(root is null ? new MockFileSystem() : new RealFileSystem(), root).Context with
         {
-            ProjectId = Guid.NewGuid(),
             Name = "Commands",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(root),
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
-            LocalFolderMounts = [],
         });
         var state = new ContentBrowserState();
         var messenger = new StrongReferenceMessenger();

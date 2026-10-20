@@ -78,6 +78,13 @@ graph TB
 | **`ProjectInfo`**            | Project metadata       | Name, version, author, timestamps                                  |
 | **`IProjectManagerService`** | Service interface      | Abstraction for DI and testing                                     |
 | **`AuthoredAssetTemplate`**  | New file template      | Folder, default name, suffixes and content of a family's new files |
+| **`ProjectContext`**         | Active project         | Mounts, settings and the `FileSystem` that holds the files         |
+
+Code that reads a project's files reads them through `ProjectContext.FileSystem`
+(`FindSource`, `LocateSource` and the modules that resolve sources), so it takes
+no file system of its own. The application gives an opened project the disk;
+tests make projects with `Oxygen.Editor.Projects.Testing.TestProject` on any
+file system.
 
 ## Core Concepts
 

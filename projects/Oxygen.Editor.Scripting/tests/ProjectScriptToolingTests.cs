@@ -6,6 +6,7 @@ using System.Reactive.Disposables;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
@@ -39,7 +40,7 @@ public sealed class ProjectScriptToolingTests
     [TestMethod]
     public void EnsureCreatesEveryFileOfANewProjectAndLogsIt()
     {
-        var changes = this.CreateTooling().Ensure(CreateProject());
+        var changes = this.CreateTooling().Ensure(this.CreateProject());
 
         _ = changes.Should().HaveCount(5);
         _ = this.files.File.Exists(Path.Combine(ProjectRoot, "Types", "oxygen.name.schema.json")).Should().BeTrue();
@@ -55,10 +56,10 @@ public sealed class ProjectScriptToolingTests
     public void EnsureOnACurrentProjectChangesNothing()
     {
         var tooling = this.CreateTooling();
-        _ = tooling.Ensure(CreateProject());
+        _ = tooling.Ensure(this.CreateProject());
         this.published.Clear();
 
-        _ = tooling.Ensure(CreateProject()).Should().BeEmpty();
+        _ = tooling.Ensure(this.CreateProject()).Should().BeEmpty();
         _ = this.published.Should().BeEmpty();
     }
 
@@ -66,10 +67,10 @@ public sealed class ProjectScriptToolingTests
     public void EnsureRefreshesDefinitionsWhenTheSdkChanges()
     {
         var tooling = this.CreateTooling();
-        _ = tooling.Ensure(CreateProject());
+        _ = tooling.Ensure(this.CreateProject());
         this.files.File.WriteAllText(DefinitionsPath, "declare oxygen: { log: any }\n");
 
-        _ = tooling.Ensure(CreateProject()).Should().Equal("Refreshed Types/oxygen.d.luau from the SDK");
+        _ = tooling.Ensure(this.CreateProject()).Should().Equal("Refreshed Types/oxygen.d.luau from the SDK");
         _ = this.files.File.ReadAllText(Path.Combine(ProjectRoot, "Types", "oxygen.d.luau")).Should().Contain("log");
     }
 
@@ -99,7 +100,7 @@ public sealed class ProjectScriptToolingTests
         const string text = "{\n  // mine\n  \"editor.tabSize\": 2\n}\n";
         this.files.File.WriteAllText(path, text);
 
-        _ = this.CreateTooling().Ensure(CreateProject());
+        _ = this.CreateTooling().Ensure(this.CreateProject());
 
         _ = this.files.File.ReadAllText(path).Should().Be(text);
         _ = this.published.Should().Contain(result => result.Status == OperationStatus.Failed
@@ -107,16 +108,8 @@ public sealed class ProjectScriptToolingTests
             && result.Message.Contains("luau-lsp.types.definitionFiles", StringComparison.Ordinal));
     }
 
-    private static ProjectContext CreateProject()
-        => new()
-        {
-            ProjectId = Guid.Empty,
-            Name = "Test",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(ProjectRoot),
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            LocalFolderMounts = [],
-        };
+    private ProjectContext CreateProject()
+        => TestProject.Create(this.files, ProjectRoot).Context with { ProjectId = Guid.Empty, Name = "Test" };
 
     private ProjectScriptTooling CreateTooling()
         => new(new ScriptToolingPaths(DefinitionsPath, Path.Combine(Root, "Sdk", "schemas")), new RecordingResults(this.published), this.files);

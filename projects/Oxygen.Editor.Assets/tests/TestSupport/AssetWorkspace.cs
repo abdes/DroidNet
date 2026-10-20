@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.Assets.TestSupport;
 
@@ -32,15 +34,7 @@ internal sealed class AssetWorkspace : IDisposable
     {
         var service = new ProjectContextService();
         service.Activate(
-            new ProjectContext
-            {
-                ProjectId = Guid.NewGuid(),
-                Name = "Test",
-                Category = Category.Games,
-                ProjectRoot = this.Root,
-                AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-                LocalFolderMounts = [],
-            });
+            TestProject.Create(new RealFileSystem(), this.Root.FullPath).Context with { Name = "Test" });
 
         var context = service.ActiveProject!;
         var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot.FullPath)

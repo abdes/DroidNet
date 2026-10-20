@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Snapshots;
 
@@ -34,7 +35,7 @@ public sealed class ProducerCollisionTests : IDisposable
         this.project = ProjectContext.FromProject(new Project(new ProjectInfo("Test", Category.Games, this.root)
         {
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-        }));
+        }), new RealFileSystem());
     }
 
     public TestContext TestContext { get; set; } = null!;

@@ -120,7 +120,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
                 AuthoringMounts = [new("Content", "Content")],
                 DefaultSceneId = withDefaultScene ? SceneId.New() : null,
             };
-            this.Projects.Activate(ProjectContext.FromProjectInfo(info));
+            this.Projects.Activate(ProjectContext.FromProjectInfo(info, new RealFileSystem()));
             this.Candidate = new ProjectInfo(info.Id, info.Name, info.Category, info.Location)
             {
                 AuthoringMounts = [.. info.AuthoringMounts],

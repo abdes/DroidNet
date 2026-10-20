@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 
@@ -99,5 +100,5 @@ public sealed class InputFileCookingTests : IDisposable
         => ProjectContext.FromProject(new Project(new ProjectInfo("Test", Category.Games, this.root)
         {
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-        }));
+        }), new RealFileSystem());
 }

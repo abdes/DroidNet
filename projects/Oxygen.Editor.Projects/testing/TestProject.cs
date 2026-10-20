@@ -57,6 +57,7 @@ public sealed class TestProject
             Name = "Test project",
             Category = Category.Games,
             ProjectRoot = FileSystemPath.From(root ?? DefaultRoot),
+            FileSystem = fileSystem,
             AuthoringMounts = [.. mounts.Select(static mount => new ProjectMountPoint(mount, mount))],
             LocalFolderMounts = [],
         };

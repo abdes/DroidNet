@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 
@@ -176,7 +177,7 @@ public sealed class ContentImportManifestBuilderTests
     public void BuildManifestUsesDescriptorInputsForAssetCook()
     {
         using var workspace = new ManifestWorkspace();
-        var projectContext = ProjectContext.FromProject(workspace.Project);
+        var projectContext = ProjectContext.FromProject(workspace.Project, new RealFileSystem());
         var scope = new ContentCookScope(
             projectContext,
             new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
@@ -240,7 +241,7 @@ public sealed class ContentImportManifestBuilderTests
 
     private static ContentCookScope CreateScope(ManifestWorkspace workspace)
     {
-        var projectContext = ProjectContext.FromProject(workspace.Project);
+        var projectContext = ProjectContext.FromProject(workspace.Project, new RealFileSystem());
         return new ContentCookScope(
             projectContext,
             new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),

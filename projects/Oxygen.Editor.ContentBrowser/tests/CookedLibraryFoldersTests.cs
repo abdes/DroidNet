@@ -6,8 +6,10 @@ using AwesomeAssertions;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentBrowser.Tests;
 
@@ -45,13 +47,9 @@ public sealed class CookedLibraryFoldersTests
             var output = this.WriteLibrary(".cooked/Content");
             this.First = this.WriteLibrary("Libraries/First");
             var second = this.WriteLibrary("Libraries/Second");
-            this.Project = new()
+            this.Project = TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
             {
-                ProjectId = Guid.NewGuid(),
                 Name = "Libraries",
-                Category = Category.Games,
-                ProjectRoot = FileSystemPath.From(this.directory.FullName),
-                AuthoringMounts = [new("Content", "Content")],
                 LocalFolderMounts = [new("First", this.First), new("Second", second)],
             };
             var identity = AssetPath.Parse("/Content/Shared.omat");

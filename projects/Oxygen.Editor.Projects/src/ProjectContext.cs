@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
@@ -30,6 +31,12 @@ public sealed record ProjectContext
     ///     Gets the project folder on disk.
     /// </summary>
     public required FileSystemPath ProjectRoot { get; init; }
+
+    /// <summary>
+    ///     Gets the file system that holds the project's files: the disk for an opened project, any file system for a
+    ///     test's. Code that reads a project file reads it through here, so it needs no file system of its own.
+    /// </summary>
+    public required IFileSystem FileSystem { get; init; }
 
     /// <summary>
     ///     Gets the project thumbnail path.
@@ -77,23 +84,26 @@ public sealed record ProjectContext
     ///     Creates a context snapshot from a loaded project.
     /// </summary>
     /// <param name="project">The loaded project.</param>
+    /// <param name="fileSystem">The file system that holds the project's files.</param>
     /// <returns>The project context.</returns>
-    public static ProjectContext FromProject(IProject project)
+    public static ProjectContext FromProject(IProject project, IFileSystem fileSystem)
     {
         ArgumentNullException.ThrowIfNull(project);
 
-        return FromProjectInfo(project.ProjectInfo);
+        return FromProjectInfo(project.ProjectInfo, fileSystem);
     }
 
     /// <summary>
     ///     Creates a context snapshot from project metadata.
     /// </summary>
     /// <param name="info">The project metadata.</param>
+    /// <param name="fileSystem">The file system that holds the project's files.</param>
     /// <returns>The project context.</returns>
     /// <exception cref="ArgumentException">The project has no location on disk.</exception>
-    public static ProjectContext FromProjectInfo(IProjectInfo info)
+    public static ProjectContext FromProjectInfo(IProjectInfo info, IFileSystem fileSystem)
     {
         ArgumentNullException.ThrowIfNull(info);
+        ArgumentNullException.ThrowIfNull(fileSystem);
         if (string.IsNullOrWhiteSpace(info.Location))
         {
             throw new ArgumentException($"Project '{info.Name}' has no location on disk.", nameof(info));
@@ -105,6 +115,7 @@ public sealed record ProjectContext
             Name = info.Name,
             Category = info.Category,
             ProjectRoot = FileSystemPath.From(info.Location),
+            FileSystem = fileSystem,
             Thumbnail = info.Thumbnail,
             AuthoringMounts = [.. info.AuthoringMounts],
             LocalFolderMounts = [.. info.LocalFolderMounts],

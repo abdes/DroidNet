@@ -9,7 +9,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
@@ -20,15 +22,7 @@ internal sealed partial class RetentionWorkspace : IDisposable
     public RetentionWorkspace()
     {
         Directory.CreateDirectory(this.ProjectRoot);
-        this.Projects.Activate(new ProjectContext
-        {
-            ProjectId = Guid.NewGuid(),
-            Name = "Retention",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(this.ProjectRoot),
-            AuthoringMounts = [new("Content", "Content")],
-            LocalFolderMounts = [],
-        });
+        this.Projects.Activate(TestProject.Create(new RealFileSystem(), this.ProjectRoot).Context with { Name = "Retention" });
         this.Coordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
         this.Retention = new(this.Documents, this.Coordinator);
     }

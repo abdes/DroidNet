@@ -11,9 +11,11 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Cooking;
 
@@ -29,15 +31,7 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
     public Task CookingRetryPreservesImportScope(bool retained) => EnqueueAsync(async () =>
     {
         var projects = new ProjectContextService();
-        var project = new ProjectContext
-        {
-            ProjectId = Guid.NewGuid(),
-            Name = "Import",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))),
-            AuthoringMounts = [new("Content", "Content")],
-            LocalFolderMounts = [],
-        };
+        var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Import" };
         projects.Activate(project);
         var source = AssetPath.Parse("/Content/Models/Crate/Crate.gltf");
         var request = new SceneImportRequest(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "Crate", AssetPath.Parse("/Content/Models"));

@@ -27,7 +27,7 @@ internal static class MountChange
         }
 
         Validate(candidate);
-        return ProjectContext.FromProjectInfo(candidate) with
+        return ProjectContext.FromProjectInfo(candidate, expected.FileSystem) with
         {
             OpenInitialScene = expected.OpenInitialScene,
             InitialScene = expected.InitialScene,
