@@ -462,7 +462,10 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
             _ = dock.ActiveDockable.Should().Be(browser);
             var next = model.SelectedRun!.Snapshot with { State = state, Revision = model.SelectedRun.Snapshot.Revision + 1 };
             runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(next, reveal: true));
-            await WaitForRenderAsync().ConfigureAwait(true);
+
+            // The panel applies a run change from a low-priority dispatcher callback, then the tab bar follows on a
+            // later layout pass; a fixed number of render passes can end before either.
+            await WaitForCookingUiAsync(() => ReferenceEquals(tabs.ActiveDockable, cooking), CancellationToken.None).ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);
             _ = tabs.ActiveDockable.Should().Be(cooking);
             _ = panel.FindDescendants().Should().Contain(cookingView).And.NotContain(browserView);
