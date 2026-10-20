@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
 using Moq;
@@ -10,8 +9,10 @@ using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Workspace;
+using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
@@ -19,8 +20,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
 
 /// <summary>Checks project preference persistence independently of the native rendering loop.</summary>
 [TestClass]
-[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes.")]
-public sealed class PreviewSettingsTests
+internal sealed class PreviewSettingsTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -250,15 +250,10 @@ public sealed class PreviewSettingsTests
         await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
         service.FrameRateCap = 45;
         await service.FlushAsync().ConfigureAwait(false);
-        var sameProject = ProjectContext.FromProjectInfo(new ProjectInfo(
-            fixture.Project.ProjectId,
-            fixture.Project.Name,
-            fixture.Project.Category,
-            fixture.Project.ProjectRoot.FullPath.ToUpperInvariant() + Path.DirectorySeparatorChar,
-            fixture.Project.Thumbnail)
+        var sameProject = fixture.Project with
         {
-            AuthoringMounts = [.. fixture.Project.AuthoringMounts],
-        }, new MockFileSystem());
+            ProjectRoot = FileSystemPath.From(fixture.Project.ProjectRoot.FullPath.ToUpperInvariant() + Path.DirectorySeparatorChar),
+        };
         fixture.Projects.Activate(sameProject);
         await service.RestoreAsync(sameProject).ConfigureAwait(false);
         _ = service.FrameRateCap.Should().Be(45);
@@ -457,11 +452,8 @@ public sealed class PreviewSettingsTests
             return fixture;
         }
 
-        public static ProjectContext ProjectAt(string name) => ProjectContext.FromProjectInfo(new ProjectInfo(
-            name, Category.Games, Path.Combine(Path.GetTempPath(), "Oxygen.PreviewPreferences", name), string.Empty)
-        {
-            AuthoringMounts = [new("Content", "Content")],
-        }, new MockFileSystem());
+        public static ProjectContext ProjectAt(string name)
+            => TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), "Oxygen.PreviewPreferences", name)).Context with { Name = name };
 
         public PreviewSettingsService CreateService(IEditorSettingsManager? store = null)
             => new(this.Engine.Object, store ?? new EditorSettingsManager(this.Database), this.Projects, this.publisher.Object, new OperationStatusReducer());

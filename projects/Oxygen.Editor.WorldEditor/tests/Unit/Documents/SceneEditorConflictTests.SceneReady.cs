@@ -10,7 +10,7 @@ using Oxygen.Editor.LivePreview.Scenes;
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
 /// <summary>Checks that a scene editor builds its panes however it learns that its scene is in the engine.</summary>
-public sealed partial class SceneEditorConflictTests
+internal sealed partial class SceneEditorConflictTests
 {
     /// <summary>An editor created after its scene finished synchronizing builds its panes at once.</summary>
     /// <returns>The test task.</returns>

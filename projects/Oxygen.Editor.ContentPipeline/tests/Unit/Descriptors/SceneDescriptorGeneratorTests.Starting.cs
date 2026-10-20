@@ -15,7 +15,7 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Descriptors;
 
 /// <summary>Checks that a scene's start state cooks as the player reads it.</summary>
-public sealed partial class SceneDescriptorGeneratorTests
+internal sealed partial class SceneDescriptorGeneratorTests
 {
     private const string InputFile = """
         {
@@ -108,9 +108,10 @@ public sealed partial class SceneDescriptorGeneratorTests
             new StartingInputContextData(AssetPath.Parse("/Content/Input/Controls.input/Gameplay.oimap")),
             new StartingInputContextData(AssetPath.Parse("/Content/Input/Overlay.input/Overlay.oimap"), Priority: 7),
         ]);
-        File.WriteAllText(
+        await File.WriteAllTextAsync(
             Path.Combine(workspace.Root, "Content", "Input", "Overlay.input.json"),
-            """{ "contexts": [ { "name": "Overlay", "priority": 1, "mappings": [] } ] }""");
+            """{ "contexts": [ { "name": "Overlay", "priority": 1, "mappings": [] } ] }""",
+            this.TestContext.CancellationToken).ConfigureAwait(false);
 
         using var descriptor = await this.GenerateDescriptorAsync(workspace, scene).ConfigureAwait(false);
 

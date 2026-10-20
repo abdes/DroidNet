@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
@@ -15,7 +16,7 @@ namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Naming", "CA1707:Identifiers should not contain underscores", Justification = "Scenario-based MSTest method names separate the operation and expected behavior.")]
-public sealed class MaterialCookTests
+internal sealed partial class MaterialCookTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -131,10 +132,11 @@ public sealed class MaterialCookTests
         var imagePath = Path.Combine(textureDirectory, "Surface.tga");
         byte[] firstImage = [0, 0, 2, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 1, 0, 32, 8, 255, 0, 0, 255];
         await File.WriteAllBytesAsync(imagePath, firstImage, this.TestContext.CancellationToken).ConfigureAwait(false);
-        await File.WriteAllTextAsync(Path.Combine(textureDirectory, "Surface.otex.json"), """
+        const string Contents = """
             { "source": "Surface.tga", "intent": "albedo", "virtual_path": "/Content/Textures/Surface.otex",
               "decode": { "color_space": "srgb" }, "output": { "format": "rgba8_srgb" } }
-            """, this.TestContext.CancellationToken).ConfigureAwait(false);
+            """;
+        await File.WriteAllTextAsync(Path.Combine(textureDirectory, "Surface.otex.json"), Contents, this.TestContext.CancellationToken).ConfigureAwait(false);
         var materialPath = Path.Combine(workspace.Root, "Content", "Materials", "Textured.omat.json");
         await WriteMaterialAsync(materialPath, CreateMaterial("Textured", metallicFactor: 0.0f, roughnessFactor: 0.6f)
             .WithTextureReference("base_color", AssetPath.Parse("/Content/Textures/Surface.otex"))).ConfigureAwait(false);
@@ -146,11 +148,11 @@ public sealed class MaterialCookTests
             "Content/Materials/Textured.omat.json");
 
         var first = await service.CookMaterialAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var firstTextureInput = first.Cook!.InputSnapshot!.Inputs.Single(input => input.RelativePath == "Content/Textures/Surface.tga");
+        var firstTextureInput = first.Cook!.InputSnapshot!.Inputs.Single(input => string.Equals(input.RelativePath, "Content/Textures/Surface.tga", StringComparison.Ordinal));
         firstImage[^2] = 255;
         await File.WriteAllBytesAsync(imagePath, firstImage, this.TestContext.CancellationToken).ConfigureAwait(false);
         var second = await service.CookMaterialAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var secondTextureInput = second.Cook!.InputSnapshot!.Inputs.Single(input => input.RelativePath == "Content/Textures/Surface.tga");
+        var secondTextureInput = second.Cook!.InputSnapshot!.Inputs.Single(input => string.Equals(input.RelativePath, "Content/Textures/Surface.tga", StringComparison.Ordinal));
 
         _ = first.State.Should().Be(MaterialCookState.Cooked);
         _ = second.State.Should().Be(MaterialCookState.Cooked);
@@ -196,9 +198,10 @@ public sealed class MaterialCookTests
         using var workspace = new MaterialWorkspace();
         var materialPath = Path.Combine(workspace.Root, "Content", "Materials", "Invalid.omat.json");
         Directory.CreateDirectory(Path.GetDirectoryName(materialPath)!);
-        await File.WriteAllTextAsync(materialPath, """
+        const string Contents = """
             { "name": "Invalid", "textures": { "base_color": { "virtual_path": 42 } } }
-            """, this.TestContext.CancellationToken).ConfigureAwait(false);
+            """;
+        await File.WriteAllTextAsync(materialPath, Contents, this.TestContext.CancellationToken).ConfigureAwait(false);
         var service = CreateService(workspace);
 
         var result = await service.CookMaterialAsync(
@@ -249,13 +252,9 @@ public sealed class MaterialCookTests
         public MaterialWorkspace(string authoringFolder = "Content")
         {
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-content-pipeline-tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(this.Root);
-            var project = new ProjectInfo("TestProject", Category.Games, this.Root)
-            {
-                AuthoringMounts = [new ProjectMountPoint("Content", authoringFolder)],
-            };
-            File.WriteAllText(Path.Combine(this.Root, "Project.oxy"), ProjectInfo.ToJson(project));
-            this.ContextService.Activate(ProjectContext.FromProjectInfo(project, new RealFileSystem()));
+            var project = TestProject.Create(new RealFileSystem(), this.Root, [new ProjectMountPoint(TestProject.ContentMount, authoringFolder)]).Context;
+            _ = TestProject.SaveProjectFile(project);
+            this.ContextService.Activate(project);
             this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
         }
 
@@ -267,7 +266,7 @@ public sealed class MaterialCookTests
             {
                 var head = System.Text.Json.JsonSerializer.Deserialize<global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationHead>(File.ReadAllBytes(global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Head(this.Root)), global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationDocument.JsonOptions)!;
                 var document = System.Text.Json.JsonSerializer.Deserialize<global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationDocument>(File.ReadAllBytes(global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Document(this.Root, head.PublicationId)), global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationDocument.JsonOptions)!;
-                return document.Roots.Single(static root => root.Owner == global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootOwner.Project && root.Name == "Content").ResolvePath(this.Root);
+                return document.Roots.Single(static root => root.Owner == global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootOwner.Project && string.Equals(root.Name, "Content", StringComparison.Ordinal)).ResolvePath(this.Root);
             }
         }
 

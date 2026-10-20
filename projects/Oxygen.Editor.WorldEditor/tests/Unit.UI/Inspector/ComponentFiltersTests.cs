@@ -9,18 +9,16 @@ using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Data.Services;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Assets;
-using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
@@ -46,7 +44,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
             new OperationStatusReducer());
         using var fixture = new SceneAuthoringFixture(interaction);
         await interaction.RestoreAsync(
-            ProjectContext.FromProjectInfo(new ProjectInfo("Inspector lock tests", Category.Games, "H:/InspectorLockTests"), new MockFileSystem()),
+            TestProject.Create(new MockFileSystem()).Context,
             fixture.Scene.Id).ConfigureAwait(true);
         using var model = fixture.CreateInspectorHost("Light", realizeViews: true);
         var view = new SceneNodeEditorView { ViewModel = model, Width = 420, Height = 600 };
@@ -82,7 +80,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         var original = model.PropertyEditors.ToArray();
         var version = fixture.Document.History.Position;
         _ = original.Select(static editor => editor.GetType()).Should().Equal(
-            new[] { typeof(TransformViewModel), typeof(GeometryViewModel), typeof(NodeRenderingViewModel) },
+            [typeof(TransformViewModel), typeof(GeometryViewModel), typeof(NodeRenderingViewModel)],
             "the node Rendering section follows every component section in the unfiltered view");
         var geometry = ComponentButton(view, typeof(GeometryComponent));
         _ = ((InspectorComponentFilter)geometry.Tag).Label.Should().Be("Geometry");

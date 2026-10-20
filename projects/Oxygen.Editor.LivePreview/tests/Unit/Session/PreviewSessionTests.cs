@@ -14,6 +14,7 @@ using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -25,7 +26,7 @@ namespace Oxygen.Editor.LivePreview.Tests.Session;
 /// </summary>
 [TestClass]
 [TestCategory("Preview Session")]
-public sealed partial class PreviewSessionTests
+internal sealed partial class PreviewSessionTests
 {
     public TestContext TestContext { get; set; }
 
@@ -115,9 +116,9 @@ public sealed partial class PreviewSessionTests
         public SessionFixture(EngineServiceState state)
         {
             this.Engine = new FakeEngine(state);
-            var info = new ProjectInfo("Preview", Category.Games, this.directory.FullName) { AuthoringMounts = [new("Content", "Content")] };
-            _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content"));
-            this.projects.Activate(ProjectContext.FromProjectInfo(info, new Testably.Abstractions.RealFileSystem()));
+            var project = TestProject.Create(new Testably.Abstractions.RealFileSystem(), this.directory.FullName).Context;
+            var info = TestProject.InfoOf(project);
+            this.projects.Activate(project);
             this.Project = this.projects.ActiveProject!;
             this.coordinator = new ContentCookCoordinator(this.projects, NullLogger<ContentCookCoordinator>.Instance);
             var files = new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());

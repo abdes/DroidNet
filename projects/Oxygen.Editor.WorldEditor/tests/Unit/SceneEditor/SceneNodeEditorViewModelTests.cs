@@ -15,6 +15,7 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -29,7 +30,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 
 [TestClass]
 [TestCategory("Inspector")]
-public sealed class SceneNodeEditorViewModelTests
+internal sealed class SceneNodeEditorViewModelTests
 {
     public TestContext TestContext { get; set; }
 
@@ -63,7 +64,7 @@ public sealed class SceneNodeEditorViewModelTests
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer());
         await interaction.RestoreAsync(
-            ProjectContext.FromProjectInfo(new ProjectInfo("Inspector lock tests", Category.Games, "H:/InspectorLockTests"), new MockFileSystem()),
+            TestProject.Create(new MockFileSystem()).Context,
             scene.Id).ConfigureAwait(false);
         interaction.SetLocked(parent.Id, isLocked: true);
 

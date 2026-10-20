@@ -26,8 +26,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
 /// <summary>Verifies scene conflict actions through the real document view model.</summary>
 [TestClass]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository's discovery configuration.")]
-public sealed partial class SceneEditorConflictTests
+internal sealed partial class SceneEditorConflictTests
 {
     /// <summary>Gets or sets the test context.</summary>
     public TestContext TestContext { get; set; } = null!;

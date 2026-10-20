@@ -7,6 +7,7 @@ using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Core.Diagnostics;
@@ -15,7 +16,7 @@ using Testably.Abstractions.Testing;
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
 /// <summary>Checks preview preference persistence at the actual document close boundary.</summary>
-public sealed partial class SceneEditorConflictTests
+internal sealed partial class SceneEditorConflictTests
 {
     /// <summary>A final control edit accepted during close must finish saving before close preparation completes.</summary>
     /// <returns>The verification task.</returns>
@@ -23,7 +24,7 @@ public sealed partial class SceneEditorConflictTests
     public async Task CloseWaitsForPreviewEditCommittedByTheFocusedControl()
     {
         var projects = new ProjectContextService();
-        var project = ProjectContext.FromProjectInfo(new ProjectInfo("Preview close", Category.Games, Path.GetTempPath(), string.Empty), new MockFileSystem());
+        var project = TestProject.Create(new MockFileSystem(), Path.GetTempPath()).Context;
         projects.Activate(project);
         var engine = new Mock<IEngineService>();
         _ = engine.SetupGet(value => value.MaxTargetFps).Returns(1000);

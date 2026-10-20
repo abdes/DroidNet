@@ -17,6 +17,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
@@ -52,7 +53,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         _ = fixture.Roots.Should().Equal(fixture.ProjectOutput);
         _ = fixture.Paused.Should().BeFalse();
         _ = (await File.ReadAllBytesAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().Equal(before);
-        File.WriteAllBytes(Path.Combine(fixture.Library, "Material.omat"), [8]);
+        await File.WriteAllBytesAsync(Path.Combine(fixture.Library, "Material.omat"), [8], this.TestContext.CancellationToken).ConfigureAwait(true);
     });
 
     /// <summary>Closure during configuration save rolls back the uncommitted change without reactivating the project.</summary>
@@ -93,7 +94,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         _ = fixture.Activations.Should().ContainSingle().Which.Should().BeSameAs(fixture.Projects.ActiveProject);
         _ = fixture.Projects.ActiveProject!.LocalFolderMounts.Should().ContainSingle();
         _ = fixture.Projects.ActiveProject.DefaultSceneId.Should().Be(original!.DefaultSceneId);
-        _ = ProjectInfo.FromJson(File.ReadAllText(fixture.ManifestPath)).DefaultSceneId.Should().Be(original.DefaultSceneId);
+        _ = ProjectInfo.FromJson(await File.ReadAllTextAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true)).DefaultSceneId.Should().Be(original.DefaultSceneId);
         _ = fixture.Roots.Should().Equal(fixture.Library, fixture.ProjectOutput);
         _ = fixture.Paused.Should().BeFalse();
     });
@@ -114,20 +115,17 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             this.ProjectOutput = this.WriteRoot(Path.GetRelativePath(this.directory.FullName, CookPublicationPaths.Generation(this.directory.FullName, this.sourceKey)), this.sourceKey);
             File.WriteAllBytes(Path.Combine(this.ProjectOutput, CookedGeneration.MarkerFileName), []);
             this.Library = this.WriteRoot("Library");
-            _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content"));
-            var info = new ProjectInfo("Transaction", Category.Games, this.directory.FullName)
+            var project = TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
             {
-                AuthoringMounts = [new("Content", "Content")],
+                Name = "Transaction",
                 DefaultSceneId = withDefaultScene ? SceneId.New() : null,
             };
-            this.Projects.Activate(ProjectContext.FromProjectInfo(info, new RealFileSystem()));
-            this.Candidate = new ProjectInfo(info.Id, info.Name, info.Category, info.Location)
+            this.Projects.Activate(project);
+            this.Candidate = TestProject.InfoOf(project with
             {
-                AuthoringMounts = [.. info.AuthoringMounts],
                 LocalFolderMounts = [new("Library", FileSystemPath.From(this.Library))],
                 CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Library"), new(CookedContentSourceKind.ProjectOutput)],
-                DefaultSceneId = info.DefaultSceneId,
-            };
+            });
             this.coordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
             var storage = new NativeStorageProvider(new RealFileSystem());
             this.manager = new(storage, atomicFiles: this.Store);
@@ -168,12 +166,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         public async Task InitializeAsync()
         {
             var context = this.Projects.ActiveProject!;
-            var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot.FullPath)
-            {
-                AuthoringMounts = [.. context.AuthoringMounts],
-                DefaultSceneId = context.DefaultSceneId,
-            };
-            _ = (await this.manager.SaveProjectInfoAsync(info).ConfigureAwait(true)).Should().BeTrue();
+            _ = (await this.manager.SaveProjectInfoAsync(TestProject.InfoOf(context)).ConfigureAwait(true)).Should().BeTrue();
             var index = (await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, CancellationToken.None).ConfigureAwait(true)).RequireCurrent(this.ProjectOutput);
             var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, context.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(context), [new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, LibraryPath: null)], [], CookInputs: null);
             var path = CookPublicationPaths.Document(context.ProjectRoot.FullPath, document.OperationId);
@@ -222,7 +215,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             });
             _ = this.engine.Setup(value => value.RefreshProjectCookedRootsAsync(It.IsAny<IReadOnlyList<RuntimeCookedRoot>>(), It.IsAny<IDisposable?>(), It.IsAny<bool>())).Returns((IReadOnlyList<RuntimeCookedRoot> roots, IDisposable? reader, bool paused) =>
             {
-                this.Roots = roots.Select(static root => root.Path).ToArray();
+                this.Roots = [.. roots.Select(static root => root.Path)];
                 if (reader is not null)
                 {
                     this.nativeReaders.Add(reader);

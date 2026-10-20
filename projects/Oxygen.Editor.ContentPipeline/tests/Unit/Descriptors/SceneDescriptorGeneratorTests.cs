@@ -7,8 +7,8 @@ using System.Numerics;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
-using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -22,8 +22,7 @@ using Testably.Abstractions;
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Descriptors;
 
 [TestClass]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-public sealed partial class SceneDescriptorGeneratorTests
+internal sealed partial class SceneDescriptorGeneratorTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -454,6 +453,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = document.RootElement.GetProperty("environment").GetProperty("post_process_volume")
             .GetProperty("exposure_mode").GetInt32().Should().Be((int)ExposureMode.Auto);
     }
+
     /// <summary>A scene without authored sky light cooks the native default captured sky light.</summary>
     /// <summary>Cooked scenes retain the captured skylight supplied by the live editor.</summary>
     /// <param name="atmosphereEnabled">Whether the captured source contains an atmosphere.</param>
@@ -508,7 +508,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             new() { AutoExposureCompensationCurve = default },
             new() { AutoExposureCompensationCurve = [new(2f, 1f), new(2f, 2f)] },
             new() { AutoExposureCompensationCurve = [new(0f, float.NaN)] },
-            new() { AutoExposureCompensationCurve = Enumerable.Range(0, 65).Select(static i => new ExposureCompensationKeyData(i, 0f)).ToImmutableArray() },
+            new() { AutoExposureCompensationCurve = [.. Enumerable.Range(0, 65).Select(static i => new ExposureCompensationKeyData(i, 0f))] },
             new() { AutoExposureMeteringMask = AssetPath.Parse("/Content/Textures/mask.omat") },
         ];
         foreach (var authored in invalid)
@@ -622,24 +622,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = result.Diagnostics.Should().BeEmpty();
         using (var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false)))
         {
-            var environment = document.RootElement.GetProperty("environment");
-            var sphere = environment.GetProperty("sky_sphere");
-            _ = sphere.GetProperty("enabled").GetBoolean().Should().BeTrue();
-            _ = sphere.GetProperty("source").GetInt32().Should().Be(0);
-            _ = sphere.GetProperty("cubemap_ref").GetString().Should().Be("/Content/Textures/Backdrop.otex");
-            _ = sphere.GetProperty("illuminance_lux").GetSingle().Should().Be(15000f);
-            _ = sphere.GetProperty("intensity").GetSingle().Should().Be(512f);
-            _ = sphere.GetProperty("rotation_radians").GetSingle().Should().Be(0.5f);
-            _ = sphere.GetProperty("tint_rgb").EnumerateArray().Select(static value => value.GetSingle()).Should().Equal(0.9f, 0.8f, 0.7f);
-            var sky = environment.GetProperty("sky_light");
-            _ = sky.GetProperty("source").GetInt32().Should().Be(1);
-            _ = sky.GetProperty("cubemap_ref").GetString().Should().Be("/Content/Textures/Light.otex");
-            _ = sky.GetProperty("illuminance_lux").GetSingle().Should().Be(8000f);
-            _ = sky.GetProperty("specular_intensity").GetSingle().Should().Be(0.25f);
-            _ = sky.GetProperty("source_cubemap_angle_radians").GetSingle().Should().Be(-1f);
-            _ = sky.GetProperty("lower_hemisphere_is_solid_color").GetBoolean().Should().BeFalse();
-            _ = sky.GetProperty("affect_reflections").GetBoolean().Should().BeFalse();
-            _ = environment.GetProperty("background").GetProperty("enabled").GetBoolean().Should().BeFalse();
+            AssertSkyCubemapsUsed(document.RootElement.GetProperty("environment"));
         }
 
         // A cubemap kept behind another source is not referenced.
@@ -649,11 +632,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             SkyLight = scene.Environment.SkyLight with { Source = SkyLightSource.CapturedScene },
         });
         var unused = await generator.GenerateAsync(await RoundTripSavedSceneAsync(scene).ConfigureAwait(false), scope, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = unused.Diagnostics.Should().BeEmpty();
-        using var second = JsonDocument.Parse(await File.ReadAllTextAsync(unused.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-        var secondEnvironment = second.RootElement.GetProperty("environment");
-        _ = secondEnvironment.GetProperty("sky_sphere").TryGetProperty("cubemap_ref", out _).Should().BeFalse();
-        _ = secondEnvironment.GetProperty("sky_light").TryGetProperty("cubemap_ref", out _).Should().BeFalse();
+        await AssertNoSkyCubemapReferencedAsync(unused, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         // A disabled system's cubemap source is not referenced either, even when the texture is gone.
         var missing = AssetPath.Parse("/Content/Textures/Missing.otex");
@@ -663,11 +642,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             SkyLight = scene.Environment.SkyLight with { Enabled = false, Source = SkyLightSource.SpecifiedCubemap, Cubemap = missing },
         });
         var disabled = await generator.GenerateAsync(await RoundTripSavedSceneAsync(scene).ConfigureAwait(false), scope, this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = disabled.Diagnostics.Should().BeEmpty();
-        using var third = JsonDocument.Parse(await File.ReadAllTextAsync(disabled.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-        var thirdEnvironment = third.RootElement.GetProperty("environment");
-        _ = thirdEnvironment.GetProperty("sky_sphere").TryGetProperty("cubemap_ref", out _).Should().BeFalse();
-        _ = thirdEnvironment.GetProperty("sky_light").TryGetProperty("cubemap_ref", out _).Should().BeFalse();
+        await AssertNoSkyCubemapReferencedAsync(disabled, this.TestContext.CancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>Rejects invalid saved Aerial Start values with a stable property navigation target.</summary>
@@ -833,7 +808,7 @@ public sealed partial class SceneDescriptorGeneratorTests
         var sceneSource = Path.Combine(workspace.Root, "Content", "Scenes", "Main.oscene.json");
         Directory.CreateDirectory(Path.GetDirectoryName(sceneSource)!);
         File.WriteAllText(sceneSource, "{}");
-        var projectContext = ProjectContext.FromProject(workspace.Project, new RealFileSystem());
+        var projectContext = workspace.Context;
         return new ContentCookScope(
             projectContext,
             new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
@@ -906,6 +881,37 @@ public sealed partial class SceneDescriptorGeneratorTests
         _ = light.GetProperty("common").GetProperty("shadow").GetProperty("normal_bias").GetSingle().Should().Be(0.04f);
     }
 
+    // The sky sphere and sky light of GenerateAsyncShouldEmitSkySphereAndSkyLightWithCubemapsOnlyWhileUsed, each on its cubemap.
+    private static void AssertSkyCubemapsUsed(JsonElement environment)
+    {
+        var sphere = environment.GetProperty("sky_sphere");
+        _ = sphere.GetProperty("enabled").GetBoolean().Should().BeTrue();
+        _ = sphere.GetProperty("source").GetInt32().Should().Be(0);
+        _ = sphere.GetProperty("cubemap_ref").GetString().Should().Be("/Content/Textures/Backdrop.otex");
+        _ = sphere.GetProperty("illuminance_lux").GetSingle().Should().Be(15000f);
+        _ = sphere.GetProperty("intensity").GetSingle().Should().Be(512f);
+        _ = sphere.GetProperty("rotation_radians").GetSingle().Should().Be(0.5f);
+        _ = sphere.GetProperty("tint_rgb").EnumerateArray().Select(static value => value.GetSingle()).Should().Equal(0.9f, 0.8f, 0.7f);
+        var sky = environment.GetProperty("sky_light");
+        _ = sky.GetProperty("source").GetInt32().Should().Be(1);
+        _ = sky.GetProperty("cubemap_ref").GetString().Should().Be("/Content/Textures/Light.otex");
+        _ = sky.GetProperty("illuminance_lux").GetSingle().Should().Be(8000f);
+        _ = sky.GetProperty("specular_intensity").GetSingle().Should().Be(0.25f);
+        _ = sky.GetProperty("source_cubemap_angle_radians").GetSingle().Should().Be(-1f);
+        _ = sky.GetProperty("lower_hemisphere_is_solid_color").GetBoolean().Should().BeFalse();
+        _ = sky.GetProperty("affect_reflections").GetBoolean().Should().BeFalse();
+        _ = environment.GetProperty("background").GetProperty("enabled").GetBoolean().Should().BeFalse();
+    }
+
+    private static async Task AssertNoSkyCubemapReferencedAsync(SceneDescriptorGenerationResult result, CancellationToken cancellationToken)
+    {
+        _ = result.Diagnostics.Should().BeEmpty();
+        using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, cancellationToken).ConfigureAwait(false));
+        var environment = document.RootElement.GetProperty("environment");
+        _ = environment.GetProperty("sky_sphere").TryGetProperty("cubemap_ref", out _).Should().BeFalse();
+        _ = environment.GetProperty("sky_light").TryGetProperty("cubemap_ref", out _).Should().BeFalse();
+    }
+
     private static async Task<Scene> RoundTripSavedSceneAsync(Scene scene)
     {
         var stream = new MemoryStream();
@@ -920,17 +926,12 @@ public sealed partial class SceneDescriptorGeneratorTests
         public DescriptorWorkspace()
         {
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-scene-descriptor-tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(this.Root);
-            var projectInfo = new ProjectInfo("TestProject", Category.Games, this.Root)
-            {
-                AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            };
-            this.Project = new Project(projectInfo);
+            this.Context = TestProject.Create(new RealFileSystem(), this.Root).Context;
         }
 
         public string Root { get; }
 
-        public Project Project { get; }
+        public ProjectContext Context { get; }
 
         public void Dispose()
         {

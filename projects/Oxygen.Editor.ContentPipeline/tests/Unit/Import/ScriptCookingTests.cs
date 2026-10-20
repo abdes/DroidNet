@@ -5,8 +5,8 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
-using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -22,11 +22,11 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 /// that attaches the slots to the cooked scene.
 /// </summary>
 [TestClass]
-public sealed class ScriptCookingTests : IDisposable
+internal sealed partial class ScriptCookingTests : IDisposable
 {
     private static readonly AssetPath MoveScript = AssetPath.Parse("/Content/Player/move.oscript");
     private readonly string root = Path.Combine(Path.GetTempPath(), "oxygen-script-cooking-tests", Guid.NewGuid().ToString("N"));
-    private readonly Project project;
+    private readonly ProjectContext project;
 
     public ScriptCookingTests()
     {
@@ -34,10 +34,7 @@ public sealed class ScriptCookingTests : IDisposable
         Directory.CreateDirectory(Path.Combine(this.root, "Content", "Scenes"));
         File.WriteAllText(Path.Combine(this.root, "Content", "Player", "move.lua"), "return {}");
         File.WriteAllText(Path.Combine(this.root, "Content", "Scenes", "Main.oscene.json"), "{}");
-        this.project = new Project(new ProjectInfo("Test", Category.Games, this.root)
-        {
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-        });
+        this.project = TestProject.Create(new RealFileSystem(), this.root).Context;
     }
 
     public TestContext TestContext { get; set; } = null!;
@@ -53,7 +50,7 @@ public sealed class ScriptCookingTests : IDisposable
     [TestMethod]
     public void ResolveScriptFindsItsSourceAndKeepsItsFolder()
     {
-        var input = CookInputResolver.Resolve(ProjectContext.FromProject(this.project, new RealFileSystem()), MoveScript, ContentCookInputRole.Dependency);
+        var input = CookInputResolver.Resolve(this.project, MoveScript, ContentCookInputRole.Dependency);
 
         _ = input.Kind.Should().Be(ContentCookAssetKind.Script);
         _ = input.AssetUri.Should().Be(MoveScript);
@@ -63,7 +60,7 @@ public sealed class ScriptCookingTests : IDisposable
     [TestMethod]
     public void BuildJobCompilesTheScriptAndRecordsItsSourceUnderTheMount()
     {
-        var input = CookInputResolver.Resolve(ProjectContext.FromProject(this.project, new RealFileSystem()), MoveScript, ContentCookInputRole.Dependency);
+        var input = CookInputResolver.Resolve(this.project, MoveScript, ContentCookInputRole.Dependency);
 
         var job = new ContentImportManifestBuilder().BuildJob(input, []);
 
@@ -80,7 +77,7 @@ public sealed class ScriptCookingTests : IDisposable
     [TestMethod]
     public async Task GenerateAsyncProjectsSlotsIntoSidecarBindings()
     {
-        var scene = this.CreateScene(out var target, out var player);
+        var scene = CreateScene(out var target, out var player);
         var slot = new ScriptSlot { Script = MoveScript, ExecutionOrder = 2 }
             .WithOverride("speed", ScriptValue.FromFloat(2.5f))
             .WithOverride("follow", ScriptValue.FromNode(target.Id))
@@ -98,8 +95,8 @@ public sealed class ScriptCookingTests : IDisposable
         _ = binding.ExecutionOrder.Should().Be(2);
         _ = binding.Params.Select(static param => (param.Key, param.Type)).Should().Equal(
             ("follow", "node"), ("jump", "asset"), ("offset", "vec2"), ("speed", "float"));
-        _ = binding.Params.Single(static param => param.Key == "follow").Value.Should().Be(0u);
-        _ = binding.Params.Single(static param => param.Key == "jump").Value.Should().Be("/Content/Input/Jump.oiact");
+        _ = binding.Params.Single(static param => string.Equals(param.Key, "follow", StringComparison.Ordinal)).Value.Should().Be(0u);
+        _ = binding.Params.Single(static param => string.Equals(param.Key, "jump", StringComparison.Ordinal)).Value.Should().Be("/Content/Input/Jump.oiact");
         _ = result.ScriptReferences.Should().BeEquivalentTo([MoveScript, AssetPath.Parse("/Content/Input/Jump.oiact")]);
         var warning = result.Diagnostics.Should().ContainSingle().Subject;
         _ = warning.Severity.Should().Be(DiagnosticSeverity.Warning);
@@ -111,7 +108,7 @@ public sealed class ScriptCookingTests : IDisposable
     [TestMethod]
     public async Task GenerateAsyncFailsForAMissingNodeOrScript()
     {
-        var scene = this.CreateScene(out _, out var player);
+        var scene = CreateScene(out _, out var player);
         var lost = new ScriptSlot { Script = MoveScript }.WithOverride("follow", ScriptValue.FromNode(NodeId.New()));
         var gone = new ScriptSlot { Script = AssetPath.Parse("/Content/Player/gone.oscript") };
         _ = player.AddComponent(new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [lost, gone] });
@@ -121,7 +118,7 @@ public sealed class ScriptCookingTests : IDisposable
         _ = result.Diagnostics.Select(static issue => issue.Code).Should().BeEquivalentTo(
             [ScriptDiagnosticCodes.SlotNodeMissing, ScriptDiagnosticCodes.SlotScriptMissing]);
         _ = result.Diagnostics.Should().AllSatisfy(static issue => issue.Severity.Should().Be(DiagnosticSeverity.Error));
-        _ = result.Diagnostics.Single(static issue => issue.Code == ScriptDiagnosticCodes.SlotNodeMissing).SuggestedAction!.Payload["PropertyPath"]
+        _ = result.Diagnostics.Single(static issue => string.Equals(issue.Code, ScriptDiagnosticCodes.SlotNodeMissing, StringComparison.Ordinal)).SuggestedAction!.Payload["PropertyPath"]
             .Should().Be(new ScriptFieldAddress(lost.Id, "follow").ToString());
         _ = File.Exists(result.DescriptorPath).Should().BeFalse("a scene with slot errors is not projected");
     }
@@ -129,7 +126,7 @@ public sealed class ScriptCookingTests : IDisposable
     [TestMethod]
     public void BuildSceneManifestsAddsASidecarAfterTheSceneAndItsScripts()
     {
-        var context = ProjectContext.FromProject(this.project, new RealFileSystem());
+        var context = this.project;
         var script = CookInputResolver.Resolve(context, MoveScript, ContentCookInputRole.Dependency);
         var scope = this.CreateScope() with { Inputs = [.. this.CreateScope().Inputs, script] };
         var binding = new ScriptSidecarBinding(1, Guid.NewGuid().ToString("D"), "/Content/Player/move.oscript", 0, [new ScriptSidecarParam("speed", "float", 2.5f)]);
@@ -147,7 +144,7 @@ public sealed class ScriptCookingTests : IDisposable
         var manifest = new ContentImportManifestBuilder().BuildSceneManifests(scope, [descriptor]);
 
         var sidecar = manifest.Jobs.Should().ContainSingle(static job => job.Type == "script-sidecar").Subject;
-        var scene = manifest.Jobs.Single(static job => job.Type == "scene-descriptor");
+        var scene = manifest.Jobs.Single(static job => string.Equals(job.Type, "scene-descriptor", StringComparison.Ordinal));
         _ = sidecar.Source.Should().BeNull();
         _ = sidecar.OwnerSource.Should().Be(scene.Source);
         _ = sidecar.DependsOn.Should().Equal(scene.Id, "script:Content/Player/move.lua");
@@ -196,7 +193,7 @@ public sealed class ScriptCookingTests : IDisposable
         _ = mapped.SuggestedAction!.Payload["PropertyPath"].Should().Be(new ScriptFieldAddress(site.SlotId, "speed").ToString());
     }
 
-    private Scene CreateScene(out SceneNode target, out SceneNode player)
+    private static Scene CreateScene(out SceneNode target, out SceneNode player)
     {
         var scene = new Scene { Name = "Main", Id = SceneId.New() };
         scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });
@@ -213,7 +210,7 @@ public sealed class ScriptCookingTests : IDisposable
 
     private ContentCookScope CreateScope()
     {
-        var context = ProjectContext.FromProject(this.project, new RealFileSystem());
+        var context = this.project;
         var key = Guid.CreateVersion7();
         return new ContentCookScope(
             context,

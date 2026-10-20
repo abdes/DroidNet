@@ -31,7 +31,7 @@ internal sealed partial class SceneDocumentFiles : IDisposable
     {
         this.project = TestProject.Create(this.FileSystem);
         this.Context = this.project.Context;
-        var info = new ProjectInfo(this.Context.Name, this.Context.Category, this.Context.ProjectRoot.FullPath) { Id = this.Context.ProjectId };
+        var info = TestProject.InfoOf(this.Context);
         var current = new Mock<IProject>();
         _ = current.SetupGet(value => value.ProjectInfo).Returns(info);
         this.Project = current.Object;

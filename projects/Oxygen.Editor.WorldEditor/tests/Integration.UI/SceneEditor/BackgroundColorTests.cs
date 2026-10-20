@@ -4,29 +4,20 @@
 
 using System.Collections.Concurrent;
 using System.Numerics;
-using System.Reactive.Concurrency;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using CommunityToolkit.WinUI.Controls;
-using DroidNet.Documents;
-using DroidNet.Hosting.WinUI;
 using DroidNet.Storage.Native;
 using DroidNet.Tests;
-using DroidNet.TimeMachine;
-using Microsoft.UI;
-using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.TestSupport;
@@ -34,15 +25,13 @@ using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
 using Color = Windows.UI.Color;
 
 namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.SceneEditor;
 
 [TestClass]
-public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInterfaceTests
+internal sealed class BackgroundColorTests : DroidNet.Tests.VisualUserInterfaceTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -71,7 +60,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
 
     private static async Task CheckNativeBackgroundWorkflowAsync(EngineService engine, IOperationResultPublisher results, string directory, CancellationToken cancellationToken)
     {
-        var project = ProjectContext.FromProjectInfo(new ProjectInfo("Native UI", Category.Games, directory, "preview.png"), new RealFileSystem());
+        var project = TestProject.Create(new RealFileSystem(), directory).Context;
         var path = Path.Combine(directory, "Content", "Scenes", "Background.oscene.json");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         var data = new SceneData { Id = SceneId.New(), Name = "Background", Environment = new SceneEnvironmentData { AtmosphereEnabled = true } };
@@ -141,6 +130,7 @@ public sealed partial class BackgroundColorTests : DroidNet.Tests.VisualUserInte
                 VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
             };
             await LoadTestContentAsync(scroller).ConfigureAwait(true);
+
             // Show a solid color that only paints the view: the background.
             ((TextBox)view.FindName("ScenePropertySearchBox")).Text = "backdrop";
             var backdrop = (Segmented)await FindInspectorControlAsync(scroller, () => view.FindDescendant<Segmented>(element => Equals(element.Tag, "Backdrop")), "Backdrop", cancellationToken).ConfigureAwait(true);

@@ -4,13 +4,14 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 
 [TestClass]
-public sealed class ContentImportManifestBuilderTests
+internal sealed partial class ContentImportManifestBuilderTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -177,7 +178,7 @@ public sealed class ContentImportManifestBuilderTests
     public void BuildManifestUsesDescriptorInputsForAssetCook()
     {
         using var workspace = new ManifestWorkspace();
-        var projectContext = ProjectContext.FromProject(workspace.Project, new RealFileSystem());
+        var projectContext = workspace.Context;
         var scope = new ContentCookScope(
             projectContext,
             new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
@@ -241,7 +242,7 @@ public sealed class ContentImportManifestBuilderTests
 
     private static ContentCookScope CreateScope(ManifestWorkspace workspace)
     {
-        var projectContext = ProjectContext.FromProject(workspace.Project, new RealFileSystem());
+        var projectContext = workspace.Context;
         return new ContentCookScope(
             projectContext,
             new ProjectCookScope(projectContext.ProjectId, FileSystemPath.From(workspace.Root), Path.Combine(workspace.Root, ".cooked")),
@@ -258,24 +259,19 @@ public sealed class ContentImportManifestBuilderTests
         { Output = workspace.Output };
     }
 
-    private sealed class ManifestWorkspace : IDisposable
+    private sealed partial class ManifestWorkspace : IDisposable
     {
         public ManifestWorkspace()
         {
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-manifest-builder-tests", Guid.NewGuid().ToString("N"));
-            Directory.CreateDirectory(this.Root);
-            var projectInfo = new ProjectInfo("TestProject", Category.Games, this.Root)
-            {
-                AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            };
-            this.Project = new Project(projectInfo);
+            this.Context = TestProject.Create(new RealFileSystem(), this.Root).Context;
             var key = Guid.CreateVersion7();
             this.Output = new("Content", key, global::Oxygen.Editor.ContentPipeline.Publication.CookPublicationPaths.Generation(this.Root, key));
         }
 
         public string Root { get; }
 
-        public Project Project { get; }
+        public ProjectContext Context { get; }
 
         public Publication.CookStagingRoot Output { get; }
 

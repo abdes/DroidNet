@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using AwesomeAssertions;
 using Microsoft.EntityFrameworkCore;
@@ -11,6 +10,7 @@ using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Workspace;
@@ -27,8 +27,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
 /// state, and discards a payload it cannot use with a warning.
 /// </summary>
 [TestClass]
-[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes.")]
-public sealed class ViewportStateServiceTests
+internal sealed class ViewportStateServiceTests
 {
     private static readonly SceneId SceneA = SceneId.FromValue(Guid.Parse("a1000000-0000-0000-0000-000000000001"));
     private static readonly SceneId SceneB = SceneId.FromValue(Guid.Parse("b2000000-0000-0000-0000-000000000002"));
@@ -180,11 +179,8 @@ public sealed class ViewportStateServiceTests
             return fixture;
         }
 
-        public static ProjectContext ProjectAt(string name) => ProjectContext.FromProjectInfo(new ProjectInfo(
-            name, Category.Games, Path.Combine(Path.GetTempPath(), "Oxygen.ViewportState", name), string.Empty)
-        {
-            AuthoringMounts = [new("Content", "Content")],
-        }, new MockFileSystem());
+        public static ProjectContext ProjectAt(string name)
+            => TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), "Oxygen.ViewportState", name)).Context with { Name = name };
 
         // Each service gets its own store, so nothing is served from another service's cache.
         public ViewportStateService CreateService(IEditorSettingsManager? store = null)

@@ -2,12 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
@@ -19,7 +19,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Snapshots;
 /// only in case, refuses both sources with <see cref="AssetCookDiagnosticCodes.IdentityCollision"/>.
 /// </summary>
 [TestClass]
-public sealed class ProducerCollisionTests : IDisposable
+internal sealed partial class ProducerCollisionTests : IDisposable
 {
     private static readonly AssetPath Box = AssetPath.Parse("/Content/Geometry/Box.ogeo");
     private static readonly AssetPath Crate = AssetPath.Parse("/Content/Geometry/Crate.ogeo");
@@ -32,10 +32,7 @@ public sealed class ProducerCollisionTests : IDisposable
         _ = Directory.CreateDirectory(Path.Combine(this.root, "Content", "Geometry"));
         File.WriteAllText(Path.Combine(this.root, "Content", "Geometry", "Box.ogeo.json"), "{}");
         File.WriteAllText(Path.Combine(this.root, "Content", "Geometry", "Crate.ogeo.json"), "{}");
-        this.project = ProjectContext.FromProject(new Project(new ProjectInfo("Test", Category.Games, this.root)
-        {
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-        }), new RealFileSystem());
+        this.project = TestProject.Create(new RealFileSystem(), this.root).Context;
     }
 
     public TestContext TestContext { get; set; } = null!;
@@ -102,8 +99,8 @@ public sealed class ProducerCollisionTests : IDisposable
     public async Task TwoFilesBesideEachOtherOfOneIdentityAreBothRefused()
     {
         _ = Directory.CreateDirectory(Path.Combine(this.root, "Content", "Player"));
-        File.WriteAllText(Path.Combine(this.root, "Content", "Player", "move.lua"), "return {}");
-        File.WriteAllText(Path.Combine(this.root, "Content", "Player", "move.luau"), "return {}");
+        await File.WriteAllTextAsync(Path.Combine(this.root, "Content", "Player", "move.lua"), "return {}", this.TestContext.CancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(Path.Combine(this.root, "Content", "Player", "move.luau"), "return {}", this.TestContext.CancellationToken).ConfigureAwait(false);
         var script = this.Input(AssetPath.Parse("/Content/Player/move.oscript"));
 
         var graph = await new CookDependencyDiscovery(new Facts(new Dictionary<AssetPath, string>()))

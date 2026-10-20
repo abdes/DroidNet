@@ -14,6 +14,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\src\Oxygen.Editor.Projects.csproj" />
+      <ProjectReference Include="..\testing\Oxygen.Editor.Projects.Testing.csproj" />
     </ItemGroup>
 
     <ItemGroup>

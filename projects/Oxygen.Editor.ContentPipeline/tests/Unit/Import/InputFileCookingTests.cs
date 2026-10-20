@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
@@ -14,7 +15,7 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 /// source they are named under.
 /// </summary>
 [TestClass]
-public sealed class InputFileCookingTests : IDisposable
+internal sealed partial class InputFileCookingTests : IDisposable
 {
     private const string Player = """
         {
@@ -97,8 +98,5 @@ public sealed class InputFileCookingTests : IDisposable
     }
 
     private ProjectContext CreateProject()
-        => ProjectContext.FromProject(new Project(new ProjectInfo("Test", Category.Games, this.root)
-        {
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-        }), new RealFileSystem());
+        => TestProject.Create(new RealFileSystem(), this.root).Context;
 }

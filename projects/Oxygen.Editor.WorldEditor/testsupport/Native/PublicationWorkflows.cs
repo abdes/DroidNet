@@ -86,13 +86,13 @@ internal static class PublicationWorkflows
         _ = before.Should().NotBeNull();
         _ = before!.CookStatus!.Freshness.Should().Be(AssetCookFreshness.NeedsCooking);
         _ = before.CookStatus.HasPublishedOutput.Should().BeFalse();
-        _ = fixture.FileSystem.File.Exists(before.CookedPath?.FullPath).Should().BeFalse();
+        _ = NativeSceneFixture.FileSystem.File.Exists(before.CookedPath?.FullPath).Should().BeFalse();
         _ = before.RuntimeAvailability.Should().NotBe(AssetRuntimeAvailability.Mounted);
         _ = (await services.Pipeline.CookAssetAsync(material.File.Asset, cancellationToken).ConfigureAwait(true)).IsPublished.Should().BeTrue();
         var choice = await feed.ResolveAsync(material.File.Asset, cancellationToken).ConfigureAwait(true);
         _ = choice!.CookStatus!.Freshness.Should().Be(AssetCookFreshness.Current);
         _ = choice.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.Mounted);
-        _ = fixture.FileSystem.File.Exists(choice.CookedPath?.FullPath).Should().BeTrue();
+        _ = NativeSceneFixture.FileSystem.File.Exists(choice.CookedPath?.FullPath).Should().BeTrue();
         var nodes = fixture.Source.RootNodes.Select(static node => node.Id).ToArray();
         fixture.Document.History.BeginChangeSet("Assign shared material");
         try
@@ -219,8 +219,8 @@ internal static class PublicationWorkflows
     internal static async Task<Document> CreateMaterialAsync(NativeSceneFixture fixture, string name, CancellationToken cancellationToken)
     {
         var path = fixture.ProjectRoot.Combine("Content").Combine("Materials").Combine(name + ".omat.json");
-        _ = fixture.FileSystem.Directory.CreateDirectory(path.Parent!.FullPath);
-        await fixture.FileSystem.File.WriteAllBytesAsync(path.FullPath, Encoding.UTF8.GetBytes(MaterialTemplates.New(name)), cancellationToken).ConfigureAwait(true);
+        _ = NativeSceneFixture.FileSystem.Directory.CreateDirectory(path.Parent!.FullPath);
+        await NativeSceneFixture.FileSystem.File.WriteAllBytesAsync(path.FullPath, Encoding.UTF8.GetBytes(MaterialTemplates.New(name)), cancellationToken).ConfigureAwait(true);
         var opened = await fixture.OpenDocuments.OpenAsync(new DocumentFile(path, AssetPath.Create("Content", $"Materials/{name}.omat")), cancellationToken).ConfigureAwait(true);
         return opened.Document ?? throw new InvalidOperationException(opened.Problem);
     }

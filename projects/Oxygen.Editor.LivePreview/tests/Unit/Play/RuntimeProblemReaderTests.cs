@@ -5,7 +5,7 @@
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Oxygen.Editor.LivePreview.Play;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
@@ -28,8 +28,7 @@ public sealed class RuntimeProblemReaderTests
 
     public RuntimeProblemReaderTests()
     {
-        var info = new ProjectInfo("Runtime problems", Category.Games, Root) { AuthoringMounts = [new("Content", "Content")] };
-        this.sut = new RuntimeProblemReader(ProjectContext.FromProjectInfo(info, this.files));
+        this.sut = new RuntimeProblemReader(TestProject.Create(this.files, Root).Context);
     }
 
     [TestMethod]
@@ -47,17 +46,17 @@ public sealed class RuntimeProblemReaderTests
 
         _ = (problem.Severity, problem.Code, problem.SlotNode, problem.SlotIndex, problem.SlotHook)
             .Should().Be((expected, "S9999", "Player", 2, "on_update"));
-        _ = (problem.File, problem.Line, problem.Column).Should().Be(((string?)null, (int?)null, (int?)null));
+        _ = (problem.File, problem.Line, problem.Column).Should().Be((null, null, null));
         _ = problem.Rendered.Should().StartWith($"{label}[S9999]");
     }
 
     [TestMethod]
     public void Read_WithoutCodeOrSlot_UsesPlaceholdersAndNoSlot()
     {
-        var problem = this.sut.Read(new JsonObject());
+        var problem = this.sut.Read([]);
 
         _ = (problem.Severity, problem.Code, problem.SlotNode, problem.SlotIndex, problem.SlotHook)
-            .Should().Be((DiagnosticSeverity.Info, "unknown", (string?)null, (int?)null, (string?)null));
+            .Should().Be((DiagnosticSeverity.Info, "unknown", null, null, null));
     }
 
     [TestMethod]

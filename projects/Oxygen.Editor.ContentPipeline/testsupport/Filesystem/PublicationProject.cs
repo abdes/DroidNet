@@ -30,12 +30,8 @@ internal sealed partial class PublicationProject : IDisposable
     {
         this.hadPrevious = hadPrevious;
         this.Context = TestProject.Create(new RealFileSystem(), this.Root, ["Content", "Second", "Unrelated"]).Context with { Name = "Publication" };
-        var info = new ProjectInfo(this.Context.ProjectId, this.Context.Name, this.Context.Category, this.Root)
-        {
-            AuthoringMounts = [.. this.Context.AuthoringMounts],
-        };
         this.Operation = new(Guid.NewGuid(), this.Context, 1);
-        this.Write("Project.oxy", ProjectInfo.ToJson(info));
+        _ = TestProject.SaveProjectFile(this.Context);
         var roots = ImmutableArray.CreateBuilder<CookPublicationRoot>();
         if (hadPrevious)
         {
@@ -189,12 +185,5 @@ internal sealed partial class PublicationProject : IDisposable
         this.baseline?.Dispose();
         this.ownership?.Dispose();
         this.directory.Delete(recursive: true);
-    }
-
-    private void Write(string relative, string text)
-    {
-        var path = Path.Combine(this.Root, relative);
-        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        File.WriteAllText(path, text);
     }
 }

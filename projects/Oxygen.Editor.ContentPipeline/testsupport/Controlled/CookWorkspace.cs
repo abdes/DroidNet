@@ -18,8 +18,8 @@ internal sealed partial class CookWorkspace : IDisposable
     {
         this.EngineContent = engineContent ?? new EngineContentPakFixture();
         this.Root = Path.Combine(Path.GetTempPath(), "oxygen-content-pipeline-service-tests", Guid.NewGuid().ToString("N"));
-        var project = TestProject.Create(new Testably.Abstractions.RealFileSystem(), this.Root).Context;
-        this.ProjectContext = authoringMounts is null ? project : project with { AuthoringMounts = [.. authoringMounts] };
+        var disk = new Testably.Abstractions.RealFileSystem();
+        this.ProjectContext = (authoringMounts is null ? TestProject.Create(disk, this.Root) : TestProject.Create(disk, this.Root, authoringMounts)).Context;
         Directory.CreateDirectory(Path.Combine(this.Root, "Content", "Scenes"));
         Directory.CreateDirectory(Path.Combine(this.Root, "Content", "Materials"));
         this.Activate(this.ProjectContext);
@@ -60,7 +60,7 @@ internal sealed partial class CookWorkspace : IDisposable
         var root = CookPublicationPaths.Generation(this.Root, key);
         Directory.CreateDirectory(root);
         Oxygen.Testing.NativeInventoryFixture.WriteIndex(root, [], key);
-        File.WriteAllBytes(Path.Combine(root, CookedGeneration.MarkerFileName), []);
+        await File.WriteAllBytesAsync(Path.Combine(root, CookedGeneration.MarkerFileName), [], token).ConfigureAwait(false);
         var digest = Oxygen.Testing.NativeInventoryFixture.Read(root).IndexSha256;
         var document = new CookPublicationDocument(
             CookPublicationDocument.CurrentVersion,
@@ -81,13 +81,7 @@ internal sealed partial class CookWorkspace : IDisposable
 
     public void Activate(ProjectContext context)
     {
-        var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot.FullPath, context.Thumbnail)
-        {
-            AuthoringMounts = [.. context.AuthoringMounts],
-            LocalFolderMounts = [.. context.LocalFolderMounts],
-            CookedContentOrder = [.. context.CookedContentOrder],
-        };
-        File.WriteAllText(Path.Combine(context.ProjectRoot.FullPath, "Project.oxy"), ProjectInfo.ToJson(info));
+        _ = TestProject.SaveProjectFile(context);
         this.ContextService.Activate(context);
     }
 

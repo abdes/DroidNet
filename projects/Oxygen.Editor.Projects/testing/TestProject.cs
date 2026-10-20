@@ -45,8 +45,19 @@ public sealed class TestProject
     /// <returns>The project.</returns>
     public static TestProject Create(IFileSystem fileSystem, string? root = null, IReadOnlyList<string>? authoringMounts = null)
     {
+        var mounts = authoringMounts is { Count: > 0 } ? authoringMounts : [ContentMount];
+        return Create(fileSystem, root, [.. mounts.Select(static mount => new ProjectMountPoint(mount, mount))]);
+    }
+
+    /// <summary>Creates a project whose authoring mounts are in folders the test names, and those folders.</summary>
+    /// <param name="fileSystem">The file system that holds the project.</param>
+    /// <param name="root">The project folder: <see cref="DefaultRoot"/> when none is given.</param>
+    /// <param name="authoringMounts">The authoring mounts, each with its folder relative to the project folder.</param>
+    /// <returns>The project.</returns>
+    public static TestProject Create(IFileSystem fileSystem, string? root, IReadOnlyList<ProjectMountPoint> authoringMounts)
+    {
         ArgumentNullException.ThrowIfNull(fileSystem);
-        IReadOnlyList<string> mounts = authoringMounts is { Count: > 0 } ? authoringMounts : [ContentMount];
+        ArgumentNullException.ThrowIfNull(authoringMounts);
         var context = new ProjectContext
         {
             ProjectId = Guid.NewGuid(),
@@ -54,15 +65,50 @@ public sealed class TestProject
             Category = Category.Games,
             ProjectRoot = FileSystemPath.From(root ?? DefaultRoot),
             FileSystem = fileSystem,
-            AuthoringMounts = [.. mounts.Select(static mount => new ProjectMountPoint(mount, mount))],
+            AuthoringMounts = [.. authoringMounts],
             LocalFolderMounts = [],
         };
-        foreach (var mount in mounts)
+        foreach (var mount in authoringMounts)
         {
-            _ = fileSystem.Directory.CreateDirectory(context.ProjectRoot.Combine(mount).FullPath);
+            _ = fileSystem.Directory.CreateDirectory(context.ProjectRoot.Combine(mount.RelativePath).FullPath);
         }
 
         return new TestProject(context);
+    }
+
+    /// <summary>Opens a project the test saved or a production service made, as the editor opens it.</summary>
+    /// <param name="info">The saved project.</param>
+    /// <param name="fileSystem">The file system that holds the project.</param>
+    /// <returns>The project.</returns>
+    public static TestProject Open(IProjectInfo info, IFileSystem fileSystem)
+        => new(ProjectContext.FromProjectInfo(info, fileSystem));
+
+    /// <summary>Gets the saved project a context is opened from.</summary>
+    /// <param name="context">The project.</param>
+    /// <returns>The project's saved form, which <see cref="Open"/> opens as <paramref name="context"/>.</returns>
+    public static ProjectInfo InfoOf(ProjectContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        return new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot.FullPath, context.Thumbnail)
+        {
+            AuthoringMounts = [.. context.AuthoringMounts],
+            LocalFolderMounts = [.. context.LocalFolderMounts],
+            PakFileMounts = [.. context.PakFileMounts],
+            CookedContentOrder = [.. context.CookedContentOrder],
+            DefaultSceneId = context.DefaultSceneId,
+            Settings = context.Settings,
+        };
+    }
+
+    /// <summary>Saves a context as its project file, through its file system, as code that loads the project reads it.</summary>
+    /// <param name="context">The project.</param>
+    /// <returns>The project file.</returns>
+    public static FileSystemPath SaveProjectFile(ProjectContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+        var file = context.ProjectRoot.Combine(Constants.ProjectFileName);
+        context.FileSystem.File.WriteAllText(file.FullPath, ProjectInfo.ToJson(InfoOf(context)));
+        return file;
     }
 
     /// <summary>Gets the file or folder at a virtual path.</summary>

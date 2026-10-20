@@ -10,7 +10,7 @@ using Testably.Abstractions;
 namespace Oxygen.Editor.Assets.TestSupport;
 
 /// <summary>A temporary project folder with one <c>Content</c> authoring mount, deleted on disposal.</summary>
-internal sealed class AssetWorkspace : IDisposable
+internal sealed partial class AssetWorkspace : IDisposable
 {
     /// <summary>Initializes a new instance of the <see cref="AssetWorkspace"/> class.</summary>
     public AssetWorkspace()
@@ -35,13 +35,7 @@ internal sealed class AssetWorkspace : IDisposable
         var service = new ProjectContextService();
         service.Activate(
             TestProject.Create(new RealFileSystem(), this.Root.FullPath).Context with { Name = "Test" });
-
-        var context = service.ActiveProject!;
-        var info = new ProjectInfo(context.ProjectId, context.Name, context.Category, context.ProjectRoot.FullPath)
-        {
-            AuthoringMounts = [.. context.AuthoringMounts],
-        };
-        File.WriteAllText(Path.Combine(this.Root.FullPath, "Project.oxy"), ProjectInfo.ToJson(info));
+        _ = TestProject.SaveProjectFile(service.ActiveProject!);
         return service;
     }
 

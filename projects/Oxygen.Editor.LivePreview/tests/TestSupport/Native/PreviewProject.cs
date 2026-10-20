@@ -14,6 +14,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -35,10 +36,8 @@ internal sealed partial class PreviewProject : IDisposable
     /// <summary>Initializes a new instance of the <see cref="PreviewProject"/> class.</summary>
     public PreviewProject()
     {
-        var info = new ProjectInfo("Live preview", Category.Games, this.directory.FullName) { AuthoringMounts = [new("Content", "Content")] };
-        _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content"));
-        File.WriteAllText(Path.Combine(this.directory.FullName, Oxygen.Editor.Projects.Constants.ProjectFileName), ProjectInfo.ToJson(info));
-        this.Context = ProjectContext.FromProjectInfo(info, new RealFileSystem());
+        this.Context = TestProject.Create(new RealFileSystem(), this.directory.FullName).Context;
+        _ = TestProject.SaveProjectFile(this.Context);
         this.Projects.Activate(this.Context);
         this.coordinator = new ContentCookCoordinator(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
         this.native = new Oxygen.Testing.NativeContentPipelineFixture(this.Projects, this.coordinator, new CookDocumentRegistry());

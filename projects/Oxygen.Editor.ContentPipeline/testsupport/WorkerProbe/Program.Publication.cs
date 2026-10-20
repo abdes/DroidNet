@@ -7,6 +7,7 @@ using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Testing;
 using Testably.Abstractions;
 
@@ -21,10 +22,10 @@ internal static partial class Program
         var manager = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: files);
         var info = await manager.LoadProjectInfoAsync(args[1]).ConfigureAwait(false)
             ?? throw new InvalidDataException("The publication fixture has no saved project.");
-        var project = ProjectContext.FromProjectInfo(info, new RealFileSystem());
+        var project = TestProject.Open(info, new RealFileSystem()).Context;
         var operation = new ContentCookOperation(Guid.Parse(args[3]), project, 1);
         var boundary = args[4];
-        using var ownership = CookOutputLease.AcquireOperation(project.ProjectRoot, operation.OperationId);
+        await using var ownership = CookOutputLease.AcquireOperation(project.ProjectRoot, operation.OperationId).ConfigureAwait(false);
         CookPublicationReadLease baseline;
         using (var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, CancellationToken.None).ConfigureAwait(false))
         {
@@ -32,8 +33,14 @@ internal static partial class Program
         }
 
         using var baselineLifetime = baseline;
-        var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content", "Second"], files, manager, CancellationToken.None,
-            checkpoint: name => name == boundary ? SignalAndWaitAsync(name) : Task.CompletedTask).ConfigureAwait(false);
+        var staging = await CookStagingArea.CreateAsync(
+            operation,
+            baseline,
+            ["Content", "Second"],
+            files,
+            manager,
+            CancellationToken.None,
+            checkpoint: name => string.Equals(name, boundary, StringComparison.Ordinal) ? SignalAndWaitAsync(name) : Task.CompletedTask).ConfigureAwait(false);
         await using var stagingLifetime = staging.ConfigureAwait(false);
         foreach (var root in staging.Roots)
         {
@@ -44,9 +51,16 @@ internal static partial class Program
         }
 
         var replacements = staging.SealRoots();
-        var roots = baseline.Roots.Where(root => !replacements.Any(replacement => replacement.Name == root.Name)).Concat(replacements).ToImmutableArray();
-        var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, operation.OperationId,
-            DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(project), roots, [], CookInputs: null);
+        var roots = baseline.Roots.Where(root => !replacements.Any(replacement => string.Equals(replacement.Name, root.Name, StringComparison.Ordinal))).Concat(replacements).ToImmutableArray();
+        var document = new CookPublicationDocument(
+            CookPublicationDocument.CurrentVersion,
+            project.ProjectId,
+            operation.OperationId,
+            DateTimeOffset.UtcNow,
+            CookPublicationDocument.ConfigurationIdentity(project),
+            roots,
+            [],
+            CookInputs: null);
         await staging.Transaction.PrepareAsync(operation, document, sourceReplacement: null, [], projectChange: null, CancellationToken.None).ConfigureAwait(false);
         staging.RetainForPublication();
         if (string.Equals(boundary, "Prepared", StringComparison.Ordinal))

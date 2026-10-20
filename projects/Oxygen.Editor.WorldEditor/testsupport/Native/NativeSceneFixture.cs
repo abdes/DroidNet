@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
+using System.IO.Abstractions;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using System.IO.Abstractions;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Settings;
@@ -38,6 +38,7 @@ using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
@@ -65,7 +66,7 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 internal sealed class NativeSceneFixture : IAsyncDisposable
 {
     // The disk: the native cook reads and writes the project there.
-    private static readonly IFileSystem Disk = new RealFileSystem();
+    private static readonly RealFileSystem Disk = new();
 
     private readonly IDirectoryInfo directory = Disk.Directory.CreateTempSubdirectory("OxygenEnvironmentField-");
     private readonly ProjectManagerService manager = new(new NativeStorageProvider(Disk));
@@ -129,9 +130,10 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         }
 
         (this.previewEngine, this.probe) = EngineProbe.Of(this.Runtime);
-        this.loadedProject = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png") { AuthoringMounts = [new("Content", "Content")], });
-        Disk.File.WriteAllText(Disk.Path.Combine(this.directory.FullName, "Project.oxy"), ProjectInfo.ToJson(this.loadedProject.ProjectInfo));
-        this.Projects.Activate(ProjectContext.FromProjectInfo(this.loadedProject.ProjectInfo, Disk));
+        var project = TestProject.Create(Disk, this.directory.FullName).Context with { Name = "Environment fields", Thumbnail = "preview.png" };
+        _ = TestProject.SaveProjectFile(project);
+        this.loadedProject = new Project(TestProject.InfoOf(project));
+        this.Projects.Activate(project);
         this.materialCookCoordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
         this.materialPipeline = new(this.Projects, this.materialCookCoordinator, new CookDocumentRegistry());
         this.activeMaterialSlotProvider = this.materialPipeline.Pipeline;
@@ -151,6 +153,9 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         this.Model = new EnvironmentViewModel(() => this.Authoring);
         this.Model.SetScene(this.Source);
     }
+
+    /// <summary>Gets the file system that holds the project: the disk, which the native cook reads and writes.</summary>
+    public static IFileSystem FileSystem => Disk;
 
     /// <summary>Gets the document area of the window that shows the transition host, once it was created.</summary>
     public DocumentArea? TransitionArea { get; private set; }
@@ -177,9 +182,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     public Mock<Oxygen.Editor.Assets.IAssetFeed> AssetCatalog { get; } = new();
 
     public ConcurrentQueue<OperationResult> Results { get; } = new();
-
-    /// <summary>Gets the file system that holds the project: the disk, which the native cook reads and writes.</summary>
-    public IFileSystem FileSystem => Disk;
 
     public FileSystemPath ProjectRoot => FileSystemPath.From(this.directory.FullName);
 
@@ -261,12 +263,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     /// <returns>The task that completes once the change is saved, mounted and active.</returns>
     public async Task ApplyContentPriorityAsync(ProjectContext project, CancellationToken cancellationToken)
     {
-        var desired = new ProjectInfo(project.ProjectId, project.Name, project.Category, project.ProjectRoot.FullPath, project.Thumbnail)
-        {
-            AuthoringMounts = [.. project.AuthoringMounts],
-            LocalFolderMounts = [.. project.LocalFolderMounts],
-            CookedContentOrder = [.. project.CookedContentOrder],
-        };
+        var desired = TestProject.InfoOf(project);
         if (this.contentSession is null)
         {
             var catalog = new Mock<IAssetPublicationTarget>();
@@ -336,7 +333,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     public async Task<FileSystemPath> GetCookedRootAsync(FileSystemPath projectRoot, CancellationToken token)
     {
         var info = await this.manager.LoadProjectInfoAsync(projectRoot.FullPath).ConfigureAwait(true) ?? throw new InvalidOperationException("The native fixture project has not been saved.");
-        using var publication = await this.MaterialPipelineFor(projectRoot).Publication.AcquireReadAsync(ProjectContext.FromProjectInfo(info, Disk), token).ConfigureAwait(true);
+        using var publication = await this.MaterialPipelineFor(projectRoot).Publication.AcquireReadAsync(TestProject.Open(info, Disk).Context, token).ConfigureAwait(true);
         return publication.FindProjectRoot("Content") ?? throw new InvalidOperationException("The fixture has not cooked its Content mount.");
     }
 
@@ -506,12 +503,9 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         if (!this.foreignMaterialPipelines.TryGetValue(root, out var value))
         {
             var contexts = new ProjectContextService();
-            var info = new ProjectInfo("Foreign material fixture", Category.Games, root.FullPath)
-            {
-                AuthoringMounts = [new("Content", "Content")],
-            };
-            Disk.File.WriteAllText(root.Combine("Project.oxy").FullPath, ProjectInfo.ToJson(info));
-            contexts.Activate(ProjectContext.FromProjectInfo(info, Disk));
+            var project = TestProject.Create(Disk, root.FullPath).Context with { Name = "Foreign material fixture" };
+            _ = TestProject.SaveProjectFile(project);
+            contexts.Activate(project);
             var coordinator = new ContentCookCoordinator(contexts, NullLogger<ContentCookCoordinator>.Instance);
             value = (coordinator, new(contexts, coordinator, new CookDocumentRegistry()));
             this.foreignMaterialPipelines.Add(root, value);

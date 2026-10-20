@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
 using AwesomeAssertions;
@@ -22,8 +21,7 @@ using Oxygen.Managed.Core.Compatibility;
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Status;
 
 [TestClass]
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
-public sealed class AssetCookStatusTests
+internal sealed partial class AssetCookStatusTests
 {
     public TestContext TestContext { get; set; } = null!;
 
@@ -172,7 +170,7 @@ public sealed class AssetCookStatusTests
     public async Task DependencyChangesAffectConsumerStatus(bool damageOutput)
     {
         using var project = new StatusProject();
-        var geometry = """
+        const string geometry = """
             {"$schema":"oxygen.geometry-descriptor.v1","name":"Geometry","bounds":{"min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},"lods":[{"name":"LOD0","mesh_type":"procedural","bounds":{"min":[-0.5,-0.5,-0.5],"max":[0.5,0.5,0.5]},"procedural":{"generator":"Cube","mesh_name":"Cube","params":{}},"submeshes":[{"name":"Main","material_ref":"/Content/Material.omat","slot_id":"146b1397-c3e0-bc20-fce3-c55e470b4086","views":[{"view_ref":"__all__"}]}]}]}
             """;
         var uri = AssetPath.Parse("/Content/Geometry.ogeo");
@@ -209,7 +207,7 @@ public sealed class AssetCookStatusTests
         await using var artifactsLifetime = artifacts.ConfigureAwait(false);
         _ = native.SetupSequence(service => service.Observation)
             .Returns(new NativeProducerObservation(1, artifacts.Fingerprint, []))
-            .Returns(new NativeProducerObservation(2, null, []));
+            .Returns(new NativeProducerObservation(2, Fingerprint: null, []));
         var status = (await project.CreateReader(native.Object).ReadAsync(project.Project, [StatusProject.SourceUri], this.TestContext.CancellationToken).ConfigureAwait(false)).Single();
         _ = status.Freshness.Should().Be(AssetCookFreshness.Unknown);
         _ = status.HasAvailableOutput.Should().BeTrue();
@@ -288,13 +286,9 @@ public sealed class AssetCookStatusTests
             var producer = Path.Combine(this.Root, "producer.bin");
             File.WriteAllText(producer, "producer");
             this.native = new([new NativeArtifactLocation("producer", producer)]);
-            this.api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
+            _ = this.api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((string root, NativeArtifactLease? _, CancellationToken _) => Oxygen.Testing.NativeInventoryFixture.Read(root));
-            var info = new ProjectInfo(this.Project.ProjectId, this.Project.Name, this.Project.Category, this.Root)
-            {
-                AuthoringMounts = [.. this.Project.AuthoringMounts],
-            };
-            File.WriteAllText(Path.Combine(this.Root, "Project.oxy"), ProjectInfo.ToJson(info));
+            _ = TestProject.SaveProjectFile(this.Project);
             this.publication = new(Mock.Of<IContentCookCoordinator>(), Mock.Of<IProjectContextService>(), this.files, this.manager, this.engineContent);
         }
 
@@ -341,9 +335,9 @@ public sealed class AssetCookStatusTests
             var producer = verified.Artifacts!;
             await using var producerLifetime = producer.ConfigureAwait(false);
             _ = verified.Succeeded.Should().BeTrue();
-            var plan = CookIncrementalPlanner.CreatePlan(producer.Fingerprint, graph.Files, graph, new(this.Project.ProjectId, [], []), ImmutableDictionary<string, ContentPipeline.Inspection.CookedInventoryReport>.Empty);
+            var plan = CookIncrementalPlanner.CreatePlan(producer.Fingerprint, graph.Files, graph, new(this.Project.ProjectId, [], []), []);
             using var baseline = await this.publication.AcquireReadAsync(this.Project, cancellationToken).ConfigureAwait(false);
-            using var ownership = CookOutputLease.AcquireOperation(this.Project.ProjectRoot, operation.OperationId);
+            await using var ownership = CookOutputLease.AcquireOperation(this.Project.ProjectRoot, operation.OperationId).ConfigureAwait(false);
             var staging = await CookStagingArea.CreateAsync(operation, baseline, ["Content"], this.files, this.manager, cancellationToken).ConfigureAwait(false);
             await using var stagingLifetime = staging.ConfigureAwait(false);
             var candidate = staging.Roots.Single();

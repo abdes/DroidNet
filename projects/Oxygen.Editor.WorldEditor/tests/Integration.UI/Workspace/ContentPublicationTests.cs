@@ -37,7 +37,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             var oldName = fixture.Source.Name;
             var oldUri = AssetPath.Create("Content", $"Scenes/{oldName}.oscene");
             _ = (await scenario.Services.Pipeline.CookCurrentSceneAsync(oldUri, token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
-            using (var relocation = new AssetRelocationService(scenario.Services.Runs, scenario.Services.Projects, scenario.Services.Documents, new NativeAtomicFileStore(fixture.FileSystem), scenario.Catalog))
+            using (var relocation = new AssetRelocationService(scenario.Services.Runs, scenario.Services.Projects, scenario.Services.Documents, new NativeAtomicFileStore(NativeSceneFixture.FileSystem), scenario.Catalog))
             using (fixture.FollowRelocations(relocation))
             {
                 var move = new AssetRelocationMove(AssetPath.Create("Content", $"Scenes/{oldName}.oscene.json"), AssetPath.Parse("/Content/Scenes/Small Scene.oscene.json"));
@@ -159,7 +159,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         _ = (await scenario.SceneAuthoringFixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = await CookPublicationScopeAsync(scenario, scope, cancellationToken).ConfigureAwait(true);
         var content = scenario.SceneAuthoringFixture.Runtime.ContentStatus;
-        var fileSystem = scenario.SceneAuthoringFixture.FileSystem;
+        var fileSystem = NativeSceneFixture.FileSystem;
         var files = ReadPublishedHashes(fileSystem, scenario.SceneAuthoringFixture.ProjectRoot).Keys.ToDictionary(static path => path, fileSystem.File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase);
         var result = await CookPublicationScopeAsync(scenario, scope, cancellationToken).ConfigureAwait(true);
         _ = result.IsUpToDate.Should().BeTrue();
@@ -214,7 +214,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
     private static async Task CheckPublicationSourceConflictAsync(PublicationScenario scenario, CancellationToken cancellationToken)
     {
         var material = scenario.Material;
-        var fileSystem = scenario.SceneAuthoringFixture.FileSystem;
+        var fileSystem = NativeSceneFixture.FileSystem;
         var original = await fileSystem.File.ReadAllBytesAsync(material.File.Path.FullPath, cancellationToken).ConfigureAwait(true);
         var content = scenario.SceneAuthoringFixture.Runtime.ContentStatus;
         await fileSystem.File.WriteAllTextAsync(material.File.Path.FullPath, "{}", cancellationToken).ConfigureAwait(true);
