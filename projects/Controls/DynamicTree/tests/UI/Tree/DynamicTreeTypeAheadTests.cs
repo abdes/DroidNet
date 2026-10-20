@@ -117,6 +117,28 @@ public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
             _ = focusedAfter!.Label.Should().Be("BETA");
         });
 
+    [TestMethod]
+    [TestCategory("DynamicTree / UI / Clipboard / Host")]
+    public Task ClipboardShortcuts_WhenDisabled_AreLeftToTheHost_Async() => EnqueueAsync(
+        async () =>
+        {
+            var vm = this.viewModel!;
+            vm.Select("ALPHA");
+            this.tree!.AreClipboardShortcutsEnabled = false;
+
+            foreach (var key in new[] { VirtualKey.C, VirtualKey.X, VirtualKey.V })
+            {
+                var handled = await this.tree.InvokeHandleKeyDownAsync(key, isControlDown: true).ConfigureAwait(true);
+                _ = handled.Should().BeFalse("a host binds the clipboard keys to its own commands");
+            }
+
+            _ = vm.CurrentClipboardState.Should().Be(ClipboardState.Empty);
+
+            this.tree.AreClipboardShortcutsEnabled = true;
+            _ = (await this.tree.InvokeHandleKeyDownAsync(VirtualKey.C, isControlDown: true).ConfigureAwait(true)).Should().BeTrue();
+            _ = vm.CurrentClipboardState.Should().NotBe(ClipboardState.Empty);
+        });
+
     protected override async Task TestSetupAsync()
     {
         await base.TestSetupAsync().ConfigureAwait(false);
@@ -157,6 +179,12 @@ public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
             };
 
             await this.InitializeRootAsync(rootItem, skipRoot: true).ConfigureAwait(false);
+        }
+
+        public void Select(string label)
+        {
+            var item = this.ShownItems.Single(shown => string.Equals(shown.Label, label, StringComparison.Ordinal));
+            this.SelectItemCommand.Execute(new ItemSelectionArgs(item, RequestOrigin.PointerInput, IsCtrlKeyDown: false, IsShiftKeyDown: false));
         }
 
         public bool TryGetFocusedItem([NotNullWhen(true)] out ITreeItem? item, out RequestOrigin origin)

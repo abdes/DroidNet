@@ -482,13 +482,13 @@ public partial class DynamicTree : Control
 
                 return true;
 
-            case VirtualKey.C when isControlDown:
+            case VirtualKey.C when isControlDown && this.AreClipboardShortcutsEnabled:
                 return await this.HandleCopyShortcutAsync().ConfigureAwait(true);
 
-            case VirtualKey.X when isControlDown:
+            case VirtualKey.X when isControlDown && this.AreClipboardShortcutsEnabled:
                 return await this.HandleCutShortcutAsync().ConfigureAwait(true);
 
-            case VirtualKey.V when isControlDown:
+            case VirtualKey.V when isControlDown && this.AreClipboardShortcutsEnabled:
                 return await this.HandlePasteShortcutAsync().ConfigureAwait(true);
 
             case VirtualKey.Up:

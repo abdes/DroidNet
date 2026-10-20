@@ -55,6 +55,10 @@ public partial class DynamicTree
     public static readonly DependencyProperty IsTypeAheadEnabledProperty = DependencyProperty.Register(
         nameof(IsTypeAheadEnabled), typeof(bool), typeof(DynamicTree), new PropertyMetadata(defaultValue: true));
 
+    /// <summary>Identifies whether Ctrl+C, Ctrl+X and Ctrl+V copy, cut and paste the tree's items.</summary>
+    public static readonly DependencyProperty AreClipboardShortcutsEnabledProperty = DependencyProperty.Register(
+        nameof(AreClipboardShortcutsEnabled), typeof(bool), typeof(DynamicTree), new PropertyMetadata(defaultValue: true));
+
     /// <summary>Identifies the minimum height of each rendered item row.</summary>
     public static readonly DependencyProperty ItemRowHeightProperty = DependencyProperty.Register(
         nameof(ItemRowHeight), typeof(double), typeof(DynamicTree), new PropertyMetadata(32d, (d, _) => ((DynamicTree)d).UpdateItemLayoutForRealizedItems()));
@@ -184,6 +188,17 @@ public partial class DynamicTree
     {
         get => (bool)this.GetValue(IsTypeAheadEnabledProperty);
         set => this.SetValue(IsTypeAheadEnabledProperty, value);
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether Ctrl+C, Ctrl+X and Ctrl+V copy, cut and paste the
+    ///     tree's items. When <see langword="false" />, those keys are left unhandled, so a host can bind
+    ///     them to its own commands.
+    /// </summary>
+    public bool AreClipboardShortcutsEnabled
+    {
+        get => (bool)this.GetValue(AreClipboardShortcutsEnabledProperty);
+        set => this.SetValue(AreClipboardShortcutsEnabledProperty, value);
     }
 
     /// <summary>
