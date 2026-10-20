@@ -12,6 +12,19 @@ namespace DroidNet.Storage.Native;
 /// <param name="fileSystem">The filesystem implementation.</param>
 public sealed class NativeAtomicFileStore(IFileSystem fileSystem) : IAtomicFileStore
 {
+    // A reader that opens the destination without sharing delete, as most file APIs do, blocks its replacement while
+    // it reads: Windows denies the replacement access. Such a read ends within moments, so the replacement waits for
+    // it, about 0.8 s in all, before the save reports a conflict.
+    private static readonly TimeSpan[] SharingRetryDelays =
+    [
+        TimeSpan.FromMilliseconds(10),
+        TimeSpan.FromMilliseconds(25),
+        TimeSpan.FromMilliseconds(50),
+        TimeSpan.FromMilliseconds(100),
+        TimeSpan.FromMilliseconds(200),
+        TimeSpan.FromMilliseconds(400),
+    ];
+
     private readonly IFileSystem fileSystem = fileSystem;
     private readonly Func<AtomicWriteStage, Stream?, CancellationToken, Task> beforeStage = (_, _, _) => Task.CompletedTask;
 
@@ -36,7 +49,8 @@ public sealed class NativeAtomicFileStore(IFileSystem fileSystem) : IAtomicFileS
 
         try
         {
-            var source = this.fileSystem.FileStream.New(path, FileMode.Open, FileAccess.Read, FileShare.Read, 4096, FileOptions.Asynchronous);
+            // Sharing delete lets a save replace the file while it is read; the read keeps the bytes it opened.
+            var source = this.fileSystem.FileStream.New(path, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 4096, FileOptions.Asynchronous);
             await using var sourceLifetime = source.ConfigureAwait(false);
             var content = new MemoryStream();
             await using var contentLifetime = content.ConfigureAwait(false);
@@ -82,7 +96,7 @@ public sealed class NativeAtomicFileStore(IFileSystem fileSystem) : IAtomicFileS
             cancellationToken.ThrowIfCancellationRequested();
             await this.VerifyBaselineAsync(destination, expected, cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
-            this.Replace(temporary, destination, expected.Exists);
+            await this.ReplaceAsync(temporary, destination, expected, cancellationToken).ConfigureAwait(false);
             owned = false;
             return Version(bytes);
         }
@@ -108,16 +122,31 @@ public sealed class NativeAtomicFileStore(IFileSystem fileSystem) : IAtomicFileS
     private static FileVersion Version(ReadOnlySpan<byte> bytes)
         => new(Exists: true, Convert.ToHexString(SHA256.HashData(bytes)));
 
-    private void Replace(string temporary, string destination, bool exists)
+    // Another handle has the destination open: access denied, ERROR_SHARING_VIOLATION or ERROR_LOCK_VIOLATION.
+    private static bool IsHeldOpen(Exception exception)
+        => exception is UnauthorizedAccessException || (exception is IOException && (exception.HResult & 0xffff) is 32 or 33);
+
+    private async Task ReplaceAsync(string temporary, string destination, FileVersion expected, CancellationToken cancellationToken)
     {
-        try
+        for (var attempt = 0; ; attempt++)
         {
-            this.fileSystem.File.Move(temporary, destination, overwrite: exists);
-        }
-        catch (Exception exception) when (exception is UnauthorizedAccessException
-            || (exception is IOException && (exception.HResult & 0xffff) is 32 or 33 or 80 or 183))
-        {
-            throw new StorageWriteConflictException("The destination became inaccessible or another writer created it before replacement.", exception);
+            try
+            {
+                this.fileSystem.File.Move(temporary, destination, overwrite: expected.Exists);
+                return;
+            }
+            catch (Exception exception) when (IsHeldOpen(exception) && attempt < SharingRetryDelays.Length)
+            {
+                await Task.Delay(SharingRetryDelays[attempt], cancellationToken).ConfigureAwait(false);
+
+                // The file may have changed while the reader held it.
+                await this.VerifyBaselineAsync(destination, expected, cancellationToken).ConfigureAwait(false);
+            }
+            catch (Exception exception) when (exception is UnauthorizedAccessException
+                || (exception is IOException && (exception.HResult & 0xffff) is 32 or 33 or 80 or 183))
+            {
+                throw new StorageWriteConflictException("The destination became inaccessible or another writer created it before replacement.", exception);
+            }
         }
     }
 

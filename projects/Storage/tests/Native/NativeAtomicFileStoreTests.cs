@@ -140,6 +140,47 @@ public sealed class NativeAtomicFileStoreTests
     }
 
     [TestMethod]
+    public async Task ReaderHoldingTheDestinationBriefly_DelaysTheReplacementWithoutFailingIt()
+    {
+        using var workspace = new Workspace();
+        var path = workspace.Path("material.omat.json");
+        await File.WriteAllTextAsync(path, "opened", this.TestContext.CancellationToken).ConfigureAwait(false);
+        Task? reading = null;
+        var store = new NativeAtomicFileStore(new RealFileSystem(), (stage, _, _) =>
+        {
+            if (stage == AtomicWriteStage.BeforeReplace)
+            {
+                reading = HoldOpenAsync(path, TimeSpan.FromMilliseconds(100), this.TestContext.CancellationToken);
+            }
+
+            return Task.CompletedTask;
+        });
+        var before = await store.ReadAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        try
+        {
+            _ = await store.WriteAsync(path, Encoding.UTF8.GetBytes("saved"), before.Version, this.TestContext.CancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            await (reading ?? Task.CompletedTask).ConfigureAwait(false);
+        }
+
+        _ = (await File.ReadAllTextAsync(path, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("saved");
+        _ = Directory.EnumerateFiles(workspace.Root).Should().ContainSingle();
+    }
+
+    // Opens the file at once, as File.ReadAllBytes does, and closes it after a while.
+    private static async Task HoldOpenAsync(string path, TimeSpan duration, CancellationToken cancellationToken)
+    {
+        var reader = new FileStream(path, FileMode.Open, FileAccess.Read, FileShare.Read);
+        await using (reader.ConfigureAwait(false))
+        {
+            await Task.Delay(duration, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
+    [TestMethod]
     public async Task ConcurrentWriter_IsRejectedByDestinationLease()
     {
         using var workspace = new Workspace();
