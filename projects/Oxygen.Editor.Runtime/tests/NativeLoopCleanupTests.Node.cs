@@ -107,7 +107,7 @@ public sealed partial class NativeLoopCleanupTests
             _ = actual.Value.Should().BeApproximately(property.Value, 0.0001f, "component {0}, field {1}", property.ComponentId, property.FieldId);
         }
 
-        _ = observed.State.GeometryName.Should().Be("cube");
+        _ = observed.State.GeometryName.Should().Be("Cube");
         _ = observed.State.VertexCount.Should().BePositive();
         _ = observed.State.IndexCount.Should().Be(36);
         _ = observed.State.MaterialKeys.Should().ContainSingle();

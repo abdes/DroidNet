@@ -39,6 +39,10 @@ public sealed partial class NativeLoopCleanupTests
                 TargetFps = 30,
                 EnableAssetLoader = true,
                 Graphics = new GraphicsConfigManaged { Headless = true },
+
+                // The built-in assets, such as the basic shapes and the default material, ship in the engine content
+                // pak, which the editor's engine mounts beneath every project mount.
+                PathFinder = new PathFinderConfigManaged { EngineContentPakPath = EngineContentPak.Installed().Path.FullPath },
             });
         }
         finally
@@ -56,6 +60,9 @@ public sealed partial class NativeLoopCleanupTests
                 await runner.WaitForEngineReadyAsync().WaitAsync(TimeSpan.FromSeconds(10), this.TestContext.CancellationToken).ConfigureAwait(false);
                 var transport = new NativeRuntimeCommandTransport(context);
                 await transport.ReplaceCookedRootsAsync((cookedRoots ?? []).Select(static path => new RuntimeCookedRoot(path, RuntimeCookedRootKind.LooseFolder)).ToArray()).ConfigureAwait(false);
+
+                // As the engine service does once the roots are mounted: scene asset loads wait until content resumes.
+                await transport.SetCookedContentPausedAsync(paused: false).ConfigureAwait(false);
                 _ = commands.BeginRun(transport, loop);
                 await check(commands).ConfigureAwait(false);
             }
