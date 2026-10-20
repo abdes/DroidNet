@@ -25,6 +25,7 @@ namespace Oxygen.Editor.Input;
 public sealed partial class InputFacts : IInputSources, IDisposable
 {
     private readonly IFileSystem fileSystem;
+    private readonly ILoggerFactory? loggerFactory;
     private readonly ILogger logger;
     private readonly SubscriberEvent<EventHandler<InputSourceChangedEventArgs>> changed = new();
     private readonly SubscriberEvent<EventHandler> problemsChanged = new();
@@ -47,6 +48,7 @@ public sealed partial class InputFacts : IInputSources, IDisposable
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(fileSystem);
         this.fileSystem = fileSystem;
+        this.loggerFactory = loggerFactory;
         this.logger = loggerFactory?.CreateLogger<InputFacts>() ?? NullLogger<InputFacts>.Instance;
         this.catalogChanges = catalog.Changes.Subscribe(this.OnCatalogChange);
 
@@ -112,7 +114,7 @@ public sealed partial class InputFacts : IInputSources, IDisposable
 
             // Disposing waits for a read in progress, so the closed project publishes nothing after this.
             this.current?.Dispose();
-            this.current = project is null ? null : new ProjectInputFacts(project, this.fileSystem, this.Publish, this.logger);
+            this.current = project is null ? null : new ProjectInputFacts(project, this.fileSystem, this.Publish, this.loggerFactory);
             this.Publish(InputSnapshot.Empty, container: null);
             started = this.current;
         }
@@ -150,7 +152,7 @@ public sealed partial class InputFacts : IInputSources, IDisposable
     {
         Volatile.Write(ref this.snapshot, published);
         var args = new InputSourceChangedEventArgs(container);
-        this.changed.Raise(handler => handler(this, args));
-        this.problemsChanged.Raise(handler => handler(this, EventArgs.Empty));
+        this.changed.Invoke(handler => handler(this, args));
+        this.problemsChanged.Invoke(handler => handler(this, EventArgs.Empty));
     }
 }

@@ -5,6 +5,7 @@
 using System.Collections.Immutable;
 using System.IO.Abstractions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Input;
@@ -24,9 +25,10 @@ namespace Oxygen.Editor.Input;
 /// <param name="project">The project.</param>
 /// <param name="fileSystem">The file system that holds the project.</param>
 /// <param name="publish">Publishes a snapshot, with the source that changed or <see langword="null"/> for all.</param>
-/// <param name="logger">The logger.</param>
-internal sealed partial class ProjectInputFacts(ProjectContext project, IFileSystem fileSystem, Action<InputSnapshot, AssetPath?> publish, ILogger logger) : IDisposable
+/// <param name="loggerFactory">The logger factory.</param>
+internal sealed partial class ProjectInputFacts(ProjectContext project, IFileSystem fileSystem, Action<InputSnapshot, AssetPath?> publish, ILoggerFactory? loggerFactory = null) : IDisposable
 {
+    private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectInputFacts>() ?? NullLogger<ProjectInputFacts>.Instance;
     private readonly Lock gate = new();
     private ImmutableDictionary<AssetPath, InputSourceEntry> entries = [];
     private bool disposed;
@@ -39,7 +41,7 @@ internal sealed partial class ProjectInputFacts(ProjectContext project, IFileSys
     public void Scan()
     {
         var sources = this.EnumerateSources().ToList();
-        InputFacts.LogProjectScan(logger, project.ProjectRoot, sources.Count);
+        this.LogProjectScan(sources.Count);
         lock (this.gate)
         {
             if (this.disposed)
@@ -142,7 +144,7 @@ internal sealed partial class ProjectInputFacts(ProjectContext project, IFileSys
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
-            InputFacts.LogSourceUnreadable(logger, file, exception);
+            this.LogSourceUnreadable(file, exception);
             return this.entries.GetValueOrDefault(identity);
         }
     }

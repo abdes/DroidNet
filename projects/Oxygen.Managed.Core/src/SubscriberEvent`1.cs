@@ -4,14 +4,20 @@
 
 using System.Collections.Immutable;
 
-namespace Oxygen.Editor.Input;
+namespace Oxygen.Managed.Core;
 
 /// <summary>
-/// The handlers of an event that is raised on each subscriber's own context: the
-/// <see cref="SynchronizationContext"/> that was current when it subscribed, or the thread pool when there was none.
+/// The handler storage behind an event's <c>add</c> and <c>remove</c> accessors, for an event raised on each
+/// subscriber's own context: the <see cref="SynchronizationContext"/> that was current when it subscribed, or the
+/// thread pool when there was none.
 /// </summary>
+/// <remarks>
+/// The owner declares the event with custom accessors that call <see cref="Add"/> and <see cref="Remove"/>, and
+/// raises it with <see cref="Invoke"/>, as it would invoke the delegate of a field-like event. It captures each
+/// subscriber's context as <see cref="Progress{T}"/> captures its creator's.
+/// </remarks>
 /// <typeparam name="THandler">The event's delegate type.</typeparam>
-internal sealed class SubscriberEvent<THandler>
+public sealed class SubscriberEvent<THandler>
     where THandler : Delegate
 {
     private ImmutableList<Subscription> subscriptions = [];
@@ -22,7 +28,7 @@ internal sealed class SubscriberEvent<THandler>
     {
         if (handler is not null)
         {
-            ImmutableInterlocked.Update(ref this.subscriptions, static (list, added) => list.Add(added), new Subscription(handler, SynchronizationContext.Current));
+            _ = ImmutableInterlocked.Update(ref this.subscriptions, static (list, added) => list.Add(added), new Subscription(handler, SynchronizationContext.Current));
         }
     }
 
@@ -32,16 +38,16 @@ internal sealed class SubscriberEvent<THandler>
     {
         if (handler is not null)
         {
-            ImmutableInterlocked.Update(
+            _ = ImmutableInterlocked.Update(
                 ref this.subscriptions,
                 static (list, removed) => list.FindLastIndex(subscription => subscription.Handler.Equals(removed)) is var index and >= 0 ? list.RemoveAt(index) : list,
                 handler);
         }
     }
 
-    /// <summary>Raises the event: posts the call to each handler's context.</summary>
+    /// <summary>Invokes the handlers: posts the call to each handler's context.</summary>
     /// <param name="invoke">Calls one handler with the event's arguments.</param>
-    public void Raise(Action<THandler> invoke)
+    public void Invoke(Action<THandler> invoke)
     {
         ArgumentNullException.ThrowIfNull(invoke);
         foreach (var subscription in this.subscriptions)

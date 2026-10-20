@@ -8,16 +8,15 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.Input;
 
 /// <summary>
-/// Logging methods for <see cref="InputFacts"/> and its <see cref="ProjectInputFacts"/>.
+/// Logging helpers for <see cref="InputFacts"/>.
 /// </summary>
 public sealed partial class InputFacts
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "Checking {Count} input sources of `{ProjectRoot}`")]
-    internal static partial void LogProjectScan(ILogger logger, FileSystemPath projectRoot, int count);
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Could not read the input sources of `{ProjectRoot}`")]
+    private static partial void LogProjectScanFailed(ILogger logger, FileSystemPath projectRoot, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Could not read input source `{Path}`; it is read again on its next change")]
-    internal static partial void LogSourceUnreadable(ILogger logger, FileSystemPath path, Exception exception);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Could not read the input sources of `{ProjectRoot}`")]
-    private partial void LogProjectScanFailed(FileSystemPath projectRoot, Exception exception);
+    private void LogProjectScanFailed(FileSystemPath projectRoot, Exception exception) => LogProjectScanFailed(this.logger, projectRoot, exception);
 }
