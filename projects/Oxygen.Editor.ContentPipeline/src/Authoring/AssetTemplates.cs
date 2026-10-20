@@ -8,7 +8,7 @@ using Oxygen.Managed.Assets.Authoring.Materials;
 namespace Oxygen.Editor.ContentPipeline.Authoring;
 
 /// <summary>
-/// The text New Script, New Input File and New Scene write.
+/// The text New Script, New Scene and New Material write; New Input File writes <c>InputTemplates.New</c>.
 /// </summary>
 public static class AssetTemplates
 {
@@ -30,37 +30,6 @@ public static class AssetTemplates
         return Script
 
         """;
-
-    /// <summary>Creates the text of a new input file: one action and one mapping context named after the file.</summary>
-    /// <param name="contextName">The mapping context name, usually the file name.</param>
-    /// <returns>The input file text, valid against <c>oxygen.input.schema.json</c>.</returns>
-    public static string InputFile(string contextName)
-    {
-        ArgumentException.ThrowIfNullOrWhiteSpace(contextName);
-        return $$"""
-            {
-              "actions": [
-                {
-                  "name": "Jump",
-                  "type": "bool"
-                }
-              ],
-              "contexts": [
-                {
-                  "name": "{{contextName}}",
-                  "mappings": [
-                    {
-                      "action": "Jump",
-                      "slot": "Space",
-                      "trigger": "pressed"
-                    }
-                  ]
-                }
-              ]
-            }
-
-            """;
-    }
 
     /// <summary>Makes the text of a new, empty scene, with an identity of its own.</summary>
     /// <param name="sceneName">The scene's name, which is its file name.</param>

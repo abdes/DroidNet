@@ -5,6 +5,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Input;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -117,7 +118,7 @@ public sealed partial class SceneDescriptorGeneratorTests
             .Select(static context => (context.GetProperty("context_ref").GetString(), context.GetProperty("priority").GetInt32()))
             .ToArray();
         _ = contexts.Should().Equal(
-            ("/Content/Input/Controls.input/Menu.oimap", InputContextSources.DefaultPriority),
+            ("/Content/Input/Controls.input/Menu.oimap", StartingContextRules.DefaultPriority),
             ("/Content/Input/Controls.input/Gameplay.oimap", 3),
             ("/Content/Input/Overlay.input/Overlay.oimap", 7));
     }

@@ -12,6 +12,7 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\src\Oxygen.Editor.WorldEditor.csproj" />
+      <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Input\testing\Oxygen.Editor.Input.Testing.csproj" />
     </ItemGroup>
 
     <ItemGroup Condition="Exists('$(ProjectsRoot)\Oxygen.Engine\out\install\$(Configuration)\bin')">

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Storage;
+using Oxygen.Editor.Input;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Diagnostics;
@@ -250,13 +251,14 @@ internal static class AssetRelocationPlanner
             throw AssetRelocationException.ModelProduct(rename.Product, model);
         }
 
-        if (AssetFileTypes.ContainerOf(rename.Product) is null || RelocationPaths.FindWritableMount(project, rename.Product) is null)
+        if (AssetFileTypes.ContainerOf(rename.Product) is not { } container || RelocationPaths.FindWritableMount(project, rename.Product) is null)
         {
             throw new AssetRelocationException($"'{rename.Product}' is not an action or a mapping context of the project's input sources.");
         }
 
-        var file = InputSourceFiles.FindSourceFile(project, rename.Product)
-            ?? throw new AssetRelocationException($"The input source of '{rename.Product.Name}' no longer exists.");
+        var file = InputSourceFiles.FileOf(project, container) is { } source && File.Exists(source.FullPath)
+            ? source
+            : throw new AssetRelocationException($"The input source of '{rename.Product.Name}' no longer exists.");
         if (map.IsMoved(file) || !index.Descriptors.Any(descriptor => descriptor.Location == file))
         {
             throw new AssetRelocationException($"Rename '{rename.CurrentName}' on its own, not while its input source moves.");

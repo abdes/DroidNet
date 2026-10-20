@@ -16,9 +16,9 @@ using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Scripts;
-using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Input;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
@@ -83,6 +83,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="materialSlots">The current native geometry slot inventories.</param>
     /// <param name="projectContexts">The active project lifetime.</param>
     /// <param name="fileSystem">The file system that holds the project's files.</param>
+    /// <param name="inputSources">The project's input sources, which declare the scene's starting input contexts.</param>
     /// <param name="interaction">The shared editor lock owner.</param>
     /// <param name="scriptAnalysis">The script analysis, for script slot parameters and problems.</param>
     /// <param name="codeEditor">The code editor, for editing a slot's script.</param>
@@ -103,6 +104,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         IGeometryMaterialSlotProvider materialSlots,
         IProjectContextService projectContexts,
         IFileSystem fileSystem,
+        IInputSources inputSources,
         ILoggerFactory? loggerFactory = null,
         WorkspaceInteractionService? interaction = null,
         IScriptAnalysisService? scriptAnalysis = null,
@@ -139,9 +141,10 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             this.InspectAtmosphereSource,
             hosting.DispatcherScheduler,
             this.ObserveSkyLightAsync,
-            context => projectContexts.ActiveProject is { } project ? InputContextSources.Find(project, context) : InputContextSource.External,
+            context => StartingContextRules.Describe(projectContexts.ActiveProject, context, inputSources.Find),
             asset => this.RevealAssetAsync(projectContexts, asset),
-            fileSystem);
+            fileSystem,
+            inputSources);
         this.renderingEditor = new NodeRenderingViewModel(this.AuthoringOf);
 
         this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;

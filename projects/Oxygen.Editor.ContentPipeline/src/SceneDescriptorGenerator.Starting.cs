@@ -2,11 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Input;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline;
 
@@ -15,6 +17,9 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public sealed partial class SceneDescriptorGenerator
 {
+    // The cook reads the saved input sources.
+    private static readonly InputSourceFiles InputFiles = new(new RealFileSystem());
+
     /// <summary>Resolves the camera node the cooked scene starts viewing through.</summary>
     /// <remarks>
     /// An unset starting camera cooks as the first camera in hierarchy order, which is the camera the editor shows
@@ -51,24 +56,16 @@ public sealed partial class SceneDescriptorGenerator
         var contexts = new List<NativeStartingInputContext>();
         foreach (var entry in scene.StartingInputContexts)
         {
-            var path = entry.Context.VirtualPath;
-            if (!path.EndsWith(AssetFileTypes.InputMappingContext, StringComparison.Ordinal))
+            var source = StartingContextRules.Describe(scope.Project, entry.Context, container => InputFiles.Read(scope.Project, container));
+            if (StartingContextRules.Check(entry, source) is { } problem)
             {
-                site.Report(SceneStartingPropertyPaths.StartingInputContexts, $"'{path}' is not an input mapping context. Remove it from the scene's starting input contexts.");
-                continue;
-            }
-
-            if (InputContextSources.Find(scope.Project, entry.Context).IsUndeclared)
-            {
-                site.Report(
-                    SceneStartingPropertyPaths.StartingInputContexts,
-                    $"No input source declares the starting input context '{path}'. Remove it, or declare it in the input source it is named under.");
+                site.Report(SceneStartingPropertyPaths.StartingInputContexts, problem.Message);
                 continue;
             }
 
             contexts.Add(new NativeStartingInputContext(
                 ContentPipelinePaths.ToNativeDescriptorPath(entry.Context, AssetFileTypes.InputMappingContext),
-                InputContextSources.EffectivePriority(scope.Project, entry)));
+                StartingContextRules.EffectivePriority(entry, source)));
         }
 
         return contexts.Count == 0 ? null : contexts;

@@ -263,8 +263,9 @@ and the pipeline implements it (`IScriptLibrary`), as LivePreview implements
   `EffectivePriority(StartingInputContextData, InputContainer?)`, and
   `StartingContextRules.Check(contexts, containers)` for
   `SetStartingInputContexts` and the cook.
-- Problems: `InputProblem : AssetProblem`, adding the JSON location, with the
-  codes of `InputSourceCodes` (`OXE.INPUT.`), which the format reports.
+- Problems: `InputProblem : AssetProblem`, adding the identity of the source
+  that has it, with the codes of `InputSourceCodes` (`OXE.INPUT.`), which the
+  format and `InputRules` report.
 - Facts: `IInputSources` (8.1), implemented by `InputFacts`. A product's source
   follows from its identity ([asset identity](asset-identity.md) 5.2), so
   nothing scans a folder to find which source declares an action or a context.
@@ -289,8 +290,11 @@ and the pipeline implements it (`IScriptLibrary`), as LivePreview implements
 **What the other modules hold**
 
 - Scenes: `Edits/Scripting` (decision 7), validated by `ScriptSlotRules`;
-  `SetStartingInputContexts` validated by `StartingContextRules`;
-  `SceneTemplates.New`. `SetStartingCamera` checks only against the scene and
+  `SceneTemplates.New`. `SetStartingInputContexts` checks only the list, as
+  every reference edit does (no missing entry, a mapping context, no
+  duplicate): a context its source no longer declares stays in the scene, so
+  the user can still edit the list, and the cook reports it through
+  `StartingContextRules`. `SetStartingCamera` checks only against the scene and
   needs no family rule.
 - ContentPipeline: the creation workflow takes the family's template
   (`AuthoredAssetTemplate`: suffixes and content); the cook calls
@@ -637,9 +641,8 @@ public interface IScriptLibrary           // implemented by ContentPipeline
 // Oxygen.Editor.Input
 public interface IInputSources : IAssetProblemSource
 {
-    event EventHandler<InputSourceChangedEventArgs>? Changed;
+    event EventHandler<InputSourceChangedEventArgs>? Changed; // Container null: the project changed
     InputContainer? Find(AssetPath container);               // /Content/Input/Player.input
-    InputDeclaration? FindDeclaration(AssetPath product);    // file and line of the declaring item
     IReadOnlyCollection<InputContainer> All { get; }
 }
 ```
@@ -647,8 +650,12 @@ public interface IInputSources : IAssetProblemSource
 `ScriptAnalysis` (`Parameters`, `Problems`, `HasDeclaration`, `IsUnavailable`)
 is the port's record; LivePreview maps the Interop types into it. `ScriptRead`
 is a library `Script` or `Unavailable(reason)`. `ScriptFacts` alone reads script
-files; `InputFacts` alone reads input sources. Both follow
-`IAssetCatalog.Changes` for their own suffixes, so neither knows the other.
+files. Input alone reads input sources: `InputFacts` the editor's saved state,
+and `InputSourceFiles` the saved file the cook reads, so the cook never waits
+for the facts. Both facts follow `IAssetCatalog.Changes` for their own suffixes,
+so neither knows the other. A product's declaration is read from its container
+(`InputContainer.FindDeclaration`); the Content Explorer opens it with the
+container rows of #80.
 
 ### 8.2 Threading
 
@@ -677,8 +684,10 @@ service, so a scope that constructs the per-project object with its
 
 - `ScriptFacts` (as `IScripts` and `IAssetProblemSource`), `InputFacts` (as
   `IInputSources` and `IAssetProblemSource`), `ProjectScriptTooling` and
-  `ScriptToolingPaths` are root singletons, registered by their family modules'
-  registrations in `Program.cs`.
+  `ScriptToolingPaths` are registered by their family modules' registrations.
+  The facts follow the asset catalog, which each workspace creates in its own
+  container today, so they are singletons of that container; they become root
+  singletons with the catalog.
 - `NativeScriptAnalyzer` is a root singleton mapped to `IScriptAnalyzer`;
   `ContentPipelineService` is mapped to `IScriptLibrary`.
 - `CodeEditorService` and the Problems panel are not family services; the UI

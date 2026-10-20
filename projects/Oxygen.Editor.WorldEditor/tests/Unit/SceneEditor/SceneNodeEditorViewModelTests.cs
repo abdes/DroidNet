@@ -11,6 +11,7 @@ using DroidNet.Mvvm.Converters;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Selection;
@@ -184,6 +185,7 @@ public sealed class SceneNodeEditorViewModelTests
             Mock.Of<ContentPipeline.Inspection.IGeometryMaterialSlotProvider>(),
             Mock.Of<IProjectContextService>(),
             new MockFileSystem(),
+            new FakeInputSources(),
             interaction: interaction);
     }
 

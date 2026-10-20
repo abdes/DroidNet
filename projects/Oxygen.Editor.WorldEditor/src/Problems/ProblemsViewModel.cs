@@ -3,19 +3,23 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.Input;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Scripting;
+using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Problems;
 
 /// <summary>
-/// The Problems panel: script problems of the project and of the running scene, grouped by file, with the full
-/// diagnostic of the selected one.
+/// The Problems panel: the script and input source problems of the project and the script problems of the running
+/// scene, grouped by file, with the full diagnostic of the selected one.
 /// </summary>
 /// <remarks>
 /// Problems update as scripts are saved, without taking focus; the tab title carries the error and warning counts.
@@ -32,6 +36,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     private readonly IScriptAnalysisService analysis;
     private readonly ICodeEditorService codeEditor;
     private readonly IProjectContextService projects;
+    private readonly IInputSources inputs;
     private readonly Dictionary<FileSystemPath, ScriptAnalysisSnapshot> files = [];
     private readonly IDisposable subscription;
     private readonly IRuntimeProblemSource? runtime;
@@ -40,13 +45,17 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     /// <param name="analysis">The script analysis, whose changes are raised on the UI thread.</param>
     /// <param name="codeEditor">The code editor that opens a problem's location.</param>
     /// <param name="projects">The active project, for project-relative file names.</param>
+    /// <param name="inputs">The project's input sources and their problems.</param>
     /// <param name="runtime">The problems the running scene reports.</param>
-    public ProblemsViewModel(IScriptAnalysisService analysis, ICodeEditorService codeEditor, IProjectContextService projects, IRuntimeProblemSource? runtime = null)
+    public ProblemsViewModel(IScriptAnalysisService analysis, ICodeEditorService codeEditor, IProjectContextService projects, IInputSources inputs, IRuntimeProblemSource? runtime = null)
     {
         ArgumentNullException.ThrowIfNull(analysis);
+        ArgumentNullException.ThrowIfNull(inputs);
         this.analysis = analysis;
         this.codeEditor = codeEditor;
         this.projects = projects;
+        this.inputs = inputs;
+        inputs.ProblemsChanged += this.OnInputProblemsChanged;
         foreach (var snapshot in analysis.Current)
         {
             this.files[snapshot.SourcePath] = snapshot;
@@ -126,6 +135,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     public void Dispose()
     {
         this.subscription.Dispose();
+        this.inputs.ProblemsChanged -= this.OnInputProblemsChanged;
         if (this.runtime is not null)
         {
             this.runtime.RuntimeProblemsChanged -= this.OnRuntimeProblemsChanged;
@@ -156,6 +166,27 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
 
     // A runtime problem whose spans name no project file has nothing to open.
     private static bool HasSourceFile(ProblemEntry entry) => Path.IsPathFullyQualified(entry.Problem.SourcePath);
+
+    // The panel lists script problems; an input source's problem is shown in the same form.
+    private static ScriptProblem ToScriptProblem(AssetProblem problem)
+    {
+        var path = problem.File ?? string.Empty;
+        var location = problem.Line is { } line ? string.Create(CultureInfo.InvariantCulture, $"{path}:{line}:{problem.Column ?? 1}") : path;
+        return new ScriptProblem(
+            problem.Severity switch
+            {
+                DiagnosticSeverity.Error or DiagnosticSeverity.Fatal => ScriptProblemSeverity.Error,
+                DiagnosticSeverity.Warning => ScriptProblemSeverity.Warning,
+                _ => ScriptProblemSeverity.Note,
+            },
+            problem.Code,
+            problem.Message,
+            path,
+            problem.Line,
+            problem.Column,
+            $"error[{problem.Code}]: {problem.Message}\n --> {location}\n",
+            problem.Explanation ?? "The input source does not cook until this is fixed.");
+    }
 
     private bool CanCheckScripts() => !this.IsChecking;
 
@@ -203,6 +234,8 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
 
     private void OnRuntimeProblemsChanged(object? sender, EventArgs args) => this.Rebuild();
 
+    private void OnInputProblemsChanged(object? sender, EventArgs args) => this.Rebuild();
+
     private void Rebuild()
     {
         var selected = this.Selected?.Problem;
@@ -211,6 +244,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
         var groups = this.files.Values
             .Where(static file => file.Problems.Count > 0)
             .SelectMany(static file => file.Problems)
+            .Concat(this.inputs.Problems.Select(ToScriptProblem))
             .Concat(runtime)
             .GroupBy(static problem => problem.SourcePath, StringComparer.OrdinalIgnoreCase)
             .Select(file => new ProblemFileGroup(

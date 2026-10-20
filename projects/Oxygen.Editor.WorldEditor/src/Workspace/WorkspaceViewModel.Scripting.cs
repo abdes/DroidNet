@@ -5,6 +5,7 @@
 using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.Input;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Problems;
 using Oxygen.Editor.World.Scripting;
@@ -12,7 +13,8 @@ using Oxygen.Editor.World.Scripting;
 namespace Oxygen.Editor.World.Workspace;
 
 /// <summary>
-/// Script authoring services of the workspace: analysis, the code editor, the Problems panel and project tooling.
+/// Script and input authoring services of the workspace: script analysis, the input facts, the code editor, the
+/// Problems panel and project tooling.
 /// </summary>
 public partial class WorkspaceViewModel
 {
@@ -30,6 +32,9 @@ public partial class WorkspaceViewModel
         childContainer.Register<ICodeEditorService, CodeEditorService>(Reuse.Singleton);
         childContainer.Register<ProjectScriptTooling>(Reuse.Singleton);
         childContainer.Register<IScriptAnalysisService, ScriptAnalysisService>(Reuse.Singleton);
+
+        // The input facts follow this workspace's asset catalog, so they live as long as it does.
+        childContainer.Register<IInputSources, InputFacts>(Reuse.Singleton);
         this.RegisterPlayServices(childContainer);
         childContainer.Register<ProblemsViewModel>(Reuse.Singleton);
         childContainer.Register<ProblemsView>(Reuse.Transient);

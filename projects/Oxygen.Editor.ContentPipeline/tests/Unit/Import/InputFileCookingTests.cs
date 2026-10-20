@@ -4,14 +4,12 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Authoring;
-using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 
 /// <summary>
-/// Input sources cook as <c>input</c> jobs named by their identity, and their actions and contexts are found in the
+/// Input sources cook as <c>input</c> jobs named by their identity, and their actions and contexts resolve to the
 /// source they are named under.
 /// </summary>
 [TestClass]
@@ -31,16 +29,11 @@ public sealed class InputFileCookingTests : IDisposable
         }
         """;
 
-    private const string Common = """
-        { "actions": [ { "name": "Fire", "type": "bool" } ] }
-        """;
-
     private readonly string root = Path.Combine(Path.GetTempPath(), "oxygen-input-cooking-tests", Guid.NewGuid().ToString("N"));
 
     public InputFileCookingTests()
     {
         _ = Directory.CreateDirectory(Path.Combine(this.root, "Content", "Gameplay"));
-        _ = Directory.CreateDirectory(Path.Combine(this.root, "Content", "Common"));
     }
 
     public void Dispose()
@@ -76,23 +69,6 @@ public sealed class InputFileCookingTests : IDisposable
     }
 
     [TestMethod]
-    public void AProductIsDeclaredInTheSourceItIsNamedUnder()
-    {
-        var project = this.CreateProject();
-        var file = this.Write("Gameplay/Player.input.json", Player);
-
-        var action = InputSourceFiles.FindDeclaration(project, AssetPath.Parse("/Content/Gameplay/Player.input/Dash.oiact"));
-        var context = InputSourceFiles.FindDeclaration(project, AssetPath.Parse("/Content/Gameplay/Player.input/Gameplay.oimap"));
-
-        _ = action.Should().NotBeNull();
-        _ = action!.File.FullPath.Should().Be(file);
-        _ = action.Position.Should().Be(new SourcePosition(2, 62));
-        _ = context!.Position.Line.Should().Be(4);
-        _ = InputSourceFiles.FindDeclaration(project, AssetPath.Parse("/Content/Gameplay/Player.input/Gameplay.oiact")).Should().BeNull();
-        _ = InputSourceFiles.FindDeclaration(project, AssetPath.Parse("/Content/Gameplay/Vehicle.input/Dash.oiact")).Should().BeNull();
-    }
-
-    [TestMethod]
     public void AProductResolvesToTheContainerItIsNamedUnder()
     {
         var project = this.CreateProject();
@@ -110,32 +86,6 @@ public sealed class InputFileCookingTests : IDisposable
             .Should().BeNull("a model produces nothing until it is imported");
         _ = CookInputResolver.ResolveContainer(project, AssetPath.Parse("/Content/Gameplay/Player.input"), ContentCookInputRole.Dependency)
             .Should().BeNull("a container is not its own product");
-    }
-
-    [TestMethod]
-    public void AContextTakesThePriorityItsSourceDeclares()
-    {
-        var project = this.CreateProject();
-        _ = this.Write("Gameplay/Player.input.json", Player);
-
-        _ = InputContextSources.Find(project, AssetPath.Parse("/Content/Gameplay/Player.input/Gameplay.oimap"))
-            .Should().Be(new InputContextSource(IsProjectContext: true, DeclaredPriority: 3));
-        _ = InputContextSources.Find(project, AssetPath.Parse("/Content/Gameplay/Player.input/Menu.oimap")).IsUndeclared.Should().BeTrue();
-        _ = InputContextSources.Find(project, AssetPath.Parse("/Content/Gameplay/Gameplay.oimap")).IsUndeclared.Should().BeTrue("a context is declared only by the source it is named under");
-    }
-
-    [TestMethod]
-    public void AnActionNamedByPathMustBeDeclaredByAProjectSource()
-    {
-        var project = this.CreateProject();
-        _ = this.Write("Common/Common.input.json", Common);
-        var source = InputSourceReader.Read(File.ReadAllBytes(this.Write("Gameplay/Player.input.json", Player)));
-
-        var problems = InputSourceFiles.CheckActionPaths(project, AssetPath.Parse("/Content/Gameplay/Player.input"), source).ToList();
-
-        var problem = problems.Should().ContainSingle("Fire is declared, and the engine content is resolved by the cook").Subject;
-        _ = problem.Code.Should().Be(InputSourceCodes.ActionMissing);
-        _ = problem.Line.Should().Be(7);
     }
 
     private string Write(string relativePath, string text)

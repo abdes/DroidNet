@@ -5,7 +5,7 @@
 using System.Numerics;
 using AwesomeAssertions;
 using DroidNet.Controls;
-using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Input;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;

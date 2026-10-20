@@ -11,13 +11,11 @@ using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Settings;
 using DroidNet.Aura.Windowing;
 using DroidNet.Config;
-using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Storage.Native;
 using DroidNet.Tests;
-using DroidNet.TimeMachine;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -25,7 +23,6 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Mounting;
@@ -33,6 +30,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Content;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Session;
@@ -55,8 +53,6 @@ using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
-using Oxygen.Editor.World.Workspace;
-using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -65,7 +61,7 @@ using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
-internal sealed partial class NativeSceneFixture : IAsyncDisposable
+internal sealed class NativeSceneFixture : IAsyncDisposable
 {
     public CookingPanelViewModel CreateTimingCookingPanel(CatalogWorkloadServices services) => new(services.Runs, services.Pipeline, services.Projects, Mock.Of<ICookingWorkspaceActions>(), this.hosting);
 
@@ -325,7 +321,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     {
         var node = this.Source.RootNodes.Select(root => SceneTraversal.FindNodeById(root, nodeId)).OfType<SceneNode>().Single();
         var uri = node.Components.OfType<GeometryComponent>().Single().Geometry;
-        var inventory = await ((IGeometryMaterialSlotProvider)this.materialPipeline.Pipeline).ReadAsync(this.projectContexts.ActiveProject!, uri, cancellationToken).ConfigureAwait(true);
+        var inventory = await this.materialPipeline.Pipeline.ReadAsync(this.projectContexts.ActiveProject!, uri, cancellationToken).ConfigureAwait(true);
         _ = inventory.Should().NotBeNull("the native fixture geometry must have a current slot inventory");
         var slot = inventory!.Slots.Should().ContainSingle().Which;
         return new(uri, slot.SlotId, inventory.LayoutRevision);
@@ -375,7 +371,7 @@ internal sealed partial class NativeSceneFixture : IAsyncDisposable
     {
         this.activeMaterialSlotProvider = materialSlots ?? this.materialPipeline.Pipeline;
         this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.area, default, assets ?? this.AssetCatalog.Object, this.Preview, new SceneSelectionService(), this.materialSlotProvider.Object, this.projectContexts, new RealFileSystem());
+        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.area, default, assets ?? this.AssetCatalog.Object, this.Preview, new SceneSelectionService(), this.materialSlotProvider.Object, this.projectContexts, new RealFileSystem(), new FakeInputSources());
     }
 
     /// <summary>Opens the fixture's scene on a running engine, starting the shared engine only if it is not running.</summary>

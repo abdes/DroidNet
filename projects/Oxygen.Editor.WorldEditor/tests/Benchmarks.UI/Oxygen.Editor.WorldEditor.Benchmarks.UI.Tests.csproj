@@ -9,6 +9,7 @@
     <ItemGroup>
         <Compile Include="../../testsupport/Native/DocumentTransitionScenario.cs" Link="Support/DocumentTransitionScenario.cs" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.WorldEditor/src/Oxygen.Editor.WorldEditor.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Input/testing/Oxygen.Editor.Input.Testing.csproj" />
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions.Testing" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Fixtures/LooseCookedIndexFixture.cs" />

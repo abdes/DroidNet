@@ -36,10 +36,6 @@ namespace Oxygen.Editor.World.Scripting;
 /// The analyzer is native and loads from the engine SDK, which the engine service makes loadable once it has verified
 /// it. Analysis waits for that, so a project opened before the engine is ready is analyzed as soon as it is.
 /// </para>
-/// <para>
-/// Hand-written input files are checked the same way, in managed code: JSON, the engine schema and self-contained
-/// action references.
-/// </para>
 /// </remarks>
 public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDisposable
 {
@@ -190,14 +186,12 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         var options = new EnumerationOptions { RecurseSubdirectories = true, IgnoreInaccessible = true, AttributesToSkip = FileAttributes.Hidden | FileAttributes.System };
         return Directory.EnumerateFiles(root.FullPath, "*", options)
             .Select(FileSystemPath.From)
-            .Where(static path => AssetFileTypes.Is(path.Name, AssetFileCategory.Script) || AssetFileTypes.Is(path.Name, AssetFileCategory.Input))
+            .Where(static path => AssetFileTypes.Is(path.Name, AssetFileCategory.Script))
             .Where(path => !path.GetPathBelow(root).Split('/').Any(static segment => segment.StartsWith('.')));
     }
 
     private static FileSystemPath? ToScriptPath(ProjectContext project, AssetPath path)
-        => (AssetFileTypes.Is(path.Name, AssetFileCategory.Script) || AssetFileTypes.Is(path.Name, AssetFileCategory.Input))
-            ? RelocationPaths.ToPhysical(project, path)
-            : null;
+        => AssetFileTypes.Is(path.Name, AssetFileCategory.Script) ? RelocationPaths.ToPhysical(project, path) : null;
 
     /// <summary>Analyzes a script, unless its content is unchanged and <paramref name="force"/> is not set.</summary>
     /// <param name="path">The script file.</param>
@@ -210,11 +204,6 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         if (this.projects.ActiveProject is not { } project || RelocationPaths.ToVirtual(project, path) is not { } virtualPath)
         {
             return null;
-        }
-
-        if (AssetFileTypes.Is(path.Name, AssetFileCategory.Input))
-        {
-            return await this.CheckInputFileAsync(project, path, virtualPath, force, cancellationToken).ConfigureAwait(false);
         }
 
         if (!AssetFileTypes.Is(path.Name, AssetFileCategory.Script))
@@ -255,38 +244,6 @@ public sealed partial class ScriptAnalysisService : IScriptAnalysisService, IDis
         }
 
         this.entries[path] = new Entry(hash, snapshot, snapshot.ParametersOutOfDate ? previous?.LastValidParameters ?? [] : snapshot.Parameters);
-        this.changes.OnNext(snapshot);
-        return snapshot;
-    }
-
-    private async Task<ScriptAnalysisSnapshot?> CheckInputFileAsync(ProjectContext project, FileSystemPath path, AssetPath virtualPath, bool force, CancellationToken cancellationToken)
-    {
-        byte[] bytes;
-        try
-        {
-            bytes = await File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(false);
-        }
-        catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
-        {
-            this.Remove(path);
-            return null;
-        }
-        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
-        {
-            this.LogScriptUnreadable(path, exception);
-            return this.Find(path);
-        }
-
-        var hash = Convert.ToHexString(SHA256.HashData(bytes));
-        if (this.entries.TryGetValue(path, out var previous) && !force && string.Equals(previous.Hash, hash, StringComparison.Ordinal))
-        {
-            return previous.Snapshot;
-        }
-
-        var identity = AssetFileTypes.ToIdentity(virtualPath);
-        var problems = InputFileCheck.Check(project, path.FullPath, identity, bytes);
-        var snapshot = new ScriptAnalysisSnapshot(path, identity, problems, [], ParametersOutOfDate: false);
-        this.entries[path] = new Entry(hash, snapshot, []);
         this.changes.OnNext(snapshot);
         return snapshot;
     }

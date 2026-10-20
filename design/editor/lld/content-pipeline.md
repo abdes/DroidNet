@@ -1424,9 +1424,10 @@ owns how the pipeline cooks it.
   libraries. The cooker resolves each path like a scene reference.
 - **Checks.** The input reader (`InputSourceReader`, Managed.Assets) checks
   JSON, the engine schema, duplicate names and undeclared local names, each at
-  its position; `InputSourceFiles.CheckActionPaths` checks that a path names an
-  action a project source declares. Script analysis reports both on save
-  (`OXE.INPUT.Source.*`).
+  its position; `InputRules.CheckActionPaths` (Input) checks that a path names
+  an action a project source declares. The input facts (`IInputSources`) report
+  both on save (`OXE.INPUT.Source.*`), and the scene cook checks starting input
+  contexts with `StartingContextRules` (Input).
 - **Renames.** Renaming an action or context is a relocation request
   (`InputProductRename`): the source is rewritten, local references included,
   the old and new product identities enter the relocation map, and every

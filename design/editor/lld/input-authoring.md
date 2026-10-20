@@ -420,8 +420,8 @@ headlessly with the rest.
 
 `InputValidation` runs on load, after every commit and before cook. The source
 reader checks JSON, the schema, duplicate names and undeclared local names, each
-at its position; `InputSourceFiles.CheckActionPaths` checks that every action
-path names an action a project source declares (a path into a cooked library is
+at its position; `InputRules.CheckActionPaths` (Input) checks that every
+action path names an action a project source declares (a path into a cooked library is
 left to the cook); the editor adds input overlaps (section 9.3). Results attach
 to fields and rows; they do not block editing. Errors block that source's cook
 with the same messages.

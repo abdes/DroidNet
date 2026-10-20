@@ -7,17 +7,23 @@ using AwesomeAssertions;
 using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Scripts;
+using Oxygen.Editor.Input;
+using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Play;
 using Oxygen.Editor.World.Problems;
+using Oxygen.Managed.Assets.Authoring.Input;
+using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 
 /// <summary>
-/// The Problems panel follows script analysis: grouped by file, counted in its title, cleared when fixed.
+/// The Problems panel follows script analysis and the input sources: grouped by file, counted in its title, cleared
+/// when fixed.
 /// </summary>
 [TestClass]
 public sealed partial class ProblemsViewModelTests : IDisposable
@@ -27,6 +33,7 @@ public sealed partial class ProblemsViewModelTests : IDisposable
     private readonly Subject<ScriptAnalysisSnapshot> changes = new();
     private readonly Mock<ICodeEditorService> codeEditor = new();
     private readonly FakeRuntimeProblems runtime = new();
+    private readonly FakeInputSources inputs = new();
 
     /// <inheritdoc />
     public void Dispose() => this.changes.Dispose();
@@ -120,6 +127,29 @@ public sealed partial class ProblemsViewModelTests : IDisposable
         _ = this.runtime.Selected.Should().ContainSingle().Which.Should().Be(runtimeProblem);
     }
 
+    [TestMethod]
+    public void AnInputSourcesProblemsAppearUntilItIsFixed()
+    {
+        using var model = this.CreateModel();
+        var problem = new AssetProblem(DiagnosticSeverity.Error, InputSourceCodes.ActionUndeclared, "The source declares no action 'Boost'.")
+        {
+            File = @"C:\Project\Content\Input\Player.input.json",
+            Line = 13,
+            Column = 21,
+        };
+
+        this.inputs.SetProblems([new InputProblem(problem, AssetPath.Parse("/Content/Input/Player.input"))]);
+
+        var entry = model.Groups.Should().ContainSingle().Which.Entries.Should().ContainSingle().Subject;
+        _ = entry.Code.Should().Be(InputSourceCodes.ActionUndeclared);
+        _ = entry.Location.Should().Be("13:21");
+        _ = model.ErrorCount.Should().Be(1);
+
+        this.inputs.SetProblems([]);
+
+        _ = model.IsEmpty.Should().BeTrue();
+    }
+
     private static ScriptProblem Problem(ScriptProblemSeverity severity, int line)
         => new(severity, "S0503", "key 'fnd_one' not found", MovePath, line, 3, "rendered", "explanation");
 
@@ -141,7 +171,7 @@ public sealed partial class ProblemsViewModelTests : IDisposable
             AuthoringMounts = [],
             LocalFolderMounts = [],
         });
-        return new ProblemsViewModel(analysis.Object, this.codeEditor.Object, projects.Object, this.runtime)
+        return new ProblemsViewModel(analysis.Object, this.codeEditor.Object, projects.Object, this.inputs, this.runtime)
         {
             NodeSelector = this.runtime.SelectAsync,
         };

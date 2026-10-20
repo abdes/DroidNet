@@ -2,7 +2,7 @@
 
 Status: `in progress` — Phase 0 and S1.1 to S1.7 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
-Scenes, LivePreview) are done; S1.8 is in progress (Textures has landed; see the ledger in section 6). Phase 1
+Scenes, LivePreview) are done; S1.8 is in progress (Textures and Input have landed; see the ledger in section 6). Phase 1
 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
@@ -652,9 +652,9 @@ that lands the work. Checked against the tree on 2026-10-20.
 
 | #   | Commit         | Status        | Notes                                                                               |
 | --- | -------------- | ------------- | ----------------------------------------------------------------------------------- |
-| 1   | Problem source | `not started` | No `IAssetProblemSource` in the tree                                                |
+| 1   | Problem source | `done`        | Landed with Input, its first implementer                                            |
 | 2   | Textures       | `done`        | Pilot of the S1.15 test practice                                                    |
-| 3   | Input          | `not started` | No `Oxygen.Editor.Input` project; `InputFileCheck` still in `WorldEditor/Scripting` |
+| 3   | Input          | `done`        | Problems shows `IInputSources` as script problems until Scripting reworks the panel |
 | 4   | Scripting      | `not started` | `WorldEditor/Scripting` still present                                               |
 | 5   | Templates      | `not started` | No `AuthoredAssetTemplate`                                                          |
 

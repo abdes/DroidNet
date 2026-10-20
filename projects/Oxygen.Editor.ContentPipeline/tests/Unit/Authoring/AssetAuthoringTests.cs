@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Authoring;
+using Oxygen.Editor.Input;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
@@ -113,7 +114,7 @@ public sealed class AssetAuthoringTests : IDisposable
 
         _ = path.Should().Be(FileSystemPath.From(Path.Combine(this.root, "Content", "Input", "Player.input.json")));
         _ = reports.Should().Equal(path);
-        _ = (await File.ReadAllTextAsync(path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(AssetTemplates.InputFile("Player"));
+        _ = (await File.ReadAllTextAsync(path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(InputTemplates.New("Player"));
     }
 
     /// <summary>A new scene goes to the Scenes folder at a mount root, named after its file, with an identity of its own.</summary>

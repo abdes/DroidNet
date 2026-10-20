@@ -9,7 +9,7 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Input;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
@@ -32,10 +32,12 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     private readonly IAssetFeed? assetProvider;
     private readonly IScheduler observerScheduler;
     private readonly Func<AssetPath, InputContextSource> contextSource;
+    private readonly IInputSources? inputSources;
     private readonly Func<NodeId, Task>? inspectSceneNode;
     private readonly Func<AssetPath, Task>? revealAsset;
     private readonly List<AssetEntry> assets = [];
     private IDisposable? assetSubscription;
+    private IDisposable? inputSubscription;
     private bool catalogLoaded;
     private Scene? scene;
     private NodeId? automaticCamera;
@@ -54,13 +56,15 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     /// declares it, and its priority.</param>
     /// <param name="inspectSceneNode">Selects a node in the Scene Explorer.</param>
     /// <param name="revealAsset">Shows an asset in the Content Browser.</param>
+    /// <param name="inputSources">The project's input sources; a change to one reads the contexts again.</param>
     internal PlaySectionViewModel(
         Func<SceneAuthoring?>? authoringProvider,
         IAssetFeed? assetProvider,
         IScheduler observerScheduler,
         Func<AssetPath, InputContextSource>? contextSource,
         Func<NodeId, Task>? inspectSceneNode = null,
-        Func<AssetPath, Task>? revealAsset = null)
+        Func<AssetPath, Task>? revealAsset = null,
+        IInputSources? inputSources = null)
     {
         this.authoringProvider = authoringProvider;
         this.assetProvider = assetProvider;
@@ -68,6 +72,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         this.contextSource = contextSource ?? (static _ => InputContextSource.External);
         this.inspectSceneNode = inspectSceneNode;
         this.revealAsset = revealAsset;
+        this.inputSources = inputSources;
     }
 
     /// <summary>Gets the starting camera list: Automatic, then every camera in hierarchy order.</summary>
@@ -141,6 +146,8 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         this.disposed = true;
         this.assetSubscription?.Dispose();
         this.assetSubscription = null;
+        this.inputSubscription?.Dispose();
+        this.inputSubscription = null;
         this.Bind(value: null);
     }
 
@@ -163,6 +170,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         {
             current.PropertyChanged += this.OnSceneChanged;
             this.StartAssets();
+            this.StartInputSources();
         }
 
         this.Refresh();
@@ -411,6 +419,29 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         this.assetSubscription = this.assetProvider.Items
             .ObserveOn(this.observerScheduler)
             .Subscribe(this.OnAssets, this.OnCatalogFeedError);
+    }
+
+    private void StartInputSources()
+    {
+        if (this.inputSources is not { } sources || this.inputSubscription is not null || this.disposed)
+        {
+            return;
+        }
+
+        this.inputSubscription = Observable.FromEventPattern<InputSourceChangedEventArgs>(
+                handler => sources.Changed += handler,
+                handler => sources.Changed -= handler)
+            .ObserveOn(this.observerScheduler)
+            .Subscribe(_ => this.OnInputSourcesChanged());
+    }
+
+    // A context's declaration and its priority come from its input source.
+    private void OnInputSourcesChanged()
+    {
+        if (!this.disposed)
+        {
+            this.Refresh();
+        }
     }
 
     private void OnAssets(IReadOnlyList<AssetEntry> value)

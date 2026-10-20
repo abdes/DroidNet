@@ -8,6 +8,7 @@ using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.Input;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
@@ -144,7 +145,7 @@ public sealed partial class AssetAuthoring(IAssetCatalog catalog, IAtomicFileSto
     private sealed record Template(string Folder, string DefaultName, IReadOnlyList<string> Extensions, Func<string, string> Text)
     {
         private static readonly Template Script = new("Scripts", "NewScript", [AssetFileTypes.LuaScript, AssetFileTypes.LuauScript], static _ => AssetTemplates.Script);
-        private static readonly Template Input = new("Input", "NewInput", [AssetFileTypes.InputFile], AssetTemplates.InputFile);
+        private static readonly Template Input = new("Input", "NewInput", [AssetFileTypes.InputFile], InputTemplates.New);
         private static readonly Template Scene = new("Scenes", "NewScene", [AssetFileTypes.SceneDescriptor], AssetTemplates.Scene);
         private static readonly Template Material = new("Materials", "NewMaterial", [AssetFileTypes.MaterialDescriptor], AssetTemplates.Material);
 

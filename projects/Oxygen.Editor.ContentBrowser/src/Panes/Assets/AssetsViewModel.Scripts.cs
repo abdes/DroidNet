@@ -4,7 +4,6 @@
 
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline;
 
 namespace Oxygen.Editor.ContentBrowser;
@@ -21,17 +20,17 @@ public partial class AssetsViewModel
     public string EditToolTip
         => codeEditor is null ? "Code editing is unavailable."
             : this.SelectedAssets.Count != 1 ? "Select one script or input file to edit it in your code editor."
-            : this.FindCodeSource(this.SelectedAssets[0]) is { } source ? $"Edit {Path.GetFileName(source.SourcePath)} in your code editor"
+            : this.FindCodeSource(this.SelectedAssets[0]) is { } source ? $"Edit {Path.GetFileName(source)} in your code editor"
             : "Only scripts and input files open in the code editor.";
 
     /// <summary>Finds the file the code editor opens for an asset.</summary>
     /// <param name="asset">The asset.</param>
-    /// <returns>The file and line, or <see langword="null"/> when the asset has no hand-written source.</returns>
-    internal InputDeclaration? FindCodeSource(AssetEntry asset)
+    /// <returns>The file, or <see langword="null"/> when the asset has no hand-written source.</returns>
+    internal string? FindCodeSource(AssetEntry asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
         return asset is { Kind: AssetKind.Script or AssetKind.InputFile, SourcePath: { } source } && File.Exists(source.FullPath)
-            ? new InputDeclaration(source.FullPath, 1)
+            ? source.FullPath
             : null;
     }
 
@@ -42,7 +41,7 @@ public partial class AssetsViewModel
     {
         if (codeEditor is not null && this.SelectedAssets is [var asset] && this.FindCodeSource(asset) is { } source)
         {
-            _ = await codeEditor.OpenAsync(source.SourcePath, source.Line).ConfigureAwait(true);
+            _ = await codeEditor.OpenAsync(source, line: 1).ConfigureAwait(true);
         }
     }
 
@@ -51,7 +50,7 @@ public partial class AssetsViewModel
     {
         if (codeEditor is not null && this.SelectedAssets is [var asset] && this.FindCodeSource(asset) is { } source)
         {
-            _ = await codeEditor.OpenWithAsync(source.SourcePath).ConfigureAwait(true);
+            _ = await codeEditor.OpenWithAsync(source).ConfigureAwait(true);
         }
     }
 
@@ -83,7 +82,7 @@ public partial class AssetsViewModel
             return false;
         }
 
-        _ = await codeEditor.OpenAsync(source.SourcePath, source.Line).ConfigureAwait(true);
+        _ = await codeEditor.OpenAsync(source, line: 1).ConfigureAwait(true);
         return true;
     }
 

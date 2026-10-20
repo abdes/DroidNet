@@ -7,7 +7,7 @@ using System.IO.Abstractions;
 using System.Reactive.Concurrency;
 using DroidNet.Controls;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Input;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
@@ -34,6 +34,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     /// <param name="revealAsset">Shows an asset in the Content Browser.</param>
     /// <param name="fileSystem">The file system that holds the project's texture descriptors; with the catalog, it
     /// lists the cube textures.</param>
+    /// <param name="inputSources">The project's input sources, whose changes the Play section follows.</param>
     public EnvironmentViewModel(
         Func<SceneAuthoring?>? authoringProvider = null,
         IAssetFeed? assetProvider = null,
@@ -42,7 +43,8 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         Func<Scene, CancellationToken, Task<SkyLightObservation?>>? observeEnvironment = null,
         Func<AssetPath, InputContextSource>? inputContextSource = null,
         Func<AssetPath, Task>? revealAsset = null,
-        IFileSystem? fileSystem = null)
+        IFileSystem? fileSystem = null,
+        IInputSources? inputSources = null)
     {
         this.observeEnvironment = observeEnvironment;
         this.EditOwner = new(authoringProvider, this.RefreshFromScene, this.ValidationFeedback);
@@ -56,7 +58,7 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         this.PostProcessing = new(this.EditOwner);
         this.AtmosphereLights = new(this.EditOwner, authoringProvider, inspectSceneNode);
         this.SceneReferences = new(authoringProvider, assetProvider, observerScheduler ?? ImmediateScheduler.Instance);
-        this.Play = new(authoringProvider, assetProvider, scheduler, inputContextSource, inspectSceneNode, revealAsset);
+        this.Play = new(authoringProvider, assetProvider, scheduler, inputContextSource, inspectSceneNode, revealAsset, inputSources);
     }
 
     /// <summary>Occurs when diagnostic navigation requests realization and focus.</summary>
