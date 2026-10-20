@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
-using System.Numerics;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.Scripting;
+using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Assets;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 
@@ -16,23 +17,23 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 public sealed partial class AssetDetailsViewModel
 {
     /// <summary>Builds the facts the analysis of a script adds to its details.</summary>
-    /// <param name="analysis">The script's analysis, or <see langword="null"/> while it has not been analyzed.</param>
+    /// <param name="script">The analyzed script, or <see langword="null"/> while it has not been analyzed.</param>
     /// <returns>The parameter and problem facts.</returns>
-    public static IReadOnlyList<AssetInformationFact> BuildScriptFacts(ScriptAnalysisSnapshot? analysis)
+    public static IReadOnlyList<AssetInformationFact> BuildScriptFacts(Script? script)
     {
-        if (analysis is null)
+        if (script is null)
         {
             return [new("Problems", "Not analyzed yet")];
         }
 
         var facts = new List<AssetInformationFact>
         {
-            new("Problems", analysis.Problems.Count == 0 ? "None" : analysis.ProblemSummary),
+            new("Problems", script.Problems.Count == 0 ? "None" : script.ProblemSummary),
         };
-        if (analysis.Parameters.Count > 0)
+        if (script.Parameters.Count > 0)
         {
-            var label = analysis.ParametersOutOfDate ? "Parameters (out of date)" : "Parameters";
-            facts.Add(new(label, string.Join(Environment.NewLine, analysis.Parameters.Select(Describe))));
+            var label = script.ParametersOutOfDate ? "Parameters (out of date)" : "Parameters";
+            facts.Add(new(label, string.Join(Environment.NewLine, script.Parameters.Select(Describe))));
         }
 
         return facts;
@@ -42,20 +43,20 @@ public sealed partial class AssetDetailsViewModel
     {
         var type = parameter.Kind switch
         {
-            ScriptParameterKind.Vec3 or ScriptParameterKind.Vec4 when parameter.IsColor => "color",
-            ScriptParameterKind.Asset => "asset (" + AssetKinds.FromCookedType(parameter.AssetType) + ")",
+            ScriptParameterKind.Vec3Parameter or ScriptParameterKind.Vec4Parameter when parameter.IsColor => "color",
+            ScriptParameterKind.AssetParameter => "asset (" + AssetKinds.FromCookedType(parameter.AssetType) + ")",
             _ => parameter.Kind.ToString().ToLowerInvariant(),
         };
-        var value = parameter.DefaultValue switch
+        var value = parameter.Default switch
         {
             null => null,
-            bool flag => flag ? "true" : "false",
-            float number => number.ToString("0.###", CultureInfo.CurrentCulture),
-            Vector2 v => string.Create(CultureInfo.CurrentCulture, $"({v.X:0.###}, {v.Y:0.###})"),
-            Vector3 v => string.Create(CultureInfo.CurrentCulture, $"({v.X:0.###}, {v.Y:0.###}, {v.Z:0.###})"),
-            Vector4 v => string.Create(CultureInfo.CurrentCulture, $"({v.X:0.###}, {v.Y:0.###}, {v.Z:0.###}, {v.W:0.###})"),
-            string text => "\"" + text + "\"",
-            var other => Convert.ToString(other, CultureInfo.CurrentCulture),
+            { Kind: ScriptValueKind.BoolValue } flag => flag.BoolValue ? "true" : "false",
+            { Kind: ScriptValueKind.Int32Value } number => number.IntValue.ToString(CultureInfo.CurrentCulture),
+            { Kind: ScriptValueKind.FloatValue } number => number.FloatValue.ToString("0.###", CultureInfo.CurrentCulture),
+            { Kind: ScriptValueKind.StringValue } text => "\"" + text.StringValue + "\"",
+            { Kind: ScriptValueKind.Vec2Value or ScriptValueKind.Vec3Value or ScriptValueKind.Vec4Value } vector
+                => "(" + string.Join(", ", vector.GetVectorComponents().Select(static component => component.ToString("0.###", CultureInfo.CurrentCulture))) + ")",
+            var other => other.ToString(),
         };
         var unit = parameter.Unit.Length > 0 ? " " + parameter.Unit : string.Empty;
         return value is null ? $"{parameter.Name}: {type}" : $"{parameter.Name}: {type} = {value}{unit}";
@@ -63,18 +64,18 @@ public sealed partial class AssetDetailsViewModel
 
     private IEnumerable<AssetInformationFact> BuildSourceFacts(AssetEntry asset)
     {
-        if (asset is { Kind: AssetKind.Script, SourcePath: { } source } && this.scripts is not null)
+        if (asset is { Kind: AssetKind.Script } && this.scripts is not null)
         {
-            return BuildScriptFacts(this.scripts.Find(source));
+            return BuildScriptFacts(this.scripts.Find(AssetFileTypes.ToIdentity(asset.Identity)));
         }
 
         return [];
     }
 
-    private void OnScriptAnalyzed(ScriptAnalysisSnapshot analysis)
+    private void OnScriptChanged(ScriptChangedEventArgs args)
     {
-        if (!this.disposed && this.Asset is { Kind: AssetKind.Script, SourcePath: { } source }
-            && source == analysis.SourcePath)
+        if (!this.disposed && this.Asset is { Kind: AssetKind.Script } asset
+            && (args.Script is null || AssetFileTypes.ToIdentity(asset.Identity) == args.Script))
         {
             this.Refresh();
         }

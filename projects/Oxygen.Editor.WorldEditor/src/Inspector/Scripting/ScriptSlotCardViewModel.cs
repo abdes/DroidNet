@@ -6,12 +6,12 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.Scenes.Edits.Scripting;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Scripting;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Inspector.Scripting;
 
@@ -24,7 +24,8 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
     /// <summary>The most problems the badge tooltip lists before summarizing the rest.</summary>
     private const int MaxListedProblems = 5;
 
-    private ScriptDeclarations declarations = ScriptDeclarations.Unknown;
+    private ScriptRead? read;
+    private bool reading;
     private bool updating;
     private bool inOrderSession;
 
@@ -117,19 +118,22 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
     public bool CanRemoveAllStale => this.StaleValues.Count > 1;
 
     /// <summary>Gets a value indicating whether the script's source can be opened in the code editor.</summary>
-    public bool CanEditScript => this.declarations.Analysis is not null;
+    public bool CanEditScript => this.Script?.SourcePath is not null;
 
     /// <summary>Gets the Edit button tooltip, which says why Edit is unavailable when it is.</summary>
-    public string EditToolTip => this.declarations.Origin switch
+    public string EditToolTip => this.Script?.Origin switch
     {
-        ScriptDeclarationOrigin.Source => "Edit in your code editor",
-        ScriptDeclarationOrigin.Library or ScriptDeclarationOrigin.LibraryLoading or ScriptDeclarationOrigin.LibraryUnavailable
-            => "This script comes from a cooked library; it has no source in the project.",
+        ScriptOrigin.Source => "Edit in your code editor",
+        ScriptOrigin.Library => "This script comes from a cooked library; it has no source in the project.",
+        _ when this.reading || this.read?.Failure is not null => "This script comes from a cooked library; it has no source in the project.",
         _ => this.Slot.Script is null ? "Pick a script to edit it." : "The script's source is not known yet.",
     };
 
     /// <summary>Gets a value indicating whether the slot can be edited.</summary>
     public bool CanEdit => this.Owner.CanEdit;
+
+    /// <summary>Gets the slot's script, when it is known.</summary>
+    private Script? Script => this.read?.Script;
 
     /// <summary>Starts an interactive execution order edit; it is committed when it completes.</summary>
     public void BeginOrderSession() => this.inOrderSession = true;
@@ -154,7 +158,7 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
     /// <param name="value">The value.</param>
     /// <returns>The completion of the undoable edit.</returns>
     internal Task SetValueAsync(ScriptParameter parameter, ScriptValue? value)
-        => this.Owner.EditAsync(slots => ScriptSlotEdits.SetValue(slots, this.SlotId, parameter, value));
+        => this.Owner.EditAsync(node => new SetScriptValue(node, new ScriptSlotId(this.SlotId), parameter, value));
 
     /// <summary>Makes the slot run another script; picking its current script changes nothing.</summary>
     /// <param name="script">The picked script.</param>
@@ -162,29 +166,32 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
     internal Task SetScriptAsync(AssetPath script)
         => script == this.Slot.Script
             ? Task.CompletedTask
-            : this.Owner.EditAsync(slots => ScriptSlotEdits.SetScript(slots, this.SlotId, script));
+            : this.Owner.EditAsync(node => new SetSlotScript(node, new ScriptSlotId(this.SlotId), script));
 
     /// <summary>Removes one value, so the parameter takes its declared default or the stale value is gone.</summary>
     /// <param name="name">The parameter name.</param>
     /// <returns>The completion of the undoable edit.</returns>
     internal Task RemoveValueAsync(string name)
-        => this.Owner.EditAsync(slots => ScriptSlotEdits.Reset(slots, this.SlotId, name));
+        => this.Owner.EditAsync(node => new ResetScriptValue(node, new ScriptSlotId(this.SlotId), name));
 
-    /// <summary>Shows the slot, its position and its script's declarations.</summary>
+    /// <summary>Shows the slot, its position and its script.</summary>
     /// <param name="slot">The slot.</param>
     /// <param name="index">The slot position.</param>
     /// <param name="count">The number of slots.</param>
-    /// <param name="declared">The script's declarations and where they come from.</param>
-    internal void Update(ScriptSlot slot, int index, int count, ScriptDeclarations declared)
+    /// <param name="script">The slot's script, from its analysis or a library read; <see langword="null"/> when it is
+    /// not known.</param>
+    /// <param name="isReading">Whether the script is being read from a library.</param>
+    internal void Update(ScriptSlot slot, int index, int count, ScriptRead? script, bool isReading)
     {
         this.Slot = slot;
-        this.declarations = declared;
+        this.read = script;
+        this.reading = isReading;
         this.CanMoveUp = index > 0;
         this.CanMoveDown = index < count - 1;
-        var picked = slot.Script is { } script ? this.ScriptChoices.Find(script) : null;
+        var picked = slot.Script is { } identity ? this.ScriptChoices.Find(identity) : null;
         this.Title = picked?.Name ?? (slot.Script is { } uri ? Path.GetFileNameWithoutExtension(uri.VirtualPath) : "No script");
         this.ScriptText = slot.Script is null ? "Pick a script" : this.Title;
-        this.MissingScriptText = slot.Script is { } missing && picked is null && declared.Origin == ScriptDeclarationOrigin.Unknown
+        this.MissingScriptText = slot.Script is { } missing && picked is null && !isReading && script?.Script is null && script?.Failure is null
             ? "Missing: " + missing.VirtualPath
             : string.Empty;
         if (!this.inOrderSession)
@@ -192,8 +199,8 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
             this.ShowOrder();
         }
 
-        this.UpdateBadge(declared.Analysis);
-        this.UpdateFields(slot, declared);
+        this.UpdateBadge(this.Script);
+        this.UpdateFields(slot);
         this.OnPropertyChanged(nameof(this.CanEdit));
         this.OnPropertyChanged(nameof(this.CanEditScript));
         this.OnPropertyChanged(nameof(this.EditToolTip));
@@ -216,7 +223,7 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
 
     private static string DescribeProblem(ScriptProblem problem)
     {
-        var severity = problem.Severity == ScriptProblemSeverity.Error ? "Error" : "Warning";
+        var severity = problem.Severity >= DiagnosticSeverity.Error ? "Error" : "Warning";
         var line = problem.Line is { } number ? string.Create(CultureInfo.CurrentCulture, $", line {number}") : string.Empty;
         return string.Create(CultureInfo.CurrentCulture, $"{severity} {problem.Code}{line}: {problem.Message}");
     }
@@ -249,26 +256,26 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private Task RemoveAsync() => this.Owner.EditAsync(slots => ScriptSlotEdits.Remove(slots, this.SlotId));
+    private Task RemoveAsync() => this.Owner.EditAsync(node => new RemoveScriptSlot(node, new ScriptSlotId(this.SlotId)));
 
     [RelayCommand]
-    private Task MoveUpAsync() => this.Owner.EditAsync(slots => ScriptSlotEdits.Move(slots, this.SlotId, -1));
+    private Task MoveUpAsync() => this.Owner.EditAsync(node => new MoveScriptSlot(node, new ScriptSlotId(this.SlotId), -1));
 
     [RelayCommand]
-    private Task MoveDownAsync() => this.Owner.EditAsync(slots => ScriptSlotEdits.Move(slots, this.SlotId, 1));
+    private Task MoveDownAsync() => this.Owner.EditAsync(node => new MoveScriptSlot(node, new ScriptSlotId(this.SlotId), 1));
 
     [RelayCommand]
     private Task NewScriptAsync() => this.Owner.CreateScriptForAsync(this.SlotId);
 
     [RelayCommand]
-    private Task EditScriptAsync() => this.Owner.EditScriptAsync(this.declarations.Analysis?.SourcePath, line: null);
+    private Task EditScriptAsync() => this.Owner.EditScriptAsync(this.Script?.SourcePath, line: null);
 
     [RelayCommand]
     private void OpenProblem()
     {
-        var problems = this.declarations.Analysis?.Problems ?? [];
-        if ((problems.FirstOrDefault(static problem => problem.Severity == ScriptProblemSeverity.Error)
-            ?? problems.FirstOrDefault(static problem => problem.Severity == ScriptProblemSeverity.Warning)) is { } problem)
+        var problems = this.Script?.Problems ?? [];
+        if ((problems.FirstOrDefault(static problem => problem.Severity >= DiagnosticSeverity.Error)
+            ?? problems.FirstOrDefault(static problem => problem.Severity == DiagnosticSeverity.Warning)) is { } problem)
         {
             this.Owner.ShowProblem(problem);
         }
@@ -276,8 +283,8 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
 
     [RelayCommand]
     private Task RemoveStaleAsync()
-        => this.declarations.AreKnown
-            ? this.Owner.EditAsync(slots => ScriptSlotEdits.RemoveStale(slots, this.SlotId, this.declarations.Parameters))
+        => this.Script is { } script
+            ? this.Owner.EditAsync(node => new RemoveStaleScriptValues(node, new ScriptSlotId(this.SlotId), script.Parameters))
             : Task.CompletedTask;
 
     private void CommitOrder()
@@ -285,7 +292,7 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
         var order = (int)Math.Round(this.ExecutionOrder);
         if (order != this.Slot.ExecutionOrder)
         {
-            _ = this.Owner.EditAsync(slots => ScriptSlotEdits.SetExecutionOrder(slots, this.SlotId, order));
+            _ = this.Owner.EditAsync(node => new SetSlotExecutionOrder(node, new ScriptSlotId(this.SlotId), order));
         }
     }
 
@@ -303,14 +310,14 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
     }
 
     // The badge shows the counts; its tooltip lists the errors, then the warnings.
-    private void UpdateBadge(ScriptAnalysisSnapshot? snapshot)
+    private void UpdateBadge(Script? script)
     {
-        var problems = (snapshot?.Problems ?? [])
-            .Where(static problem => problem.Severity is ScriptProblemSeverity.Error or ScriptProblemSeverity.Warning)
-            .OrderBy(static problem => problem.Severity == ScriptProblemSeverity.Error ? 0 : 1)
+        var problems = (script?.Problems ?? [])
+            .Where(static problem => problem.Severity >= DiagnosticSeverity.Warning)
+            .OrderBy(static problem => problem.Severity >= DiagnosticSeverity.Error ? 0 : 1)
             .ToArray();
-        this.BadgeIsError = snapshot?.ErrorCount > 0;
-        this.BadgeText = snapshot is null || problems.Length == 0 ? string.Empty : snapshot.ProblemSummary;
+        this.BadgeIsError = script?.ErrorCount > 0;
+        this.BadgeText = script is null || problems.Length == 0 ? string.Empty : script.ProblemSummary;
         var lines = problems.Take(MaxListedProblems).Select(DescribeProblem);
         var more = problems.Length > MaxListedProblems
             ? [string.Create(CultureInfo.CurrentCulture, $"and {problems.Length - MaxListedProblems} more")]
@@ -319,11 +326,11 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
             : string.Join(System.Environment.NewLine, lines.Concat(more).Append("Click to open Problems."));
     }
 
-    private void UpdateFields(ScriptSlot slot, ScriptDeclarations declarations)
+    private void UpdateFields(ScriptSlot slot)
     {
-        var declared = declarations.Parameters;
-        this.ParametersOutOfDate = declarations.Analysis?.ParametersOutOfDate == true;
-        this.Notice = slot.Script is null ? "Pick a script to set its parameters." : this.DescribeDeclarations(declarations);
+        var declared = this.Script?.Parameters ?? [];
+        this.ParametersOutOfDate = this.Script?.ParametersOutOfDate == true;
+        this.Notice = slot.Script is null ? "Pick a script to set its parameters." : this.DescribeScript();
 
         // Fields are kept across updates, so a field that has focus keeps it when an unrelated value changes.
         for (var index = this.Fields.Count - 1; index >= 0; index--)
@@ -352,13 +359,13 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
             }
 
             var value = slot.Overrides.GetValueOrDefault(parameter.Name);
-            field.Update(parameter, value is not null && value.Kind == ScriptSlotEdits.ToValueKind(parameter.Kind) ? value : null);
+            field.Update(parameter, value is not null && value.Kind == parameter.ValueKind ? value : null);
         }
 
         this.StaleValues.Clear();
-        if (declarations.AreKnown && !this.ParametersOutOfDate)
+        if (this.Script is not null && !this.ParametersOutOfDate)
         {
-            foreach (var name in ScriptSlotEdits.FindStale(slot, declared))
+            foreach (var name in ScriptSlotRules.FindStale(slot, declared))
             {
                 this.StaleValues.Add(new ScriptStaleValueViewModel(this, name, slot.Overrides[name]));
             }
@@ -368,15 +375,15 @@ public sealed partial class ScriptSlotCardViewModel : ObservableObject
         this.OnPropertyChanged(nameof(this.CanRemoveAllStale));
     }
 
-    private string DescribeDeclarations(ScriptDeclarations declarations)
-        => declarations.Origin switch
+    private string DescribeScript()
+        => this.Script switch
         {
-            ScriptDeclarationOrigin.Unknown => "The script has not been analyzed yet, so its parameters are unknown.",
-            ScriptDeclarationOrigin.LibraryLoading => "Reading the parameters of this library script.",
-            ScriptDeclarationOrigin.LibraryUnavailable => "The parameters of this library script could not be read: " + declarations.Failure,
+            null when this.reading => "Reading the parameters of this library script.",
+            null when this.read?.Failure is { } failure => "The parameters of this library script could not be read: " + failure,
+            null => "The script has not been analyzed yet, so its parameters are unknown.",
             _ when this.ParametersOutOfDate => "The script has errors. These parameters are from its last valid version; fix the errors to see the current ones.",
-            _ when declarations.Parameters.Count == 0 => "This script declares no parameters.",
-            ScriptDeclarationOrigin.Library => "This script comes from a cooked library, which keeps no ranges, units or descriptions.",
+            { Parameters.Count: 0 } => "This script declares no parameters.",
+            { Origin: ScriptOrigin.Library } => "This script comes from a cooked library, which keeps no ranges, units or descriptions.",
             _ => string.Empty,
         };
 }

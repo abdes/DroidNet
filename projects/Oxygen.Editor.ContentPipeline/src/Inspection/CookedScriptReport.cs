@@ -6,6 +6,8 @@ using System.Collections.Immutable;
 using System.Numerics;
 using System.Text.Json;
 using Json.Schema;
+using Oxygen.Editor.Scripting;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
@@ -14,9 +16,9 @@ namespace Oxygen.Editor.ContentPipeline.Inspection;
 public sealed class CookedScriptReport
 {
     private static readonly Lazy<JsonSchema> Schema = new(LoadSchema);
-    private readonly ImmutableDictionary<Guid, ImmutableArray<CookedScriptParameter>> scripts;
+    private readonly ImmutableDictionary<Guid, ImmutableArray<ScriptParameter>> scripts;
 
-    private CookedScriptReport(ImmutableDictionary<Guid, ImmutableArray<CookedScriptParameter>> scripts) => this.scripts = scripts;
+    private CookedScriptReport(ImmutableDictionary<Guid, ImmutableArray<ScriptParameter>> scripts) => this.scripts = scripts;
 
     /// <summary>Validates the shared native schema and rejects duplicate scripts or parameters.</summary>
     /// <param name="json">The native report.</param>
@@ -29,7 +31,7 @@ public sealed class CookedScriptReport
             throw new InvalidDataException("The native script report does not match its schema.");
         }
 
-        var scripts = ImmutableDictionary.CreateBuilder<Guid, ImmutableArray<CookedScriptParameter>>();
+        var scripts = ImmutableDictionary.CreateBuilder<Guid, ImmutableArray<ScriptParameter>>();
         foreach (var row in document.RootElement.GetProperty("scripts").EnumerateArray())
         {
             var parameters = row.GetProperty("parameters").EnumerateArray().Select(ParseParameter).ToImmutableArray();
@@ -49,31 +51,31 @@ public sealed class CookedScriptReport
 
     /// <summary>Reads a native command result scoped to one virtual path.</summary>
     /// <param name="scriptUri">The requested script identity.</param>
-    /// <returns>The sole script's declarations, or null when the root has no matching script.</returns>
-    public CookedScriptDeclarations? SingleOrDefault(AssetPath scriptUri)
+    /// <returns>The sole script, or null when the root has no matching script.</returns>
+    public CookedScript? SingleOrDefault(AssetPath scriptUri)
         => this.scripts.Count switch
         {
             0 => null,
-            1 => new(scriptUri, this.scripts.Keys.Single(), this.scripts.Values.Single()),
+            1 => new(this.scripts.Keys.Single(), new Script { Identity = scriptUri, Origin = ScriptOrigin.Library, Parameters = this.scripts.Values.Single() }),
             _ => throw new InvalidDataException("The native script query returned more than one asset."),
         };
 
-    private static CookedScriptParameter ParseParameter(JsonElement row)
+    private static ScriptParameter ParseParameter(JsonElement row)
     {
         var name = row.GetProperty("name").GetString()!;
         var type = row.GetProperty("type").GetString();
         var value = row.TryGetProperty("default", out var element) ? element : default;
         return type switch
         {
-            "bool" => new(name, CookedScriptParameterKind.Bool, value.GetBoolean(), 0),
-            "int32" => new(name, CookedScriptParameterKind.Int32, value.GetInt32(), 0),
-            "float" => new(name, CookedScriptParameterKind.Float, value.GetSingle(), 0),
-            "string" => new(name, CookedScriptParameterKind.String, value.GetString()!, 0),
-            "vec2" => new(name, CookedScriptParameterKind.Vec2, new Vector2(value[0].GetSingle(), value[1].GetSingle()), 0),
-            "vec3" => new(name, CookedScriptParameterKind.Vec3, new Vector3(value[0].GetSingle(), value[1].GetSingle(), value[2].GetSingle()), 0),
-            "vec4" => new(name, CookedScriptParameterKind.Vec4, new Vector4(value[0].GetSingle(), value[1].GetSingle(), value[2].GetSingle(), value[3].GetSingle()), 0),
-            "asset" => new(name, CookedScriptParameterKind.Asset, null, row.GetProperty("asset_type").GetByte()),
-            "node" => new(name, CookedScriptParameterKind.Node, null, 0),
+            "bool" => new() { Name = name, Kind = ScriptParameterKind.BoolParameter, Default = ScriptValue.FromBool(value.GetBoolean()) },
+            "int32" => new() { Name = name, Kind = ScriptParameterKind.Int32Parameter, Default = ScriptValue.FromInt(value.GetInt32()) },
+            "float" => new() { Name = name, Kind = ScriptParameterKind.FloatParameter, Default = ScriptValue.FromFloat(value.GetSingle()) },
+            "string" => new() { Name = name, Kind = ScriptParameterKind.StringParameter, Default = ScriptValue.FromString(value.GetString()!) },
+            "vec2" => new() { Name = name, Kind = ScriptParameterKind.Vec2Parameter, Default = ScriptValue.FromVector(new Vector2(value[0].GetSingle(), value[1].GetSingle())) },
+            "vec3" => new() { Name = name, Kind = ScriptParameterKind.Vec3Parameter, Default = ScriptValue.FromVector(new Vector3(value[0].GetSingle(), value[1].GetSingle(), value[2].GetSingle())) },
+            "vec4" => new() { Name = name, Kind = ScriptParameterKind.Vec4Parameter, Default = ScriptValue.FromVector(new Vector4(value[0].GetSingle(), value[1].GetSingle(), value[2].GetSingle(), value[3].GetSingle())) },
+            "asset" => new() { Name = name, Kind = ScriptParameterKind.AssetParameter, AssetType = row.GetProperty("asset_type").GetByte() },
+            "node" => new() { Name = name, Kind = ScriptParameterKind.NodeParameter },
             _ => throw new InvalidDataException($"The native script report has an unknown parameter type '{type}'."),
         };
     }

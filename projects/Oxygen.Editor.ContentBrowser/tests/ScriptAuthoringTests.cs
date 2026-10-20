@@ -61,11 +61,4 @@ public sealed class ScriptAuthoringTests
     [TestMethod]
     public void PreferenceWithoutCustomCommandIsInvalid()
         => _ = new CodeEditorPreference(CodeEditorPreference.CurrentVersion, CodeEditorKind.Custom, " ").IsValid.Should().BeFalse();
-
-    [TestMethod]
-    public void SnapshotDescribesProblemCounts()
-    {
-        _ = ScriptAnalysisSnapshot.DescribeCounts(2, 1).Should().Be("2 errors, 1 warning");
-        _ = ScriptAnalysisSnapshot.DescribeCounts(0, 3).Should().Be("3 warnings");
-    }
 }

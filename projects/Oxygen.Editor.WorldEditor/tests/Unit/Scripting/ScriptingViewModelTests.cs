@@ -3,18 +3,16 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
-using System.Reactive.Subjects;
 using AwesomeAssertions;
-using Moq;
-using Oxygen.Editor.ContentBrowser.Scripts;
-using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
+using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Scripting;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 
@@ -28,13 +26,23 @@ public sealed partial class ScriptingViewModelTests : IDisposable
     private const string MovePath = @"C:\Project\Content\Player\move.lua";
     private static readonly AssetPath MoveScript = AssetPath.Parse("/Content/Player/move.oscript");
 
-    private static readonly ScriptParameter Speed = new("move_speed", ScriptParameterKind.Float, 1f, 0, Min: 0, Max: 10, Step: 0.5, "m/s", "How fast", [], IsColor: false);
-    private static readonly ScriptParameter Tint = new("tint", ScriptParameterKind.Vec3, Vector3.One, 0, Min: null, Max: null, Step: null, string.Empty, string.Empty, [], IsColor: true);
-    private static readonly ScriptParameter Mode = new("mode", ScriptParameterKind.String, "walk", 0, Min: null, Max: null, Step: null, string.Empty, string.Empty, ["walk", "run"], IsColor: false);
-    private static readonly ScriptParameter Follow = new("follow", ScriptParameterKind.Node, DefaultValue: null, 0, Min: null, Max: null, Step: null, string.Empty, string.Empty, [], IsColor: false);
+    private static readonly ScriptParameter Speed = new()
+    {
+        Name = "move_speed",
+        Kind = ScriptParameterKind.FloatParameter,
+        Default = ScriptValue.FromFloat(1f),
+        Min = 0,
+        Max = 10,
+        Step = 0.5,
+        Unit = "m/s",
+        Description = "How fast",
+    };
 
-    private readonly Subject<ScriptAnalysisSnapshot> changes = new();
-    private readonly List<ScriptAnalysisSnapshot> current = [];
+    private static readonly ScriptParameter Tint = new() { Name = "tint", Kind = ScriptParameterKind.Vec3Parameter, Default = ScriptValue.FromVector(Vector3.One), IsColor = true };
+    private static readonly ScriptParameter Mode = new() { Name = "mode", Kind = ScriptParameterKind.StringParameter, Default = ScriptValue.FromString("walk"), Options = ["walk", "run"] };
+    private static readonly ScriptParameter Follow = new() { Name = "follow", Kind = ScriptParameterKind.NodeParameter };
+
+    private readonly FakeScripts scripts = new();
     private readonly Scene scene = new() { Name = "Main" };
     private SceneNode player;
     private SceneTab? tab;
@@ -48,11 +56,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
     }
 
     /// <inheritdoc />
-    public void Dispose()
-    {
-        this.changes.Dispose();
-        this.tab?.Dispose();
-    }
+    public void Dispose() => this.tab?.Dispose();
 
     [TestMethod]
     public void OneCardPerSlotWithOneFieldPerDeclaredParameter()
@@ -139,9 +143,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
         _ = model.Slots[0].HasStaleValues.Should().BeTrue();
         _ = model.Slots[0].CanRemoveAllStale.Should().BeFalse("one value is removed with its own button");
 
-        this.current.Clear();
-        this.current.Add(new ScriptAnalysisSnapshot(FileSystemPath.From(MovePath), MoveScript, [Problem()], [Speed], ParametersOutOfDate: true));
-        this.changes.OnNext(this.current[0]);
+        _ = this.scripts.Add(Analyzed(Speed) with { Problems = [Problem()], ParametersOutOfDate = true });
 
         _ = model.Slots[0].ParametersOutOfDate.Should().BeTrue();
         _ = model.Slots[0].HasBadge.Should().BeTrue();
@@ -189,10 +191,14 @@ public sealed partial class ScriptingViewModelTests : IDisposable
     {
         var library = AssetPath.Parse("/Engine/Scripts/rotate.oscript");
         this.scripting.Slots = [new ScriptSlot { Script = library }.WithOverride("speed", ScriptValue.FromFloat(2f))];
-        var declarations = new Mock<IScriptDeclarationProvider>();
-        _ = declarations.Setup(provider => provider.ReadAsync(It.IsAny<ProjectContext>(), library, It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new CookedScriptDeclarations(library, Guid.NewGuid(), [new CookedScriptParameter("rotation_angle", CookedScriptParameterKind.Float, 0.9f, 0)]));
-        using var model = this.CreateModel(declarations: declarations.Object);
+        var rotate = new Script
+        {
+            Identity = library,
+            Origin = ScriptOrigin.Library,
+            Parameters = [new ScriptParameter { Name = "rotation_angle", Kind = ScriptParameterKind.FloatParameter, Default = ScriptValue.FromFloat(0.9f) }],
+        };
+        this.scripts.SetLibrary(library, _ => Task.FromResult(ScriptRead.Found(rotate)));
+        using var model = this.CreateModel();
 
         model.UpdateValues([this.player]);
 
@@ -205,13 +211,32 @@ public sealed partial class ScriptingViewModelTests : IDisposable
         _ = card.Notice.Should().Contain("cooked library");
     }
 
+    [TestMethod]
+    public void ALibraryScriptThatCannotBeReadSaysWhyAndIsReadOnce()
+    {
+        var library = AssetPath.Parse("/Engine/Scripts/rotate.oscript");
+        this.scripting.Slots = [new ScriptSlot { Script = library }];
+        this.scripts.SetLibrary(library, _ => Task.FromResult(ScriptRead.Unavailable("the library is gone")));
+        using var model = this.CreateModel();
+
+        model.UpdateValues([this.player]);
+        model.UpdateValues([this.player]);
+
+        var card = model.Slots.Should().ContainSingle().Subject;
+        _ = card.Notice.Should().Contain("the library is gone");
+        _ = card.IsScriptMissing.Should().BeFalse("the script exists in a library that could not be read");
+        _ = this.scripts.LibraryReads.Should().Be(1);
+    }
+
     private static ScriptProblem Problem()
-        => new(ScriptProblemSeverity.Error, "S0101", "unexpected symbol", MovePath, 3, 1, "rendered", "explanation");
+        => new(DiagnosticSeverity.Error, "S0101", "unexpected symbol", "rendered") { File = MovePath, Line = 3, Column = 1, Explanation = "explanation" };
 
-    private void Analyze(params ScriptParameter[] parameters)
-        => this.current.Add(new ScriptAnalysisSnapshot(FileSystemPath.From(MovePath), MoveScript, [], parameters, ParametersOutOfDate: false));
+    private static Script Analyzed(params ScriptParameter[] parameters)
+        => new() { Identity = MoveScript, Origin = ScriptOrigin.Source, SourcePath = FileSystemPath.From(MovePath), Parameters = parameters };
 
-    private ScriptingViewModel CreateModel(Action? onEdit = null, IScriptDeclarationProvider? declarations = null)
+    private void Analyze(params ScriptParameter[] parameters) => _ = this.scripts.Add(Analyzed(parameters));
+
+    private ScriptingViewModel CreateModel(Action? onEdit = null)
     {
         // The document edits its own copy of the scene: the test reads the player and its slots from it.
         this.tab = SceneTabs.Open(this.scene);
@@ -222,9 +247,6 @@ public sealed partial class ScriptingViewModelTests : IDisposable
             this.tab.Authoring.Changed += (_, _) => onEdit();
         }
 
-        var analysis = new Mock<IScriptAnalysisService>();
-        _ = analysis.SetupGet(service => service.Changes).Returns(this.changes);
-        _ = analysis.SetupGet(service => service.Current).Returns(this.current);
         var projects = new ProjectContextService();
         projects.Activate(new ProjectContext
         {
@@ -235,6 +257,6 @@ public sealed partial class ScriptingViewModelTests : IDisposable
             AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
             LocalFolderMounts = [],
         });
-        return new ScriptingViewModel(() => this.tab.Authoring, analysis: analysis.Object, projects: projects, declarationProvider: declarations);
+        return new ScriptingViewModel(() => this.tab.Authoring, scripts: this.scripts, projects: projects);
     }
 }

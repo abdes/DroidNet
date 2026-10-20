@@ -16,13 +16,13 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 /// <param name="projectContextService">The active project context service.</param>
 /// <param name="contentBrowserState">The content-browser state.</param>
 /// <param name="hostingContext">The hosting context.</param>
-/// <param name="scripts">The script analysis, which shows script problems in each row's status.</param>
+/// <param name="scripts">The scripts, whose problems show in each row's status.</param>
 public partial class TilesLayoutViewModel(
     IAssetFeed assetProvider,
     IProjectContextService projectContextService,
     ContentBrowserState contentBrowserState,
     HostingContext hostingContext,
-    Scripts.IScriptAnalysisService? scripts = null)
+    Oxygen.Editor.Scripting.IScripts? scripts = null)
     : AssetsLayoutViewModel(assetProvider, projectContextService, contentBrowserState, hostingContext, scripts)
 {
     /// <summary>

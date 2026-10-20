@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -102,7 +103,7 @@ public sealed class ScriptCookingTests : IDisposable
         var warning = result.Diagnostics.Should().ContainSingle().Subject;
         _ = warning.Severity.Should().Be(DiagnosticSeverity.Warning);
         _ = warning.Code.Should().Be(ScriptDiagnosticCodes.SlotWithoutScript);
-        _ = warning.SuggestedAction!.Payload["PropertyPath"].Should().Be(ScriptSlotDiagnostics.PropertyPath(empty.Id, parameter: null));
+        _ = warning.SuggestedAction!.Payload["PropertyPath"].Should().Be(new ScriptFieldAddress(empty.Id).ToString());
         _ = warning.SuggestedAction.Payload["NodeId"].Should().Be(player.Id.ToString());
     }
 
@@ -120,7 +121,7 @@ public sealed class ScriptCookingTests : IDisposable
             [ScriptDiagnosticCodes.SlotNodeMissing, ScriptDiagnosticCodes.SlotScriptMissing]);
         _ = result.Diagnostics.Should().AllSatisfy(static issue => issue.Severity.Should().Be(DiagnosticSeverity.Error));
         _ = result.Diagnostics.Single(static issue => issue.Code == ScriptDiagnosticCodes.SlotNodeMissing).SuggestedAction!.Payload["PropertyPath"]
-            .Should().Be(ScriptSlotDiagnostics.PropertyPath(lost.Id, "follow"));
+            .Should().Be(new ScriptFieldAddress(lost.Id, "follow").ToString());
         _ = File.Exists(result.DescriptorPath).Should().BeFalse("a scene with slot errors is not projected");
     }
 
@@ -191,7 +192,7 @@ public sealed class ScriptCookingTests : IDisposable
         _ = mapped.Code.Should().Be(issue.Code);
         _ = mapped.Message.Should().StartWith("Parameter 'speed' of slot 1 of 'Player': ");
         _ = mapped.AffectedEntity!.NodeId.Should().Be(site.NodeId);
-        _ = mapped.SuggestedAction!.Payload["PropertyPath"].Should().Be(ScriptSlotDiagnostics.PropertyPath(site.SlotId, "speed"));
+        _ = mapped.SuggestedAction!.Payload["PropertyPath"].Should().Be(new ScriptFieldAddress(site.SlotId, "speed").ToString());
     }
 
     private Scene CreateScene(out SceneNode target, out SceneNode player)

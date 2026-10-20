@@ -8,13 +8,13 @@ using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Problems;
-using Oxygen.Editor.World.Scripting;
+using Oxygen.Managed.Assets.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;
 
 /// <summary>
-/// Script and input authoring services of the workspace: script analysis, the input facts, the code editor, the
-/// Problems panel and project tooling.
+/// Script and input authoring services of the workspace: the script and input facts, the code editor, the Problems
+/// panel and project tooling.
 /// </summary>
 public partial class WorkspaceViewModel
 {
@@ -31,10 +31,10 @@ public partial class WorkspaceViewModel
         childContainer.RegisterInstance(ScriptToolingPaths.Discover());
         childContainer.Register<ICodeEditorService, CodeEditorService>(Reuse.Singleton);
         childContainer.Register<ProjectScriptTooling>(Reuse.Singleton);
-        childContainer.Register<IScriptAnalysisService, ScriptAnalysisService>(Reuse.Singleton);
 
-        // The input facts follow this workspace's asset catalog, so they live as long as it does.
-        childContainer.Register<IInputSources, InputFacts>(Reuse.Singleton);
+        // The family facts follow this workspace's asset catalog, so they live as long as it does.
+        childContainer.RegisterMany([typeof(IScripts), typeof(IAssetProblemSource)], typeof(ScriptFacts), Reuse.Singleton);
+        childContainer.RegisterMany([typeof(IInputSources), typeof(IAssetProblemSource)], typeof(InputFacts), Reuse.Singleton);
         this.RegisterPlayServices(childContainer);
         childContainer.Register<ProblemsViewModel>(Reuse.Singleton);
         childContainer.Register<ProblemsView>(Reuse.Transient);

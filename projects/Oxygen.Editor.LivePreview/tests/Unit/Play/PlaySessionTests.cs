@@ -13,7 +13,6 @@ using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.LivePreview.Tests.TestSupport;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -74,15 +73,11 @@ public sealed partial class PlaySessionTests
     public void WithoutAPlayer_NothingComesToTheFrontAndNoProblemNamesANode()
     {
         using var fixture = new PlayFixture(installedPlayer: false);
-        var problem = new ScriptProblem(ScriptProblemSeverity.Error, "S0001", "failed", string.Empty, Line: null, Column: null, string.Empty, string.Empty)
-        {
-            SlotNode = "Cube",
-            IsRuntime = true,
-        };
+        var problem = new RuntimeScriptProblem(DiagnosticSeverity.Error, "S0001", "failed", string.Empty) { SlotNode = "Cube" };
 
         _ = fixture.Session.BringPlayerToFront().Should().BeFalse();
         _ = fixture.Session.NodeOf(problem).Should().BeNull("no scene played");
-        _ = fixture.Session.NodeOf(problem with { IsRuntime = false }).Should().BeNull();
+        _ = fixture.Session.NodeOf(problem with { SlotNode = null }).Should().BeNull();
     }
 
     private sealed partial class PlayFixture : IDisposable

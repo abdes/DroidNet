@@ -11,15 +11,18 @@ using Oxygen.Editor.Scenes.Edits.EditorView;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Edits.Scripting;
 using Oxygen.Editor.Scenes.Edits.Settings;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits;
@@ -68,6 +71,14 @@ public static class EditSamples
 
     private static Guid RestoredSlot { get; } = SampleScene.Tagged(4, "C2");
 
+    private static ScriptSlotId AddedSlot { get; } = ScriptSlotId.FromValue(SampleScene.Tagged(4, "C3"));
+
+    private static ScriptSlotId MoveSlot { get; } = ScriptSlotId.FromValue(SampleScene.MoveSlot);
+
+    private static ScriptParameter TargetParameter { get; } = new() { Name = "target", Kind = ScriptParameterKind.NodeParameter };
+
+    private static ScriptParameter SurfaceParameter { get; } = new() { Name = "surface", Kind = ScriptParameterKind.AssetParameter, AssetType = (byte)AssetType.Material };
+
     private static AssetPath GreenMaterial { get; } = AssetPath.Parse("/Content/Green.omat");
 
     private static AssetPath MaskTexture { get; } = AssetPath.Parse("/Content/Mask.otex");
@@ -105,6 +116,14 @@ public static class EditSamples
         SetStartingInputContextsSample,
         SetSceneReferencesSample,
         SetScriptSlotsSample,
+        AddScriptSlotSample,
+        RemoveScriptSlotSample,
+        MoveScriptSlotSample,
+        SetSlotScriptSample,
+        SetSlotExecutionOrderSample,
+        SetScriptValueSample,
+        ResetScriptValueSample,
+        RemoveStaleScriptValuesSample,
         SetEditorHiddenSample,
         BatchSample,
         NestedBatchSample,
@@ -441,6 +460,62 @@ public static class EditSamples
             AssetNode = SampleScene.Script,
         };
 
+    private static EditSample AddScriptSlotSample =>
+        ScriptSlotSample(nameof(AddScriptSlot), static _ => new AddScriptSlot(SampleScene.Script, AddedSlot));
+
+    private static EditSample RemoveScriptSlotSample =>
+        ScriptSlotSample(nameof(RemoveScriptSlot), static _ => new RemoveScriptSlot(SampleScene.Script, MoveSlot));
+
+    private static EditSample MoveScriptSlotSample =>
+        ScriptSlotSample(nameof(MoveScriptSlot), static _ => new MoveScriptSlot(SampleScene.Script, MoveSlot, Offset: 1));
+
+    private static EditSample SetSlotScriptSample =>
+        new(
+            nameof(SetSlotScript),
+            static _ => new SetSlotScript(SampleScene.Script, MoveSlot, JumpScript),
+            [new SceneChange.ScriptSlotsChanged(SampleScene.Script)],
+            [new SceneChange.ScriptSlotsChanged(SampleScene.Script)])
+        {
+            HasTargets = true,
+            CarriesAssetReference = true,
+            Asset = JumpScript,
+            AssetNode = SampleScene.Script,
+        };
+
+    private static EditSample SetSlotExecutionOrderSample =>
+        ScriptSlotSample(nameof(SetSlotExecutionOrder), static _ => new SetSlotExecutionOrder(SampleScene.Script, MoveSlot, Order: 5));
+
+    private static EditSample SetScriptValueSample =>
+        new(
+            nameof(SetScriptValue),
+            static _ => new SetScriptValue(SampleScene.Script, MoveSlot, SurfaceParameter, ScriptValue.FromAsset(GreenMaterial)),
+            [new SceneChange.ScriptSlotsChanged(SampleScene.Script)],
+            [new SceneChange.ScriptSlotsChanged(SampleScene.Script)])
+        {
+            HasTargets = true,
+            CarriesAssetReference = true,
+            Asset = GreenMaterial,
+            AssetNode = SampleScene.Script,
+        };
+
+    private static EditSample ResetScriptValueSample =>
+        ScriptSlotSample(nameof(ResetScriptValue), static _ => new ResetScriptValue(SampleScene.Script, MoveSlot, "target"));
+
+    private static EditSample RemoveStaleScriptValuesSample =>
+        new(
+            nameof(RemoveStaleScriptValues),
+            static _ => new RemoveStaleScriptValues(SampleScene.Script, MoveSlot, []),
+            [new SceneChange.ScriptSlotsChanged(SampleScene.Script)],
+            [new SceneChange.ScriptSlotsChanged(SampleScene.Script)])
+        {
+            HasTargets = true,
+            Tamper = static _ =>
+            {
+                var declared = new List<ScriptParameter>();
+                return new TamperedEdit(new RemoveStaleScriptValues(SampleScene.Script, MoveSlot, declared), () => declared.Add(TargetParameter));
+            },
+        };
+
     private static EditSample SetEditorHiddenSample =>
         new(
             nameof(SetEditorHidden),
@@ -498,6 +573,17 @@ public static class EditSamples
     }
 
     private static NodeId? ParentOfFirstTarget(EditSample sample) => ParentOf(sample.Build(SampleScene.Build()).Targets.First());
+
+    // A gesture edit of the sample node's script slots: it targets the node and raises one slots change both ways.
+    private static EditSample ScriptSlotSample(string name, Func<SceneData, ISceneEdit> build)
+        => new(
+            name,
+            build,
+            [new SceneChange.ScriptSlotsChanged(SampleScene.Script)],
+            [new SceneChange.ScriptSlotsChanged(SampleScene.Script)])
+        {
+            HasTargets = true,
+        };
 
     private static IEnumerable<TestDataRow<EditSample>> Rows(IEnumerable<EditSample> samples)
         => samples.Select(static sample => new TestDataRow<EditSample>(sample) { DisplayName = sample.Name });

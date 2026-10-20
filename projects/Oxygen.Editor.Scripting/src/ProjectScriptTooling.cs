@@ -1,0 +1,211 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using System.IO.Abstractions;
+using System.Text.Json;
+using System.Text.Json.Nodes;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets;
+using Oxygen.Managed.Core.Diagnostics;
+
+namespace Oxygen.Editor.Scripting;
+
+/// <summary>
+/// Keeps a project's script tooling files current so VS Code completes and checks scripts and input files the way
+/// the engine does.
+/// </summary>
+/// <remarks>
+/// The files are <c>.luaurc</c> (Luau mode), <c>Types/oxygen.d.luau</c> and the input file schemas copied from the
+/// SDK, and <c>.vscode/settings.json</c>, which points <c>luau-lsp</c> at the definitions; <c>.luaurc</c> cannot name
+/// definition files. Missing files are created and SDK copies refreshed when they differ. An existing VS Code settings
+/// file only gains the keys it lacks; no value is ever overwritten, and a file with comments is left untouched.
+/// </remarks>
+/// <param name="paths">The SDK scripting files.</param>
+/// <param name="operationResults">The publisher that records each change in Output.</param>
+/// <param name="fileSystem">The file system that holds the project and the SDK.</param>
+/// <param name="loggerFactory">The logger factory.</param>
+public sealed partial class ProjectScriptTooling(ScriptToolingPaths paths, IOperationResultPublisher operationResults, IFileSystem fileSystem, ILoggerFactory? loggerFactory = null)
+{
+    /// <summary>The project folder that holds the SDK copies.</summary>
+    public const string TypesFolder = "Types";
+
+    private static readonly JsonSerializerOptions Indented = new() { WriteIndented = true };
+
+    private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectScriptTooling>() ?? NullLogger<ProjectScriptTooling>.Instance;
+
+    /// <summary>Creates or refreshes the tooling files of a project and records the changes in Output.</summary>
+    /// <param name="project">The project.</param>
+    /// <returns>The changes made, one line each; empty when everything was current.</returns>
+    public IReadOnlyList<string> Ensure(ProjectContext project)
+    {
+        ArgumentNullException.ThrowIfNull(project);
+        var root = project.ProjectRoot.FullPath;
+        var changes = new List<string>();
+        try
+        {
+            if (this.WriteIfMissing(fileSystem.Path.Combine(root, ".luaurc"), "{\n  \"languageMode\": \"nonstrict\"\n}\n"))
+            {
+                changes.Add("Created .luaurc");
+            }
+
+            this.CopyFromSdk(paths.DefinitionsPath, fileSystem.Path.Combine(root, TypesFolder, "oxygen.d.luau"), changes);
+            this.CopyFromSdk(fileSystem.Path.Combine(paths.SchemaDirectory, "oxygen.input.schema.json"), fileSystem.Path.Combine(root, TypesFolder, "oxygen.input.schema.json"), changes);
+
+            // The input schema references the shared name definition beside it.
+            this.CopyFromSdk(fileSystem.Path.Combine(paths.SchemaDirectory, "oxygen.name.schema.json"), fileSystem.Path.Combine(root, TypesFolder, "oxygen.name.schema.json"), changes);
+            this.MergeVsCodeSettings(fileSystem.Path.Combine(root, ".vscode", "settings.json"), changes);
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            this.LogUpdateFailed(root, exception);
+            ScriptOperationResults.PublishFailure(
+                operationResults,
+                ScriptOperationKinds.UpdateTooling,
+                ScriptDiagnosticCodes.ToolingUpdateFailed,
+                "Script tooling not updated",
+                $"Could not update the project's script tooling files: {exception.Message}. VS Code may not complete the Oxygen API.",
+                root,
+                exception);
+            return changes;
+        }
+
+        if (changes.Count > 0)
+        {
+            ScriptOperationResults.PublishSuccess(operationResults, ScriptOperationKinds.UpdateTooling, "Script tooling updated", string.Join("; ", changes) + ".", root);
+        }
+
+        return changes;
+    }
+
+    /// <summary>Adds the keys VS Code needs to a settings object, keeping every existing value.</summary>
+    /// <param name="settings">The settings object.</param>
+    /// <returns>The keys that were added.</returns>
+    internal static IReadOnlyList<string> AddMissingSettings(JsonObject settings)
+    {
+        ArgumentNullException.ThrowIfNull(settings);
+        var added = new List<string>();
+        AddIfMissing(settings, "luau-lsp.types.definitionFiles", () => new JsonArray($"{TypesFolder}/oxygen.d.luau"), added);
+        AddIfMissing(settings, "luau-lsp.platform.type", () => "standard", added);
+        AddIfMissing(settings, "luau-lsp.sourcemap.enabled", () => false, added);
+
+        if (settings["files.associations"] is JsonObject associations)
+        {
+            AddIfMissing(associations, "*.lua", () => "luau", added, "files.associations *.lua");
+        }
+        else
+        {
+            AddIfMissing(settings, "files.associations", () => new JsonObject { ["*.lua"] = "luau" }, added);
+        }
+
+        var schemas = settings["json.schemas"] as JsonArray;
+        if (schemas is null && !settings.ContainsKey("json.schemas"))
+        {
+            schemas = [];
+            settings["json.schemas"] = schemas;
+        }
+
+        if (schemas is not null)
+        {
+            const string url = $"./{TypesFolder}/oxygen.input.schema.json";
+            if (!schemas.OfType<JsonObject>().Any(entry => string.Equals(entry["url"]?.GetValue<string>(), url, StringComparison.OrdinalIgnoreCase)))
+            {
+                schemas.Add(new JsonObject { ["fileMatch"] = new JsonArray("*" + AssetFileTypes.InputFile), ["url"] = url });
+                added.Add("json.schemas *" + AssetFileTypes.InputFile);
+            }
+        }
+
+        return added;
+    }
+
+    private static void AddIfMissing(JsonObject target, string key, Func<JsonNode?> value, List<string> added, string? label = null)
+    {
+        if (!target.ContainsKey(key))
+        {
+            target[key] = value();
+            added.Add(label ?? key);
+        }
+    }
+
+    private bool WriteIfMissing(string path, string text)
+    {
+        if (fileSystem.File.Exists(path))
+        {
+            return false;
+        }
+
+        _ = fileSystem.Directory.CreateDirectory(fileSystem.Path.GetDirectoryName(path)!);
+        fileSystem.File.WriteAllText(path, text);
+        this.LogFileWritten(path, existed: false);
+        return true;
+    }
+
+    private void CopyFromSdk(string source, string target, List<string> changes)
+    {
+        if (!fileSystem.File.Exists(source))
+        {
+            return;
+        }
+
+        var bytes = fileSystem.File.ReadAllBytes(source);
+        var exists = fileSystem.File.Exists(target);
+        if (exists && fileSystem.File.ReadAllBytes(target).AsSpan().SequenceEqual(bytes))
+        {
+            return;
+        }
+
+        _ = fileSystem.Directory.CreateDirectory(fileSystem.Path.GetDirectoryName(target)!);
+        fileSystem.File.WriteAllBytes(target, bytes);
+        this.LogFileWritten(target, exists);
+        changes.Add((exists ? "Refreshed " : "Created ") + TypesFolder + "/" + fileSystem.Path.GetFileName(target) + " from the SDK");
+    }
+
+    private void MergeVsCodeSettings(string path, List<string> changes)
+    {
+        if (!fileSystem.File.Exists(path))
+        {
+            var created = new JsonObject();
+            _ = AddMissingSettings(created);
+            _ = fileSystem.Directory.CreateDirectory(fileSystem.Path.GetDirectoryName(path)!);
+            fileSystem.File.WriteAllText(path, created.ToJsonString(Indented) + "\n");
+            this.LogFileWritten(path, existed: false);
+            changes.Add("Created .vscode/settings.json for luau-lsp");
+            return;
+        }
+
+        JsonObject? settings;
+        try
+        {
+            // VS Code allows comments and trailing commas; such a file is never rewritten, since that would drop them.
+            settings = JsonNode.Parse(fileSystem.File.ReadAllText(path)) as JsonObject;
+        }
+        catch (JsonException)
+        {
+            settings = null;
+        }
+
+        if (settings is null)
+        {
+            var missing = AddMissingSettings([]);
+            this.LogSettingsLeftUnchanged(path);
+            ScriptOperationResults.PublishFailure(
+                operationResults,
+                ScriptOperationKinds.UpdateTooling,
+                ScriptDiagnosticCodes.ToolingUpdateFailed,
+                "VS Code settings not updated",
+                $".vscode/settings.json has comments or is not plain JSON, so it was left unchanged. For script completion, add: {string.Join(", ", missing)}.",
+                path);
+            return;
+        }
+
+        var added = AddMissingSettings(settings);
+        if (added.Count > 0)
+        {
+            fileSystem.File.WriteAllText(path, settings.ToJsonString(Indented) + "\n");
+            this.LogSettingsAdded(path, added);
+            changes.Add("Added " + string.Join(", ", added) + " to .vscode/settings.json");
+        }
+    }
+}

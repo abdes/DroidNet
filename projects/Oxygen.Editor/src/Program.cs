@@ -458,7 +458,10 @@ public static partial class Program
         container.RegisterDelegate(
             resolver => (ContentPipeline.Inspection.IGeometryMaterialSlotProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
         container.RegisterDelegate(
-            resolver => (ContentPipeline.Inspection.IScriptDeclarationProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
+            resolver => (Scripting.IScriptLibrary)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
+
+        // Scripting: the engine's analyzer, which the script facts of every workspace use.
+        container.Register<Scripting.IScriptAnalyzer, LivePreview.Scripting.NativeScriptAnalyzer>(Reuse.Singleton);
         container.Register<ContentPipeline.Publication.CookPublicationService>(Reuse.Singleton);
         container.RegisterMapping<ContentPipeline.Publication.ICookPublicationReader, ContentPipeline.Publication.CookPublicationService>();
         container.Register<ContentPipeline.Mounting.CookedContentMountService>(Reuse.Singleton);

@@ -231,18 +231,22 @@ and the pipeline implements it (`IScriptLibrary`), as LivePreview implements
 
 **Scripting** (`Oxygen.Editor.Scripting`)
 
-- Model: `Script` (asset URI, source path or none for a library script, `Origin`
-  Source or Library, declared parameters, problems, parameters out of date),
+- Model: `Script` (identity, its cooked virtual path as a slot names it; source
+  path or none for a library script, `Origin` Source or Library, declared
+  parameters, problems, parameters out of date),
   `ScriptParameter` (name, kind, `ValueKind`, default as `ScriptValue`, asset
   type, range, step, unit, description, options, color), and
   `ScriptParameterKind`. One vocabulary for source and cooked scripts.
 - Problems: `ScriptProblem : AssetProblem`, adding the analyzer's rendered text.
   `ScriptDiagnosticCodes` holds the script codes; the input codes are Input's.
 - Slot rules, `ScriptSlotRules`, over World's `ScriptSlot` and a `Script`:
-  `FindStale`, `IsDefault`, `CheckValue(parameter, value)` (kind and asset
-  type), and `Check(slot, scene, script)` returning the slot problems the
-  inspector and the cook both report (`SlotWithoutScript`, `SlotScriptMissing`,
-  `SlotNodeMissing`, wrong kind, wrong asset type). `ScriptFieldAddress` is the
+  `FindStale`, `IsDefault`, `CheckValue(slot, parameter, value)` (kind and asset
+  type), and `Check(slot, hasNode, scriptExists, script?)` returning the slot
+  problems (`ScriptSlotProblem`) the edits and the cook report
+  (`SlotWithoutScript`, `SlotScriptMissing`, `SlotNodeMissing`, and with a known
+  script `SlotValueKindMismatch` and `SlotAssetTypeMismatch`). The caller says
+  which nodes and scripts exist: the cook knows its cooked nodes and resolves
+  scripts in the project. `ScriptFieldAddress` is the
   `Scripting/{slot}/{parameter}` path that leads from a problem to the field.
 - Facts: `IScripts` (8.1), implemented by `ScriptFacts`; ports `IScriptAnalyzer`
   (LivePreview) and `IScriptLibrary` (ContentPipeline).
@@ -300,7 +304,8 @@ and the pipeline implements it (`IScriptLibrary`), as LivePreview implements
   (`AuthoredAssetTemplate`: suffixes and content); the cook calls
   `ScriptSlotRules` and the Input rules and keeps only the mapping of their
   problems to `DiagnosticRecord`; it implements `IScriptLibrary` from its cooked
-  report.
+  report. The cook checks slots without their scripts' declarations: the cooker
+  checks each value against the compiled script.
 - LivePreview: `NativeScriptAnalyzer : IScriptAnalyzer`;
   `RuntimeScriptProblem : ScriptProblem` (slot node, index and hook);
   `IRuntimeProblemSource` extends `IAssetProblemSource`.
@@ -561,8 +566,9 @@ Unreal
 7. **Script slot rules in Scripting, slot edits in Scenes, one set of rules for
    the inspector and the cook.** Scenes has `AddScriptSlot`, `RemoveScriptSlot`,
    `MoveScriptSlot`, `SetSlotScript`, `SetSlotExecutionOrder`, `SetScriptValue`,
-   `ResetScriptValue` and `RemoveStaleScriptValues`, targeting a slot by
-   `ScriptSlot.Id` and validated by `ScriptSlotRules`; each gesture is its own
+   `ResetScriptValue` and `RemoveStaleScriptValues`, targeting a slot by its
+   identity (`ScriptSlotId`, as edits name nodes by `NodeId`) and validated by
+   `ScriptSlotRules`; each gesture is its own
    undo entry with its own label ("Set Script Value"). `SetScriptSlots` serves
    paste and restore. The cook reports `ScriptSlotRules.Check` results;
    `ScriptSlotDiagnostics` holds only the mapping to `DiagnosticRecord`.
@@ -603,7 +609,7 @@ The family models and their records:
   family (decision 5).
 - `ScriptAnalysis` (`Parameters`, `Problems`, `HasDeclaration`,
   `IsUnavailable`), the record of the `IScriptAnalyzer` port, and `ScriptRead`,
-  a library `Script` or `Unavailable(reason)`.
+  a library `Script`, `NotFound` or `Unavailable(reason)`.
 
 ## 8. Services, Ports And Lifetime
 
@@ -621,9 +627,9 @@ public interface IAssetProblemSource
 public interface IScripts : IAssetProblemSource
 {
     event EventHandler<ScriptChangedEventArgs>? Changed;
-    Script? Find(Uri scriptUri);
+    Script? Find(AssetPath script);                          // /Content/Player/move.oscript
     IReadOnlyCollection<Script> All { get; }
-    Task<ScriptRead> ReadLibraryAsync(Uri scriptUri, CancellationToken cancellationToken);
+    Task<ScriptRead> ReadLibraryAsync(AssetPath script, CancellationToken cancellationToken);
     Task RefreshAsync(bool force, CancellationToken cancellationToken);
 }
 
@@ -635,7 +641,7 @@ public interface IScriptAnalyzer          // implemented by LivePreview
 
 public interface IScriptLibrary           // implemented by ContentPipeline
 {
-    Task<Script?> ReadAsync(ProjectContext project, Uri scriptUri, CancellationToken cancellationToken);
+    Task<Script?> ReadAsync(ProjectContext project, AssetPath script, CancellationToken cancellationToken);
 }
 
 // Oxygen.Editor.Input
@@ -649,8 +655,9 @@ public interface IInputSources : IAssetProblemSource
 
 `ScriptAnalysis` (`Parameters`, `Problems`, `HasDeclaration`, `IsUnavailable`)
 is the port's record; LivePreview maps the Interop types into it. `ScriptRead`
-is a library `Script` or `Unavailable(reason)`. `ScriptFacts` alone reads script
-files. Input alone reads input sources: `InputFacts` the editor's saved state,
+is a library `Script`, `NotFound` when no mounted library has it, or
+`Unavailable(reason)` when the library cannot be read. `ScriptFacts` alone reads
+script files. Input alone reads input sources: `InputFacts` the editor's saved state,
 and `InputSourceFiles` the saved file the cook reads, so the cook never waits
 for the facts. Both facts follow `IAssetCatalog.Changes` for their own suffixes,
 so neither knows the other. A product's declaration is read from its container
@@ -662,11 +669,14 @@ container rows of #80.
 No family module takes a `HostingContext`, `DispatcherQueue` or `IScheduler`.
 Analysis and checks run on the thread pool. Each event handler is invoked on the
 `SynchronizationContext` that was current when it subscribed (the event's `add`
-accessor captures it), or on the thread pool when there was none, so the result
-does not depend on which thread first resolved the singleton. `Find`, `All`,
+accessor captures it, through Managed.Core's `SubscriberEvent`), or on the thread
+pool when there was none, so the result does not depend on which thread first
+resolved the singleton. The play session's runtime problems are raised on the UI
+thread that owns it. `Find`, `All`,
 `FindDeclaration` and `Problems` read an immutable snapshot that each change
-replaces atomically. One file is never analyzed twice at once; a newer change
-supersedes an older run, which then publishes nothing. Editable models
+replaces atomically. A source whose content is unchanged is not analyzed again;
+when two analyses of one file overlap, the newer supersedes the older, which then
+publishes nothing. Editable models
 (decision 4) raise `Changed` on the thread that replaced the source, as
 `SceneAuthoring` and `Document` do.
 

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
+using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -14,38 +15,19 @@ namespace Oxygen.Editor.ContentPipeline;
 /// </summary>
 public static class ScriptSlotDiagnostics
 {
-    /// <summary>The prefix of a script slot property path: <c>Scripting/{slot}</c> or <c>Scripting/{slot}/{parameter}</c>.</summary>
-    public const string PropertyPathPrefix = "Scripting/";
-
-    /// <summary>Gets the property path of a slot or one of its parameters.</summary>
-    /// <param name="slotId">The slot.</param>
-    /// <param name="parameter">The parameter name, or null for the slot itself.</param>
-    /// <returns>The property path.</returns>
-    public static string PropertyPath(Guid slotId, string? parameter)
-        => PropertyPathPrefix + slotId.ToString("D") + (parameter is null ? string.Empty : "/" + parameter);
-
-    /// <summary>Parses a script slot property path.</summary>
-    /// <param name="path">The property path.</param>
-    /// <param name="slotId">The slot.</param>
-    /// <param name="parameter">The parameter name, or null for the slot itself.</param>
-    /// <returns>Whether the path names a script slot.</returns>
-    public static bool TryParsePropertyPath(string? path, out Guid slotId, out string? parameter)
+    /// <summary>Creates the diagnostic of a slot problem the slot rules report, with Go To Property.</summary>
+    /// <param name="operationId">The cook operation.</param>
+    /// <param name="problem">The problem.</param>
+    /// <param name="scene">The scene being cooked.</param>
+    /// <param name="sceneId">The scene identity.</param>
+    /// <param name="sceneName">The scene name.</param>
+    /// <param name="site">The node and slot.</param>
+    /// <returns>The diagnostic, whose message names the node and slot.</returns>
+    public static DiagnosticRecord Create(Guid operationId, ScriptSlotProblem problem, ContentCookInput scene, SceneId sceneId, string sceneName, ScriptBindingSite site)
     {
-        slotId = Guid.Empty;
-        parameter = null;
-        if (path is null || !path.StartsWith(PropertyPathPrefix, StringComparison.Ordinal))
-        {
-            return false;
-        }
-
-        var parts = path[PropertyPathPrefix.Length..].Split('/', 2);
-        if (!Guid.TryParse(parts[0], CultureInfo.InvariantCulture, out slotId))
-        {
-            return false;
-        }
-
-        parameter = parts.Length > 1 ? parts[1] : null;
-        return true;
+        ArgumentNullException.ThrowIfNull(problem);
+        var subject = Describe(site);
+        return Create(operationId, problem.Severity, problem.Code, $"{char.ToUpperInvariant(subject[0])}{subject[1..]}: {problem.Message}", scene, sceneId, sceneName, site, problem.Field.Parameter);
     }
 
     /// <summary>Creates a diagnostic about a slot, with Go To Property.</summary>
@@ -102,7 +84,7 @@ public static class ScriptSlotDiagnostics
                 {
                     ["AssetUri"] = scene.AssetUri.ToUriString(),
                     ["NodeId"] = site.NodeId.ToString(),
-                    ["PropertyPath"] = PropertyPath(site.SlotId, parameter),
+                    ["PropertyPath"] = new ScriptFieldAddress(site.SlotId, parameter).ToString(),
                 },
             },
         };

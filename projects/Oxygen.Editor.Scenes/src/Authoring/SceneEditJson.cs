@@ -44,6 +44,7 @@ public static class SceneEditJson
                 new QuaternionJsonConverter(),
                 new PropertyEditJsonConverter(),
                 new ScriptSlotJsonConverter(),
+                new ScriptValueJsonConverter(),
             },
         };
         options.MakeReadOnly();
@@ -129,6 +130,28 @@ public static class SceneEditJson
         {
             var scripting = new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [value] };
             JsonSerializer.Serialize(writer, ((ScriptingData)scripting.Dehydrate()).Slots[0], SceneJsonContext.Default.ScriptSlotData);
+        }
+    }
+
+    /// <summary>Writes a script parameter value in its saved form.</summary>
+    private sealed class ScriptValueJsonConverter : JsonConverter<ScriptValue>
+    {
+        // A value is saved as the override of a slot, whose saved form is the value's.
+        private const string Name = "value";
+
+        public override ScriptValue Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            var data = JsonSerializer.Deserialize(ref reader, SceneJsonContext.Default.ScriptValueData)
+                ?? throw new JsonException("A script value cannot be null.");
+            var slot = new ScriptSlotData { Id = Guid.NewGuid(), Overrides = new Dictionary<string, ScriptValueData>(StringComparer.Ordinal) { [Name] = data } };
+            var scripting = (ScriptingComponent)GameComponent.CreateAndHydrate(new ScriptingData { Name = ScriptingComponent.DefaultName, Slots = [slot] });
+            return scripting.Slots[0].Overrides[Name];
+        }
+
+        public override void Write(Utf8JsonWriter writer, ScriptValue value, JsonSerializerOptions options)
+        {
+            var scripting = new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [new ScriptSlot().WithOverride(Name, value)] };
+            JsonSerializer.Serialize(writer, ((ScriptingData)scripting.Dehydrate()).Slots[0].Overrides![Name], SceneJsonContext.Default.ScriptValueData);
         }
     }
 }

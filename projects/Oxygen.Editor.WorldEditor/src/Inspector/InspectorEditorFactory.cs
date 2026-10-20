@@ -45,6 +45,6 @@ internal static class InspectorEditorFactory
             [typeof(PointLightComponent)] = _ => new PointLightViewModel(authoring),
             [typeof(SpotLightComponent)] = _ => new SpotLightViewModel(authoring),
             [typeof(LocalFogVolumeComponent)] = _ => new LocalFogVolumeViewModel(authoring),
-            [typeof(ScriptingComponent)] = messenger => new ScriptingViewModel(authoring, assets, scripts?.Analysis, scripts?.CodeEditor, messenger, projects, hosting.DispatcherScheduler, scripts?.Declarations),
+            [typeof(ScriptingComponent)] = messenger => new ScriptingViewModel(authoring, assets, scripts?.Scripts, scripts?.CodeEditor, messenger, projects, hosting.DispatcherScheduler),
         };
 }

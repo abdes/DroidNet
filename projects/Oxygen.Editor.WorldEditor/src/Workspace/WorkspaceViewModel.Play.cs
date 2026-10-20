@@ -11,9 +11,10 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Selection;
-using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Play;
+using Oxygen.Managed.Assets.Diagnostics;
+using Oxygen.Managed.Core.Diagnostics;
 using Serilog.Events;
 
 namespace Oxygen.Editor.World.Workspace;
@@ -52,7 +53,7 @@ public partial class WorkspaceViewModel
     /// <summary>Shows the scene document a runtime problem names and selects its node.</summary>
     /// <param name="problem">A problem the running scene reported.</param>
     /// <returns>Whether the node was selected.</returns>
-    internal async Task<bool> SelectRuntimeProblemNodeAsync(ScriptProblem problem)
+    internal async Task<bool> SelectRuntimeProblemNodeAsync(RuntimeScriptProblem problem)
     {
         if (this.playSession?.NodeOf(problem) is not { } target
             || Dockable.FromId(this.CenterOutletName)?.ViewModel is not DocumentHostViewModel host
@@ -73,10 +74,11 @@ public partial class WorkspaceViewModel
         childContainer.Register<PlaySettings>(Reuse.Singleton);
         childContainer.Register<PlaySession>(Reuse.Singleton);
         childContainer.RegisterMapping<IRuntimeProblemSource, PlaySession>();
+        childContainer.RegisterMapping<IAssetProblemSource, PlaySession>();
         this.playSession = childContainer.Resolve<PlaySession>();
         this.playerOutput = childContainer.Resolve<OutputLogBuffer>(IfUnresolved.ReturnDefault);
         this.playSession.LogReceived += this.OnPlayerLogReceived;
-        this.playSession.RuntimeProblemsChanged += this.OnRuntimeProblemsChanged;
+        this.playSession.ProblemsChanged += this.OnRuntimeProblemsChanged;
         this.messenger?.Register<RevealPlayPanelMessage>(this, (_, message) => this.Reveal(message.Panel));
     }
 
@@ -87,7 +89,7 @@ public partial class WorkspaceViewModel
         {
             this.playSession = null;
             session.LogReceived -= this.OnPlayerLogReceived;
-            session.RuntimeProblemsChanged -= this.OnRuntimeProblemsChanged;
+            session.ProblemsChanged -= this.OnRuntimeProblemsChanged;
             _ = session.ShutdownAsync();
         }
     }
@@ -126,9 +128,9 @@ public partial class WorkspaceViewModel
     // A runtime error brings Problems forward; warnings wait to be looked at.
     private void OnRuntimeProblemsChanged(object? sender, EventArgs args)
     {
-        var problems = this.playSession?.RuntimeProblems ?? [];
+        var problems = this.playSession?.Problems ?? [];
         var added = problems.Skip(Math.Min(this.shownRuntimeProblems, problems.Count));
-        var hasError = problems.Count > this.shownRuntimeProblems && added.Any(static problem => problem.Severity == ScriptProblemSeverity.Error);
+        var hasError = problems.Count > this.shownRuntimeProblems && added.Any(static problem => problem.Severity >= DiagnosticSeverity.Error);
         this.shownRuntimeProblems = problems.Count;
         if (hasError)
         {

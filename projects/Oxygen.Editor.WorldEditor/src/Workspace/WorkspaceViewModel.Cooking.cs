@@ -90,7 +90,7 @@ public partial class WorkspaceViewModel
             || Oxygen.Editor.ContentPipeline.SceneStartingPropertyPaths.IsStartingProperty(property);
 
     private static NodeId? FindScriptSlotNode(DiagnosticRecord issue, string property)
-        => Oxygen.Editor.ContentPipeline.ScriptSlotDiagnostics.TryParsePropertyPath(property, out _, out _)
+        => Oxygen.Editor.Scripting.ScriptFieldAddress.TryParse(property, out _)
             && issue.SuggestedAction?.Payload.TryGetValue("NodeId", out var text) == true
             && Guid.TryParse(text, System.Globalization.CultureInfo.InvariantCulture, out var node)
                 ? NodeId.FromValue(node) : null;

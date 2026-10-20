@@ -5,11 +5,13 @@
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
+using Oxygen.Editor.Scripting;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Inspection;
 
-/// <summary>The native Inspector's script report maps to typed declarations, and malformed reports are refused.</summary>
+/// <summary>The native Inspector's script report maps to a library script, and malformed reports are refused.</summary>
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class ScriptMetadataTests
@@ -30,18 +32,19 @@ public sealed class ScriptMetadataTests
             { "name": "target", "type": "node" }
             """));
 
-        var declarations = report.SingleOrDefault(Script)!;
+        var cooked = report.SingleOrDefault(Script)!;
 
-        _ = declarations.ScriptUri.Should().Be(Script);
-        _ = declarations.NativeScriptKey.Should().Be(Guid.Parse(Key));
-        _ = declarations.Parameters.Should().Equal(
-            new CookedScriptParameter("speed", CookedScriptParameterKind.Float, 0.9f, 0),
-            new CookedScriptParameter("count", CookedScriptParameterKind.Int32, 3, 0),
-            new CookedScriptParameter("armed", CookedScriptParameterKind.Bool, true, 0),
-            new CookedScriptParameter("mode", CookedScriptParameterKind.String, "walk", 0),
-            new CookedScriptParameter("offset", CookedScriptParameterKind.Vec3, new Vector3(1, 2, 3), 0),
-            new CookedScriptParameter("fire", CookedScriptParameterKind.Asset, null, 5),
-            new CookedScriptParameter("target", CookedScriptParameterKind.Node, null, 0));
+        _ = cooked.AssetKey.Should().Be(Guid.Parse(Key));
+        _ = cooked.Script.Identity.Should().Be(Script);
+        _ = cooked.Script.Origin.Should().Be(ScriptOrigin.Library);
+        _ = cooked.Script.Parameters.Should().Equal(
+            new ScriptParameter { Name = "speed", Kind = ScriptParameterKind.FloatParameter, Default = ScriptValue.FromFloat(0.9f) },
+            new ScriptParameter { Name = "count", Kind = ScriptParameterKind.Int32Parameter, Default = ScriptValue.FromInt(3) },
+            new ScriptParameter { Name = "armed", Kind = ScriptParameterKind.BoolParameter, Default = ScriptValue.FromBool(true) },
+            new ScriptParameter { Name = "mode", Kind = ScriptParameterKind.StringParameter, Default = ScriptValue.FromString("walk") },
+            new ScriptParameter { Name = "offset", Kind = ScriptParameterKind.Vec3Parameter, Default = ScriptValue.FromVector(new Vector3(1, 2, 3)) },
+            new ScriptParameter { Name = "fire", Kind = ScriptParameterKind.AssetParameter, AssetType = 5 },
+            new ScriptParameter { Name = "target", Kind = ScriptParameterKind.NodeParameter });
     }
 
     [TestMethod]

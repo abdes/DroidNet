@@ -16,6 +16,7 @@
     <ItemGroup>
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
     </ItemGroup>
 
     <ItemGroup Condition="Exists('$(ProjectsRoot)/Oxygen.Engine/out/install/$(Configuration)/bin')">

@@ -29,7 +29,7 @@ namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 /// Spot     spot light, cones 0.4 / 0.6
 /// Fog      local fog volume
 /// Mesh     Cube.ogeo, one material slot override (Red.omat)
-/// Script   one script slot (Move.oscript) whose "target" value is node B
+/// Script   two script slots: Move.oscript with "target" = node B, then Move.oscript with no values
 /// </code>
 /// Every id is fixed, so two builds are the same document. Ids end in readable tags: nodes are <c>...-0001-...</c>,
 /// components <c>...-0002-...</c>, folders <c>...-0003-...</c>, slots <c>...-0004-...</c>; a node's transform is
@@ -107,6 +107,8 @@ public static class SampleScene
     public static Guid CubeSlot { get; } = Tagged(4, "C1");
 
     public static Guid MoveSlot { get; } = Tagged(4, "51");
+
+    public static Guid SecondSlot { get; } = Tagged(4, "52");
 
     /// <summary>Gets every node, in declaration order.</summary>
     public static IReadOnlyList<NodeId> AllNodes { get; } = [A, A1, A11, A2, B, Cam, Ortho, Sun, Moon, Lamp, Spot, Fog, Mesh, Script];
@@ -211,6 +213,11 @@ public static class SampleScene
                     {
                         ["target"] = new() { Type = "node", Value = NodeValue(B) },
                     },
+                },
+                new ScriptSlotData
+                {
+                    Id = SecondSlot,
+                    Script = MoveScript,
                 },
             ],
         };

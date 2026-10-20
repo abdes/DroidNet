@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Reactive.Subjects;
 using AwesomeAssertions;
 using DroidNet.Documents;
 using Moq;
@@ -12,7 +11,7 @@ using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
-using Oxygen.Editor.World.Play;
+using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Editor.World.Problems;
 using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Assets.Diagnostics;
@@ -22,28 +21,26 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
 
 /// <summary>
-/// The Problems panel follows script analysis and the input sources: grouped by file, counted in its title, cleared
-/// when fixed.
+/// The Problems panel follows every problem source (the scripts, the input sources, the running scene): grouped by
+/// file, counted in its title, cleared when fixed.
 /// </summary>
 [TestClass]
-public sealed partial class ProblemsViewModelTests : IDisposable
+public sealed partial class ProblemsViewModelTests
 {
     private const string MovePath = @"C:\Project\Content\Player\move.lua";
+    private static readonly AssetPath Move = AssetPath.Parse("/Content/Player/move.oscript");
 
-    private readonly Subject<ScriptAnalysisSnapshot> changes = new();
     private readonly Mock<ICodeEditorService> codeEditor = new();
+    private readonly FakeScripts scripts = new();
     private readonly FakeRuntimeProblems runtime = new();
     private readonly FakeInputSources inputs = new();
 
-    /// <inheritdoc />
-    public void Dispose() => this.changes.Dispose();
-
     [TestMethod]
-    public void AnalysisWithProblemsAppearsGroupedByFileWithCountsInTheTitle()
+    public void AScriptWithProblemsAppearsGroupedByFileWithCountsInTheTitle()
     {
         using var model = this.CreateModel();
 
-        this.changes.OnNext(Snapshot(MovePath, Problem(ScriptProblemSeverity.Warning, 4), Problem(ScriptProblemSeverity.Error, 12)));
+        _ = this.scripts.Add(Analyzed(MovePath, Problem(DiagnosticSeverity.Warning, 4), Problem(DiagnosticSeverity.Error, 12)));
 
         var group = model.Groups.Should().ContainSingle().Subject;
         _ = group.DisplayPath.Should().Be("Content/Player/move.lua");
@@ -56,9 +53,9 @@ public sealed partial class ProblemsViewModelTests : IDisposable
     public void FixingOrDeletingTheFileClearsItsProblems()
     {
         using var model = this.CreateModel();
-        this.changes.OnNext(Snapshot(MovePath, Problem(ScriptProblemSeverity.Error, 12)));
+        _ = this.scripts.Add(Analyzed(MovePath, Problem(DiagnosticSeverity.Error, 12)));
 
-        this.changes.OnNext(Snapshot(MovePath));
+        _ = this.scripts.Add(Analyzed(MovePath));
 
         _ = model.Groups.Should().BeEmpty();
         _ = model.Title.Should().Be("Problems");
@@ -69,20 +66,20 @@ public sealed partial class ProblemsViewModelTests : IDisposable
     public void SelectionSurvivesAnUpdateOfAnotherFile()
     {
         using var model = this.CreateModel();
-        this.changes.OnNext(Snapshot(MovePath, Problem(ScriptProblemSeverity.Error, 12)));
+        _ = this.scripts.Add(Analyzed(MovePath, Problem(DiagnosticSeverity.Error, 12)));
         model.Selected = model.Groups[0].Entries[0];
 
-        this.changes.OnNext(Snapshot(@"C:\Project\Content\jump.lua", Problem(ScriptProblemSeverity.Warning, 2)));
+        _ = this.scripts.Add(Analyzed(@"C:\Project\Content\jump.lua", Problem(DiagnosticSeverity.Warning, 2)) with { Identity = AssetPath.Parse("/Content/jump.oscript") });
 
         _ = model.Selected.Should().NotBeNull();
-        _ = model.Selected!.Problem.SourcePath.Should().Be(MovePath);
+        _ = model.Selected!.Problem.File.Should().Be(MovePath);
     }
 
     [TestMethod]
     public async Task OpenGoesToTheProblemLocation()
     {
         using var model = this.CreateModel();
-        this.changes.OnNext(Snapshot(MovePath, Problem(ScriptProblemSeverity.Error, 12)));
+        _ = this.scripts.Add(Analyzed(MovePath, Problem(DiagnosticSeverity.Error, 12)));
 
         await model.OpenAsync(model.Groups[0].Entries[0]).ConfigureAwait(false);
 
@@ -90,13 +87,23 @@ public sealed partial class ProblemsViewModelTests : IDisposable
     }
 
     [TestMethod]
+    public void CheckScriptsAnalyzesEveryScriptAgain()
+    {
+        using var model = this.CreateModel();
+
+        model.CheckScriptsCommand.Execute(parameter: null);
+
+        _ = this.scripts.Refreshes.Should().Equal(true);
+    }
+
+    [TestMethod]
     public void RuntimeProblemsJoinTheirFileAndClearWithTheSession()
     {
         using var model = this.CreateModel();
-        this.changes.OnNext(Snapshot(MovePath, Problem(ScriptProblemSeverity.Warning, 4)));
+        _ = this.scripts.Add(Analyzed(MovePath, Problem(DiagnosticSeverity.Warning, 4)));
 
-        this.runtime.Report(Problem(ScriptProblemSeverity.Error, 9) with { IsRuntime = true, SlotNode = "Player", SlotIndex = 0 });
-        this.runtime.Report(new ScriptProblem(ScriptProblemSeverity.Warning, "OXE.PLAY.SCENE_ISSUE", "unsupported record", string.Empty, Line: null, Column: null, "rendered", string.Empty) { IsRuntime = true });
+        this.runtime.Report(new RuntimeScriptProblem(DiagnosticSeverity.Error, "S0701", "attempt to index nil", "rendered") { File = MovePath, Line = 9, SlotNode = "Player", SlotIndex = 0 });
+        this.runtime.Report(new RuntimeScriptProblem(DiagnosticSeverity.Warning, "OXE.PLAY.SCENE_ISSUE", "unsupported record", "rendered"));
 
         _ = model.Groups.Select(static group => group.DisplayPath).Should().Equal("Content/Player/move.lua", ProblemsViewModel.PlaySessionGroup);
         _ = model.Groups[0].Entries.Select(static entry => entry.Problem.Line).Should().Equal(4, 9);
@@ -111,12 +118,7 @@ public sealed partial class ProblemsViewModelTests : IDisposable
     public async Task ARuntimeProblemSelectsItsNodeAndOnlyAFileProblemOpens()
     {
         using var model = this.CreateModel();
-        var runtimeProblem = new ScriptProblem(ScriptProblemSeverity.Error, "S0701", "attempt to index nil", string.Empty, Line: null, Column: null, "rendered", string.Empty)
-        {
-            IsRuntime = true,
-            SlotNode = "Player",
-            SlotIndex = 0,
-        };
+        var runtimeProblem = new RuntimeScriptProblem(DiagnosticSeverity.Error, "S0701", "attempt to index nil", "rendered") { SlotNode = "Player", SlotIndex = 0 };
         this.runtime.Report(runtimeProblem);
 
         model.Selected = model.Groups[0].Entries[0];
@@ -143,6 +145,7 @@ public sealed partial class ProblemsViewModelTests : IDisposable
         var entry = model.Groups.Should().ContainSingle().Which.Entries.Should().ContainSingle().Subject;
         _ = entry.Code.Should().Be(InputSourceCodes.ActionUndeclared);
         _ = entry.Location.Should().Be("13:21");
+        _ = entry.Rendered.Should().Contain(InputSourceCodes.ActionUndeclared, "a problem without the engine's rendering is shown in its layout");
         _ = model.ErrorCount.Should().Be(1);
 
         this.inputs.SetProblems([]);
@@ -150,17 +153,20 @@ public sealed partial class ProblemsViewModelTests : IDisposable
         _ = model.IsEmpty.Should().BeTrue();
     }
 
-    private static ScriptProblem Problem(ScriptProblemSeverity severity, int line)
-        => new(severity, "S0503", "key 'fnd_one' not found", MovePath, line, 3, "rendered", "explanation");
+    private static ScriptProblem Problem(DiagnosticSeverity severity, int line)
+        => new(severity, "S0503", "key 'fnd_one' not found", "rendered") { File = MovePath, Line = line, Column = 3, Explanation = "explanation" };
 
-    private static ScriptAnalysisSnapshot Snapshot(string path, params ScriptProblem[] problems)
-        => new(FileSystemPath.From(path), AssetPath.Parse("/Content/x.oscript"), [.. problems.Select(problem => problem with { SourcePath = path })], [], ParametersOutOfDate: false);
+    private static Script Analyzed(string path, params ScriptProblem[] problems)
+        => new()
+        {
+            Identity = Move,
+            Origin = ScriptOrigin.Source,
+            SourcePath = FileSystemPath.From(path),
+            Problems = [.. problems.Select(problem => problem with { File = path })],
+        };
 
     private ProblemsViewModel CreateModel()
     {
-        var analysis = new Mock<IScriptAnalysisService>();
-        _ = analysis.SetupGet(static service => service.Changes).Returns(this.changes);
-        _ = analysis.SetupGet(static service => service.Current).Returns([]);
         var projects = new Mock<IProjectContextService>();
         _ = projects.SetupGet(static service => service.ActiveProject).Returns(new ProjectContext
         {
@@ -171,7 +177,7 @@ public sealed partial class ProblemsViewModelTests : IDisposable
             AuthoringMounts = [],
             LocalFolderMounts = [],
         });
-        return new ProblemsViewModel(analysis.Object, this.codeEditor.Object, projects.Object, this.inputs, this.runtime)
+        return new ProblemsViewModel([this.scripts, this.inputs, this.runtime], this.codeEditor.Object, projects.Object)
         {
             NodeSelector = this.runtime.SelectAsync,
         };
@@ -179,38 +185,38 @@ public sealed partial class ProblemsViewModelTests : IDisposable
 
     private sealed class FakeRuntimeProblems : IRuntimeProblemSource
     {
-        private readonly List<ScriptProblem> problems = [];
+        private readonly List<RuntimeScriptProblem> problems = [];
 
-        public event EventHandler? RuntimeProblemsChanged;
+        public event EventHandler? ProblemsChanged;
 
-        public IReadOnlyList<ScriptProblem> RuntimeProblems => this.problems;
+        public IReadOnlyList<AssetProblem> Problems => this.problems;
 
-        public List<ScriptProblem> Selected { get; } = [];
+        public List<RuntimeScriptProblem> Selected { get; } = [];
 
         public DocumentId Document { get; } = DocumentId.New();
 
         public NodeId Node { get; } = NodeId.New();
 
         // A problem that names a node is found in the scene that played.
-        public (DocumentId Document, NodeId Node)? NodeOf(ScriptProblem problem)
-            => problem.IsRuntime && problem.SlotNode is not null ? (this.Document, this.Node) : null;
+        public (DocumentId Document, NodeId Node)? NodeOf(RuntimeScriptProblem problem)
+            => problem.SlotNode is not null ? (this.Document, this.Node) : null;
 
-        public Task<bool> SelectAsync(ScriptProblem problem)
+        public Task<bool> SelectAsync(RuntimeScriptProblem problem)
         {
             this.Selected.Add(problem);
             return Task.FromResult(true);
         }
 
-        public void Report(ScriptProblem problem)
+        public void Report(RuntimeScriptProblem problem)
         {
             this.problems.Add(problem);
-            this.RuntimeProblemsChanged?.Invoke(this, EventArgs.Empty);
+            this.ProblemsChanged?.Invoke(this, EventArgs.Empty);
         }
 
         public void Clear()
         {
             this.problems.Clear();
-            this.RuntimeProblemsChanged?.Invoke(this, EventArgs.Empty);
+            this.ProblemsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 }

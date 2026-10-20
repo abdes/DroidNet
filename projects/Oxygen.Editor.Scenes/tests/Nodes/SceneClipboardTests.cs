@@ -165,7 +165,7 @@ public sealed class SceneClipboardTests
 
         SceneAssert.Applied(result);
         var pasted = target.Scene.AllNodes.Single(node => node.Id != OtherRoot);
-        var slot = pasted.Components.OfType<ScriptingComponent>().Single().Slots.Should().ContainSingle().Which;
+        var slot = pasted.Components.OfType<ScriptingComponent>().Single().Slots[0];
         _ = slot.Overrides["target"].NodeId.Should().Be(SampleScene.B);
         _ = target.Scene.AllNodes.Select(static node => node.Id).Should().NotContain(SampleScene.B);
     }

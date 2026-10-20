@@ -26,6 +26,7 @@ using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
@@ -85,9 +86,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="fileSystem">The file system that holds the project's files.</param>
     /// <param name="inputSources">The project's input sources, which declare the scene's starting input contexts.</param>
     /// <param name="interaction">The shared editor lock owner.</param>
-    /// <param name="scriptAnalysis">The script analysis, for script slot parameters and problems.</param>
+    /// <param name="scripts">The scripts, for script slot parameters and problems.</param>
     /// <param name="codeEditor">The code editor, for editing a slot's script.</param>
-    /// <param name="scriptDeclarations">The declarations of library scripts, which have no source to analyze.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -107,9 +107,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         IInputSources inputSources,
         ILoggerFactory? loggerFactory = null,
         WorkspaceInteractionService? interaction = null,
-        IScriptAnalysisService? scriptAnalysis = null,
-        ICodeEditorService? codeEditor = null,
-        IScriptDeclarationProvider? scriptDeclarations = null)
+        IScripts? scripts = null,
+        ICodeEditorService? codeEditor = null)
         : base(loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger<SceneNodeEditorViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneNodeEditorViewModel>();
@@ -134,7 +133,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             projectContexts,
             loggerFactory,
             this.AuthoringOf,
-            new InspectorScriptServices(scriptAnalysis, codeEditor, scriptDeclarations));
+            new InspectorScriptServices(scripts, codeEditor));
         this.environmentEditor = new EnvironmentViewModel(
             this.AuthoringOf,
             assetProvider,

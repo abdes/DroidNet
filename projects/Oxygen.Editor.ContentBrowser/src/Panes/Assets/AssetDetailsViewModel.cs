@@ -4,9 +4,13 @@
 
 using System.ComponentModel;
 using System.Globalization;
+using System.Reactive.Concurrency;
+using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
@@ -24,7 +28,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     private readonly ContentBrowserState state;
     private readonly IAssetShell shell;
     private readonly Relocation.IAssetRelocationWorkflow? relocation;
-    private readonly Scripts.IScriptAnalysisService? scripts;
+    private readonly IScripts? scripts;
     private readonly IDisposable? scriptChanges;
     private int referrersRequest;
     private bool disposed;
@@ -33,19 +37,26 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     /// <param name="state">The browser state that publishes the selection.</param>
     /// <param name="shell">The clipboard and File Explorer actions.</param>
     /// <param name="relocation">Finds the content that uses the selected asset; without it no referrers are shown.</param>
-    /// <param name="scripts">The script analysis, which supplies a script's parameters and problems.</param>
+    /// <param name="scripts">The scripts, which supply a script's parameters and problems.</param>
+    /// <param name="hosting">The UI host, whose dispatcher shows the scripts' changes; without it they are shown on the
+    /// thread that raises them.</param>
     public AssetDetailsViewModel(
         ContentBrowserState state,
         IAssetShell shell,
         Relocation.IAssetRelocationWorkflow? relocation = null,
-        Scripts.IScriptAnalysisService? scripts = null)
+        IScripts? scripts = null,
+        HostingContext? hosting = null)
     {
         this.state = state;
         this.shell = shell;
         this.relocation = relocation;
         this.scripts = scripts;
         state.PropertyChanged += this.OnStateChanged;
-        this.scriptChanges = scripts?.Changes.Subscribe(this.OnScriptAnalyzed);
+        this.scriptChanges = scripts is null ? null : Observable.FromEventPattern<ScriptChangedEventArgs>(
+                handler => scripts.Changed += handler,
+                handler => scripts.Changed -= handler)
+            .ObserveOn((IScheduler?)hosting?.DispatcherScheduler ?? ImmediateScheduler.Instance)
+            .Subscribe(change => this.OnScriptChanged(change.EventArgs));
         this.Refresh();
     }
 

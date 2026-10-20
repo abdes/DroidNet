@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Reactive.Concurrency;
@@ -13,16 +12,13 @@ using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Scripts;
-using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.Scenes.Edits.Settings;
+using Oxygen.Editor.Scenes.Edits.Scripting;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Problems;
-using Oxygen.Editor.World.Scripting;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -39,16 +35,17 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
 
     private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly IAssetFeed? assetProvider;
-    private readonly IScriptAnalysisService? analysis;
+    private readonly IScripts? scripts;
     private readonly ICodeEditorService? codeEditor;
     private readonly IMessenger? messenger;
     private readonly IProjectContextService? projects;
-    private readonly IScriptDeclarationProvider? declarationProvider;
-    private readonly Dictionary<AssetPath, ScriptDeclarations> libraryScripts = [];
+
+    // The library scripts read, or being read when the read is null.
+    private readonly Dictionary<AssetPath, ScriptRead?> libraryScripts = [];
     private readonly List<AssetEntry> assets = [];
     private IReadOnlyList<AssetPath> scriptAssets = [];
-    private readonly IDisposable? analysisSubscription;
     private IDisposable? assetSubscription;
+    private IDisposable? scriptSubscription;
     private SceneNode? node;
     private ScriptingComponent? scripting;
     private Task pending = Task.CompletedTask;
@@ -58,31 +55,35 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <summary>Initializes a new instance of the <see cref="ScriptingViewModel"/> class.</summary>
     /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     /// <param name="assetProvider">The shared asset catalog, for script and asset pickers.</param>
-    /// <param name="analysis">The script analysis, for declared parameters and problems.</param>
+    /// <param name="scripts">The scripts, for declared parameters and problems.</param>
     /// <param name="codeEditor">The code editor, for Edit.</param>
     /// <param name="messenger">The messenger, for New Script and Problems.</param>
     /// <param name="projects">The active project.</param>
-    /// <param name="scheduler">The UI scheduler that catalog and analysis updates are observed on.</param>
-    /// <param name="declarationProvider">The declarations of library scripts, which have no source to analyze.</param>
+    /// <param name="scheduler">The UI scheduler that catalog and script updates are observed on.</param>
     public ScriptingViewModel(
         Func<SceneAuthoring?>? authoringProvider = null,
         IAssetFeed? assetProvider = null,
-        IScriptAnalysisService? analysis = null,
+        IScripts? scripts = null,
         ICodeEditorService? codeEditor = null,
         IMessenger? messenger = null,
         IProjectContextService? projects = null,
-        IScheduler? scheduler = null,
-        IScriptDeclarationProvider? declarationProvider = null)
+        IScheduler? scheduler = null)
     {
         this.authoringProvider = authoringProvider;
         this.assetProvider = assetProvider;
-        this.analysis = analysis;
+        this.scripts = scripts;
         this.codeEditor = codeEditor;
         this.messenger = messenger;
         this.projects = projects;
-        this.declarationProvider = declarationProvider;
         var observer = scheduler ?? ImmediateScheduler.Instance;
-        this.analysisSubscription = analysis?.Changes.ObserveOn(observer).Subscribe(this.OnAnalyzed, static _ => { });
+
+        // The facts raise a change on the context that subscribed; the scheduler brings it to the UI thread wherever
+        // the section is created.
+        this.scriptSubscription = scripts is null ? null : Observable.FromEventPattern<ScriptChangedEventArgs>(
+                handler => scripts.Changed += handler,
+                handler => scripts.Changed -= handler)
+            .ObserveOn(observer)
+            .Subscribe(change => this.OnScriptsChanged(change.EventArgs));
         this.assetSubscription = assetProvider?.Items.ObserveOn(observer).Subscribe(this.OnAssets, static _ => { });
     }
 
@@ -144,26 +145,19 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         }
 
         this.disposed = true;
-        this.analysisSubscription?.Dispose();
+        this.scriptSubscription?.Dispose();
+        this.scriptSubscription = null;
         this.assetSubscription?.Dispose();
         this.assetSubscription = null;
         this.Bind(null);
     }
 
     /// <summary>Applies one change to the slots as an undoable scene edit.</summary>
-    /// <param name="change">Computes the new slots from the current ones.</param>
+    /// <param name="change">Creates the edit of the selected node's slots.</param>
     /// <returns>The completion of the edit.</returns>
-    internal async Task EditAsync(Func<ImmutableArray<ScriptSlot>, ImmutableArray<ScriptSlot>> change)
+    internal async Task EditAsync(Func<NodeId, ISceneEdit> change)
     {
-        if (!this.CanEdit || this.scripting is not { } component || this.node is not { } owner
-            || this.authoringProvider?.Invoke() is not { } authoring)
-        {
-            this.Rebuild();
-            return;
-        }
-
-        var slots = change(component.Slots);
-        if (slots.SequenceEqual(component.Slots))
+        if (!this.CanEdit || this.node is not { } owner || this.authoringProvider?.Invoke() is not { } authoring)
         {
             this.Rebuild();
             return;
@@ -172,7 +166,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         this.SetBusy(busy: true);
         try
         {
-            var edit = authoring.ExecuteAsync(new SetScriptSlots(owner.Id, slots));
+            var edit = authoring.ExecuteAsync(change(owner.Id));
             this.pending = edit;
             var result = await edit.ConfigureAwait(true);
             this.ErrorMessage = result.Succeeded ? string.Empty : result.Diagnostics.FirstOrDefault(static diagnostic => diagnostic.IsError)?.Message ?? "The scripts could not be changed.";
@@ -209,7 +203,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         }
 
         var script = location.Identity;
-        await this.EditAsync(slots => ScriptSlotEdits.SetScript(slots, slotId, script)).ConfigureAwait(true);
+        await this.EditAsync(node => new SetSlotScript(node, new ScriptSlotId(slotId), script)).ConfigureAwait(true);
     }
 
     /// <summary>Opens a script in the code editor.</summary>
@@ -267,7 +261,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     protected override void OnInputEnabledChanged(bool enabled) => this.RefreshCanEdit();
 
     [RelayCommand]
-    private Task AddSlotAsync() => this.EditAsync(ScriptSlotEdits.Add);
+    private Task AddSlotAsync() => this.EditAsync(static node => new AddScriptSlot(node, new ScriptSlotId(Guid.NewGuid())));
 
     partial void OnSelectionMessageChanged(string value)
     {
@@ -310,9 +304,15 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         }
     }
 
-    private void OnAnalyzed(ScriptAnalysisSnapshot snapshot)
+    private void OnScriptsChanged(ScriptChangedEventArgs args)
     {
-        if (!this.disposed && this.scripting?.Slots.Any(slot => slot.Script == snapshot.Script) == true)
+        // No script named: the project changed, and with it the libraries it mounts.
+        if (args.Script is null)
+        {
+            this.libraryScripts.Clear();
+        }
+
+        if (!this.disposed && this.scripting?.Slots.Any(slot => args.Script is null || slot.Script == args.Script) == true)
         {
             this.Rebuild();
         }
@@ -341,55 +341,45 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         this.Rebuild();
     }
 
-    // A script without analysis may come from a mounted library; it is queued for reading, and shown as loading.
-    private ScriptDeclarations FindDeclarations(AssetPath? script, List<AssetPath> toRead)
+    // A script the project has no source of may come from a mounted library; it is queued for reading, and shown as
+    // being read.
+    private (ScriptRead? Script, bool IsReading) FindScript(AssetPath? script, List<AssetPath> toRead)
     {
-        if (script is null)
+        if (script is null || this.scripts is null)
         {
-            return ScriptDeclarations.Unknown;
+            return (null, false);
         }
 
-        if (this.analysis?.Current.FirstOrDefault(snapshot => !snapshot.IsRemoved && snapshot.Script == script) is { } source)
+        if (this.scripts.Find(script) is { } source)
         {
-            return ScriptDeclarations.FromSource(source);
+            return (ScriptRead.Found(source), false);
         }
 
         if (this.libraryScripts.TryGetValue(script, out var library))
         {
-            return library;
+            return (library, library is null);
         }
 
-        if (this.declarationProvider is null || this.projects?.ActiveProject is null)
-        {
-            return ScriptDeclarations.Unknown;
-        }
-
-        this.libraryScripts[script] = ScriptDeclarations.LibraryLoading;
+        this.libraryScripts[script] = null;
         toRead.Add(script);
-        return ScriptDeclarations.LibraryLoading;
+        return (null, true);
     }
 
     // A library script's cooked descriptor records its parameters; reading it rebuilds the cards that use it.
-    private async Task ReadLibraryScriptAsync(IScriptDeclarationProvider provider, ProjectContext project, AssetPath script)
+    private async Task ReadLibraryScriptAsync(IScripts library, AssetPath script)
     {
-        ScriptDeclarations read;
+        ScriptRead read;
         try
         {
-            read = await provider.ReadAsync(project, script).ConfigureAwait(true) is { } cooked
-                ? ScriptDeclarations.FromLibrary(cooked)
-                : ScriptDeclarations.Unknown;
+            read = await library.ReadLibraryAsync(script).ConfigureAwait(true);
         }
         catch (OperationCanceledException)
         {
             _ = this.libraryScripts.Remove(script);
             return;
         }
-        catch (Exception exception) when (exception is InvalidDataException or IOException or InvalidOperationException or ContentPipelineTerminationException)
-        {
-            read = ScriptDeclarations.LibraryUnavailable(exception.Message);
-        }
 
-        if (this.disposed || !this.libraryScripts.TryGetValue(script, out var current) || !ReferenceEquals(current, ScriptDeclarations.LibraryLoading))
+        if (this.disposed || !this.libraryScripts.TryGetValue(script, out var current) || current is not null)
         {
             return;
         }
@@ -429,18 +419,19 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
                 this.Slots.Move(this.Slots.IndexOf(card), index);
             }
 
-            card.Update(slot, index, slots.Length, this.FindDeclarations(slot.Script, toRead));
+            var (script, isReading) = this.FindScript(slot.Script, toRead);
+            card.Update(slot, index, slots.Length, script, isReading);
         }
 
         this.OnPropertyChanged(nameof(this.HasNoSlots));
         this.OnPropertyChanged(nameof(this.CanEdit));
 
         // Reads start once every card is shown, so a read that completes at once rebuilds after this pass.
-        if (this.declarationProvider is { } provider && this.projects?.ActiveProject is { } project)
+        if (this.scripts is { } library)
         {
             foreach (var script in toRead.Distinct())
             {
-                _ = this.ReadLibraryScriptAsync(provider, project, script);
+                _ = this.ReadLibraryScriptAsync(library, script);
             }
         }
     }

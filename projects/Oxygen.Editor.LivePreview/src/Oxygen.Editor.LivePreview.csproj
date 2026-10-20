@@ -16,6 +16,7 @@
         <PackageReference Include="CommunityToolkit.Mvvm" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="System.Reactive" />
+        <PackageReference Include="Testably.Abstractions" />
     </ItemGroup>
 
     <ItemGroup>

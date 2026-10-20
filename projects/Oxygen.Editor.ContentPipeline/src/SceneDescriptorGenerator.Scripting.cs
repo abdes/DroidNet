@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -41,29 +41,19 @@ public sealed partial class SceneDescriptorGenerator
             {
                 var slot = slots[number - 1];
                 var site = new ScriptBindingSite(node.Id, node.Name, slot.Id, number, [.. slot.Overrides.Keys]);
-                ScriptBindingSite At(string? parameter, DiagnosticSeverity severity, string code, string message)
+                var problems = ScriptSlotRules.Check(
+                    slot,
+                    nodeIndices.ContainsKey,
+                    path => !CookInputResolver.IsAuthoringUri(scope.Project, path) || CookInputResolver.TryResolveScript(scope.Project, path, ContentCookInputRole.Dependency) is not null);
+                diagnostics.AddRange(problems.Select(problem => ScriptSlotDiagnostics.Create(operationId, problem, sceneInput, scene.Id, scene.Name, site)));
+                if (slot.Script is not { } script || problems.Any(static problem => problem.Field.Parameter is null))
                 {
-                    diagnostics.Add(ScriptSlotDiagnostics.Create(operationId, severity, code, message, sceneInput, scene.Id, scene.Name, site, parameter));
-                    return site;
-                }
-
-                if (slot.Script is not { } script)
-                {
-                    _ = At(parameter: null, DiagnosticSeverity.Warning, ScriptDiagnosticCodes.SlotWithoutScript, $"{Capitalize(ScriptSlotDiagnostics.Describe(site))} has no script, so it is left out of the cooked scene.");
-                    continue;
-                }
-
-                var scriptPath = script.VirtualPath;
-                if (!scriptPath.EndsWith(AssetFileTypes.Script, StringComparison.Ordinal)
-                    || (CookInputResolver.IsAuthoringUri(scope.Project, script) && CookInputResolver.TryResolveScript(scope.Project, script, ContentCookInputRole.Dependency) is null))
-                {
-                    _ = At(parameter: null, DiagnosticSeverity.Error, ScriptDiagnosticCodes.SlotScriptMissing, $"{Capitalize(ScriptSlotDiagnostics.Describe(site))} runs '{scriptPath}', which no longer exists. Pick another script.");
                     continue;
                 }
 
                 references.Add(script);
                 var parameters = new List<ScriptSidecarParam>();
-                foreach (var (name, value) in slot.Overrides)
+                foreach (var (name, value) in slot.Overrides.Where(entry => !problems.Any(problem => string.Equals(problem.Field.Parameter, entry.Key, StringComparison.Ordinal))))
                 {
                     object? cooked = value.Kind switch
                     {
@@ -78,7 +68,6 @@ public sealed partial class SceneDescriptorGenerator
                     };
                     if (cooked is null)
                     {
-                        _ = At(name, DiagnosticSeverity.Error, ScriptDiagnosticCodes.SlotNodeMissing, $"Parameter '{name}' of {ScriptSlotDiagnostics.Describe(site)} refers to a node the scene no longer has. Pick another node or clear it.");
                         continue;
                     }
 
@@ -90,13 +79,11 @@ public sealed partial class SceneDescriptorGenerator
                     parameters.Add(new ScriptSidecarParam(name, ScriptingComponent.GetTypeName(value.Kind), cooked));
                 }
 
-                bindings.Add(new ScriptSidecarBinding((uint)nodeIndices[node.Id], slot.Id.ToString("D"), scriptPath, slot.ExecutionOrder, parameters));
+                bindings.Add(new ScriptSidecarBinding((uint)nodeIndices[node.Id], slot.Id.ToString("D"), script.VirtualPath, slot.ExecutionOrder, parameters));
                 sites.Add(site with { ParameterNames = [.. parameters.Select(static parameter => parameter.Key)] });
             }
         }
 
         return (bindings, sites, [.. references.Distinct()]);
     }
-
-    private static string Capitalize(string text) => text.Length == 0 ? text : char.ToUpperInvariant(text[0]) + text[1..];
 }

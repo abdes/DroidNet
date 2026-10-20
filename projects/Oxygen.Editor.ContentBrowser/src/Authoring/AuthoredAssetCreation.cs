@@ -12,6 +12,7 @@ using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Materials;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;

@@ -5,6 +5,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Materials;
+using Oxygen.Editor.Scripting;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 
@@ -16,7 +17,7 @@ public sealed partial class AssetBrowserRow(AssetEntry item) : ObservableObject
     private AssetFileFacts? fileFacts;
     private MaterialPreviewColor? baseColor;
     private bool baseColorRead;
-    private Scripts.ScriptAnalysisSnapshot? scriptAnalysis;
+    private Script? script;
 
     /// <summary>Gets the current asset snapshot used by display bindings and commands.</summary>
     public AssetEntry Item => this.item;
@@ -25,12 +26,12 @@ public sealed partial class AssetBrowserRow(AssetEntry item) : ObservableObject
     public AssetKind Kind => this.item.Kind;
 
     /// <summary>Gets the displayed status; a script with problems shows its error and warning counts instead.</summary>
-    public string StatusText => this.scriptAnalysis is { ErrorCount: > 0 } or { WarningCount: > 0 }
-        ? this.scriptAnalysis.ProblemSummary
+    public string StatusText => this.script is { ErrorCount: > 0 } or { WarningCount: > 0 }
+        ? this.script.ProblemSummary
         : this.item.PrimaryBadge;
 
     /// <summary>Gets the semantic tone of the displayed status: Neutral, Caution, Critical or Success.</summary>
-    public string StatusTone => this.scriptAnalysis switch
+    public string StatusTone => this.script switch
     {
         { ErrorCount: > 0 } => "Critical",
         { WarningCount: > 0 } => "Caution",
@@ -79,15 +80,15 @@ public sealed partial class AssetBrowserRow(AssetEntry item) : ObservableObject
     public bool HasGlyph => !this.HasSwatch;
 
     /// <summary>Shows a script's problems in the row status.</summary>
-    /// <param name="analysis">The script's analysis, or <see langword="null"/> when unknown.</param>
-    internal void SetScriptProblems(Scripts.ScriptAnalysisSnapshot? analysis)
+    /// <param name="analyzed">The analyzed script, or <see langword="null"/> when unknown.</param>
+    internal void SetScriptProblems(Script? analyzed)
     {
-        if (ReferenceEquals(this.scriptAnalysis, analysis))
+        if (ReferenceEquals(this.script, analyzed))
         {
             return;
         }
 
-        this.scriptAnalysis = analysis;
+        this.script = analyzed;
         this.OnPropertyChanged(nameof(this.StatusText));
         this.OnPropertyChanged(nameof(this.StatusTone));
     }

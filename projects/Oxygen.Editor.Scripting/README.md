@@ -3,12 +3,30 @@
 The script family module: what is true of the editor's scripts whatever shows
 them. It holds no view, view model or dialog.
 
-Today it holds the script problems: `ScriptProblem`, one problem the engine's
-script analyzer reported or the player raised while a scene played, and its
-`ScriptProblemSeverity`. The Content Browser's analysis snapshot and Live
-Preview's play session produce them; the Problems panel and the inspector's
-script slots show them.
+- `Script` is what is known of one script: its identity (the cooked virtual
+  path a scene's slot names, such as `/Content/Player/move.oscript`), its
+  declared parameters (`ScriptParameter`, `ScriptParameterKind`) and its
+  problems (`ScriptProblem`). A script analyzed from its source and one read
+  from a cooked library use the same vocabulary; `Origin` says which.
+- `ScriptSlotRules` holds the rules of a scene's script slots against their
+  scripts, the same for the inspector, the scene edits and the cook: stale
+  values, defaults, value and asset types, and a slot's problems
+  (`ScriptSlotProblem`). `ScriptFieldAddress` is the `Scripting/{slot}` or
+  `Scripting/{slot}/{parameter}` path that leads from a problem to the field.
+- `IScripts`, implemented by `ScriptFacts`, holds the open project's scripts as
+  the engine's analyzer reads them and their problems. It analyzes a source
+  again when its file changes, keeps a broken declaration's last valid
+  parameters, and reads library scripts. Its events are raised on each
+  subscriber's context.
+- Two ports keep the module free of the engine and the pipeline:
+  `IScriptAnalyzer` (Live Preview's `NativeScriptAnalyzer`) analyzes a source,
+  and `IScriptLibrary` (the content pipeline) reads a script from a mounted
+  cooked library.
+- `ProjectScriptTooling` keeps a project's VS Code and Luau tooling files
+  current from the SDK files `ScriptToolingPaths` finds.
+- `ScriptDiagnosticCodes` and `ScriptOperationResults` are the family's codes
+  (`OXE.SCRIPT.`) and its Output results.
 
-The rest of the script family moves here: the script model and parameters, the
-slot rules the inspector and the cook share, the script facts and their ports,
-project script tooling, templates and diagnostic codes.
+Files are read through `IFileSystem`, so the tests run on an in-memory file
+system. `Oxygen.Editor.Scripting.Testing` gives other modules' tests
+`FakeScripts`, `FakeScriptAnalyzer` and `FakeScriptLibrary`.

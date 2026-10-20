@@ -5,7 +5,6 @@
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Runtime.Player;
-using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LivePreview.Play;
@@ -54,7 +53,7 @@ public sealed partial class PlaySession
             case "session_started":
                 this.LogReceived?.Invoke(this, PlayerLogEventArgs.SessionStarted());
                 this.runtimeProblems.Clear();
-                this.RuntimeProblemsChanged?.Invoke(this, EventArgs.Empty);
+                this.ProblemsChanged?.Invoke(this, EventArgs.Empty);
                 if (!this.Status.IsBusy)
                 {
                     this.scene = null;
@@ -63,10 +62,10 @@ public sealed partial class PlaySession
 
                 break;
             case "scene_loaded":
-                this.AddSceneIssues(received.Data, ScriptProblemSeverity.Warning);
+                this.AddSceneIssues(received.Data, DiagnosticSeverity.Warning);
                 break;
             case "scene_failed":
-                this.AddSceneIssues(received.Data, ScriptProblemSeverity.Error);
+                this.AddSceneIssues(received.Data, DiagnosticSeverity.Error);
                 break;
             case "paused" when this.Status.IsRunning:
                 this.Status = this.Status with { Activity = PlayActivity.Paused };
@@ -144,7 +143,7 @@ public sealed partial class PlaySession
     }
 
     // Scene issues name records by node index; the cooked scene lists nodes in the editor's hierarchy order.
-    private void AddSceneIssues(JsonObject data, ScriptProblemSeverity severity)
+    private void AddSceneIssues(JsonObject data, DiagnosticSeverity severity)
     {
         if (data["issues"] is not JsonArray issues)
         {
@@ -154,30 +153,26 @@ public sealed partial class PlaySession
         var nodes = this.scene?.Scene.AllNodes.ToArray() ?? [];
         foreach (var issue in issues.OfType<JsonObject>())
         {
-            var message = issue["message"]?.GetValue<string>() ?? string.Empty;
+            var message = issue["message"]?.GetValue<string>() is { Length: > 0 } text ? text : "the player could not apply part of the scene";
             var index = issue["node_index"] is JsonValue value && value.TryGetValue<int>(out var number) ? number : (int?)null;
             var node = index is { } at && at < nodes.Length ? nodes[at].Name : null;
-            var code = severity == ScriptProblemSeverity.Error ? PlayDiagnosticCodes.SceneFailed : PlayDiagnosticCodes.SceneIssue;
+            var code = severity == DiagnosticSeverity.Error ? PlayDiagnosticCodes.SceneFailed : PlayDiagnosticCodes.SceneIssue;
             var location = node is null ? string.Empty : $"\n = note: on node '{node}'";
-            this.AddRuntimeProblem(new ScriptProblem(
+            this.AddRuntimeProblem(new RuntimeScriptProblem(
                 severity,
                 code,
                 message,
-                SourcePath: string.Empty,
-                Line: null,
-                Column: null,
-                $"{(severity == ScriptProblemSeverity.Error ? "error" : "warning")}[{code}]: {message}{location}\n",
-                "The player could not apply this part of the scene; the rest of the scene loaded.")
+                $"{(severity == DiagnosticSeverity.Error ? "error" : "warning")}[{code}]: {message}{location}\n")
             {
+                Explanation = "The player could not apply this part of the scene; the rest of the scene loaded.",
                 SlotNode = node,
-                IsRuntime = true,
             });
         }
     }
 
-    private void AddRuntimeProblem(ScriptProblem problem)
+    private void AddRuntimeProblem(RuntimeScriptProblem problem)
     {
         this.runtimeProblems.Add(problem);
-        this.RuntimeProblemsChanged?.Invoke(this, EventArgs.Empty);
+        this.ProblemsChanged?.Invoke(this, EventArgs.Empty);
     }
 }

@@ -8,10 +8,9 @@ using System.Numerics;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Scripting;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector.Scripting;
@@ -39,7 +38,7 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
         this.card = card;
         this.Parameter = parameter;
         this.Kind = ResolveKind(parameter);
-        this.Dimension = ScriptValue.VectorSize(ScriptSlotEdits.ToValueKind(parameter.Kind) ?? ScriptValueKind.BoolValue);
+        this.Dimension = ScriptValue.VectorSize(parameter.ValueKind ?? ScriptValueKind.BoolValue);
     }
 
     /// <summary>Gets the declared parameter.</summary>
@@ -61,7 +60,7 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
     public string Unit => this.Parameter.Unit;
 
     /// <summary>Gets the number format: whole numbers for integers, the step's precision for floats.</summary>
-    public string NumberMask => this.Parameter.Kind == ScriptParameterKind.Int32 ? "~." : "~." + new string('#', Math.Clamp(Decimals(this.Parameter.Step), 1, 4));
+    public string NumberMask => this.Parameter.Kind == ScriptParameterKind.Int32Parameter ? "~." : "~." + new string('#', Math.Clamp(Decimals(this.Parameter.Step), 1, 4));
 
     /// <summary>Gets the declared choices of a string parameter.</summary>
     public IReadOnlyList<string> Options => this.Parameter.Options;
@@ -225,12 +224,12 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
     private static ScriptFieldKind ResolveKind(ScriptParameter parameter)
         => parameter.Kind switch
         {
-            ScriptParameterKind.Bool => ScriptFieldKind.Toggle,
-            ScriptParameterKind.Int32 or ScriptParameterKind.Float => ScriptFieldKind.Number,
-            ScriptParameterKind.String => parameter.Options.Count > 0 ? ScriptFieldKind.Choice : ScriptFieldKind.Text,
-            ScriptParameterKind.Vec3 or ScriptParameterKind.Vec4 when parameter.IsColor => ScriptFieldKind.Color,
-            ScriptParameterKind.Vec2 or ScriptParameterKind.Vec3 or ScriptParameterKind.Vec4 => ScriptFieldKind.Vector,
-            ScriptParameterKind.Asset => ScriptFieldKind.Asset,
+            ScriptParameterKind.BoolParameter => ScriptFieldKind.Toggle,
+            ScriptParameterKind.Int32Parameter or ScriptParameterKind.FloatParameter => ScriptFieldKind.Number,
+            ScriptParameterKind.StringParameter => parameter.Options.Count > 0 ? ScriptFieldKind.Choice : ScriptFieldKind.Text,
+            ScriptParameterKind.Vec3Parameter or ScriptParameterKind.Vec4Parameter when parameter.IsColor => ScriptFieldKind.Color,
+            ScriptParameterKind.Vec2Parameter or ScriptParameterKind.Vec3Parameter or ScriptParameterKind.Vec4Parameter => ScriptFieldKind.Vector,
+            ScriptParameterKind.AssetParameter => ScriptFieldKind.Asset,
             _ => ScriptFieldKind.Node,
         };
 
@@ -351,16 +350,16 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
     {
         switch (this.Parameter.Kind)
         {
-            case ScriptParameterKind.Int32:
+            case ScriptParameterKind.Int32Parameter:
                 this.Commit(ScriptValue.FromInt((int)Math.Round(this.Clamp(this.NumberValue))));
                 break;
-            case ScriptParameterKind.Float:
+            case ScriptParameterKind.FloatParameter:
                 this.Commit(ScriptValue.FromFloat((float)this.Clamp(this.NumberValue)));
                 break;
-            case ScriptParameterKind.Vec2 or ScriptParameterKind.Vec3 or ScriptParameterKind.Vec4:
+            case ScriptParameterKind.Vec2Parameter or ScriptParameterKind.Vec3Parameter or ScriptParameterKind.Vec4Parameter:
                 // Components the vector does not have stay zero, as the stored value expects.
                 this.Commit(ScriptValue.FromVector(
-                    ScriptSlotEdits.ToValueKind(this.Parameter.Kind)!.Value,
+                    this.Parameter.ValueKind!.Value,
                     new Vector4(
                         (float)this.Clamp(this.X),
                         (float)this.Clamp(this.Y),
@@ -386,7 +385,7 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
     private void Commit(ScriptValue? candidate)
     {
         this.SetError(string.Empty);
-        if (Equals(candidate, this.value ?? ScriptSlotEdits.DefaultOf(this.Parameter)) && candidate is not null)
+        if (Equals(candidate, this.value ?? this.Parameter.Default) && candidate is not null)
         {
             this.ShowValue();
             return;
@@ -397,7 +396,7 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
 
     private void ShowValue()
     {
-        var shown = this.value ?? ScriptSlotEdits.DefaultOf(this.Parameter);
+        var shown = this.value ?? this.Parameter.Default;
         this.updating = true;
         try
         {

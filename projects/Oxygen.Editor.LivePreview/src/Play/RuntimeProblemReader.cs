@@ -2,13 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using System.Runtime.CompilerServices;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Scripting;
 using Oxygen.Interop.Scripting;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LivePreview.Play;
 
@@ -17,12 +18,13 @@ namespace Oxygen.Editor.LivePreview.Play;
 /// in the engine's layout, like the analyzer's.
 /// </summary>
 /// <param name="project">The project whose files the diagnostics' spans name.</param>
-internal sealed class RuntimeProblemReader(ProjectContext project)
+/// <param name="fileSystem">The file system that holds the project.</param>
+internal sealed class RuntimeProblemReader(ProjectContext project, IFileSystem fileSystem)
 {
     /// <summary>Reads one diagnostic.</summary>
     /// <param name="diagnostic">The diagnostic, as <c>oxygen.script-diagnostic.schema.json</c> defines it.</param>
     /// <returns>The problem.</returns>
-    public ScriptProblem Read(JsonObject diagnostic)
+    public RuntimeScriptProblem Read(JsonObject diagnostic)
     {
         ArgumentNullException.ThrowIfNull(diagnostic);
         try
@@ -47,74 +49,74 @@ internal sealed class RuntimeProblemReader(ProjectContext project)
 
         if (sourceName.StartsWith('/'))
         {
-            return AssetPath.TryParse(sourceName, out var asset) && RelocationPaths.ToPhysical(project, asset) is { } physical && File.Exists(physical.FullPath) ? physical.FullPath : null;
+            return AssetPath.TryParse(sourceName, out var asset) && RelocationPaths.ToPhysical(project, asset) is { } physical && fileSystem.File.Exists(physical.FullPath) ? physical.FullPath : null;
         }
 
-        return project.AuthoringMounts.Select(mount => Path.Combine(project.ProjectRoot.FullPath, mount.RelativePath, sourceName))
-            .Append(Path.Combine(project.ProjectRoot.FullPath, sourceName))
-            .Select(Path.GetFullPath)
-            .FirstOrDefault(File.Exists);
+        return project.AuthoringMounts.Select(mount => fileSystem.Path.Combine(project.ProjectRoot.FullPath, mount.RelativePath, sourceName))
+            .Append(fileSystem.Path.Combine(project.ProjectRoot.FullPath, sourceName))
+            .Select(fileSystem.Path.GetFullPath)
+            .FirstOrDefault(fileSystem.File.Exists);
     }
 
     // The analyzer renders the severity in lowercase, as in "error[S0503]: ...".
-    private static string Label(ScriptProblemSeverity severity) => severity switch
+    private static string Label(DiagnosticSeverity severity) => severity switch
     {
-        ScriptProblemSeverity.Error => "error",
-        ScriptProblemSeverity.Warning => "warning",
+        DiagnosticSeverity.Error or DiagnosticSeverity.Fatal => "error",
+        DiagnosticSeverity.Warning => "warning",
         _ => "note",
     };
 
-    private static ScriptProblem Unrendered(JsonObject diagnostic)
+    // The schema requires a code and a message; a diagnostic without them still shows, under placeholders.
+    private static RuntimeScriptProblem Unrendered(JsonObject diagnostic)
     {
-        var code = diagnostic["code"]?.GetValue<string>() ?? string.Empty;
-        var message = diagnostic["message"]?.GetValue<string>() ?? string.Empty;
+        var code = diagnostic["code"]?.GetValue<string>() is { Length: > 0 } named ? named : "unknown";
+        var message = diagnostic["message"]?.GetValue<string>() is { Length: > 0 } text ? text : "the script reported a problem";
         var severity = Severity(diagnostic["severity"]?.GetValue<string>());
         var slot = diagnostic["slot"] as JsonObject;
-        return new ScriptProblem(severity, code, message, string.Empty, Line: null, Column: null, $"{Label(severity)}[{code}]: {message}\n", string.Empty)
+        return new RuntimeScriptProblem(severity, code, message, $"{Label(severity)}[{code}]: {message}\n")
         {
             SlotNode = slot?["node"]?.GetValue<string>(),
             SlotIndex = slot?["slot_index"]?.GetValue<int>(),
-            IsRuntime = true,
+            SlotHook = slot?["hook"]?.GetValue<string>(),
         };
     }
 
-    private static ScriptProblemSeverity Severity(string? text)
+    private static DiagnosticSeverity Severity(string? text)
         => text switch
         {
-            "error" => ScriptProblemSeverity.Error,
-            "warning" => ScriptProblemSeverity.Warning,
-            _ => ScriptProblemSeverity.Note,
+            "error" => DiagnosticSeverity.Error,
+            "warning" => DiagnosticSeverity.Warning,
+            _ => DiagnosticSeverity.Info,
         };
 
     // Loading the Interop assembly fails when the method that uses its types is compiled, so those types stay here
     // and the load failure surfaces at the call.
     [MethodImpl(MethodImplOptions.NoInlining)]
-    private ScriptProblem? ReadNative(JsonObject diagnostic)
+    private RuntimeScriptProblem? ReadNative(JsonObject diagnostic)
     {
         if (ScriptAnalysis.Render(diagnostic.ToJsonString(), this.ReadSource) is not { } info)
         {
             return null;
         }
 
-        var source = info.PrimarySpan is { } span ? this.ResolveSource(span.SourceName) ?? span.SourceName : string.Empty;
-        return new ScriptProblem(
+        return new RuntimeScriptProblem(
             info.Severity switch
             {
-                ScriptDiagnosticSeverity.Error => ScriptProblemSeverity.Error,
-                ScriptDiagnosticSeverity.Warning => ScriptProblemSeverity.Warning,
-                _ => ScriptProblemSeverity.Note,
+                ScriptDiagnosticSeverity.Error => DiagnosticSeverity.Error,
+                ScriptDiagnosticSeverity.Warning => DiagnosticSeverity.Warning,
+                _ => DiagnosticSeverity.Info,
             },
             info.Code,
             info.Message,
-            source,
-            info.PrimarySpan?.Line,
-            info.PrimarySpan?.Column,
-            info.Rendered,
-            info.Explanation)
+            info.Rendered)
         {
+            File = info.PrimarySpan is { } span ? this.ResolveSource(span.SourceName) ?? span.SourceName : null,
+            Line = info.PrimarySpan?.Line,
+            Column = info.PrimarySpan?.Column,
+            Explanation = info.Explanation,
             SlotNode = info.SlotNode,
             SlotIndex = info.SlotIndex,
-            IsRuntime = true,
+            SlotHook = info.SlotHook,
         };
     }
 
@@ -127,7 +129,7 @@ internal sealed class RuntimeProblemReader(ProjectContext project)
 
         try
         {
-            return File.ReadAllText(path);
+            return fileSystem.File.ReadAllText(path);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {

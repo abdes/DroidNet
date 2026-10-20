@@ -11,6 +11,7 @@ using DroidNet.Routing;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -24,7 +25,7 @@ public abstract partial class AssetsLayoutViewModel(
     IProjectContextService projectContextService,
     ContentBrowserState contentBrowserState,
     HostingContext hostingContext,
-    Scripts.IScriptAnalysisService? scripts = null) : ObservableObject, IRoutingAware, IDisposable
+    IScripts? scripts = null) : ObservableObject, IRoutingAware, IDisposable
 {
     private readonly IAssetFeed assetProvider = assetProvider;
     private readonly IProjectContextService projectContextService = projectContextService;
@@ -300,18 +301,18 @@ public abstract partial class AssetsLayoutViewModel(
 
     private void ApplyScriptProblems(AssetBrowserRow row)
     {
-        if (scripts is not null && row.Item is { Kind: AssetKind.Script, SourcePath: { } source })
+        if (scripts is not null && row.Item is { Kind: AssetKind.Script })
         {
-            row.SetScriptProblems(scripts.Find(source));
+            row.SetScriptProblems(scripts.Find(AssetFileTypes.ToIdentity(row.Item.Identity)));
         }
     }
 
-    private void OnScriptAnalyzed(Scripts.ScriptAnalysisSnapshot analysis)
+    private void OnScriptChanged(ScriptChangedEventArgs args)
     {
-        foreach (var row in this.Assets.Where(row => row.Item is { Kind: AssetKind.Script, SourcePath: { } source }
-            && source == analysis.SourcePath))
+        foreach (var row in this.Assets.Where(row => row.Item is { Kind: AssetKind.Script }
+            && (args.Script is null || AssetFileTypes.ToIdentity(row.Item.Identity) == args.Script)))
         {
-            row.SetScriptProblems(analysis.IsRemoved ? null : analysis);
+            this.ApplyScriptProblems(row);
         }
     }
 
@@ -324,9 +325,11 @@ public abstract partial class AssetsLayoutViewModel(
         this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
         this.Query.Changed -= this.OnQueryChanged;
         this.Presentation.SortChanged -= this.OnQueryChanged;
-        this.scriptChanges = scripts?.Changes
+        this.scriptChanges = scripts is null ? null : Observable.FromEventPattern<ScriptChangedEventArgs>(
+                handler => scripts.Changed += handler,
+                handler => scripts.Changed -= handler)
             .ObserveOn(this.hostingContext.DispatcherScheduler)
-            .Subscribe(this.OnScriptAnalyzed);
+            .Subscribe(change => this.OnScriptChanged(change.EventArgs));
         this.subscription = this.assetProvider.Items
             .ObserveOn(this.hostingContext.DispatcherScheduler)
             .Subscribe(

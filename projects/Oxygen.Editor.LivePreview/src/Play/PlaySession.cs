@@ -13,10 +13,11 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Player;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.Scripting;
+using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
 
 namespace Oxygen.Editor.LivePreview.Play;
 
@@ -32,6 +33,9 @@ namespace Oxygen.Editor.LivePreview.Play;
 /// </remarks>
 public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSource, IDisposable
 {
+    // The saved project files the player's diagnostics name, as the player reads them.
+    private static readonly RealFileSystem ProjectFiles = new();
+
     private readonly IProjectContextService projects;
     private readonly IContentPipelineService pipeline;
     private readonly CookPublicationService publication;
@@ -41,7 +45,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     private readonly OwnerThread owner = OwnerThread.Capture();
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
-    private readonly List<ScriptProblem> runtimeProblems = [];
+    private readonly List<RuntimeScriptProblem> runtimeProblems = [];
     private PlayerConnection? player;
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "It refers to the cancellation of the Play under way, which PlayAsync owns and disposes.")]
     private CancellationTokenSource? play;
@@ -93,7 +97,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     }
 
     /// <inheritdoc />
-    public event EventHandler? RuntimeProblemsChanged;
+    public event EventHandler? ProblemsChanged;
 
     /// <summary>Occurs for each line of the player's output, and with a clear when a session starts.</summary>
     public event EventHandler<PlayerLogEventArgs>? LogReceived;
@@ -112,7 +116,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     public partial PlayStatus Status { get; private set; } = PlayStatus.Idle;
 
     /// <inheritdoc />
-    public IReadOnlyList<ScriptProblem> RuntimeProblems => this.runtimeProblems;
+    public IReadOnlyList<AssetProblem> Problems => this.runtimeProblems;
 
     /// <summary>Plays a scene document: cooks it, then starts the player on it or plays it in the running player.</summary>
     /// <remarks>A running session keeps running until the new scene is cooked. A Play that fails ends the
@@ -176,10 +180,10 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     public bool BringPlayerToFront() => this.player?.BringToFront() == true;
 
     /// <inheritdoc />
-    public (DocumentId Document, NodeId Node)? NodeOf(ScriptProblem problem)
+    public (DocumentId Document, NodeId Node)? NodeOf(RuntimeScriptProblem problem)
     {
         ArgumentNullException.ThrowIfNull(problem);
-        if (problem is not { IsRuntime: true, SlotNode: { } name } || this.scene is not { } played)
+        if (problem.SlotNode is not { } name || this.scene is not { } played)
         {
             return null;
         }
@@ -245,7 +249,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
         var scenePath = ContentPipelinePaths.ToCookedScenePath(request.SceneAsset);
         var mounts = await this.WriteLaunchFileAsync(project, request, scenePath, cancellationToken).ConfigureAwait(true);
         this.scene = request;
-        this.reader = new RuntimeProblemReader(project);
+        this.reader = new RuntimeProblemReader(project, ProjectFiles);
         var failure = this.player is { } running
             ? await this.PlayInRunningPlayerAsync(running, scenePath, mounts, cancellationToken).ConfigureAwait(true)
             : await this.LaunchPlayerAsync(project, mounts, cancellationToken).ConfigureAwait(true);
@@ -373,7 +377,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
 
         var errors = stage switch
         {
-            PlayStage.Scene => this.runtimeProblems.Count(static problem => problem.Severity == ScriptProblemSeverity.Error),
+            PlayStage.Scene => this.runtimeProblems.Count(static problem => problem.Severity >= DiagnosticSeverity.Error),
             PlayStage.Cook => diagnostics?.Count(static record => record.Severity == DiagnosticSeverity.Error) ?? 0,
             _ => 0,
         };

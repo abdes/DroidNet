@@ -4,8 +4,8 @@
 
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -92,7 +92,7 @@ public sealed class ScriptCookTests
         _ = result.IsPublished.Should().BeFalse();
         var stale = result.Diagnostics.Should().ContainSingle(static issue => issue.Code == "script.sidecar.param_undeclared").Subject;
         _ = stale.Message.Should().Contain("'jump_height'").And.Contain("'Player'");
-        _ = stale.SuggestedAction!.Payload["PropertyPath"].Should().Be(ScriptSlotDiagnostics.PropertyPath(slot.Id, "jump_height"));
+        _ = stale.SuggestedAction!.Payload["PropertyPath"].Should().Be(new ScriptFieldAddress(slot.Id, "jump_height").ToString());
     }
 
     /// <summary>A script from a mounted cooked library reports the parameters its cooked descriptor records.</summary>
@@ -114,16 +114,17 @@ public sealed class ScriptCookTests
         var context = consumer.ProjectContext with { LocalFolderMounts = [new("Script library", FileSystemPath.From(root))] };
         consumer.Activate(context);
         consumer.WriteText("Content/Local/own.lua", Move);
-        IScriptDeclarationProvider service = CreateNativeService(consumer, out var consumerCompatibility);
+        IScriptLibrary service = CreateNativeService(consumer, out var consumerCompatibility);
         using var lifetime = consumerCompatibility;
 
-        var declarations = await service.ReadAsync(context, MoveScript, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var script = await service.ReadAsync(context, MoveScript, this.TestContext.CancellationToken).ConfigureAwait(false);
         var own = await service.ReadAsync(context, AssetPath.Parse("/Content/Local/own.oscript"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = declarations.Should().NotBeNull();
-        _ = declarations!.Parameters.Should().Equal(
-            new CookedScriptParameter("speed", CookedScriptParameterKind.Float, 1f, 0),
-            new CookedScriptParameter("target", CookedScriptParameterKind.Node, null, 0));
+        _ = script.Should().NotBeNull();
+        _ = script!.Origin.Should().Be(ScriptOrigin.Library);
+        _ = script.Parameters.Should().Equal(
+            new ScriptParameter { Name = "speed", Kind = ScriptParameterKind.FloatParameter, Default = ScriptValue.FromFloat(1f) },
+            new ScriptParameter { Name = "target", Kind = ScriptParameterKind.NodeParameter });
         _ = own.Should().BeNull("a script with its source in the project is analyzed from the source");
     }
 
