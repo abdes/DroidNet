@@ -24,30 +24,30 @@ public sealed class RemoveStaleScriptValuesTests
     public async Task UndeclaredAndRetypedValues_AreRemoved()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        _ = await fixture.Authoring.ExecuteAsync(new SetScriptValue(ScriptSlotCases.Node, ScriptSlotCases.First, ScriptSlotCases.Speed, ScriptValue.FromFloat(3f))).ConfigureAwait(false);
-        _ = await fixture.Authoring.ExecuteAsync(new SetScriptValue(ScriptSlotCases.Node, ScriptSlotCases.First, new ScriptParameter { Name = "gone", Kind = ScriptParameterKind.BoolParameter }, ScriptValue.FromBool(value: true))).ConfigureAwait(false);
+        _ = await fixture.Authoring.ExecuteAsync(new SetScriptValue(SampleScene.Script, SampleScene.MoveSlotId, SampleScene.SpeedParameter, ScriptValue.FromFloat(3f))).ConfigureAwait(false);
+        _ = await fixture.Authoring.ExecuteAsync(new SetScriptValue(SampleScene.Script, SampleScene.MoveSlotId, new ScriptParameter { Name = "gone", Kind = ScriptParameterKind.BoolParameter }, ScriptValue.FromBool(value: true))).ConfigureAwait(false);
         fixture.Changes.Clear();
 
         // The script now declares "speed" as an integer and no longer declares "gone"; "target" is still a node.
-        var declared = new[] { ScriptSlotCases.Speed with { Kind = ScriptParameterKind.Int32Parameter, Default = ScriptValue.FromInt(1) }, ScriptSlotCases.Target };
-        var result = await fixture.Authoring.ExecuteAsync(new RemoveStaleScriptValues(ScriptSlotCases.Node, ScriptSlotCases.First, declared)).ConfigureAwait(false);
+        var declared = new[] { SampleScene.SpeedParameter with { Kind = ScriptParameterKind.Int32Parameter, Default = ScriptValue.FromInt(1) }, SampleScene.TargetParameter };
+        var result = await fixture.Authoring.ExecuteAsync(new RemoveStaleScriptValues(SampleScene.Script, SampleScene.MoveSlotId, declared)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = ScriptSlotCases.SlotOf(fixture, ScriptSlotCases.First).Overrides.Keys.Should().Equal("target");
-        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ScriptSlotsChanged(ScriptSlotCases.Node));
+        _ = fixture.SlotOf(SampleScene.Script, SampleScene.MoveSlotId).Overrides.Keys.Should().Equal("target");
+        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ScriptSlotsChanged(SampleScene.Script));
     }
 
     [TestMethod]
     public async Task Undo_RestoresTheValues()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var before = ScriptSlotCases.SlotsOf(fixture);
-        _ = await fixture.Authoring.ExecuteAsync(new RemoveStaleScriptValues(ScriptSlotCases.Node, ScriptSlotCases.First, [])).ConfigureAwait(false);
+        var before = fixture.SlotsOf(SampleScene.Script);
+        _ = await fixture.Authoring.ExecuteAsync(new RemoveStaleScriptValues(SampleScene.Script, SampleScene.MoveSlotId, [])).ConfigureAwait(false);
 
         var undone = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
 
         SceneAssert.Applied(undone);
-        _ = ScriptSlotCases.SlotsOf(fixture).Should().Equal(before);
+        _ = fixture.SlotsOf(SampleScene.Script).Should().Equal(before);
     }
 
     [TestMethod]
@@ -56,7 +56,7 @@ public sealed class RemoveStaleScriptValuesTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new RemoveStaleScriptValues(ScriptSlotCases.Node, ScriptSlotCases.First, [ScriptSlotCases.Target])).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new RemoveStaleScriptValues(SampleScene.Script, SampleScene.MoveSlotId, [SampleScene.TargetParameter])).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
         SceneAssert.Unchanged(fixture, before);
@@ -68,9 +68,9 @@ public sealed class RemoveStaleScriptValuesTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new RemoveStaleScriptValues(ScriptSlotCases.Node, ScriptSlotId.New(), [])).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new RemoveStaleScriptValues(SampleScene.Script, ScriptSlotId.New(), [])).ConfigureAwait(false);
 
-        SceneAssert.Invalid(result, SceneEditCodes.EntryMissing, ScriptSlotCases.Node);
+        SceneAssert.Invalid(result, SceneEditCodes.EntryMissing, SampleScene.Script);
         SceneAssert.Unchanged(fixture, before);
     }
 
@@ -80,7 +80,7 @@ public sealed class RemoveStaleScriptValuesTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new RemoveStaleScriptValues(SampleScene.B, ScriptSlotCases.First, [])).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new RemoveStaleScriptValues(SampleScene.B, SampleScene.MoveSlotId, [])).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.ComponentMissing, SampleScene.B);
         SceneAssert.Unchanged(fixture, before);

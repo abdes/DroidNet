@@ -4,8 +4,12 @@
 
 using System.Numerics;
 using System.Text.Json;
+using Oxygen.Editor.Scenes.Edits.Scripting;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.Scripting;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;
@@ -109,6 +113,21 @@ public static class SampleScene
     public static Guid MoveSlot { get; } = Tagged(4, "51");
 
     public static Guid SecondSlot { get; } = Tagged(4, "52");
+
+    /// <summary>Gets <see cref="MoveSlot"/> as a script slot id: the first slot of <see cref="Script"/>, which holds a "target" value naming node B.</summary>
+    public static ScriptSlotId MoveSlotId { get; } = ScriptSlotId.FromValue(MoveSlot);
+
+    /// <summary>Gets <see cref="SecondSlot"/> as a script slot id: the second slot of <see cref="Script"/>, which holds no values.</summary>
+    public static ScriptSlotId SecondSlotId { get; } = ScriptSlotId.FromValue(SecondSlot);
+
+    /// <summary>Gets the float parameter <see cref="MoveScript"/> declares, whose default is 1.</summary>
+    public static ScriptParameter SpeedParameter { get; } = new() { Name = "speed", Kind = ScriptParameterKind.FloatParameter, Default = ScriptValue.FromFloat(1f) };
+
+    /// <summary>Gets the node parameter <see cref="MoveScript"/> declares, which defaults to none.</summary>
+    public static ScriptParameter TargetParameter { get; } = new() { Name = "target", Kind = ScriptParameterKind.NodeParameter };
+
+    /// <summary>Gets the material asset parameter <see cref="MoveScript"/> declares.</summary>
+    public static ScriptParameter SurfaceParameter { get; } = new() { Name = "surface", Kind = ScriptParameterKind.AssetParameter, AssetType = (byte)AssetType.Material };
 
     /// <summary>Gets every node, in declaration order.</summary>
     public static IReadOnlyList<NodeId> AllNodes { get; } = [A, A1, A11, A2, B, Cam, Ortho, Sun, Moon, Lamp, Spot, Fog, Mesh, Script];

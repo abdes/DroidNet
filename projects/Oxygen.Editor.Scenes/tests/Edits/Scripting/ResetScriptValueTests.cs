@@ -22,24 +22,24 @@ public sealed class ResetScriptValueTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var result = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(ScriptSlotCases.Node, ScriptSlotCases.First, "target")).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(SampleScene.Script, SampleScene.MoveSlotId, "target")).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = ScriptSlotCases.SlotOf(fixture, ScriptSlotCases.First).Overrides.Should().BeEmpty();
-        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ScriptSlotsChanged(ScriptSlotCases.Node));
+        _ = fixture.SlotOf(SampleScene.Script, SampleScene.MoveSlotId).Overrides.Should().BeEmpty();
+        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ScriptSlotsChanged(SampleScene.Script));
     }
 
     [TestMethod]
     public async Task Undo_RestoresTheValue()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var before = ScriptSlotCases.SlotsOf(fixture);
-        _ = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(ScriptSlotCases.Node, ScriptSlotCases.First, "target")).ConfigureAwait(false);
+        var before = fixture.SlotsOf(SampleScene.Script);
+        _ = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(SampleScene.Script, SampleScene.MoveSlotId, "target")).ConfigureAwait(false);
 
         var undone = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
 
         SceneAssert.Applied(undone);
-        _ = ScriptSlotCases.SlotsOf(fixture).Should().Equal(before);
+        _ = fixture.SlotsOf(SampleScene.Script).Should().Equal(before);
     }
 
     [TestMethod]
@@ -48,7 +48,7 @@ public sealed class ResetScriptValueTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(ScriptSlotCases.Node, ScriptSlotCases.First, "speed")).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(SampleScene.Script, SampleScene.MoveSlotId, "speed")).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
         SceneAssert.Unchanged(fixture, before);
@@ -60,9 +60,9 @@ public sealed class ResetScriptValueTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(ScriptSlotCases.Node, ScriptSlotCases.First, " ")).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(SampleScene.Script, SampleScene.MoveSlotId, " ")).ConfigureAwait(false);
 
-        SceneAssert.Invalid(result, SceneEditCodes.NameEmpty, ScriptSlotCases.Node);
+        SceneAssert.Invalid(result, SceneEditCodes.NameEmpty, SampleScene.Script);
         SceneAssert.Unchanged(fixture, before);
     }
 
@@ -72,9 +72,9 @@ public sealed class ResetScriptValueTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(ScriptSlotCases.Node, ScriptSlotId.New(), "target")).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(SampleScene.Script, ScriptSlotId.New(), "target")).ConfigureAwait(false);
 
-        SceneAssert.Invalid(result, SceneEditCodes.EntryMissing, ScriptSlotCases.Node);
+        SceneAssert.Invalid(result, SceneEditCodes.EntryMissing, SampleScene.Script);
         SceneAssert.Unchanged(fixture, before);
     }
 
@@ -84,7 +84,7 @@ public sealed class ResetScriptValueTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(SampleScene.B, ScriptSlotCases.First, "target")).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new ResetScriptValue(SampleScene.B, SampleScene.MoveSlotId, "target")).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.ComponentMissing, SampleScene.B);
         SceneAssert.Unchanged(fixture, before);

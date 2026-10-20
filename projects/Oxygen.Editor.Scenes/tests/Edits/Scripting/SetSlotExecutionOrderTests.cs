@@ -21,27 +21,27 @@ public sealed class SetSlotExecutionOrderTests
     public async Task Order_IsSetOnTheSlotAlone()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var before = ScriptSlotCases.SlotOf(fixture, ScriptSlotCases.First);
+        var before = fixture.SlotOf(SampleScene.Script, SampleScene.MoveSlotId);
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotExecutionOrder(ScriptSlotCases.Node, ScriptSlotCases.First, Order: -3)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotExecutionOrder(SampleScene.Script, SampleScene.MoveSlotId, Order: -3)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = ScriptSlotCases.SlotOf(fixture, ScriptSlotCases.First).Should().Be(before with { ExecutionOrder = -3 });
-        _ = ScriptSlotCases.SlotOf(fixture, ScriptSlotCases.Second).ExecutionOrder.Should().Be(0);
-        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ScriptSlotsChanged(ScriptSlotCases.Node));
+        _ = fixture.SlotOf(SampleScene.Script, SampleScene.MoveSlotId).Should().Be(before with { ExecutionOrder = -3 });
+        _ = fixture.SlotOf(SampleScene.Script, SampleScene.SecondSlotId).ExecutionOrder.Should().Be(0);
+        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ScriptSlotsChanged(SampleScene.Script));
     }
 
     [TestMethod]
     public async Task Undo_RestoresTheOrder()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var before = ScriptSlotCases.SlotsOf(fixture);
-        _ = await fixture.Authoring.ExecuteAsync(new SetSlotExecutionOrder(ScriptSlotCases.Node, ScriptSlotCases.First, Order: 7)).ConfigureAwait(false);
+        var before = fixture.SlotsOf(SampleScene.Script);
+        _ = await fixture.Authoring.ExecuteAsync(new SetSlotExecutionOrder(SampleScene.Script, SampleScene.MoveSlotId, Order: 7)).ConfigureAwait(false);
 
         var undone = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
 
         SceneAssert.Applied(undone);
-        _ = ScriptSlotCases.SlotsOf(fixture).Should().Equal(before);
+        _ = fixture.SlotsOf(SampleScene.Script).Should().Equal(before);
     }
 
     [TestMethod]
@@ -50,7 +50,7 @@ public sealed class SetSlotExecutionOrderTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotExecutionOrder(ScriptSlotCases.Node, ScriptSlotCases.First, Order: 0)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotExecutionOrder(SampleScene.Script, SampleScene.MoveSlotId, Order: 0)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
         SceneAssert.Unchanged(fixture, before);
@@ -62,9 +62,9 @@ public sealed class SetSlotExecutionOrderTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotExecutionOrder(ScriptSlotCases.Node, ScriptSlotId.New(), Order: 1)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotExecutionOrder(SampleScene.Script, ScriptSlotId.New(), Order: 1)).ConfigureAwait(false);
 
-        SceneAssert.Invalid(result, SceneEditCodes.EntryMissing, ScriptSlotCases.Node);
+        SceneAssert.Invalid(result, SceneEditCodes.EntryMissing, SampleScene.Script);
         SceneAssert.Unchanged(fixture, before);
     }
 
@@ -74,7 +74,7 @@ public sealed class SetSlotExecutionOrderTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotExecutionOrder(SampleScene.B, ScriptSlotCases.First, Order: 1)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotExecutionOrder(SampleScene.B, SampleScene.MoveSlotId, Order: 1)).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.ComponentMissing, SampleScene.B);
         SceneAssert.Unchanged(fixture, before);

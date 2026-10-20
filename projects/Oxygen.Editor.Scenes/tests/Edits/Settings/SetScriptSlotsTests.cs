@@ -30,7 +30,7 @@ public sealed class SetScriptSlotsTests
         var result = await fixture.Authoring.ExecuteAsync(new SetScriptSlots(SampleScene.Script, [first, second])).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = SlotsOf(fixture, SampleScene.Script).Should().Equal(first, second);
+        _ = fixture.SlotsOf(SampleScene.Script).Should().Equal(first, second);
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ScriptSlotsChanged(SampleScene.Script));
     }
 
@@ -91,7 +91,7 @@ public sealed class SetScriptSlotsTests
     public async Task EqualSlots_AppliesWithoutAnEntry()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var current = SlotsOf(fixture, SampleScene.Script);
+        var current = fixture.SlotsOf(SampleScene.Script);
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(new SetScriptSlots(SampleScene.Script, [.. current])).ConfigureAwait(false);
@@ -114,9 +114,6 @@ public sealed class SetScriptSlotsTests
         var result = await fixture.Authoring.ExecuteAsync(new SetScriptSlots(SampleScene.Script, [slot])).ConfigureAwait(false);
 
         SceneAssert.Warned(result, SceneEditCodes.AssetReferenceDeleted, SampleScene.Script);
-        _ = SlotsOf(fixture, SampleScene.Script).Single().Overrides["surface"].Asset.Should().Be(surface);
+        _ = fixture.SlotsOf(SampleScene.Script).Single().Overrides["surface"].Asset.Should().Be(surface);
     }
-
-    private static List<ScriptSlot> SlotsOf(AuthoringFixture fixture, NodeId node)
-        => [.. fixture.Node(node).Components.OfType<ScriptingComponent>().Single().Slots];
 }

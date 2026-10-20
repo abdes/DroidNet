@@ -23,28 +23,28 @@ public sealed class AddScriptSlotTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var added = ScriptSlotId.New();
 
-        var result = await fixture.Authoring.ExecuteAsync(new AddScriptSlot(ScriptSlotCases.Node, added)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new AddScriptSlot(SampleScene.Script, added)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = ScriptSlotCases.IdsOf(fixture).Should().Equal(ScriptSlotCases.First.Value, ScriptSlotCases.Second.Value, added.Value);
-        var slot = ScriptSlotCases.SlotOf(fixture, added);
+        _ = fixture.SlotsOf(SampleScene.Script).Select(static slot => slot.Id).Should().Equal(SampleScene.MoveSlotId.Value, SampleScene.SecondSlotId.Value, added.Value);
+        var slot = fixture.SlotOf(SampleScene.Script, added);
         _ = slot.Script.Should().BeNull();
         _ = slot.ExecutionOrder.Should().Be(0);
         _ = slot.Overrides.Should().BeEmpty();
-        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ScriptSlotsChanged(ScriptSlotCases.Node));
+        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ScriptSlotsChanged(SampleScene.Script));
     }
 
     [TestMethod]
     public async Task Undo_RemovesTheSlot()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var before = ScriptSlotCases.SlotsOf(fixture);
-        _ = await fixture.Authoring.ExecuteAsync(new AddScriptSlot(ScriptSlotCases.Node, ScriptSlotId.New())).ConfigureAwait(false);
+        var before = fixture.SlotsOf(SampleScene.Script);
+        _ = await fixture.Authoring.ExecuteAsync(new AddScriptSlot(SampleScene.Script, ScriptSlotId.New())).ConfigureAwait(false);
 
         var undone = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
 
         SceneAssert.Applied(undone);
-        _ = ScriptSlotCases.SlotsOf(fixture).Should().Equal(before);
+        _ = fixture.SlotsOf(SampleScene.Script).Should().Equal(before);
     }
 
     [TestMethod]
@@ -53,9 +53,9 @@ public sealed class AddScriptSlotTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new AddScriptSlot(ScriptSlotCases.Node, ScriptSlotId.Empty)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new AddScriptSlot(SampleScene.Script, ScriptSlotId.Empty)).ConfigureAwait(false);
 
-        SceneAssert.Invalid(result, SceneEditCodes.EntryMissing, ScriptSlotCases.Node);
+        SceneAssert.Invalid(result, SceneEditCodes.EntryMissing, SampleScene.Script);
         SceneAssert.Unchanged(fixture, before);
     }
 
@@ -65,9 +65,9 @@ public sealed class AddScriptSlotTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new AddScriptSlot(ScriptSlotCases.Node, ScriptSlotCases.Second)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new AddScriptSlot(SampleScene.Script, SampleScene.SecondSlotId)).ConfigureAwait(false);
 
-        SceneAssert.Invalid(result, SceneEditCodes.EntryDuplicate, ScriptSlotCases.Node);
+        SceneAssert.Invalid(result, SceneEditCodes.EntryDuplicate, SampleScene.Script);
         SceneAssert.Unchanged(fixture, before);
     }
 

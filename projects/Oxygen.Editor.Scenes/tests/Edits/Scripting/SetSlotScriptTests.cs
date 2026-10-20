@@ -24,16 +24,16 @@ public sealed class SetSlotScriptTests
     public async Task Script_IsPickedAndTheValuesAreKept()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var before = ScriptSlotCases.SlotOf(fixture, ScriptSlotCases.First);
+        var before = fixture.SlotOf(SampleScene.Script, SampleScene.MoveSlotId);
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(ScriptSlotCases.Node, ScriptSlotCases.First, Jump)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(SampleScene.Script, SampleScene.MoveSlotId, Jump)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        var slot = ScriptSlotCases.SlotOf(fixture, ScriptSlotCases.First);
+        var slot = fixture.SlotOf(SampleScene.Script, SampleScene.MoveSlotId);
         _ = slot.Script.Should().Be(Jump);
         _ = slot.Overrides.Should().ContainKey("target", "a value the new script does not declare becomes stale, not lost");
         _ = slot.Should().Be(before with { Script = Jump });
-        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ScriptSlotsChanged(ScriptSlotCases.Node));
+        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ScriptSlotsChanged(SampleScene.Script));
     }
 
     [TestMethod]
@@ -41,23 +41,23 @@ public sealed class SetSlotScriptTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(ScriptSlotCases.Node, ScriptSlotCases.First, Script: null)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(SampleScene.Script, SampleScene.MoveSlotId, Script: null)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = ScriptSlotCases.SlotOf(fixture, ScriptSlotCases.First).Script.Should().BeNull();
+        _ = fixture.SlotOf(SampleScene.Script, SampleScene.MoveSlotId).Script.Should().BeNull();
     }
 
     [TestMethod]
     public async Task Undo_RestoresTheScript()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var before = ScriptSlotCases.SlotsOf(fixture);
-        _ = await fixture.Authoring.ExecuteAsync(new SetSlotScript(ScriptSlotCases.Node, ScriptSlotCases.First, Jump)).ConfigureAwait(false);
+        var before = fixture.SlotsOf(SampleScene.Script);
+        _ = await fixture.Authoring.ExecuteAsync(new SetSlotScript(SampleScene.Script, SampleScene.MoveSlotId, Jump)).ConfigureAwait(false);
 
         var undone = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
 
         SceneAssert.Applied(undone);
-        _ = ScriptSlotCases.SlotsOf(fixture).Should().Equal(before);
+        _ = fixture.SlotsOf(SampleScene.Script).Should().Equal(before);
     }
 
     [TestMethod]
@@ -66,7 +66,7 @@ public sealed class SetSlotScriptTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(ScriptSlotCases.Node, ScriptSlotCases.First, SampleScene.MoveScript)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(SampleScene.Script, SampleScene.MoveSlotId, SampleScene.MoveScript)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
         SceneAssert.Unchanged(fixture, before);
@@ -79,10 +79,10 @@ public sealed class SetSlotScriptTests
         var moved = EditSamples.MovedTo(Jump);
         fixture.Redirects.Move(Jump, moved);
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(ScriptSlotCases.Node, ScriptSlotCases.First, Jump)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(SampleScene.Script, SampleScene.MoveSlotId, Jump)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = ScriptSlotCases.SlotOf(fixture, ScriptSlotCases.First).Script.Should().Be(moved);
+        _ = fixture.SlotOf(SampleScene.Script, SampleScene.MoveSlotId).Script.Should().Be(moved);
     }
 
     [TestMethod]
@@ -91,10 +91,10 @@ public sealed class SetSlotScriptTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         fixture.Redirects.Delete(Jump);
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(ScriptSlotCases.Node, ScriptSlotCases.First, Jump)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(SampleScene.Script, SampleScene.MoveSlotId, Jump)).ConfigureAwait(false);
 
-        SceneAssert.Warned(result, SceneEditCodes.AssetReferenceDeleted, ScriptSlotCases.Node);
-        _ = ScriptSlotCases.SlotOf(fixture, ScriptSlotCases.First).Script.Should().Be(Jump);
+        SceneAssert.Warned(result, SceneEditCodes.AssetReferenceDeleted, SampleScene.Script);
+        _ = fixture.SlotOf(SampleScene.Script, SampleScene.MoveSlotId).Script.Should().Be(Jump);
     }
 
     [TestMethod]
@@ -103,9 +103,9 @@ public sealed class SetSlotScriptTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(ScriptSlotCases.Node, ScriptSlotCases.First, SampleScene.RedMaterial)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(SampleScene.Script, SampleScene.MoveSlotId, SampleScene.RedMaterial)).ConfigureAwait(false);
 
-        SceneAssert.Invalid(result, SceneEditCodes.AssetReferenceInvalid, ScriptSlotCases.Node);
+        SceneAssert.Invalid(result, SceneEditCodes.AssetReferenceInvalid, SampleScene.Script);
         SceneAssert.Unchanged(fixture, before);
     }
 
@@ -115,9 +115,9 @@ public sealed class SetSlotScriptTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(ScriptSlotCases.Node, ScriptSlotId.New(), Jump)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(SampleScene.Script, ScriptSlotId.New(), Jump)).ConfigureAwait(false);
 
-        SceneAssert.Invalid(result, SceneEditCodes.EntryMissing, ScriptSlotCases.Node);
+        SceneAssert.Invalid(result, SceneEditCodes.EntryMissing, SampleScene.Script);
         SceneAssert.Unchanged(fixture, before);
     }
 
@@ -127,7 +127,7 @@ public sealed class SetSlotScriptTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(SampleScene.B, ScriptSlotCases.First, Jump)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new SetSlotScript(SampleScene.B, SampleScene.MoveSlotId, Jump)).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.ComponentMissing, SampleScene.B);
         SceneAssert.Unchanged(fixture, before);

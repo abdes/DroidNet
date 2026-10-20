@@ -8,8 +8,10 @@ using DroidNet.TimeMachine;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Edits.Scripting;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
@@ -123,6 +125,25 @@ public sealed partial class AuthoringFixture : IDisposable
     /// <exception cref="InvalidOperationException">The scene has no such node.</exception>
     public SceneNode Node(NodeId id)
         => this.Scene.AllNodes.FirstOrDefault(node => node.Id == id) ?? throw new InvalidOperationException($"The scene has no node {id}.");
+
+    /// <summary>
+    /// Reads the script slots of a node of the live scene.
+    /// </summary>
+    /// <param name="node">The node's id.</param>
+    /// <returns>The slots, in order.</returns>
+    /// <exception cref="InvalidOperationException">The scene has no such node.</exception>
+    public IReadOnlyList<ScriptSlot> SlotsOf(NodeId node)
+        => [.. this.Node(node).Components.OfType<ScriptingComponent>().Single().Slots];
+
+    /// <summary>
+    /// Finds a script slot of a node of the live scene.
+    /// </summary>
+    /// <param name="node">The node's id.</param>
+    /// <param name="slot">The slot's id.</param>
+    /// <returns>The slot.</returns>
+    /// <exception cref="InvalidOperationException">The scene has no such node.</exception>
+    public ScriptSlot SlotOf(NodeId node, ScriptSlotId slot)
+        => this.SlotsOf(node).Single(item => item.Id == slot.Value);
 
     /// <summary>
     /// Captures what "unchanged" compares: the dehydrated document, the hidden nodes, the history depth and the number

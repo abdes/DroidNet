@@ -22,7 +22,6 @@ using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits;
@@ -72,12 +71,6 @@ public static class EditSamples
     private static Guid RestoredSlot { get; } = SampleScene.Tagged(4, "C2");
 
     private static ScriptSlotId AddedSlot { get; } = ScriptSlotId.FromValue(SampleScene.Tagged(4, "C3"));
-
-    private static ScriptSlotId MoveSlot { get; } = ScriptSlotId.FromValue(SampleScene.MoveSlot);
-
-    private static ScriptParameter TargetParameter { get; } = new() { Name = "target", Kind = ScriptParameterKind.NodeParameter };
-
-    private static ScriptParameter SurfaceParameter { get; } = new() { Name = "surface", Kind = ScriptParameterKind.AssetParameter, AssetType = (byte)AssetType.Material };
 
     private static AssetPath GreenMaterial { get; } = AssetPath.Parse("/Content/Green.omat");
 
@@ -464,15 +457,15 @@ public static class EditSamples
         ScriptSlotSample(nameof(AddScriptSlot), static _ => new AddScriptSlot(SampleScene.Script, AddedSlot));
 
     private static EditSample RemoveScriptSlotSample =>
-        ScriptSlotSample(nameof(RemoveScriptSlot), static _ => new RemoveScriptSlot(SampleScene.Script, MoveSlot));
+        ScriptSlotSample(nameof(RemoveScriptSlot), static _ => new RemoveScriptSlot(SampleScene.Script, SampleScene.MoveSlotId));
 
     private static EditSample MoveScriptSlotSample =>
-        ScriptSlotSample(nameof(MoveScriptSlot), static _ => new MoveScriptSlot(SampleScene.Script, MoveSlot, Offset: 1));
+        ScriptSlotSample(nameof(MoveScriptSlot), static _ => new MoveScriptSlot(SampleScene.Script, SampleScene.MoveSlotId, Offset: 1));
 
     private static EditSample SetSlotScriptSample =>
         new(
             nameof(SetSlotScript),
-            static _ => new SetSlotScript(SampleScene.Script, MoveSlot, JumpScript),
+            static _ => new SetSlotScript(SampleScene.Script, SampleScene.MoveSlotId, JumpScript),
             [new SceneChange.ScriptSlotsChanged(SampleScene.Script)],
             [new SceneChange.ScriptSlotsChanged(SampleScene.Script)])
         {
@@ -483,12 +476,12 @@ public static class EditSamples
         };
 
     private static EditSample SetSlotExecutionOrderSample =>
-        ScriptSlotSample(nameof(SetSlotExecutionOrder), static _ => new SetSlotExecutionOrder(SampleScene.Script, MoveSlot, Order: 5));
+        ScriptSlotSample(nameof(SetSlotExecutionOrder), static _ => new SetSlotExecutionOrder(SampleScene.Script, SampleScene.MoveSlotId, Order: 5));
 
     private static EditSample SetScriptValueSample =>
         new(
             nameof(SetScriptValue),
-            static _ => new SetScriptValue(SampleScene.Script, MoveSlot, SurfaceParameter, ScriptValue.FromAsset(GreenMaterial)),
+            static _ => new SetScriptValue(SampleScene.Script, SampleScene.MoveSlotId, SampleScene.SurfaceParameter, ScriptValue.FromAsset(GreenMaterial)),
             [new SceneChange.ScriptSlotsChanged(SampleScene.Script)],
             [new SceneChange.ScriptSlotsChanged(SampleScene.Script)])
         {
@@ -499,12 +492,12 @@ public static class EditSamples
         };
 
     private static EditSample ResetScriptValueSample =>
-        ScriptSlotSample(nameof(ResetScriptValue), static _ => new ResetScriptValue(SampleScene.Script, MoveSlot, "target"));
+        ScriptSlotSample(nameof(ResetScriptValue), static _ => new ResetScriptValue(SampleScene.Script, SampleScene.MoveSlotId, "target"));
 
     private static EditSample RemoveStaleScriptValuesSample =>
         new(
             nameof(RemoveStaleScriptValues),
-            static _ => new RemoveStaleScriptValues(SampleScene.Script, MoveSlot, []),
+            static _ => new RemoveStaleScriptValues(SampleScene.Script, SampleScene.MoveSlotId, []),
             [new SceneChange.ScriptSlotsChanged(SampleScene.Script)],
             [new SceneChange.ScriptSlotsChanged(SampleScene.Script)])
         {
@@ -512,7 +505,7 @@ public static class EditSamples
             Tamper = static _ =>
             {
                 var declared = new List<ScriptParameter>();
-                return new TamperedEdit(new RemoveStaleScriptValues(SampleScene.Script, MoveSlot, declared), () => declared.Add(TargetParameter));
+                return new TamperedEdit(new RemoveStaleScriptValues(SampleScene.Script, SampleScene.MoveSlotId, declared), () => declared.Add(SampleScene.TargetParameter));
             },
         };
 
