@@ -5,16 +5,17 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Documents;
 using Microsoft.UI;
+using Oxygen.Editor.Documents;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.Documents;
+namespace Oxygen.Editor.Shell.Documents;
 
 /// <summary>Coordinates save decisions before any editor authoring state is released.</summary>
 /// <param name="prompt">The application-owned close dialog.</param>
 /// <param name="operationResults">The visible operation-result publisher.</param>
-public sealed partial class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOperationResultPublisher operationResults)
+public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOperationResultPublisher operationResults)
 {
-    private readonly Dictionary<(WindowId window, DocumentId document), IDocumentCloseParticipant> participants = [];
+    private readonly Dictionary<(WindowId Window, DocumentId Document), IDocumentCloseParticipant> participants = [];
 
     /// <summary>Registers the authoring owner of an open document.</summary>
     /// <param name="windowId">The owner window.</param>
@@ -184,5 +185,5 @@ public sealed partial class DocumentCloseCoordinator(IDocumentClosePrompt prompt
         });
     }
 
-    private sealed partial record ParticipantEntry(IDocumentMetadata Metadata, IDocumentCloseParticipant Participant);
+    private sealed record ParticipantEntry(IDocumentMetadata Metadata, IDocumentCloseParticipant Participant);
 }

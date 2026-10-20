@@ -669,7 +669,7 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.7 LivePreview                            | `done`        |                                                                                                 |
 | S1.8 Asset family modules                   | `done`        | See the sub-slice table below                                                                   |
 | S1.9 Cook on change over checked inputs     | `done`        |                                                                                                 |
-| S1.10 Shell                                 | `not started` |                                                                                                 |
+| S1.10 Shell                                 | `in progress` | Tab source and close coordination moved into the Shell                                          |
 | S1.11 Unsaved documents                     | `not started` | Needs S1.10                                                                                     |
 | S1.12 Features                              | `not started` | One row per feature when it starts                                                              |
 | S1.13 Dissolve the World Editor             | `not started` |                                                                                                 |

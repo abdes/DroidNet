@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Microsoft.UI;
 using Moq;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Documents.Tests;

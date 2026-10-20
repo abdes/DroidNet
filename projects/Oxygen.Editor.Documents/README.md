@@ -1,9 +1,8 @@
 # Oxygen.Editor.Documents
 
 What the editor edits, independent of the window that shows it: documents, the
-files they read and write, and the kinds that decode them. Until the Shell's
-document service replaces it, this module also holds the tab service the Aura
-tabs run on and the close coordination with its prompts.
+files they read and write, and the kinds that decode them. Where documents show
+and how they close is the [Shell](../Oxygen.Editor.Shell/README.md)'s.
 
 Design: [document-kinds.md](../../design/editor/review/document-kinds.md) and
 [document-identity.md](../../design/editor/review/document-identity.md).
@@ -50,58 +49,9 @@ file (`Find(path)`) or by asset (`FindByAsset(Uri)`). Persisted view state is
 keyed by what the document edits, never by `DocumentId`, which lives for one
 session.
 
-## Tabs
-
-`EditorDocumentService` implements Aura's `IDocumentService` over the tabs of
-every window. A tab is an `IDocumentMetadata`; in the editor it is the Shell's
-`DocumentTab`, a view of one `Document` that raises `PropertyChanged` when the
-document changes, so nothing pushes tab state to the service.
-
-- A document has at most one tab: opening or attaching a tab for a document that
-  has one, in any window, is refused. `FindWindow` says which window has it.
-- Every detach is refused until the Shell has document windows to receive a
-  torn-out tab; Aura leaves the tab in place.
-- Features do not use the service. They reach their window's documents through
-  the Shell's `IDocumentArea`, which is built over it.
-
-## Closing
-
-A close is a transaction: it is prepared, then committed or dropped.
-
-- `PrepareCloseDocumentsAsync` prepares closing some tabs of a window,
-  `PrepareCloseAllAsync` a window's workspace close, and
-  `PrepareCloseAllWindowsAsync` the replacement of the project.
-- Preparing raises `DocumentClosing`, whose handlers may veto, then hands the
-  documents to the `DocumentCloseCoordinator`. Each editor registers an
-  `IDocumentCloseParticipant` for its document with the coordinator, keyed by
-  window and `DocumentId`.
-- The coordinator asks `IDocumentClosePrompt` about unsaved documents. A
-  document chosen for saving is saved with `SaveForCloseAsync`; when it is still
-  dirty after a save that succeeded, it changed while saving, and the close is
-  refused with a published failure.
-- Committing closes each participant, then the tab. The Shell's area then closes
-  the document in `OpenDocuments`; editors never do.
-
-`IDocumentConflictPrompt` and `IDocumentConflictParticipant` offer reload or
-save a copy when a save meets a newer file. The prompts, `DocumentCloseItem` and
-`IDocumentInputCommitter` still take the window's `WindowId` and the tab as
-`IDocumentMetadata`; they move into the Shell with the document service.
-
-## Events
-
-| Event               | When raised                                      |
-| ------------------- | ------------------------------------------------ |
-| `DocumentOpened`    | A tab was added                                  |
-| `DocumentClosing`   | Before a close that is not forced; handlers veto |
-| `DocumentClosed`    | A tab was removed                                |
-| `DocumentActivated` | A tab was selected                               |
-| `DocumentAttached`  | A tab was attached to a window                   |
-| `DocumentDetached`  | Never: every detach is refused                   |
-
 ## Dependencies
 
-- [DroidNet.Documents](../Documents/README.md): `DocumentId` and Aura's document
-  contract.
+- [DroidNet.Documents](../Documents/README.md): `DocumentId`.
 - `DroidNet.Storage`: `IAtomicFileStore`, through which every file is read and
   written.
 - `Microsoft.Extensions.Logging`.

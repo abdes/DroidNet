@@ -11,11 +11,9 @@
 
     <ItemGroup>
         <ProjectReference Include="..\src\Oxygen.Editor.Documents.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
     </ItemGroup>
 
     <ItemGroup>
-        <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions.Testing" />
     </ItemGroup>
 </Project>

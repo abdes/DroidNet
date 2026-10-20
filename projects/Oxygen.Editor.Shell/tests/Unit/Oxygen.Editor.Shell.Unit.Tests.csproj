@@ -10,6 +10,10 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="Moq" />
+    </ItemGroup>
+
+    <ItemGroup>
         <ProjectReference Include="../../src/Oxygen.Editor.Shell.csproj" />
     </ItemGroup>
 

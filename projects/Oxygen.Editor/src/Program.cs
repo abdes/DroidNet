@@ -38,6 +38,7 @@ using Oxygen.Editor.ProjectBrowser.Views;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Core.Compatibility;

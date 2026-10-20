@@ -6,6 +6,7 @@ using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
+using Oxygen.Editor.Shell.Documents;
 
 namespace Oxygen.Editor.Documents;
 

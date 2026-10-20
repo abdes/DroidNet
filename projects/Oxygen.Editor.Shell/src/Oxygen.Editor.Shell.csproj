@@ -21,6 +21,7 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)/Documents/src/Documents.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Documents/src/Oxygen.Editor.Documents.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Core/src/Oxygen.Managed.Core.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/TimeMachine/src/TimeMachine.csproj" />
     </ItemGroup>
 
