@@ -309,6 +309,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         this.RegisterOutputPanels(childContainer);
         this.RegisterScriptServices(childContainer);
 
+        // The cook listens to the catalog's changes from the moment the workspace opens, and the Content Browser's
+        // Cook on change toggle reaches the same instance. It reads the family facts, registered with the scripts.
+        _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>();
+
         childContainer.Register<SceneNodeEditorViewModel>(Reuse.Transient);
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
         childContainer.Register<SceneEditorView>(Reuse.Transient);
@@ -410,10 +414,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         // Likewise one script authoring service: the asset feed follows the files it reports creating, so the Content
         // Browser's New Script must reach the instance the feed listens to.
         _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Authoring.IAssetAuthoring>();
-
-        // The cook listens to the catalog's changes from the moment the workspace opens, and the Content Browser's
-        // Cook on change toggle reaches the same instance.
-        _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>();
     }
 
     private void RegisterOutputPanels(IContainer childContainer)

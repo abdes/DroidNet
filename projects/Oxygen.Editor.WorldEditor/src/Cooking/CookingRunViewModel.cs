@@ -43,10 +43,14 @@ public sealed partial class CookingRunViewModel : ObservableObject
         CookTargetKind.Project => "Project",
         CookTargetKind.Folder => "Folder",
         CookTargetKind.CurrentScene => "Scene",
+        CookTargetKind.Changes => "Changes",
         _ => (this.snapshot.Request.ScopeUri is { } asset ? AssetKinds.FromFileName(AssetFileTypes.ToIdentity(asset).Name) : AssetKind.Material) switch
         {
             AssetKind.Scene => "Scene",
             AssetKind.Geometry => "Geometry",
+            AssetKind.Texture => "Texture",
+            AssetKind.Script => "Script",
+            AssetKind.InputFile => "Input",
             _ => "Material",
         },
     };

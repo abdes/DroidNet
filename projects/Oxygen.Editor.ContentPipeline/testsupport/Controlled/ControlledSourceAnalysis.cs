@@ -7,7 +7,7 @@ using Oxygen.Editor.ContentPipeline.Import;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
-/// <summary>Supplies facts for dependency-free material and scene orchestration scenarios.</summary>
+/// <summary>Supplies facts for dependency-free material, scene and script orchestration scenarios.</summary>
 internal static class ControlledSourceAnalysis
 {
     public static Task<NativeSourceAnalysisReport> AnalyzeAsync(ContentSourceAnalysisExecution execution, CancellationToken cancellationToken)
@@ -25,6 +25,7 @@ internal static class ControlledSourceAnalysis
         {
             "material-descriptor" => "material",
             "scene-descriptor" => "scene",
+            "script" => "script",
             _ => throw new InvalidOperationException($"Provide explicit dependency facts for '{job.Type}'."),
         };
         var source = Path.GetFullPath(job.AttributedSource, root);

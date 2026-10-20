@@ -60,4 +60,37 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
         pipeline.Verify(value => value.ImportSourceAsync(request, It.IsAny<CancellationToken>()), retained ? Times.Never() : Times.Once());
         pipeline.Verify(value => value.ReimportSourceAsync(source, project, It.IsAny<CancellationToken>()), retained ? Times.Once() : Times.Never());
     });
+
+    /// <summary>Retry of a cook on change run of several sources cooks the same sources as one requested run.</summary>
+    /// <returns>The asynchronous Cooking recovery command test.</returns>
+    [TestMethod]
+    public Task CookingRetryCooksTheSameChangedSources() => EnqueueAsync(async () =>
+    {
+        var projects = new ProjectContextService();
+        var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Changes" };
+        projects.Activate(project);
+        AssetPath[] assets = [AssetPath.Parse("/Content/Materials/Red.omat"), AssetPath.Parse("/Content/Input/Player.input")];
+        var snapshot = new CookRunSnapshot
+        {
+            OperationId = Guid.NewGuid(),
+            ProjectId = project.ProjectId,
+            ProjectRoot = project.ProjectRoot,
+            DisplayName = "2 changed assets",
+            State = CookRunState.Failed,
+            CompletedAt = DateTimeOffset.UtcNow,
+            Request = new(CookTargetKind.Changes, ScopeUri: null, IsAutomatic: true) { Assets = assets },
+        };
+        var runs = new Mock<ICookRunService>();
+        _ = runs.SetupGet(value => value.Runs).Returns([snapshot]);
+        var pipeline = new Mock<IContentPipelineService>();
+        _ = pipeline.Setup(value => value.CookAssetsAsync(It.IsAny<IReadOnlyList<AssetPath>>(), It.IsAny<CancellationToken>()))
+            .ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Changes, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
+        var dispatcher = DispatcherQueue.GetForCurrentThread();
+        var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
+        using var model = new CookingPanelViewModel(runs.Object, pipeline.Object, projects, Mock.Of<ICookingWorkspaceActions>(), hosting);
+        _ = model.SelectedRun!.Context.Should().Be("Changes · Automatic");
+        await model.RetryCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+        _ = model.ActionError.Should().BeEmpty();
+        pipeline.Verify(value => value.CookAssetsAsync(It.Is<IReadOnlyList<AssetPath>>(cooked => cooked.SequenceEqual(assets)), It.IsAny<CancellationToken>()), Times.Once());
+    });
 }

@@ -351,6 +351,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
             {
                 CookTargetKind.Project => await this.pipeline.CookProjectAsync(CancellationToken.None).ConfigureAwait(true),
                 CookTargetKind.Folder => await this.pipeline.CookFolderAsync(request.ScopeUri!, CancellationToken.None).ConfigureAwait(true),
+                CookTargetKind.Changes => await this.pipeline.CookAssetsAsync(request.Assets, CancellationToken.None).ConfigureAwait(true),
                 _ => await this.pipeline.CookAssetAsync(request.ScopeUri!, CancellationToken.None).ConfigureAwait(true),
             };
         }

@@ -129,6 +129,11 @@ public sealed partial class ContentCookCoordinator
             return import.Name;
         }
 
+        if (request.TargetKind == CookTargetKind.Changes)
+        {
+            return DescribeAssets(request);
+        }
+
         if (request.TargetKind == CookTargetKind.Project || request.ScopeUri is null)
         {
             return operation.Project.Name;
@@ -193,6 +198,11 @@ public sealed partial class ContentCookCoordinator
                 : request.Import is not null || request.IsReimport ? ContentCookAssetKind.ForeignSource
                 : ContentCookAssetKinds.Of(assetUri.Name);
             snapshot = snapshot with { Assets = snapshot.Assets.Add(assetUri, new(assetUri, kind, CookAssetState.Preparing)) };
+        }
+
+        foreach (var asset in request.Assets)
+        {
+            snapshot = snapshot with { Assets = snapshot.Assets.SetItem(asset, new(asset, ContentCookAssetKinds.Of(asset.Name), CookAssetState.Preparing)) };
         }
 
         snapshot = Append(snapshot, new(Message: request.IsDemand ? "Queued for the active preview."

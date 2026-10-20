@@ -28,4 +28,9 @@ public enum CookTargetKind
     /// All cookable project assets.
     /// </summary>
     Project,
+
+    /// <summary>
+    /// Several named assets, such as the sources that changed together.
+    /// </summary>
+    Changes,
 }

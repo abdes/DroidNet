@@ -61,8 +61,30 @@ public sealed partial class ContentPipelineService
     // An automatic cook whose sources are all gone, and at least one of them has a published product.
     private static bool IsRetiringRemovedSources(ProjectContext project, Incremental.CookProvenance previous, ContentCookInput[] primaryInputs)
         => primaryInputs.Length != 0 && primaryInputs.All(input => !project.FileSystem.File.Exists(input.SourceAbsolutePath.FullPath))
-            && previous.Products.Any(product => primaryInputs.Any(input => input.AssetUri == product.SourceUri)
-                && Incremental.CookRootRepair.IsRetired(project.ProjectRoot.FullPath, product));
+            && primaryInputs.Any(input => HasRetiredProduct(project, previous, input));
+
+    // A cook on change of several sources leaves out those moved or deleted since they changed; the cook's repair
+    // publishes the content again without their products. When every source is gone, the cook keeps them.
+    private static (Func<IReadOnlyList<ContentCookScope>> ResolveScopes, ContentCookInput[] PrimaryInputs) LeaveRemovedSources(
+        ContentCookOperation operation,
+        Incremental.CookProvenance previous,
+        Func<IReadOnlyList<ContentCookScope>> resolveScopes,
+        ContentCookInput[] primaryInputs)
+    {
+        var gone = primaryInputs.Where(input => !operation.Project.FileSystem.File.Exists(input.SourceAbsolutePath.FullPath))
+            .Select(static input => input.AssetUri).ToHashSet();
+        if (gone.Count == 0 || primaryInputs.All(input => gone.Contains(input.AssetUri)))
+        {
+            return (resolveScopes, primaryInputs);
+        }
+
+        ReportRetiredSources(operation.OperationId, [.. primaryInputs.Where(input => gone.Contains(input.AssetUri) && HasRetiredProduct(operation.Project, previous, input))]);
+        return (() => [.. resolveScopes().Where(scope => !scope.Inputs.All(input => gone.Contains(input.AssetUri)))], [.. primaryInputs.Where(input => !gone.Contains(input.AssetUri))]);
+    }
+
+    // Whether a source published a product that its move or deletion retires.
+    private static bool HasRetiredProduct(ProjectContext project, Incremental.CookProvenance previous, ContentCookInput input)
+        => previous.Products.Any(product => input.AssetUri == product.SourceUri && Incremental.CookRootRepair.IsRetired(project.ProjectRoot.FullPath, product));
 
     // Each removed source is reported as an Info diagnostic, so the run names what it removed.
     private static void ReportRetiredSources(Guid operationId, ContentCookInput[] inputs)
@@ -116,6 +138,11 @@ public sealed partial class ContentPipelineService
 
         var scopes = resolveScopes();
         var isAutomatic = scopes.All(static scope => scope.IsAutomatic);
+        if (isAutomatic)
+        {
+            (resolveScopes, primaryInputs) = LeaveRemovedSources(operation, previous, resolveScopes, primaryInputs);
+        }
+
         if (isAutomatic && IsRetiringRemovedSources(operation.Project, previous, primaryInputs))
         {
             // The sources were moved or deleted after they were cooked: nothing is left to cook, and the cook's repair

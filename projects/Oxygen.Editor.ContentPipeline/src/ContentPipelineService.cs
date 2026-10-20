@@ -48,6 +48,9 @@ public sealed partial class ContentPipelineService(
     /// <summary>The code of the Info diagnostic that names a moved or deleted source whose cooked output a cook removes.</summary>
     internal const string OutputRetiredCode = "asset_cook.output_retired";
 
+    /// <summary>The code of the Info diagnostic that names a changed source cook on change leaves out for its errors.</summary>
+    internal const string SkippedForProblemsCode = "asset_cook.skipped_for_problems";
+
     private readonly INativeCompatibilityService nativeCompatibility = nativeCompatibility;
     private readonly Publication.CookPublicationService publication = publication ?? throw new ArgumentNullException(nameof(publication));
     private readonly IEngineContentPak engineContent = engineContent ?? throw new ArgumentNullException(nameof(engineContent));
@@ -87,6 +90,24 @@ public sealed partial class ContentPipelineService(
                 ? Task.FromResult(CreateFailedCook(operation, CookTargetKind.Asset, new InvalidOperationException("The originating project is no longer active.")))
                 : this.CookAssetCoreAsync(operation, assetUri, token),
             cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<ContentCookResult> CookAssetsAsync(IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(assetUris);
+
+        // A request may name source files; the cook, its run and its results name the assets they stand for.
+        AssetPath[] assets = [.. assetUris.Select(AssetFileTypes.ToIdentity).Distinct()];
+        return assets switch
+        {
+            [] => throw new ArgumentException("Cooking assets together needs at least one asset.", nameof(assetUris)),
+            [var only] => this.CookAssetAsync(only, cancellationToken),
+            _ => this.cookCoordinator.RunCookAsync(
+                new(CookTargetKind.Changes, ScopeUri: null) { Assets = assets, OriginContext = this.projectContextService.ActiveProject },
+                (operation, token) => this.CookAssetsCoreAsync(operation, assets, isAutomatic: false, token),
+                cancellationToken),
+        };
     }
 
     /// <inheritdoc />
@@ -248,8 +269,10 @@ public sealed partial class ContentPipelineService(
 
     private static ContentCookAssetKind GetAssetKind(AssetPath assetUri)
     {
+        // A script is named by its identity and cooks from its source, which the resolver finds.
         var kind = ContentCookAssetKinds.Of(assetUri.Name);
         return kind != ContentCookAssetKind.Unknown ? kind
+            : assetUri.Name.EndsWith(AssetFileTypes.Script, StringComparison.Ordinal) ? ContentCookAssetKind.Script
             : throw new ArgumentException($"Unsupported content cook asset URI '{assetUri}'.", nameof(assetUri));
     }
 
@@ -372,7 +395,15 @@ public sealed partial class ContentPipelineService(
         => this.CookCapturedScopesAsync(operation, () => [this.CreateSceneScope(operation.Project, sceneAssetUri) with { ScopeUri = sceneAssetUri }], CookTargetKind.CurrentScene, cancellationToken);
 
     private Task<ContentCookResult> CookAssetCoreAsync(ContentCookOperation operation, AssetPath assetUri, CancellationToken cancellationToken, bool allowImportedSourceChanges = true, bool isAutomatic = false)
-        => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, [ResolveInput(operation.Project, assetUri, GetAssetKind(assetUri), ContentCookInputRole.Primary)], CookTargetKind.Asset) with { ScopeUri = assetUri, AllowImportedSourceChanges = allowImportedSourceChanges, IsAutomatic = isAutomatic }], CookTargetKind.Asset, cancellationToken);
+        => this.CookCapturedScopesAsync(operation, () => [this.CreateAssetScope(operation.Project, assetUri, allowImportedSourceChanges, isAutomatic)], CookTargetKind.Asset, cancellationToken);
+
+    // Each asset keeps the scope it has when cooked alone, so a requested product still resolves to its container.
+    private Task<ContentCookResult> CookAssetsCoreAsync(ContentCookOperation operation, IReadOnlyList<AssetPath> assetUris, bool isAutomatic, CancellationToken cancellationToken)
+        => this.CookCapturedScopesAsync(
+            operation,
+            () => [.. assetUris.Select(assetUri => this.CreateAssetScope(operation.Project, assetUri, allowImportedSourceChanges: !isAutomatic, isAutomatic))],
+            assetUris.Count == 1 ? CookTargetKind.Asset : CookTargetKind.Changes,
+            cancellationToken);
 
     private Task<ContentCookResult> CookFolderCoreAsync(ContentCookOperation operation, AssetPath folderUri, CancellationToken cancellationToken)
         => this.CookCapturedScopesAsync(operation, () => [this.CreateScope(operation.Project, ResolveFolderInputs(operation.Project, folderUri), CookTargetKind.Folder) with { ScopeUri = folderUri }], CookTargetKind.Folder, cancellationToken);
@@ -575,4 +606,12 @@ public sealed partial class ContentPipelineService(
         IReadOnlyList<ContentCookInput> inputs,
         CookTargetKind targetKind)
         => new(project, this.cookScopeProvider.CreateScope(project), inputs, targetKind);
+
+    private ContentCookScope CreateAssetScope(ProjectContext project, AssetPath assetUri, bool allowImportedSourceChanges, bool isAutomatic)
+        => this.CreateScope(project, [ResolveInput(project, assetUri, GetAssetKind(assetUri), ContentCookInputRole.Primary)], CookTargetKind.Asset) with
+        {
+            ScopeUri = assetUri,
+            AllowImportedSourceChanges = allowImportedSourceChanges,
+            IsAutomatic = isAutomatic,
+        };
 }

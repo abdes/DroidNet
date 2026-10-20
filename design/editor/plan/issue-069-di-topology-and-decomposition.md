@@ -1,8 +1,9 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0 and S1.1 to S1.8 (Assets, Cook on change,
+Status: `in progress` — Phase 0 and S1.1 to S1.9 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
-Scenes, LivePreview, Asset family modules) are done; see the ledger in section 6. Phase 1 follows
+Scenes, LivePreview, Asset family modules, Cook on change over checked inputs)
+are done; see the ledger in section 6. Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -415,7 +416,12 @@ needs instead of a `WindowId`. Every slice follows decision 9.
     of each source cooking once more on its own.
 
   A cook run fails as a whole when one input fails, which is why the single run
-  waits for the skip. Gate: ContentPipeline and LivePreview tests.
+  waits for the skip. Landed: errors in the script and input facts skip the
+  input, the run names it, and the facts reporting no errors cook it; a saved
+  script cooks on change; a run of several inputs is a `Changes` run, which
+  Retry cooks again as one requested run; a source moved or deleted before the
+  run starts leaves it, and one that cannot be a cook input is not cooked.
+  Gate: ContentPipeline and LivePreview tests.
 
 - **S1.10 Shell** (C9, C10, C12, C16). In place: the global history
   (`IHistoryService`, S1.4a), and `DocumentArea`, `DocumentTab` and
@@ -655,7 +661,7 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.6 Scenes                                 | `done`        |                                                              |
 | S1.7 LivePreview                            | `done`        |                                                              |
 | S1.8 Asset family modules                   | `done`        | See the sub-slice table below                                |
-| S1.9 Cook on change over checked inputs     | `not started` |                                                              |
+| S1.9 Cook on change over checked inputs     | `done`        |                                                              |
 | S1.10 Shell                                 | `not started` |                                                              |
 | S1.11 Unsaved documents                     | `not started` | Needs S1.10                                                  |
 | S1.12 Features                              | `not started` | One row per feature when it starts                           |

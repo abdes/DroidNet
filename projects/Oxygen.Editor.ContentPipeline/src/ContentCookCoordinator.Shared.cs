@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Managed.Core;
 
@@ -34,7 +35,10 @@ public sealed partial class ContentCookCoordinator
     }
 
     private static string DescribeScope(CookRunRequest request)
-        => request.ScopeUri is { } scope ? scope.VirtualPath : "the project";
+        => request.ScopeUri is { } scope ? scope.VirtualPath : request.TargetKind == CookTargetKind.Changes ? DescribeAssets(request) : "the project";
+
+    private static string DescribeAssets(CookRunRequest request)
+        => string.Create(CultureInfo.InvariantCulture, $"{request.Assets.Count} changed assets");
 
     private Task<T> RunSharedAsync<T>(CookRunRequest request, Func<ContentCookOperation, CancellationToken, Task<T>> work, CancellationToken cancellationToken)
     {

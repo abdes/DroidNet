@@ -39,6 +39,19 @@ public interface IContentPipelineService : Status.IAssetCookStatusReader
     /// <returns>The shared pipeline's incremental result.</returns>
     public Task<ContentCookResult> CookSavedAssetAsync(AssetPath assetUri, ProjectContext expectedProject, CancellationToken cancellationToken);
 
+    /// <summary>Cooks changed saved sources together, as one background run of their originating project.</summary>
+    /// <remarks>
+    /// One source is cooked as that asset's run, several as one <see cref="CookTargetKind.Changes"/> run. The run names
+    /// each skipped source in an Info diagnostic. A source moved or deleted before the run starts leaves it; the run
+    /// removes the output it published.
+    /// </remarks>
+    /// <param name="changes">The changed sources, and those left out for their errors.</param>
+    /// <param name="expectedProject">The project whose files changed.</param>
+    /// <param name="cancellationToken">Cancels this request.</param>
+    /// <returns>The shared pipeline's incremental result.</returns>
+    /// <exception cref="ArgumentException"><paramref name="changes"/> has no source to cook.</exception>
+    public Task<ContentCookResult> CookChangedSourcesAsync(Cooking.CookChanges changes, ProjectContext expectedProject, CancellationToken cancellationToken);
+
     /// <summary>
     /// Cooks the current scene's saved source and required dependencies.
     /// </summary>
@@ -57,6 +70,13 @@ public interface IContentPipelineService : Status.IAssetCookStatusReader
     /// <param name="expectedProject">Optional originating project facts, checked again inside the writer.</param>
     /// <returns>The cook result.</returns>
     public Task<ContentCookResult> CookAssetAsync(AssetPath assetUri, CancellationToken cancellationToken, ProjectContext? expectedProject = null);
+
+    /// <summary>Cooks several assets of the active project together, as one <see cref="CookTargetKind.Changes"/> run.</summary>
+    /// <param name="assetUris">The assets, such as those of a cook on change run to cook again.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The cook result.</returns>
+    /// <exception cref="ArgumentException"><paramref name="assetUris"/> is empty.</exception>
+    public Task<ContentCookResult> CookAssetsAsync(IReadOnlyList<AssetPath> assetUris, CancellationToken cancellationToken);
 
     /// <summary>
     /// Cooks all supported assets under a folder.

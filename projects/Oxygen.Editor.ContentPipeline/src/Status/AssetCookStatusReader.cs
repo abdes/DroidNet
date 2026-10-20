@@ -30,6 +30,9 @@ public sealed partial class AssetCookStatusReader(
     INativeCompatibilityService nativeCompatibility,
     IEngineContentPak engineContent) : IAssetCookStatusReader
 {
+    /// <summary>The code of the status of an asset that cannot be a cook input, such as a deleted script.</summary>
+    internal const string InputUnresolvedCode = "asset_status.input_unresolved";
+
     /// <inheritdoc />
     public event EventHandler? Changed
     {
@@ -142,7 +145,7 @@ public sealed partial class AssetCookStatusReader(
                     OperationId = Guid.Empty,
                     Domain = FailureDomain.AssetCook,
                     Severity = DiagnosticSeverity.Error,
-                    Code = "asset_status.input_unresolved",
+                    Code = InputUnresolvedCode,
                     Message = reason,
                     AffectedVirtualPath = requested.VirtualPath,
                 },

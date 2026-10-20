@@ -16,11 +16,38 @@ public sealed partial class AutomaticCookService
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Automatic cooking failed for changed source {Source}.")]
-    private static partial void LogSchedulingFailure(ILogger logger, Exception exception, AssetPath source);
+        Message = "Automatic cooking failed for {Count} changed sources.")]
+    private static partial void LogSchedulingFailure(ILogger logger, Exception exception, int count);
 
-    private void LogSchedulingFailure(Exception exception, AssetPath source)
-        => LogSchedulingFailure(this.logger, exception, source);
+    private void LogSchedulingFailure(Exception exception, int count)
+        => LogSchedulingFailure(this.logger, exception, count);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Cook on change stopped scheduling; the next change starts it again.")]
+    private static partial void LogDrainFailure(ILogger logger, Exception exception);
+
+    private void LogDrainFailure(Exception exception)
+        => LogDrainFailure(this.logger, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "{Count} changed sources were not cooked: their facts report errors ({Sources}); the change that fixes them cooks them.")]
+    private static partial void LogSkippedForErrors(ILogger logger, int count, string sources);
+
+    private void LogSkippedForErrors(List<SkippedCookSource> skipped)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Information))
+        {
+            return;
+        }
+
+        var count = skipped.Count;
+        var sources = string.Join(", ", skipped.Select(static source => source.Source.VirtualPath));
+        LogSkippedForErrors(this.logger, count, sources);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -52,7 +79,7 @@ public sealed partial class AutomaticCookService
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "{Count} changed sources were not cooked: their files are gone and they had no cooked output to remove.")]
+        Message = "{Count} changed sources were not cooked: their files are gone and they had no cooked output to remove, or they cannot be cook inputs.")]
     private static partial void LogSourcesGone(ILogger logger, int count);
 
     private void LogSourcesGone(int count)
@@ -120,23 +147,6 @@ public sealed partial class AutomaticCookService
     [Conditional("DEBUG")]
     private void LogChangeIgnored(AssetPath uri)
         => LogChangeIgnored(this.logger, uri);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "Cancelling the cook on change of '{Source}': the file was moved or deleted; cook on change checks it again.")]
-    private static partial void LogCookRetired(ILogger logger, string source);
-
-    private void LogCookRetired(AssetPath asset)
-    {
-        if (!this.logger.IsEnabled(LogLevel.Information))
-        {
-            return;
-        }
-
-        var source = asset.VirtualPath;
-        LogCookRetired(this.logger, source);
-    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
