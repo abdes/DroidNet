@@ -24,6 +24,17 @@ public sealed record TextureSource
         this.Source = source;
     }
 
+    /// <summary>
+    /// Gets the cooker's names of the six faces of a cube, each set in +X, -X, +Y, -Y, +Z, -Z order. A face is named
+    /// by the name the faces share and the suffix of its face, such as <c>sky_px.hdr</c>.
+    /// </summary>
+    public static IReadOnlyList<IReadOnlyList<string>> CubeFaceSuffixSets { get; } =
+    [
+        ["_px", "_nx", "_py", "_ny", "_pz", "_nz"],
+        ["_posx", "_negx", "_posy", "_negy", "_posz", "_negz"],
+        ["_right", "_left", "_top", "_bottom", "_front", "_back"],
+    ];
+
     /// <summary>Gets the texture's display name.</summary>
     public string? Name { get; init; }
 
@@ -51,8 +62,15 @@ public sealed record TextureSource
     /// cube.</summary>
     public TextureCubeSettings? Cube { get; init; }
 
-    /// <summary>Gets every image the texture reads: <see cref="Source"/>, then each of <see cref="Sources"/>.</summary>
+    /// <summary>Gets the images the descriptor names: <see cref="Source"/>, then each of <see cref="Sources"/>.</summary>
+    /// <remarks>A six-face cube names only one face; <see cref="ResolveImages"/> finds the other five.</remarks>
     public IReadOnlyList<string> Images => [this.Source, .. this.Sources.Select(static mapping => mapping.File)];
+
+    /// <summary>
+    /// Gets whether the texture is a cube made of six face files, which the cooker finds by name from
+    /// <see cref="Source"/>: a cube with no other source, no panorama projection and no layout.
+    /// </summary>
+    public bool IsSixFaceCube => this.Sources.Count == 0 && this.Cube is { Cubemap: true, EquirectToCube: not true, Layout: null };
 
     /// <summary>Gets whether the texture cooks to a cube.</summary>
     public bool IsCube => this.Cube?.MakesCube == true;
@@ -65,11 +83,39 @@ public sealed record TextureSource
 
     /// <summary>Resolves every image the texture reads to a file, as the cooker does.</summary>
     /// <param name="descriptor">The texture descriptor file.</param>
-    /// <returns>The images, in <see cref="Images"/> order.</returns>
-    public IReadOnlyList<FileSystemPath> ResolveImages(FileSystemPath descriptor)
+    /// <param name="exists">Whether a file exists; the six faces of a cube are the first set of names whose six files
+    /// all exist, as the cooker finds them.</param>
+    /// <returns>The images, in <see cref="Images"/> order; for a six-face cube, its faces in +X, -X, +Y, -Y, +Z, -Z
+    /// order, named by the first set when no set is complete.</returns>
+    public IReadOnlyList<FileSystemPath> ResolveImages(FileSystemPath descriptor, Func<FileSystemPath, bool> exists)
     {
         ArgumentNullException.ThrowIfNull(descriptor);
+        ArgumentNullException.ThrowIfNull(exists);
         var folder = descriptor.Parent ?? throw new ArgumentException("The descriptor has no folder.", nameof(descriptor));
-        return [.. this.Images.Select(image => Path.IsPathRooted(image) ? FileSystemPath.From(image) : folder.Combine(image))];
+        IReadOnlyList<FileSystemPath> images = [.. this.Images.Select(image => Path.IsPathRooted(image) ? FileSystemPath.From(image) : folder.Combine(image))];
+        return this.IsSixFaceCube ? FindFaces(images[0], exists) : images;
+    }
+
+    private static IReadOnlyList<FileSystemPath> FindFaces(FileSystemPath source, Func<FileSystemPath, bool> exists)
+    {
+        var folder = source.Parent!;
+        var stem = Path.GetFileNameWithoutExtension(source.Name);
+        var extension = Path.GetExtension(source.Name);
+        IReadOnlyList<FileSystemPath>? first = null;
+        foreach (var suffixes in CubeFaceSuffixSets)
+        {
+            var shared = suffixes.FirstOrDefault(suffix => stem.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) is { } suffix
+                ? stem[..^suffix.Length]
+                : stem;
+            IReadOnlyList<FileSystemPath> faces = [.. suffixes.Select(face => folder.Combine(shared + face + extension))];
+            if (faces.All(exists))
+            {
+                return faces;
+            }
+
+            first ??= faces;
+        }
+
+        return first!;
     }
 }

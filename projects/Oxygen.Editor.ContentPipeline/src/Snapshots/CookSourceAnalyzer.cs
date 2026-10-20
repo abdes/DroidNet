@@ -308,7 +308,7 @@ internal sealed partial class CookSourceAnalyzer(
             return this.CreateTextureReferenceDiagnostic(input, channel, textureDescriptorPath, "texture descriptor is invalid", exception.Message);
         }
 
-        return texture.ResolveImages(FileSystemPath.From(textureDescriptorPath)).FirstOrDefault(static image => !File.Exists(image.FullPath)) is { } missing
+        return texture.ResolveImages(FileSystemPath.From(textureDescriptorPath), static image => File.Exists(image.FullPath)).FirstOrDefault(static image => !File.Exists(image.FullPath)) is { } missing
             ? this.CreateTextureReferenceDiagnostic(input, channel, missing.FullPath, "source image is missing", details: null)
             : null;
     }

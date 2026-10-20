@@ -132,7 +132,8 @@ internal static class AuthoredReferenceFormat
             : settings with { BundleRoot = bundleRoot, PrimaryRelativePath = primary, Files = [.. files] };
     }
 
-    /// <summary>Reads the images a texture descriptor reads, resolved against its folder.</summary>
+    /// <summary>Reads the images a texture descriptor reads, resolved against its folder; a six-face cube's are its six
+    /// faces.</summary>
     /// <param name="path">The texture descriptor.</param>
     /// <param name="content">Its bytes.</param>
     /// <returns>The absolute image paths; none when the descriptor cannot be read.</returns>
@@ -140,7 +141,7 @@ internal static class AuthoredReferenceFormat
     {
         try
         {
-            return TextureSourceReader.Read(content.Span).ResolveImages(path);
+            return TextureSourceReader.Read(content.Span).ResolveImages(path, static image => File.Exists(image.FullPath));
         }
         catch (AssetFormatException)
         {

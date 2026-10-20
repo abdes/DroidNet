@@ -34,20 +34,11 @@ public static class TextureSourceAssetImporter
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
 
-    // The cooker's face naming conventions, each in +X, -X, +Y, -Y, +Z, -Z order. The first
-    // set also names the faces an import writes.
-    private static readonly string[][] FaceSuffixSets =
-    [
-        ["_px", "_nx", "_py", "_ny", "_pz", "_nz"],
-        ["_posx", "_negx", "_posy", "_negy", "_posz", "_negz"],
-        ["_right", "_left", "_top", "_bottom", "_front", "_back"],
-    ];
-
     /// <summary>Gets the supported standalone image extensions.</summary>
     public static IReadOnlyCollection<string> SupportedExtensions => ImageExtensions;
 
     /// <summary>Gets the suffixes an imported six-face cube gives its face files, in +X, -X, +Y, -Y, +Z, -Z order.</summary>
-    public static IReadOnlyList<string> FaceSuffixes => FaceSuffixSets[0];
+    public static IReadOnlyList<string> FaceSuffixes => TextureSource.CubeFaceSuffixSets[0];
 
     /// <summary>Creates an image texture descriptor under a project authoring mount.</summary>
     /// <param name="request">The selected image, destination, name and native cook settings.</param>
@@ -147,7 +138,7 @@ public static class TextureSourceAssetImporter
     /// <returns><see langword="true"/> when the descriptor can be read and each of its images exists.</returns>
     public static bool HasSourceImage(string descriptorPath)
         => TryRead(descriptorPath) is { } texture
-            && texture.ResolveImages(FileSystemPath.From(descriptorPath)).All(static image => File.Exists(image.FullPath));
+            && texture.ResolveImages(FileSystemPath.From(descriptorPath), static image => File.Exists(image.FullPath)).All(static image => File.Exists(image.FullPath));
 
     /// <summary>Finds the six face files of a cube from any one of them, named as the cooker expects.</summary>
     /// <param name="path">One face image, such as <c>sky_px.hdr</c>, <c>sky_posx.hdr</c> or <c>sky_right.hdr</c>.</param>
@@ -162,7 +153,7 @@ public static class TextureSourceAssetImporter
         var folder = Path.GetDirectoryName(Path.GetFullPath(path)) ?? string.Empty;
         var stem = Path.GetFileNameWithoutExtension(path);
         var extension = Path.GetExtension(path);
-        foreach (var suffixes in FaceSuffixSets)
+        foreach (var suffixes in TextureSource.CubeFaceSuffixSets)
         {
             var suffix = suffixes.FirstOrDefault(candidate => stem.Length > candidate.Length && stem.EndsWith(candidate, StringComparison.OrdinalIgnoreCase));
             if (suffix is null)
@@ -187,7 +178,7 @@ public static class TextureSourceAssetImporter
     public static string StripFaceSuffix(string stem)
     {
         ArgumentNullException.ThrowIfNull(stem);
-        foreach (var suffix in FaceSuffixSets.SelectMany(static suffixes => suffixes))
+        foreach (var suffix in TextureSource.CubeFaceSuffixSets.SelectMany(static suffixes => suffixes))
         {
             if (stem.Length > suffix.Length && stem.EndsWith(suffix, StringComparison.OrdinalIgnoreCase))
             {

@@ -36,13 +36,49 @@ public sealed class TextureSourceTests
         var rooted = Path.Combine(Path.GetTempPath(), "Elsewhere", "Sky.hdr");
         var texture = new TextureSource("Grass.png") { Sources = [new("../Shared/Snow.png"), new(rooted)] };
 
-        var images = texture.ResolveImages(FileSystemPath.From(Path.Combine(folder, "Terrain.otex.json")));
+        var images = texture.ResolveImages(FileSystemPath.From(Path.Combine(folder, "Terrain.otex.json")), static _ => true);
 
         _ = images.Select(static image => image.FullPath).Should().Equal(
             Path.Combine(folder, "Grass.png"),
             Path.GetFullPath(Path.Combine(folder, "..", "Shared", "Snow.png")),
             rooted);
     }
+
+    [TestMethod]
+    [DataRow("Sky_px.hdr", new[] { "Sky_px.hdr", "Sky_nx.hdr", "Sky_py.hdr", "Sky_ny.hdr", "Sky_pz.hdr", "Sky_nz.hdr" })]
+    [DataRow("Sky_posx.hdr", new[] { "Sky_posx.hdr", "Sky_negx.hdr", "Sky_posy.hdr", "Sky_negy.hdr", "Sky_posz.hdr", "Sky_negz.hdr" })]
+    [DataRow("Sky.hdr", new[] { "Sky_right.hdr", "Sky_left.hdr", "Sky_top.hdr", "Sky_bottom.hdr", "Sky_front.hdr", "Sky_back.hdr" })]
+    public void ASixFaceCubeReadsTheFirstCompleteSetOfFacesAsTheCookerFindsThem(string source, string[] existing)
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "Project", "Content", "Sky");
+        var files = existing.Select(name => Path.Combine(folder, name)).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var texture = new TextureSource(source) { Cube = new TextureCubeSettings { Cubemap = true } };
+
+        var images = texture.ResolveImages(FileSystemPath.From(Path.Combine(folder, "Sky.otex.json")), image => files.Contains(image.FullPath));
+
+        _ = texture.IsSixFaceCube.Should().BeTrue();
+        _ = images.Select(static image => image.Name).Should().Equal(existing);
+    }
+
+    [TestMethod]
+    public void ASixFaceCubeWithoutACompleteSetReadsTheFirstSetSoTheMissingFacesAreReported()
+    {
+        var folder = Path.Combine(Path.GetTempPath(), "Project", "Content", "Sky");
+        var texture = new TextureSource("Sky_px.hdr") { Cube = new TextureCubeSettings { Cubemap = true } };
+
+        var images = texture.ResolveImages(FileSystemPath.From(Path.Combine(folder, "Sky.otex.json")), static _ => false);
+
+        _ = images.Select(static image => image.Name).Should().Equal("Sky_px.hdr", "Sky_nx.hdr", "Sky_py.hdr", "Sky_ny.hdr", "Sky_pz.hdr", "Sky_nz.hdr");
+    }
+
+    [TestMethod]
+    [DataRow("""{ "source": "Sky_px.hdr", "cube": { "cubemap": true, "cube_layout": "hcross" } }""")]
+    [DataRow("""{ "source": "Sky_px.hdr", "cube": { "cubemap": true, "cube_layout": "auto" } }""")]
+    [DataRow("""{ "source": "Sky_px.hdr", "cube": { "equirect_to_cube": true, "cube_face_size": 512 } }""")]
+    [DataRow("""{ "source": "Sky_px.hdr", "sources": [ { "file": "Sky_nx.hdr", "layer": 1 } ], "cube": { "cubemap": true } }""")]
+    [DataRow("""{ "source": "Sky_px.hdr" }""")]
+    public void OnlyACubeWithoutLayoutProjectionOrOtherSourcesIsMadeOfSixFaceFiles(string json)
+        => _ = TextureSourceReader.Read(Encoding.UTF8.GetBytes(json)).IsSixFaceCube.Should().BeFalse();
 
     [TestMethod]
     [DataRow("""{ "source": "Sky.hdr", "output": { "format": "rgba16f" }, "cube": { "equirect_to_cube": true, "cube_face_size": 512 } }""", true, true)]

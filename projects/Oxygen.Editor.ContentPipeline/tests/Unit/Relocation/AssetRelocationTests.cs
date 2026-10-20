@@ -634,6 +634,41 @@ public sealed class AssetRelocationTests
         _ = recycled.Should().BeEquivalentTo(workspace.PathOf("Content/Textures/Wood.otex.json"));
     }
 
+    /// <summary>A six-face cube names its +X face only; the cooker reads all six, so all six go with it.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task DeletingASixFaceCubeRecyclesEveryFace()
+    {
+        using var workspace = CreateContent();
+        var faces = WriteSixFaceCube(workspace, "Content/Sky");
+        var recycled = new List<string>();
+
+        await workspace.Service.DeleteAsync(
+            [AssetPath.Parse("/Content/Sky/Pisa.otex.json")],
+            paths =>
+            {
+                recycled.AddRange(paths);
+                return Task.CompletedTask;
+            },
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = recycled.Should().BeEquivalentTo([workspace.PathOf("Content/Sky/Pisa.otex.json"), .. faces.Select(face => workspace.PathOf($"Content/Sky/{face}"))]);
+    }
+
+    /// <summary>Moving a six-face cube moves every face with its descriptor.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task MovingASixFaceCubeMovesEveryFace()
+    {
+        using var workspace = CreateContent();
+        var faces = WriteSixFaceCube(workspace, "Content/Sky");
+
+        _ = await workspace.Service.RelocateAsync(Move("/Content/Sky/Pisa.otex.json", "/Content/Textures/Pisa.otex.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = faces.Where(face => !workspace.Exists($"Content/Textures/{face}")).Should().BeEmpty();
+        _ = faces.Where(face => workspace.Exists($"Content/Sky/{face}")).Should().BeEmpty();
+    }
+
     /// <summary>A request that changes nothing touches no file and starts no transaction.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
@@ -809,6 +844,19 @@ public sealed class AssetRelocationTests
     private static AssetRelocationRequest Move(string source, string target) => new() { Moves = [new(AssetPath.Parse(source), AssetPath.Parse(target))] };
 
     private static AssetRelocationRequest Rename(string product, string name) => new() { ProductRenames = [new(AssetPath.Parse(product), name)] };
+
+    // A cube whose descriptor names its +X face, as a six-face import writes it; returns the face file names.
+    private static string[] WriteSixFaceCube(RelocationWorkspace workspace, string folder)
+    {
+        string[] faces = ["Pisa_px.hdr", "Pisa_nx.hdr", "Pisa_py.hdr", "Pisa_ny.hdr", "Pisa_pz.hdr", "Pisa_nz.hdr"];
+        foreach (var face in faces)
+        {
+            _ = workspace.Write($"{folder}/{face}", face);
+        }
+
+        _ = workspace.Write($"{folder}/Pisa.otex.json", $$"""{ "name": "Pisa", "virtual_path": "/{{folder}}/Pisa.otex", "source": "Pisa_px.hdr", "cube": { "cubemap": true } }""");
+        return faces;
+    }
 
     private static Dictionary<string, string> Snapshot(string root)
         => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
