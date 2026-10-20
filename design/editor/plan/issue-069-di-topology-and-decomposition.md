@@ -499,6 +499,12 @@ needs instead of a `WindowId`. Every slice follows decision 9.
     folders on any `IFileSystem`, `WriteFile` and `PathOf` by virtual path) is
     the first; Scripting (`IScripts`, `IScriptAnalyzer`,
     `IScriptLibrary`) and Input (`IInputSources`) follow with S1.8.
+  - **Moq.** A test may mock a port with Moq when its owner publishes no kit
+    fake for it and the test needs only a few canned answers, a thrown failure
+    or a check that a call was made. A port whose kit has a fake is used through
+    the fake. A port that tests keep mocking with the same setups, or that needs
+    state across calls (a store, events, holds), gets a fake in its owner's kit
+    instead. Moq mocks ports only, never models or the module under test.
   - **File system.** Unit tests of logic over files run on Testably's
     `MockFileSystem`; the real disk is for integration tests (atomic replace,
     watcher timing, locking, native tools). Code a slice writes or moves takes
