@@ -156,6 +156,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
         this.container.RegisterInstance(Mock.Of<IOperationResultPublisher>());
         this.container.RegisterInstance(Mock.Of<IStatusReducer>());
         this.container.RegisterInstance(Mock.Of<IWindowManagerService>());
+        this.container.RegisterInstance(new Oxygen.Editor.Textures.TextureImport(new RealFileSystem()));
         this.Browser = new(this.container, Mock.Of<IRouter>(), this.Projects, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
     }
 
