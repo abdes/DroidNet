@@ -245,7 +245,7 @@ public partial class DemoViewModel(SpatialMapperFactory spatialMapperFactory, IW
         var physicalPoint = new Point(cursor.X, cursor.Y);
 
         // Update the DPI for the monitor currently under the pointer
-        var pdpi = Coordinates.Native.GetDpiForPhysicalPoint(physicalPoint);
+        var pdpi = Native.GetDpiForPhysicalPoint(cursor);
         this.PointerMonitorDpi = pdpi.ToString(CultureInfo.InvariantCulture);
 
         this.UpdateCoordinates(physicalPoint);
@@ -337,11 +337,38 @@ public partial class DemoViewModel(SpatialMapperFactory spatialMapperFactory, IW
     private static partial class Native
     {
         private const string User32 = "user32.dll";
+        private const string SHCore = "shcore.dll";
+        private const uint MonitorDefaultToNearest = 2;
+        private const int EffectiveDpi = 0;
 
         [LibraryImport(User32, SetLastError = true)]
         [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
         [return: MarshalAs(UnmanagedType.Bool)]
         public static partial bool GetCursorPos(out POINT lpPoint);
+
+        /// <summary>Gets the effective DPI of the monitor nearest to a physical screen point.</summary>
+        /// <param name="point">The physical screen point.</param>
+        /// <returns>The monitor's effective DPI.</returns>
+        public static uint GetDpiForPhysicalPoint(POINT point)
+        {
+            var monitor = MonitorFromPoint(point, MonitorDefaultToNearest);
+            if (monitor == IntPtr.Zero)
+            {
+                throw new InvalidOperationException("Unable to resolve the monitor under the pointer.");
+            }
+
+            return GetDpiForMonitor(monitor, EffectiveDpi, out var dpiX, out _) == 0
+                ? dpiX
+                : throw new InvalidOperationException("GetDpiForMonitor failed for the monitor under the pointer.");
+        }
+
+        [LibraryImport(User32, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static partial IntPtr MonitorFromPoint(POINT pt, uint dwFlags);
+
+        [LibraryImport(SHCore, SetLastError = true)]
+        [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+        private static partial int GetDpiForMonitor(IntPtr hmonitor, int dpiType, out uint dpiX, out uint dpiY);
 
         /// <summary>POINT structure for screen coordinates.</summary>
         /// <remarks>

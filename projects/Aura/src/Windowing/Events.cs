@@ -94,8 +94,12 @@ public sealed class WindowClosingEventArgs : CancelEventArgs
     /// <summary>Commits approved work or releases prepared state after all guards finish.</summary>
     /// <param name="approved">Whether every close guard approved.</param>
     /// <returns>The completion task.</returns>
+    /// <remarks>
+    ///     The window manager that raised <see cref="IWindowManagerService.WindowClosing"/> calls this once, after
+    ///     every handler has returned, and destroys the window only when it completes with approval.
+    /// </remarks>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "All prepared resources must receive cancellation cleanup before a completion failure is rethrown.")]
-    internal async Task CompleteAsync(bool approved)
+    public async Task CompleteAsync(bool approved)
     {
         Exception? failure = null;
         foreach (var completion in this.completionTasks)

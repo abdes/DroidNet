@@ -12,5 +12,4 @@ using System.Runtime.CompilerServices;
  https://aka.ms/assembly-info-properties
 */
 
-[assembly: InternalsVisibleTo("DroidNet.Hosting")]
 [assembly: InternalsVisibleTo("DynamicProxyGenAssembly2")]
