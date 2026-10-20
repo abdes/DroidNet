@@ -117,10 +117,9 @@ public sealed partial class ScriptingView
     private void OnScriptFlyoutOpening(object? sender, object args)
     {
         _ = args;
-        if (sender is Flyout { Target.DataContext: ScriptSlotCardViewModel card } flyout)
+        if (sender is Flyout { Target.DataContext: ScriptSlotCardViewModel } flyout)
         {
             this.openFlyout = flyout;
-            card.ScriptChoices.SearchText = string.Empty;
         }
     }
 
@@ -137,10 +136,9 @@ public sealed partial class ScriptingView
     private void OnAssetFlyoutOpening(object? sender, object args)
     {
         _ = args;
-        if (sender is Flyout { Target.DataContext: ScriptParameterFieldViewModel field } flyout)
+        if (sender is Flyout { Target.DataContext: ScriptParameterFieldViewModel } flyout)
         {
             this.openFlyout = flyout;
-            field.AssetChoices.SearchText = string.Empty;
         }
     }
 

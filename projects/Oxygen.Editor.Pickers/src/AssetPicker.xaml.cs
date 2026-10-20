@@ -26,7 +26,22 @@ public sealed partial class AssetPicker : UserControl
     public static readonly DependencyProperty MaxListHeightProperty = Register<double>(nameof(MaxListHeight), defaultValue: 420.0);
 
     /// <summary>Initializes a new instance of the <see cref="AssetPicker"/> class.</summary>
-    public AssetPicker() => this.InitializeComponent();
+    /// <remarks>
+    /// A picker opens with every choice: it clears its search when it leaves the visual tree, such as when its flyout
+    /// closes. Clearing it while a flyout opens would change the choice lists while the flyout attaches them, which
+    /// WinUI refuses.
+    /// </remarks>
+    public AssetPicker()
+    {
+        this.InitializeComponent();
+        this.Unloaded += (_, _) =>
+        {
+            if (this.Model is { } model)
+            {
+                model.SearchText = string.Empty;
+            }
+        };
+    }
 
     /// <summary>Raised when the user picks an enabled choice; a clearing choice has no asset.</summary>
     public event EventHandler<AssetChoice>? ChoiceInvoked;

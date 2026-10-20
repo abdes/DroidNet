@@ -142,10 +142,9 @@ public sealed partial class MaterialEditorView
     private void OnTextureFlyoutOpening(object? sender, object args)
     {
         _ = args;
-        if (sender is Flyout { Target.DataContext: MaterialTextureChannel channel } flyout)
+        if (sender is Flyout { Target.DataContext: MaterialTextureChannel } flyout)
         {
             this.openTextureFlyout = flyout;
-            channel.Choices.SearchText = string.Empty;
         }
     }
 
