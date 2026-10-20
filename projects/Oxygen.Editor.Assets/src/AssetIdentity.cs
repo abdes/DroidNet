@@ -17,13 +17,14 @@ public static class AssetIdentity
     /// <summary>Describes an asset as one cooked source provides it, retaining the source ordinary assignments use.</summary>
     /// <param name="effective">The asset selected by ordinary native resolution.</param>
     /// <param name="source">The representation explicitly being browsed.</param>
-    /// <param name="project">The current library names.</param>
+    /// <param name="project">The project, which holds the library files and their names.</param>
     /// <returns>The library's own read-only asset row.</returns>
     public static AssetEntry FromCookedSource(AssetEntry effective, CookedAssetMetadata source, ProjectContext project)
     {
+        ArgumentNullException.ThrowIfNull(project);
         var identity = source.VirtualPath ?? effective.Identity;
         var physicalPath = AssetIdentityReducer.TryResolveIndexedDescriptorPath(source);
-        var exists = source.IsPackaged || (physicalPath is not null && File.Exists(physicalPath.FullPath));
+        var exists = source.IsPackaged || (physicalPath is not null && project.FileSystem.File.Exists(physicalPath.FullPath));
         var library = source.IsPackaged ? null : project.LocalFolderMounts.FirstOrDefault(mount => mount.Root == source.ContainerPath);
         return new(
             identity,

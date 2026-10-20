@@ -20,7 +20,7 @@ public static class CookedLibraryFolders
     public static IReadOnlyList<AssetEntry> ForFolders(IReadOnlyList<AssetEntry> items, ProjectContext project, IReadOnlyCollection<AssetPath> folders)
     {
         var libraries = Library.Of(project).Where(library => folders.Any(folder => string.Equals(folder.Mount, library.Name, StringComparison.Ordinal))
-            && library.HasContent).ToArray();
+            && library.HasContent(project)).ToArray();
         if (libraries.Length == 0)
         {
             return items;
@@ -54,9 +54,9 @@ public static class CookedLibraryFolders
     // A local folder shows its assets at their descriptor paths, a pak at its assets' virtual paths, under the mount.
     private sealed record Library(CookedContentSourceKind Kind, string Name, FileSystemPath Container)
     {
-        public bool HasContent => this.Kind == CookedContentSourceKind.PakFile
-            ? File.Exists(this.Container.FullPath)
-            : File.Exists(Path.Combine(this.Container.FullPath, "container.index.bin"));
+        public bool HasContent(ProjectContext project) => this.Kind == CookedContentSourceKind.PakFile
+            ? project.FileSystem.File.Exists(this.Container.FullPath)
+            : project.FileSystem.File.Exists(Path.Combine(this.Container.FullPath, "container.index.bin"));
 
         public static Library[] Of(ProjectContext project)
             => [.. project.LocalFolderMounts.Select(static folder => new Library(CookedContentSourceKind.LocalFolder, folder.Name, folder.Root)),

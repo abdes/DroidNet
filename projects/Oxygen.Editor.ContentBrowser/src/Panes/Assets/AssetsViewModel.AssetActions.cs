@@ -179,16 +179,17 @@ public partial class AssetsViewModel
         var path = asset.Kind == AssetKind.Folder
             ? RelocationPaths.ToPhysical(project, asset.Identity)
             : asset.DescriptorPath ?? asset.SourcePath;
-        if (path is null || !(File.Exists(path.FullPath) || Directory.Exists(path.FullPath)))
+        var fileSystem = project.FileSystem;
+        if (path is null || !(fileSystem.File.Exists(path.FullPath) || fileSystem.Directory.Exists(path.FullPath)))
         {
             return new(VirtualPath: null, PhysicalPath: null, IsFolder: false, IsImportedOutput: asset.ImportSource is not null, ModelSourcePath: asset.ImportSourcePath);
         }
 
-        var isModel = AssetFileTypes.Is(path.Name, AssetFileCategory.Model) && File.Exists(path.FullPath + NativeSceneImportSettings.SidecarSuffix);
+        var isModel = AssetFileTypes.Is(path.Name, AssetFileCategory.Model) && fileSystem.File.Exists(path.FullPath + NativeSceneImportSettings.SidecarSuffix);
         return new(
             RelocationPaths.ToVirtual(project, path),
             path,
-            Directory.Exists(path.FullPath),
+            fileSystem.Directory.Exists(path.FullPath),
             IsImportedOutput: false,
             isModel ? path : asset.ImportSourcePath);
     }

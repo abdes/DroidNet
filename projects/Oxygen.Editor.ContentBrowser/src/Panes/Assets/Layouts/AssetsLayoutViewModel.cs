@@ -384,23 +384,24 @@ public abstract partial class AssetsLayoutViewModel(
         var selectedIdentities = this.IsActiveLayout
             ? this.contentBrowserState.SelectedIdentities : [.. this.selectedAssets.Select(static asset => asset.Identity)];
         var existing = this.Assets.ToDictionary(static row => row.Item.Identity);
-        var scopedItems = this.projectContextService.ActiveProject is { } project
-            ? CookedLibraryFolders.ForFolders(items, project, this.contentBrowserState.SelectedFolders) : items;
+        // Rows show the active project's assets and read its files; without a project there are none.
+        var project = this.projectContextService.ActiveProject;
+        var scopedItems = project is null ? [] : CookedLibraryFolders.ForFolders(items, project, this.contentBrowserState.SelectedFolders);
         // A container is one asset, its source file: its products (a model's materials, an input source's
         // actions) are not listed, and pickers and references reach them by identity.
         var inScope = scopedItems.Where(static item => AssetFileTypes.ContainerOf(item.Identity) is null)
             .Where(this.IsInSelectedFolders).ToArray();
         this.scopeCount = inScope.Length;
-        var visible = this.Presentation.Sort(inScope.Where(this.Query.Matches));
+        var visible = project is null ? [] : this.Presentation.Sort(inScope.Where(this.Query.Matches), project);
         this.isReplacingRows = true;
         try
         {
-            for (var index = 0; index < visible.Count; index++)
+            for (var index = 0; project is not null && index < visible.Count; index++)
             {
                 var item = visible[index];
                 if (existing.TryGetValue(item.Identity, out var row))
                 {
-                    row.Update(item);
+                    row.Update(item, project);
                     this.ApplyScriptProblems(row);
                     if (!ReferenceEquals(this.Assets[index], row))
                     {
@@ -409,7 +410,7 @@ public abstract partial class AssetsLayoutViewModel(
                 }
                 else
                 {
-                    var added = new AssetBrowserRow(item);
+                    var added = new AssetBrowserRow(item, project);
                     this.ApplyScriptProblems(added);
                     this.Assets.Insert(index, added);
                 }

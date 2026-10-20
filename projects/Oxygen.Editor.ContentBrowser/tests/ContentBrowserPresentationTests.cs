@@ -25,59 +25,52 @@ public sealed class ContentBrowserPresentationTests
     [TestMethod]
     public void SortOrdersByFieldAndHeaderClicksReverse()
     {
+        var project = TestProject.Create(new MockFileSystem());
         var presentation = new AssetBrowserPresentation();
         var bolt = CreateAsset("/Content/Geometry/Bolt.ogeo", AssetKind.Geometry, AssetCookFreshness.Current);
         var clay = CreateAsset("/Content/Materials/Clay.omat", AssetKind.Material, AssetCookFreshness.OutOfDate);
         var arch = CreateAsset("/Content/Scenes/Arch.oscene", AssetKind.Scene, AssetCookFreshness.NeedsCooking);
         AssetEntry[] items = [bolt, clay, arch];
 
-        _ = presentation.Sort(items).Should().Equal(arch, bolt, clay);
+        _ = presentation.Sort(items, project.Context).Should().Equal(arch, bolt, clay);
         presentation.SortByCommand.Execute(AssetSortField.Name);
         _ = presentation.SortDescending.Should().BeTrue();
-        _ = presentation.Sort(items).Should().Equal(clay, bolt, arch);
+        _ = presentation.Sort(items, project.Context).Should().Equal(clay, bolt, arch);
 
         presentation.SortByCommand.Execute(AssetSortField.Type);
         _ = presentation.SortDescending.Should().BeFalse();
-        _ = presentation.Sort(items).Should().Equal(bolt, clay, arch);
+        _ = presentation.Sort(items, project.Context).Should().Equal(bolt, clay, arch);
 
         // Cooked, Needs cooking and Out of date sort as displayed text.
         presentation.OrderByCommand.Execute(AssetSortField.Status);
-        _ = presentation.Sort(items).Should().Equal(bolt, arch, clay);
+        _ = presentation.Sort(items, project.Context).Should().Equal(bolt, arch, clay);
 
         presentation.OrderByCommand.Execute(AssetSortField.Location);
         presentation.OrderDescendingCommand.Execute(parameter: null);
-        _ = presentation.Sort(items).Should().Equal(arch, clay, bolt);
+        _ = presentation.Sort(items, project.Context).Should().Equal(arch, clay, bolt);
     }
 
-    /// <summary>Size and time order real files; assets without a file stay last in both directions.</summary>
+    /// <summary>Size and time order the project's files; assets without a file stay last in both directions.</summary>
     [TestMethod]
     public void FileFactsSortWithMissingFilesLast()
     {
-        var folder = Directory.CreateTempSubdirectory("cb-sort-");
-        try
-        {
-            var small = Path.Combine(folder.FullName, "Small.omat.json");
-            var large = Path.Combine(folder.FullName, "Large.omat.json");
-            File.WriteAllText(small, "{}");
-            File.WriteAllText(large, new string('x', 4096));
-            File.SetLastWriteTimeUtc(small, new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc));
-            File.SetLastWriteTimeUtc(large, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
-            var smallAsset = CreateAsset("/Content/Materials/Small.omat", AssetKind.Material, AssetCookFreshness.Current) with { DescriptorPath = FileSystemPath.From(small) };
-            var largeAsset = CreateAsset("/Content/Materials/Large.omat", AssetKind.Material, AssetCookFreshness.Current) with { DescriptorPath = FileSystemPath.From(large) };
-            var missing = CreateAsset("/Content/Materials/Missing.omat", AssetKind.Material, AssetCookFreshness.Current);
-            var presentation = new AssetBrowserPresentation { SortField = AssetSortField.Size };
+        var project = TestProject.Create(new MockFileSystem());
+        var files = project.Context.FileSystem;
+        var small = project.WriteFile("/Content/Materials/Small.omat.json", "{}");
+        var large = project.WriteFile("/Content/Materials/Large.omat.json", new string('x', 4096));
+        files.File.SetLastWriteTimeUtc(small.FullPath, new DateTime(2026, 1, 2, 0, 0, 0, DateTimeKind.Utc));
+        files.File.SetLastWriteTimeUtc(large.FullPath, new DateTime(2026, 1, 1, 0, 0, 0, DateTimeKind.Utc));
+        var smallAsset = CreateAsset("/Content/Materials/Small.omat", AssetKind.Material, AssetCookFreshness.Current) with { DescriptorPath = small };
+        var largeAsset = CreateAsset("/Content/Materials/Large.omat", AssetKind.Material, AssetCookFreshness.Current) with { DescriptorPath = large };
+        var missing = CreateAsset("/Content/Materials/Missing.omat", AssetKind.Material, AssetCookFreshness.Current);
+        var presentation = new AssetBrowserPresentation { SortField = AssetSortField.Size };
 
-            _ = presentation.Sort([missing, largeAsset, smallAsset]).Should().Equal(smallAsset, largeAsset, missing);
-            presentation.SortDescending = true;
-            _ = presentation.Sort([missing, smallAsset, largeAsset]).Should().Equal(largeAsset, smallAsset, missing);
-            presentation.SortField = AssetSortField.Modified;
-            _ = presentation.Sort([missing, largeAsset, smallAsset]).Should().Equal(smallAsset, largeAsset, missing);
-            _ = AssetFileFacts.Read(largeAsset).SizeText.Should().Be(AssetFileFacts.FormatSize(4096));
-        }
-        finally
-        {
-            folder.Delete(recursive: true);
-        }
+        _ = presentation.Sort([missing, largeAsset, smallAsset], project.Context).Should().Equal(smallAsset, largeAsset, missing);
+        presentation.SortDescending = true;
+        _ = presentation.Sort([missing, smallAsset, largeAsset], project.Context).Should().Equal(largeAsset, smallAsset, missing);
+        presentation.SortField = AssetSortField.Modified;
+        _ = presentation.Sort([missing, largeAsset, smallAsset], project.Context).Should().Equal(smallAsset, largeAsset, missing);
+        _ = AssetFileFacts.Read(project.Context, largeAsset).SizeText.Should().Be(AssetFileFacts.FormatSize(4096));
     }
 
     /// <summary>Sort changes are announced once; tile sizes stay within the slider range.</summary>
@@ -157,7 +150,9 @@ public sealed class ContentBrowserPresentationTests
     {
         var state = new ContentBrowserState();
         var shell = new RecordingShell();
-        using var details = new AssetDetailsViewModel(state, shell);
+        var projects = new ProjectContextService();
+        projects.Activate(TestProject.Create(new MockFileSystem()).Context);
+        using var details = new AssetDetailsViewModel(state, projects, shell);
         _ = details.IsEmpty.Should().BeTrue();
         _ = details.CopyPathCommand.CanExecute(parameter: null).Should().BeFalse();
 

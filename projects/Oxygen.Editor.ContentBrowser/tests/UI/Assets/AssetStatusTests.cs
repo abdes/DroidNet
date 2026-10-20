@@ -13,7 +13,6 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.Projects;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
@@ -38,7 +37,7 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
         var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        var projects = new ProjectContextService();
+        var projects = CreateQueryProject();
         var state = new ContentBrowserState();
         var hosting = CreateStatusHosting();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, hosting) : new ListLayoutViewModel(provider.Object, projects, state, hosting);

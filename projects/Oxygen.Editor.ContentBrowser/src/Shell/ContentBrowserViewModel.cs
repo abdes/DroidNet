@@ -396,7 +396,7 @@ public sealed partial class ContentBrowserViewModel(
 
     // A new project's scenes are in Content/Scenes, which the browser opens on when it has no saved state.
     private static bool HasScenesFolder(ProjectContext project)
-        => project.Find(ScenesFolder) is { } folder && Directory.Exists(folder.File.FullPath);
+        => project.Find(ScenesFolder) is { } folder && project.FileSystem.Directory.Exists(folder.File.FullPath);
 
     private void OnContentBrowserStateChanged(object? sender, PropertyChangedEventArgs e)
     {

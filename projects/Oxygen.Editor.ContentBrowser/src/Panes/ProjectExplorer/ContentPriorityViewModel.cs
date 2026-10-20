@@ -24,7 +24,7 @@ public sealed partial class ContentPriorityViewModel : ObservableObject
                     var folder = project.LocalFolderMounts.Single(mount => string.Equals(mount.Name, source.Name, StringComparison.Ordinal));
 
                     // A folder without an index holds no cooked content to order yet.
-                    if (File.Exists(Path.Combine(folder.Root.FullPath, "container.index.bin")))
+                    if (project.FileSystem.File.Exists(Path.Combine(folder.Root.FullPath, "container.index.bin")))
                     {
                         this.Sources.Add(new(source, folder.Name, folder.Root.FullPath));
                     }

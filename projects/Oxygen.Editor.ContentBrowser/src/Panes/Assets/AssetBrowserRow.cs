@@ -5,15 +5,18 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Materials;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 
 /// <summary>Keeps one asset's visual container stable while its immutable status snapshot changes.</summary>
 /// <param name="item">The initial asset snapshot.</param>
-public sealed partial class AssetBrowserRow(AssetEntry item) : ObservableObject
+/// <param name="project">The project that holds the asset's files.</param>
+public sealed partial class AssetBrowserRow(AssetEntry item, ProjectContext project) : ObservableObject
 {
     private AssetEntry item = item;
+    private ProjectContext project = project;
     private AssetFileFacts? fileFacts;
     private MaterialPreviewColor? baseColor;
     private bool baseColorRead;
@@ -50,7 +53,7 @@ public sealed partial class AssetBrowserRow(AssetEntry item) : ObservableObject
     }
 
     /// <summary>Gets the size and change time of the asset's file, read once per snapshot.</summary>
-    public AssetFileFacts FileFacts => this.fileFacts ??= AssetFileFacts.Read(this.item);
+    public AssetFileFacts FileFacts => this.fileFacts ??= AssetFileFacts.Read(this.project, this.item);
 
     /// <summary>Gets the asset file size for display.</summary>
     public string SizeText => this.FileFacts.SizeText;
@@ -65,7 +68,7 @@ public sealed partial class AssetBrowserRow(AssetEntry item) : ObservableObject
         {
             if (!this.baseColorRead)
             {
-                this.baseColor = MaterialPreviewColor.TryRead(this.item);
+                this.baseColor = MaterialPreviewColor.TryRead(this.project, this.item);
                 this.baseColorRead = true;
             }
 
@@ -95,15 +98,19 @@ public sealed partial class AssetBrowserRow(AssetEntry item) : ObservableObject
 
     /// <summary>Updates presentation without replacing the row or its selection identity.</summary>
     /// <param name="replacement">The latest snapshot of this asset.</param>
-    internal void Update(AssetEntry replacement)
+    /// <param name="project">The project that holds the asset's files now.</param>
+    internal void Update(AssetEntry replacement, ProjectContext project)
     {
+        ArgumentNullException.ThrowIfNull(project);
         if (this.item.Identity != replacement.Identity)
         {
             throw new ArgumentException("A row can only update its own asset identity.", nameof(replacement));
         }
 
         var previousKind = this.item.Kind;
-        if (!this.SetProperty(ref this.item, replacement, nameof(this.Item)))
+        var projectChanged = !ReferenceEquals(this.project, project);
+        this.project = project;
+        if (!this.SetProperty(ref this.item, replacement, nameof(this.Item)) && !projectChanged)
         {
             return;
         }

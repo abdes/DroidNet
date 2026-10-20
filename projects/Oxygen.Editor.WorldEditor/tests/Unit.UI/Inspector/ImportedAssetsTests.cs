@@ -50,7 +50,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         var projects = CreateQueryProject();
         var state = new ContentBrowserState();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
-        using var details = new AssetDetailsViewModel(state, Mock.Of<IAssetShell>());
+        using var details = new AssetDetailsViewModel(state, projects, Mock.Of<IAssetShell>());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {

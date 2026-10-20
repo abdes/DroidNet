@@ -237,7 +237,7 @@ public sealed partial class SceneImportDialogViewModel : ObservableObject
         {
             var name = this.Name?.Trim() ?? string.Empty;
             var bundle = ImportSourceRetention.ResolveDestination(this.project, ImportDestination.Parse(this.DestinationFolder ?? string.Empty), name);
-            if (!this.IsProjectSource() && Directory.Exists(bundle))
+            if (!this.IsProjectSource() && this.project.FileSystem.Directory.Exists(bundle))
             {
                 this.HasCollision = true;
                 this.Error = string.Empty;

@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
+using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentBrowser;
 
@@ -70,11 +71,13 @@ public sealed partial class AssetBrowserPresentation : ObservableObject
 
     /// <summary>Orders rows by the current field and direction, ties by name and then identity.</summary>
     /// <param name="items">The rows to order.</param>
+    /// <param name="project">The project that holds the rows' files, read when sorting by size or change time.</param>
     /// <returns>The ordered rows.</returns>
-    public IReadOnlyList<AssetEntry> Sort(IEnumerable<AssetEntry> items)
+    public IReadOnlyList<AssetEntry> Sort(IEnumerable<AssetEntry> items, ProjectContext project)
     {
         ArgumentNullException.ThrowIfNull(items);
-        var keyed = items.Select(item => (Item: item, Facts: this.SortField is AssetSortField.Size or AssetSortField.Modified ? AssetFileFacts.Read(item) : default)).ToList();
+        ArgumentNullException.ThrowIfNull(project);
+        var keyed = items.Select(item => (Item: item, Facts: this.SortField is AssetSortField.Size or AssetSortField.Modified ? AssetFileFacts.Read(project, item) : default)).ToList();
         keyed.Sort((left, right) =>
         {
             var order = this.CompareField(left.Item, left.Facts, right.Item, right.Facts);

@@ -353,7 +353,7 @@ public partial class AssetsViewModel(
         }
         else if (args.InvokedItem is { Kind: AssetKind.ForeignSource, SourcePath: { } sourcePath } && projectContextService.ActiveProject is { } project)
         {
-            if (File.Exists(sourcePath.FullPath + NativeSceneImportSettings.SidecarSuffix))
+            if (project.FileSystem.File.Exists(sourcePath.FullPath + NativeSceneImportSettings.SidecarSuffix))
             {
                 await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(args.InvokedItem.Identity, project, CancellationToken.None)).ConfigureAwait(true);
             }

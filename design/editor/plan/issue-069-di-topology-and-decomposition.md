@@ -530,14 +530,15 @@ needs instead of a `WindowId`. Every slice follows decision 9.
     `new AssetFeed` (12) and 15 `new CookDependencyDiscovery` (3). The shared
     host-equivalent builder constructs them from registrations instead.
   - A project's files are read through `ProjectContext.FileSystem`; code that
-    holds a project takes no second file system for them. Relocation and the
-    cook's reads of authored sources do. Editor source still uses
-    `File`/`Directory` statics in 56 files. The 30 in ContentPipeline are the
-    cook's native side (input snapshots, staging, publication, cooked roots and
-    the cross-process leases), which the native tools and other processes share
-    on the real disk. Of the rest, those that read project files move to the
-    project's file system. About 30 unit test files make their own `%TEMP%`
-    root for that reason. Unifying Storage and `IFileSystem` is a
+    holds a project takes no second file system for them. Editor source still
+    uses `File`/`Directory` statics in 44 files. The 30 in ContentPipeline are
+    the cook's native side (input snapshots, staging, publication, cooked roots
+    and the cross-process leases), which the native tools and other processes
+    share on the real disk. The rest read no project files through them (SDK
+    schemas, the player, paths the user picks outside the project, the shell)
+    except the Content Browser's folder tree, which is built on Storage. About
+    30 unit test files make their own `%TEMP%` root, mostly for those native
+    paths. Unifying Storage and `IFileSystem` is a
     separate decision, not part of #69.
   - About 45 test files assert message, tooltip or title text.
   - View models with long hand-wired constructors spread every new dependency

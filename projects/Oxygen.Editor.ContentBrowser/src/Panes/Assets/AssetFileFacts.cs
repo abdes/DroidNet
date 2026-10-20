@@ -4,11 +4,12 @@
 
 using System.Globalization;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
 
-/// <summary>The size and change time of the file that holds an asset, read from disk without loading it.</summary>
+/// <summary>The size and change time of the file that holds an asset, read from the project without loading it.</summary>
 /// <param name="Path">The authored descriptor, source or cooked file, or null when the asset has none.</param>
 /// <param name="Size">The file size in bytes, or null when unknown.</param>
 /// <param name="Modified">When the file last changed, or null when unknown.</param>
@@ -31,10 +32,12 @@ public readonly record struct AssetFileFacts(string? Path, long? Size, DateTimeO
     }
 
     /// <summary>Reads the current facts for an asset's file.</summary>
+    /// <param name="project">The project that holds the file.</param>
     /// <param name="asset">The asset.</param>
     /// <returns>The facts; size and time are null when the file is missing or unreadable.</returns>
-    public static AssetFileFacts Read(AssetEntry asset)
+    public static AssetFileFacts Read(ProjectContext project, AssetEntry asset)
     {
+        ArgumentNullException.ThrowIfNull(project);
         var path = GetPath(asset);
         if (path is null)
         {
@@ -43,7 +46,7 @@ public readonly record struct AssetFileFacts(string? Path, long? Size, DateTimeO
 
         try
         {
-            var file = new FileInfo(path.FullPath);
+            var file = project.FileSystem.FileInfo.New(path.FullPath);
             return file.Exists ? new(path.FullPath, file.Length, file.LastWriteTimeUtc) : new(path.FullPath, null, null);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)

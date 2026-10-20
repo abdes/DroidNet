@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
@@ -26,7 +27,7 @@ internal static class MountChange
             throw new InvalidOperationException("A content mount change must stay within the active project.");
         }
 
-        Validate(candidate);
+        Validate(expected.FileSystem, candidate);
         return ProjectContext.FromProjectInfo(candidate, expected.FileSystem) with
         {
             OpenInitialScene = expected.OpenInitialScene,
@@ -85,7 +86,7 @@ internal static class MountChange
         }
     }
 
-    private static void Validate(ProjectInfo candidate)
+    private static void Validate(IFileSystem fileSystem, ProjectInfo candidate)
     {
         var names = candidate.AuthoringMounts.Select(static mount => mount.Name)
             .Concat(candidate.LocalFolderMounts.Select(static mount => mount.Name))
@@ -105,7 +106,7 @@ internal static class MountChange
 
         foreach (var folder in candidate.LocalFolderMounts)
         {
-            if (!Directory.Exists(folder.Root.FullPath))
+            if (!fileSystem.Directory.Exists(folder.Root.FullPath))
             {
                 throw new DirectoryNotFoundException($"Local folder '{folder.Name}' is unavailable: {folder.Root}.");
             }
@@ -118,7 +119,7 @@ internal static class MountChange
                 throw new InvalidDataException($"Pak file mount '{pak.Name}' must name a .pak file: {pak.Path}.");
             }
 
-            if (!File.Exists(pak.Path.FullPath))
+            if (!fileSystem.File.Exists(pak.Path.FullPath))
             {
                 throw new FileNotFoundException($"Pak file '{pak.Name}' is unavailable: {pak.Path}.", pak.Path.FullPath);
             }

@@ -2,16 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Assets.Materials;
-using Oxygen.Editor.Assets.TestSupport;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
 
@@ -132,14 +134,14 @@ public sealed class AssetRuleTests
     [TestMethod]
     public void AMaterialPreviewReadsItsDescriptorsBaseColor()
     {
-        using var workspace = new AssetWorkspace();
-        var path = workspace.SourcePath("Content/Materials/Wood.omat.json");
-        WriteMaterial(path, 0.2f, 0.3f, 0.4f, 1.0f);
+        var project = TestProject.Create(new MockFileSystem());
+        var path = project.PathOf("/Content/Materials/Wood.omat.json");
+        WriteMaterial(project.Context.FileSystem, path.FullPath, 0.2f, 0.3f, 0.4f, 1.0f);
 
-        var preview = MaterialPreviewColor.TryRead(Entry(Wood) with { DescriptorPath = FileSystemPath.From(path) });
+        var preview = MaterialPreviewColor.TryRead(project.Context, Entry(Wood) with { DescriptorPath = path });
 
         _ = preview.Should().Be(new MaterialPreviewColor(0.2f, 0.3f, 0.4f, 1.0f));
-        _ = MaterialPreviewColor.TryRead(Entry(Stone, AssetState.Broken, selectable: false) with { DescriptorPath = FileSystemPath.From(path) }).Should().BeNull();
+        _ = MaterialPreviewColor.TryRead(project.Context, Entry(Stone, AssetState.Broken, selectable: false) with { DescriptorPath = path }).Should().BeNull();
     }
 
     private static AssetEntry Entry(AssetPath identity, AssetState state = AssetState.Descriptor, AssetKind kind = AssetKind.Material, bool selectable = true)
@@ -161,10 +163,10 @@ public sealed class AssetRuleTests
     private static AssetCookStatus Status(AssetPath identity, bool available)
         => new(identity, available ? AssetCookFreshness.Current : AssetCookFreshness.NeedsCooking, available, available ? CookedOutputAvailability.Present : CookedOutputAvailability.Unknown, [], [], []);
 
-    private static void WriteMaterial(string path, float r, float g, float b, float a)
+    private static void WriteMaterial(IFileSystem fileSystem, string path, float r, float g, float b, float a)
     {
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        using var stream = File.Create(path);
+        _ = fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var stream = fileSystem.File.Create(path);
         MaterialSourceWriter.Write(
             stream,
             new MaterialSource(

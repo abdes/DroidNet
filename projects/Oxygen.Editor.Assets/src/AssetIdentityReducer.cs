@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using System.Security.Cryptography;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
@@ -170,9 +171,9 @@ internal sealed class AssetIdentityReducer
 
         if (descriptor is not null)
         {
-            (primaryState, derivedState) = this.ReadDescriptorState(descriptorPath, cookedPath, diagnostics);
+            (primaryState, derivedState) = this.ReadDescriptorState(project.FileSystem, descriptorPath, cookedPath, diagnostics);
         }
-        else if (cooked is not null && (cookedPath is null || !File.Exists(cookedPath.FullPath)))
+        else if (cooked is not null && (cookedPath is null || !project.FileSystem.File.Exists(cookedPath.FullPath)))
         {
             primaryState = AssetState.Broken;
             diagnostics.Add(cookedPath is null ? AssetIdentityDiagnosticCodes.DescriptorBroken : AssetIdentityDiagnosticCodes.CookedMissing);
@@ -198,7 +199,7 @@ internal sealed class AssetIdentityReducer
         };
     }
 
-    private bool CanReadMaterialDescriptor(FileSystemPath descriptorPath)
+    private bool CanReadMaterialDescriptor(IFileSystem fileSystem, FileSystemPath descriptorPath)
     {
         if (!descriptorPath.Name.EndsWith(AssetFileTypes.Material + AssetFileTypes.DescriptorSuffix, StringComparison.Ordinal))
         {
@@ -208,7 +209,7 @@ internal sealed class AssetIdentityReducer
         byte[] bytes;
         try
         {
-            bytes = File.ReadAllBytes(descriptorPath.FullPath);
+            bytes = fileSystem.File.ReadAllBytes(descriptorPath.FullPath);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -244,9 +245,9 @@ internal sealed class AssetIdentityReducer
         return canRead;
     }
 
-    private (AssetState primary, AssetState? derived) ReadDescriptorState(FileSystemPath? descriptorPath, FileSystemPath? cookedPath, List<string> diagnostics)
+    private (AssetState primary, AssetState? derived) ReadDescriptorState(IFileSystem fileSystem, FileSystemPath? descriptorPath, FileSystemPath? cookedPath, List<string> diagnostics)
     {
-        if (descriptorPath is null || !File.Exists(descriptorPath.FullPath) || !this.CanReadMaterialDescriptor(descriptorPath))
+        if (descriptorPath is null || !fileSystem.File.Exists(descriptorPath.FullPath) || !this.CanReadMaterialDescriptor(fileSystem, descriptorPath))
         {
             diagnostics.Add(AssetIdentityDiagnosticCodes.DescriptorBroken);
             return (AssetState.Broken, null);
@@ -257,7 +258,7 @@ internal sealed class AssetIdentityReducer
             return (AssetState.Descriptor, null);
         }
 
-        if (!File.Exists(cookedPath.FullPath))
+        if (!fileSystem.File.Exists(cookedPath.FullPath))
         {
             diagnostics.Add(AssetIdentityDiagnosticCodes.CookedMissing);
             return (AssetState.Descriptor, null);

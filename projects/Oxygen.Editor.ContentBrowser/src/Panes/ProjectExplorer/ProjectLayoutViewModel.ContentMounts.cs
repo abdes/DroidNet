@@ -135,7 +135,7 @@ public partial class ProjectLayoutViewModel
             return;
         }
 
-        ApplyMountRows(expected, candidate, model.Mounts, static folder => File.Exists(Path.Combine(folder, "container.index.bin")));
+        ApplyMountRows(expected, candidate, model.Mounts, folder => expected.FileSystem.File.Exists(Path.Combine(folder, "container.index.bin")));
         if (candidate.AuthoringMounts.SequenceEqual(expected.AuthoringMounts) && candidate.LocalFolderMounts.SequenceEqual(expected.LocalFolderMounts)
             && candidate.PakFileMounts.SequenceEqual(expected.PakFileMounts))
         {

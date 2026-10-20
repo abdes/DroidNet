@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.Assets.Materials;
 
@@ -15,7 +16,8 @@ namespace Oxygen.Editor.Assets.Materials;
 public sealed record MaterialPreviewColor(float R, float G, float B, float A)
 {
     /// <summary>Reads a material asset's base colour from its saved descriptor, re-reading only after it changes.</summary>
+    /// <param name="project">The project that holds the asset's descriptor.</param>
     /// <param name="asset">The asset whose swatch is shown.</param>
     /// <returns>The base colour, or <see langword="null"/> for other kinds and for missing or unreadable descriptors.</returns>
-    public static MaterialPreviewColor? TryRead(AssetEntry asset) => MaterialPreviewReader.Read(asset);
+    public static MaterialPreviewColor? TryRead(ProjectContext project, AssetEntry asset) => MaterialPreviewReader.Read(project, asset);
 }

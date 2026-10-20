@@ -10,6 +10,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -26,6 +27,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     private const char PathBreak = '​';
 
     private readonly ContentBrowserState state;
+    private readonly IProjectContextService projects;
     private readonly IAssetShell shell;
     private readonly Relocation.IAssetRelocationWorkflow? relocation;
     private readonly IScripts? scripts;
@@ -35,6 +37,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
 
     /// <summary>Initializes a new instance of the <see cref="AssetDetailsViewModel"/> class.</summary>
     /// <param name="state">The browser state that publishes the selection.</param>
+    /// <param name="projects">The active project, which holds the selected assets' files.</param>
     /// <param name="shell">The clipboard and File Explorer actions.</param>
     /// <param name="relocation">Finds the content that uses the selected asset; without it no referrers are shown.</param>
     /// <param name="scripts">The scripts, which supply a script's parameters and problems.</param>
@@ -42,12 +45,14 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     /// thread that raises them.</param>
     public AssetDetailsViewModel(
         ContentBrowserState state,
+        IProjectContextService projects,
         IAssetShell shell,
         Relocation.IAssetRelocationWorkflow? relocation = null,
         IScripts? scripts = null,
         HostingContext? hosting = null)
     {
         this.state = state;
+        this.projects = projects;
         this.shell = shell;
         this.relocation = relocation;
         this.scripts = scripts;
@@ -203,10 +208,12 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
 
     private void Refresh()
     {
-        var assets = this.state.SelectedAssets;
-        if (assets is [var asset])
+        // The details read the selected assets' files from the active project; without one nothing is selected.
+        var project = this.projects.ActiveProject;
+        var assets = project is null ? [] : this.state.SelectedAssets;
+        if (project is not null && assets is [var asset])
         {
-            var row = new AssetBrowserRow(asset);
+            var row = new AssetBrowserRow(asset, project);
             this.Asset = asset;
             this.Row = row;
             this.Title = asset.DisplayName;
@@ -221,9 +228,9 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
             this.Title = assets.Count == 0 ? "No selection" : string.Create(CultureInfo.CurrentCulture, $"{assets.Count} assets selected");
             this.Description = assets.Count == 0 ? "Select an asset to see its details." : string.Empty;
             this.Facts = assets.Count == 0 ? [] : BuildSummaryFacts(assets);
-            this.SelectedItems = [.. assets.Select(static asset => new AssetInformationFact(
+            this.SelectedItems = project is null ? [] : [.. assets.Select(asset => new AssetInformationFact(
                 asset.DisplayName,
-                string.Join(" · ", new[] { asset.TypeDisplayName, AssetFileFacts.Read(asset).SizeText }.Where(static part => part.Length > 0))))];
+                string.Join(" · ", new[] { asset.TypeDisplayName, AssetFileFacts.Read(project, asset).SizeText }.Where(static part => part.Length > 0))))];
         }
 
         _ = this.RefreshReferrersAsync(assets is [var single] ? single.Identity : null);

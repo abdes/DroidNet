@@ -29,7 +29,8 @@ public partial class AssetsViewModel
     internal string? FindCodeSource(AssetEntry asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        return asset is { Kind: AssetKind.Script or AssetKind.InputFile, SourcePath: { } source } && File.Exists(source.FullPath)
+        return asset is { Kind: AssetKind.Script or AssetKind.InputFile, SourcePath: { } source }
+            && projectContextService.ActiveProject is { } project && project.FileSystem.File.Exists(source.FullPath)
             ? source.FullPath
             : null;
     }

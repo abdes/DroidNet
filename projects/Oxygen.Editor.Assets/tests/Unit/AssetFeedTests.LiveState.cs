@@ -41,7 +41,9 @@ public sealed partial class AssetFeedTests
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = sourceHash }]);
         });
         var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, documents, EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
+        var projects = workspace.ActivateProject();
+        var project = projects.ActiveProject!;
+        using var provider = new AssetFeed(catalog, projects, new WorkspaceCookScopeProvider(workspace), reader, documents, EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(
@@ -49,7 +51,7 @@ public sealed partial class AssetFeedTests
             this.TestContext.CancellationToken);
         provider.Assets(AssetRule.For(AssetKind.Material)).Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => choices = value), this.TestContext.CancellationToken);
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var preview = MaterialPreviewColor.TryRead(choices.Single(choice => choice.Identity == identity));
+        var preview = MaterialPreviewColor.TryRead(project, choices.Single(choice => choice.Identity == identity));
         _ = preview.Should().NotBeNull();
         var lockedSource = new FileStream(path.FullPath, FileMode.Open, FileAccess.Read, FileShare.None);
         await using var lockedSourceLifetime = lockedSource.ConfigureAwait(false);
@@ -63,7 +65,7 @@ public sealed partial class AssetFeedTests
         owner.Dispose();
         _ = rows.Single().PrimaryBadge.Should().Be("Cooked");
         _ = AssetStatusText.ForEntry(choices.Single(choice => choice.Identity == identity)).Should().Be("Cooked");
-        _ = MaterialPreviewColor.TryRead(choices.Single(choice => choice.Identity == identity)).Should().Be(preview);
+        _ = MaterialPreviewColor.TryRead(project, choices.Single(choice => choice.Identity == identity)).Should().Be(preview);
         _ = reads.Should().Be(1);
     }
 
