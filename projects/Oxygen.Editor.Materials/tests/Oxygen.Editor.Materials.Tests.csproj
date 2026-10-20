@@ -15,5 +15,6 @@
 
     <ItemGroup>
         <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
     </ItemGroup>
 </Project>

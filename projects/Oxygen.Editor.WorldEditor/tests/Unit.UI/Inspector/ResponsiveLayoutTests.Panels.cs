@@ -164,7 +164,8 @@ internal sealed partial class ResponsiveLayoutTests
     public Task MaterialHeaderKeepsStatusBesideTheTitleAndActionsInside(double width, double rasterizationScale) => EnqueueAsync(async () =>
     {
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateStatusAsset(0) with { Identity = AssetPath.Parse("/Content/Materials/UI.omat") }]);
-        using var model = CreateMaterialEditor(MaterialStatusTests.StatusProvider(updates));
+        using var material = CreateMaterialEditor(MaterialStatusTests.StatusProvider(updates));
+        var model = material.Editor;
         var view = new MaterialEditorView { ViewModel = model, Width = width, Height = 600 };
         using var scaledHost = new ScaledXamlHost();
         await scaledHost.LoadAsync(view, rasterizationScale, this.TestContext.CancellationToken).ConfigureAwait(true);

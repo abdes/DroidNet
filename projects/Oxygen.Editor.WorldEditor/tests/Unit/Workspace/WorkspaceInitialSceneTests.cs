@@ -24,9 +24,9 @@ public sealed class WorkspaceInitialSceneTests
     {
         using var scenes = CreateScenes();
 
-        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, "Alpha").ConfigureAwait(false))!.File.Should().Be(scenes.PathOf("Alpha"));
-        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, "Beta.oscene.json").ConfigureAwait(false))!.File.Should().Be(scenes.PathOf("Beta"));
-        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, GammaId.Value.ToString("D")).ConfigureAwait(false))!.File.Should().Be(scenes.PathOf("Levels/Gamma"));
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, "Alpha", scenes.FileSystem).ConfigureAwait(false))!.File.Should().Be(scenes.PathOf("Alpha"));
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, "Beta.oscene.json", scenes.FileSystem).ConfigureAwait(false))!.File.Should().Be(scenes.PathOf("Beta"));
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, GammaId.Value.ToString("D"), scenes.FileSystem).ConfigureAwait(false))!.File.Should().Be(scenes.PathOf("Levels/Gamma"));
     }
 
     [TestMethod]
@@ -34,9 +34,9 @@ public sealed class WorkspaceInitialSceneTests
     {
         using var scenes = CreateScenes();
 
-        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, "   ").ConfigureAwait(false)).Should().BeNull();
-        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, "Not a scene").ConfigureAwait(false)).Should().BeNull();
-        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, Guid.NewGuid().ToString("D")).ConfigureAwait(false)).Should().BeNull();
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, "   ", scenes.FileSystem).ConfigureAwait(false)).Should().BeNull();
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, "Not a scene", scenes.FileSystem).ConfigureAwait(false)).Should().BeNull();
+        _ = (await WorkspaceViewModel.ResolveSceneByNameOrIdAsync(CatalogOf(scenes), scenes.Context, Guid.NewGuid().ToString("D"), scenes.FileSystem).ConfigureAwait(false)).Should().BeNull();
     }
 
     [TestMethod]
@@ -44,7 +44,7 @@ public sealed class WorkspaceInitialSceneTests
     {
         using var scenes = CreateScenes();
 
-        var initial = await WorkspaceViewModel.ResolveInitialSceneAsync(CatalogOf(scenes), scenes.Context with { DefaultSceneId = GammaId }).ConfigureAwait(false);
+        var initial = await WorkspaceViewModel.ResolveInitialSceneAsync(CatalogOf(scenes), scenes.Context with { DefaultSceneId = GammaId }, scenes.FileSystem).ConfigureAwait(false);
 
         _ = initial.Should().Be(scenes.FileOf("Levels/Gamma").Asset);
     }
@@ -55,7 +55,7 @@ public sealed class WorkspaceInitialSceneTests
         using var scenes = CreateScenes();
         var requested = scenes.FileOf("Beta").Asset;
 
-        var initial = await WorkspaceViewModel.ResolveInitialSceneAsync(CatalogOf(scenes), scenes.Context with { DefaultSceneId = AlphaId, InitialScene = requested }).ConfigureAwait(false);
+        var initial = await WorkspaceViewModel.ResolveInitialSceneAsync(CatalogOf(scenes), scenes.Context with { DefaultSceneId = AlphaId, InitialScene = requested }, scenes.FileSystem).ConfigureAwait(false);
 
         _ = initial.Should().Be(requested);
     }
@@ -65,8 +65,8 @@ public sealed class WorkspaceInitialSceneTests
     {
         using var scenes = CreateScenes();
 
-        _ = (await WorkspaceViewModel.ResolveInitialSceneAsync(CatalogOf(scenes), scenes.Context with { DefaultSceneId = SceneId.New() }).ConfigureAwait(false)).Should().BeNull();
-        _ = (await WorkspaceViewModel.ResolveInitialSceneAsync(CatalogOf(scenes), scenes.Context).ConfigureAwait(false)).Should().BeNull();
+        _ = (await WorkspaceViewModel.ResolveInitialSceneAsync(CatalogOf(scenes), scenes.Context with { DefaultSceneId = SceneId.New() }, scenes.FileSystem).ConfigureAwait(false)).Should().BeNull();
+        _ = (await WorkspaceViewModel.ResolveInitialSceneAsync(CatalogOf(scenes), scenes.Context, scenes.FileSystem).ConfigureAwait(false)).Should().BeNull();
     }
 
     private static SceneDocumentFiles CreateScenes()

@@ -9,6 +9,7 @@
 
     <ItemGroup>
         <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
         <ProjectReference Include="..\src\Oxygen.Editor.MaterialEditor.csproj" />
         <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
         <Compile Include="..\..\Oxygen.Editor.ContentPipeline\testsupport\Native\NativeContentPipelineFixture.cs" Link="NativeContentPipelineFixture.cs" />

@@ -22,7 +22,8 @@ shows them. It holds no view, view model or dialog.
   the actions of another. Its events are raised on each subscriber's context.
 - `InputSourceFiles` finds a source's file from its identity and reads it as
   the cooker will; the cook reads the saved file through it.
-- `InputTemplates.New` is the text of a new input source.
+- `InputTemplates.New` is the text of a new input source, and
+  `InputTemplates.Asset` the template New Input File creates it from.
 
 Files are read through `IFileSystem`, so the tests run on an in-memory file
 system. `Oxygen.Editor.Input.Testing` gives other modules' tests

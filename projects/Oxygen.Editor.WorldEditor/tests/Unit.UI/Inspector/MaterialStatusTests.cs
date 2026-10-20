@@ -34,7 +34,8 @@ internal sealed class MaterialStatusTests : DroidNet.Tests.VisualUserInterfaceTe
             Identity = AssetPath.Parse("/Content/Materials/UI.omat"),
         };
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
-        using var model = CreateMaterialEditor(StatusProvider(updates));
+        using var material = CreateMaterialEditor(StatusProvider(updates));
+        var model = material.Editor;
         var view = new MaterialEditorView { ViewModel = model, Width = 920, Height = 600 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var label = (TextBlock)view.FindName("CookStatus");

@@ -6,7 +6,6 @@ using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using DroidNet.Routing;
-using DroidNet.Storage.Native;
 using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Moq;
@@ -22,7 +21,6 @@ using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using Testably.Abstractions;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -148,7 +146,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
         fixture.FirstDocument.History.AddChange("Edit", static () => { });
-        File.Delete(fixture.Files.PathOf("Second").FullPath);
+        fixture.Files.FileSystem.File.Delete(fixture.Files.PathOf("Second").FullPath);
 
         _ = (await fixture.Manager.OpenSceneAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeFalse();
 
@@ -255,7 +253,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
             this.close = new DocumentCloseCoordinator(this.CreateClosePrompt(), Mock.Of<IOperationResultPublisher>());
             this.Documents = new EditorDocumentService(closeCoordinator: this.close);
             var selection = new SceneSelectionService();
-            this.Files = new SceneDocumentFiles(this.Store);
+            this.Files = new SceneDocumentFiles();
             this.Contexts.Activate(this.Files.Context);
             this.Files.Write("First", SceneDocumentFiles.Data(SceneId.New(), "First", "Node"));
             this.Files.Write("Second", SceneDocumentFiles.Data(SceneId.New(), "Second", "Destination"));
@@ -287,7 +285,7 @@ public sealed partial class DocumentManagerSceneLifetimeTests
 
         public WindowId Window { get; } = new(73);
 
-        public GatedFileStore Store { get; } = new(new NativeAtomicFileStore(new RealFileSystem()));
+        public GatedFileStore Store => this.Files.Store;
 
         public SceneDocumentFiles Files { get; }
 

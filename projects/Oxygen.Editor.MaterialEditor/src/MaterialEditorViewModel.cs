@@ -479,7 +479,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private async Task CookAsync()
     {
         if (this.projects.ActiveProject is not { } project
-            || project.FindSource(this.document.File.Asset) is not { IsMountRoot: false } location)
+            || project.FindSource(this.document.File.Asset, this.fileSystem) is not { IsMountRoot: false } location)
         {
             this.StatusText = "The material is not in the active project and cannot be cooked.";
             return;

@@ -1,9 +1,8 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0 and S1.1 to S1.7 (Assets, Cook on change,
+Status: `in progress` — Phase 0 and S1.1 to S1.8 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
-Scenes, LivePreview) are done; S1.8 is in progress (Textures, Input and Scripting have landed; see the ledger in section 6). Phase 1
-follows
+Scenes, LivePreview, Asset family modules) are done; see the ledger in section 6. Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -389,12 +388,14 @@ needs instead of a `WindowId`. Every slice follows decision 9.
        Unit takes `ScriptSlotEditsTests`; WorldEditor keeps
        `ScriptingViewModelTests` and `ProblemsViewModelTests` over fakes of the
        ports; LivePreview Integration.UI tests `NativeScriptAnalyzer`.
-  5. **Templates.** `AuthoredAssetTemplate` replaces ContentPipeline
+  5. **Templates.** `AuthoredAssetTemplate` (Projects) replaces ContentPipeline
      `Authoring/AuthoredAssetKind.cs` and `AssetTemplates.cs`;
      `ScriptTemplates`, `InputTemplates`, `MaterialTemplates` and
-     `SceneTemplates` own the texts; `Authoring/AssetAuthoring.cs` and
-     ContentBrowser `Authoring/AuthoredAssetCreation.cs` take a template;
-     `ScriptAuthoringTests` follow.
+     `SceneTemplates` own the texts and each family's template;
+     `Authoring/AssetAuthoring.cs` and ContentBrowser
+     `Authoring/AuthoredAssetCreation.cs` take a template. `AssetAuthoringTests`
+     run over the family templates; the scene and material content checks move
+     to Scenes and Materials tests.
 
   Gate: the tests of LLD section 14 and the reviewer's editor build and check
   (script cards, Play section, Problems with analysis and runtime problems, the
@@ -639,8 +640,8 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.5 Document kinds                         | `done`        |                                                              |
 | S1.6 Scenes                                 | `done`        |                                                              |
 | S1.7 LivePreview                            | `done`        |                                                              |
-| S1.8 Asset family modules                   | `in progress` | See the sub-slice table below                                |
-| S1.9 Cook on change over checked inputs     | `not started` | Needs S1.8 facts                                             |
+| S1.8 Asset family modules                   | `done`        | See the sub-slice table below                                |
+| S1.9 Cook on change over checked inputs     | `not started` |                                                              |
 | S1.10 Shell                                 | `not started` |                                                              |
 | S1.11 Unsaved documents                     | `not started` | Needs S1.10                                                  |
 | S1.12 Features                              | `not started` | One row per feature when it starts                           |
@@ -656,13 +657,13 @@ that lands the work. Checked against the tree on 2026-10-20.
 
 ### S1.8 sub-slices
 
-| #   | Commit         | Status        | Notes                                                             |
-| --- | -------------- | ------------- | ----------------------------------------------------------------- |
-| 1   | Problem source | `done`        | Landed with Input, its first implementer                          |
-| 2   | Textures       | `done`        | Pilot of the S1.15 test practice                                  |
-| 3   | Input          | `done`        | Landed before the Problems panel worked over every problem source |
-| 4   | Scripting      | `done`        | Scene slot edits name a slot by `ScriptSlotId`                    |
-| 5   | Templates      | `not started` | No `AuthoredAssetTemplate`                                        |
+| #   | Commit         | Status | Notes                                                             |
+| --- | -------------- | ------ | ----------------------------------------------------------------- |
+| 1   | Problem source | `done` | Landed with Input, its first implementer                          |
+| 2   | Textures       | `done` | Pilot of the S1.15 test practice                                  |
+| 3   | Input          | `done` | Landed before the Problems panel worked over every problem source |
+| 4   | Scripting      | `done` | Scene slot edits name a slot by `ScriptSlotId`                    |
+| 5   | Templates      | `done` | `AuthoredAssetTemplate` lives in Projects, below every family     |
 
 Landed before the sub-slices, as part of the same direction: Materials module,
 checked URIs, source-collision reporting from the cook (`5d5c2bc0e`).

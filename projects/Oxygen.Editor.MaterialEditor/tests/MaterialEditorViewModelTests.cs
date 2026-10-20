@@ -107,7 +107,7 @@ public sealed partial class MaterialEditorViewModelTests
         await editor.PrepareForCloseAsync().ConfigureAwait(false);
         _ = (await editor.SaveForCloseAsync().ConfigureAwait(false)).Should().BeTrue();
 
-        var saved = MaterialSourceReader.Read(await File.ReadAllBytesAsync(materials.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false));
+        var saved = MaterialSourceReader.Read(await materials.FileSystem.File.ReadAllBytesAsync(MaterialDocuments.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = saved.PbrMetallicRoughness.MetallicFactor.Should().Be(0.4f);
     }
 
@@ -140,14 +140,14 @@ public sealed partial class MaterialEditorViewModelTests
         _ = materials.Edits.SetTexture(document, "base_color", AssetPath.Parse("/Content/Textures/Bark.otex"));
         _ = await document.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         using var editor = materials.EditorOf(document);
-        File.Move(materials.PathOf("Wood"), materials.PathOf("Oak"));
+        materials.FileSystem.File.Move(MaterialDocuments.PathOf("Wood"), MaterialDocuments.PathOf("Oak"));
 
         await document.FollowRelocationAsync(
-            new DocumentRelocation(materials.FileOf("Oak"), document.Version, static texture => AssetPath.Parse(texture.VirtualPath.Replace("/Bark.", "/Oak.", StringComparison.Ordinal))),
+            new DocumentRelocation(MaterialDocuments.FileOf("Oak"), document.Version, static texture => AssetPath.Parse(texture.VirtualPath.Replace("/Bark.", "/Oak.", StringComparison.Ordinal))),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = editor.DisplayName.Should().Be("Oak");
-        _ = editor.MaterialUriText.Should().Be(materials.FileOf("Oak").Asset.ToUriString());
+        _ = editor.MaterialUriText.Should().Be(MaterialDocuments.FileOf("Oak").Asset.ToUriString());
         _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be(AssetPath.Parse("/Content/Textures/Oak.otex"));
         _ = editor.IsDirty.Should().BeFalse();
     }
@@ -176,6 +176,6 @@ public sealed partial class MaterialEditorViewModelTests
             await Task.Delay(10).ConfigureAwait(false);
         }
 
-        _ = document.History.UndoStack.Count.Should().Be(entries);
+        _ = document.History.UndoStack.Should().HaveCount(entries);
     }
 }

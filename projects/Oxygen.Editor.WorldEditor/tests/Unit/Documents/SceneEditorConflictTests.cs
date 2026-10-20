@@ -5,7 +5,6 @@
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
-using DroidNet.Storage.Native;
 using DroidNet.TimeMachine;
 using DryIoc;
 using Microsoft.UI;
@@ -22,7 +21,6 @@ using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using Testably.Abstractions;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
@@ -132,14 +130,13 @@ public sealed partial class SceneEditorConflictTests
         /// <returns>The fixture.</returns>
         public static async Task<Fixture> CreateAsync(TestContext test, bool active, World.Workspace.PreviewSettingsService? previewSettings = null, Action? commitInput = null, bool synchronized = false)
         {
-            var store = new GatedFileStore(new NativeAtomicFileStore(new RealFileSystem()));
-            var files = new SceneDocumentFiles(store);
+            var files = new SceneDocumentFiles();
             var id = SceneId.New();
             files.Write("Main", SceneDocumentFiles.Data(id, "Main"));
             var (document, _) = await files.OpenAsync("Main", test.CancellationToken).ConfigureAwait(false);
             document.History.AddChange("Edit", static () => { });
             files.Write("Main", SceneDocumentFiles.Data(id, "Main", "Outside"));
-            var fixture = new Fixture(store, files, document);
+            var fixture = new Fixture(files.Store, files, document);
             fixture.CreateEditor(active, previewSettings, commitInput, synchronized);
             return fixture;
         }

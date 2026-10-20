@@ -4,53 +4,51 @@
 
 using System.Text.Json;
 using AwesomeAssertions;
-using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Moq;
-using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Materials;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
-using Testably.Abstractions;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
 
-/// <summary>Scene and material files in the Content mount of a temporary project, opened as documents of their kinds.</summary>
+/// <summary>Scene and material files in the Content mount of an in-memory project, opened as documents of their kinds.</summary>
 internal sealed partial class SceneDocumentFiles : IDisposable
 {
-    private readonly string root = Path.Combine(Path.GetTempPath(), "OxygenSceneDocumentTests", Guid.NewGuid().ToString("N"));
+    private readonly TestProject project;
 
     /// <summary>Initializes a new instance of the <see cref="SceneDocumentFiles"/> class.</summary>
-    /// <param name="store">The file store documents read and write through, or the real one.</param>
     /// <param name="interaction">The lock and hide state the opened scenes' edits respect, if any.</param>
-    public SceneDocumentFiles(IAtomicFileStore? store = null, ISceneNodeInteraction? interaction = null)
+    public SceneDocumentFiles(ISceneNodeInteraction? interaction = null)
     {
-        _ = Directory.CreateDirectory(Path.Combine(this.root, "Content"));
-        var info = new ProjectInfo("Scene documents", Category.Games, this.root);
-        this.Context = new ProjectContext
-        {
-            ProjectId = info.Id,
-            Name = "Scene documents",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(this.root),
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            LocalFolderMounts = [],
-        };
-        var project = new Mock<IProject>();
-        _ = project.SetupGet(value => value.ProjectInfo).Returns(info);
-        this.Project = project.Object;
+        this.project = TestProject.Create(this.FileSystem);
+        this.Context = this.project.Context;
+        var info = new ProjectInfo(this.Context.Name, this.Context.Category, this.Context.ProjectRoot.FullPath) { Id = this.Context.ProjectId };
+        var current = new Mock<IProject>();
+        _ = current.SetupGet(value => value.ProjectInfo).Returns(info);
+        this.Project = current.Object;
         var projects = new Mock<IProjectManagerService>();
         _ = projects.SetupGet(value => value.CurrentProject).Returns(this.Project);
         this.ProjectManager = projects.Object;
+        this.Store = new GatedFileStore(new NativeAtomicFileStore(this.FileSystem));
         this.Documents = new OpenDocuments(
             [new SceneDocumentKind(this.Context, interaction), new MaterialDocumentKind(new MaterialValidation())],
-            store ?? new NativeAtomicFileStore(new RealFileSystem()));
+            this.Store);
     }
+
+    /// <summary>Gets the in-memory file system that holds the project.</summary>
+    public MockFileSystem FileSystem { get; } = new();
+
+    /// <summary>Gets the file store the documents read and write through, whose reads a test can hold.</summary>
+    public GatedFileStore Store { get; }
 
     /// <summary>Gets the project manager, whose current project is <see cref="Project"/>.</summary>
     public IProjectManagerService ProjectManager { get; }
@@ -88,38 +86,33 @@ internal sealed partial class SceneDocumentFiles : IDisposable
     /// <summary>Gets the path of a scene's file.</summary>
     /// <param name="name">The scene's name, after the folder it is in below the Content mount, if any.</param>
     /// <returns>The path.</returns>
-    public FileSystemPath PathOf(string name) => FileSystemPath.From(Path.Combine(this.root, "Content", name + ".oscene.json"));
+    public FileSystemPath PathOf(string name) => this.project.PathOf($"/Content/{name}.oscene.json");
 
     /// <summary>Writes a scene file.</summary>
     /// <param name="name">The scene's name, after the folder it is in below the Content mount, if any.</param>
     /// <param name="data">What the file records.</param>
     public void Write(string name, SceneData data)
-    {
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(this.PathOf(name).FullPath)!);
-        File.WriteAllBytes(this.PathOf(name).FullPath, JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData));
-    }
+        => _ = this.project.WriteFile($"/Content/{name}.oscene.json", JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData));
 
     /// <summary>Writes a new material file below the Content mount.</summary>
     /// <param name="name">The material's name.</param>
     /// <returns>The material's file.</returns>
     public DocumentFile WriteMaterial(string name)
     {
-        var path = FileSystemPath.From(Path.Combine(this.root, "Content", "Materials", name + ".omat.json"));
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(path.FullPath)!);
-        File.WriteAllText(path.FullPath, AssetTemplates.Material(name));
+        var path = this.project.WriteFile($"/Content/Materials/{name}.omat.json", MaterialTemplates.New(name));
         return new DocumentFile(path, AssetPath.Parse($"/Content/Materials/{name}.omat"));
     }
 
     /// <summary>Writes a file that may not be a scene.</summary>
     /// <param name="name">The scene's name.</param>
     /// <param name="text">The file's text.</param>
-    public void WriteText(string name, string text) => File.WriteAllText(this.PathOf(name).FullPath, text);
+    public void WriteText(string name, string text) => this.FileSystem.File.WriteAllText(this.PathOf(name).FullPath, text);
 
     /// <summary>Reads a scene file.</summary>
     /// <param name="name">The scene's name.</param>
     /// <returns>What the file records.</returns>
     public SceneData Read(string name)
-        => JsonSerializer.Deserialize(File.ReadAllBytes(this.PathOf(name).FullPath), SceneJsonContext.Default.SceneData)!;
+        => JsonSerializer.Deserialize(this.FileSystem.File.ReadAllBytes(this.PathOf(name).FullPath), SceneJsonContext.Default.SceneData)!;
 
     /// <summary>Writes an empty scene file and opens it.</summary>
     /// <param name="name">The scene's name.</param>
@@ -143,9 +136,5 @@ internal sealed partial class SceneDocumentFiles : IDisposable
     }
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        this.Documents.Dispose();
-        Directory.Delete(this.root, recursive: true);
-    }
+    public void Dispose() => this.Documents.Dispose();
 }

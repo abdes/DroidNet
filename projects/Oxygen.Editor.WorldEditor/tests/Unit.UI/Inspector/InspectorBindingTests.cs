@@ -160,7 +160,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     [TestMethod]
     public Task MaterialEditorXamlRealizesItsNumericControls() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Material", fixture),
-        static model => new MaterialEditorView { ViewModel = (MaterialEditorViewModel)model },
+        static model => new MaterialEditorView { ViewModel = ((MaterialEditorModel)model).Editor },
         prepareFixture: null,
         assertRealizedAsync: async view =>
         {

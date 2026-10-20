@@ -7,6 +7,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Materials.Properties;
+using Oxygen.Editor.Materials.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
@@ -96,7 +97,7 @@ public sealed class MaterialEditsTests
         using var materials = new MaterialDocuments();
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
         var content = MaterialDocuments.ContentOf(document);
-        var written = await File.ReadAllBytesAsync(materials.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var written = await materials.FileSystem.File.ReadAllBytesAsync(MaterialDocuments.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = materials.Edits.Apply(document, PropertyEdit.SingleEdit(MaterialDescriptors.Metalness, 0.5f));
 
         // The edits refuse such a source; it reaches the content only from outside them, as a broken history entry would.
@@ -110,7 +111,7 @@ public sealed class MaterialEditsTests
 
         _ = result.Outcome.Should().Be(Oxygen.Editor.Documents.DocumentSaveOutcome.Refused);
         _ = result.Message.Should().NotBeNullOrWhiteSpace();
-        _ = (await File.ReadAllBytesAsync(materials.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(written);
+        _ = (await materials.FileSystem.File.ReadAllBytesAsync(MaterialDocuments.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Equal(written);
     }
 
     /// <summary>An edit that changes no value records nothing.</summary>
@@ -186,7 +187,7 @@ public sealed class MaterialEditsTests
 
         _ = document.History.UndoStack.Should().ContainSingle();
         _ = document.IsDirty.Should().BeFalse();
-        var saved = MaterialSourceReader.Read(await File.ReadAllBytesAsync(materials.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false));
+        var saved = MaterialSourceReader.Read(await materials.FileSystem.File.ReadAllBytesAsync(MaterialDocuments.PathOf("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = saved.PbrMetallicRoughness.MetallicFactor.Should().Be(0.5f);
     }
 
@@ -200,7 +201,7 @@ public sealed class MaterialEditsTests
 
         _ = materials.Edits.SetTexture(document, "base_color", AssetPath.Parse("/Content/Textures/Bark.otex")).Succeeded.Should().BeTrue();
         _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences["base_color"].Should().Be(AssetPath.Parse("/Content/Textures/Bark.otex"));
-        _ = materials.Edits.SetTexture(document, "base_color", null).Succeeded.Should().BeTrue();
+        _ = materials.Edits.SetTexture(document, "base_color", texture: null).Succeeded.Should().BeTrue();
         _ = MaterialDocuments.ContentOf(document).Material.Source.TextureReferences.Should().NotContainKey("base_color");
 
         _ = materials.Edits.SetTexture(document, "no_such_channel", AssetPath.Parse("/Content/Textures/Bark.otex")).Code.Should().Be(MaterialDiagnosticCodes.TextureChannelInvalid);

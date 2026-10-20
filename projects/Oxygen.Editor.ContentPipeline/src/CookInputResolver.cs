@@ -11,7 +11,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>
 /// Resolves an asset to the source the cook reads: any path of the asset (its identity or one of its files) names the
 /// asset by <see cref="AssetFileTypes.ToIdentity"/>, and the project holds its source where
-/// <see cref="ProjectAssetFiles.FindSource"/> finds it.
+/// <see cref="ProjectAssetFiles.FindSource(ProjectContext, AssetPath)"/> finds it.
 /// </summary>
 internal static class CookInputResolver
 {

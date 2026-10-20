@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Projects.Tests;
 
@@ -104,22 +105,14 @@ public sealed class ProjectAssetFilesTests
     [TestMethod]
     public void FindSource_OfAnIdentity_IsTheSourceThatExists()
     {
-        var root = Directory.CreateTempSubdirectory("ProjectAssetFiles").FullName;
-        try
-        {
-            var project = Project with { ProjectRoot = FileSystemPath.From(root) };
-            _ = Directory.CreateDirectory(Path.Combine(root, "Content", "Scripts"));
-            File.WriteAllText(Path.Combine(root, "Content", "Scripts", "Orbit.luau"), string.Empty);
-            _ = Directory.CreateDirectory(Path.Combine(root, "Content", "Materials"));
-            File.WriteAllText(Path.Combine(root, "Content", "Materials", "Wood.omat.json"), "{}");
+        var fileSystem = new MockFileSystem();
+        _ = fileSystem.Directory.CreateDirectory(@"C:\Games\Demo\Content\Scripts");
+        fileSystem.File.WriteAllText(@"C:\Games\Demo\Content\Scripts\Orbit.luau", string.Empty);
+        _ = fileSystem.Directory.CreateDirectory(@"C:\Games\Demo\Content\Materials");
+        fileSystem.File.WriteAllText(@"C:\Games\Demo\Content\Materials\Wood.omat.json", "{}");
 
-            _ = project.FindSource(AssetPath.Parse("/Content/Scripts/Orbit.oscript"))!.Path.Should().Be(AssetPath.Parse("/Content/Scripts/Orbit.luau"));
-            _ = project.FindSource(AssetPath.Parse("/Content/Materials/Wood.omat"))!.Path.Should().Be(AssetPath.Parse("/Content/Materials/Wood.omat.json"));
-            _ = project.FindSource(AssetPath.Parse("/Content/Materials/Gone.omat")).Should().BeNull();
-        }
-        finally
-        {
-            Directory.Delete(root, recursive: true);
-        }
+        _ = Project.FindSource(AssetPath.Parse("/Content/Scripts/Orbit.oscript"), fileSystem)!.Path.Should().Be(AssetPath.Parse("/Content/Scripts/Orbit.luau"));
+        _ = Project.FindSource(AssetPath.Parse("/Content/Materials/Wood.omat"), fileSystem)!.Path.Should().Be(AssetPath.Parse("/Content/Materials/Wood.omat.json"));
+        _ = Project.FindSource(AssetPath.Parse("/Content/Materials/Gone.omat"), fileSystem).Should().BeNull();
     }
 }

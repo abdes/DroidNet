@@ -18,7 +18,6 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using Testably.Abstractions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.PublicationWorkflows;
 
@@ -38,7 +37,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             var oldName = fixture.Source.Name;
             var oldUri = AssetPath.Create("Content", $"Scenes/{oldName}.oscene");
             _ = (await scenario.Services.Pipeline.CookCurrentSceneAsync(oldUri, token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
-            using (var relocation = new AssetRelocationService(scenario.Services.Runs, scenario.Services.Projects, scenario.Services.Documents, new NativeAtomicFileStore(new RealFileSystem()), scenario.Catalog))
+            using (var relocation = new AssetRelocationService(scenario.Services.Runs, scenario.Services.Projects, scenario.Services.Documents, new NativeAtomicFileStore(fixture.FileSystem), scenario.Catalog))
             using (fixture.FollowRelocations(relocation))
             {
                 var move = new AssetRelocationMove(AssetPath.Create("Content", $"Scenes/{oldName}.oscene.json"), AssetPath.Parse("/Content/Scenes/Small Scene.oscene.json"));
@@ -160,13 +159,14 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         _ = (await scenario.SceneAuthoringFixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = await CookPublicationScopeAsync(scenario, scope, cancellationToken).ConfigureAwait(true);
         var content = scenario.SceneAuthoringFixture.Runtime.ContentStatus;
-        var files = ReadPublishedHashes(scenario.SceneAuthoringFixture.ProjectRoot).Keys.ToDictionary(static path => path, File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase);
+        var fileSystem = scenario.SceneAuthoringFixture.FileSystem;
+        var files = ReadPublishedHashes(fileSystem, scenario.SceneAuthoringFixture.ProjectRoot).Keys.ToDictionary(static path => path, fileSystem.File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase);
         var result = await CookPublicationScopeAsync(scenario, scope, cancellationToken).ConfigureAwait(true);
         _ = result.IsUpToDate.Should().BeTrue();
         _ = result.CookedAssets.Should().BeEmpty();
         _ = result.ReusedAssets.Should().NotBeEmpty();
         _ = scenario.SceneAuthoringFixture.Runtime.ContentStatus.Should().Be(content);
-        _ = ReadPublishedHashes(scenario.SceneAuthoringFixture.ProjectRoot).Keys.ToDictionary(static path => path, File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase).Should().BeEquivalentTo(files);
+        _ = ReadPublishedHashes(fileSystem, scenario.SceneAuthoringFixture.ProjectRoot).Keys.ToDictionary(static path => path, fileSystem.File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase).Should().BeEquivalentTo(files);
         var state = await scenario.SceneAuthoringFixture.ReadNodeAsync(scenario.SceneAuthoringFixture.Source.RootNodes[0].Id, cancellationToken).ConfigureAwait(true);
         _ = state.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(1, 0, 0, 1));
     }
@@ -214,9 +214,10 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
     private static async Task CheckPublicationSourceConflictAsync(PublicationScenario scenario, CancellationToken cancellationToken)
     {
         var material = scenario.Material;
-        var original = await File.ReadAllBytesAsync(material.File.Path.FullPath, cancellationToken).ConfigureAwait(true);
+        var fileSystem = scenario.SceneAuthoringFixture.FileSystem;
+        var original = await fileSystem.File.ReadAllBytesAsync(material.File.Path.FullPath, cancellationToken).ConfigureAwait(true);
         var content = scenario.SceneAuthoringFixture.Runtime.ContentStatus;
-        await File.WriteAllTextAsync(material.File.Path.FullPath, "{}", cancellationToken).ConfigureAwait(true);
+        await fileSystem.File.WriteAllTextAsync(material.File.Path.FullPath, "{}", cancellationToken).ConfigureAwait(true);
         var failed = await scenario.Services.Pipeline.CookAssetAsync(material.File.Asset, cancellationToken).ConfigureAwait(true);
         _ = failed.Status.Should().Be(OperationStatus.Failed);
         _ = failed.IsPublished.Should().BeFalse();
@@ -228,7 +229,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             _ = retained.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(1, 0, 0, 1));
         }
 
-        await File.WriteAllBytesAsync(material.File.Path.FullPath, original, cancellationToken).ConfigureAwait(true);
+        await fileSystem.File.WriteAllBytesAsync(material.File.Path.FullPath, original, cancellationToken).ConfigureAwait(true);
         await SetPublicationMaterialColorAsync(scenario.Materials, material, new(0, 1, 0, 1), cancellationToken).ConfigureAwait(true);
         var recovered = await scenario.Services.Pipeline.CookAssetAsync(material.File.Asset, cancellationToken).ConfigureAwait(true);
         _ = recovered.IsPublished.Should().BeTrue();

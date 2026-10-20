@@ -10,8 +10,10 @@ using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Scripts;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.Input;
 using Oxygen.Editor.Materials;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
@@ -20,8 +22,9 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.ContentBrowser.Authoring;
 
 /// <summary>
-/// New Script, New Input File and New Scene: asks for a name and folder, has the content pipeline create the file, then
-/// selects it and opens it: a script or input file in the code editor, a scene in the scene editor.
+/// New Script, New Input File, New Scene and New Material: asks for a name and folder, has the content pipeline create
+/// the file from its family's template, then selects it and opens it: a script or input file in the code editor, a scene
+/// in the scene editor, a material in the material editor.
 /// </summary>
 /// <param name="dialogs">The dialog service.</param>
 /// <param name="projects">The active project.</param>
@@ -42,22 +45,22 @@ public sealed class AuthoredAssetCreation(
     /// <summary>Asks for a name and folder and creates a script from the template.</summary>
     /// <returns>The new file, or <see langword="null"/> when cancelled or failed.</returns>
     public Task<FileSystemPath?> CreateScriptAsync()
-        => this.CreateAsync(new CreationKind("New Script", AuthoredAssetKind.Script, ScriptOperationKinds.Create, ScriptDiagnosticCodes.CreateFailed, FailureDomain.ScriptAuthoring), this.OpenInCodeEditorAsync);
+        => this.CreateAsync(new CreationKind("New Script", ScriptTemplates.Asset, ScriptOperationKinds.Create, ScriptDiagnosticCodes.CreateFailed, FailureDomain.ScriptAuthoring), this.OpenInCodeEditorAsync);
 
     /// <summary>Asks for a name and folder and creates an input file with one action and one mapping context.</summary>
     /// <returns>The new file, or <see langword="null"/> when cancelled or failed.</returns>
     public Task<FileSystemPath?> CreateInputFileAsync()
-        => this.CreateAsync(new CreationKind("New Input File", AuthoredAssetKind.InputFile, ScriptOperationKinds.CreateInputFile, ScriptDiagnosticCodes.CreateFailed, FailureDomain.ScriptAuthoring), this.OpenInCodeEditorAsync);
+        => this.CreateAsync(new CreationKind("New Input File", InputTemplates.Asset, ScriptOperationKinds.CreateInputFile, ScriptDiagnosticCodes.CreateFailed, FailureDomain.ScriptAuthoring), this.OpenInCodeEditorAsync);
 
     /// <summary>Asks for a name and folder, creates an empty scene, and opens it.</summary>
     /// <returns>The new file, or <see langword="null"/> when cancelled or failed.</returns>
     public Task<FileSystemPath?> CreateSceneAsync()
-        => this.CreateAsync(new CreationKind("New Scene", AuthoredAssetKind.Scene, SceneOperationKinds.Create, SceneDiagnosticCodes.CreateFailed, FailureDomain.Document), this.OpenSceneAsync);
+        => this.CreateAsync(new CreationKind("New Scene", SceneTemplates.Asset, SceneOperationKinds.Create, SceneDiagnosticCodes.CreateFailed, FailureDomain.Document), this.OpenSceneAsync);
 
     /// <summary>Asks for a name and folder, creates a new material there and opens it.</summary>
     /// <returns>The new material's path, or <see langword="null"/> when nothing was created.</returns>
     public Task<FileSystemPath?> CreateMaterialAsync()
-        => this.CreateAsync(new CreationKind("New Material", AuthoredAssetKind.Material, MaterialOperationKinds.Create, MaterialDiagnosticCodes.NameInvalid, FailureDomain.MaterialAuthoring), this.OpenMaterialAsync);
+        => this.CreateAsync(new CreationKind("New Material", MaterialTemplates.Asset, MaterialOperationKinds.Create, MaterialDiagnosticCodes.NameInvalid, FailureDomain.MaterialAuthoring), this.OpenMaterialAsync);
 
     private static string ReadFolder(TextBox folderBox) => "/" + folderBox.Text.Trim().Replace('\\', '/').Trim('/');
 
@@ -68,7 +71,7 @@ public sealed class AuthoredAssetCreation(
             return null;
         }
 
-        var proposal = await authoring.ProposeAsync(project, kind.Kind, browserState.SelectedFolders.Order().FirstOrDefault(), CancellationToken.None).ConfigureAwait(true);
+        var proposal = await authoring.ProposeAsync(project, kind.Template, browserState.SelectedFolders.Order().FirstOrDefault(), CancellationToken.None).ConfigureAwait(true);
         var nameBox = new TextBox { Header = "Name", Text = proposal.Name, MinWidth = 320 };
         nameBox.Loaded += (_, _) =>
         {
@@ -76,8 +79,12 @@ public sealed class AuthoredAssetCreation(
             nameBox.SelectAll();
         };
         var folderBox = new TextBox { Header = "Folder", Text = proposal.Folder.VirtualPath };
-        var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
-        error.Foreground = Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) ? brush as Microsoft.UI.Xaml.Media.Brush : null;
+        var error = new TextBlock
+        {
+            TextWrapping = TextWrapping.Wrap,
+            Visibility = Visibility.Collapsed,
+            Foreground = Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) ? brush as Microsoft.UI.Xaml.Media.Brush : null,
+        };
 
         var spec = new DialogSpec(kind.Title, new StackPanel { Spacing = 12, Children = { nameBox, folderBox, error } })
         {
@@ -88,7 +95,7 @@ public sealed class AuthoredAssetCreation(
             {
                 var folder = ReadFolder(folderBox);
                 var invalid = VirtualPath.Validate(folder)?.ToMessage()
-                    ?? await authoring.ValidateAsync(project, kind.Kind, nameBox.Text.Trim(), AssetPath.Parse(folder), CancellationToken.None).ConfigureAwait(true);
+                    ?? await authoring.ValidateAsync(project, kind.Template, nameBox.Text.Trim(), AssetPath.Parse(folder), CancellationToken.None).ConfigureAwait(true);
                 error.Text = invalid ?? string.Empty;
                 error.Visibility = invalid is null ? Visibility.Collapsed : Visibility.Visible;
                 return invalid is null;
@@ -103,7 +110,7 @@ public sealed class AuthoredAssetCreation(
         FileSystemPath path;
         try
         {
-            path = await authoring.CreateAsync(project, kind.Kind, nameBox.Text.Trim(), AssetPath.Parse(ReadFolder(folderBox)), CancellationToken.None).ConfigureAwait(true);
+            path = await authoring.CreateAsync(project, kind.Template, nameBox.Text.Trim(), AssetPath.Parse(ReadFolder(folderBox)), CancellationToken.None).ConfigureAwait(true);
         }
         catch (AssetCreationException failure)
         {
@@ -159,5 +166,5 @@ public sealed class AuthoredAssetCreation(
         }
     }
 
-    private sealed record CreationKind(string Title, AuthoredAssetKind Kind, string OperationKind, string FailureCode, FailureDomain Domain);
+    private sealed record CreationKind(string Title, AuthoredAssetTemplate Template, string OperationKind, string FailureCode, FailureDomain Domain);
 }

@@ -63,17 +63,17 @@ public sealed partial class CookingSaveConflictTests : DroidNet.Tests.VisualUser
         {
             await WaitForBlockedMaterialAsync(panel, material.File.Path, cancellationToken).ConfigureAwait(true);
             var id = panel.SelectedRun!.Snapshot.OperationId;
-            var published = ReadPublishedHashes(scenario.SceneAuthoringFixture.ProjectRoot);
-            var source = JsonNode.Parse(await File.ReadAllTextAsync(material.File.Path.FullPath, cancellationToken).ConfigureAwait(true))!;
+            var published = ReadPublishedHashes(scenario.SceneAuthoringFixture.FileSystem, scenario.SceneAuthoringFixture.ProjectRoot);
+            var source = JsonNode.Parse(await scenario.SceneAuthoringFixture.FileSystem.File.ReadAllTextAsync(material.File.Path.FullPath, cancellationToken).ConfigureAwait(true))!;
             source["parameters"]!["base_color"] = new JsonArray(0f, 0f, 1f, 1f);
             var external = source.ToJsonString();
-            await File.WriteAllTextAsync(material.File.Path.FullPath, external, cancellationToken).ConfigureAwait(true);
+            await scenario.SceneAuthoringFixture.FileSystem.File.WriteAllTextAsync(material.File.Path.FullPath, external, cancellationToken).ConfigureAwait(true);
             await InvokeCookingSaveAsync(panel, view, cancellationToken).ConfigureAwait(true);
             _ = panel.ActionError.Should().Contain("conflict");
             _ = panel.SelectedRun!.Snapshot.State.Should().Be(CookRunState.NeedsSave);
             _ = cook.IsCompleted.Should().BeFalse();
-            _ = ReadPublishedHashes(scenario.SceneAuthoringFixture.ProjectRoot).Should().BeEquivalentTo(published);
-            _ = (await File.ReadAllTextAsync(material.File.Path.FullPath, cancellationToken).ConfigureAwait(true)).Should().Be(external);
+            _ = ReadPublishedHashes(scenario.SceneAuthoringFixture.FileSystem, scenario.SceneAuthoringFixture.ProjectRoot).Should().BeEquivalentTo(published);
+            _ = (await scenario.SceneAuthoringFixture.FileSystem.File.ReadAllTextAsync(material.File.Path.FullPath, cancellationToken).ConfigureAwait(true)).Should().Be(external);
             _ = material.IsDirty.Should().BeTrue();
             _ = await material.ReloadAsync(cancellationToken).ConfigureAwait(true);
             await InvokeCookingSaveAsync(panel, view, cancellationToken).ConfigureAwait(true);

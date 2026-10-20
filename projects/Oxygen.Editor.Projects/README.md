@@ -71,12 +71,13 @@ graph TB
 
 ### Core Components
 
-| Component                    | Purpose                | Key Responsibilities                      |
-| ---------------------------- | ---------------------- | ----------------------------------------- |
-| **`ProjectManagerService`**  | High-level project API | Create, open, save, close projects        |
-| **`Project`**                | Workspace model        | Metadata, scene references, serialization |
-| **`ProjectInfo`**            | Project metadata       | Name, version, author, timestamps         |
-| **`IProjectManagerService`** | Service interface      | Abstraction for DI and testing            |
+| Component                    | Purpose                | Key Responsibilities                                               |
+| ---------------------------- | ---------------------- | ------------------------------------------------------------------ |
+| **`ProjectManagerService`**  | High-level project API | Create, open, save, close projects                                 |
+| **`Project`**                | Workspace model        | Metadata, scene references, serialization                          |
+| **`ProjectInfo`**            | Project metadata       | Name, version, author, timestamps                                  |
+| **`IProjectManagerService`** | Service interface      | Abstraction for DI and testing                                     |
+| **`AuthoredAssetTemplate`**  | New file template      | Folder, default name, suffixes and content of a family's new files |
 
 ## Core Concepts
 

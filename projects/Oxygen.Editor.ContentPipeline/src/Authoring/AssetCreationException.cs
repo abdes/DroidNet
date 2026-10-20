@@ -4,7 +4,7 @@
 
 namespace Oxygen.Editor.ContentPipeline.Authoring;
 
-/// <summary>A new script or input file was not created; the message tells the user why.</summary>
+/// <summary>A new file was not created; the message tells the user why.</summary>
 public sealed class AssetCreationException : Exception
 {
     /// <summary>Initializes a new instance of the <see cref="AssetCreationException"/> class.</summary>

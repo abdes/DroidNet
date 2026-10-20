@@ -6,6 +6,7 @@ using System.Collections.Concurrent;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
+using System.IO.Abstractions;
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Settings;
@@ -63,8 +64,11 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 
 internal sealed class NativeSceneFixture : IAsyncDisposable
 {
-    private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("OxygenEnvironmentField-");
-    private readonly ProjectManagerService manager = new(new NativeStorageProvider(new RealFileSystem()));
+    // The disk: the native cook reads and writes the project there.
+    private static readonly IFileSystem Disk = new RealFileSystem();
+
+    private readonly IDirectoryInfo directory = Disk.Directory.CreateTempSubdirectory("OxygenEnvironmentField-");
+    private readonly ProjectManagerService manager = new(new NativeStorageProvider(Disk));
     private readonly bool ownsEngine;
     private readonly Oxygen.Testing.TemporaryNativeArtifacts? compatibility;
     private readonly IDisposable? sharedResults;
@@ -126,7 +130,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
         (this.previewEngine, this.probe) = EngineProbe.Of(this.Runtime);
         this.loadedProject = new Project(new ProjectInfo("Environment fields", Category.Games, this.directory.FullName, "preview.png") { AuthoringMounts = [new("Content", "Content")], });
-        File.WriteAllText(Path.Combine(this.directory.FullName, "Project.oxy"), ProjectInfo.ToJson(this.loadedProject.ProjectInfo));
+        Disk.File.WriteAllText(Disk.Path.Combine(this.directory.FullName, "Project.oxy"), ProjectInfo.ToJson(this.loadedProject.ProjectInfo));
         this.Projects.Activate(ProjectContext.FromProjectInfo(this.loadedProject.ProjectInfo));
         this.materialCookCoordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
         this.materialPipeline = new(this.Projects, this.materialCookCoordinator, new CookDocumentRegistry());
@@ -141,7 +145,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         // The scene is a document of the project, saved where the editor saves scenes.
         this.sceneKind = new SceneDocumentKind(this.Projects.ActiveProject!);
         this.materialKind = new MaterialDocumentKind(this.materialValidation);
-        this.OpenDocuments = new OpenDocuments([this.sceneKind, this.materialKind], new ImmediateReadFileStore(new NativeAtomicFileStore(new RealFileSystem())));
+        this.OpenDocuments = new OpenDocuments([this.sceneKind, this.materialKind], new ImmediateReadFileStore(new NativeAtomicFileStore(Disk)));
         this.previewResults = results;
         this.OpenScene(this.WriteScene(this.Source, layout?.Invoke(this.Source)));
         this.Model = new EnvironmentViewModel(() => this.Authoring);
@@ -173,6 +177,9 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     public Mock<Oxygen.Editor.Assets.IAssetFeed> AssetCatalog { get; } = new();
 
     public ConcurrentQueue<OperationResult> Results { get; } = new();
+
+    /// <summary>Gets the file system that holds the project: the disk, which the native cook reads and writes.</summary>
+    public IFileSystem FileSystem => Disk;
 
     public FileSystemPath ProjectRoot => FileSystemPath.From(this.directory.FullName);
 
@@ -221,20 +228,20 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     {
         var root = projectRoot ?? this.ProjectRoot;
         var path = root.Combine("Content").Combine("Materials").Combine($"{name}.omat.json");
-        _ = Directory.CreateDirectory(path.Parent!.FullPath);
+        _ = Disk.Directory.CreateDirectory(path.Parent!.FullPath);
         var color = baseColor ?? System.Numerics.Vector4.One;
         var factor = System.Text.Json.JsonSerializer.Serialize(new[] { color.X, color.Y, color.Z, color.W });
         var source = $$"""
                 { "name": "{{name}}",
                   "parameters": { "base_color": {{factor}}, "metalness": 0, "roughness": 0.5 } }
                 """;
-        await File.WriteAllTextAsync(path.FullPath, source, cancellationToken).ConfigureAwait(true);
+        await Disk.File.WriteAllTextAsync(path.FullPath, source, cancellationToken).ConfigureAwait(true);
         var native = this.MaterialPipelineFor(root);
         var asset = AssetPath.Parse($"/Content/Materials/{name}.omat");
         var result = await native.Pipeline.CookAssetAsync(asset, cancellationToken).ConfigureAwait(true);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         var cookedRoot = await this.GetCookedRootAsync(root, cancellationToken).ConfigureAwait(true);
-        var indexStream = File.OpenRead(cookedRoot.Combine("container.index.bin").FullPath);
+        var indexStream = Disk.File.OpenRead(cookedRoot.Combine("container.index.bin").FullPath);
         await using var indexLifetime = indexStream.ConfigureAwait(true);
         var cooked = LooseCookedIndex.Read(indexStream).Assets.Single(value => string.Equals(value.VirtualPath, asset.VirtualPath, StringComparison.Ordinal));
         if (projectRoot is null)
@@ -292,7 +299,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         DocumentEditorDescriptor[] editors =
         [
             new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, windowId, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, this.messenger, preferences)) { IsClosable = false },
-            new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Projects, new RealFileSystem(), windowId: windowId)),
+            new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Projects, Disk, windowId: windowId)),
         ];
         this.TransitionArea = new DocumentArea(documents, this.OpenDocuments, editors, windowId, static _ => { });
         container.RegisterInstance<IDocumentArea>(this.TransitionArea);
@@ -346,7 +353,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     {
         this.activeMaterialSlotProvider = materialSlots ?? this.materialPipeline.Pipeline;
         this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.area, default, assets ?? this.AssetCatalog.Object, this.Preview, new SceneSelectionService(), this.materialSlotProvider, this.Projects, new RealFileSystem(), new FakeInputSources());
+        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.area, default, assets ?? this.AssetCatalog.Object, this.Preview, new SceneSelectionService(), this.materialSlotProvider, this.Projects, Disk, new FakeInputSources());
     }
 
     /// <summary>Opens the fixture's scene on a running engine, starting the shared engine only if it is not running.</summary>
@@ -485,8 +492,8 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     private static void WriteSceneFile(FileSystemPath path, SceneFileData data)
     {
-        _ = Directory.CreateDirectory(path.Parent!.FullPath);
-        File.WriteAllBytes(path.FullPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData));
+        _ = Disk.Directory.CreateDirectory(path.Parent!.FullPath);
+        Disk.File.WriteAllBytes(path.FullPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData));
     }
 
     private Oxygen.Testing.NativeContentPipelineFixture MaterialPipelineFor(FileSystemPath root)
@@ -503,7 +510,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             {
                 AuthoringMounts = [new("Content", "Content")],
             };
-            File.WriteAllText(root.Combine("Project.oxy").FullPath, ProjectInfo.ToJson(info));
+            Disk.File.WriteAllText(root.Combine("Project.oxy").FullPath, ProjectInfo.ToJson(info));
             contexts.Activate(ProjectContext.FromProjectInfo(info));
             var coordinator = new ContentCookCoordinator(contexts, NullLogger<ContentCookCoordinator>.Instance);
             value = (coordinator, new(contexts, coordinator, new CookDocumentRegistry()));
@@ -628,12 +635,12 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         // Reads before returning, so the open that awaits it completes at once.
         private static DroidNet.Storage.FileSnapshot SnapshotOf(string path)
         {
-            if (!File.Exists(path))
+            if (!Disk.File.Exists(path))
             {
                 return new DroidNet.Storage.FileSnapshot([], DroidNet.Storage.FileVersion.Missing);
             }
 
-            var bytes = File.ReadAllBytes(path);
+            var bytes = Disk.File.ReadAllBytes(path);
             return new DroidNet.Storage.FileSnapshot([.. bytes], new DroidNet.Storage.FileVersion(Exists: true, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(bytes))));
         }
     }

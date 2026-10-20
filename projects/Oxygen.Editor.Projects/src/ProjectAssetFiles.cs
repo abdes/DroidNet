@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -34,11 +35,20 @@ public static class ProjectAssetFiles
     /// <param name="identity">The asset's identity.</param>
     /// <returns>The source's location, or <see langword="null"/> when no source of the asset exists.</returns>
     public static ProjectAssetLocation? FindSource(this ProjectContext project, AssetPath identity)
+        => FindSource(project, identity, File.Exists);
+
+    /// <summary>
+    /// Finds the source file of an asset: the first of <see cref="AssetFileTypes.SourcesOf"/> that exists under the
+    /// project's mounts in a file system.
+    /// </summary>
+    /// <param name="project">The project.</param>
+    /// <param name="identity">The asset's identity.</param>
+    /// <param name="fileSystem">The file system that holds the project's files.</param>
+    /// <returns>The source's location, or <see langword="null"/> when no source of the asset exists.</returns>
+    public static ProjectAssetLocation? FindSource(this ProjectContext project, AssetPath identity, IFileSystem fileSystem)
     {
-        ArgumentNullException.ThrowIfNull(identity);
-        return AssetFileTypes.SourcesOf(identity)
-            .Select(source => project.Find(source))
-            .FirstOrDefault(static location => location is not null && File.Exists(location.File.FullPath));
+        ArgumentNullException.ThrowIfNull(fileSystem);
+        return FindSource(project, identity, fileSystem.File.Exists);
     }
 
     /// <summary>
@@ -69,6 +79,14 @@ public static class ProjectAssetFiles
         return holder is not null && AssetPath.TryCreate(holder.Name, file.GetPathBelow(holder.Root), out var virtualPath)
             ? new(virtualPath, file, holder.Root, holder.Kind)
             : null;
+    }
+
+    private static ProjectAssetLocation? FindSource(ProjectContext project, AssetPath identity, Func<string, bool> exists)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        return AssetFileTypes.SourcesOf(identity)
+            .Select(source => project.Find(source))
+            .FirstOrDefault(location => location is not null && exists(location.File.FullPath));
     }
 
     private static IEnumerable<Mount> Mounts(ProjectContext project)

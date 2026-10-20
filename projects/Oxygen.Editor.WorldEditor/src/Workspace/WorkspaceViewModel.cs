@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using DryIoc;
@@ -58,6 +59,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private readonly IEngineService engineService;
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
+    private readonly IFileSystem fileSystem;
     private readonly ILogger logger;
     private DocumentManager? documentManager;
     private IAssetCatalog? assetCatalog;
@@ -89,6 +91,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         IEngineService engineService,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
+        IFileSystem fileSystem,
         ILoggerFactory? loggerFactory = null)
         : base(container, router, loggerFactory)
     {
@@ -99,6 +102,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         this.engineService = engineService;
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
+        this.fileSystem = fileSystem;
         this.logger = loggerFactory?.CreateLogger<WorkspaceViewModel>() ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceViewModel>.Instance;
     }
 
@@ -192,8 +196,9 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
     /// <param name="project">The project whose scene files are searched.</param>
     /// <param name="lastOpenedScene">The persisted last-opened scene name.</param>
+    /// <param name="fileSystem">The file system that holds the scene files.</param>
     /// <returns>Where the matching scene is, or <see langword="null"/> when no scene matches.</returns>
-    internal static async Task<ProjectAssetLocation?> ResolveSceneByNameOrIdAsync(IAssetCatalog catalog, ProjectContext project, string? lastOpenedScene)
+    internal static async Task<ProjectAssetLocation?> ResolveSceneByNameOrIdAsync(IAssetCatalog catalog, ProjectContext project, string? lastOpenedScene, IFileSystem fileSystem)
     {
         if (string.IsNullOrWhiteSpace(lastOpenedScene))
         {
@@ -202,7 +207,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
         if (Guid.TryParse(lastOpenedScene, out var id))
         {
-            return await SceneFiles.FindByIdAsync(catalog, project, SceneId.FromValue(id)).ConfigureAwait(true);
+            return await SceneFiles.FindByIdAsync(catalog, project, SceneId.FromValue(id), fileSystem).ConfigureAwait(true);
         }
 
         var sceneName = lastOpenedScene.EndsWith(Oxygen.Managed.Assets.AssetFileTypes.SceneDescriptor, StringComparison.Ordinal)
@@ -214,11 +219,12 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     /// <summary>Resolves the scene a workspace opens first: the one activation asked for, else the project's start scene.</summary>
     /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
     /// <param name="context">The project.</param>
+    /// <param name="fileSystem">The file system that holds the scene files.</param>
     /// <returns>The scene's asset URI, or <see langword="null"/> when there is none to open.</returns>
-    internal static async Task<AssetPath?> ResolveInitialSceneAsync(IAssetCatalog catalog, ProjectContext context)
+    internal static async Task<AssetPath?> ResolveInitialSceneAsync(IAssetCatalog catalog, ProjectContext context, IFileSystem fileSystem)
     {
         // Fresh activation may carry an explicit scene request (template StarterScene or a workflow open).
-        if (context.InitialScene is { } initialScene && context.FindSource(initialScene) is { IsMountRoot: false } requested)
+        if (context.InitialScene is { } initialScene && context.FindSource(initialScene, fileSystem) is { IsMountRoot: false } requested)
         {
             return requested.Identity;
         }
@@ -226,7 +232,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         // Otherwise the project's configured start scene, resolved by stable ID.
         // A missing or invalid start scene is not silently replaced by last-opened or first-listed.
         return context.DefaultSceneId is { } defaultSceneId
-            ? (await SceneFiles.FindByIdAsync(catalog, context, defaultSceneId).ConfigureAwait(true))?.Identity
+            ? (await SceneFiles.FindByIdAsync(catalog, context, defaultSceneId, fileSystem).ConfigureAwait(true))?.Identity
             : null;
     }
 
@@ -448,7 +454,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         // Seed the default scene for projects that predate DefaultSceneId before resolving it.
         await this.MigrateDefaultSceneAsync(catalog, project, context).ConfigureAwait(true);
 
-        var scene = await ResolveInitialSceneAsync(catalog, this.projectContextService.ActiveProject ?? context).ConfigureAwait(true);
+        var scene = await ResolveInitialSceneAsync(catalog, this.projectContextService.ActiveProject ?? context, this.fileSystem).ConfigureAwait(true);
         if (scene is null)
         {
             return;
@@ -492,8 +498,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             }
 
             var lastOpened = usage.LastOpenedScene;
-            if (await ResolveSceneByNameOrIdAsync(catalog, context, lastOpened).ConfigureAwait(true) is not { } migrated
-                || await SceneFiles.ReadIdAsync(migrated.File).ConfigureAwait(true) is not { } migratedId)
+            if (await ResolveSceneByNameOrIdAsync(catalog, context, lastOpened, this.fileSystem).ConfigureAwait(true) is not { } migrated
+                || await SceneFiles.ReadIdAsync(migrated.File, this.fileSystem).ConfigureAwait(true) is not { } migratedId)
             {
                 return;
             }

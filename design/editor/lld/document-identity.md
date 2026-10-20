@@ -314,10 +314,10 @@ Materials are documents of the material kind. The model is `Material` in
 - Relocation: the editor's relocation participant maps the change with
   `DocumentRelocations.Map` (`Oxygen.Editor.ContentPipeline.Relocation`, shared
   by both editors) and calls `Document.FollowRelocationAsync`.
-- New Material goes through ContentPipeline's asset authoring:
-  `AuthoredAssetKind.Material` and `AssetTemplates.Material(name)`. The Content
-  Explorer's `AuthoredAssetCreation` offers "New Material" beside "New Scene",
-  then sends `OpenMaterialRequestMessage`.
+- New Material goes through ContentPipeline's asset authoring with
+  `MaterialTemplates.Asset`, whose content is `MaterialTemplates.New(name)`.
+  The Content Explorer's `AuthoredAssetCreation` offers "New Material" beside
+  "New Scene", then sends `OpenMaterialRequestMessage`.
 
 File versions, save against the version read, conflicts, Keep Mine, quiet
 reload, follow a relocation, save a copy and dirty come from `Document`; the
@@ -365,8 +365,8 @@ Closability comes from the descriptor (5.8), not from a document type string.
 | `DocumentId`, `IDocumentMetadata`, `IDocumentTabSource`                                                                       | `DroidNet.Documents`            |
 | `Document`, `OpenDocuments`, kind and content contracts, `IUnsavedDocuments`                                                  | `Oxygen.Editor.Documents`       |
 | `DocumentTab`, `IDocumentArea`, `DocumentEditorDescriptor`, the document service, input committer, prompts, close coordinator | `Oxygen.Editor.Shell`           |
-| `MaterialDocumentKind`, `MaterialContent`, `MaterialEdits`                                                                    | `Oxygen.Editor.Materials`       |
-| `DocumentRelocations`, `AssetTemplates.Material`                                                                              | `Oxygen.Editor.ContentPipeline` |
+| `MaterialDocumentKind`, `MaterialContent`, `MaterialEdits`, `MaterialTemplates`                                               | `Oxygen.Editor.Materials`       |
+| `DocumentRelocations`                                                                                                         | `Oxygen.Editor.ContentPipeline` |
 | Cooked Inspector panel                                                                                                        | `Oxygen.Editor.CookedInspector` |
 
 ## 7. Data Contracts
@@ -443,7 +443,7 @@ All edges point down:
   failure; copy renames; relocation maps textures and redirects old history
   entries; the editor follows its `Document` through reload and relocation;
   dirty follows the position.
-- ContentPipeline: `AuthoredAssetKind.Material` creates a file the kind opens;
+- ContentPipeline: `MaterialTemplates.Asset` creates a file the kind opens;
   `IUnsavedDocuments` reports a document dirty during a gesture.
 - World Editor: the explorer, inspector and demand follow `IDocumentArea`; the
   host creates editors from descriptors, saves by asset and fails the scope

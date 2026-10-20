@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Materials.Tests.TestSupport;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core;
 
@@ -22,7 +23,7 @@ public sealed class MaterialDocumentKindTests
     public async Task AMaterialIsNamedAfterItsFile()
     {
         using var materials = new MaterialDocuments();
-        await File.WriteAllTextAsync(materials.PathOf("Wood"), Oxygen.Editor.ContentPipeline.Authoring.AssetTemplates.Material("Old name"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        await materials.FileSystem.File.WriteAllTextAsync(MaterialDocuments.PathOf("Wood"), MaterialTemplates.New("Old name"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var document = await materials.OpenAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -36,9 +37,9 @@ public sealed class MaterialDocumentKindTests
     public async Task AFileThatIsNotAMaterialDoesNotOpen()
     {
         using var materials = new MaterialDocuments();
-        await File.WriteAllTextAsync(materials.PathOf("Broken"), "{ not json", this.TestContext.CancellationToken).ConfigureAwait(false);
+        await materials.FileSystem.File.WriteAllTextAsync(MaterialDocuments.PathOf("Broken"), "{ not json", this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var opened = await materials.Documents.OpenAsync(materials.FileOf("Broken"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var opened = await materials.Documents.OpenAsync(MaterialDocuments.FileOf("Broken"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = opened.Document.Should().BeNull();
         _ = opened.Problem.Should().Contain("is not a valid material");
@@ -53,10 +54,10 @@ public sealed class MaterialDocumentKindTests
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = materials.Edits.SetTexture(document, "base_color", AssetPath.Parse("/Content/Textures/Bark.otex"));
 
-        var copy = materials.FileOf("Wood Copy");
+        var copy = MaterialDocuments.FileOf("Wood Copy");
         _ = (await document.SaveCopyAsync(copy, this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded.Should().BeTrue();
 
-        var written = MaterialSourceReader.Read(await File.ReadAllBytesAsync(copy.Path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false));
+        var written = MaterialSourceReader.Read(await materials.FileSystem.File.ReadAllBytesAsync(copy.Path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false));
         _ = written.Name.Should().Be("Wood Copy");
         _ = written.TextureReferences["base_color"].Should().Be(AssetPath.Parse("/Content/Textures/Bark.otex"));
         _ = document.IsDirty.Should().BeTrue();
@@ -69,22 +70,22 @@ public sealed class MaterialDocumentKindTests
     public async Task ARelocationRenamesAndRetargetsTheMaterial()
     {
         using var materials = new MaterialDocuments();
-        await File.WriteAllTextAsync(materials.PathOf("Wood"), Oxygen.Editor.ContentPipeline.Authoring.AssetTemplates.Material("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        await materials.FileSystem.File.WriteAllTextAsync(MaterialDocuments.PathOf("Wood"), MaterialTemplates.New("Wood"), this.TestContext.CancellationToken).ConfigureAwait(false);
         var document = await materials.OpenAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = materials.Edits.SetTexture(document, "base_color", AssetPath.Parse("/Content/Textures/Bark.otex"));
         _ = await document.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var entries = document.History.UndoStack.Count;
-        File.Move(materials.PathOf("Wood"), materials.PathOf("Oak"));
+        materials.FileSystem.File.Move(MaterialDocuments.PathOf("Wood"), MaterialDocuments.PathOf("Oak"));
 
         await document.FollowRelocationAsync(
-            new DocumentRelocation(materials.FileOf("Oak"), document.Version, static texture => AssetPath.Parse(texture.VirtualPath.Replace("/Bark.", "/Oak.", StringComparison.Ordinal))),
+            new DocumentRelocation(MaterialDocuments.FileOf("Oak"), document.Version, static texture => AssetPath.Parse(texture.VirtualPath.Replace("/Bark.", "/Oak.", StringComparison.Ordinal))),
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var source = MaterialDocuments.ContentOf(document).Material.Source;
         _ = document.Title.Should().Be("Oak");
         _ = source.Name.Should().Be("Oak");
         _ = source.TextureReferences["base_color"].Should().Be(AssetPath.Parse("/Content/Textures/Oak.otex"));
-        _ = document.History.UndoStack.Count.Should().Be(entries);
+        _ = document.History.UndoStack.Should().HaveCount(entries);
         _ = document.IsDirty.Should().BeFalse();
     }
 }

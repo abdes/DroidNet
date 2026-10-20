@@ -26,6 +26,8 @@ them. It holds no view, view model or dialog.
   current from the SDK files `ScriptToolingPaths` finds.
 - `ScriptDiagnosticCodes` and `ScriptOperationResults` are the family's codes
   (`OXE.SCRIPT.`) and its Output results.
+- `ScriptTemplates.New` is the text of a new script, and
+  `ScriptTemplates.Asset` the template New Script creates it from.
 
 Files are read through `IFileSystem`, so the tests run on an in-memory file
 system. `Oxygen.Editor.Scripting.Testing` gives other modules' tests

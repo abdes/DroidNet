@@ -56,7 +56,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         using var document = fixture.RegisterMainCookDocument(services);
         var uri = AssetPath.Parse("/Content/Scenes/Main.oscene");
         _ = (await services.Pipeline.CookCurrentSceneAsync(uri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
-        var originalOutput = ReadPublishedHashes(fixture.ProjectRoot);
+        var originalOutput = ReadPublishedHashes(fixture.FileSystem, fixture.ProjectRoot);
         await fixture.SetSavedLegacyAerialStartAsync().ConfigureAwait(true);
         var actions = CreateMainRepairActions(fixture);
         using var panel = new CookingPanelViewModel(services.Runs, services.Pipeline, services.Projects, actions.Object, CreateStatusHosting());
@@ -73,7 +73,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         await host.LoadAsync(root, 1, timeout.Token).ConfigureAwait(true);
         var failed = await services.Pipeline.CookCurrentSceneAsync(uri, timeout.Token).ConfigureAwait(true);
         _ = failed.Status.Should().Be(OperationStatus.Failed);
-        _ = ReadPublishedHashes(fixture.ProjectRoot).Should().BeEquivalentTo(originalOutput);
+        _ = ReadPublishedHashes(fixture.FileSystem, fixture.ProjectRoot).Should().BeEquivalentTo(originalOutput);
         await CheckMainRepairControlsAsync(fixture, services, panel, cooking, environment, failed.OperationId, timeout.Token).ConfigureAwait(true);
         _ = (await services.Pipeline.ReadAsync(services.Projects.ActiveProject!, [uri], timeout.Token).ConfigureAwait(true)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);

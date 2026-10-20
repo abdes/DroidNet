@@ -301,7 +301,9 @@ and the pipeline implements it (`IScriptLibrary`), as LivePreview implements
   `StartingContextRules`. `SetStartingCamera` checks only against the scene and
   needs no family rule.
 - ContentPipeline: the creation workflow takes the family's template
-  (`AuthoredAssetTemplate`: suffixes and content); the cook calls
+  (`AuthoredAssetTemplate`, declared in Projects so every family can name it:
+  folder, default name, suffixes and content) and knows no family; the cook
+  calls
   `ScriptSlotRules` and the Input rules and keeps only the mapping of their
   problems to `DiagnosticRecord`; it implements `IScriptLibrary` from its cooked
   report. The cook checks slots without their scripts' declarations: the cooker
@@ -769,14 +771,14 @@ fixture crosses modules.
 | -------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | Managed.Assets Unit        | `TextureSource` and `InputSource` round trips; fields outside the editable projection survive; schema problems by code                                                                                                                                                                                        |
 | Scripting Unit             | `ScriptSlotRules` (stale, defaults, kinds, asset types, every slot check code); `ScriptFacts` over a fake `IScriptAnalyzer` and `IScriptLibrary` and a temporary project: scan, change, relocation, removal, out-of-date parameters, events on the subscriber's context, project swap; `ProjectScriptTooling` |
-| Input Unit                 | `InputContainer` rules, `StartingContextRules`, `InputFacts`                                                                                                                                                                                                                                                  |
+| Input Unit                 | `InputContainer` rules, `StartingContextRules`, `InputFacts`, the template                                                                                                                                                                                                                                    |
 | Textures Unit              | `Texture` and `TextureImport`                                                                                                                                                                                                                                                                                 |
-| Scenes Unit                | One class per decision 7 edit: apply, inverse, validation codes                                                                                                                                                                                                                                               |
+| Materials Unit             | `MaterialTemplates`                                                                                                                                                                                                                                                                                           |
+| Scenes Unit                | One class per decision 7 edit: apply, inverse, validation codes; `SceneTemplates`                                                                                                                                                                                                                             |
 | ContentPipeline Unit       | Cook slot checks through `ScriptSlotRules`; starting input contexts through `StartingContextRules`; `InputFileCookingTests`; `IScriptLibrary` over a cooked report; creation with family templates                                                                                                            |
 | LivePreview Unit           | `RuntimeProblemReader` to `RuntimeScriptProblem`; `PlaySessionTests`                                                                                                                                                                                                                                          |
 | LivePreview Integration.UI | `NativeScriptAnalyzer` against the real analyzer on the shared engine: parameters, a syntax error, unavailable before the SDK is verified                                                                                                                                                                     |
 | WorldEditor Unit           | `ScriptingViewModelTests` and `ProblemsViewModelTests` over fakes of the family ports                                                                                                                                                                                                                         |
-| ContentBrowser             | `ScriptAuthoringTests` over the family templates                                                                                                                                                                                                                                                              |
 
 Tests assert codes, never messages.
 

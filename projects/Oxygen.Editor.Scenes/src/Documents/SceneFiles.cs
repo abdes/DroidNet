@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
@@ -37,13 +38,14 @@ public static class SceneFiles
     /// <param name="catalog">The project's asset catalog.</param>
     /// <param name="project">The project.</param>
     /// <param name="sceneId">The scene's id.</param>
+    /// <param name="fileSystem">The file system that holds the scene files.</param>
     /// <param name="cancellationToken">Cancels reading the files.</param>
     /// <returns>Where the scene is, or <see langword="null"/> when no scene file holds the id.</returns>
-    public static async Task<ProjectAssetLocation?> FindByIdAsync(IAssetCatalog catalog, ProjectContext project, SceneId sceneId, CancellationToken cancellationToken = default)
+    public static async Task<ProjectAssetLocation?> FindByIdAsync(IAssetCatalog catalog, ProjectContext project, SceneId sceneId, IFileSystem fileSystem, CancellationToken cancellationToken = default)
     {
         foreach (var location in await ListAsync(catalog, project, cancellationToken).ConfigureAwait(true))
         {
-            if (await ReadIdAsync(location.File, cancellationToken).ConfigureAwait(true) == sceneId)
+            if (await ReadIdAsync(location.File, fileSystem, cancellationToken).ConfigureAwait(true) == sceneId)
             {
                 return location;
             }
@@ -65,14 +67,16 @@ public static class SceneFiles
 
     /// <summary>Reads the identity a scene file holds.</summary>
     /// <param name="path">The scene file.</param>
+    /// <param name="fileSystem">The file system that holds the scene file.</param>
     /// <param name="cancellationToken">Cancels reading the file.</param>
     /// <returns>The scene's id, or <see langword="null"/> when the file is not a readable scene.</returns>
-    public static async Task<SceneId?> ReadIdAsync(FileSystemPath path, CancellationToken cancellationToken = default)
+    public static async Task<SceneId?> ReadIdAsync(FileSystemPath path, IFileSystem fileSystem, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(path);
+        ArgumentNullException.ThrowIfNull(fileSystem);
         try
         {
-            return SceneSerializer.ReadId(await File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(true));
+            return SceneSerializer.ReadId(await fileSystem.File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(true));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
