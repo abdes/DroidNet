@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 
@@ -17,15 +18,10 @@ internal sealed partial class CookWorkspace : IDisposable
     {
         this.EngineContent = engineContent ?? new EngineContentPakFixture();
         this.Root = Path.Combine(Path.GetTempPath(), "oxygen-content-pipeline-service-tests", Guid.NewGuid().ToString("N"));
+        var project = TestProject.Create(new Testably.Abstractions.RealFileSystem(), this.Root).Context;
+        this.ProjectContext = authoringMounts is null ? project : project with { AuthoringMounts = [.. authoringMounts] };
         Directory.CreateDirectory(Path.Combine(this.Root, "Content", "Scenes"));
         Directory.CreateDirectory(Path.Combine(this.Root, "Content", "Materials"));
-        var projectInfo = new ProjectInfo("TestProject", Category.Games, this.Root)
-        {
-            AuthoringMounts = authoringMounts is null ? [new ProjectMountPoint("Content", "Content")] : [.. authoringMounts],
-        };
-        this.Project = new Project(projectInfo);
-        File.WriteAllText(Path.Combine(this.Root, "Project.oxy"), ProjectInfo.ToJson(projectInfo));
-        this.ProjectContext = ProjectContext.FromProject(this.Project, new Testably.Abstractions.RealFileSystem());
         this.Activate(this.ProjectContext);
         this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
         this.Publication = new(this.CookCoordinator, this.ContextService, this.Files, this.Manager, this.EngineContent);
@@ -45,8 +41,6 @@ internal sealed partial class CookWorkspace : IDisposable
 
     /// <summary>Gets the engine content pak beneath the workspace's libraries: a declared fixture, or the installed pak for native cooks.</summary>
     public IEngineContentPak EngineContent { get; }
-
-    public Project Project { get; }
 
     public ProjectContext ProjectContext { get; }
 

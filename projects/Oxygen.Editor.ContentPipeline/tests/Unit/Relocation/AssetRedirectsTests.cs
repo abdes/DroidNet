@@ -64,7 +64,7 @@ public sealed class AssetRedirectsTests
             [AssetPath.Parse("/Content/Materials/A.omat.json")],
             paths =>
             {
-                File.Delete(path);
+                workspace.FileSystem.File.Delete(path);
                 return Task.CompletedTask;
             },
             this.TestContext.CancellationToken).ConfigureAwait(false);

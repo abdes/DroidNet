@@ -60,7 +60,7 @@ public sealed partial class ContentPipelineService
 
     // An automatic cook whose sources are all gone, and at least one of them has a published product.
     private static bool IsRetiringRemovedSources(ProjectContext project, Incremental.CookProvenance previous, ContentCookInput[] primaryInputs)
-        => primaryInputs.Length != 0 && primaryInputs.All(static input => !File.Exists(input.SourceAbsolutePath.FullPath))
+        => primaryInputs.Length != 0 && primaryInputs.All(input => !project.FileSystem.File.Exists(input.SourceAbsolutePath.FullPath))
             && previous.Products.Any(product => primaryInputs.Any(input => input.AssetUri == product.SourceUri)
                 && Incremental.CookRootRepair.IsRetired(project.ProjectRoot.FullPath, product));
 
@@ -200,9 +200,9 @@ public sealed partial class ContentPipelineService
 
         // A save or preview may have queued this cook before its source, never cooked, was moved or deleted. There is
         // nothing to cook and no output to remove.
-        if (isAutomatic && primaryInputs.All(static input => !File.Exists(input.SourceAbsolutePath.FullPath)))
+        if (isAutomatic && primaryInputs.All(input => !operation.Project.FileSystem.File.Exists(input.SourceAbsolutePath.FullPath)))
         {
-            var retired = CreateSourceMissingDiagnostics(operation.OperationId, primaryInputs).Select(diagnostic => diagnostic with
+            var retired = CreateSourceMissingDiagnostics(operation.Project, operation.OperationId, primaryInputs).Select(diagnostic => diagnostic with
             {
                 Severity = DiagnosticSeverity.Info,
                 Message = $"'{Path.GetFileName(diagnostic.AffectedPath)}' was moved or deleted after this cook was requested; there is nothing to cook.",
@@ -221,7 +221,7 @@ public sealed partial class ContentPipelineService
             return null;
         }
 
-        var missing = CreateSourceMissingDiagnostics(operation.OperationId, primaryInputs);
+        var missing = CreateSourceMissingDiagnostics(operation.Project, operation.OperationId, primaryInputs);
         return missing.Count == 0 ? null : new(operation.OperationId, targetKind, OperationStatus.Failed, NormalizeDiagnostics(operation.OperationId, missing), [], Inspection: null, Validation: null);
     }
 

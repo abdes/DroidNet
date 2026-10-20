@@ -2,10 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using System.Security.Cryptography;
 using System.Text.Json;
 using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
@@ -29,7 +31,7 @@ internal static partial class AssetRelocationTransaction
     }
 
     /// <summary>Applies a plan, or restores every file and rethrows when any step fails.</summary>
-    /// <param name="projectRoot">The project root.</param>
+    /// <param name="project">The project whose files the plan changes.</param>
     /// <param name="plan">The plan, prepared against the current files.</param>
     /// <param name="files">The atomic file store.</param>
     /// <param name="logger">Records the journal, each move, each rewrite and any restore.</param>
@@ -37,20 +39,22 @@ internal static partial class AssetRelocationTransaction
     /// <param name="cancellationToken">Cancels before the first change.</param>
     /// <returns>Each rewritten file with the version written, after every move and rewrite is committed.</returns>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Any failure after the first change must restore the project before it is reported.")]
-    public static async Task<IReadOnlyList<RelocatedFile>> ApplyAsync(string projectRoot, AssetRelocationPlan plan, IAtomicFileStore files, ILogger logger, int? failAfterStep, CancellationToken cancellationToken)
+    public static async Task<IReadOnlyList<RelocatedFile>> ApplyAsync(ProjectContext project, AssetRelocationPlan plan, IAtomicFileStore files, ILogger logger, int? failAfterStep, CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(plan);
-        await RequirePreparedStateAsync(plan, files, cancellationToken).ConfigureAwait(false);
+        var fileSystem = project.FileSystem;
+        await RequirePreparedStateAsync(fileSystem, plan, files, cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var journal = new Journal
         {
             Phase = Phase.Applying,
             Moves = [.. plan.Moves.Select(static move => new JournalMove(move.Source.FullPath, move.Target.FullPath, move.IsDirectory))],
-            CreatedDirectories = [.. GetMissingParents(plan.Moves)],
+            CreatedDirectories = [.. GetMissingParents(fileSystem, plan.Moves)],
             Edits = [.. plan.Edits.Select(static edit => new JournalEdit(edit.FinalPath.FullPath, edit.Before.Sha256, Hash(edit.AfterContent), edit.BeforeContent))],
         };
-        var path = Path.Combine(projectRoot, ".build", JournalFolder, Guid.NewGuid().ToString("N"), JournalName);
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        var path = Path.Combine(project.ProjectRoot.FullPath, ".build", JournalFolder, Guid.NewGuid().ToString("N"), JournalName);
+        _ = fileSystem.Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await WriteJournalAsync(files, path, journal).ConfigureAwait(false);
         LogJournalOpened(logger, path, journal.Moves.Length, journal.Edits.Length);
 
@@ -60,6 +64,7 @@ internal static partial class AssetRelocationTransaction
         try
         {
             await ApplyChangesAsync(
+                fileSystem,
                 plan,
                 journal,
                 files,
@@ -76,60 +81,62 @@ internal static partial class AssetRelocationTransaction
         catch (Exception failure)
         {
             LogRestoring(logger, failure, path);
-            await RestoreAsync(files, path, journal, logger, failure).ConfigureAwait(false);
+            await RestoreAsync(fileSystem, files, path, journal, logger, failure).ConfigureAwait(false);
             throw new AssetRelocationException("The move failed and every file was restored: " + failure.Message, failure);
         }
 
         journal = journal with { Phase = Phase.Committed };
         await WriteJournalAsync(files, path, journal).ConfigureAwait(false);
-        DeleteJournal(path, logger);
+        DeleteJournal(fileSystem, path, logger);
         LogCommitted(logger, path);
         return written;
     }
 
     /// <summary>Restores every relocation a process interruption left half-applied.</summary>
-    /// <param name="projectRoot">The project root.</param>
+    /// <param name="project">The project.</param>
     /// <param name="files">The atomic file store.</param>
     /// <param name="logger">Records each recovered journal and restored file.</param>
     /// <param name="cancellationToken">Cancels before the next journal.</param>
     /// <returns>Completion after each interrupted relocation is restored.</returns>
-    public static async Task RecoverAsync(string projectRoot, IAtomicFileStore files, ILogger logger, CancellationToken cancellationToken)
+    public static async Task RecoverAsync(ProjectContext project, IAtomicFileStore files, ILogger logger, CancellationToken cancellationToken)
     {
-        var root = Path.Combine(projectRoot, ".build", JournalFolder);
-        if (!Directory.Exists(root))
+        ArgumentNullException.ThrowIfNull(project);
+        var fileSystem = project.FileSystem;
+        var root = Path.Combine(project.ProjectRoot.FullPath, ".build", JournalFolder);
+        if (!fileSystem.Directory.Exists(root))
         {
             return;
         }
 
-        foreach (var path in Directory.EnumerateFiles(root, JournalName, SearchOption.AllDirectories).ToArray())
+        foreach (var path in fileSystem.Directory.EnumerateFiles(root, JournalName, SearchOption.AllDirectories).ToArray())
         {
             cancellationToken.ThrowIfCancellationRequested();
             Journal? journal;
             try
             {
-                journal = JsonSerializer.Deserialize<Journal>(await File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false), JsonOptions);
+                journal = JsonSerializer.Deserialize<Journal>(await fileSystem.File.ReadAllBytesAsync(path, cancellationToken).ConfigureAwait(false), JsonOptions);
             }
             catch (JsonException error)
             {
                 // The journal is written atomically, so an unreadable one never recorded a started relocation.
                 LogUnreadableJournal(logger, error, path);
-                DeleteJournal(path, logger);
+                DeleteJournal(fileSystem, path, logger);
                 continue;
             }
 
             if (journal?.Phase == Phase.Applying)
             {
                 LogRecovering(logger, path);
-                await RestoreAsync(files, path, journal, logger, failure: null).ConfigureAwait(false);
+                await RestoreAsync(fileSystem, files, path, journal, logger, failure: null).ConfigureAwait(false);
             }
             else
             {
-                DeleteJournal(path, logger);
+                DeleteJournal(fileSystem, path, logger);
             }
         }
     }
 
-    private static async Task RequirePreparedStateAsync(AssetRelocationPlan plan, IAtomicFileStore files, CancellationToken cancellationToken)
+    private static async Task RequirePreparedStateAsync(IFileSystem fileSystem, AssetRelocationPlan plan, IAtomicFileStore files, CancellationToken cancellationToken)
     {
         foreach (var edit in plan.Edits)
         {
@@ -142,8 +149,8 @@ internal static partial class AssetRelocationTransaction
 
         foreach (var move in plan.Moves)
         {
-            var exists = move.IsDirectory ? Directory.Exists(move.Source.FullPath) : File.Exists(move.Source.FullPath);
-            if (!exists || (move.Source != move.Target && (File.Exists(move.Target.FullPath) || Directory.Exists(move.Target.FullPath))))
+            var exists = move.IsDirectory ? fileSystem.Directory.Exists(move.Source.FullPath) : fileSystem.File.Exists(move.Source.FullPath);
+            if (!exists || (move.Source != move.Target && (fileSystem.File.Exists(move.Target.FullPath) || fileSystem.Directory.Exists(move.Target.FullPath))))
             {
                 throw new AssetRelocationException($"'{move.Source.Name}' or its destination changed while the move was prepared. Try again.");
             }
@@ -151,6 +158,7 @@ internal static partial class AssetRelocationTransaction
     }
 
     private static async Task ApplyChangesAsync(
+        IFileSystem fileSystem,
         AssetRelocationPlan plan,
         Journal journal,
         IAtomicFileStore files,
@@ -160,13 +168,13 @@ internal static partial class AssetRelocationTransaction
     {
         foreach (var directory in journal.CreatedDirectories)
         {
-            _ = Directory.CreateDirectory(directory);
+            _ = fileSystem.Directory.CreateDirectory(directory);
         }
 
         foreach (var move in journal.Moves)
         {
             step();
-            Move(move.Source, move.Target, move.IsDirectory);
+            Move(fileSystem, move.Source, move.Target, move.IsDirectory);
             LogMoved(logger, move.Source, move.Target);
         }
 
@@ -178,12 +186,12 @@ internal static partial class AssetRelocationTransaction
         }
     }
 
-    private static async Task RestoreAsync(IAtomicFileStore files, string path, Journal journal, ILogger logger, Exception? failure)
+    private static async Task RestoreAsync(IFileSystem fileSystem, IAtomicFileStore files, string path, Journal journal, ILogger logger, Exception? failure)
     {
         var errors = new List<Exception>();
         await RestoreEditsAsync(files, journal, logger, errors).ConfigureAwait(false);
-        RestoreMoves(journal, logger, errors);
-        RemoveCreatedDirectories(journal, errors);
+        RestoreMoves(fileSystem, journal, logger, errors);
+        RemoveCreatedDirectories(fileSystem, journal, errors);
         if (errors.Count != 0)
         {
             foreach (var error in errors)
@@ -198,7 +206,7 @@ internal static partial class AssetRelocationTransaction
         }
 
         await WriteJournalAsync(files, path, journal with { Phase = Phase.RolledBack }).ConfigureAwait(false);
-        DeleteJournal(path, logger);
+        DeleteJournal(fileSystem, path, logger);
         LogRestored(logger, path);
     }
 
@@ -226,18 +234,18 @@ internal static partial class AssetRelocationTransaction
         }
     }
 
-    private static void RestoreMoves(Journal journal, ILogger logger, List<Exception> errors)
+    private static void RestoreMoves(IFileSystem fileSystem, Journal journal, ILogger logger, List<Exception> errors)
     {
         foreach (var move in journal.Moves.AsEnumerable().Reverse())
         {
             try
             {
-                var targetExists = move.IsDirectory ? Directory.Exists(move.Target) : File.Exists(move.Target);
-                var sourceExists = move.IsDirectory ? Directory.Exists(move.Source) : File.Exists(move.Source);
+                var targetExists = move.IsDirectory ? fileSystem.Directory.Exists(move.Target) : fileSystem.File.Exists(move.Target);
+                var sourceExists = move.IsDirectory ? fileSystem.Directory.Exists(move.Source) : fileSystem.File.Exists(move.Source);
                 var caseOnly = FileSystemPath.From(move.Source) == FileSystemPath.From(move.Target);
-                if (caseOnly ? targetExists && !HasExactName(move.Source) : targetExists && !sourceExists)
+                if (caseOnly ? targetExists && !HasExactName(fileSystem, move.Source) : targetExists && !sourceExists)
                 {
-                    Move(move.Target, move.Source, move.IsDirectory);
+                    Move(fileSystem, move.Target, move.Source, move.IsDirectory);
                     LogMovedBack(logger, move.Target, move.Source);
                 }
             }
@@ -248,15 +256,15 @@ internal static partial class AssetRelocationTransaction
         }
     }
 
-    private static void RemoveCreatedDirectories(Journal journal, List<Exception> errors)
+    private static void RemoveCreatedDirectories(IFileSystem fileSystem, Journal journal, List<Exception> errors)
     {
         foreach (var directory in journal.CreatedDirectories.AsEnumerable().Reverse())
         {
             try
             {
-                if (Directory.Exists(directory) && !Directory.EnumerateFileSystemEntries(directory).Any())
+                if (fileSystem.Directory.Exists(directory) && !fileSystem.Directory.EnumerateFileSystemEntries(directory).Any())
                 {
-                    Directory.Delete(directory);
+                    fileSystem.Directory.Delete(directory);
                 }
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -266,41 +274,41 @@ internal static partial class AssetRelocationTransaction
         }
     }
 
-    private static void Move(string source, string target, bool isDirectory)
+    private static void Move(IFileSystem fileSystem, string source, string target, bool isDirectory)
     {
         // A change of case only goes through a temporary name, which the file system sees as a different file.
         if (FileSystemPath.From(source) == FileSystemPath.From(target))
         {
             var temporary = Path.Combine(Path.GetDirectoryName(source)!, ".oxygen-relocate-" + Guid.NewGuid().ToString("N"));
-            Move(source, temporary, isDirectory);
-            Move(temporary, target, isDirectory);
+            Move(fileSystem, source, temporary, isDirectory);
+            Move(fileSystem, temporary, target, isDirectory);
             return;
         }
 
         if (isDirectory)
         {
-            Directory.Move(source, target);
+            fileSystem.Directory.Move(source, target);
         }
         else
         {
-            File.Move(source, target);
+            fileSystem.File.Move(source, target);
         }
     }
 
-    private static bool HasExactName(string path)
+    private static bool HasExactName(IFileSystem fileSystem, string path)
     {
         var folder = Path.GetDirectoryName(path)!;
-        return Directory.Exists(folder) && Directory.EnumerateFileSystemEntries(folder, Path.GetFileName(path))
+        return fileSystem.Directory.Exists(folder) && fileSystem.Directory.EnumerateFileSystemEntries(folder, Path.GetFileName(path))
             .Any(entry => string.Equals(Path.GetFileName(entry), Path.GetFileName(path), StringComparison.Ordinal));
     }
 
-    private static List<string> GetMissingParents(IEnumerable<RelocationFileMove> moves)
+    private static List<string> GetMissingParents(IFileSystem fileSystem, IEnumerable<RelocationFileMove> moves)
     {
         var created = new List<FileSystemPath>();
         foreach (var move in moves)
         {
             var missing = new Stack<FileSystemPath>();
-            for (var folder = move.Target.Parent; folder is not null && !Directory.Exists(folder.FullPath); folder = folder.Parent)
+            for (var folder = move.Target.Parent; folder is not null && !fileSystem.Directory.Exists(folder.FullPath); folder = folder.Parent)
             {
                 missing.Push(folder);
             }
@@ -319,11 +327,11 @@ internal static partial class AssetRelocationTransaction
         _ = await files.WriteAsync(path, JsonSerializer.SerializeToUtf8Bytes(journal, JsonOptions), current.Version, CancellationToken.None).ConfigureAwait(false);
     }
 
-    private static void DeleteJournal(string path, ILogger logger)
+    private static void DeleteJournal(IFileSystem fileSystem, string path, ILogger logger)
     {
         try
         {
-            Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
+            fileSystem.Directory.Delete(Path.GetDirectoryName(path)!, recursive: true);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException)
         {

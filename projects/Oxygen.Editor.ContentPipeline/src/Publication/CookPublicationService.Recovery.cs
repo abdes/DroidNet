@@ -24,7 +24,6 @@ public sealed partial class CookPublicationService
     async Task<ICookPublicationReadLease> ICookPublicationReader.AcquireReadAsync(ProjectContext project, CancellationToken cancellationToken)
         => await this.AcquireReadAsync(project, cancellationToken).ConfigureAwait(false);
 
-
     /// <summary>Restores interrupted authored-source/configuration changes before a host activates its project context.</summary>
     /// <param name="project">The project being activated.</param>
     /// <param name="cancellationToken">Cancels the recovery.</param>
@@ -32,7 +31,7 @@ public sealed partial class CookPublicationService
     public async Task RecoverAsync(ProjectContext project, CancellationToken cancellationToken)
     {
         using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, cancellationToken).ConfigureAwait(false);
-        await Relocation.AssetRelocationTransaction.RecoverAsync(project.ProjectRoot.FullPath, files, this.Logger, cancellationToken).ConfigureAwait(false);
+        await Relocation.AssetRelocationTransaction.RecoverAsync(project, files, this.Logger, cancellationToken).ConfigureAwait(false);
         await CookPublicationTransaction.RecoverInterruptedMutationsAsync(
             project,
             files,

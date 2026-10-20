@@ -95,7 +95,7 @@ internal sealed class CookDependencyDiscovery(
 
                 // Files beside each other that cook to one asset, such as a pair made outside the editor, are both
                 // refused: the identity has one source.
-                foreach (var other in SourceCollisions.Find(input.SourceAbsolutePath))
+                foreach (var other in SourceCollisions.Find(project, input.SourceAbsolutePath))
                 {
                     this.ReportCollision(input.AssetUri.VirtualPath, input.SourceAbsolutePath, other);
                 }

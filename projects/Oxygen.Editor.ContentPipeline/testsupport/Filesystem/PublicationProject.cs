@@ -9,6 +9,7 @@ using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Testing;
 using Testably.Abstractions;
@@ -28,11 +29,11 @@ internal sealed partial class PublicationProject : IDisposable
     public PublicationProject(bool hadPrevious)
     {
         this.hadPrevious = hadPrevious;
-        var info = new ProjectInfo(Guid.NewGuid(), "Publication", Category.Games, this.Root)
+        this.Context = TestProject.Create(new RealFileSystem(), this.Root, ["Content", "Second", "Unrelated"]).Context with { Name = "Publication" };
+        var info = new ProjectInfo(this.Context.ProjectId, this.Context.Name, this.Context.Category, this.Root)
         {
-            AuthoringMounts = [new("Content", "Content"), new("Second", "Second"), new("Unrelated", "Unrelated")],
+            AuthoringMounts = [.. this.Context.AuthoringMounts],
         };
-        this.Context = ProjectContext.FromProjectInfo(info, new RealFileSystem());
         this.Operation = new(Guid.NewGuid(), this.Context, 1);
         this.Write("Project.oxy", ProjectInfo.ToJson(info));
         var roots = ImmutableArray.CreateBuilder<CookPublicationRoot>();

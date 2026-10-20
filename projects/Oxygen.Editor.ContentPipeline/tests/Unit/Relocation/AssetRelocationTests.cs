@@ -119,12 +119,12 @@ public sealed class AssetRelocationTests
         var history = new HistoryKeeper(this);
         _ = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Rename", history, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = workspace.Write("Content/Materials/Red.omat.json", Material);
-        var before = Snapshot(workspace.Root);
+        var before = workspace.Snapshot();
 
         Func<Task> undo = async () => await history.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = await undo.Should().ThrowAsync<AssetRelocationException>().ConfigureAwait(false);
-        _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
+        _ = workspace.Snapshot().Should().BeEquivalentTo(before);
         _ = history.CanUndo.Should().BeTrue();
     }
 
@@ -243,7 +243,7 @@ public sealed class AssetRelocationTests
         using var workspace = CreateContent();
         _ = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
         var product = AssetPath.Parse("/Content/Models/Robot/robot.gltf/Body.ogeo");
-        var before = Snapshot(workspace.Root);
+        var before = workspace.Snapshot();
 
         Func<Task> move = () => workspace.Service.RelocateAsync(Move(product.VirtualPath, "/Content/Models/Body.ogeo"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
         Func<Task> rename = () => workspace.Service.RelocateAsync(new AssetRelocationRequest { ProductRenames = [new(product, "Hull")] }, "Rename", new HistoryKeeper(this), this.TestContext.CancellationToken);
@@ -255,7 +255,7 @@ public sealed class AssetRelocationTests
                 .Which.Code.Should().Be(AssetRelocationException.ModelProductCode);
         }
 
-        _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
+        _ = workspace.Snapshot().Should().BeEquivalentTo(before);
     }
 
     /// <summary>Each forbidden request is rejected before any file changes.</summary>
@@ -277,12 +277,12 @@ public sealed class AssetRelocationTests
         _ = workspace.Write("Content/Materials/Other.omat.json", """{ "name": "Other" }""");
         _ = workspace.Write("Content/Shared/a.txt", "a");
         _ = workspace.WriteModel("Content/Models/Robot", "robot.gltf");
-        var before = Snapshot(workspace.Root);
+        var before = workspace.Snapshot();
 
         Func<Task> work = () => workspace.Service.RelocateAsync(Move(source, target), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
         _ = await work.Should().ThrowAsync<AssetRelocationException>().ConfigureAwait(false);
-        _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
+        _ = workspace.Snapshot().Should().BeEquivalentTo(before);
     }
 
     /// <summary>A script cannot be renamed next to a source with the same name: both would cook to one script.</summary>
@@ -335,7 +335,7 @@ public sealed class AssetRelocationTests
     public async Task MovingAnInputSourceMovesItsProductsInTheirReferrers()
     {
         using var workspace = CreateInput();
-        _ = Directory.CreateDirectory(Path.Combine(workspace.Root, "Content", "Controls"));
+        workspace.CreateFolder("Content/Controls");
 
         var plan = await workspace.Service.RelocateAsync(Move("/Content/Input/Player.input.json", "/Content/Controls/Player.input.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -390,12 +390,12 @@ public sealed class AssetRelocationTests
     public async Task ARenameTheSourceRefusesChangesNothing(string product, string name)
     {
         using var workspace = CreateInput();
-        var before = Snapshot(workspace.Root);
+        var before = workspace.Snapshot();
 
         Func<Task> rename = async () => await workspace.Service.RelocateAsync(Rename(product, name), "Rename", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = await rename.Should().ThrowAsync<AssetRelocationException>().ConfigureAwait(false);
-        _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
+        _ = workspace.Snapshot().Should().BeEquivalentTo(before);
     }
 
     /// <summary>Renaming a script rewrites the slots and parameters that refer to the script it cooks to.</summary>
@@ -429,13 +429,13 @@ public sealed class AssetRelocationTests
     public async Task FailureRestoresEveryFile(int failAfterStep)
     {
         using var workspace = CreateContent();
-        var before = Snapshot(workspace.Root);
+        var before = workspace.Snapshot();
         workspace.Service.FailAfterStep = failAfterStep;
 
         Func<Task> work = () => workspace.Service.RelocateAsync(Move("/Content/Textures/Wood.otex.json", "/Content/Textures/Oak.otex.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
         _ = await work.Should().ThrowAsync<AssetRelocationException>().WithMessage("*restored*").ConfigureAwait(false);
-        _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
+        _ = workspace.Snapshot().Should().BeEquivalentTo(before);
     }
 
     /// <summary>Recovery restores a relocation that a process interruption left half-applied.</summary>
@@ -444,14 +444,14 @@ public sealed class AssetRelocationTests
     public async Task RecoveryRestoresInterruptedRelocation()
     {
         using var workspace = CreateContent();
-        var before = Snapshot(workspace.Root);
+        var before = workspace.Snapshot();
         var original = workspace.PathOf("Content/Materials/Red.omat.json");
         var moved = workspace.PathOf("Content/Materials/Blue.omat.json");
         var referrer = workspace.PathOf("Content/Geometry/Box.ogeo.json");
-        var previous = await File.ReadAllBytesAsync(referrer, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var previous = await workspace.FileSystem.File.ReadAllBytesAsync(referrer, this.TestContext.CancellationToken).ConfigureAwait(false);
         var rewritten = Encoding.UTF8.GetBytes(Geometry.Replace("Red.omat", "Blue.omat", StringComparison.Ordinal));
-        File.Move(original, moved);
-        await File.WriteAllBytesAsync(referrer, rewritten, this.TestContext.CancellationToken).ConfigureAwait(false);
+        workspace.FileSystem.File.Move(original, moved);
+        await workspace.FileSystem.File.WriteAllBytesAsync(referrer, rewritten, this.TestContext.CancellationToken).ConfigureAwait(false);
         var journal = new
         {
             Version = 1,
@@ -462,10 +462,10 @@ public sealed class AssetRelocationTests
         };
         var journalPath = workspace.Write(".build/relocation/interrupted/journal.json", JsonSerializer.Serialize(journal));
 
-        await AssetRelocationTransaction.RecoverAsync(workspace.Root, workspace.Files, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, this.TestContext.CancellationToken).ConfigureAwait(false);
+        await AssetRelocationTransaction.RecoverAsync(workspace.Project, workspace.Files, Microsoft.Extensions.Logging.Abstractions.NullLogger.Instance, this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        _ = File.Exists(journalPath).Should().BeFalse();
-        _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
+        _ = workspace.FileSystem.File.Exists(journalPath).Should().BeFalse();
+        _ = workspace.Snapshot().Should().BeEquivalentTo(before);
     }
 
     /// <summary>Unsaved documents reject a relocation and are named.</summary>
@@ -675,13 +675,13 @@ public sealed class AssetRelocationTests
     public async Task RequestThatChangesNothingTouchesNoFile()
     {
         using var workspace = CreateContent();
-        var before = Snapshot(workspace.Root);
+        var before = workspace.Snapshot();
 
         var plan = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Red.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = plan.Moves.Should().BeEmpty();
         _ = plan.RewrittenFiles.Should().BeEmpty();
-        _ = Snapshot(workspace.Root).Should().BeEquivalentTo(before);
+        _ = workspace.Snapshot().Should().BeEquivalentTo(before);
         _ = workspace.Exists(".build/relocation").Should().BeFalse();
     }
 
@@ -857,11 +857,6 @@ public sealed class AssetRelocationTests
         _ = workspace.Write($"{folder}/Pisa.otex.json", $$"""{ "name": "Pisa", "virtual_path": "/{{folder}}/Pisa.otex", "source": "Pisa_px.hdr", "cube": { "cubemap": true } }""");
         return faces;
     }
-
-    private static Dictionary<string, string> Snapshot(string root)
-        => Directory.EnumerateFiles(root, "*", SearchOption.AllDirectories)
-            .Where(path => !Path.GetRelativePath(root, path).StartsWith(".build", StringComparison.Ordinal))
-            .ToDictionary(path => Path.GetRelativePath(root, path), File.ReadAllText, StringComparer.Ordinal);
 
     /// <summary>Runs posted work on the thread pool with itself as the current context, counting the posts.</summary>
     private sealed class RecordingContext : SynchronizationContext

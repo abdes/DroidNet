@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.IO.Abstractions;
 using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
@@ -45,7 +46,7 @@ internal sealed class AuthoredReferenceIndex
         var imports = new List<ImportSource>();
         var unreadable = new List<FileSystemPath>();
         var root = project.ProjectRoot;
-        foreach (var path in mounts.SelectMany(mount => EnumerateFiles(root.Combine(mount.RelativePath))))
+        foreach (var path in mounts.SelectMany(mount => EnumerateFiles(project.FileSystem, root.Combine(mount.RelativePath))))
         {
             cancellationToken.ThrowIfCancellationRequested();
             var isDescriptor = AuthoredReferenceFormat.IsReferencingSource(path.FullPath);
@@ -57,7 +58,7 @@ internal sealed class AuthoredReferenceIndex
             byte[] content;
             try
             {
-                content = await File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(false);
+                content = await project.FileSystem.File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(false);
             }
             catch (Exception error) when (error is IOException or UnauthorizedAccessException)
             {
@@ -105,15 +106,15 @@ internal sealed class AuthoredReferenceIndex
             .Order()];
     }
 
-    private static IEnumerable<FileSystemPath> EnumerateFiles(FileSystemPath root)
+    private static IEnumerable<FileSystemPath> EnumerateFiles(IFileSystem fileSystem, FileSystemPath root)
     {
-        if (!Directory.Exists(root.FullPath))
+        if (!fileSystem.Directory.Exists(root.FullPath))
         {
             return [];
         }
 
         var options = new EnumerationOptions { RecurseSubdirectories = true, AttributesToSkip = FileAttributes.ReparsePoint, IgnoreInaccessible = true };
-        return Directory.EnumerateFiles(root.FullPath, "*", options)
+        return fileSystem.Directory.EnumerateFiles(root.FullPath, "*", options)
             .Select(FileSystemPath.From)
             .Where(path => !path.GetPathBelow(root).Split('/').Any(static segment => segment.StartsWith('.')));
     }

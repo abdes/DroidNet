@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -20,18 +21,21 @@ namespace Oxygen.Editor.ContentPipeline;
 public static class SourceCollisions
 {
     /// <summary>Finds the other files beside a source that cook to the same asset.</summary>
+    /// <param name="project">The project that holds the source.</param>
     /// <param name="source">The source, or the location a source would be written to.</param>
     /// <param name="ignored">A file that does not count, such as the source of a rename.</param>
     /// <returns>The colliding files, sorted by name; empty when the source has none or cooks into no descriptor.</returns>
-    public static IReadOnlyList<FileSystemPath> Find(FileSystemPath source, FileSystemPath? ignored = null)
+    public static IReadOnlyList<FileSystemPath> Find(ProjectContext project, FileSystemPath source, FileSystemPath? ignored = null)
     {
+        ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(source);
-        if (CookedName(source.Name) is not { } cooked || source.Parent is not { } folder || !Directory.Exists(folder.FullPath))
+        var files = project.FileSystem;
+        if (CookedName(source.Name) is not { } cooked || source.Parent is not { } folder || !files.Directory.Exists(folder.FullPath))
         {
             return [];
         }
 
-        return [.. Directory.EnumerateFiles(folder.FullPath)
+        return [.. files.Directory.EnumerateFiles(folder.FullPath)
             .Select(FileSystemPath.From)
             .Where(other => !string.Equals(other.Name, source.Name, StringComparison.Ordinal) && other != ignored
                 && string.Equals(CookedName(other.Name), cooked, StringComparison.OrdinalIgnoreCase))

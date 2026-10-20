@@ -159,7 +159,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             {
                 var project = operation.Project;
                 var index = await this.BuildIndexAsync(project, token).ConfigureAwait(false);
-                if (RelocationPaths.ToPhysical(project, targetFolder) is not { } folder || !Directory.Exists(folder.FullPath))
+                if (RelocationPaths.ToPhysical(project, targetFolder) is not { } folder || !project.FileSystem.Directory.Exists(folder.FullPath))
                 {
                     throw new AssetRelocationException("Choose a destination under Content or another authoring folder.");
                 }
@@ -173,7 +173,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 }
 
                 coordinator.VerifyWriter(operation);
-                await this.WriteCopiesAsync(map).ConfigureAwait(false);
+                await this.WriteCopiesAsync(project, map).ConfigureAwait(false);
                 this.Invalidate();
                 created = [.. map.Moves];
                 return copies;
@@ -205,7 +205,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                     }
 
                     var path = ResolveExisting(project, source);
-                    var isDirectory = Directory.Exists(path.FullPath);
+                    var isDirectory = project.FileSystem.Directory.Exists(path.FullPath);
 
                     RejectStartSceneDelete(project, path, isDirectory);
                     paths.AddRange(GetDeletedFiles(project, index, path, isDirectory));
@@ -219,7 +219,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                     this.LogRecycling(path.FullPath);
                 }
 
-                foldersDeleted = distinct.Exists(static path => Directory.Exists(path.FullPath));
+                foldersDeleted = distinct.Exists(path => project.FileSystem.Directory.Exists(path.FullPath));
                 try
                 {
                     await recycle([.. distinct.Select(static path => path.FullPath)]).ConfigureAwait(false);
@@ -255,35 +255,36 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         foreach (var source in sources)
         {
             var path = ResolveExisting(project, source);
-            var isDirectory = Directory.Exists(path.FullPath);
+            var isDirectory = project.FileSystem.Directory.Exists(path.FullPath);
             RejectImportContent(project, index, path, isDirectory, "Import the model again instead of copying it.");
             if (isDirectory && targetFolder.IsSameOrInside(source))
             {
                 throw new AssetRelocationException("A folder cannot be copied into itself.");
             }
 
-            var target = GetUniquePath(folder, path.Name, isDirectory, reserved);
+            var target = GetUniquePath(project, folder, path.Name, isDirectory, reserved);
             map.AddMove(new(path, target, isDirectory));
             copies.Add(RelocationPaths.ToVirtual(project, target)!);
             if (!isDirectory && path.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal))
             {
-                await AddTextureImageCopiesAsync(map, path, target, folder, reserved, cancellationToken).ConfigureAwait(false);
+                await AddTextureImageCopiesAsync(project, map, path, target, folder, reserved, cancellationToken).ConfigureAwait(false);
             }
         }
 
         return (map, copies);
     }
 
-    private static async Task AddTextureImageCopiesAsync(RelocationMap map, FileSystemPath path, FileSystemPath target, FileSystemPath folder, HashSet<FileSystemPath> reserved, CancellationToken cancellationToken)
+    private static async Task AddTextureImageCopiesAsync(ProjectContext project, RelocationMap map, FileSystemPath path, FileSystemPath target, FileSystemPath folder, HashSet<FileSystemPath> reserved, CancellationToken cancellationToken)
     {
         var stem = RelocationPaths.GetDisplayName(path.Name);
         var newStem = RelocationPaths.GetDisplayName(target.Name);
-        foreach (var image in AuthoredReferenceFormat.ReadTextureSources(path, await File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(false))
-            .Where(image => image.Parent == path.Parent && File.Exists(image.FullPath)))
+        var fileSystem = project.FileSystem;
+        foreach (var image in AuthoredReferenceFormat.ReadTextureSources(project, path, await fileSystem.File.ReadAllBytesAsync(path.FullPath, cancellationToken).ConfigureAwait(false))
+            .Where(image => image.Parent == path.Parent && fileSystem.File.Exists(image.FullPath)))
         {
             var name = image.Name;
             var renamed = string.Equals(RelocationPaths.GetDisplayName(name), stem, FileSystemPath.NameComparison) ? newStem + AssetFileTypes.GetSuffix(name) : name;
-            map.AddMove(new(image, GetUniquePath(folder, renamed, isDirectory: false, reserved), IsDirectory: false));
+            map.AddMove(new(image, GetUniquePath(project, folder, renamed, isDirectory: false, reserved), IsDirectory: false));
         }
     }
 
@@ -295,10 +296,11 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             return;
         }
 
+        var fileSystem = project.FileSystem;
         var scenes = isDirectory
-            ? Directory.EnumerateFiles(path.FullPath, "*" + AssetFileTypes.SceneDescriptor, SearchOption.AllDirectories)
+            ? fileSystem.Directory.EnumerateFiles(path.FullPath, "*" + AssetFileTypes.SceneDescriptor, SearchOption.AllDirectories)
             : path.Name.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal) ? [path.FullPath] : [];
-        if (scenes.FirstOrDefault(scene => SceneSerializer.ReadId(File.ReadAllBytes(scene)) == start) is { } found)
+        if (scenes.FirstOrDefault(scene => SceneSerializer.ReadId(fileSystem.File.ReadAllBytes(scene)) == start) is { } found)
         {
             throw new AssetRelocationException($"'{RelocationPaths.GetDisplayName(Path.GetFileName(found))}' is the project's start scene and cannot be deleted. Choose another start scene first.");
         }
@@ -323,6 +325,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
 
     private static IEnumerable<FileSystemPath> GetDeletedFiles(ProjectContext project, AuthoredReferenceIndex index, FileSystemPath path, bool isDirectory)
     {
+        var fileSystem = project.FileSystem;
         var root = project.ProjectRoot;
         foreach (var import in index.Imports)
         {
@@ -347,11 +350,11 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             if (path == import.PrimaryPath)
             {
                 var owned = bundleFiles.Append(import.SidecarPath).ToHashSet();
-                var onlyThisModel = Directory.Exists(bundle.FullPath)
-                    && Directory.EnumerateFiles(bundle.FullPath, "*", SearchOption.AllDirectories).All(file => owned.Contains(FileSystemPath.From(file)));
+                var onlyThisModel = fileSystem.Directory.Exists(bundle.FullPath)
+                    && fileSystem.Directory.EnumerateFiles(bundle.FullPath, "*", SearchOption.AllDirectories).All(file => owned.Contains(FileSystemPath.From(file)));
                 return onlyThisModel && bundle != root
                     ? [bundle]
-                    : owned.Where(static file => File.Exists(file.FullPath));
+                    : owned.Where(file => fileSystem.File.Exists(file.FullPath));
             }
 
             if (bundleFiles.Contains(path))
@@ -364,7 +367,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         {
             var descriptors = isDirectory ? [] : index.Descriptors.Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
                 && descriptor.Location.Parent == path.Parent
-                && AuthoredReferenceFormat.ReadTextureSources(descriptor.Location, File.ReadAllBytes(descriptor.Location.FullPath)).Contains(path))
+                && AuthoredReferenceFormat.ReadTextureSources(project, descriptor.Location, fileSystem.File.ReadAllBytes(descriptor.Location.FullPath)).Contains(path))
                 .Select(static descriptor => descriptor.Location);
             return [path, .. descriptors];
         }
@@ -375,19 +378,20 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             .Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
                 && descriptor.Location != path
                 && descriptor.Location.Parent == folder)
-            .SelectMany(static descriptor => AuthoredReferenceFormat.ReadTextureSources(descriptor.Location, File.ReadAllBytes(descriptor.Location.FullPath)))
+            .SelectMany(descriptor => AuthoredReferenceFormat.ReadTextureSources(project, descriptor.Location, fileSystem.File.ReadAllBytes(descriptor.Location.FullPath)))
             .ToHashSet();
-        var images = AuthoredReferenceFormat.ReadTextureSources(path, File.ReadAllBytes(path.FullPath))
-            .Where(image => image.Parent == folder && File.Exists(image.FullPath) && !shared.Contains(image));
+        var images = AuthoredReferenceFormat.ReadTextureSources(project, path, fileSystem.File.ReadAllBytes(path.FullPath))
+            .Where(image => image.Parent == folder && fileSystem.File.Exists(image.FullPath) && !shared.Contains(image));
         return [path, .. images];
     }
 
-    private static FileSystemPath GetUniquePath(FileSystemPath folder, string name, bool isDirectory, HashSet<FileSystemPath> reserved)
+    private static FileSystemPath GetUniquePath(ProjectContext project, FileSystemPath folder, string name, bool isDirectory, HashSet<FileSystemPath> reserved)
     {
+        var fileSystem = project.FileSystem;
         var extension = isDirectory ? string.Empty : AssetFileTypes.GetSuffix(name);
         var stem = name[..^extension.Length];
         var candidate = folder.Combine(name);
-        for (var index = 2; File.Exists(candidate.FullPath) || Directory.Exists(candidate.FullPath) || reserved.Contains(candidate) || SourceCollisions.Find(candidate).Count != 0; index++)
+        for (var index = 2; fileSystem.File.Exists(candidate.FullPath) || fileSystem.Directory.Exists(candidate.FullPath) || reserved.Contains(candidate) || SourceCollisions.Find(project, candidate).Count != 0; index++)
         {
             candidate = folder.Combine(string.Create(CultureInfo.InvariantCulture, $"{stem} ({index}){extension}"));
         }
@@ -408,20 +412,21 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             throw new AssetRelocationException("A content mount is changed in Mounts, not here.");
         }
 
-        return File.Exists(path.FullPath) || Directory.Exists(path.FullPath)
+        return project.FileSystem.File.Exists(path.FullPath) || project.FileSystem.Directory.Exists(path.FullPath)
             ? path
             : throw new AssetRelocationException($"'{source}' does not exist as an authored file. Imported outputs belong to their model.");
     }
 
-    private async Task WriteCopiesAsync(RelocationMap map)
+    private async Task WriteCopiesAsync(ProjectContext project, RelocationMap map)
     {
+        var fileSystem = project.FileSystem;
         var created = new List<string>();
         try
         {
             foreach (var move in map.Moves)
             {
                 var pairs = move.IsDirectory
-                    ? Directory.EnumerateFiles(move.Source.FullPath, "*", SearchOption.AllDirectories)
+                    ? fileSystem.Directory.EnumerateFiles(move.Source.FullPath, "*", SearchOption.AllDirectories)
                         .Select(FileSystemPath.From)
                         .Select(file => (Source: file, Below: file.GetPathBelow(move.Source)))
                         .Where(static file => !file.Below.Split('/').Any(static segment => segment.StartsWith('.')))
@@ -430,15 +435,15 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                     : [(move.Source, move.Target)];
                 if (move.IsDirectory)
                 {
-                    _ = Directory.CreateDirectory(move.Target.FullPath);
+                    _ = fileSystem.Directory.CreateDirectory(move.Target.FullPath);
                     created.Add(move.Target.FullPath);
                 }
 
                 foreach (var (source, target) in pairs)
                 {
-                    var content = await File.ReadAllBytesAsync(source.FullPath, CancellationToken.None).ConfigureAwait(false);
+                    var content = await fileSystem.File.ReadAllBytesAsync(source.FullPath, CancellationToken.None).ConfigureAwait(false);
                     var bytes = AuthoredReferenceFormat.IsReferencingSource(source.FullPath) ? AuthoredReferenceFormat.RewriteCopy(source, target, content, map) : content;
-                    _ = Directory.CreateDirectory(target.Parent!.FullPath);
+                    _ = fileSystem.Directory.CreateDirectory(target.Parent!.FullPath);
                     _ = await files.WriteAsync(target.FullPath, bytes, FileVersion.Missing, CancellationToken.None).ConfigureAwait(false);
                     created.Add(target.FullPath);
                     this.LogCopied(source.FullPath, target.FullPath);
@@ -452,13 +457,13 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             {
                 try
                 {
-                    if (File.Exists(path))
+                    if (fileSystem.File.Exists(path))
                     {
-                        File.Delete(path);
+                        fileSystem.File.Delete(path);
                     }
-                    else if (Directory.Exists(path))
+                    else if (fileSystem.Directory.Exists(path))
                     {
-                        Directory.Delete(path, recursive: true);
+                        fileSystem.Directory.Delete(path, recursive: true);
                     }
                 }
                 catch (Exception error) when (error is IOException or UnauthorizedAccessException)
@@ -509,7 +514,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 IReadOnlyList<RelocatedFile> written;
                 try
                 {
-                    written = await AssetRelocationTransaction.ApplyAsync(operation.Project.ProjectRoot.FullPath, plan, files, this.logger, this.FailAfterStep, token).ConfigureAwait(false);
+                    written = await AssetRelocationTransaction.ApplyAsync(operation.Project, plan, files, this.logger, this.FailAfterStep, token).ConfigureAwait(false);
                 }
                 finally
                 {

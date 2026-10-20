@@ -520,11 +520,9 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   - What remains of project construction after `TestProject` (measured
     2026-10-20): 50 test files make their project with the kit, and the
     per-module builders `AssetWorkspace`, `RelocationWorkspace`,
-    `BrowserTestData`, `GenerationScenario`, `CookCoordinatorScenario` and
-    `SceneTabs` build on it. `CookWorkspace` (39 users,
-    `ProjectContext.FromProject`) and `PublicationProject` (7,
-    `FromProjectInfo`) still build their own, and 21 other test and
-    `testsupport` files call `FromProject`, `FromProjectInfo` or
+    `BrowserTestData`, `GenerationScenario`, `CookCoordinatorScenario`,
+    `SceneTabs`, `CookWorkspace` and `PublicationProject` build on it. 21 other
+    test and `testsupport` files call `FromProject`, `FromProjectInfo` or
     `new ProjectContext` directly. All move to `TestProject`; Phase 4's removal
     of `IProjectContextService` then changes the kit only.
   - Tests construct services directly, so every new constructor dependency
@@ -532,11 +530,14 @@ needs instead of a `WindowId`. Every slice follows decision 9.
     `new AssetFeed` (12) and 15 `new CookDependencyDiscovery` (3). The shared
     host-equivalent builder constructs them from registrations instead.
   - A project's files are read through `ProjectContext.FileSystem`; code that
-    holds a project takes no second file system for them. Editor source still
-    uses `File`/`Directory` statics in 66 files (ContentPipeline 39): the
-    cross-process cook leases and native tools need the real disk, the rest
-    move to the project's file system. About 33 unit test files make their own
-    `%TEMP%` root for that reason. Unifying Storage and `IFileSystem` is a
+    holds a project takes no second file system for them. Relocation and the
+    cook's reads of authored sources do. Editor source still uses
+    `File`/`Directory` statics in 56 files. The 30 in ContentPipeline are the
+    cook's native side (input snapshots, staging, publication, cooked roots and
+    the cross-process leases), which the native tools and other processes share
+    on the real disk. Of the rest, those that read project files move to the
+    project's file system. About 30 unit test files make their own `%TEMP%`
+    root for that reason. Unifying Storage and `IFileSystem` is a
     separate decision, not part of #69.
   - About 45 test files assert message, tooltip or title text.
   - View models with long hand-wired constructors spread every new dependency

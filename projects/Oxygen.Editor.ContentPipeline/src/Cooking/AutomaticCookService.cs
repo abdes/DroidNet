@@ -136,7 +136,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     private static bool TryResolveSource(ProjectContext project, AssetPath uri, [NotNullWhen(true)] out string? source)
     {
         source = project.AuthoringMounts.Any(mount => !ProjectOutputFolders.Contains(mount) && string.Equals(mount.Name, uri.Mount, StringComparison.Ordinal))
-            && project.Find(uri) is { IsMountRoot: false } location && ContentPipelineService.IsCookableDescriptorFile(location.File.FullPath)
+            && project.Find(uri) is { IsMountRoot: false } location && ContentPipelineService.IsCookableDescriptorFile(project, location.File.FullPath)
                 ? location.File.FullPath
                 : null;
         return source is not null;

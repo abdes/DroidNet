@@ -3,25 +3,17 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Import;
 
 /// <summary>Two sources beside each other that cook to one asset collide; each reports the other.</summary>
 [TestClass]
-public sealed class SourceCollisionsTests : IDisposable
+public sealed class SourceCollisionsTests
 {
-    private readonly string folder = Path.Combine(Path.GetTempPath(), "oxygen-source-collision-tests", Guid.NewGuid().ToString("N"));
-
-    public SourceCollisionsTests() => Directory.CreateDirectory(this.folder);
-
-    public void Dispose()
-    {
-        if (Directory.Exists(this.folder))
-        {
-            Directory.Delete(this.folder, recursive: true);
-        }
-    }
+    private readonly TestProject project = TestProject.Create(new MockFileSystem());
 
     [TestMethod]
     public void ScriptsWithOneNameCollide()
@@ -30,9 +22,9 @@ public sealed class SourceCollisionsTests : IDisposable
         var luau = this.Write("move.luau");
         _ = this.Write("jump.lua");
 
-        _ = Names(SourceCollisions.Find(lua)).Should().Equal("move.luau");
-        _ = Names(SourceCollisions.Find(luau)).Should().Equal("move.lua");
-        _ = SourceCollisions.Find(luau, ignored: lua).Should().BeEmpty("a rename does not collide with the file it renames");
+        _ = Names(SourceCollisions.Find(this.project.Context, lua)).Should().Equal("move.luau");
+        _ = Names(SourceCollisions.Find(this.project.Context, luau)).Should().Equal("move.lua");
+        _ = SourceCollisions.Find(this.project.Context, luau, ignored: lua).Should().BeEmpty("a rename does not collide with the file it renames");
     }
 
     [TestMethod]
@@ -40,7 +32,7 @@ public sealed class SourceCollisionsTests : IDisposable
     {
         _ = this.Write("Red.omat.json");
 
-        _ = Names(SourceCollisions.Find(this.PathOf("red.omat.json"))).Should().ContainSingle().Which.Should().Be("Red.omat.json", "a case-insensitive file system holds both in one cooked file");
+        _ = Names(SourceCollisions.Find(this.project.Context, this.PathOf("red.omat.json"))).Should().ContainSingle().Which.Should().Be("Red.omat.json", "a case-insensitive file system holds both in one cooked file");
     }
 
     [TestMethod]
@@ -50,17 +42,13 @@ public sealed class SourceCollisionsTests : IDisposable
         _ = this.Write("Red.ogeo.json");
         _ = this.Write("Red.png");
 
-        _ = SourceCollisions.Find(this.PathOf("Red.omat.json")).Should().BeEmpty();
-        _ = SourceCollisions.Find(this.PathOf("Red.png")).Should().BeEmpty("an image cooks into no descriptor of its own");
+        _ = SourceCollisions.Find(this.project.Context, this.PathOf("Red.omat.json")).Should().BeEmpty();
+        _ = SourceCollisions.Find(this.project.Context, this.PathOf("Red.png")).Should().BeEmpty("an image cooks into no descriptor of its own");
     }
 
     private static string[] Names(IReadOnlyList<FileSystemPath> paths) => [.. paths.Select(static path => path.Name)];
 
-    private FileSystemPath PathOf(string name) => FileSystemPath.From(Path.Combine(this.folder, name));
+    private FileSystemPath PathOf(string name) => this.project.PathOf("/Content/" + name);
 
-    private FileSystemPath Write(string name)
-    {
-        File.WriteAllText(Path.Combine(this.folder, name), "{}");
-        return this.PathOf(name);
-    }
+    private FileSystemPath Write(string name) => this.project.WriteFile("/Content/" + name, "{}");
 }

@@ -3,6 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.Projects.Testing;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Cooking;
 
@@ -32,8 +34,8 @@ public sealed class ContentCookAssetKindsTests
     [DataRow("Door.lua", false)]
     public void OnlyAuthoredSourcesAreCookable(string name, bool expected)
     {
-        var path = Path.Combine(Path.GetTempPath(), name);
+        var project = TestProject.Create(new MockFileSystem());
 
-        _ = ContentPipelineService.IsCookableDescriptorFile(path).Should().Be(expected);
+        _ = ContentPipelineService.IsCookableDescriptorFile(project.Context, project.PathOf("/Content/" + name).FullPath).Should().Be(expected);
     }
 }

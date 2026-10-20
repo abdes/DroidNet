@@ -7,6 +7,7 @@ using System.Text.Encodings.Web;
 using System.Text.Json;
 using System.Text.Json.Nodes;
 using Oxygen.Editor.ContentPipeline.Import;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Authoring.Input;
@@ -134,14 +135,15 @@ internal static class AuthoredReferenceFormat
 
     /// <summary>Reads the images a texture descriptor reads, resolved against its folder; a six-face cube's are its six
     /// faces.</summary>
+    /// <param name="project">The project that holds the descriptor and its images.</param>
     /// <param name="path">The texture descriptor.</param>
     /// <param name="content">Its bytes.</param>
     /// <returns>The absolute image paths; none when the descriptor cannot be read.</returns>
-    public static IReadOnlyList<FileSystemPath> ReadTextureSources(FileSystemPath path, ReadOnlyMemory<byte> content)
+    public static IReadOnlyList<FileSystemPath> ReadTextureSources(ProjectContext project, FileSystemPath path, ReadOnlyMemory<byte> content)
     {
         try
         {
-            return TextureSourceReader.Read(content.Span).ResolveImages(path, static image => File.Exists(image.FullPath));
+            return TextureSourceReader.Read(content.Span).ResolveImages(path, image => project.FileSystem.File.Exists(image.FullPath));
         }
         catch (AssetFormatException)
         {

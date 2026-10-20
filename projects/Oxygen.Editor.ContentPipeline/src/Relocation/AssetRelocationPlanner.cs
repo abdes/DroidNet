@@ -101,7 +101,7 @@ internal static class AssetRelocationPlanner
                     throw new AssetRelocationException($"'{model}' references its other files by relative path. Move the model's folder to move it.");
                 }
 
-                AddFile(map, import.SidecarPath, FileSystemPath.From(target.FullPath + Import.NativeSceneImportSettings.SidecarSuffix));
+                AddFile(project, map, import.SidecarPath, FileSystemPath.From(target.FullPath + Import.NativeSceneImportSettings.SidecarSuffix));
             }
             else if (import.Settings.Files.Any(file => FileSystemPath.From(import.Settings.ResolveFile(project.ProjectRoot.FullPath, file)) == source))
             {
@@ -112,7 +112,7 @@ internal static class AssetRelocationPlanner
         map.AddMove(new(source, target, isDirectory));
         if (!isDirectory)
         {
-            AddTextureCompanions(index, map, source, target);
+            AddTextureCompanions(project, index, map, source, target);
         }
     }
 
@@ -124,13 +124,14 @@ internal static class AssetRelocationPlanner
             throw new AssetRelocationException($"'{move.Source}' cannot be moved to '{move.Target}'.");
         }
 
-        var isDirectory = Directory.Exists(source.FullPath);
-        if (!isDirectory && !File.Exists(source.FullPath))
+        var fileSystem = project.FileSystem;
+        var isDirectory = fileSystem.Directory.Exists(source.FullPath);
+        if (!isDirectory && !fileSystem.File.Exists(source.FullPath))
         {
             throw new AssetRelocationException($"'{move.Source}' no longer exists; it was deleted or moved outside the Content Browser.");
         }
 
-        RequireValidTarget(move, source, target, isDirectory);
+        RequireValidTarget(project, move, source, target, isDirectory);
         return (source, target, isDirectory);
     }
 
@@ -157,8 +158,9 @@ internal static class AssetRelocationPlanner
         }
     }
 
-    private static void RequireValidTarget(AssetRelocationMove move, FileSystemPath source, FileSystemPath target, bool isDirectory)
+    private static void RequireValidTarget(ProjectContext project, AssetRelocationMove move, FileSystemPath source, FileSystemPath target, bool isDirectory)
     {
+        var fileSystem = project.FileSystem;
         var name = move.Target.Name;
         if (VirtualPath.ValidateSegment(name, VirtualPathRuleSet.Authored) is { } invalid)
         {
@@ -176,25 +178,25 @@ internal static class AssetRelocationPlanner
         }
 
         // A change of case only is a rename of the same file.
-        if (source != target && (File.Exists(target.FullPath) || Directory.Exists(target.FullPath)))
+        if (source != target && (fileSystem.File.Exists(target.FullPath) || fileSystem.Directory.Exists(target.FullPath)))
         {
             throw new AssetRelocationException($"'{name}' already exists in '{move.Target.Parent}'.");
         }
 
-        if (!Directory.Exists(target.Parent!.FullPath))
+        if (!fileSystem.Directory.Exists(target.Parent!.FullPath))
         {
             throw new AssetRelocationException($"The destination folder '{move.Target.Parent}' does not exist.");
         }
 
-        if (!isDirectory && SourceCollisions.Find(target, ignored: source) is [var collision, ..])
+        if (!isDirectory && SourceCollisions.Find(project, target, ignored: source) is [var collision, ..])
         {
             throw new AssetRelocationException(AssetRelocationException.SourceCollisionCode, $"'{collision.Name}' is already in '{move.Target.Parent}'; both would cook to the same asset. Choose another name.");
         }
     }
 
-    private static void AddFile(RelocationMap map, FileSystemPath source, FileSystemPath target)
+    private static void AddFile(ProjectContext project, RelocationMap map, FileSystemPath source, FileSystemPath target)
     {
-        if (File.Exists(target.FullPath) && source != target)
+        if (project.FileSystem.File.Exists(target.FullPath) && source != target)
         {
             throw new AssetRelocationException($"'{target.Name}' already exists next to the destination.");
         }
@@ -204,8 +206,9 @@ internal static class AssetRelocationPlanner
 
     // A texture descriptor and the image beside it are one asset: each moves with the other, and a rename
     // renames an image that shares the descriptor's name.
-    private static void AddTextureCompanions(AuthoredReferenceIndex index, RelocationMap map, FileSystemPath source, FileSystemPath target)
+    private static void AddTextureCompanions(ProjectContext project, AuthoredReferenceIndex index, RelocationMap map, FileSystemPath source, FileSystemPath target)
     {
+        var fileSystem = project.FileSystem;
         var folder = source.Parent!;
         var targetFolder = target.Parent!;
         var stem = RelocationPaths.GetDisplayName(source.Name);
@@ -217,11 +220,11 @@ internal static class AssetRelocationPlanner
 
         if (source.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal))
         {
-            var content = File.ReadAllBytes(source.FullPath);
-            foreach (var image in AuthoredReferenceFormat.ReadTextureSources(source, content)
-                .Where(image => image.Parent == folder && File.Exists(image.FullPath) && !map.IsMoved(image)))
+            var content = fileSystem.File.ReadAllBytes(source.FullPath);
+            foreach (var image in AuthoredReferenceFormat.ReadTextureSources(project, source, content)
+                .Where(image => image.Parent == folder && fileSystem.File.Exists(image.FullPath) && !map.IsMoved(image)))
             {
-                AddFile(map, image, Companion(image));
+                AddFile(project, map, image, Companion(image));
             }
 
             return;
@@ -230,9 +233,9 @@ internal static class AssetRelocationPlanner
         foreach (var descriptor in index.Descriptors.Where(descriptor => descriptor.Location.Name.EndsWith(AssetFileTypes.TextureDescriptor, StringComparison.Ordinal)
             && descriptor.Location.Parent == folder && !map.IsMoved(descriptor.Location)))
         {
-            if (AuthoredReferenceFormat.ReadTextureSources(descriptor.Location, File.ReadAllBytes(descriptor.Location.FullPath)).Contains(source))
+            if (AuthoredReferenceFormat.ReadTextureSources(project, descriptor.Location, fileSystem.File.ReadAllBytes(descriptor.Location.FullPath)).Contains(source))
             {
-                AddFile(map, descriptor.Location, Companion(descriptor.Location));
+                AddFile(project, map, descriptor.Location, Companion(descriptor.Location));
             }
         }
     }
@@ -256,7 +259,7 @@ internal static class AssetRelocationPlanner
             throw new AssetRelocationException($"'{rename.Product}' is not an action or a mapping context of the project's input sources.");
         }
 
-        var file = InputSourceFiles.FileOf(project, container) is { } source && File.Exists(source.FullPath)
+        var file = InputSourceFiles.FileOf(project, container) is { } source && project.FileSystem.File.Exists(source.FullPath)
             ? source
             : throw new AssetRelocationException($"The input source of '{rename.Product.Name}' no longer exists.");
         if (map.IsMoved(file) || !index.Descriptors.Any(descriptor => descriptor.Location == file))
@@ -267,7 +270,7 @@ internal static class AssetRelocationPlanner
         var pending = renames.TryGetValue(file, out var existing) ? existing : renames[file] = [];
         try
         {
-            var content = File.ReadAllBytes(file.FullPath);
+            var content = project.FileSystem.File.ReadAllBytes(file.FullPath);
             foreach (var earlier in pending)
             {
                 content = AuthoredReferenceFormat.RenameInputProduct(content, earlier);

@@ -103,11 +103,11 @@ public sealed partial class ContentPipelineService(
     public Task<ContentCookResult> CookProjectAsync(CancellationToken cancellationToken)
         => this.cookCoordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null) { CoalescePending = true, OriginContext = this.projectContextService.ActiveProject }, this.CookProjectCoreAsync, cancellationToken);
 
-    internal static bool IsCookableDescriptorFile(string path)
+    internal static bool IsCookableDescriptorFile(ProjectContext project, string path)
         => ContentCookAssetKinds.Of(path) switch
         {
             ContentCookAssetKind.Unknown => false,
-            ContentCookAssetKind.ForeignSource => File.Exists(path + AssetFileTypes.ImportSettings),
+            ContentCookAssetKind.ForeignSource => project.FileSystem.File.Exists(path + AssetFileTypes.ImportSettings),
             _ => !AssetFileTypes.Is(path, AssetFileCategory.Cooked),
         };
 
@@ -171,10 +171,11 @@ public sealed partial class ContentPipelineService(
         => diagnostics.Any(static diagnostic => diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal);
 
     private static List<DiagnosticRecord> CreateSourceMissingDiagnostics(
+        ProjectContext project,
         Guid operationId,
         IEnumerable<ContentCookInput> inputs)
         => inputs
-            .Where(static input => !File.Exists(input.SourceAbsolutePath.FullPath))
+            .Where(input => !project.FileSystem.File.Exists(input.SourceAbsolutePath.FullPath))
             .Select(input => new DiagnosticRecord
             {
                 OperationId = operationId,
@@ -279,8 +280,9 @@ public sealed partial class ContentPipelineService(
         }
 
         var absoluteFolder = project.Find(folderUri)!.File.FullPath;
-        return !Directory.Exists(absoluteFolder) ? [] : Directory.EnumerateFiles(absoluteFolder, "*", SearchOption.AllDirectories)
-            .Where(IsCookableDescriptorFile)
+        var files = project.FileSystem;
+        return !files.Directory.Exists(absoluteFolder) ? [] : files.Directory.EnumerateFiles(absoluteFolder, "*", SearchOption.AllDirectories)
+            .Where(file => IsCookableDescriptorFile(project, file))
             .Select(file => ResolveFileInput(project, mount, file, ContentCookInputRole.Primary))
             .OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
             .ToList();
@@ -291,8 +293,9 @@ public sealed partial class ContentPipelineService(
         ProjectMountPoint mount)
     {
         var mountRoot = project.ProjectRoot.Combine(mount.RelativePath);
-        return !Directory.Exists(mountRoot.FullPath) ? [] : Directory.EnumerateFiles(mountRoot.FullPath, "*", SearchOption.AllDirectories)
-            .Where(IsCookableDescriptorFile)
+        var files = project.FileSystem;
+        return !files.Directory.Exists(mountRoot.FullPath) ? [] : files.Directory.EnumerateFiles(mountRoot.FullPath, "*", SearchOption.AllDirectories)
+            .Where(file => IsCookableDescriptorFile(project, file))
             .Select(file => ResolveFileInput(project, mount, file, ContentCookInputRole.Primary))
             .OrderBy(static input => input.SourceRelativePath, StringComparer.Ordinal)
             .ToList();

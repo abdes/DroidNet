@@ -291,7 +291,7 @@ internal sealed partial class CookSourceAnalyzer(
         }
 
         var textureDescriptorPath = this.ResolveTextureDescriptorPath(texture);
-        return textureDescriptorPath is null || !File.Exists(textureDescriptorPath)
+        return textureDescriptorPath is null || !operation.Project.FileSystem.File.Exists(textureDescriptorPath)
             ? this.CreateTextureReferenceDiagnostic(input, channel, textureDescriptorPath ?? texture.VirtualPath, "texture descriptor is missing", details: null)
             : await this.ValidateTextureImagesAsync(input, channel, textureDescriptorPath, cancellationToken).ConfigureAwait(false);
     }
@@ -301,14 +301,15 @@ internal sealed partial class CookSourceAnalyzer(
         TextureSource texture;
         try
         {
-            texture = TextureSourceReader.Read(await File.ReadAllBytesAsync(textureDescriptorPath, cancellationToken).ConfigureAwait(false));
+            texture = TextureSourceReader.Read(await operation.Project.FileSystem.File.ReadAllBytesAsync(textureDescriptorPath, cancellationToken).ConfigureAwait(false));
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or AssetFormatException)
         {
             return this.CreateTextureReferenceDiagnostic(input, channel, textureDescriptorPath, "texture descriptor is invalid", exception.Message);
         }
 
-        return texture.ResolveImages(FileSystemPath.From(textureDescriptorPath), static image => File.Exists(image.FullPath)).FirstOrDefault(static image => !File.Exists(image.FullPath)) is { } missing
+        var files = operation.Project.FileSystem;
+        return texture.ResolveImages(FileSystemPath.From(textureDescriptorPath), image => files.File.Exists(image.FullPath)).FirstOrDefault(image => !files.File.Exists(image.FullPath)) is { } missing
             ? this.CreateTextureReferenceDiagnostic(input, channel, missing.FullPath, "source image is missing", details: null)
             : null;
     }
