@@ -489,10 +489,14 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   faked ports or the real services, or moves into the tests of the module whose
   behavior it checks, and no test project links another module's fixtures. Gate:
   the touched test projects.
-- **S1.15 Enforcement.** A `unittest` in `tooling/tests` checks the layer rules
-  of architecture section 5.2 and the internals rule of its decision 4;
-  hand-built test containers move to the shared host-equivalent builder in
-  `TestHelpers`. Gate: tooling tests.
+- **S1.15 Enforcement.** `tooling/tests/test_editor_module_boundaries.py`
+  checks, from the project and `AssemblyInfo` files, the layer rules of
+  architecture section 5.2, the engine rule of its section 5.4 and the internals
+  rule of its decision 4. The violations the tree still has are listed in the
+  test with the slice that removes them (S1.13, S1.14); an entry that no longer
+  occurs fails the test. Hand-built test containers move to the shared
+  host-equivalent builder in `TestHelpers` with S3.1, whose registration modules
+  it composes. Gate: tooling tests.
 
   Test practice, decided with the reviewer during S1.8 (Textures is the pilot)
   and applied by every slice that touches a test:
@@ -523,14 +527,15 @@ needs instead of a `WindowId`. Every slice follows decision 9.
     the code.
 
   What the S1.8 survey measured (651 test files), for this slice to finish:
-  - What remains of project construction after `TestProject` (measured
-    2026-10-20): 50 test files make their project with the kit, and the
-    per-module builders `AssetWorkspace`, `RelocationWorkspace`,
-    `BrowserTestData`, `GenerationScenario`, `CookCoordinatorScenario`,
-    `SceneTabs`, `CookWorkspace` and `PublicationProject` build on it. 21 other
-    test and `testsupport` files call `FromProject`, `FromProjectInfo` or
-    `new ProjectContext` directly. All move to `TestProject`; Phase 4's removal
-    of `IProjectContextService` then changes the kit only.
+  - Project construction: every test, `testsupport` file and test probe makes
+    its project with `TestProject` (`Create` over any file system, `Open` for a
+    project loaded through the project manager, `SaveProjectFile` and `InfoOf`
+    for its saved form), directly or through the per-module builders
+    `AssetWorkspace`, `RelocationWorkspace`, `BrowserTestData`,
+    `GenerationScenario`, `CookCoordinatorScenario`, `SceneTabs`,
+    `CookWorkspace` and `PublicationProject`. Only the Projects module's own
+    tests build `ProjectContext` by hand, so Phase 4's removal of
+    `IProjectContextService` changes the kit only.
   - Tests build the content pipeline and the asset feed through builders that
     default what a test does not vary: ContentPipeline's `CookScenario.CreateService`
     and `NativeCook`, and Assets' `AssetFeeds`. A new constructor dependency
@@ -586,7 +591,9 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 
 - **S3.1** Split `Program.cs` into the Editor modules of spec 6.7, one subsystem
   per commit, including the Assets registration; eager resolves become
-  activation lists. Gate: topology test, reviewer's editor build.
+  activation lists. Hand-built test containers move to a shared
+  host-equivalent builder in `TestHelpers` that composes these modules (the
+  rest of S1.15). Gate: topology test, reviewer's editor build.
 
 ### Phase 4: Project Session
 
@@ -648,32 +655,32 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 Status values: `done`, `in progress`, `not started`. Update the row in the commit
 that lands the work. Checked against the tree on 2026-10-20.
 
-| Slice                                       | Status        | Notes                                                        |
-| ------------------------------------------- | ------------- | ------------------------------------------------------------ |
-| S0.1 Startup hygiene                        | `done`        |                                                              |
-| S1.1 Assets                                 | `done`        | Remaining items listed in the slice move with S1.8 and S1.11 |
-| S1.2 Cook on change                         | `done`        |                                                              |
-| S1.3 Foreground cooks                       | `done`        |                                                              |
-| S1.4a Global history                        | `done`        |                                                              |
-| S1.4 Pipeline workflows out of UI           | `done`        |                                                              |
-| S1.4c Removing one cooked product           | `done`        | `1e32de33f`                                                  |
-| S1.5 Document kinds                         | `done`        |                                                              |
-| S1.6 Scenes                                 | `done`        |                                                              |
-| S1.7 LivePreview                            | `done`        |                                                              |
-| S1.8 Asset family modules                   | `done`        | See the sub-slice table below                                |
-| S1.9 Cook on change over checked inputs     | `done`        |                                                              |
-| S1.10 Shell                                 | `not started` |                                                              |
-| S1.11 Unsaved documents                     | `not started` | Needs S1.10                                                  |
-| S1.12 Features                              | `not started` | One row per feature when it starts                           |
-| S1.13 Dissolve the World Editor             | `not started` |                                                              |
-| S1.14 Test boundaries                       | `not started` |                                                              |
-| S1.15 Enforcement                           | `not started` | Test practice decided in S1.8; Textures pilots it            |
-| S2.1 to S2.3 Scope factory and topology     | `not started` |                                                              |
-| S3.1 Registration modules                   | `not started` |                                                              |
-| S4.1 to S4.3 Project Session                | `not started` |                                                              |
-| S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                              |
-| S6.1 to S6.3 Service location and messenger | `not started` |                                                              |
-| S7 Documentation                            | `not started` |                                                              |
+| Slice                                       | Status        | Notes                                                                                           |
+| ------------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------- |
+| S0.1 Startup hygiene                        | `done`        |                                                                                                 |
+| S1.1 Assets                                 | `done`        | Remaining items listed in the slice move with S1.8 and S1.11                                    |
+| S1.2 Cook on change                         | `done`        |                                                                                                 |
+| S1.3 Foreground cooks                       | `done`        |                                                                                                 |
+| S1.4a Global history                        | `done`        |                                                                                                 |
+| S1.4 Pipeline workflows out of UI           | `done`        |                                                                                                 |
+| S1.4c Removing one cooked product           | `done`        | `1e32de33f`                                                                                     |
+| S1.5 Document kinds                         | `done`        |                                                                                                 |
+| S1.6 Scenes                                 | `done`        |                                                                                                 |
+| S1.7 LivePreview                            | `done`        |                                                                                                 |
+| S1.8 Asset family modules                   | `done`        | See the sub-slice table below                                                                   |
+| S1.9 Cook on change over checked inputs     | `done`        |                                                                                                 |
+| S1.10 Shell                                 | `not started` |                                                                                                 |
+| S1.11 Unsaved documents                     | `not started` | Needs S1.10                                                                                     |
+| S1.12 Features                              | `not started` | One row per feature when it starts                                                              |
+| S1.13 Dissolve the World Editor             | `not started` |                                                                                                 |
+| S1.14 Test boundaries                       | `not started` |                                                                                                 |
+| S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; the shared host-equivalent builder lands with S3.1 |
+| S2.1 to S2.3 Scope factory and topology     | `not started` |                                                                                                 |
+| S3.1 Registration modules                   | `not started` |                                                                                                 |
+| S4.1 to S4.3 Project Session                | `not started` |                                                                                                 |
+| S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                                                                 |
+| S6.1 to S6.3 Service location and messenger | `not started` |                                                                                                 |
+| S7 Documentation                            | `not started` |                                                                                                 |
 
 ### S1.8 sub-slices
 

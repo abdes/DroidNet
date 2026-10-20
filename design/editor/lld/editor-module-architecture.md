@@ -76,6 +76,7 @@ slices of the
 Composition root        Oxygen.Editor
 Shell                   Oxygen.Editor.Shell
 Feature UI              editors, explorers, inspectors, passive panels
+Shared feature UI       Oxygen.Editor.Pickers
 Domain services         Scenes, Assets, LivePreview, ContentPipeline, Projects
                         families: Scripting, Input, Textures, Materials
 UI kit                  Oxygen.Editor.Controls, Oxygen.Editor.Routing
@@ -85,7 +86,9 @@ Foundation              World, Documents, Schemas, Data, Runtime, Interop,
 ```
 
 References point down only. A feature references the Shell, the domain modules
-it uses and the UI kit. A domain module references other domain modules below it
+it uses, the shared feature UI and the UI kit. The shared feature UI is what
+several features show alike (the asset picker); it references domain modules,
+the UI kit and foundation, never the Shell or a feature. A domain module references other domain modules below it
 and foundation, never the Shell or a feature. The Shell references foundation
 only. The composition root references everything and is the only project that
 does.
@@ -317,8 +320,9 @@ to its own tests only (decision 4); each module owns its outbound ports
 Each module has its own test project; a UI test project only where it has XAML.
 A test lives with the module whose behavior it checks. Cross-module workflows
 are tested at the highest owner (the composition root's integration suite). A
-tooling unit test under `tooling/tests` enforces the layer rules of 5.2 and the
-internals rule of decision 4.
+tooling unit test, `tooling/tests/test_editor_module_boundaries.py`, enforces
+the layer rules of 5.2, the engine rule of 5.4 and the internals rule of
+decision 4.
 
 ## 15. Open Issues
 
