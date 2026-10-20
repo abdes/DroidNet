@@ -7,7 +7,6 @@ using Moq;
 using Oxygen.Editor.Assets.TestSupport;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Relocation;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
@@ -31,7 +30,7 @@ public sealed partial class AssetFeedTests
         var catalog = new TestProjectAssetCatalog([red]);
         var relocation = new Mock<IAssetRelocationService>();
         var authoring = new Mock<IAssetAuthoring>();
-        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), new EmptyCookStatusReader(), new CookDocumentRegistry(), EmptyCookRuns(), AssetStatusFixture.CreateUnavailableRuntimeStatus(), relocation.Object, authoring.Object);
+        using var provider = AssetFeeds.Create(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), relocation: relocation.Object, authoring: authoring.Object);
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);

@@ -3,11 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Inspection;
@@ -27,10 +25,9 @@ public sealed class ImportedSourceInspectionTests
     {
         using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")], EngineContentPak.Installed());
         var source = await WriteCrossMountModelAsync(workspace, this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        using var cook = NativeCook.Create(workspace, runner: runner);
+        var service = cook.Service;
         var cooked = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue();
         var expected = cooked.CookedAssets.Select(static asset => asset.VirtualPath).ToArray();
@@ -53,7 +50,7 @@ public sealed class ImportedSourceInspectionTests
         using var workspace = new CookWorkspace([new("Content", "Content"), new("Art", "Art")]);
         var source = await WriteCrossMountModelAsync(workspace, this.TestContext.CancellationToken).ConfigureAwait(false);
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
-        var service = CreateService(workspace, Mock.Of<ISceneDescriptorGenerator>(), api.Object);
+        var service = CreateService(workspace, api.Object, Mock.Of<ISceneDescriptorGenerator>());
         var report = await service.InspectCookedOutputAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = report.Roots.Should().ContainSingle().Which.Name.Should().Be("Art");
         _ = report.Roots.Should().OnlyContain(static root => !root.IsPresent);

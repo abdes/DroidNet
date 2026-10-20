@@ -26,7 +26,7 @@ public sealed class PreviewCookTests
     public async Task PreviewDemandRejectsNonAssetScopes(string identity)
     {
         using var workspace = new CookWorkspace();
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync));
+        var pipeline = CreateService(workspace, CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync), new CapturingSceneDescriptorGenerator([]));
         Func<Task> request = () => pipeline.CookPreviewAssetAsync(AssetPath.Parse(identity), workspace.ProjectContext, this.TestContext.CancellationToken);
         _ = await request.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
         _ = workspace.CookCoordinator.Runs.Should().BeEmpty();

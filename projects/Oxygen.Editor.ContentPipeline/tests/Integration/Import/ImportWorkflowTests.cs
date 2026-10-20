@@ -37,9 +37,8 @@ public sealed class ImportWorkflowTests
         {
             var source = Path.Combine(external.FullName, "Model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), source);
-            using var compatibility = EditorNativeCompatibilityService.ForCooking();
-            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+            using var cook = NativeCook.Create(workspace);
+            var service = cook.Service;
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
             _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
@@ -76,9 +75,8 @@ public sealed class ImportWorkflowTests
         var path = Path.Combine(workspace.Root, "Content/Models/model.fbx");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.fbx"), path);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        using var cook = NativeCook.Create(workspace);
+        var service = cook.Service;
         var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
         _ = result.RetainedSourceUri.Should().Be(AssetPath.Parse("/Content/Models/model.fbx"));
@@ -97,10 +95,9 @@ public sealed class ImportWorkflowTests
         {
             var path = Path.Combine(external.FullName, "model.gltf");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), path);
-            using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var runner = new FailImportBatchRunner();
-            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+            using var cook = NativeCook.Create(workspace, runner: runner);
+            var service = cook.Service;
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = result.RetainedSourceUri.Should().NotBeNull();
@@ -135,10 +132,9 @@ public sealed class ImportWorkflowTests
             var texture = Path.Combine(external.FullName, "static_textured_checker.png");
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_textured_triangle." + format), path);
             File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_textured_checker.png"), texture);
-            using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var runner = new FailImportBatchRunner();
-            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+            using var cook = NativeCook.Create(workspace, runner: runner);
+            var service = cook.Service;
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, path, "Triangle", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = result.Status.Should().Be(OperationStatus.Failed);
             _ = result.RetainedSourceUri.Should().NotBeNull();
@@ -179,7 +175,7 @@ public sealed class ImportWorkflowTests
         {
             SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator([]));
         var result = await service.ImportSourceAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = result.Status.Should().Be(OperationStatus.Failed);
@@ -257,9 +253,8 @@ public sealed class ImportWorkflowTests
                     _ = blocked.TrySetResult(args.Run.OperationId);
                 }
             };
-            using var compatibility = EditorNativeCompatibilityService.ForCooking();
-            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+            using var cook = NativeCook.Create(workspace);
+            var service = cook.Service;
             var pending = service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken);
             var operationId = await blocked.Task.WaitAsync(TimeSpan.FromSeconds(15), this.TestContext.CancellationToken).ConfigureAwait(false);
             File.Delete(source);

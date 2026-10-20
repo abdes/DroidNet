@@ -4,11 +4,9 @@
 
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
 
@@ -37,9 +35,8 @@ public sealed class TexturedModelImportTests
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_textured_triangle." + extension), primary);
         const string imageName = "static_textured_checker.png";
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", imageName), Path.Combine(original, imageName));
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var pipeline = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        using var cook = NativeCook.Create(workspace);
+        var pipeline = cook.Service;
         var request = new SceneImportRequest(workspace.ProjectContext, primary, "Textured", AssetPath.Parse("/Content/Models"));
 
         var imported = await pipeline.ImportSourceAsync(request, this.TestContext.CancellationToken).ConfigureAwait(false);

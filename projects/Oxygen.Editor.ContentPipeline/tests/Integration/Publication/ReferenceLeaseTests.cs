@@ -38,7 +38,7 @@ public sealed class ReferenceLeaseTests
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var runner = new ContextLeaseRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        var service = CreateService(workspace, api, compatibility: compatibility);
         var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
         var geometry = first.CookedAssets.First(static asset => asset.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
@@ -46,7 +46,7 @@ public sealed class ReferenceLeaseTests
         if (foreignLibrary)
         {
             consumer.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(workspace.CookedRoot("Art")))] });
-            service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
+            service = CreateService(consumer, api, compatibility: compatibility);
         }
 
         AddGeometryNode(consumer, geometry, "Mesh");

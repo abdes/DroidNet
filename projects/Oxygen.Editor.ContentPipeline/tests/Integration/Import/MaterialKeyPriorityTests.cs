@@ -40,7 +40,7 @@ public sealed class MaterialKeyPriorityTests
         consumer.WriteMaterial(material, "Project material");
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var materialProducer = CreateService(materials, new SceneDescriptorGenerator(), api, compatibility);
+        var materialProducer = CreateService(materials, api, compatibility: compatibility);
         var imported = await materialProducer.CookAssetAsync(AssetPath.Parse("/" + material[..^5]), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = imported.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, imported.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         var materialRoot = await materials.ExportRootAsync("Art", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -49,7 +49,7 @@ public sealed class MaterialKeyPriorityTests
         var descriptor = JsonNode.Parse(meshes.ReadText("Content/Geometry/AuthoredCube.ogeo.json"))!;
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/Art/Materials/Shared.omat";
         meshes.WriteText("Content/Geometry/AuthoredCube.ogeo.json", descriptor.ToJsonString());
-        var producer = CreateService(meshes, new SceneDescriptorGenerator(), api, compatibility);
+        var producer = CreateService(meshes, api, compatibility: compatibility);
         var geometry = await producer.CookAssetAsync(AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = geometry.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, geometry.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         consumer.Activate(consumer.ProjectContext with
@@ -58,7 +58,7 @@ public sealed class MaterialKeyPriorityTests
         });
         AddGeometryNode(consumer, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
+        var service = CreateService(consumer, api, compatibility: compatibility);
         var result = await service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
         _ = result.InputSnapshot!.CookedDependencies.Should().NotContain(input => input.SourceName == "Materials");

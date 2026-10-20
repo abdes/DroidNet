@@ -3,11 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
 
@@ -31,10 +29,9 @@ public sealed class LibraryInspectionLifetimeTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         workspace.WriteMaterial("Content/Materials/Shared.omat.json", "Shared");
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new ContextLeaseRunner();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        using var cook = NativeCook.Create(workspace, runner: runner);
+        var service = cook.Service;
         var source = AssetPath.Parse("/Content/Materials/Shared.omat");
         AssertCookSucceeded(await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false));
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

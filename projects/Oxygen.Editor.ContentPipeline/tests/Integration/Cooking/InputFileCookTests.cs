@@ -123,6 +123,6 @@ public sealed class InputFileCookTests
     private static ContentPipelineService CreateInputService(CookWorkspace workspace, EditorNativeCompatibilityService compatibility)
     {
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        return CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        return CreateService(workspace, api, compatibility: compatibility);
     }
 }

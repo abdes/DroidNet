@@ -18,6 +18,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <Compile Include="../TestSupport/AssetFeeds.cs" Link="TestSupport/AssetFeeds.cs" />
         <Compile Include="../TestSupport/AssetStatusFixture.cs" Link="TestSupport/AssetStatusFixture.cs" />
         <Compile Include="../TestSupport/AssetWorkspace.cs" Link="TestSupport/AssetWorkspace.cs" />
         <Compile Include="../TestSupport/Observer.cs" Link="TestSupport/Observer.cs" />

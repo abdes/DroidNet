@@ -132,7 +132,7 @@ public sealed class ScriptCookTests
     {
         compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        return CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        return CreateService(workspace, api, compatibility: compatibility);
     }
 
     private static ScriptSlot AddScriptedNodes(CookWorkspace workspace, out SceneNode target)

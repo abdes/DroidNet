@@ -37,9 +37,8 @@ public sealed class ImportedOutputOwnershipTests
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await WriteRetainedModelAsync(workspace, "Other", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        using var cook = NativeCook.Create(workspace);
+        var service = cook.Service;
 
         var result = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -61,12 +60,12 @@ public sealed class ImportedOutputOwnershipTests
         await File.WriteAllTextAsync(policy, "v1", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var firstCompatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine([new("test/policy", policy)]);
         var firstApi = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, firstCompatibility);
-        var first = await CreateService(workspace, new SceneDescriptorGenerator(), firstApi, firstCompatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var first = await CreateService(workspace, firstApi, compatibility: firstCompatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
         await File.WriteAllTextAsync(policy, "v2", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var changedCompatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine([new("test/policy", policy)]);
         var changedApi = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, changedCompatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), changedApi, changedCompatibility);
+        var service = CreateService(workspace, changedApi, compatibility: changedCompatibility);
         var geometry = first.CookedAssets.First(static asset => asset.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;
         var result = await service.CookPreviewAssetAsync(geometry, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
@@ -80,10 +79,9 @@ public sealed class ImportedOutputOwnershipTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        using var cook = NativeCook.Create(workspace, runner: runner);
+        var service = cook.Service;
         var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
         var count = runner.ImportCount;
@@ -113,12 +111,12 @@ public sealed class ImportedOutputOwnershipTests
         _ = await WriteRetainedModelAsync(clean, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var first = await CreateService(original, new SceneDescriptorGenerator(), api, compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var first = await CreateService(original, api, compatibility: compatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
         var geometry = first.CookedAssets.First(static output => output.Kind == ContentCookAssetKind.Geometry);
         AddGeometryNode(clean, geometry.CookedAssetUri, "Imported mesh");
         await clean.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var service = CreateService(clean, new SceneDescriptorGenerator(), api, compatibility);
+        var service = CreateService(clean, api, compatibility: compatibility);
         var result = await (scope switch
         {
             "asset" => service.CookAssetAsync(geometry.CookedAssetUri, this.TestContext.CancellationToken),
@@ -142,9 +140,8 @@ public sealed class ImportedOutputOwnershipTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        using var cook = NativeCook.Create(workspace);
+        var service = cook.Service;
         var index = CookPublicationPaths.Head(workspace.Root);
         byte[]? before = null;
         if (alreadyCooked)
@@ -176,10 +173,9 @@ public sealed class ImportedOutputOwnershipTests
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        using var cook = NativeCook.Create(workspace, runner: runner);
+        var service = cook.Service;
         var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         var uris = first.CookedAssets.Select(static output => output.CookedAssetUri).Prepend(source).ToArray();
         var count = runner.Count;
@@ -223,9 +219,8 @@ public sealed class ImportedOutputOwnershipTests
             await File.WriteAllTextAsync(path, content.ToJsonString(), this.TestContext.CancellationToken).ConfigureAwait(false);
         }
 
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        using var cook = NativeCook.Create(workspace);
+        var service = cook.Service;
         var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
         var geometry = first.CookedAssets.First(static output => output.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;

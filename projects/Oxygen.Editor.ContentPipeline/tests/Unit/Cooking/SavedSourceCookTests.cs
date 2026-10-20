@@ -41,7 +41,7 @@ public sealed class SavedSourceCookTests
             },
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, generator, api);
+        var service = CreateService(workspace, api, generator);
         var cook = service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         try
@@ -71,7 +71,7 @@ public sealed class SavedSourceCookTests
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var first = workspace.CookCoordinator.RunAsync((_, _) => release.Task, this.TestContext.CancellationToken);
         var generator = new CapturingSceneDescriptorGenerator([]);
-        var service = CreateService(workspace, generator, CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync));
+        var service = CreateService(workspace, CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync), generator);
         var cook = service.CookCurrentSceneAsync(AssetPath.Parse("/Content/Scenes/Main.oscene.json"), this.TestContext.CancellationToken);
         try
         {
@@ -115,7 +115,7 @@ public sealed class SavedSourceCookTests
         using var registration = workspace.Documents.Register(FileSystemPath.From(path), _ => Task.FromResult<CookDocumentReadLease?>(new(state, static () => { })));
         await File.AppendAllTextAsync(path, " ", this.TestContext.CancellationToken).ConfigureAwait(false);
         var api = CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync);
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api);
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator([]));
         var result = material
             ? await service.CookAssetAsync(AssetPath.Parse("/" + relative), this.TestContext.CancellationToken).ConfigureAwait(false)
             : await service.CookCurrentSceneAsync(AssetPath.Parse("/" + relative), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -155,7 +155,7 @@ public sealed class SavedSourceCookTests
             }
         };
         var generator = new CapturingSceneDescriptorGenerator([]);
-        var service = CreateService(workspace, generator, CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync));
+        var service = CreateService(workspace, CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync), generator);
         var cook = service.CookCurrentSceneAsync(AssetPath.Parse("/" + relative), this.TestContext.CancellationToken);
         var runId = await blocked.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = generator.Scene.Should().BeNull();

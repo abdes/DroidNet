@@ -525,10 +525,14 @@ needs instead of a `WindowId`. Every slice follows decision 9.
     test and `testsupport` files call `FromProject`, `FromProjectInfo` or
     `new ProjectContext` directly. All move to `TestProject`; Phase 4's removal
     of `IProjectContextService` then changes the kit only.
-  - Tests construct services directly, so every new constructor dependency
-    still edits them: about 88 `new SceneDescriptorGenerator` (28 files), 29
-    `new AssetFeed` (12) and 15 `new CookDependencyDiscovery` (3). The shared
-    host-equivalent builder constructs them from registrations instead.
+  - Tests build the content pipeline and the asset feed through builders that
+    default what a test does not vary: ContentPipeline's `CookScenario.CreateService`
+    and `NativeCook`, and Assets' `AssetFeeds`. A new constructor dependency
+    changes the builder only. The shared host-equivalent builder replaces them
+    once registration modules exist (S3.1). What still builds them by hand: the
+    tests whose subject is `SceneDescriptorGenerator` or
+    `CookDependencyDiscovery`, a few tests that share one native API between
+    services, and `NativeContentPipelineFixture`, which other modules link.
   - A project's files are read through `ProjectContext.FileSystem`; code that
     holds a project takes no second file system for them. Editor source still
     uses `File`/`Directory` statics in 44 files. The 30 in ContentPipeline are

@@ -32,8 +32,7 @@ public sealed partial class AssetFeedTests
         var statuses = new Mock<IAssetCookStatusReader>();
         _ = statuses.Setup(value => value.ReadAsync(It.IsAny<ProjectContext>(), It.IsAny<IReadOnlyList<AssetPath>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => [new AssetCookStatus(identity, known ? AssetCookFreshness.Current : AssetCookFreshness.Unknown, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
-        var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, projects, new WorkspaceCookScopeProvider(workspace), statuses.Object, new CookDocumentRegistry(), EmptyCookRuns(), runtime, NoRelocations(), NoAuthoring());
+        using var provider = AssetFeeds.Create(catalog, projects, new WorkspaceCookScopeProvider(workspace), cookStatus: statuses.Object);
         var observer = new Observer<IReadOnlyList<AssetEntry>>(rows =>
         {
             if (rows.Any(row => row.CookStatus?.Freshness == AssetCookFreshness.Current))

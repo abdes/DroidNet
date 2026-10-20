@@ -31,7 +31,7 @@ public sealed class CookPublicationWorkflowTests
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var publication = workspace.Publication;
-        var pipeline = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility, publication);
+        var pipeline = CreateService(workspace, api, compatibility: compatibility, publication: publication);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         var previous = ReadOutputIdentities(workspace.Root);
         var provenancePath = CookPublicationPaths.Head(workspace.Root);
@@ -96,7 +96,7 @@ public sealed class CookPublicationWorkflowTests
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var publication = workspace.Publication;
-        var pipeline = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility, publication);
+        var pipeline = CreateService(workspace, api, compatibility: compatibility, publication: publication);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         using var mounted = await publication.AcquireForMountAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
         var path = mounted.FindProjectRoot("Content")!.FullPath;
@@ -123,7 +123,7 @@ public sealed class CookPublicationWorkflowTests
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var publication = workspace.Publication;
-        var pipeline = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility, publication);
+        var pipeline = CreateService(workspace, api, compatibility: compatibility, publication: publication);
         AssertCookSucceeded(await pipeline.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         using var previous = await publication.AcquireReadAsync(workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
         var previousPath = previous.FindProjectRoot("Content")!.FullPath;
@@ -146,7 +146,7 @@ public sealed class CookPublicationWorkflowTests
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        var service = CreateService(workspace, api, compatibility: compatibility);
         AssertCookSucceeded(await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false));
         var headPath = CookPublicationPaths.Head(workspace.Root);
         var head = System.Text.Json.JsonSerializer.Deserialize<CookPublicationHead>(await File.ReadAllBytesAsync(headPath, this.TestContext.CancellationToken).ConfigureAwait(false), CookPublicationDocument.JsonOptions)!;

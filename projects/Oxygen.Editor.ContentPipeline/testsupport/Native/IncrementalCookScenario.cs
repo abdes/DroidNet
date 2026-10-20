@@ -22,7 +22,7 @@ internal static class IncrementalCookScenario
 {
     internal static RecordingNativeApi CreateRecordingApi(INativeCompatibilityService compatibility) => new(new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility));
 
-    internal static ContentPipelineService CreateIncrementalService(CookWorkspace workspace, RecordingNativeApi api, INativeCompatibilityService compatibility) => CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+    internal static ContentPipelineService CreateIncrementalService(CookWorkspace workspace, RecordingNativeApi api, INativeCompatibilityService compatibility) => CreateService(workspace, api, compatibility: compatibility);
 
     internal static void AssertCookSucceeded(ContentCookResult result) => _ = result.Status.Should().BeOneOf([OperationStatus.Succeeded, OperationStatus.SucceededWithWarnings], string.Join(Environment.NewLine, result.Diagnostics.Select(static diagnostic => diagnostic.TechnicalMessage ?? diagnostic.Message)));
 

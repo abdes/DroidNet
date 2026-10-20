@@ -40,10 +40,9 @@ public sealed partial class AssetFeedTests
             _ = Interlocked.Increment(ref reads);
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = sourceHash }]);
         });
-        var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         var projects = workspace.ActivateProject();
         var project = projects.ActiveProject!;
-        using var provider = new AssetFeed(catalog, projects, new WorkspaceCookScopeProvider(workspace), reader, documents, EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
+        using var provider = AssetFeeds.Create(catalog, projects, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, documents: documents);
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(
@@ -96,8 +95,7 @@ public sealed partial class AssetFeedTests
             _ = Interlocked.Increment(ref reads);
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>(uris.Select(uri => new AssetCookStatus(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])).ToArray());
         });
-        var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), cookService.Object, unavailableRuntime, NoRelocations(), NoAuthoring());
+        using var provider = AssetFeeds.Create(catalog, context, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, cooks: cookService.Object);
         IReadOnlyList<AssetEntry> rows = [];
         var notifications = 0;
         provider.Items.Subscribe(
@@ -159,8 +157,7 @@ public sealed partial class AssetFeedTests
             return [new(identity, changed ? AssetCookFreshness.OutOfDate : AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = changed ? "new" : "old" }];
         });
         var catalog = new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
-        var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, documents, EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
+        using var provider = AssetFeeds.Create(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader, documents: documents);
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(
             new Observer<IReadOnlyList<AssetEntry>>(value =>
@@ -209,8 +206,7 @@ public sealed partial class AssetFeedTests
             var complete = Interlocked.Increment(ref reads) > 1;
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, complete ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
         });
-        var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]), context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), cooks.Object, unavailableRuntime, NoRelocations(), NoAuthoring());
+        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]), context, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, cooks: cooks.Object);
         provider.Items.Subscribe(
             new Observer<IReadOnlyList<AssetEntry>>(items =>
         {

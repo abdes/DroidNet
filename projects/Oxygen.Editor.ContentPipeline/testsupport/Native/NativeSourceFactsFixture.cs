@@ -12,6 +12,12 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 /// <summary>Uses installed native interpretation in graph tests instead of duplicating descriptor parsing.</summary>
 internal sealed class NativeSourceFactsFixture(ProjectContext project, ICookDocumentRegistry documents) : ICookSourceFactsProvider
 {
+    /// <summary>Creates the dependency discovery of a workspace over the installed native analysis.</summary>
+    /// <param name="workspace">The workspace whose sources are analyzed.</param>
+    /// <returns>The discovery.</returns>
+    public static CookDependencyDiscovery CreateDiscovery(CookWorkspace workspace)
+        => new(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
+
     public static async Task<global::Oxygen.Editor.ContentPipeline.Import.NativeSourceAnalysisReport> AnalyzeAsync(ContentSourceAnalysisExecution execution, CancellationToken cancellationToken)
     {
         using var compatibility = EditorNativeCompatibilityService.ForCooking();

@@ -45,7 +45,7 @@ public sealed class TransitiveLibraryTests
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var producer = CreateService(library, new SceneDescriptorGenerator(), api, compatibility);
+        var producer = CreateService(library, api, compatibility: compatibility);
         _ = (await producer.CookAssetAsync(geometry, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var context = consumer.ProjectContext with
         {
@@ -57,7 +57,7 @@ public sealed class TransitiveLibraryTests
         consumer.Activate(context);
         AddGeometryNode(consumer, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
+        var service = CreateService(consumer, api, compatibility: compatibility);
         var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var cooked = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, cooked.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));
@@ -103,7 +103,7 @@ public sealed class TransitiveLibraryTests
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
         var runner = new CountingSourceRunner();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var producer = CreateService(library, new SceneDescriptorGenerator(), api, compatibility);
+        var producer = CreateService(library, api, compatibility: compatibility);
         var exported = await producer.CookAssetAsync(geometry, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = exported.IsPublished.Should().BeTrue();
         var context = consumer.ProjectContext with
@@ -113,7 +113,7 @@ public sealed class TransitiveLibraryTests
         consumer.Activate(context);
         AddGeometryNode(consumer, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Library mesh");
         await consumer.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var service = CreateService(consumer, new SceneDescriptorGenerator(), api, compatibility);
+        var service = CreateService(consumer, api, compatibility: compatibility);
         var scene = AssetPath.Parse("/Content/Scenes/Main.oscene");
         var cooked = await service.CookCurrentSceneAsync(scene, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = cooked.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, cooked.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));

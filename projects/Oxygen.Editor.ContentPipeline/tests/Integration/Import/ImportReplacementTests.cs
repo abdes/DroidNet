@@ -3,13 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -74,11 +72,10 @@ public sealed class ImportReplacementTests
                 workspace.WriteText("Content/Geometry/AuthoredCube.ogeo.json", geometry.ToJsonString());
             }
 
-            using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var runner = new FailImportBatchRunner { Fail = false };
-            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var publication = workspace.Publication;
-            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility, publication);
+            using var cook = NativeCook.Create(workspace, runner: runner, publication: publication);
+            var service = cook.Service;
             var first = repair
                 ? await service.CookProjectAsync(this.TestContext.CancellationToken).ConfigureAwait(false)
                 : await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -163,10 +160,9 @@ public sealed class ImportReplacementTests
         try
         {
             var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
-            using var compatibility = EditorNativeCompatibilityService.ForCooking();
             var runner = new ContextLeaseRunner();
-            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), runner, NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+            using var cook = NativeCook.Create(workspace, runner: runner);
+            var service = cook.Service;
             _ = (await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
             var before = ReadOutputIdentities(workspace.Root).ToDictionary(static item => item.Key, static item => item.Value.hash, StringComparer.Ordinal);
             var primary = Path.Combine(workspace.Root, "Content/Models/Model/model.gltf");
@@ -219,9 +215,8 @@ public sealed class ImportReplacementTests
         try
         {
             var source = await WriteRetainedModelAsync(workspace, "Model", "fbx", this.TestContext.CancellationToken).ConfigureAwait(false);
-            using var compatibility = EditorNativeCompatibilityService.ForCooking();
-            var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-            var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility, workspace.Publication);
+            using var cook = NativeCook.Create(workspace, publication: workspace.Publication);
+            var service = cook.Service;
             var first = await service.CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = first.IsPublished.Should().BeTrue();
 

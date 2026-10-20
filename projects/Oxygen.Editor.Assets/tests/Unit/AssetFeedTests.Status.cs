@@ -3,10 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Moq;
-using Oxygen.Editor.ContentPipeline.Authoring;
-using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
@@ -52,8 +48,7 @@ public sealed partial class AssetFeedTests
         var catalog = new TestProjectAssetCatalog([new AssetRecord(source)]);
         var state = new AssetCookStatus(AssetPath.Parse("/Content/Materials/Red.omat"), freshness, published, verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []);
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
-        var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
+        using var provider = AssetFeeds.Create(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -80,17 +75,11 @@ public sealed partial class AssetFeedTests
         File.WriteAllText(descriptorPath, """{"name":"Orbit"}""");
         var catalog = new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/" + relativePath))]);
         var reader = new DelegateStatusReader((_, _, _) => throw new InvalidOperationException("Typed references are not source-cookable."));
-        var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(
+        using var provider = AssetFeeds.Create(
             catalog,
             workspace.ActivateProject(),
             new WorkspaceCookScopeProvider(workspace),
-            reader,
-            new CookDocumentRegistry(),
-            EmptyCookRuns(),
-            unavailableRuntime,
-            NoRelocations(),
-            NoAuthoring());
+            cookStatus: reader);
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
 
@@ -123,8 +112,7 @@ public sealed partial class AssetFeedTests
             return [];
         });
         var catalog = new TestProjectAssetCatalog([new AssetRecord(red)]);
-        var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
+        using var provider = AssetFeeds.Create(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
         var snapshots = new List<IReadOnlyList<AssetEntry>>();
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(snapshots.Add), this.TestContext.CancellationToken);
         var refresh = provider.RefreshAsync(this.TestContext.CancellationToken);
@@ -175,8 +163,7 @@ public sealed partial class AssetFeedTests
         });
         var context = workspace.ActivateProject();
         var catalog = new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
-        var unavailableRuntime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, context, new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), unavailableRuntime, NoRelocations(), NoAuthoring());
+        using var provider = AssetFeeds.Create(catalog, context, new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
         var refresh = provider.RefreshAsync(this.TestContext.CancellationToken);
@@ -214,8 +201,7 @@ public sealed partial class AssetFeedTests
         const string failure = "The publication document does not match the selected digest.";
         var catalog = new TestProjectAssetCatalog([new AssetRecord(source)]) { PublicationError = failure };
         var reader = new DelegateStatusReader((_, _, _) => throw new InvalidOperationException("Must not reopen failed publication."));
-        var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime, NoRelocations(), NoAuthoring());
+        using var provider = AssetFeeds.Create(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
         var item = await provider.ResolveAsync(identity, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = item.Should().NotBeNull();
         _ = item!.IsSelectable.Should().Be(!broken);
@@ -252,8 +238,7 @@ public sealed partial class AssetFeedTests
 
             return [];
         });
-        var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        var provider = new AssetFeed(new TestProjectAssetCatalog([new(source)]), workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), reader, new CookDocumentRegistry(), EmptyCookRuns(), runtime, NoRelocations(), NoAuthoring());
+        var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
         var refresh = provider.RefreshAsync(this.TestContext.CancellationToken);
         var disposal = Task.CompletedTask;
         try
@@ -272,12 +257,6 @@ public sealed partial class AssetFeedTests
 
         _ = await ((Func<Task>)(() => refresh)).Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
     }
-
-    private static ICookRunService EmptyCookRuns() => Mock.Of<ICookRunService>(runs => runs.Runs == Array.Empty<CookRunSnapshot>());
-
-    private static IAssetRelocationService NoRelocations() => Mock.Of<IAssetRelocationService>();
-
-    private static IAssetAuthoring NoAuthoring() => Mock.Of<IAssetAuthoring>();
 
     private sealed class DelegateStatusReader(Func<ProjectContext, IReadOnlyList<AssetPath>, CancellationToken, Task<IReadOnlyList<AssetCookStatus>>> read) : IAssetCookStatusReader
     {

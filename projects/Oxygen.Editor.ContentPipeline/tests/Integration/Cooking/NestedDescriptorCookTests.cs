@@ -4,13 +4,11 @@
 
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
-using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
 
@@ -42,9 +40,8 @@ public sealed class NestedDescriptorCookTests
         descriptor["lods"]![0]!["submeshes"]![0]!["material_ref"] = "/" + first[..^5];
         workspace.WriteText(geometry, descriptor.ToJsonString());
         File.Delete(original);
-        using var compatibility = EditorNativeCompatibilityService.ForCooking();
-        var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
-        var service = CreateService(workspace, new SceneDescriptorGenerator(), api, compatibility);
+        using var cook = NativeCook.Create(workspace);
+        var service = cook.Service;
         var geometryUri = AssetPath.Parse("/" + geometry[..^5]);
         _ = (await service.CookAssetAsync(geometryUri, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
         var inventory = await service.ReadAsync(workspace.ProjectContext, geometryUri, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -65,7 +62,7 @@ public sealed class NestedDescriptorCookTests
             _ = File.Exists(workspace.CookedPath(path[..^5])).Should().BeTrue(path);
         }
 
-        var inspected = await api.InspectLooseCookedRootAsync(workspace.CookedRoot("Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var inspected = await cook.Api.InspectLooseCookedRootAsync(workspace.CookedRoot("Content"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = inspected.Succeeded.Should().BeTrue();
         _ = inspected.Assets.Where(static asset => asset.Kind == ContentCookAssetKind.Material).Select(static asset => asset.AssetKey)
             .Should().HaveCount(2).And.OnlyHaveUniqueItems().And.NotContainNulls();

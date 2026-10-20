@@ -27,7 +27,7 @@ public sealed class CookedOutputInspectionTests
     {
         using var workspace = new CookWorkspace([new("Cooked", ".cooked"), new("Content", "Content"), new("Extra", "MoreContent")]);
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
+        var pipeline = CreateService(workspace, api.Object, new CapturingSceneDescriptorGenerator([]));
         var report = await pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, validate: true).ConfigureAwait(false);
         _ = report.Roots.Select(static root => root.Name).Should().Equal("Content", "Extra");
         _ = report.Roots.Should().OnlyContain(root => !root.IsPresent && root.Validation == null && root.Inspection.Assets.Count == 0);
@@ -56,7 +56,7 @@ public sealed class CookedOutputInspectionTests
             await release.Task.ConfigureAwait(false);
             return NativeInventoryFixture.Read(root);
         });
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
+        var pipeline = CreateService(workspace, api.Object, new CapturingSceneDescriptorGenerator([]));
         var inspection = pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken, validate: true);
         try
         {
@@ -91,7 +91,7 @@ public sealed class CookedOutputInspectionTests
             await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
             return NativeInventoryFixture.Read(root);
         });
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
+        var pipeline = CreateService(workspace, api.Object, new CapturingSceneDescriptorGenerator([]));
         var inspection = pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         workspace.ContextService.Close();
@@ -130,7 +130,7 @@ public sealed class CookedOutputInspectionTests
         using var accepted = await workspace.Publication.AcquireForMountAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = api.Setup(value => value.ReadInventoryAsync(root, It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(() => NativeInventoryFixture.Read(root));
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
+        var pipeline = CreateService(workspace, api.Object, new CapturingSceneDescriptorGenerator([]));
         var report = await pipeline.InspectCookedOutputAsync(AssetPath.Parse("/Library/Geometry"), this.TestContext.CancellationToken, expectedProject: project).ConfigureAwait(false);
         var inspected = report.Roots.Should().ContainSingle().Subject;
         _ = inspected.Inspection.CookedRoot.Should().Be(root);

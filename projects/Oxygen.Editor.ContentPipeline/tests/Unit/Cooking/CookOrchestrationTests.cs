@@ -31,7 +31,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, generator, api);
+        var service = CreateService(workspace, api, generator);
 
         var result = await service.CookCurrentSceneAsync(sceneUri, CancellationToken.None)
             .ConfigureAwait(false);
@@ -75,7 +75,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, generator, api);
+        var service = CreateService(workspace, api, generator);
 
         var result = await service.CookCurrentSceneAsync(
                 AssetPath.Parse("/Content/Scenes/Main.oscene"),
@@ -100,7 +100,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator(diagnostics: []));
 
         var result = await service.CookAssetAsync(materialUri, CancellationToken.None)
             .ConfigureAwait(false);
@@ -130,7 +130,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator(diagnostics: []));
 
         var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Missing.omat"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -153,7 +153,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator(diagnostics: []));
 
         var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -175,7 +175,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator(diagnostics: []));
 
         var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -199,7 +199,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator(diagnostics: []));
 
         var result = await service.CookAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -267,7 +267,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, generator, api);
+        var service = CreateService(workspace, api, generator);
 
         var result = await service.CookCurrentSceneAsync(
                 AssetPath.Parse("/Content/Scenes/Main.oscene"),
@@ -292,7 +292,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator(diagnostics: []));
 
         _ = await service.CookFolderAsync(AssetPath.Parse("/Content/Materials"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -314,7 +314,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, generator, api);
+        var service = CreateService(workspace, api, generator);
 
         _ = await service.CookFolderAsync(AssetPath.Parse("/Content/Scenes"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -336,7 +336,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator(diagnostics: []));
 
         var result = await service.CookProjectAsync(CancellationToken.None)
             .ConfigureAwait(false);
@@ -358,7 +358,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator(diagnostics: []));
 
         var report = await service.InspectCookedOutputAsync(AssetPath.Parse("/Cooked/Content"), CancellationToken.None)
             .ConfigureAwait(false);
@@ -381,7 +381,7 @@ public sealed class CookOrchestrationTests
         {
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
-        var service = CreateService(workspace, new CapturingSceneDescriptorGenerator(diagnostics: []), api);
+        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator(diagnostics: []));
 
         var report = await service.InspectCookedOutputAsync(scopeUri: null, CancellationToken.None)
             .ConfigureAwait(false);

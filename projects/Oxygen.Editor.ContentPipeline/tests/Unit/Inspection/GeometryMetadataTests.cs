@@ -54,7 +54,7 @@ public sealed class GeometryMetadataTests
         var original = workspace.ProjectContext;
         workspace.Activate(original with { ProjectId = Guid.NewGuid() });
         var api = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
-        var pipeline = CreateService(workspace, new CapturingSceneDescriptorGenerator([]), api.Object);
+        var pipeline = CreateService(workspace, api.Object, new CapturingSceneDescriptorGenerator([]));
         var result = await pipeline.ReadAsync(original, EngineAssets.BasicShape("Cube"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.Should().BeNull();
         api.VerifyNoOtherCalls();
