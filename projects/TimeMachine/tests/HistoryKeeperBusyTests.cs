@@ -29,6 +29,32 @@ public sealed class HistoryKeeperBusyTests
         _ = history.IsBusy.Should().BeFalse();
     }
 
+    /// <summary>
+    /// An undo or redo asked for while an undo still runs is ignored, so the history is idle again once the running one
+    /// completes and the next change is undoable.
+    /// </summary>
+    /// <returns>The test task.</returns>
+    [TestMethod]
+    public async Task AReplayIsIgnoredWhileAnotherRuns()
+    {
+        var history = new HistoryKeeper(new object());
+        var complete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        history.AddChange("First", static () => { });
+        history.AddChange("Deferred change", () => complete.Task);
+        var undo = history.UndoAsync(this.TestContext.CancellationToken);
+
+        await history.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        await history.RedoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = history.Undo().Should().BeFalse();
+        _ = history.UndoStack.Should().ContainSingle().Which.Key.Should().Be("First");
+
+        complete.SetResult();
+        await undo.ConfigureAwait(false);
+        history.AddChange("Next", static () => { });
+        _ = history.IsBusy.Should().BeFalse();
+        _ = history.UndoStack.Select(static change => change.Key).Should().Equal("First", "Next");
+    }
+
     /// <summary>An open change set is busy even before its first change has been recorded.</summary>
     [TestMethod]
     public void IsBusyIncludesAnOpenChangeSet()

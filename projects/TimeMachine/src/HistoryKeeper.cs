@@ -134,6 +134,10 @@ public class HistoryKeeper
     /// </remarks>
     internal States State { get; set; } = States.Idle;
 
+    // An undo or redo is running, maybe awaiting its change; another one would interleave with it and restore the state
+    // out of order.
+    private bool IsReplaying => this.State is States.Undoing or States.Redoing;
+
     /// <summary>
     /// Adds a change to the undo stack or the current change set.
     /// </summary>
@@ -167,14 +171,15 @@ public class HistoryKeeper
     /// Undo the first available change.
     /// </summary>
     /// <returns>
-    /// <see langword="true"/> when a change was undone; <see langword="false"/> when there was nothing to undo, or when
+    /// <see langword="true"/> when a change was undone; <see langword="false"/> when there was nothing to undo, when an
+    /// undo or redo is still running, or when
     /// the change threw, in which case it stays on the undo stack at its position, unless it recorded part of its
     /// inverse before it threw.
     /// </returns>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A change that fails to apply leaves the history as it was, and the result tells the caller.")]
     public bool Undo()
     {
-        if (!this.TryPopUndoStack(out var lastChange, out var position))
+        if (this.IsReplaying || !this.TryPopUndoStack(out var lastChange, out var position))
         {
             return false;
         }
@@ -205,11 +210,12 @@ public class HistoryKeeper
     /// <summary>
     /// Undo the first available change asynchronously.
     /// </summary>
+    /// <remarks>Nothing is undone while an undo or redo is still running.</remarks>
     /// <param name="cancellationToken">A token that can be used to cancel the operation.</param>
     /// <returns>A task-like object that represents the asynchronous operation.</returns>
     public async ValueTask UndoAsync(CancellationToken cancellationToken = default)
     {
-        if (!this.TryPopUndoStack(out var lastChange, out var position))
+        if (this.IsReplaying || !this.TryPopUndoStack(out var lastChange, out var position))
         {
             return;
         }
@@ -241,14 +247,15 @@ public class HistoryKeeper
     /// Redo the first available change.
     /// </summary>
     /// <returns>
-    /// <see langword="true"/> when a change was redone; <see langword="false"/> when there was nothing to redo, or when
+    /// <see langword="true"/> when a change was redone; <see langword="false"/> when there was nothing to redo, when an
+    /// undo or redo is still running, or when
     /// the change threw, in which case it stays on the redo stack at its position, unless it recorded part of its
     /// inverse before it threw.
     /// </returns>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A change that fails to apply leaves the history as it was, and the result tells the caller.")]
     public bool Redo()
     {
-        if (!this.TryPopRedoStack(out var lastChange, out var position))
+        if (this.IsReplaying || !this.TryPopRedoStack(out var lastChange, out var position))
         {
             return false;
         }
@@ -279,11 +286,12 @@ public class HistoryKeeper
     /// <summary>
     /// Redo the first available change asynchronously.
     /// </summary>
+    /// <remarks>Nothing is redone while an undo or redo is still running.</remarks>
     /// <param name="cancellationToken">A token that can be used to cancel the operation.</param>
     /// <returns>A task-like object that represents the asynchronous operation.</returns>
     public async ValueTask RedoAsync(CancellationToken cancellationToken = default)
     {
-        if (!this.TryPopRedoStack(out var lastChange, out var position))
+        if (this.IsReplaying || !this.TryPopRedoStack(out var lastChange, out var position))
         {
             return;
         }
