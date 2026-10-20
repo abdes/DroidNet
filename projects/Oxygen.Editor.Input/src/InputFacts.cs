@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.IO.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
@@ -24,7 +23,6 @@ namespace Oxygen.Editor.Input;
 /// </remarks>
 public sealed partial class InputFacts : IInputSources, IDisposable
 {
-    private readonly IFileSystem fileSystem;
     private readonly ILoggerFactory? loggerFactory;
     private readonly ILogger logger;
     private readonly SubscriberEvent<EventHandler<InputSourceChangedEventArgs>> changed = new();
@@ -40,14 +38,11 @@ public sealed partial class InputFacts : IInputSources, IDisposable
     /// project's input sources.</summary>
     /// <param name="projects">The active project.</param>
     /// <param name="catalog">The project catalog, whose file changes read a source again.</param>
-    /// <param name="fileSystem">The file system that holds the project.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    public InputFacts(IProjectContextService projects, IAssetCatalog catalog, IFileSystem fileSystem, ILoggerFactory? loggerFactory = null)
+    public InputFacts(IProjectContextService projects, IAssetCatalog catalog, ILoggerFactory? loggerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(projects);
         ArgumentNullException.ThrowIfNull(catalog);
-        ArgumentNullException.ThrowIfNull(fileSystem);
-        this.fileSystem = fileSystem;
         this.loggerFactory = loggerFactory;
         this.logger = loggerFactory?.CreateLogger<InputFacts>() ?? NullLogger<InputFacts>.Instance;
         this.catalogChanges = catalog.Changes.Subscribe(this.OnCatalogChange);
@@ -114,7 +109,7 @@ public sealed partial class InputFacts : IInputSources, IDisposable
 
             // Disposing waits for a read in progress, so the closed project publishes nothing after this.
             this.current?.Dispose();
-            this.current = project is null ? null : new ProjectInputFacts(project, this.fileSystem, this.Publish, this.loggerFactory);
+            this.current = project is null ? null : new ProjectInputFacts(project, this.Publish, this.loggerFactory);
             this.Publish(InputSnapshot.Empty, container: null);
             started = this.current;
         }

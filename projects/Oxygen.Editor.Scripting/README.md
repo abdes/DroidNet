@@ -29,6 +29,8 @@ them. It holds no view, view model or dialog.
 - `ScriptTemplates.New` is the text of a new script, and
   `ScriptTemplates.Asset` the template New Script creates it from.
 
-Files are read through `IFileSystem`, so the tests run on an in-memory file
+A project's files are read and written through the project's file system
+(`ProjectContext.FileSystem`); the SDK's definitions and schemas through the
+`IFileSystem` the services are given. So the tests run on an in-memory file
 system. `Oxygen.Editor.Scripting.Testing` gives other modules' tests
 `FakeScripts`, `FakeScriptAnalyzer` and `FakeScriptLibrary`.

@@ -52,7 +52,7 @@ public sealed partial class SceneDescriptorGenerator
         var contexts = new List<NativeStartingInputContext>();
         foreach (var entry in scene.StartingInputContexts)
         {
-            var source = StartingContextRules.Describe(scope.Project, entry.Context, container => new InputSourceFiles(scope.Project.FileSystem).Read(scope.Project, container));
+            var source = StartingContextRules.Describe(scope.Project, entry.Context, container => InputSourceFiles.Read(scope.Project, container));
             if (StartingContextRules.Check(entry, source) is { } problem)
             {
                 site.Report(SceneStartingPropertyPaths.StartingInputContexts, problem.Message);

@@ -517,19 +517,27 @@ needs instead of a `WindowId`. Every slice follows decision 9.
     the code.
 
   What the S1.8 survey measured (651 test files), for this slice to finish:
-  - `ProjectContext` is hand-built (six `required` members) in about 34 test
-    files and 6 `testsupport` files, and `ProjectContextService` plus
-    `Activate` in 19; shared builders of their own exist in `CookWorkspace`
-    (32 users), `BrowserTestData` (15), `AssetWorkspace` (12),
-    `SceneTabs.Project` (11), `CookCoordinatorScenario` (7),
-    `PublicationProject` (6) and `GenerationScenario` (5). All move to
-    `TestProject`; Phase 4's removal of `IProjectContextService` then changes
-    the kit only.
-  - Editor source reads files three ways: `File`/`Directory` statics in about 90
-    files (ContentPipeline most), DroidNet.Storage in 28, `IFileSystem` in 3. So
-    about 90 test files make their own `%TEMP%` root with `try/finally`, 61 pass
-    `RealFileSystem`, and 3 use `MockFileSystem`. Unifying Storage and
-    `IFileSystem` is a separate decision, not part of #69.
+  - What remains of project construction after `TestProject` (measured
+    2026-10-20): 50 test files make their project with the kit, and the
+    per-module builders `AssetWorkspace`, `RelocationWorkspace`,
+    `BrowserTestData`, `GenerationScenario`, `CookCoordinatorScenario` and
+    `SceneTabs` build on it. `CookWorkspace` (39 users,
+    `ProjectContext.FromProject`) and `PublicationProject` (7,
+    `FromProjectInfo`) still build their own, and 21 other test and
+    `testsupport` files call `FromProject`, `FromProjectInfo` or
+    `new ProjectContext` directly. All move to `TestProject`; Phase 4's removal
+    of `IProjectContextService` then changes the kit only.
+  - Tests construct services directly, so every new constructor dependency
+    still edits them: about 88 `new SceneDescriptorGenerator` (28 files), 29
+    `new AssetFeed` (12) and 15 `new CookDependencyDiscovery` (3). The shared
+    host-equivalent builder constructs them from registrations instead.
+  - A project's files are read through `ProjectContext.FileSystem`; code that
+    holds a project takes no second file system for them. Editor source still
+    uses `File`/`Directory` statics in 66 files (ContentPipeline 39): the
+    cross-process cook leases and native tools need the real disk, the rest
+    move to the project's file system. About 33 unit test files make their own
+    `%TEMP%` root for that reason. Unifying Storage and `IFileSystem` is a
+    separate decision, not part of #69.
   - About 45 test files assert message, tooltip or title text.
   - View models with long hand-wired constructors spread every new dependency
     over their tests: `AssetsViewModel` (13 arguments, 4 test sites),

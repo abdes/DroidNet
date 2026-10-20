@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.IO.Abstractions;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Core;
@@ -16,11 +15,8 @@ namespace Oxygen.Editor.Input;
 /// A product is named under its source (<c>/Content/Input/Player.input/Jump.oiact</c> is declared by
 /// <c>/Content/Input/Player.input.json</c>), so its source follows from its identity; nothing scans a folder.
 /// </remarks>
-/// <param name="fileSystem">The file system that holds the project.</param>
-public sealed class InputSourceFiles(IFileSystem fileSystem)
+public static class InputSourceFiles
 {
-    private readonly IFileSystem fileSystem = fileSystem ?? throw new ArgumentNullException(nameof(fileSystem));
-
     /// <summary>Gets a value indicating whether a virtual path is in one of the project's authoring mounts, where the
     /// project's own input sources are, rather than in a library or the pipeline's output.</summary>
     /// <param name="project">The project.</param>
@@ -48,7 +44,7 @@ public sealed class InputSourceFiles(IFileSystem fileSystem)
     /// <param name="container">The source's identity.</param>
     /// <returns>The source, or <see langword="null"/> when it does not exist, cannot be read or does not match the
     /// engine's input schema.</returns>
-    public InputContainer? Read(ProjectContext project, AssetPath container)
+    public static InputContainer? Read(ProjectContext project, AssetPath container)
     {
         if (FileOf(project, container) is not { } file)
         {
@@ -57,7 +53,7 @@ public sealed class InputSourceFiles(IFileSystem fileSystem)
 
         try
         {
-            return InputSourceReader.Check(this.fileSystem.File.ReadAllBytes(file.FullPath)).Source is { } source
+            return InputSourceReader.Check(project.FileSystem.File.ReadAllBytes(file.FullPath)).Source is { } source
                 ? new InputContainer(container, source)
                 : null;
         }

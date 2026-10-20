@@ -9,6 +9,7 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Textures;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Managed.Core;
@@ -72,12 +73,12 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     /// inspector: the descriptors are read once per catalog update and the last list is replayed.
     /// </summary>
     /// <param name="assetProvider">The shared content catalog.</param>
-    /// <param name="fileSystem">The file system that holds the project's texture descriptors.</param>
+    /// <param name="projects">The active project, whose files hold its texture descriptors.</param>
     /// <returns>The shared feed.</returns>
-    internal static IObservable<IReadOnlyList<CubeTextureAsset>> CubeTextures(IAssetFeed assetProvider, IFileSystem fileSystem)
+    internal static IObservable<IReadOnlyList<CubeTextureAsset>> CubeTextures(IAssetFeed assetProvider, IProjectContextService projects)
         => assetProvider.Items
             .Select(assets => (IReadOnlyList<CubeTextureAsset>)AssetRule.For(AssetKind.Texture).Apply(assets)
-                .Select(asset => (Asset: asset, Cube: DescribeCube(fileSystem, asset)))
+                .Select(asset => (Asset: asset, Cube: DescribeCube(projects.ActiveProject?.FileSystem, asset)))
                 .Where(static entry => entry.Cube is not null)
                 .Select(static entry => new CubeTextureAsset(entry.Asset, entry.Cube!.Value))
                 .ToArray())
@@ -97,9 +98,9 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
 
     // A project texture's descriptor says whether it is a cube; a packaged or library texture's cooked record does.
     // The value is whether the cube keeps float radiance, or null when the asset is not a cube.
-    private static bool? DescribeCube(IFileSystem fileSystem, AssetEntry asset)
+    private static bool? DescribeCube(IFileSystem? files, AssetEntry asset)
         => asset.DescriptorPath is { } descriptorPath
-            ? Texture.TryRead(fileSystem, descriptorPath) is { IsCube: true } texture ? texture.StoresRadiance : null
+            ? files is not null && Texture.TryRead(files, descriptorPath) is { IsCube: true } texture ? texture.StoresRadiance : null
             : asset.CookedMetadata?.Texture is { IsCube: true } cooked ? cooked.StoresRadiance : null;
 
     private void UpdateRows(IReadOnlyList<CubeTextureAsset> cubemaps)

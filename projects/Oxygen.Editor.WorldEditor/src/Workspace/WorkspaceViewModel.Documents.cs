@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.IO.Abstractions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Windowing;
 using DroidNet.Config;
@@ -102,7 +101,6 @@ public partial class WorkspaceViewModel
             container.Resolve<HostingContext>().DispatcherScheduler,
             container.Resolve<IMaterialCookService>(),
             container.Resolve<IProjectContextService>(),
-            container.Resolve<IFileSystem>(),
             container.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault),
             inputCommitter: container.Resolve<IDocumentInputCommitter>(),
             windowId: container.Resolve<WindowId>(),

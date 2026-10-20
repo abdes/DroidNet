@@ -50,7 +50,8 @@ public sealed partial class ScriptFacts : IScripts, IDisposable
     /// project's scripts.</summary>
     /// <param name="projects">The active project.</param>
     /// <param name="catalog">The project catalog, whose file changes analyze a script again.</param>
-    /// <param name="fileSystem">The file system that holds the project and the SDK.</param>
+    /// <param name="fileSystem">The file system that holds the SDK's API definitions; the project's scripts are read
+    /// through the project's own file system.</param>
     /// <param name="analyzer">The engine's script analyzer.</param>
     /// <param name="library">The scripts of mounted libraries.</param>
     /// <param name="operationResults">The publisher that reports an analyzer that cannot run.</param>
@@ -188,7 +189,7 @@ public sealed partial class ScriptFacts : IScripts, IDisposable
             this.current?.Dispose();
             this.current = project is null
                 ? null
-                : new ProjectScriptFacts(project, this.fileSystem, this.analyzer, () => this.definitions.Value, this.Publish, this.ReportUnavailable, this.loggerFactory);
+                : new ProjectScriptFacts(project, this.analyzer, () => this.definitions.Value, this.Publish, this.ReportUnavailable, this.loggerFactory);
             this.Publish(ScriptSnapshot.Empty, script: null);
             started = this.current;
         }

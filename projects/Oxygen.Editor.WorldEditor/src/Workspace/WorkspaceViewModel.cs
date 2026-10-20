@@ -493,7 +493,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
             var lastOpened = usage.LastOpenedScene;
             if (await ResolveSceneByNameOrIdAsync(catalog, context, lastOpened).ConfigureAwait(true) is not { } migrated
-                || await SceneFiles.ReadIdAsync(migrated.File, context.FileSystem).ConfigureAwait(true) is not { } migratedId)
+                || await SceneFiles.ReadIdAsync(context, migrated).ConfigureAwait(true) is not { } migratedId)
             {
                 return;
             }

@@ -35,7 +35,7 @@ public sealed partial class InputFactsTests : IDisposable
 
     public InputFactsTests()
     {
-        this.facts = new InputFacts(this.projects, new Catalog(this.changes), this.project.FileSystem);
+        this.facts = new InputFacts(this.projects, new Catalog(this.changes));
     }
 
     public TestContext TestContext { get; set; }
@@ -115,7 +115,7 @@ public sealed partial class InputFactsTests : IDisposable
         var file = this.project.WriteFile(PlayerFile, InputTemplates.New("Player"));
         await this.OpenAsync().ConfigureAwait(false);
 
-        this.project.FileSystem.File.Delete(file.FullPath);
+        this.project.Context.FileSystem.File.Delete(file.FullPath);
         await this.ChangeAsync(new AssetChange(AssetChangeKind.Removed, AssetPath.Parse(PlayerFile)), () => this.facts.All.Count == 0).ConfigureAwait(false);
 
         _ = this.facts.Find(Player).Should().BeNull();
@@ -127,7 +127,7 @@ public sealed partial class InputFactsTests : IDisposable
         var file = this.project.WriteFile(PlayerFile, InputTemplates.New("Player"));
         await this.OpenAsync().ConfigureAwait(false);
 
-        this.project.FileSystem.File.Move(file.FullPath, this.project.PathOf("/Content/Input/Hero.input.json").FullPath);
+        this.project.Context.FileSystem.File.Move(file.FullPath, this.project.PathOf("/Content/Input/Hero.input.json").FullPath);
         await this.ChangeAsync(
             new AssetChange(AssetChangeKind.Relocated, AssetPath.Parse("/Content/Input/Hero.input.json"), AssetPath.Parse(PlayerFile)),
             () => this.facts.Find(Player) is null).ConfigureAwait(false);

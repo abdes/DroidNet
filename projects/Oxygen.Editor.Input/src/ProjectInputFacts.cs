@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using System.IO.Abstractions;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Projects;
@@ -23,10 +22,9 @@ namespace Oxygen.Editor.Input;
 /// order they were made. Nothing is published once the project is closed.
 /// </remarks>
 /// <param name="project">The project.</param>
-/// <param name="fileSystem">The file system that holds the project.</param>
 /// <param name="publish">Publishes a snapshot, with the source that changed or <see langword="null"/> for all.</param>
 /// <param name="loggerFactory">The logger factory.</param>
-internal sealed partial class ProjectInputFacts(ProjectContext project, IFileSystem fileSystem, Action<InputSnapshot, AssetPath?> publish, ILoggerFactory? loggerFactory = null) : IDisposable
+internal sealed partial class ProjectInputFacts(ProjectContext project, Action<InputSnapshot, AssetPath?> publish, ILoggerFactory? loggerFactory = null) : IDisposable
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectInputFacts>() ?? NullLogger<ProjectInputFacts>.Instance;
     private readonly Lock gate = new();
@@ -105,12 +103,12 @@ internal sealed partial class ProjectInputFacts(ProjectContext project, IFileSys
         foreach (var mount in project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)))
         {
             var root = project.ProjectRoot.Combine(mount.RelativePath);
-            if (!fileSystem.Directory.Exists(root.FullPath))
+            if (!project.FileSystem.Directory.Exists(root.FullPath))
             {
                 continue;
             }
 
-            foreach (var path in fileSystem.Directory.EnumerateFiles(root.FullPath, "*" + AssetFileTypes.InputFile, SearchOption.AllDirectories))
+            foreach (var path in project.FileSystem.Directory.EnumerateFiles(root.FullPath, "*" + AssetFileTypes.InputFile, SearchOption.AllDirectories))
             {
                 var file = FileSystemPath.From(path);
                 if (!file.GetPathBelow(root).Split('/').Any(static segment => segment.StartsWith('.'))
@@ -135,7 +133,7 @@ internal sealed partial class ProjectInputFacts(ProjectContext project, IFileSys
     {
         try
         {
-            var report = InputSourceReader.Check(fileSystem.File.ReadAllBytes(file.FullPath));
+            var report = InputSourceReader.Check(project.FileSystem.File.ReadAllBytes(file.FullPath));
             return new InputSourceEntry(file, report.Source is { } source ? new InputContainer(identity, source) : null, report.Problems);
         }
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)

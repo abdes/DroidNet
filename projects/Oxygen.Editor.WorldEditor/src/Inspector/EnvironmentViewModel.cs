@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.IO.Abstractions;
 using System.Reactive.Concurrency;
 using DroidNet.Controls;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.LivePreview.Scenes;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.World.Inspector.Environment;
@@ -32,8 +32,8 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     /// <param name="observeEnvironment">Reads the runtime environment that renders a scene.</param>
     /// <param name="inputContextSource">Reads what the project says about a mapping context.</param>
     /// <param name="revealAsset">Shows an asset in the Content Browser.</param>
-    /// <param name="fileSystem">The file system that holds the project's texture descriptors; with the catalog, it
-    /// lists the cube textures.</param>
+    /// <param name="projects">The active project, whose files hold its texture descriptors; with the catalog, it lists
+    /// the cube textures.</param>
     /// <param name="inputSources">The project's input sources, whose changes the Play section follows.</param>
     public EnvironmentViewModel(
         Func<SceneAuthoring?>? authoringProvider = null,
@@ -43,13 +43,13 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         Func<Scene, CancellationToken, Task<SkyLightObservation?>>? observeEnvironment = null,
         Func<AssetPath, InputContextSource>? inputContextSource = null,
         Func<AssetPath, Task>? revealAsset = null,
-        IFileSystem? fileSystem = null,
+        IProjectContextService? projects = null,
         IInputSources? inputSources = null)
     {
         this.observeEnvironment = observeEnvironment;
         this.EditOwner = new(authoringProvider, this.RefreshFromScene, this.ValidationFeedback);
         var scheduler = observerScheduler ?? ImmediateScheduler.Instance;
-        var cubeTextures = assetProvider is not null && fileSystem is not null ? CubemapPickerModel.CubeTextures(assetProvider, fileSystem) : null;
+        var cubeTextures = assetProvider is not null && projects is not null ? CubemapPickerModel.CubeTextures(assetProvider, projects) : null;
         this.Backdrop = new(this.EditOwner, cubeTextures, scheduler);
         this.SkyLight = new(this.EditOwner, cubeTextures, scheduler);
         this.SkyAtmosphere = new(this.EditOwner);

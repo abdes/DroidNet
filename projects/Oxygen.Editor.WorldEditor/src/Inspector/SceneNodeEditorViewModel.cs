@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using System.IO.Abstractions;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
@@ -83,7 +82,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="selectionService">The authoritative document selection owner, used to hydrate the typed context at startup.</param>
     /// <param name="materialSlots">The current native geometry slot inventories.</param>
     /// <param name="projectContexts">The active project lifetime.</param>
-    /// <param name="fileSystem">The file system that holds the project's files.</param>
     /// <param name="inputSources">The project's input sources, which declare the scene's starting input contexts.</param>
     /// <param name="interaction">The shared editor lock owner.</param>
     /// <param name="scripts">The scripts, for script slot parameters and problems.</param>
@@ -103,7 +101,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         ISceneSelectionService selectionService,
         IGeometryMaterialSlotProvider materialSlots,
         IProjectContextService projectContexts,
-        IFileSystem fileSystem,
         IInputSources inputSources,
         ILoggerFactory? loggerFactory = null,
         WorkspaceInteractionService? interaction = null,
@@ -142,7 +139,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             this.ObserveSkyLightAsync,
             context => StartingContextRules.Describe(projectContexts.ActiveProject, context, inputSources.Find),
             asset => this.RevealAssetAsync(projectContexts, asset),
-            fileSystem,
+            projectContexts,
             inputSources);
         this.renderingEditor = new NodeRenderingViewModel(this.AuthoringOf);
 

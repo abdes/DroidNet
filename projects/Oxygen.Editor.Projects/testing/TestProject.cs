@@ -25,16 +25,12 @@ public sealed class TestProject
     /// <summary>The project folder a project has when the test names none.</summary>
     public const string DefaultRoot = @"C:\Project";
 
-    private TestProject(IFileSystem fileSystem, ProjectContext context)
+    private TestProject(ProjectContext context)
     {
-        this.FileSystem = fileSystem;
         this.Context = context;
     }
 
-    /// <summary>Gets the file system that holds the project's files.</summary>
-    public IFileSystem FileSystem { get; }
-
-    /// <summary>Gets the project.</summary>
+    /// <summary>Gets the project, whose <see cref="ProjectContext.FileSystem"/> holds its files.</summary>
     public ProjectContext Context { get; }
 
     /// <summary>Gets the project's root folder.</summary>
@@ -66,7 +62,7 @@ public sealed class TestProject
             _ = fileSystem.Directory.CreateDirectory(context.ProjectRoot.Combine(mount).FullPath);
         }
 
-        return new TestProject(fileSystem, context);
+        return new TestProject(context);
     }
 
     /// <summary>Gets the file or folder at a virtual path.</summary>
@@ -84,8 +80,8 @@ public sealed class TestProject
     {
         ArgumentNullException.ThrowIfNull(content);
         var file = this.PathOf(path);
-        _ = this.FileSystem.Directory.CreateDirectory(file.Parent!.FullPath);
-        this.FileSystem.File.WriteAllBytes(file.FullPath, content);
+        _ = this.Context.FileSystem.Directory.CreateDirectory(file.Parent!.FullPath);
+        this.Context.FileSystem.File.WriteAllBytes(file.FullPath, content);
         return file;
     }
 

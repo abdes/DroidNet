@@ -99,7 +99,7 @@ public sealed class AssetAuthoringTests
 
         _ = path.Should().Be(this.Project.PathOf("/Content/Input/Player.input.json"));
         _ = reports.Should().Equal(path);
-        _ = (await this.Project.FileSystem.File.ReadAllTextAsync(path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(InputTemplates.New("Player"));
+        _ = (await this.Project.Context.FileSystem.File.ReadAllTextAsync(path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be(InputTemplates.New("Player"));
     }
 
     /// <summary>A file the catalog has not seen yet is never overwritten.</summary>
@@ -112,7 +112,7 @@ public sealed class AssetAuthoringTests
         var create = () => this.Authoring.CreateAsync(this.Context, ScriptTemplates.Asset, "move", AssetPath.Parse("/Content/Player"), this.TestContext.CancellationToken);
 
         _ = await create.Should().ThrowAsync<AssetCreationException>().ConfigureAwait(false);
-        _ = (await this.Project.FileSystem.File.ReadAllTextAsync(existing.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("-- mine");
+        _ = (await this.Project.Context.FileSystem.File.ReadAllTextAsync(existing.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().Be("-- mine");
     }
 
     private void Catalog(string virtualPath) => this.records.Add(new(AssetPath.Parse(virtualPath)));

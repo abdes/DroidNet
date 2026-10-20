@@ -37,7 +37,7 @@ public sealed partial class TestSceneDocuments : IDisposable
     {
         ArgumentNullException.ThrowIfNull(project);
         this.Project = project;
-        this.Files = new NativeAtomicFileStore(project.FileSystem);
+        this.Files = new NativeAtomicFileStore(project.Context.FileSystem);
         this.Kind = new SceneDocumentKind(project.Context, interaction, redirects);
         this.Open = new OpenDocuments([this.Kind], this.Files);
     }
@@ -88,8 +88,8 @@ public sealed partial class TestSceneDocuments : IDisposable
         ArgumentNullException.ThrowIfNull(data);
         var content = layout is null && data is SceneFileData stored ? stored : new SceneFileData(data, layout);
         var path = file.Path.FullPath;
-        _ = this.Project.FileSystem.Directory.CreateDirectory(this.Project.FileSystem.Path.GetDirectoryName(path)!);
-        this.Project.FileSystem.File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(content, SceneFileJsonContext.Default.SceneFileData));
+        _ = this.Project.Context.FileSystem.Directory.CreateDirectory(this.Project.Context.FileSystem.Path.GetDirectoryName(path)!);
+        this.Project.Context.FileSystem.File.WriteAllBytes(path, JsonSerializer.SerializeToUtf8Bytes(content, SceneFileJsonContext.Default.SceneFileData));
     }
 
     /// <summary>Writes a scene to the file of its name and opens it.</summary>

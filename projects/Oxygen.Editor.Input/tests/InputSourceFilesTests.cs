@@ -18,15 +18,7 @@ public sealed class InputSourceFilesTests
 {
     private static readonly AssetPath Player = AssetPath.Parse("/Content/Input/Player.input");
 
-    private readonly TestProject project;
-    private readonly InputSourceFiles files;
-
-    public InputSourceFilesTests()
-    {
-        var fileSystem = new MockFileSystem();
-        this.project = TestProject.Create(fileSystem);
-        this.files = new InputSourceFiles(fileSystem);
-    }
+    private readonly TestProject project = TestProject.Create(new MockFileSystem());
 
     [TestMethod]
     public void TheFileIsTheIdentityWithItsAuthoringSuffix()
@@ -40,7 +32,7 @@ public sealed class InputSourceFilesTests
     {
         _ = this.project.WriteFile("/Content/Input/Player.input.json", InputTemplates.New("Player"));
 
-        var player = this.files.Read(this.project.Context, Player);
+        var player = InputSourceFiles.Read(this.project.Context, Player);
 
         _ = player!.Identity.Should().Be(Player);
         _ = player.Contexts.Should().ContainSingle().Which.Identity.Should().Be(AssetPath.Parse("/Content/Input/Player.input/Player.oimap"));
@@ -49,10 +41,10 @@ public sealed class InputSourceFilesTests
     [TestMethod]
     public void AMissingOrInvalidSourceReadsAsNone()
     {
-        _ = this.files.Read(this.project.Context, Player).Should().BeNull();
+        _ = InputSourceFiles.Read(this.project.Context, Player).Should().BeNull();
 
         _ = this.project.WriteFile("/Content/Input/Player.input.json", """{ "actions": 3 }""");
 
-        _ = this.files.Read(this.project.Context, Player).Should().BeNull();
+        _ = InputSourceFiles.Read(this.project.Context, Player).Should().BeNull();
     }
 }

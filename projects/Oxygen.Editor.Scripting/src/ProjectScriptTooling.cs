@@ -25,9 +25,10 @@ namespace Oxygen.Editor.Scripting;
 /// </remarks>
 /// <param name="paths">The SDK scripting files.</param>
 /// <param name="operationResults">The publisher that records each change in Output.</param>
-/// <param name="fileSystem">The file system that holds the project and the SDK.</param>
+/// <param name="sdkFileSystem">The file system that holds the SDK; the project's files are read and written through
+/// the project's own file system.</param>
 /// <param name="loggerFactory">The logger factory.</param>
-public sealed partial class ProjectScriptTooling(ScriptToolingPaths paths, IOperationResultPublisher operationResults, IFileSystem fileSystem, ILoggerFactory? loggerFactory = null)
+public sealed partial class ProjectScriptTooling(ScriptToolingPaths paths, IOperationResultPublisher operationResults, IFileSystem sdkFileSystem, ILoggerFactory? loggerFactory = null)
 {
     /// <summary>The project folder that holds the SDK copies.</summary>
     public const string TypesFolder = "Types";
@@ -42,21 +43,22 @@ public sealed partial class ProjectScriptTooling(ScriptToolingPaths paths, IOper
     public IReadOnlyList<string> Ensure(ProjectContext project)
     {
         ArgumentNullException.ThrowIfNull(project);
+        var files = project.FileSystem;
         var root = project.ProjectRoot.FullPath;
         var changes = new List<string>();
         try
         {
-            if (this.WriteIfMissing(fileSystem.Path.Combine(root, ".luaurc"), "{\n  \"languageMode\": \"nonstrict\"\n}\n"))
+            if (this.WriteIfMissing(files, files.Path.Combine(root, ".luaurc"), "{\n  \"languageMode\": \"nonstrict\"\n}\n"))
             {
                 changes.Add("Created .luaurc");
             }
 
-            this.CopyFromSdk(paths.DefinitionsPath, fileSystem.Path.Combine(root, TypesFolder, "oxygen.d.luau"), changes);
-            this.CopyFromSdk(fileSystem.Path.Combine(paths.SchemaDirectory, "oxygen.input.schema.json"), fileSystem.Path.Combine(root, TypesFolder, "oxygen.input.schema.json"), changes);
+            this.CopyFromSdk(paths.DefinitionsPath, files, files.Path.Combine(root, TypesFolder, "oxygen.d.luau"), changes);
+            this.CopyFromSdk(sdkFileSystem.Path.Combine(paths.SchemaDirectory, "oxygen.input.schema.json"), files, files.Path.Combine(root, TypesFolder, "oxygen.input.schema.json"), changes);
 
             // The input schema references the shared name definition beside it.
-            this.CopyFromSdk(fileSystem.Path.Combine(paths.SchemaDirectory, "oxygen.name.schema.json"), fileSystem.Path.Combine(root, TypesFolder, "oxygen.name.schema.json"), changes);
-            this.MergeVsCodeSettings(fileSystem.Path.Combine(root, ".vscode", "settings.json"), changes);
+            this.CopyFromSdk(sdkFileSystem.Path.Combine(paths.SchemaDirectory, "oxygen.name.schema.json"), files, files.Path.Combine(root, TypesFolder, "oxygen.name.schema.json"), changes);
+            this.MergeVsCodeSettings(files, files.Path.Combine(root, ".vscode", "settings.json"), changes);
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
         {
@@ -129,47 +131,47 @@ public sealed partial class ProjectScriptTooling(ScriptToolingPaths paths, IOper
         }
     }
 
-    private bool WriteIfMissing(string path, string text)
+    private bool WriteIfMissing(IFileSystem files, string path, string text)
     {
-        if (fileSystem.File.Exists(path))
+        if (files.File.Exists(path))
         {
             return false;
         }
 
-        _ = fileSystem.Directory.CreateDirectory(fileSystem.Path.GetDirectoryName(path)!);
-        fileSystem.File.WriteAllText(path, text);
+        _ = files.Directory.CreateDirectory(files.Path.GetDirectoryName(path)!);
+        files.File.WriteAllText(path, text);
         this.LogFileWritten(path, existed: false);
         return true;
     }
 
-    private void CopyFromSdk(string source, string target, List<string> changes)
+    private void CopyFromSdk(string source, IFileSystem files, string target, List<string> changes)
     {
-        if (!fileSystem.File.Exists(source))
+        if (!sdkFileSystem.File.Exists(source))
         {
             return;
         }
 
-        var bytes = fileSystem.File.ReadAllBytes(source);
-        var exists = fileSystem.File.Exists(target);
-        if (exists && fileSystem.File.ReadAllBytes(target).AsSpan().SequenceEqual(bytes))
+        var bytes = sdkFileSystem.File.ReadAllBytes(source);
+        var exists = files.File.Exists(target);
+        if (exists && files.File.ReadAllBytes(target).AsSpan().SequenceEqual(bytes))
         {
             return;
         }
 
-        _ = fileSystem.Directory.CreateDirectory(fileSystem.Path.GetDirectoryName(target)!);
-        fileSystem.File.WriteAllBytes(target, bytes);
+        _ = files.Directory.CreateDirectory(files.Path.GetDirectoryName(target)!);
+        files.File.WriteAllBytes(target, bytes);
         this.LogFileWritten(target, exists);
-        changes.Add((exists ? "Refreshed " : "Created ") + TypesFolder + "/" + fileSystem.Path.GetFileName(target) + " from the SDK");
+        changes.Add((exists ? "Refreshed " : "Created ") + TypesFolder + "/" + files.Path.GetFileName(target) + " from the SDK");
     }
 
-    private void MergeVsCodeSettings(string path, List<string> changes)
+    private void MergeVsCodeSettings(IFileSystem files, string path, List<string> changes)
     {
-        if (!fileSystem.File.Exists(path))
+        if (!files.File.Exists(path))
         {
             var created = new JsonObject();
             _ = AddMissingSettings(created);
-            _ = fileSystem.Directory.CreateDirectory(fileSystem.Path.GetDirectoryName(path)!);
-            fileSystem.File.WriteAllText(path, created.ToJsonString(Indented) + "\n");
+            _ = files.Directory.CreateDirectory(files.Path.GetDirectoryName(path)!);
+            files.File.WriteAllText(path, created.ToJsonString(Indented) + "\n");
             this.LogFileWritten(path, existed: false);
             changes.Add("Created .vscode/settings.json for luau-lsp");
             return;
@@ -179,7 +181,7 @@ public sealed partial class ProjectScriptTooling(ScriptToolingPaths paths, IOper
         try
         {
             // VS Code allows comments and trailing commas; such a file is never rewritten, since that would drop them.
-            settings = JsonNode.Parse(fileSystem.File.ReadAllText(path)) as JsonObject;
+            settings = JsonNode.Parse(files.File.ReadAllText(path)) as JsonObject;
         }
         catch (JsonException)
         {
@@ -203,7 +205,7 @@ public sealed partial class ProjectScriptTooling(ScriptToolingPaths paths, IOper
         var added = AddMissingSettings(settings);
         if (added.Count > 0)
         {
-            fileSystem.File.WriteAllText(path, settings.ToJsonString(Indented) + "\n");
+            files.File.WriteAllText(path, settings.ToJsonString(Indented) + "\n");
             this.LogSettingsAdded(path, added);
             changes.Add("Added " + string.Join(", ", added) + " to .vscode/settings.json");
         }

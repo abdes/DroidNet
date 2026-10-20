@@ -273,10 +273,11 @@ project's mounts: its authoring mounts and its local folder mounts. A resolved
 caller that only works on authoring mounts keeps that rule.
 
 - `Find(AssetPath)`: the location of a virtual path.
-- `FindSource(identity)`: the asset's existing source file.
+- `FindSource(identity)`: the asset's existing source file, looked up through
+  the project's file system (`ProjectContext.FileSystem`).
 - `LocateSource(identity)`: its existing source, or where its most specific
   source would be, so a reader reports a missing file rather than an unknown
-  asset.
+  asset; it reads through the project's file system too.
 - `FindByFilePath(FileSystemPath)`: the virtual path of a file; when mounts
   nest, the innermost holds it.
 

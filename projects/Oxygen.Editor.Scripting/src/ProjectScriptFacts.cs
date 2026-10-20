@@ -5,7 +5,6 @@
 using System.Collections.Concurrent;
 using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
-using System.IO.Abstractions;
 using System.Security.Cryptography;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -27,7 +26,6 @@ namespace Oxygen.Editor.Scripting;
 /// </remarks>
 internal sealed partial class ProjectScriptFacts : IDisposable
 {
-    private readonly IFileSystem fileSystem;
     private readonly IScriptAnalyzer analyzer;
     private readonly Func<string?> definitions;
     private readonly Action<ScriptSnapshot, AssetPath?> publish;
@@ -42,7 +40,6 @@ internal sealed partial class ProjectScriptFacts : IDisposable
 
     /// <summary>Initializes a new instance of the <see cref="ProjectScriptFacts"/> class.</summary>
     /// <param name="project">The project.</param>
-    /// <param name="fileSystem">The file system that holds the project.</param>
     /// <param name="analyzer">The script analyzer.</param>
     /// <param name="definitions">Reads the engine's API definitions, or <see langword="null"/> without them.</param>
     /// <param name="publish">Publishes a snapshot, with the script that changed or <see langword="null"/> for all.</param>
@@ -50,7 +47,6 @@ internal sealed partial class ProjectScriptFacts : IDisposable
     /// <param name="loggerFactory">The logger factory.</param>
     public ProjectScriptFacts(
         ProjectContext project,
-        IFileSystem fileSystem,
         IScriptAnalyzer analyzer,
         Func<string?> definitions,
         Action<ScriptSnapshot, AssetPath?> publish,
@@ -58,7 +54,6 @@ internal sealed partial class ProjectScriptFacts : IDisposable
         ILoggerFactory? loggerFactory = null)
     {
         this.Project = project;
-        this.fileSystem = fileSystem;
         this.analyzer = analyzer;
         this.definitions = definitions;
         this.publish = publish;
@@ -162,12 +157,12 @@ internal sealed partial class ProjectScriptFacts : IDisposable
         foreach (var mount in this.Project.AuthoringMounts.Where(static mount => !ProjectOutputFolders.Contains(mount)))
         {
             var root = this.Project.ProjectRoot.Combine(mount.RelativePath);
-            if (!this.fileSystem.Directory.Exists(root.FullPath))
+            if (!this.Project.FileSystem.Directory.Exists(root.FullPath))
             {
                 continue;
             }
 
-            foreach (var path in this.fileSystem.Directory.EnumerateFiles(root.FullPath, "*", SearchOption.AllDirectories))
+            foreach (var path in this.Project.FileSystem.Directory.EnumerateFiles(root.FullPath, "*", SearchOption.AllDirectories))
             {
                 var file = FileSystemPath.From(path);
                 if (!file.GetPathBelow(root).Split('/').Any(static segment => segment.StartsWith('.'))
@@ -193,7 +188,7 @@ internal sealed partial class ProjectScriptFacts : IDisposable
         byte[] bytes;
         try
         {
-            bytes = await this.fileSystem.File.ReadAllBytesAsync(file.FullPath, cancellationToken).ConfigureAwait(false);
+            bytes = await this.Project.FileSystem.File.ReadAllBytesAsync(file.FullPath, cancellationToken).ConfigureAwait(false);
         }
         catch (Exception exception) when (exception is FileNotFoundException or DirectoryNotFoundException)
         {

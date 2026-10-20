@@ -190,7 +190,6 @@ public sealed class SceneNodeEditorViewModelTests
             selectionService,
             slots,
             Mock.Of<IProjectContextService>(),
-            new MockFileSystem(),
             new FakeInputSources(),
             interaction: interaction);
     }

@@ -94,7 +94,6 @@ internal sealed partial class MaterialDocuments : IDisposable
             System.Reactive.Concurrency.ImmediateScheduler.Instance,
             Mock.Of<IMaterialCookService>(),
             Mock.Of<IProjectContextService>(),
-            this.FileSystem,
             inputCommitter: inputCommitter);
 
     public void Dispose()

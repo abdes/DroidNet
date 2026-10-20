@@ -18,7 +18,6 @@ using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Managed.Core;
-using Testably.Abstractions.Testing;
 using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
@@ -135,8 +134,7 @@ internal static partial class InspectorModels
             assetProvider ?? Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             CreateStatusHosting().DispatcherScheduler,
             Mock.Of<IMaterialCookService>(),
-            Mock.Of<IProjectContextService>(),
-            new MockFileSystem());
+            Mock.Of<IProjectContextService>());
 
         /// <inheritdoc/>
         public void Dispose()

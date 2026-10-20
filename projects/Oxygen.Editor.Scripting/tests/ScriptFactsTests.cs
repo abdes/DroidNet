@@ -61,7 +61,7 @@ public sealed partial class ScriptFactsTests : IDisposable
         this.facts = new ScriptFacts(
             this.projects,
             new Catalog(this.changes),
-            this.project.FileSystem,
+            this.project.Context.FileSystem,
             this.analyzer,
             this.library,
             this.results,
@@ -135,7 +135,7 @@ public sealed partial class ScriptFactsTests : IDisposable
         var file = this.project.WriteFile(MoveFile, MoveSource);
         await this.OpenAsync().ConfigureAwait(false);
 
-        this.project.FileSystem.File.Delete(file.FullPath);
+        this.project.Context.FileSystem.File.Delete(file.FullPath);
         await this.ChangeAsync(new AssetChange(AssetChangeKind.Removed, AssetPath.Parse(MoveFile)), () => this.facts.All.Count == 0).ConfigureAwait(false);
 
         _ = this.facts.Find(Move).Should().BeNull();
@@ -147,7 +147,7 @@ public sealed partial class ScriptFactsTests : IDisposable
         var file = this.project.WriteFile(MoveFile, MoveSource);
         await this.OpenAsync().ConfigureAwait(false);
 
-        this.project.FileSystem.File.Move(file.FullPath, this.project.PathOf("/Content/Player/run.lua").FullPath);
+        this.project.Context.FileSystem.File.Move(file.FullPath, this.project.PathOf("/Content/Player/run.lua").FullPath);
         await this.ChangeAsync(
             new AssetChange(AssetChangeKind.Relocated, AssetPath.Parse("/Content/Player/run.lua"), AssetPath.Parse(MoveFile)),
             () => this.facts.Find(Move) is null && this.facts.All.Count == 1).ConfigureAwait(false);
@@ -248,7 +248,7 @@ public sealed partial class ScriptFactsTests : IDisposable
     {
         _ = this.project.WriteFile(MoveFile, MoveSource);
         await this.OpenAsync().ConfigureAwait(false);
-        var other = TestProject.Create(this.project.FileSystem, @"C:\Other");
+        var other = TestProject.Create(this.project.Context.FileSystem, @"C:\Other");
         var file = other.WriteFile(RunFile, MoveSource);
 
         await this.UntilAsync(() => this.facts.Find(Run) is not null, () => this.projects.Activate(other.Context)).ConfigureAwait(false);
@@ -297,7 +297,7 @@ public sealed partial class ScriptFactsTests : IDisposable
         var file = this.project.WriteFile(MoveFile, MoveSource);
         await this.OpenAsync().ConfigureAwait(false);
         _ = this.project.WriteFile(RunFile, NewerSource);
-        await using var lockedFile = this.project.FileSystem.File.Open(file.FullPath, FileMode.Open, FileAccess.Read, FileShare.None).ConfigureAwait(false);
+        await using var lockedFile = this.project.Context.FileSystem.File.Open(file.FullPath, FileMode.Open, FileAccess.Read, FileShare.None).ConfigureAwait(false);
 
         // One change names both files, and its analyses run in order: the unreadable one, then the readable one.
         await this.ChangeAsync(
@@ -311,7 +311,7 @@ public sealed partial class ScriptFactsTests : IDisposable
     [TestMethod]
     public async Task TheScanSkipsDotFoldersOutputFoldersAndFilesThatAreNotScripts()
     {
-        var other = TestProject.Create(this.project.FileSystem, @"C:\Outputs", [TestProject.ContentMount, ".cooked"]);
+        var other = TestProject.Create(this.project.Context.FileSystem, @"C:\Outputs", [TestProject.ContentMount, ".cooked"]);
         _ = other.WriteFile(MoveFile, MoveSource);
         _ = other.WriteFile("/Content/readme.txt", MoveSource);
         WriteRaw(other, other.Root.Combine(TestProject.ContentMount).Combine(".hidden").Combine("a.lua"));
@@ -328,8 +328,8 @@ public sealed partial class ScriptFactsTests : IDisposable
     [TestMethod]
     public async Task TheSdkApiDefinitionsReachTheAnalyzerWhenTheFileExists()
     {
-        _ = this.project.FileSystem.Directory.CreateDirectory(@"C:\Sdk");
-        await this.project.FileSystem.File.WriteAllTextAsync(@"C:\Sdk\oxygen.d.luau", "declare oxygen", this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = this.project.Context.FileSystem.Directory.CreateDirectory(@"C:\Sdk");
+        await this.project.Context.FileSystem.File.WriteAllTextAsync(@"C:\Sdk\oxygen.d.luau", "declare oxygen", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = this.project.WriteFile(MoveFile, MoveSource);
 
         await this.OpenAsync().ConfigureAwait(false);
@@ -384,8 +384,8 @@ public sealed partial class ScriptFactsTests : IDisposable
 
     private static void WriteRaw(TestProject project, FileSystemPath file)
     {
-        _ = project.FileSystem.Directory.CreateDirectory(file.Parent!.FullPath);
-        project.FileSystem.File.WriteAllText(file.FullPath, MoveSource);
+        _ = project.Context.FileSystem.Directory.CreateDirectory(file.Parent!.FullPath);
+        project.Context.FileSystem.File.WriteAllText(file.FullPath, MoveSource);
     }
 
     private Task OpenAsync()

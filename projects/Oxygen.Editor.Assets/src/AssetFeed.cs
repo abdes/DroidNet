@@ -252,7 +252,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         string? publicationError = null)
     {
         source = source.Select(item => item.Kind == AssetKind.ForeignSource && item.SourcePath is { } path
-            && File.Exists(path.FullPath + Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.SidecarSuffix)
+            && project.FileSystem.File.Exists(path.FullPath + Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.SidecarSuffix)
                 ? item with { ImportSource = item.Identity, ImportSourcePath = path } : item).ToArray();
         var candidates = source.Where(item => item.ImportSource is not null
             || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture)
