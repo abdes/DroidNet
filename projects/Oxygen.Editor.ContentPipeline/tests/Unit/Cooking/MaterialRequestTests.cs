@@ -25,7 +25,7 @@ public sealed class MaterialRequestTests
     [TestMethod]
     public async Task CookMaterialAsync_WhenRequestMissingProjectFacts_ShouldReject()
     {
-        var projects = CreateProjectContext();
+        using var projects = CreateProjectContext();
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
         var service = new MaterialCookService(pipeline.Object, projects, NullLogger<MaterialCookService>.Instance);
 
@@ -51,7 +51,7 @@ public sealed class MaterialRequestTests
     [DataRow("kind")]
     public async Task MaterialRequestMustMatchItsActiveProjectIdentity(string mismatch)
     {
-        var projects = CreateProjectContext();
+        using var projects = CreateProjectContext();
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
         var request = new MaterialCookRequest(AssetPath.Parse("/Content/Materials/Wood.omat"), projects.Context.ProjectRoot, "Content", "Content/Materials/Wood.omat.json");
         request = mismatch switch
@@ -84,7 +84,7 @@ public sealed class MaterialRequestTests
     [DataRow(AssetCookFreshness.NeedsCooking, false, false, false, MaterialCookState.NotCooked)]
     public async Task ReadMaterialStateUsesSharedCookFacts(AssetCookFreshness freshness, bool published, bool verified, bool dirty, MaterialCookState expected)
     {
-        var projects = CreateProjectContext();
+        using var projects = CreateProjectContext();
         var uri = AssetPath.Parse("/Content/Material.omat");
         var source = projects.Context.ProjectRoot.Combine("Content/Material.omat.json");
         var state = new AssetCookStatus(

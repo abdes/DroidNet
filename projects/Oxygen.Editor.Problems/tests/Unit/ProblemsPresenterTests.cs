@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Problems.Unit.Tests.TestSupport;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core.Diagnostics;
@@ -14,10 +15,14 @@ namespace Oxygen.Editor.Problems.Unit.Tests;
 
 /// <summary>The Problems tab shows the counts, and the panel comes forward for a runtime error and for a requested problem.</summary>
 [TestClass]
-internal sealed class ProblemsPresenterTests
+internal sealed class ProblemsPresenterTests : IDisposable
 {
+    private readonly TestSession session = TestProblems.CreateSession();
     private readonly Mock<IPlacementService> placement = new();
     private readonly FakeRuntimeProblems runtime = new();
+
+    /// <inheritdoc/>
+    public void Dispose() => this.session.Dispose();
 
     /// <summary>The tab shows the title at once, and the title again as the counts change.</summary>
     [TestMethod]
@@ -84,7 +89,7 @@ internal sealed class ProblemsPresenterTests
         => new(DiagnosticSeverity.Error, "S0701", "attempt to index nil", "rendered") { Line = 9, SlotNode = "Player", SlotIndex = 0 };
 
     private ProblemsViewModel CreateModel()
-        => TestProblems.CreateModel([this.runtime], new Mock<ICodeEditorService>().Object, this.runtime);
+        => TestProblems.CreateModel(this.session, [this.runtime], new Mock<ICodeEditorService>().Object, this.runtime);
 
     private ProblemsPresenter CreatePresenter(ProblemsViewModel model)
         => new(model, this.placement.Object, this.runtime);

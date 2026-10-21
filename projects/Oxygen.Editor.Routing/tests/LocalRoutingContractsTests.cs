@@ -297,8 +297,10 @@ public sealed class LocalRoutingContractsTests
     private static ScopeHandle CreateLocalScope(LocalRouterContext localContext)
     {
         var host = HostContainer.Create();
-        var scope = new ScopeFactory().Create<IScopeLayer>(ScopeFactory.CreateRoot(host), [new RouterScopeModule(new Routes([]), localContext)]);
+        var root = ScopeFactory.CreateRoot(host);
+        var scope = new ScopeFactory().Create<IScopeLayer>(root, [new RouterScopeModule(new Routes([]), localContext)]);
         scope.Own(host);
+        scope.Own(root);
         return scope;
     }
 

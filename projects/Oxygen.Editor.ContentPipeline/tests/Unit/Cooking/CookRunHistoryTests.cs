@@ -21,7 +21,8 @@ public sealed class CookRunHistoryTests
     [TestMethod]
     public async Task ConsumerRefreshRetainsWriterUntilItSettles()
     {
-        using var coordinator = CreateCoordinator(CreateSession());
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         coordinator.CookCompleted += args =>
@@ -63,7 +64,7 @@ public sealed class CookRunHistoryTests
     [DataRow(CookTargetKind.Project, false)]
     public async Task CompletedCooksShareOneProjectScopedNotification(CookTargetKind kind, bool automatic)
     {
-        var projects = CreateSession();
+        using var projects = CreateSession();
         using var coordinator = CreateCoordinator(projects);
         var notifications = new List<CookCompletedEventArgs>();
         coordinator.CookCompleted += args =>
@@ -85,7 +86,8 @@ public sealed class CookRunHistoryTests
     [TestMethod]
     public async Task CompatibilityFailuresKeepArtifactDiagnosticsInCookHistory()
     {
-        using var coordinator = CreateCoordinator(CreateSession());
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
         var diagnostic = new DiagnosticRecord
         {
             OperationId = Guid.NewGuid(),
@@ -109,7 +111,8 @@ public sealed class CookRunHistoryTests
     [TestMethod]
     public async Task ProjectRunRetainsItsScopeAndOrderedTranscript()
     {
-        using var coordinator = CreateCoordinator(CreateSession());
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
         var reveals = new List<Guid>();
         coordinator.RunChanged += (_, args) =>
         {
@@ -143,7 +146,8 @@ public sealed class CookRunHistoryTests
     [TestMethod]
     public async Task CancelSelectedRunKeepsQueuedCookAndWaitsForDrain()
     {
-        using var coordinator = CreateCoordinator(CreateSession());
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
         var stopped = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var first = coordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), (_, _) => stopped.Task, CancellationToken.None);
         var firstId = coordinator.Runs.Single().OperationId;
@@ -164,7 +168,8 @@ public sealed class CookRunHistoryTests
     [TestMethod]
     public async Task AutomaticRunKeepsMessagesScopedWithoutReveal()
     {
-        using var coordinator = CreateCoordinator(CreateSession());
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
         var reveal = false;
         coordinator.RunChanged += (_, args) => reveal |= args.Reveal;
         _ = await coordinator.RunCookAsync(
@@ -185,7 +190,8 @@ public sealed class CookRunHistoryTests
     [TestMethod]
     public async Task RunTerminationFailureRemainsActiveUntilDrain()
     {
-        using var coordinator = CreateCoordinator(CreateSession());
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
         var drained = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var failure = new ContentPipelineTerminationException(new IOException("Termination failed."), drained.Task);
         var operation = coordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), (_, _) => Task.FromException<int>(failure), CancellationToken.None);
@@ -203,7 +209,8 @@ public sealed class CookRunHistoryTests
     [TestMethod]
     public async Task PresentationFailureCannotFailCook()
     {
-        using var coordinator = CreateCoordinator(CreateSession());
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
         coordinator.RunChanged += (_, _) => throw new InvalidOperationException("Broken UI observer.");
         _ = (await coordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null), (_, _) => Task.FromResult(42), CancellationToken.None).ConfigureAwait(false)).Should().Be(42);
         _ = coordinator.Runs.Single().State.Should().Be(CookRunState.Succeeded);
@@ -214,7 +221,8 @@ public sealed class CookRunHistoryTests
     [TestMethod]
     public async Task FailedPreflightKeepsAffectedAndSkippedAssets()
     {
-        using var coordinator = CreateCoordinator(CreateSession());
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
         var main = AssetPath.Parse("/Content/Scenes/Main.oscene.json");
         var material = AssetPath.Parse("/Content/Materials/Blue.omat.json");
         _ = await coordinator.RunCookAsync(

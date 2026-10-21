@@ -484,9 +484,10 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             await WaitForRenderAsync().ConfigureAwait(true);
             var tree = (DynamicTree)view.FindName("ExplorerTree")!;
             var row = Row(tree, adapter);
-            var host = new RowHost(testScene, node, viewModel, view, interaction, adapter, secondaryAdapter, childAdapter, tree, row, row.FindDescendant<SceneRowActions>()!);
+            var host = new RowHost(testScene, node, viewModel, view, interaction, adapter, secondaryAdapter, childAdapter, tree, row, row.FindDescendant<SceneRowActions>()!, session);
             testScene = null;
             viewModel = null;
+            session = null;
             return host;
         }
         finally
@@ -579,6 +580,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     /// <param name="Tree">The realized Explorer tree.</param>
     /// <param name="Row">The primary realized row.</param>
     /// <param name="Actions">The primary row's action controls.</param>
+    /// <param name="Session">The project session of the scene's project.</param>
     internal sealed record RowHost(
         TestScene TestScene,
         SceneNode Node,
@@ -590,12 +592,14 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         SceneNodeAdapter ChildAdapter,
         DynamicTree Tree,
         DynamicTreeItem Row,
-        SceneRowActions Actions) : IDisposable
+        SceneRowActions Actions,
+        TestSession Session) : IDisposable
     {
         /// <inheritdoc />
         public void Dispose()
         {
             this.ViewModel.Dispose();
+            this.Session.Dispose();
             this.TestScene.Dispose();
         }
     }

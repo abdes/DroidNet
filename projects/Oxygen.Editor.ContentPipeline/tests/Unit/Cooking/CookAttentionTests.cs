@@ -21,7 +21,8 @@ public sealed class CookAttentionTests
     [TestMethod]
     public async Task CompletedQueueRevealsProblemsBeforeSuccessfulResults()
     {
-        using var coordinator = CreateCoordinator(CreateSession());
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
         var events = new ConcurrentQueue<CookRunChangedEventArgs>();
         coordinator.RunChanged += (_, change) => events.Enqueue(change);
         var finish = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);

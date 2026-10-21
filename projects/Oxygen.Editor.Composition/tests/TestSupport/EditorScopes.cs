@@ -75,6 +75,8 @@ internal sealed class EditorScopes : IAsyncDisposable
     /// <summary>Gets the editor scope's window manager, a fake that <see cref="EditorWindowsFake.ShowWindows" /> configures.</summary>
     public Mock<IWindowManagerService> Windows { get; } = new();
 
+    private List<TestSession> Sessions { get; } = [];
+
     /// <summary>Creates the editor scope.</summary>
     /// <returns>The editor's scopes.</returns>
     public static async Task<EditorScopes> CreateAsync()
@@ -131,6 +133,7 @@ internal sealed class EditorScopes : IAsyncDisposable
     public ScopeHandle CreateSession()
     {
         var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
+        this.Sessions.Add(session);
         return this.Factory.Create<ISessionLayer>(
             this.Root,
             SessionModules().Select(static module => new RegistrationsOf<ISessionLayer>(module)),
@@ -163,6 +166,11 @@ internal sealed class EditorScopes : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await this.Root.DisposeAsync().ConfigureAwait(false);
+        foreach (var session in Enumerable.Reverse(this.Sessions))
+        {
+            session.Dispose();
+        }
+
         this.Host.Dispose();
     }
 

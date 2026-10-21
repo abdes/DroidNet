@@ -18,7 +18,7 @@ public sealed class CookProjectChangeTests
     [TestMethod]
     public async Task ProjectChangeOwnsTheWriterThroughContextReplacementAndResume()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var replaced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

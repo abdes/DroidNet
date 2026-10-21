@@ -19,7 +19,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task QueuedWorkCapturesAfterPreviousWriterCompletes()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var first = coordinator.RunAsync(
@@ -51,7 +51,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task CancelledQueuedWorkNeverStarts()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         using var cancellation = new CancellationTokenSource();
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -77,7 +77,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task MountChangeCancelsActiveAndQueuedWork()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var cancellationSeen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -117,7 +117,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task SessionEndCancelsActiveAndQueuedWork()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var cancellationSeen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var active = coordinator.RunAsync(
@@ -153,7 +153,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task TerminationFailureRetainsWriterUntilDrain()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var failure = new ContentPipelineTerminationException(new Win32Exception(5), drain.Task);
@@ -179,7 +179,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task OrdinaryFailureReleasesWriter()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var first = coordinator.RunAsync((_, _) => Task.FromException<int>(new IOException("input missing")), CancellationToken.None);
         var failed = async () => await first.ConfigureAwait(false);
@@ -192,7 +192,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task CancelledActiveWorkCannotReturnSuccess()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         using var cancellation = new CancellationTokenSource();
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -210,7 +210,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task MountChangeInvalidatesOldOperation()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var operation = await coordinator.RunAsync((current, _) => Task.FromResult(current), CancellationToken.None).ConfigureAwait(false);
         context.ChangeContext(operation.Project with { });
@@ -223,7 +223,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task DisposalCancelsAndDrainsActiveOwnership()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var active = coordinator.RunAsync((_, _) => release.Task, CancellationToken.None);

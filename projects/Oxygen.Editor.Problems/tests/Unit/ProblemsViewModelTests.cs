@@ -8,6 +8,7 @@ using Oxygen.Editor.Input;
 using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Problems.Unit.Tests.TestSupport;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Editor.Shell.Desktop;
@@ -23,15 +24,19 @@ namespace Oxygen.Editor.Problems.Unit.Tests;
 /// file, counted in its title, cleared when fixed.
 /// </summary>
 [TestClass]
-internal sealed class ProblemsViewModelTests
+internal sealed class ProblemsViewModelTests : IDisposable
 {
     private const string MovePath = @"C:\Project\Content\Player\move.lua";
     private static readonly AssetPath Move = AssetPath.Parse("/Content/Player/move.oscript");
 
+    private readonly TestSession session = TestProblems.CreateSession();
     private readonly Mock<ICodeEditorService> codeEditor = new();
     private readonly FakeScripts scripts = new();
     private readonly FakeRuntimeProblems runtime = new();
     private readonly FakeInputSources inputs = new();
+
+    /// <inheritdoc/>
+    public void Dispose() => this.session.Dispose();
 
     [TestMethod]
     public void AScriptWithProblemsAppearsGroupedByFileWithCountsInTheTitle()
@@ -164,5 +169,5 @@ internal sealed class ProblemsViewModelTests
         };
 
     private ProblemsViewModel CreateModel()
-        => TestProblems.CreateModel([this.scripts, this.inputs, this.runtime], this.codeEditor.Object, this.runtime);
+        => TestProblems.CreateModel(this.session, [this.scripts, this.inputs, this.runtime], this.codeEditor.Object, this.runtime);
 }

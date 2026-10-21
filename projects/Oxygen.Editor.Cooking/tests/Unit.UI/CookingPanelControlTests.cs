@@ -42,7 +42,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     [TestMethod]
     public Task CookingAutomationNamesDescribeRunAndAsset() => EnqueueAsync(async () =>
     {
-        using var model = CreateModel();
+        using var session = CreateSession();
+        using var model = CreateModel(session);
         model.SelectedRun!.IsAssetsExpanded = true;
         var view = new CookingPanelView { ViewModel = model, Width = 960, Height = 600 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
@@ -85,7 +86,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     [DataRow(360d, ElementTheme.Light, 2d)]
     public Task CookingLayoutKeepsRecoveryAndOutputReachable(double width, ElementTheme theme, double rasterizationScale) => EnqueueAsync(async () =>
     {
-        using var model = CreateModel();
+        using var session = CreateSession();
+        using var model = CreateModel(session);
         model.SelectedRun!.IsAssetsExpanded = true;
         var view = new CookingPanelView { ViewModel = model, Width = width, Height = 340, RequestedTheme = theme };
         var host = (Border)XamlReader.Load("<Border xmlns='http://schemas.microsoft.com/winfx/2006/xaml/presentation' Background='{ThemeResource ApplicationPageBackgroundThemeBrush}' />");
@@ -135,7 +137,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     {
         var actions = new Mock<ICookRecovery>();
         _ = actions.Setup(value => value.InspectAsync(It.IsAny<CookRunSnapshot>())).ReturnsAsync(value: true);
-        using var model = CreateModel(actions.Object);
+        using var session = CreateSession();
+        using var model = CreateModel(session, actions.Object);
         var selected = model.SelectedRun!;
         var snapshot = selected.Snapshot;
         var view = new CookingPanelView { ViewModel = model, Width = width, Height = 360 };
@@ -173,7 +176,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         _ = actions.Setup(value => value.ShowImportedAssetsAsync(It.IsAny<CookRunSnapshot>())).ReturnsAsync(value: true);
         var source = AssetPath.Parse("/Content/Models/Model/model.gltf");
         var output = AssetPath.Parse("/Content/Models/Model/model.gltf/Mesh.ogeo");
-        using var model = CreateModel(actions.Object, configure: snapshot => snapshot with
+        using var session = CreateSession();
+        using var model = CreateModel(session, actions.Object, configure: snapshot => snapshot with
         {
             DisplayName = "Model",
             Diagnostics = [],
@@ -239,7 +243,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     public Task RequestedAttentionSelectsTheRunAfterTheInitiatingEvent() => EnqueueAsync(async () =>
     {
         var runs = new Mock<ICookRunService>();
-        using var model = CreateModel(runService: runs);
+        using var session = CreateSession();
+        using var model = CreateModel(session, runService: runs);
         var next = model.SelectedRun!.Snapshot with { OperationId = Guid.NewGuid(), State = CookRunState.Queued, CompletedAt = null };
         var revealed = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);
         model.RevealRequested += (_, _) => revealed.TrySetResult(model.SelectedRun!.Snapshot.OperationId);
@@ -254,7 +259,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     public Task AutomaticCooksAreVisibleWhileRunningAndRetainedInShowAll() => EnqueueAsync(async () =>
     {
         var runs = new Mock<ICookRunService>();
-        using var model = CreateModel(runService: runs);
+        using var session = CreateSession();
+        using var model = CreateModel(session, runService: runs);
         var selected = model.SelectedRun;
         var snapshot = selected!.Snapshot with
         {
@@ -290,7 +296,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     public Task CookingAttentionActivatesTheRenderedDockAtStartAndCompletion() => EnqueueAsync(async () =>
     {
         var runs = new Mock<ICookRunService>();
-        using var model = CreateModel(runService: runs);
+        using var session = CreateSession();
+        using var model = CreateModel(session, runService: runs);
         using var docker = new Docker();
         var dock = ToolDock.New();
         var browser = Dockable.New(Guid.NewGuid().ToString("N"));
@@ -345,7 +352,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     [TestMethod]
     public Task ExpandedSectionsGrowToTheirCompleteContents() => EnqueueAsync(async () =>
     {
-        using var model = CreateModel();
+        using var session = CreateSession();
+        using var model = CreateModel(session);
         var run = model.SelectedRun!;
         var snapshot = run.Snapshot;
         var assets = snapshot.Assets;
@@ -383,7 +391,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     public Task ProgressBurstsPreserveTranscriptAndAssetRowsWithoutRepeatedProjection() => EnqueueAsync(async () =>
     {
         var runs = new Mock<ICookRunService>();
-        using var model = CreateModel(runService: runs);
+        using var session = CreateSession();
+        using var model = CreateModel(session, runService: runs);
         var selected = model.SelectedRun!;
         var snapshot = selected.Snapshot;
         var originalMessages = selected.Output.Count;
@@ -500,10 +509,12 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         }
     }
 
-    private static CookingPanelViewModel CreateModel(ICookRecovery? actions = null, Mock<ICookRunService>? runService = null, Func<CookRunSnapshot, CookRunSnapshot>? configure = null)
+    private static TestSession CreateSession()
+        => new(TestProject.Create(new MockFileSystem(), Path.GetTempPath()).Context with { ProjectId = Guid.NewGuid(), Name = "Vortex", AuthoringMounts = [] });
+
+    private static CookingPanelViewModel CreateModel(TestSession session, ICookRecovery? actions = null, Mock<ICookRunService>? runService = null, Func<CookRunSnapshot, CookRunSnapshot>? configure = null)
     {
-        var projectId = Guid.NewGuid();
-        var session = new TestSession(TestProject.Create(new MockFileSystem(), Path.GetTempPath()).Context with { ProjectId = projectId, Name = "Vortex", AuthoringMounts = [] });
+        var projectId = session.Context.ProjectId;
         var operationId = Guid.NewGuid();
         DiagnosticRecord Issue(string name, string message) => new()
         {

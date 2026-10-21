@@ -21,7 +21,7 @@ public sealed class SharedCookTests
     [TestMethod]
     public async Task PendingCookIsSharedAndOneCancelledObserverDoesNotStopIt()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         using var cancelled = new CancellationTokenSource();
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -53,7 +53,7 @@ public sealed class SharedCookTests
     [TestMethod]
     public async Task ExplicitRequestPromotesSharedQueuedSaveAndRevealsItsRun()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var revealed = false;
@@ -72,7 +72,7 @@ public sealed class SharedCookTests
     [TestMethod]
     public async Task RequestJoinsAPendingCookThatCoversIt()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var folder = Queue(new(CookTargetKind.Folder, AssetPath.Parse("/Content/Materials")), 1);
@@ -94,7 +94,7 @@ public sealed class SharedCookTests
     [TestMethod]
     public async Task RequestDuringRunningCaptureQueuesDistinctLatestWork()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var first = coordinator.RunCookAsync(SharedAssetRequest(), (_, _) => release.Task, this.TestContext.CancellationToken);
@@ -112,7 +112,7 @@ public sealed class SharedCookTests
     [TestMethod]
     public async Task LastCancelledObserverRemovesPendingWork()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         using var firstOwner = new CancellationTokenSource();
         using var secondOwner = new CancellationTokenSource();
@@ -142,7 +142,7 @@ public sealed class SharedCookTests
     [TestMethod]
     public async Task SharedPendingWorkCannotCrossProjectLifetime()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         _ = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var first = coordinator.RunCookAsync(SharedAssetRequest(), (_, _) => Task.FromResult(1), this.TestContext.CancellationToken);
@@ -158,7 +158,7 @@ public sealed class SharedCookTests
     [TestMethod]
     public async Task SharedRunningCookStopsOnlyAfterItsLastOwnerDetaches()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         using var firstOwner = new CancellationTokenSource();
         using var secondOwner = new CancellationTokenSource();
@@ -199,7 +199,7 @@ public sealed class SharedCookTests
     [TestMethod]
     public async Task CancellingDisplayedSharedRunCancelsAllObservers()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var first = coordinator.RunCookAsync(SharedAssetRequest(), (_, _) => Task.FromResult(1), this.TestContext.CancellationToken);
@@ -216,7 +216,7 @@ public sealed class SharedCookTests
     [TestMethod]
     public async Task SharedScopeRetainsEachOriginatingProjectCheck()
     {
-        var context = CreateSession();
+        using var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var current = context.Context;

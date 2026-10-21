@@ -240,6 +240,7 @@ internal sealed partial class AssetCookStatusTests
         private readonly NativeAtomicFileStore files = new(new Testably.Abstractions.RealFileSystem());
         private readonly Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts native;
         private readonly EngineContentPakFixture engineContent = new();
+        private readonly TestSession session;
         private readonly CookPublicationService publication;
         private readonly Mock<IEngineContentPipelineApi> api = new();
         private readonly ProjectManagerService manager = new(new NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
@@ -256,7 +257,8 @@ internal sealed partial class AssetCookStatusTests
             _ = this.api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((string root, NativeArtifactLease? _, CancellationToken _) => Oxygen.Testing.NativeInventoryFixture.Read(root));
             _ = TestProject.SaveProjectFile(this.Project);
-            this.publication = new(Mock.Of<IContentCookCoordinator>(), new TestSession(this.Project), this.files, this.manager, this.engineContent);
+            this.session = new TestSession(this.Project);
+            this.publication = new(Mock.Of<IContentCookCoordinator>(), this.session, this.files, this.manager, this.engineContent);
         }
 
         public static string MaterialJson => CreateMaterialJson(0.5f);
@@ -345,6 +347,7 @@ internal sealed partial class AssetCookStatusTests
 
         public void Dispose()
         {
+            this.session.Dispose();
             this.native.Dispose();
             this.directory.Delete(recursive: true);
         }

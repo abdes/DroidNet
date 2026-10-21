@@ -309,11 +309,11 @@ public sealed class ScopeChainTests
     }
 
     [TestMethod]
-    public void CreateRoot_HostWithARootScope_Throws()
+    public async Task CreateRoot_HostWithARootScope_Throws()
     {
         // Arrange
         using var host = TestScopes.CreateHost();
-        _ = ScopeFactory.CreateRoot(host);
+        await using var root = ScopeFactory.CreateRoot(host);
 
         // Act
         var act = () => ScopeFactory.CreateRoot(host);

@@ -109,6 +109,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
     private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-ExplorerReveal-");
     private readonly RealFileSystem fileSystem = new();
     private readonly IContainer container = HostContainer.Create();
+    private readonly ScopeHandle scopeRoot;
     private readonly BehaviorSubject<IReadOnlyList<AssetEntry>> items;
     private readonly Mock<ILogger> logger = new();
     private readonly FakeCookPublicationReader publications;
@@ -169,7 +170,8 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         this.container.RegisterInstance(Mock.Of<IAssetAuthoring>());
         this.container.RegisterInstance(Mock.Of<ICodeEditorService>());
         // The fixture's container stands in for the explorer's window.
-        this.Explorer = new(new ScopeFactory(), ScopeFactory.CreateRoot(this.container), Mock.Of<IRouter>(), this.Session, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
+        this.scopeRoot = ScopeFactory.CreateRoot(this.container);
+        this.Explorer = new(new ScopeFactory(), this.scopeRoot, Mock.Of<IRouter>(), this.Session, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
     }
 
     public TestSession Session { get; }
@@ -242,6 +244,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
     public void Dispose()
     {
         this.Explorer.Dispose();
+        this.scopeRoot.DisposeAsync().AsTask().GetAwaiter().GetResult();
         this.container.Dispose();
         this.Session.Dispose();
         this.items.Dispose();

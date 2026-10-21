@@ -70,7 +70,8 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.CookAssetsAsync(It.IsAny<IReadOnlyList<AssetPath>>(), It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Changes, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
-        using var model = CreateModel("2 changed assets", new(CookTargetKind.Changes, ScopeUri: null, IsAutomatic: true) { Assets = assets }, actions.Object, pipeline.Object);
+        using var session = CreateSession();
+        using var model = CreateModel(session, "2 changed assets", new(CookTargetKind.Changes, ScopeUri: null, IsAutomatic: true) { Assets = assets }, actions.Object, pipeline.Object);
         _ = model.SelectedRun!.Context.Should().Be("Changes · Automatic");
         await model.RetryCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         _ = model.ActionError.Should().BeEmpty();
@@ -85,7 +86,8 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
         var actions = new Mock<ICookRecovery>();
         _ = actions.Setup(value => value.SaveInputsAsync(It.IsAny<CookRunRequest>())).ReturnsAsync(value: false);
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
-        using var model = CreateModel("Scenes", new(CookTargetKind.Project, ScopeUri: null), actions.Object, pipeline.Object);
+        using var session = CreateSession();
+        using var model = CreateModel(session, "Scenes", new(CookTargetKind.Project, ScopeUri: null), actions.Object, pipeline.Object);
         await model.RetryCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         _ = model.ActionError.Should().BeEmpty();
         actions.Verify(value => value.SaveInputsAsync(It.IsAny<CookRunRequest>()), Times.Once());
@@ -103,16 +105,19 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.CookCurrentSceneAsync(scope, It.IsAny<CancellationToken>()))
             .ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.CurrentScene, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
-        using var model = CreateModel("Main", new(CookTargetKind.CurrentScene, scope), actions.Object, pipeline.Object);
+        using var session = CreateSession();
+        using var model = CreateModel(session, "Main", new(CookTargetKind.CurrentScene, scope), actions.Object, pipeline.Object);
         await model.RetryCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         _ = model.ActionError.Should().BeEmpty();
         pipeline.Verify(value => value.CookCurrentSceneAsync(scope, It.IsAny<CancellationToken>()), Times.Once());
     });
 
-    private static CookingPanelViewModel CreateModel(string displayName, CookRunRequest request, ICookRecovery actions, IContentPipelineService pipeline)
+    private static TestSession CreateSession()
+        => new(TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Retry" });
+
+    private static CookingPanelViewModel CreateModel(TestSession session, string displayName, CookRunRequest request, ICookRecovery actions, IContentPipelineService pipeline)
     {
-        var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Retry" };
-        var session = new TestSession(project);
+        var project = session.Context;
         var snapshot = new CookRunSnapshot
         {
             OperationId = Guid.NewGuid(),

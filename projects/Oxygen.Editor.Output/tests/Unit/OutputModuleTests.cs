@@ -29,12 +29,12 @@ public sealed class OutputModuleTests
 
     /// <summary>An activated window shows the player's output before the panel is ever shown.</summary>
     [TestMethod]
-    public void ActivatedWindowFollowsThePlayerBeforeThePanelShows()
+    public async Task ActivatedWindowFollowsThePlayerBeforeThePanelShows()
     {
         var log = new Mock<IPlayerLog>();
         var buffer = new OutputLogBuffer();
         using var host = HostContainer.Create();
-        var root = ScopeFactory.CreateRoot(host);
+        await using var root = ScopeFactory.CreateRoot(host);
 
         _ = new ScopeFactory().Create<IWindowLayer>(
             root,

@@ -25,7 +25,8 @@ public sealed class CookingPresenterTests : DroidNet.Tests.VisualUserInterfaceTe
     {
         var placement = new Mock<IPlacementService>();
         var runs = new Mock<ICookRunService>();
-        var (model, snapshot) = CreateModel(runs);
+        using var session = CreateSession();
+        var (model, snapshot) = CreateModel(session, runs);
         using (model)
         using (new CookingPresenter(model, placement.Object))
         {
@@ -42,7 +43,8 @@ public sealed class CookingPresenterTests : DroidNet.Tests.VisualUserInterfaceTe
     {
         var placement = new Mock<IPlacementService>();
         var runs = new Mock<ICookRunService>();
-        var (model, snapshot) = CreateModel(runs);
+        using var session = CreateSession();
+        var (model, snapshot) = CreateModel(session, runs);
         using (model)
         {
             var presenter = new CookingPresenter(model, placement.Object);
@@ -62,10 +64,12 @@ public sealed class CookingPresenterTests : DroidNet.Tests.VisualUserInterfaceTe
         await applied.Task.ConfigureAwait(true);
     }
 
-    private static (CookingPanelViewModel Model, CookRunSnapshot Snapshot) CreateModel(Mock<ICookRunService> runs)
+    private static TestSession CreateSession()
+        => new(TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Presenter" });
+
+    private static (CookingPanelViewModel Model, CookRunSnapshot Snapshot) CreateModel(TestSession session, Mock<ICookRunService> runs)
     {
-        var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Presenter" };
-        var session = new TestSession(project);
+        var project = session.Context;
         var snapshot = new CookRunSnapshot
         {
             OperationId = Guid.NewGuid(),

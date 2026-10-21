@@ -12,14 +12,19 @@ namespace Oxygen.Editor.Problems.Unit.Tests.TestSupport;
 /// <summary>Builds the Problems panel's view model over fakes of what it reads.</summary>
 internal static class TestProblems
 {
+    /// <summary>Creates the session of a project with no files.</summary>
+    /// <returns>The session, which the caller disposes.</returns>
+    internal static TestSession CreateSession()
+        => new(TestProject.Create(new MockFileSystem()).Context with { ProjectId = Guid.Empty, Name = "Test", AuthoringMounts = [] });
+
     /// <summary>Creates the view model of a project with no files.</summary>
+    /// <param name="session">The project's session, which the caller owns.</param>
     /// <param name="sources">The problem sources.</param>
     /// <param name="codeEditor">The code editor a problem's location opens in.</param>
     /// <param name="nodes">What shows the node a runtime problem names.</param>
     /// <returns>The view model.</returns>
-    internal static ProblemsViewModel CreateModel(IEnumerable<IAssetProblemSource> sources, ICodeEditorService codeEditor, IRuntimeProblemNodes nodes)
+    internal static ProblemsViewModel CreateModel(TestSession session, IEnumerable<IAssetProblemSource> sources, ICodeEditorService codeEditor, IRuntimeProblemNodes nodes)
     {
-        var session = new TestSession(TestProject.Create(new MockFileSystem()).Context with { ProjectId = Guid.Empty, Name = "Test", AuthoringMounts = [] });
         return new ProblemsViewModel(new AssetProblemSources(sources), codeEditor, session, nodes);
     }
 }

@@ -21,7 +21,8 @@ public sealed class CookDispatchTests
     [DataRow(true)]
     public async Task SynchronousCookWorkDoesNotBlockItsSubmittingThread(bool coalesced)
     {
-        using var coordinator = CreateCoordinator(CreateSession());
+        using var session = CreateSession();
+        using var coordinator = CreateCoordinator(session);
         using var release = new ManualResetEventSlim();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var returned = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);

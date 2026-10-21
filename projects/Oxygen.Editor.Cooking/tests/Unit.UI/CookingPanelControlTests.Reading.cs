@@ -54,7 +54,8 @@ public sealed partial class CookingPanelControlTests
     public Task TranscriptReadingPositionAndSelectionSurviveUpdatesAndRunSwitches() => EnqueueAsync(async () =>
     {
         var runs = new Mock<ICookRunService>();
-        using var model = CreateModel(runService: runs);
+        using var session = CreateSession();
+        using var model = CreateModel(session, runService: runs);
         var first = model.SelectedRun!;
         AppendReadingMessages(first, 80);
         var secondSnapshot = first.Snapshot with { OperationId = Guid.NewGuid(), DisplayName = "Other cook" };
