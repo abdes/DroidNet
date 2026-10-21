@@ -10,7 +10,6 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Materials;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
@@ -18,7 +17,7 @@ using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.MaterialEditor.TestSupport;
 
 /// <summary>The material editor over an in-memory material, for the tests of its views.</summary>
 internal static partial class MaterialEditorModels

@@ -51,7 +51,8 @@ controls. A panel's own behavior is tested by its module.
 Content Browser filtering, navigation, asset presentation and import-dialog tests
 live under `Oxygen.Editor.ContentBrowser/tests`. Its controls use the separate
 `Oxygen.Editor.ContentBrowser.UI.Tests` project. Material transaction/history
-coverage lives under `Oxygen.Editor.MaterialEditor/tests`.
+and view coverage lives under `Oxygen.Editor.MaterialEditor/tests` (its views in the
+`Oxygen.Editor.MaterialEditor.UI.Tests` project).
 
 Cross-module workflows stay in WorldEditor integration tests when WorldEditor
 owns the coordination, such as publishing cooked material changes to an open

@@ -22,7 +22,6 @@
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserControls.cs" Link="Support/BrowserControls.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserQuerySupport.cs" Link="Support/BrowserQuerySupport.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentBrowser/testsupport/UI/BrowserTestData.cs" Link="Support/BrowserTestData.cs" />
-        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/UI/MaterialEditorModels.cs" Link="Support/MaterialEditorModels.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
         <Compile Include="$(ProjectsRoot)/UITests.Shared/testsupport/ScaledXamlHost.cs" Link="Support/ScaledXamlHost.cs" />
         <Compile Include="$(ProjectsRoot)/UITests.Shared/tests/TestHostLifecycleTests.cs" Link="TestHostLifecycleTests.cs" />

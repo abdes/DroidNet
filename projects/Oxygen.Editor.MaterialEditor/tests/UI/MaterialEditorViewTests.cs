@@ -13,11 +13,10 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Testing;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.MaterialEditor;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.MaterialEditorModels;
+using static Oxygen.Editor.MaterialEditor.TestSupport.MaterialEditorModels;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.MaterialEditor;
+namespace Oxygen.Editor.MaterialEditor.UI.Tests;
 
 /// <summary>The material editor's document: its controls, its header and its cook status.</summary>
 [TestClass]
