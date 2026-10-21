@@ -9,7 +9,7 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
+namespace Oxygen.Editor.Scenes.Tests.Selection;
 
 [TestClass]
 [TestCategory("Scene Selection")]
