@@ -684,7 +684,7 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.9 Cook on change over checked inputs     | `done`        |                                                                                                 |
 | S1.10 Shell                                 | `done`        | Consistent clipboard and delete commands across parts: #86                                      |
 | S1.11 Unsaved documents                     | `done`        | Shell `UnsavedDocuments` implements the port; Play, Cook and relocation ask before they run     |
-| S1.12 Features                              | `not started` | One row per feature when it starts                                                              |
+| S1.12 Features                              | `in progress` | See the feature table below                                                                     |
 | S1.13 Dissolve the World Editor             | `not started` |                                                                                                 |
 | S1.14 Test boundaries                       | `not started` |                                                                                                 |
 | S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; the shared host-equivalent builder lands with S3.1 |
@@ -707,3 +707,9 @@ that lands the work. Checked against the tree on 2026-10-20.
 
 Landed before the sub-slices, as part of the same direction: Materials module,
 checked URIs, source-collision reporting from the cook (`5d5c2bc0e`).
+
+### S1.12 features
+
+| #   | Feature | Status        | Notes |
+| --- | ------- | ------------- | ----- |
+| 1   | Output  | `in progress` |       |
