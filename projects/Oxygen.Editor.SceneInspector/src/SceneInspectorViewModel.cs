@@ -86,7 +86,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// </summary>
     /// <param name="hosting">The hosting context for WinUI dispatching.</param>
     /// <param name="vmToViewConverter">The converter for resolving views from viewmodels.</param>
-    /// <param name="assetReveal">What shows assets in the Content Browser.</param>
+    /// <param name="assetReveal">What shows assets in the Content Explorer.</param>
     /// <param name="documentArea">The window's document area, whose active scene document the inspector shows.</param>
     /// <param name="assetProvider">The shared asset identity and availability feed.</param>
     /// <param name="scenePreview">The engine preview, which reports the fields still waiting for the engine.</param>
@@ -562,7 +562,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     private bool IsEditorInputEnabled(ComponentPropertyEditor editor)
         => this.PropertyEditors.Contains(editor) && this.CanEditSelectedNodes;
 
-    // Ctrl+B's navigation: the Content Browser shows and selects the asset.
+    // Ctrl+B's navigation: the Content Explorer shows and selects the asset.
     private async Task RevealAssetAsync(IProjectContextService projectContexts, AssetPath asset)
     {
         if (projectContexts.ActiveProject is null)

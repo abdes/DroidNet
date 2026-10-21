@@ -12,9 +12,9 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser;
-using Oxygen.Editor.ContentBrowser.Panes.Assets;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+using Oxygen.Editor.ContentExplorer;
+using Oxygen.Editor.ContentExplorer.Panes.Assets;
+using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Status;
@@ -24,7 +24,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
-using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
+using static Oxygen.Editor.ContentExplorer.TestSupport.ExplorerControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.CatalogWorkload;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 
@@ -40,7 +40,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
     /// <returns>The asynchronous browser and native viewport workload.</returns>
     [TestMethod]
     [TestCategory("Performance")]
-    public Task ThousandInputBrowserFiltersWithLiveHundredNodeViewport() => EnqueueAsync(async () =>
+    public Task ThousandInputExplorerFiltersWithLiveHundredNodeViewport() => EnqueueAsync(async () =>
     {
         var fixture = new NativeSceneFixture(automatic: false, engineSettings: new EngineStartupSettings { Graphics = new() { EnableDebugLayer = false, EnableValidation = false }, Renderer = new() { DirectionalShadowPolicy = DirectionalShadowPolicy.ConventionalOnly }, Timing = new() { FixedDelta = TimeSpan.FromSeconds(1.0 / 60) }, });
         await using var lifetime = fixture.ConfigureAwait(true);
@@ -82,7 +82,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
                 Width = 1920 / scale,
                 Height = 1080 / scale,
             };
-            var state = new ContentBrowserState();
+            var state = new ContentExplorerState();
             state.SetSelectedFolders([AssetPath.Content]);
             await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
             using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);

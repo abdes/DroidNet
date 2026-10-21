@@ -20,7 +20,7 @@ workspace UI, content pipeline execution, engine mounts, or native interop.
 | `REQ-017` | Project content roots and authoring mounts provide the source identity basis for assets.           |
 | `REQ-018` | Project policy can identify descriptor/cooked roots for later pipeline milestones.                 |
 | `REQ-019` | Project cook scope is defined as policy, not hardcoded in UI.                                      |
-| `REQ-020` | Content Browser can derive browsable roots from project content-root policy.                       |
+| `REQ-020` | Content Explorer can derive browsable roots from project content-root policy.                      |
 | `REQ-021` | Asset references use project mount identity rather than cooked filesystem paths.                   |
 | `REQ-022` | Project workflows return typed results to the caller.                                              |
 | `REQ-024` | Project load/save failures expose useful diagnostics.                                              |
@@ -52,7 +52,7 @@ Current project behavior is split across:
 - `Oxygen.Editor.World.IProject` and `IProjectInfo`: shared project-domain
   abstractions consumed by world editor code.
 - `Oxygen.Editor.Data.ProjectUsageService`: recent project records, last opened
-  scene, and content browser state.
+  scene, and content explorer state.
 
 Baseline strengths:
 
@@ -80,7 +80,7 @@ Baseline gaps:
   report.
 - Project cook scope is implicit in current save/cook behavior.
 - `IProjectManagerService.CurrentProject` is consumed by downstream modules such
-  as WorldEditor, Content Browser, and project asset catalog code.
+  as WorldEditor, Content Explorer, and project asset catalog code.
 
 ## 5. Target Design
 
@@ -119,7 +119,7 @@ Target invariants:
    root policy.
 8. Active project state is exposed through `IProjectContextService`, not through
    mutable `IProjectManagerService.CurrentProject`.
-9. Content Browser source roots, local roots, and derived cooked roots are
+9. Content Explorer source roots, local roots, and derived cooked roots are
    exposed from `ProjectContext`/cook-scope policy, not guessed from current UI
    selection.
 
@@ -288,7 +288,7 @@ Path rules:
 
 Project layout, default creation targets, derived roots, and template output
 rules are owned by `project-layout-and-templates.md`. Project services expose
-the manifest facts and validation results that let Content Browser and Content
+the manifest facts and validation results that let Content Explorer and Content
 Pipeline apply those rules.
 
 ### Project Cook Scope
@@ -362,7 +362,7 @@ Required behavior:
 
 - is called by the Shell Activation Coordinator after activation succeeds.
 - update recent project only after project activation succeeds.
-- preserve last opened scene and content browser state.
+- preserve last opened scene and content explorer state.
 - classify stale recent projects during enumeration.
 - keep stale entries visible until the user dismisses/removes them or a visible
   result explains their removal.
@@ -380,9 +380,9 @@ ED-M07 scope:
 
 - full cook scope details and content pipeline handoff.
 
-### Content Browser Root Adapter
+### Content Explorer Root Adapter
 
-ED-M06 may introduce a small adapter in `Oxygen.Editor.ContentBrowser`, not in
+ED-M06 may introduce a small adapter in `Oxygen.Editor.ContentExplorer`, not in
 `Oxygen.Editor.Projects`, that projects `ProjectContext` into browser roots:
 
 ```csharp
@@ -417,7 +417,7 @@ Consumers are described by their owning LLDs:
 
 - Project Browser and workspace activation: `project-workspace-shell.md`.
 - Settings UI: `settings-architecture.md`.
-- Content Browser and asset identity: `content-browser-asset-identity.md`.
+- Content Explorer and asset identity: `content-explorer-asset-identity.md`.
 
 Project services must return enough structured data for UI consumers to render
 states without parsing exception messages.
@@ -449,7 +449,7 @@ Persistent editor state stores:
 - times opened.
 - last used date.
 - last opened scene.
-- content browser state.
+- content explorer state.
 - later, workspace layout state where applicable.
 
 Persistent state must not become the source of truth for project manifest
@@ -471,7 +471,7 @@ Project services provide facts to runtime and pipeline services:
   local folder roots, and cooked-root policy to workspace/runtime consumers.
 - `ProjectCookScope` provides the minimal ED-M01 cook-scope record: project
   identity, project root, and cooked output root.
-- Content Browser consumes the same facts to label authoring roots and derived
+- Content Explorer consumes the same facts to label authoring roots and derived
   roots consistently.
 
 Project services do not:
@@ -559,12 +559,12 @@ ED-M01 project services are complete when:
 - project services expose project root and authoring roots for workspace
   activation.
 - `CurrentProject` consumers are migrated to `IProjectContextService`.
-- Content Browser and project asset catalog resolve project state from
+- Content Explorer and project asset catalog resolve project state from
   `IProjectContextService`, not `IProjectManagerService`.
 
 ED-M06 project-service gates:
 
-- Content Browser root adapter derives authoring, local, and derived cooked
+- Content Explorer root adapter derives authoring, local, and derived cooked
   roots from `ProjectContext` and `ProjectCookScopeProvider`.
 - browser and template workflows consume layout rules from
   `project-layout-and-templates.md` instead of defining local folder policy.

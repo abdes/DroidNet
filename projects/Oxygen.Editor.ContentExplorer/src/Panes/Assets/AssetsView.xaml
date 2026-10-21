@@ -1,13 +1,12 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.ContentBrowser.AssetsView"
+    x:Class="Oxygen.Editor.ContentExplorer.AssetsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:browser="using:Oxygen.Editor.ContentBrowser"
     xmlns:controls="using:DroidNet.Routing.WinUI"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dnc="using:DroidNet.Controls"
-    xmlns:local="using:Oxygen.Editor.ContentBrowser"
+    xmlns:local="using:Oxygen.Editor.ContentExplorer"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
     mc:Ignorable="d">
@@ -326,8 +325,8 @@
                         Width="96"
                         VerticalAlignment="Center"
                         AutomationProperties.Name="Tile size"
-                        Maximum="{x:Bind browser:AssetBrowserPresentation.MaxTileSize}"
-                        Minimum="{x:Bind browser:AssetBrowserPresentation.MinTileSize}"
+                        Maximum="{x:Bind local:AssetBrowserPresentation.MaxTileSize}"
+                        Minimum="{x:Bind local:AssetBrowserPresentation.MinTileSize}"
                         StepFrequency="8"
                         ToolTipService.ToolTip="Tile size"
                         Value="{x:Bind ViewModel.Presentation.TileSize, Mode=TwoWay}" />
@@ -349,37 +348,37 @@
                         <MenuFlyout Placement="BottomEdgeAlignedRight">
                             <RadioMenuFlyoutItem
                                 Command="{x:Bind ViewModel.Presentation.OrderByCommand}"
-                                CommandParameter="{x:Bind browser:AssetSortField.Name}"
+                                CommandParameter="{x:Bind local:AssetSortField.Name}"
                                 GroupName="SortField"
                                 IsChecked="{x:Bind local:AssetsView.IsSortField(ViewModel.Presentation.SortField, 'Name'), Mode=OneWay}"
                                 Text="Name" />
                             <RadioMenuFlyoutItem
                                 Command="{x:Bind ViewModel.Presentation.OrderByCommand}"
-                                CommandParameter="{x:Bind browser:AssetSortField.Type}"
+                                CommandParameter="{x:Bind local:AssetSortField.Type}"
                                 GroupName="SortField"
                                 IsChecked="{x:Bind local:AssetsView.IsSortField(ViewModel.Presentation.SortField, 'Type'), Mode=OneWay}"
                                 Text="Type" />
                             <RadioMenuFlyoutItem
                                 Command="{x:Bind ViewModel.Presentation.OrderByCommand}"
-                                CommandParameter="{x:Bind browser:AssetSortField.Status}"
+                                CommandParameter="{x:Bind local:AssetSortField.Status}"
                                 GroupName="SortField"
                                 IsChecked="{x:Bind local:AssetsView.IsSortField(ViewModel.Presentation.SortField, 'Status'), Mode=OneWay}"
                                 Text="Status" />
                             <RadioMenuFlyoutItem
                                 Command="{x:Bind ViewModel.Presentation.OrderByCommand}"
-                                CommandParameter="{x:Bind browser:AssetSortField.Location}"
+                                CommandParameter="{x:Bind local:AssetSortField.Location}"
                                 GroupName="SortField"
                                 IsChecked="{x:Bind local:AssetsView.IsSortField(ViewModel.Presentation.SortField, 'Location'), Mode=OneWay}"
                                 Text="Location" />
                             <RadioMenuFlyoutItem
                                 Command="{x:Bind ViewModel.Presentation.OrderByCommand}"
-                                CommandParameter="{x:Bind browser:AssetSortField.Size}"
+                                CommandParameter="{x:Bind local:AssetSortField.Size}"
                                 GroupName="SortField"
                                 IsChecked="{x:Bind local:AssetsView.IsSortField(ViewModel.Presentation.SortField, 'Size'), Mode=OneWay}"
                                 Text="Size" />
                             <RadioMenuFlyoutItem
                                 Command="{x:Bind ViewModel.Presentation.OrderByCommand}"
-                                CommandParameter="{x:Bind browser:AssetSortField.Modified}"
+                                CommandParameter="{x:Bind local:AssetSortField.Modified}"
                                 GroupName="SortField"
                                 IsChecked="{x:Bind local:AssetsView.IsSortField(ViewModel.Presentation.SortField, 'Modified'), Mode=OneWay}"
                                 Text="Modified" />

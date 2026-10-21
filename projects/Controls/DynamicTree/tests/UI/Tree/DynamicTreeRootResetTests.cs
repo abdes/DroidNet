@@ -8,7 +8,7 @@ using DroidNet.Tests;
 
 namespace DroidNet.Controls.Tests.Tree;
 
-/// <summary>A view model outlives the trees that show it, as the Content Browser's does when its view is
+/// <summary>A view model outlives the trees that show it, as the Content Explorer's does when its view is
 /// rebuilt; only a loaded tree listens to its rows, so replacing the root rebuilds the live tree. Unloading stops the
 /// listening without changing the repeater's source, because a closing window unloads while its XAML is torn down
 /// (see <c>DisplayedTreeItems</c>).</summary>

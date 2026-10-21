@@ -11,7 +11,6 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Windows;
-using Oxygen.Editor.CookedInspector;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 

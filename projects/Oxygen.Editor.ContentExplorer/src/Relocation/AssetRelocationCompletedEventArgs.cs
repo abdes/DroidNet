@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ContentBrowser.Relocation;
+namespace Oxygen.Editor.ContentExplorer.Relocation;
 
 /// <summary>Carries the outcome of a completed or failed relocation change.</summary>
 /// <param name="outcome">The result to show and whether Undo is available.</param>

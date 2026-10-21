@@ -350,7 +350,7 @@ targets, and Content Browser/picker refresh behavior under the accepted project
 filesystem contract.
 
 - [x] Required LLDs are reviewed: `material-editor`,
-      `content-browser-asset-identity`, `asset-primitives`, `content-pipeline`.
+      `content-explorer-asset-identity`, `asset-primitives`, `content-pipeline`.
 - [x] Detailed `ED-M05` implementation plan exists.
 - [x] Corrective workflow/UI pass is landed after the rejected first
       implementation.
@@ -381,7 +381,7 @@ Current note: ED-M06 validation closed after `ED-M06A` corrected project root
 layout, folder navigation, material row filtering, and template-created project
 structure against `project-layout-and-templates.md`.
 
-- [x] Required LLDs are reviewed: `content-browser-asset-identity`,
+- [x] Required LLDs are reviewed: `content-explorer-asset-identity`,
       `asset-primitives`, `project-services`, `diagnostics-operation-results`.
 - [x] ED-M06 LLDs are drafted for review with concrete content-browser row,
       state-reducer, project-root, typed-picker, and diagnostics contracts.

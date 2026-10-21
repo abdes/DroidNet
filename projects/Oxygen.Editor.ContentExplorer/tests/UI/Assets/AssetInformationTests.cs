@@ -9,16 +9,16 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Panes.Assets;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+using Oxygen.Editor.ContentExplorer.Panes.Assets;
+using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
-using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
+using static Oxygen.Editor.ContentExplorer.TestSupport.ExplorerTestData;
 
-namespace Oxygen.Editor.ContentBrowser.UI.Tests.Assets;
+namespace Oxygen.Editor.ContentExplorer.UI.Tests.Assets;
 
 [TestClass]
 public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInterfaceTests
@@ -45,7 +45,7 @@ public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInt
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([asset]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState();
+        var state = new ContentExplorerState();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
         using var details = new AssetDetailsViewModel(state, projects, Mock.Of<IDesktopIntegration>());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);

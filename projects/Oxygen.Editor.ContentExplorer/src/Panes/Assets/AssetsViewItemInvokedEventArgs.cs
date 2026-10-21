@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Assets;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets;
 
 /// <summary>
 ///     Provides data for the <see cref="Layouts.AssetsLayoutViewModel.ItemInvoked"/> event.

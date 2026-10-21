@@ -28,7 +28,7 @@ defines the reusable data/model/tooling layer those editor features consume.
 | `REQ-016`  | Import/cook operations have reusable primitives.                                        |
 | `REQ-017`  | Cooked outputs can be indexed and queried.                                              |
 | `REQ-018`  | Cook output can be validated before mount by later pipeline work.                       |
-| `REQ-020`  | Content browser can build state views from catalog primitives.                          |
+| `REQ-020`  | Content explorer can build state views from catalog primitives.                         |
 | `REQ-021`  | Authoring stores asset identity, not raw cooked path text.                              |
 | `REQ-024`  | Asset failures can be routed to narrow domains.                                         |
 | `REQ-037`  | Persisted authoring data survives save/reopen without manual repair.                    |
@@ -41,7 +41,7 @@ defines the reusable data/model/tooling layer those editor features consume.
   primitives; editor projects own workflows and UI.
 - `material-editor.md`: consumes material source, material cook, and material
   identity primitives.
-- `content-browser-asset-identity.md`: consumes catalog/query/reference
+- `content-explorer-asset-identity.md`: consumes catalog/query/reference
   primitives for picker UX.
 - `content-pipeline.md`: orchestrates import/cook/index primitives.
 
@@ -77,7 +77,7 @@ Catalogs expose the resulting identity without interpreting material binaries.
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
 | `Oxygen.Managed.Assets`         | reusable asset identity, references, catalog primitives, material authoring model, and read-only current loose-index metadata. |
 | `Oxygen.Managed.Core`           | shared URI and diagnostics constants used by asset workflows.                                                                  |
-| `Oxygen.Editor.ContentBrowser`  | asset state enrichment, browsing, picker UX, thumbnails/swatches.                                                              |
+| `Oxygen.Editor.ContentExplorer` | asset state enrichment, browsing, picker UX, thumbnails/swatches.                                                              |
 | `Oxygen.Editor.MaterialEditor`  | material document UI and user commands over material descriptors.                                                              |
 | `Oxygen.Editor.ContentPipeline` | saved input capture, native tools, diagnostics/progress, provenance and publication.                                           |
 | `Oxygen.Editor.WorldEditor`     | scene commands that persist asset references in components.                                                                    |
@@ -167,7 +167,7 @@ public sealed record AssetChange(
 
 Catalogs do not compute user-facing `AssetState`, `AssetKind`, or runtime mount
 availability; they provide records and changes.
-`content-browser-asset-identity.md` defines state enrichment.
+`content-explorer-asset-identity.md` defines state enrichment.
 
 ### 7.4 Catalog Identity Limits
 
@@ -254,15 +254,15 @@ None.
 UI belongs to:
 
 - `material-editor.md` for material documents.
-- `content-browser-asset-identity.md` for picker/browser views.
+- `content-explorer-asset-identity.md` for picker/browser views.
 - `property-inspector.md` for Geometry material slots.
 
 This LLD only requires UI consumers to preserve asset URI identity and not
 display raw cooked filesystem paths as the authored identity.
 
-ED-M06 Content Browser UI consumes primitive records through an editor-owned
-`ContentBrowserAssetItem` projection. That projection must not move into
-`Oxygen.Managed.Assets`.
+Editor UI, the Content Explorer included, consumes primitive records through
+an editor-owned projection, `AssetEntry` (`Oxygen.Editor.Assets`). That
+projection must not move into `Oxygen.Managed.Assets`.
 
 ## 10. Persistence And Round Trip
 
@@ -347,7 +347,7 @@ Forbidden:
 
 ## 15. Closed V0.1 Decisions
 
-AssetRecord carries identity and producer/index metadata; ContentBrowser owns
+AssetRecord carries identity and producer/index metadata; ContentExplorer owns
 user-facing state enrichment and runtime availability overlays. URI identity and
 missing-reference preservation remain the contract; file rename/move repair UI
 is outside V0.1. ContentPipeline owns native import/source regeneration and

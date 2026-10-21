@@ -28,7 +28,7 @@ erDiagram
         int TimesOpened
         datetime LastUsedOn
         string LastOpenedScene
-        string ContentBrowserState
+        string ContentExplorerState
     }
 
     TemplatesUsageRecords {
@@ -59,15 +59,15 @@ erDiagram
 
 Tracks usage statistics and state for projects opened in the editor.
 
-| Column                | Type            | Constraints                | Description                                         |
-| --------------------- | --------------- | -------------------------- | --------------------------------------------------- |
-| `Id`                  | INTEGER         | PRIMARY KEY, AUTOINCREMENT | Unique identifier                                   |
-| `Name`                | TEXT(255)       | NOT NULL, MIN 1            | Project display name                                |
-| `Location`            | TEXT(2048)      | NOT NULL, MIN 1            | Absolute path to project directory                  |
-| `TimesOpened`         | INTEGER         | NOT NULL                   | Counter incremented each time project opens         |
-| `LastUsedOn`          | TEXT (DateTime) | NOT NULL                   | Timestamp of most recent project access             |
-| `LastOpenedScene`     | TEXT(255)       | NOT NULL, DEFAULT ''       | Path to last active scene (for session restoration) |
-| `ContentBrowserState` | TEXT(2048)      | NOT NULL, DEFAULT ''       | Serialized UI state for content browser panel       |
+| Column                 | Type            | Constraints                | Description                                         |
+| ---------------------- | --------------- | -------------------------- | --------------------------------------------------- |
+| `Id`                   | INTEGER         | PRIMARY KEY, AUTOINCREMENT | Unique identifier                                   |
+| `Name`                 | TEXT(255)       | NOT NULL, MIN 1            | Project display name                                |
+| `Location`             | TEXT(2048)      | NOT NULL, MIN 1            | Absolute path to project directory                  |
+| `TimesOpened`          | INTEGER         | NOT NULL                   | Counter incremented each time project opens         |
+| `LastUsedOn`           | TEXT (DateTime) | NOT NULL                   | Timestamp of most recent project access             |
+| `LastOpenedScene`      | TEXT(255)       | NOT NULL, DEFAULT ''       | Path to last active scene (for session restoration) |
+| `ContentExplorerState` | TEXT(2048)      | NOT NULL, DEFAULT ''       | Serialized UI state for content explorer panel      |
 
 **Indexes:**
 
@@ -76,14 +76,14 @@ Tracks usage statistics and state for projects opened in the editor.
 **Business Rules:**
 
 - Name and Location cannot be empty or whitespace
-- Updates occur on project open, rename/move, scene change, and content browser state change
+- Updates occur on project open, rename/move, scene change, and content explorer state change
 - Records are soft-deleted (removed explicitly via API, not cascaded)
 
 **Use Cases:**
 
 - Populate "Recently Used Projects" list in launcher
 - Restore last opened scene when project reopens
-- Persist content browser navigation state
+- Persist content explorer navigation state
 
 ### TemplatesUsageRecords
 

@@ -12,7 +12,6 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.CookedInspector;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.CookedInspector.Unit.UI.Tests.TestSupport.TestProjects;
 

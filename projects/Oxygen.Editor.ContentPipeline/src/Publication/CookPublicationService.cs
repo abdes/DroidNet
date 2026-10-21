@@ -215,7 +215,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
                         operation.OperationId,
                         result,
                         "Cook.CatalogRefreshFailed",
-                        "Content bindings were published. The browser could not finish refreshing them.",
+                        "Content bindings were published. The Content Explorer could not finish refreshing them.",
                         failure);
                 }
             }
@@ -282,7 +282,7 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
                 operation.OperationId,
                 published,
                 "Cook.CatalogRefreshFailed",
-                "Cooked content was published. The browser could not finish refreshing it.",
+                "Cooked content was published. The Content Explorer could not finish refreshing it.",
                 refresh);
         }
     }

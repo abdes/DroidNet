@@ -63,7 +63,7 @@ namespace Oxygen.Editor.Data.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<string>("ContentBrowserState")
+                    b.Property<string>("ContentExplorerState")
                         .IsRequired()
                         .HasMaxLength(2048)
                         .HasColumnType("TEXT");

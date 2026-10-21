@@ -328,7 +328,7 @@ ED-M07 mount contract:
 
 - ContentPipeline requests runtime refresh only after cooked output validation
   succeeds.
-- Brownfield scene save, material save/cook, Content Browser import/cook, and
+- Brownfield scene save, material save/cook, Content Explorer import/cook, and
   catalog-only refresh paths must stop publishing unvalidated cooked-root
   refresh messages; only a validated content-pipeline result may trigger runtime
   mount refresh in ED-M07.

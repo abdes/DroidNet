@@ -13,7 +13,7 @@ imported assets.
   and shown through the scene selection (`ISceneSelectionService`), which also
   carries the request to focus the property.
 - It asks the cooked inspection to inspect a run's scope (`ICookedInspections`)
-  and the Content Browser to show a run's imported assets (`IAssetReveal`).
+  and the Content Explorer to show a run's imported assets (`IAssetReveal`).
   Both are Shell ports, so the panel references neither feature.
 
 The panel presents cook runs only; orchestrating them belongs to

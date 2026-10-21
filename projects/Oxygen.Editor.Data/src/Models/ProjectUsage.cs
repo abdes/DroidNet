@@ -9,7 +9,7 @@ using Microsoft.EntityFrameworkCore;
 namespace Oxygen.Editor.Data.Models;
 
 /// <summary>
-/// Represents the usage data of a project, including its location, name, last used date, last opened scene, and content browser state.
+/// Represents the usage data of a project, including its location, name, last used date, last opened scene, and content explorer state.
 /// </summary>
 [Table(TableName)]
 [Index(nameof(Location), nameof(Name), IsUnique = true)]
@@ -62,9 +62,9 @@ public class ProjectUsage
     public string LastOpenedScene { get; set; } = string.Empty;
 
     /// <summary>
-    /// Gets or sets the state of the content browser for the project.
+    /// Gets or sets the state of the content explorer for the project.
     /// </summary>
     [Required]
     [StringLength(2048)]
-    public string ContentBrowserState { get; set; } = string.Empty;
+    public string ContentExplorerState { get; set; } = string.Empty;
 }

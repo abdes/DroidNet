@@ -3,10 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Tests;
+namespace Oxygen.Editor.ContentExplorer.Tests;
 
 [TestClass]
 public sealed class AssetsLayoutViewModelTests

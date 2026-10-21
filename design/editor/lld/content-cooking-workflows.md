@@ -12,7 +12,7 @@ This is the V0.1 user-workflow contract. It traces to PRD `REQ-013` through
 `REQ-024`, `REQ-026`, `REQ-036` through `REQ-041`, and `SUCCESS-006/007`.
 
 ContentPipeline owns dependency freshness, requests, incremental execution, and
-publication. ContentBrowser owns shared asset presentation and typed pickers.
+publication. ContentExplorer owns shared asset presentation and typed pickers.
 MaterialEditor and WorldEditor own document saves and undoable assignments; they
 submit requests through ContentPipeline. Runtime owns readiness and asset load
 acceptance. Projects owns roots and retained source locations. Existing
@@ -21,7 +21,7 @@ coordinator state supplies live progress to the
 [Cooking panel](cooking-panel.md); there is no second job system.
 
 Related contracts: [content-pipeline.md](content-pipeline.md) sections 16-19,
-[content-browser-asset-identity.md](content-browser-asset-identity.md),
+[content-explorer-asset-identity.md](content-explorer-asset-identity.md),
 [material-editor.md](material-editor.md),
 [documents-and-commands.md](documents-and-commands.md),
 [diagnostics-operation-results.md](diagnostics-operation-results.md),

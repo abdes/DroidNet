@@ -1,12 +1,12 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts.DetailsLayoutView"
+    x:Class="Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts.DetailsLayoutView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:browser="using:Oxygen.Editor.ContentBrowser"
-    xmlns:identity="using:Oxygen.Editor.ContentBrowser.Panes.Assets"
-    xmlns:layouts="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts"
-    xmlns:localcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters"
+    xmlns:explorer="using:Oxygen.Editor.ContentExplorer"
+    xmlns:identity="using:Oxygen.Editor.ContentExplorer.Panes.Assets"
+    xmlns:layouts="using:Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts"
+    xmlns:localcvt="using:Oxygen.Editor.ContentExplorer.Panes.Assets.Converters"
     xmlns:pickercvt="using:Oxygen.Editor.Pickers.Converters">
 
     <UserControl.Resources>
@@ -57,7 +57,7 @@
             <Button
                 AutomationProperties.Name="Sort by name"
                 Command="{x:Bind ViewModel.Presentation.SortByCommand}"
-                CommandParameter="{x:Bind browser:AssetSortField.Name}"
+                CommandParameter="{x:Bind explorer:AssetSortField.Name}"
                 Style="{StaticResource ColumnHeaderButtonStyle}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Name" />
@@ -68,7 +68,7 @@
                 Grid.Column="1"
                 AutomationProperties.Name="Sort by type"
                 Command="{x:Bind ViewModel.Presentation.SortByCommand}"
-                CommandParameter="{x:Bind browser:AssetSortField.Type}"
+                CommandParameter="{x:Bind explorer:AssetSortField.Type}"
                 Style="{StaticResource ColumnHeaderButtonStyle}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Type" />
@@ -79,7 +79,7 @@
                 Grid.Column="2"
                 AutomationProperties.Name="Sort by status"
                 Command="{x:Bind ViewModel.Presentation.SortByCommand}"
-                CommandParameter="{x:Bind browser:AssetSortField.Status}"
+                CommandParameter="{x:Bind explorer:AssetSortField.Status}"
                 Style="{StaticResource ColumnHeaderButtonStyle}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Status" />
@@ -90,7 +90,7 @@
                 Grid.Column="3"
                 AutomationProperties.Name="Sort by location"
                 Command="{x:Bind ViewModel.Presentation.SortByCommand}"
-                CommandParameter="{x:Bind browser:AssetSortField.Location}"
+                CommandParameter="{x:Bind explorer:AssetSortField.Location}"
                 Style="{StaticResource ColumnHeaderButtonStyle}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Location" />
@@ -101,7 +101,7 @@
                 Grid.Column="4"
                 AutomationProperties.Name="Sort by size"
                 Command="{x:Bind ViewModel.Presentation.SortByCommand}"
-                CommandParameter="{x:Bind browser:AssetSortField.Size}"
+                CommandParameter="{x:Bind explorer:AssetSortField.Size}"
                 Style="{StaticResource ColumnHeaderButtonStyle}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Size" />
@@ -112,7 +112,7 @@
                 Grid.Column="5"
                 AutomationProperties.Name="Sort by modified time"
                 Command="{x:Bind ViewModel.Presentation.SortByCommand}"
-                CommandParameter="{x:Bind browser:AssetSortField.Modified}"
+                CommandParameter="{x:Bind explorer:AssetSortField.Modified}"
                 Style="{StaticResource ColumnHeaderButtonStyle}">
                 <StackPanel Orientation="Horizontal" Spacing="6">
                     <TextBlock Text="Modified" />

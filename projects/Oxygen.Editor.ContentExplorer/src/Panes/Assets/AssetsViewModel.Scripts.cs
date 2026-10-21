@@ -6,7 +6,7 @@ using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentExplorer;
 
 /// <summary>
 /// Script and input file commands: New Script, New Input File, Edit and Open with.

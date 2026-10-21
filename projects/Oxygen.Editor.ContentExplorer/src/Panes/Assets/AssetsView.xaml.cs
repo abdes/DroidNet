@@ -6,7 +6,7 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentExplorer;
 
 /// <summary>
 /// Represents the view for displaying assets in the World Editor.

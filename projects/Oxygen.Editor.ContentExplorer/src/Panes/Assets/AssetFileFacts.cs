@@ -7,7 +7,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets;
 
 /// <summary>The size and change time of the file that holds an asset, read from the project without loading it.</summary>
 /// <param name="Path">The authored descriptor, source or cooked file, or null when the asset has none.</param>

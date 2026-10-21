@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentExplorer;
 
-/// <summary>The ways the Content Browser shows its results.</summary>
+/// <summary>The ways the Content Explorer shows its results.</summary>
 public enum AssetBrowserView
 {
     /// <summary>Preview tiles with name, type and status.</summary>

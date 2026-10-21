@@ -6,7 +6,7 @@
         <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
         <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
-        <RootNamespace>Oxygen.Editor.ContentBrowser</RootNamespace>
+        <RootNamespace>Oxygen.Editor.ContentExplorer</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
 

@@ -9,7 +9,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentExplorer;
 
 /// <summary>Owns the browser session's search and filters, independently of catalog scans and cooking.</summary>
 public sealed partial class AssetBrowserQuery : ObservableObject

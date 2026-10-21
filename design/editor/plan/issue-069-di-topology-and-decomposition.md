@@ -473,8 +473,10 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   preview, viewport and transform tool settings), `SceneInspector` (from
   `Inspector`); then the Material Editor registers its editor provider, the
   Content Browser becomes `ContentExplorer` (its relocation and creation
-  workflows go to ContentPipeline, `IAssetShell` to the Shell's desktop
-  integration) (its left pane, `ProjectExplorer` today, becomes
+  dialogs stay with it, while the rules behind them, the moves a paste makes and
+  the replay of undo and redo, join the plan, transaction and history in
+  ContentPipeline's `IAssetRelocationService`; `IAssetShell` went to the Shell's
+  `IDesktopIntegration`; its left pane, `ProjectExplorer` until then, becomes
   `ContentFolders`) and the Project Browser becomes `ProjectExplorer`. The new
   `TextureEditor` replaces the Content Browser's texture import dialog, and the
   new `History` panel (documents design decision 1) comes last, as a passive
@@ -510,10 +512,11 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   | `ComponentAddRequestedMessage`, `ComponentRemoveRequestedMessage` (on `WeakReferenceMessenger.Default`) | The Inspector's `ISceneComponentEdits`, which the details header calls on the inspector |
 
   With the ContentExplorer: `OpenCookedInspectionRequestMessage` becomes the
-  Shell's `ICookedInspections`, `ChangeContentMountsRequestMessage` a port of
-  the mount transaction's owner, and `NavigateToFolderRequestMessage` and
-  `CreateFolderRequestMessage` calls between its panes. The window then
-  registers no `IMessenger`.
+  Shell's `ICookedInspections`, `ChangeContentMountsRequestMessage`
+  ContentPipeline's `IContentMountChanges`, which the preview session (the
+  mount transaction's owner) implements, and `NavigateToFolderRequestMessage`
+  and `CreateFolderRequestMessage` calls between its panes through
+  `IContentFoldersPane`. The window then registers no `IMessenger`.
 
   Commands are the automation surface: a command takes no arguments and acts on
   the window's active document and its selection, so a script runs it by id
@@ -769,3 +772,4 @@ checked URIs, source-collision reporting from the cook (`5d5c2bc0e`).
 | 6   | SceneEditor     | `done` |                                                                                                                                    |
 | 7   | SceneInspector  | `done` |                                                                                                                                    |
 | 8   | MaterialEditor  | `done` | Contributes its editor provider and view through its module; its view tests live in its own UI test project                        |
+| 9   | ContentExplorer | `done` | The window sends no messages; relocation and creation rules live in ContentPipeline, their dialogs in the explorer                 |

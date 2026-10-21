@@ -48,7 +48,7 @@ internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTes
     });
 
     /// <summary>
-    /// A model's material is not listed in the Content Browser, and is still offered by the material picker: it is
+    /// A model's material is not listed in the Content Explorer, and is still offered by the material picker: it is
     /// reached by its identity under the model.
     /// </summary>
     /// <returns>The asynchronous picker test.</returns>

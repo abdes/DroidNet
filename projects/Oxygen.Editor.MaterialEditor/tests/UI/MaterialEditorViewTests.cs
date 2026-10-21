@@ -126,7 +126,7 @@ internal sealed class MaterialEditorViewTests : DroidNet.Tests.VisualUserInterfa
         }
     });
 
-    // The content browser's view of the document's asset, published by the test.
+    // The content explorer's view of the document's asset, published by the test.
     internal static IAssetFeed StatusProvider(IObservable<IReadOnlyList<AssetEntry>> updates)
     {
         var provider = new Mock<IAssetFeed>();

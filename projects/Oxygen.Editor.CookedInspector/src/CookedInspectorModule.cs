@@ -29,7 +29,7 @@ public sealed class CookedInspectorModule : IFeatureModule
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        // The inspector shows its asset links in the window's Content Browser, through the port that browser implements.
+        // The inspector shows its asset links in the window's Content Explorer, through the port that browser implements.
         window.RegisterDelegate(
             resolver => new CookedInspectionViewModel(
                 resolver.Resolve<IContentPipelineService>(),

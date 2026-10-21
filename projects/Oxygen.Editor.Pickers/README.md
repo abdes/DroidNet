@@ -23,9 +23,9 @@ origin comes from the asset itself (`AssetEntry.Origin`): anything under
 The picker does not decide what a property accepts; its owner does, usually with
 an `AssetRule`, and hands the accepted assets over.
 
-The library lives outside the Content Browser and the World Editor because the
+The library lives outside the Content Explorer and the World Editor because the
 Material Editor and the World Editor both use it, and neither should depend on
-the other or on the Content Browser to show a list of assets. It depends only on
+the other or on the Content Explorer to show a list of assets. It depends only on
 `Oxygen.Editor.Assets` (the asset model) and the DroidNet controls.
 
 ## How it fits
@@ -90,4 +90,4 @@ Editor's UI tests exercise the control inside the inspector.
 
 `AssetKindToIconConverter` and `AssetKindToBrushConverter` (namespace
 `Oxygen.Editor.Pickers.Converters`) give an asset kind its glyph and color, so
-the Content Browser and the Cooked Inspector show a kind the same way.
+the Content Explorer and the Cooked Inspector show a kind the same way.

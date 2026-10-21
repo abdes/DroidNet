@@ -48,8 +48,8 @@ public class DiagnosticVocabularyTests
         _ = AssetOperationKinds.Resolve.Should().Be("Asset.Resolve");
         _ = AssetOperationKinds.Browse.Should().Be("Asset.Browse");
         _ = AssetOperationKinds.CopyIdentity.Should().Be("Asset.CopyIdentity");
-        _ = ContentBrowserOperationKinds.Navigate.Should().Be("ContentBrowser.Navigate");
-        _ = ContentBrowserOperationKinds.Refresh.Should().Be("ContentBrowser.Refresh");
+        _ = ContentExplorerOperationKinds.Navigate.Should().Be("ContentExplorer.Navigate");
+        _ = ContentExplorerOperationKinds.Refresh.Should().Be("ContentExplorer.Refresh");
     }
 
     [TestMethod]

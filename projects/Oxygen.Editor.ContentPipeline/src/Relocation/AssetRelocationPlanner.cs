@@ -128,7 +128,7 @@ internal static class AssetRelocationPlanner
         var isDirectory = fileSystem.Directory.Exists(source.FullPath);
         if (!isDirectory && !fileSystem.File.Exists(source.FullPath))
         {
-            throw new AssetRelocationException($"'{move.Source}' no longer exists; it was deleted or moved outside the Content Browser.");
+            throw new AssetRelocationException($"'{move.Source}' no longer exists; it was deleted or moved outside the Content Explorer.");
         }
 
         RequireValidTarget(project, move, source, target, isDirectory);

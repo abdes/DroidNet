@@ -11,12 +11,12 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
 using Moq;
-using Oxygen.Editor.ContentBrowser.Importing;
+using Oxygen.Editor.ContentExplorer.Importing;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Testably.Abstractions;
 
-namespace Oxygen.Editor.ContentBrowser.UI.Tests.Importing;
+namespace Oxygen.Editor.ContentExplorer.UI.Tests.Importing;
 
 /// <summary>Renders the model import review with its real bindings and inline validation.</summary>
 [TestClass]

@@ -38,7 +38,7 @@ editor-only JSON schemas for runtime content.
 | `REQ-022`  | Save/cook/refresh/mount failures surface operation results.                                                                                                         |
 | `REQ-023`  | Pipeline and engine/tool failures produce correlated logs.                                                                                                          |
 | `REQ-024`  | Diagnostics identify descriptor/import/cook/index/mount cause.                                                                                                      |
-| `REQ-036`  | Content Browser reflects refreshed descriptor/cooked states.                                                                                                        |
+| `REQ-036`  | Content Explorer reflects refreshed descriptor/cooked states.                                                                                                       |
 | `REQ-037`  | Authored source remains repairable and round-trippable.                                                                                                             |
 
 ## 3. Architecture Links
@@ -123,7 +123,7 @@ staging remains inspectable without becoming published current content.
 | `Oxygen.Editor.Interop`              | Narrow managed wrappers for native cooker inspection/validation/import APIs when ED-M07 needs native behavior that is not exposed in managed code.  |
 | `Oxygen.Editor.Projects`             | Project root, authoring mount facts, local mount facts, default cooked output root, and validation policy.                                          |
 | `Oxygen.Editor.WorldEditor`          | Scene document ownership and user commands that invoke pipeline workflows.                                                                          |
-| `Oxygen.Editor.ContentBrowser`       | Presents refreshed source/descriptor/cooked/stale/broken/mounted state; does not cook.                                                              |
+| `Oxygen.Editor.ContentExplorer`      | Presents refreshed source/descriptor/cooked/stale/broken/mounted state; does not cook.                                                              |
 | `Oxygen.Editor.Runtime`              | Runtime mount/unmount calls through `IEngineService`; does not decide cook scope.                                                                   |
 
 `Oxygen.Editor.Projects` must not regain cook execution ownership.
@@ -429,12 +429,12 @@ never mount.
 
 Use the existing UI surfaces:
 
-| Surface                              | Actions                                                                             |
-| ------------------------------------ | ----------------------------------------------------------------------------------- |
-| Content Browser toolbar/context menu | `Cook`, `Cook Folder`, `Inspect Cooked Output`, `Validate Cooked Output`, `Refresh` |
-| Scene document/header/menu           | `Cook Current Scene`                                                                |
-| Material editor                      | continues to expose `Cook` for one material                                         |
-| Output/log panel                     | correlated cook phase summaries and diagnostics                                     |
+| Surface                               | Actions                                                                             |
+| ------------------------------------- | ----------------------------------------------------------------------------------- |
+| Content Explorer toolbar/context menu | `Cook`, `Cook Folder`, `Inspect Cooked Output`, `Validate Cooked Output`, `Refresh` |
+| Scene document/header/menu            | `Cook Current Scene`                                                                |
+| Material editor                       | continues to expose `Cook` for one material                                         |
+| Output/log panel                      | correlated cook phase summaries and diagnostics                                     |
 
 Illustrative result summary:
 
@@ -477,7 +477,7 @@ slots, project manifests, or recent documents.
   transaction in section 16.
 - Runtime cooked-root refresh happens only after cooked output validation
   succeeds.
-- Scene save, material save/cook, Content Browser import/cook, and catalog-only
+- Scene save, material save/cook, Content Explorer import/cook, and catalog-only
   refresh paths must not publish unvalidated cooked-root refresh messages.
   Save-time scheduling must never bypass this publication authority.
 - Runtime publication uses the section 16 transaction; mount failure reports
@@ -533,7 +533,7 @@ Allowed:
 - ContentPipeline depends on project services for project/cook scope facts.
 - ContentPipeline may depend on `Oxygen.Editor.Interop` through
   `IEngineContentPipelineApi` for native cooker APIs.
-- WorldEditor, MaterialEditor, and ContentBrowser invoke ContentPipeline service
+- WorldEditor, MaterialEditor, and ContentExplorer invoke ContentPipeline service
   contracts.
 - Runtime integration consumes validated mount refresh requests.
 
@@ -542,7 +542,7 @@ Forbidden:
 - Save must not execute a cook inline or publish output; successful persistence
   may schedule saved-scope work through the shared coordinator.
 - ContentPipeline must not mutate scene authoring state.
-- ContentPipeline must not own Content Browser item layout or picker UX.
+- ContentPipeline must not own Content Explorer item layout or picker UX.
 - ContentPipeline must not persist cooked paths into authoring files.
 - Project services must not execute cook/import.
 - Runtime services must not generate descriptors or decide cook scope.
@@ -564,12 +564,12 @@ The following production paths require regression coverage:
 5. inspect output shows asset entries and file entries for the cooked root.
 6. validation runs before runtime mount refresh; failed validation blocks mount
    and publishes a visible operation result.
-7. successful validation refreshes Content Browser asset states without editor
+7. successful validation refreshes Content Explorer asset states without editor
    restart.
 8. successful validation requests runtime cooked-root refresh and reports mount
    failure as `AssetMount`, not as a cook failure.
 9. dirty save-time cook coupling does not reappear in project services.
-10. scene/material save, material cook, Content Browser import/cook, and
+10. scene/material save, material cook, Content Explorer import/cook, and
     catalog-only refresh paths no longer publish unvalidated cooked-root refresh
     messages.
 11. URI normalization tests prove `.omat.json`/`.ogeo.json` authored asset URIs
@@ -868,7 +868,7 @@ reimport accepts only the canonical settings/layout; it does not retain
 version-2 grouped path behavior. Changing a sidecar alone cannot relocate
 content because native asset keys derive from virtual paths; output groups move
 only through the reference-aware relocation in
-[Content Browser §9.5](content-browser-asset-identity.md#95-asset-relocation),
+[Content Explorer §9.5](content-explorer-asset-identity.md#95-asset-relocation),
 which rewrites the sidecar with the files. After a relocation or delete, a prior
 product whose authored source no longer exists is retired for every asset kind,
 and an imported product whose outputs fall outside its sidecar's current group
@@ -1107,7 +1107,7 @@ gizmo live under `/Engine/Internal`, which pickers hide by folder.
 The editor reads `engine.pak` through `IEngineContentPak`:
 
 - the asset catalog lists its assets as Packaged assets with the Engine badge;
-  the Content Browser shows it as the read-only `Engine` root.
+  the Content Explorer shows it as the read-only `Engine` root.
 - it is the lowest cooked library and the first native context root; the cooking
   artifact inventory leases and verifies it like the tools and schemas, so its
   content identity joins the cook fingerprint.

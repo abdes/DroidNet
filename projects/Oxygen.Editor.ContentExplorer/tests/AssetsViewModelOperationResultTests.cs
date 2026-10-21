@@ -5,9 +5,9 @@
 using AwesomeAssertions;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.ContentBrowser.Tests;
+namespace Oxygen.Editor.ContentExplorer.Tests;
 
-/// <summary>Checks concise operation feedback in the content browser.</summary>
+/// <summary>Checks concise operation feedback in the content explorer.</summary>
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository discovery configuration.")]
 public sealed class AssetsViewModelOperationResultTests

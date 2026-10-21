@@ -5,7 +5,7 @@
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets;
 
 /// <summary>Maps project-output folders using the saved virtual mount names.</summary>
 internal static class ProjectCookedFolders

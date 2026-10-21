@@ -90,6 +90,24 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     }
 
     /// <inheritdoc/>
+    public AssetRelocationRequest? CreatePasteRequest(IReadOnlyList<AssetPath> sources, AssetPath targetFolder)
+    {
+        ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(targetFolder);
+        var moves = sources.Where(path => path.Parent != targetFolder)
+            .Select(path => new AssetRelocationMove(path, targetFolder.Combine(path.Name))).ToArray();
+        return moves.Length == 0 ? null : new AssetRelocationRequest { Moves = moves };
+    }
+
+    /// <inheritdoc/>
+    public Task<string?> UndoAsync(HistoryKeeper history, CancellationToken cancellationToken)
+        => this.ReplayAsync(history, undo: true, cancellationToken);
+
+    /// <inheritdoc/>
+    public Task<string?> RedoAsync(HistoryKeeper history, CancellationToken cancellationToken)
+        => this.ReplayAsync(history, undo: false, cancellationToken);
+
+    /// <inheritdoc/>
     public async Task<IReadOnlyList<AssetPath>> FindReferrersAsync(AssetPath virtualPath, CancellationToken cancellationToken)
     {
         var project = projects.ActiveProject;
@@ -462,6 +480,29 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
 
             throw new AssetRelocationException("The copy failed and was removed: " + failure.Message, failure);
         }
+    }
+
+    // Resumes on the caller's context, which the history belongs to.
+    private async Task<string?> ReplayAsync(HistoryKeeper history, bool undo, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(history);
+        if (history.IsBusy || !(undo ? history.CanUndo : history.CanRedo))
+        {
+            return null;
+        }
+
+        var label = (undo ? history.UndoStack[^1] : history.RedoStack[0]).Key.ToString() ?? string.Empty;
+        this.LogReplayRequested(undo ? "Undo" : "Redo", label);
+        if (undo)
+        {
+            await history.UndoAsync(cancellationToken).ConfigureAwait(true);
+        }
+        else
+        {
+            await history.RedoAsync(cancellationToken).ConfigureAwait(true);
+        }
+
+        return label;
     }
 
     private void Invalidate()

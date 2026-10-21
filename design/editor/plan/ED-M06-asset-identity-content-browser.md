@@ -46,7 +46,7 @@ cook execution remains `ED-M07`; runtime parity remains `ED-M08`.
 
 Only these LLDs gate ED-M06 implementation:
 
-- [content-browser-asset-identity.md](../lld/content-browser-asset-identity.md)
+- [content-explorer-asset-identity.md](../lld/content-explorer-asset-identity.md)
 - [asset-primitives.md](../lld/asset-primitives.md)
 - [project-services.md](../lld/project-services.md)
 - [diagnostics-operation-results.md](../lld/diagnostics-operation-results.md)

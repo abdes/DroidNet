@@ -48,7 +48,7 @@ Only these LLDs gate ED-M06A implementation:
 - [project-services.md](../lld/project-services.md)
 - [project-workspace-shell.md](../lld/project-workspace-shell.md), for
   create/open activation behavior only
-- [content-browser-asset-identity.md](../lld/content-browser-asset-identity.md)
+- [content-explorer-asset-identity.md](../lld/content-explorer-asset-identity.md)
 - [material-editor.md](../lld/material-editor.md), for material create/open
   target behavior only
 - [scene-authoring-model.md](../lld/scene-authoring-model.md), for scene file

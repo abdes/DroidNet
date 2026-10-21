@@ -5,10 +5,10 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Panes.Assets;
+using Oxygen.Editor.ContentExplorer.Panes.Assets;
 using Oxygen.Editor.Projects;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentExplorer;
 
 /// <summary>How the browser session presents results: order, tile size and the details pane. Never authored data.</summary>
 public sealed partial class AssetBrowserPresentation : ObservableObject

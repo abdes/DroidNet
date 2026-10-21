@@ -38,7 +38,7 @@ public sealed record InspectionAssetRow(CookedRootReport Root, CookedAssetEntry 
     /// <summary>Gets the asset type and physical mount.</summary>
     public string Subtitle => this.Kind + " · " + this.Root.Name;
 
-    /// <summary>Gets the asset type, as the Content Browser names it and draws its icon.</summary>
+    /// <summary>Gets the asset type, as the Content Explorer names it and draws its icon.</summary>
     public AssetKind Kind => AssetKinds.FromFileName(this.Asset.VirtualPath);
 
     /// <summary>Gets the full cooked asset reference.</summary>

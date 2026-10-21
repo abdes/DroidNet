@@ -2,7 +2,7 @@
 
 Status: **design; owner decisions SC-1 to SC-4 taken on 2026-10-11**. Extends
 [scene instantiation](scene-instantiation-and-player.md) and the editor's
-[content identity](../../../../design/editor/lld/content-browser-asset-identity.md).
+[content identity](../../../../design/editor/lld/content-explorer-asset-identity.md).
 
 Summary: a glTF or FBX import keeps its scene, the hierarchy of nodes with
 their transforms, meshes, materials, cameras and lights, as a read-only
@@ -15,11 +15,11 @@ patched into import results.
 
 ## 1. Problem
 
-| Fact today                                                                                                                                                                                                        | Consequence                                                                                                                 |
-| ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| A model import emits its materials, geometry and scene under the model (`Ship.glb/Ship.oscene`) ([content identity](../../../../design/editor/lld/content-browser-asset-identity.md)); nothing can use the scene. | The editor builds scenes from geometry one mesh at a time; the model's hierarchy, transforms, cameras and lights are lost.  |
-| Examples run import results directly and patch them with script sidecars (`rotating-gltf`).                                                                                                                       | An import result becomes a runnable scene through a side door; Oxygen data such as start state has no proper home on it.    |
-| Removing input context `auto_activate` ([start state](scene-instantiation-and-player.md#scene-start-state)) needs a scene to name its starting contexts.                                                          | A scene that is an import result cannot say which contexts start without adding Oxygen fields to the import or the sidecar. |
+| Fact today                                                                                                                                                                                                         | Consequence                                                                                                                 |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------- |
+| A model import emits its materials, geometry and scene under the model (`Ship.glb/Ship.oscene`) ([content identity](../../../../design/editor/lld/content-explorer-asset-identity.md)); nothing can use the scene. | The editor builds scenes from geometry one mesh at a time; the model's hierarchy, transforms, cameras and lights are lost.  |
+| Examples run import results directly and patch them with script sidecars (`rotating-gltf`).                                                                                                                        | An import result becomes a runnable scene through a side door; Oxygen data such as start state has no proper home on it.    |
+| Removing input context `auto_activate` ([start state](scene-instantiation-and-player.md#scene-start-state)) needs a scene to name its starting contexts.                                                           | A scene that is an import result cannot say which contexts start without adding Oxygen fields to the import or the sidecar. |
 
 The editor's own rules already settle ownership: scenes are authored content,
 and source media "remains source media until an import or descriptor workflow

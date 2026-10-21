@@ -206,7 +206,7 @@ Required fields:
 - last workspace route/layout, if any.
 - last opened documents, if any.
 - window placement key.
-- content browser state, if any.
+- content explorer state, if any.
 
 ### Workspace Restoration Result
 
@@ -317,7 +317,7 @@ Owned by workspace shell and document services.
 
 Responsibilities:
 
-- restore dock layout, content browser state, document tabs, and last selected
+- restore dock layout, content explorer state, document tabs, and last selected
   document where possible.
 - report partial restore failures as diagnostics.
 - never silently discard stored restore data when it fails to apply.
@@ -360,7 +360,7 @@ Examples:
 
 - last opened scene no longer exists.
 - saved dock layout references a removed pane.
-- content browser folder selection points to a missing folder.
+- content explorer folder selection points to a missing folder.
 
 ## 10. Persistence And Round Trip
 
@@ -368,7 +368,7 @@ Persistent shell state:
 
 - recent projects.
 - last opened scene/document per project.
-- content browser state per project.
+- content explorer state per project.
 - workspace route/layout state per project.
 - Project Browser settings such as last save location and open-view columns.
 - window placement through `WindowPlacementService` using a stable shell

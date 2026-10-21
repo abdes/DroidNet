@@ -4,7 +4,7 @@
 
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Importing;
+namespace Oxygen.Editor.ContentExplorer.Importing;
 
 /// <summary>Reads the destination folder people type in an import review.</summary>
 internal static class ImportDestination

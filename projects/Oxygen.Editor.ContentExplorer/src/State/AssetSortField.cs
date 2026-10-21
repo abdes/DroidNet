@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentExplorer;
 
-/// <summary>The fields that order Content Browser results.</summary>
+/// <summary>The fields that order Content Explorer results.</summary>
 public enum AssetSortField
 {
     /// <summary>The asset name.</summary>

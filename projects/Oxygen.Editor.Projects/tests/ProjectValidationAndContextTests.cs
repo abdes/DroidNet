@@ -184,7 +184,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var target = resolver.ResolveCreateTarget(
             context,
             AuthoringAssetKind.Material,
-            new ContentBrowserSelection("Content/Scenes"));
+            new ContentFolderSelection("Content/Scenes"));
 
         _ = target.ProjectRelativeFolder.Should().Be("Content/Materials");
         _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials"));
@@ -200,7 +200,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var target = resolver.ResolveCreateTarget(
             context,
             AuthoringAssetKind.Material,
-            new ContentBrowserSelection("Content/Materials/Subfolder"));
+            new ContentFolderSelection("Content/Materials/Subfolder"));
 
         _ = target.ProjectRelativeFolder.Should().Be("Content/Materials/Subfolder");
         _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials/Subfolder"));
@@ -219,7 +219,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var target = resolver.ResolveCreateTarget(
             context,
             AuthoringAssetKind.Material,
-            new ContentBrowserSelection("Authoring/Materials/Subfolder"));
+            new ContentFolderSelection("Authoring/Materials/Subfolder"));
 
         _ = target.ProjectRelativeFolder.Should().Be("Authoring/Materials/Subfolder");
         _ = target.Folder.Should().Be(AssetPath.Parse("/Content/Materials/Subfolder"));
@@ -238,7 +238,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var target = resolver.ResolveCreateTarget(
             context,
             AuthoringAssetKind.Material,
-            new ContentBrowserSelection("StudioLibrary/Materials/Shared", "StudioLibrary"));
+            new ContentFolderSelection("StudioLibrary/Materials/Shared", "StudioLibrary"));
 
         _ = target.IsExplicitLocalMount.Should().BeTrue();
         _ = target.ProjectRelativeFolder.Should().Be("Materials/Shared");
@@ -258,7 +258,7 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
         var target = resolver.ResolveCreateTarget(
             context,
             AuthoringAssetKind.Material,
-            new ContentBrowserSelection("StudioLibrary/Scenes", "StudioLibrary"));
+            new ContentFolderSelection("StudioLibrary/Scenes", "StudioLibrary"));
 
         _ = target.IsExplicitLocalMount.Should().BeTrue();
         _ = target.ProjectRelativeFolder.Should().Be("Materials");

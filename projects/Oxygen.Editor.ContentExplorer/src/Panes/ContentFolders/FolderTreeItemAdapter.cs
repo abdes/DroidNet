@@ -1,0 +1,140 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using System.ComponentModel;
+using DroidNet.Controls;
+using DroidNet.Storage;
+using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
+
+namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
+
+/// <summary>
+///     Represents a folder item in the content explorer's tree structure.
+/// </summary>
+public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
+{
+    private readonly ILogger logger;
+    private bool disposed;
+
+    private string label;
+
+    /// <summary>
+    ///     Initializes a new instance of the <see cref="FolderTreeItemAdapter" /> class.
+    /// </summary>
+    /// <param name="logger">The logger to use for logging errors.</param>
+    /// <param name="folder">The folder represented by this adapter.</param>
+    /// <param name="label">The label for the folder.</param>
+    /// <param name="isRoot">Indicates if this folder is the root folder.</param>
+    /// <param name="isHidden">Indicates if this folder is hidden.</param>
+    public FolderTreeItemAdapter(
+        ILogger logger,
+        IFolder folder,
+        string label,
+        bool isRoot = false,
+        bool isHidden = false)
+        : base(isRoot, isHidden)
+    {
+        this.logger = logger;
+        this.Folder = folder;
+        this.label = label;
+
+        this.ChildrenCollectionChanged += (_, _) => this.OnPropertyChanged(nameof(this.IconGlyph));
+    }
+
+    /// <inheritdoc />
+    public override string Label
+    {
+        get => this.IsRoot ? $"{this.label} (Project Root)" : this.label;
+        set
+        {
+            if (string.Equals(value, this.label, StringComparison.Ordinal))
+            {
+                return;
+            }
+
+            this.label = value;
+            this.OnPropertyChanged();
+        }
+    }
+
+    /// <summary>
+    ///     Gets the icon glyph for the folder.
+    /// </summary>
+    public string IconGlyph => this.IsExpanded && this.ChildrenCount > 0 ? "\uE838" : "\uE8B7";
+
+    /// <summary>
+    ///     Gets the folder represented by this adapter.
+    /// </summary>
+    public IFolder Folder { get; }
+
+    /// <summary>
+    ///     Disposes the resources used by the <see cref="FolderTreeItemAdapter" />.
+    /// </summary>
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <inheritdoc />
+    public override bool ValidateItemName(string name) => VirtualPath.ValidateSegment(name, VirtualPathRuleSet.Authored) is null;
+
+    /// <inheritdoc />
+    // We return 1 to indicate that the item may have children and can be expanded.
+    // Once expanded, the real count of the children will be updated.
+    protected override int DoGetChildrenCount() => 1;
+
+    /// <inheritdoc />
+    protected override async Task LoadChildren()
+    {
+        await foreach (var child in this.Folder.GetFoldersAsync().ConfigureAwait(true))
+        {
+            FolderTreeItemAdapter? item = null;
+            try
+            {
+                item = new FolderTreeItemAdapter(this.logger, child, child.Name);
+                this.AddChildInternal(item);
+                item = null;
+            }
+#pragma warning disable CA1031 // exceptions will not stop the loading of the rest of the folders
+            catch (Exception ex)
+            {
+                // Log the failure, but continue with the rest
+                this.CouldNotLoadProjectFolders(this.Folder.Location, ex);
+            }
+#pragma warning restore CA1031
+            finally
+            {
+                item?.Dispose();
+            }
+        }
+    }
+
+    /// <inheritdoc />
+    protected override void OnPropertyChanged(PropertyChangedEventArgs e)
+    {
+        base.OnPropertyChanged(e);
+        if (e.PropertyName?.Equals(nameof(this.IsExpanded), StringComparison.Ordinal) == true)
+        {
+            this.OnPropertyChanged(nameof(this.IconGlyph));
+        }
+
+        // FolderTreeItemAdapter is now a pure tree item - it doesn't update any external state
+        // The ContentFoldersViewModel will listen to tree selection changes and update ContentExplorerState
+    }
+
+    /// <summary>
+    ///     Disposes the resources used by the <see cref="FolderTreeItemAdapter" />.
+    /// </summary>
+    /// <param name="disposing">A value indicating whether the method is called from Dispose.</param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (!this.disposed && disposing)
+        {
+            // No more event subscriptions to clean up
+            this.disposed = true;
+        }
+    }
+}

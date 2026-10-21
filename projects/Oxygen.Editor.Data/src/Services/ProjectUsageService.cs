@@ -36,8 +36,8 @@ namespace Oxygen.Editor.Data.Services;
 ///     Console.WriteLine($"Project: {project.Name}, Last Used: {project.LastUsedOn}");
 /// }
 ///
-/// // Update the content browser state
-/// await service.UpdateContentBrowserStateAsync("Project1", "Location1", "NewState");
+/// // Update the content explorer state
+/// await service.UpdateContentExplorerStateAsync("Project1", "Location1", "NewState");
 ///
 /// // Rename or move a project
 /// await service.UpdateProjectNameAndLocationAsync("Project1", "Location1", "NewProject1", "NewLocation1");
@@ -157,7 +157,7 @@ public class ProjectUsageService : IProjectUsageService
                     TimesOpened = (cached?.TimesOpened ?? 0) + 1,
                     LastUsedOn = DateTime.Now,
                     LastOpenedScene = cached?.LastOpenedScene ?? string.Empty,
-                    ContentBrowserState = cached?.ContentBrowserState ?? string.Empty,
+                    ContentExplorerState = cached?.ContentExplorerState ?? string.Empty,
                 };
                 _ = context.ProjectUsageRecords.Add(tracked);
             }
@@ -172,7 +172,7 @@ public class ProjectUsageService : IProjectUsageService
     }
 
     /// <inheritdoc />
-    public async Task UpdateContentBrowserStateAsync(string name, string location, string contentBrowserState)
+    public async Task UpdateContentExplorerStateAsync(string name, string location, string contentExplorerState)
     {
         var context = this.contextFactory();
         try
@@ -182,11 +182,11 @@ public class ProjectUsageService : IProjectUsageService
 
             if (tracked == null)
             {
-                Debug.Fail("Project usage record must exist before updating content browser state (did you call UpdateProjectUsageAsync() before).");
+                Debug.Fail("Project usage record must exist before updating content explorer state (did you call UpdateProjectUsageAsync() before).");
                 return;
             }
 
-            tracked.ContentBrowserState = contentBrowserState;
+            tracked.ContentExplorerState = contentExplorerState;
             _ = await context.SaveChangesAsync().ConfigureAwait(false);
             _ = this.cache.Set(CreateCacheKey(name, location), Clone(tracked));
         }
@@ -309,6 +309,6 @@ public class ProjectUsageService : IProjectUsageService
             TimesOpened = source.TimesOpened,
             LastUsedOn = source.LastUsedOn,
             LastOpenedScene = source.LastOpenedScene,
-            ContentBrowserState = source.ContentBrowserState,
+            ContentExplorerState = source.ContentExplorerState,
         };
 }

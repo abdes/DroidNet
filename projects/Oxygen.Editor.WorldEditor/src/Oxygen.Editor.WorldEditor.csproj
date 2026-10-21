@@ -44,7 +44,6 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Routing\src\Oxygen.Editor.Routing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Schemas\src\Oxygen.Editor.Schemas.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Assets\src\Oxygen.Editor.Assets.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentExplorer\src\Oxygen.Editor.ContentExplorer.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\src\Oxygen.Editor.ContentPipeline.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Textures\src\Oxygen.Editor.Textures.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Input\src\Oxygen.Editor.Input.csproj" />
@@ -53,6 +52,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Pickers\src\Oxygen.Editor.Pickers.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.LivePreview\src\Oxygen.Editor.LivePreview.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Materials\src\Oxygen.Editor.Materials.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Runtime\src\Oxygen.Editor.Runtime.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Scenes\src\Oxygen.Editor.Scenes.csproj" />

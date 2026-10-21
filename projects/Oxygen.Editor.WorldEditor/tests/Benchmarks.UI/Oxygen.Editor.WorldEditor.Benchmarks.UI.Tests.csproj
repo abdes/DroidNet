@@ -12,6 +12,7 @@
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.SceneEditor/src/Oxygen.Editor.SceneEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.MaterialEditor/src/Oxygen.Editor.MaterialEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Cooking/src/Oxygen.Editor.Cooking.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentExplorer/src/Oxygen.Editor.ContentExplorer.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Input/testing/Oxygen.Editor.Input.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Shell/testing/Oxygen.Editor.Shell.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
@@ -29,8 +30,8 @@
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/NativeSceneFixture.cs" Link="Support/NativeSceneFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/SharedNativeEngine.cs" Link="Support/SharedNativeEngine.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.WorldEditor/testsupport/Native/SharedNativeEngineLifetime.cs" Link="Support/SharedNativeEngineLifetime.cs" />
-        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/BrowserControls.cs" Link="Support/BrowserControls.cs" />
-        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/BrowserQuerySupport.cs" Link="Support/BrowserQuerySupport.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerControls.cs" Link="Support/ExplorerControls.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerQuerySupport.cs" Link="Support/ExplorerQuerySupport.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
         <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/test/Assets/Models/static_scalar_triangle.gltf" Link="Fixtures/static_scalar_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
         <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/test/Assets/Models/static_textured_triangle.gltf" Link="Fixtures/static_textured_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />

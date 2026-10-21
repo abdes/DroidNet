@@ -1,0 +1,150 @@
+﻿<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.ContentExplorer.Panes.ContentFolders.ContentFoldersView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:dnc="using:DroidNet.Controls"
+    xmlns:local="using:Oxygen.Editor.ContentExplorer.Panes.ContentFolders"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    DataContext="{x:Bind ViewModel}"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <!--  Folders are a muted gold; mounted sources use the accent colour and a link badge.  -->
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FFC7B881" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FF8C7633" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="#FFC7B881" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="HighContrast">
+                    <SolidColorBrush x:Key="FolderAssetBrush" Color="{ThemeResource SystemColorWindowTextColor}" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+
+            <DataTemplate x:Key="FolderThumbnailTemplate">
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{Binding IconGlyph, Mode=OneWay}" />
+            </DataTemplate>
+
+            <DataTemplate x:Key="ProjectRootThumbnailTemplate">
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="&#xE838;" />
+            </DataTemplate>
+
+            <DataTemplate x:Key="AuthoringMountThumbnailTemplate">
+                <FontIcon Foreground="{ThemeResource FolderAssetBrush}" Glyph="{Binding IconGlyph, Mode=OneWay}" />
+            </DataTemplate>
+
+            <DataTemplate x:Key="VirtualFolderMountThumbnailTemplate">
+                <Grid>
+                    <FontIcon Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}" Glyph="{Binding IconGlyph, Mode=OneWay}" />
+                    <Border
+                        Margin="0,0,-4,-3"
+                        Padding="1"
+                        HorizontalAlignment="Right"
+                        VerticalAlignment="Bottom"
+                        Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                        CornerRadius="2">
+                        <FontIcon
+                            FontSize="8"
+                            Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                            Glyph="&#xE71B;" />
+                    </Border>
+                </Grid>
+            </DataTemplate>
+
+            <local:ThumbnailTemplateSelector
+                x:Key="ThumbnailTemplateSelector"
+                AuthoringMountTemplate="{StaticResource AuthoringMountThumbnailTemplate}"
+                DefaultTemplate="{StaticResource FolderThumbnailTemplate}"
+                FolderTemplate="{StaticResource FolderThumbnailTemplate}"
+                ProjectRootTemplate="{StaticResource ProjectRootThumbnailTemplate}"
+                VirtualFolderMountTemplate="{StaticResource VirtualFolderMountThumbnailTemplate}" />
+
+            <!--  Mounted sources are read-only; the lock says so on the mount row.  -->
+            <DataTemplate x:Key="ReadOnlyBadgeTemplate">
+                <FontIcon
+                    AutomationProperties.Name="Read-only"
+                    FontSize="10"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Glyph="&#xE72E;"
+                    ToolTipService.ToolTip="Read-only: mounted and derived content cannot be edited here." />
+            </DataTemplate>
+            <local:ReadOnlyBadgeTemplateSelector x:Key="ReadOnlyBadgeTemplateSelector" ReadOnlyTemplate="{StaticResource ReadOnlyBadgeTemplate}" />
+            <!--  ~+~  -->
+
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Border Margin="4,0,0,4" Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}">
+        <Grid>
+            <Grid.RowDefinitions>
+                <RowDefinition Height="*" />
+                <RowDefinition Height="Auto" />
+            </Grid.RowDefinitions>
+
+            <dnc:DynamicTree
+                x:Name="ProjectTree"
+                Grid.Row="0"
+                AreClipboardShortcutsEnabled="False"
+                IsEnabled="{x:Bind ViewModel.CanChangeMounts, Mode=OneWay}"
+                ThumbnailTemplateSelector="{StaticResource ThumbnailTemplateSelector}"
+                TrailingContentTemplateSelector="{StaticResource ReadOnlyBadgeTemplateSelector}"
+                TrailingContentWidth="40"
+                ViewModel="{x:Bind ViewModel}" />
+
+            <!--  Mount management opens the Content mounts dialog; priority orders cooked sources.  -->
+            <Grid
+                Grid.Row="1"
+                Padding="6,4"
+                BorderBrush="{ThemeResource DividerStrokeColorDefaultBrush}"
+                BorderThickness="0,1,0,0"
+                ColumnSpacing="3">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Button
+                    Padding="8,4"
+                    HorizontalAlignment="Stretch"
+                    HorizontalContentAlignment="Left"
+                    AutomationProperties.Name="Mounts"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Command="{x:Bind ViewModel.ManageMountsCommand}"
+                    Foreground="{ThemeResource AccentTextFillColorPrimaryBrush}"
+                    ToolTipService.ToolTip="Add, rename or unmount content sources">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <FontIcon FontSize="15" Glyph="&#xE8F4;" />
+                        <TextBlock Text="Mounts" />
+                    </StackPanel>
+                </Button>
+                <ProgressRing
+                    Grid.Column="1"
+                    Width="16"
+                    Height="16"
+                    IsActive="{x:Bind ViewModel.IsApplyingMounts, Mode=OneWay}"
+                    ToolTipService.ToolTip="Updating content mounts"
+                    Visibility="{x:Bind ViewModel.MountProgressVisibility, Mode=OneWay}" />
+                <Button
+                    Grid.Column="2"
+                    Width="30"
+                    Height="30"
+                    Padding="0"
+                    AutomationProperties.Name="Content priority"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Command="{x:Bind ViewModel.ContentPriorityCommand}"
+                    ToolTipService.ToolTip="Content priority">
+                    <FontIcon FontSize="15" Glyph="&#xE9E9;" />
+                </Button>
+            </Grid>
+        </Grid>
+    </Border>
+</UserControl>

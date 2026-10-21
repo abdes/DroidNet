@@ -40,6 +40,14 @@ public sealed partial class AssetRelocationService
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "{Action} of '{Label}' requested.")]
+    private static partial void LogReplayRequested(ILogger logger, string action, string label);
+
+    private void LogReplayRequested(string action, string label) => LogReplayRequested(this.logger, action, label);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Relocation changes nothing; no file is touched.")]
     private static partial void LogNothingToRelocate(ILogger logger);

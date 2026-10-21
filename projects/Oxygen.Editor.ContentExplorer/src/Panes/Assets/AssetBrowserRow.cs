@@ -8,7 +8,7 @@ using Oxygen.Editor.Assets.Materials;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets;
 
 /// <summary>Keeps one asset's visual container stable while its immutable status snapshot changes.</summary>
 /// <param name="item">The initial asset snapshot.</param>

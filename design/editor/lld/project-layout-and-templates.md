@@ -18,7 +18,7 @@ This LLD owns:
   video, scripts, prefabs, animations, and source media.
 - `Project.oxy` layout fields related to mounts and template output.
 - predefined template descriptor shape and required template payloads.
-- Content Browser root positioning rules.
+- Content Explorer root positioning rules.
 - derived/output root positioning rules.
 
 This LLD does not own:
@@ -26,7 +26,7 @@ This LLD does not own:
 - project-service API signatures; see `project-services.md`.
 - scene serialization DTO internals; see `scene-authoring-model.md`.
 - asset catalog query primitives; see `asset-primitives.md`.
-- browser row state reduction; see `content-browser-asset-identity.md`.
+- browser row state reduction; see `content-explorer-asset-identity.md`.
 - import/cook execution; see `content-pipeline.md`.
 - material editor UI; see `material-editor.md`.
 
@@ -42,7 +42,7 @@ This LLD does not own:
 | `REQ-019`   | Cooked output is discoverable for refresh/mount without becoming an authoring root.                       |
 | `REQ-021`   | Asset references preserve authored identity through mount tokens.                                         |
 | `REQ-024`   | Layout and mount failures can identify authoring-root, template, cooked-output, or browser-mapping cause. |
-| `REQ-036`   | Content Browser navigation and creation targets are predictable.                                          |
+| `REQ-036`   | Content Explorer navigation and creation targets are predictable.                                         |
 
 ## 3. Architecture Links
 
@@ -56,14 +56,14 @@ This LLD does not own:
   as authoring data; asset references preserve authoring intent.
 - `project-services.md`: project manifest services, active project context,
   authoring roots, local folder mounts, and cook-scope facts.
-- `content-browser-asset-identity.md`: browser projection of source, descriptor,
+- `content-explorer-asset-identity.md`: browser projection of source, descriptor,
   cooked, missing, and broken states.
 - `content-pipeline.md`: import/cook output paths and cooked index policy.
 
 ## 4. Project Layout Contract
 
 The layout below is the V0.1 project contract. New predefined templates, new
-project creation, new authored asset creation, and Content Browser defaults must
+project creation, new authored asset creation, and Content Explorer defaults must
 follow it.
 
 A folder under the project root is not authored content unless it is:
@@ -160,7 +160,7 @@ Rules:
   `.cooked/head.json`.
 - top-level `Scenes/` is not part of the V0.1 project layout.
 - scene create, scene open, scene save, starter-scene template payloads, and
-  Content Browser scene rows use `Content/Scenes/*.oscene.json`.
+  Content Explorer scene rows use `Content/Scenes/*.oscene.json`.
 - scene document JSON schema ownership remains in `scene-authoring-model.md`.
 
 ### Authoring Identity
@@ -305,7 +305,7 @@ Rules:
 - paths are absolute and name `.pak` files; runtimes and the Player tell a pak
   from a loose root by that extension.
 - a mount name is a label unique among all the project's mounts; a pak's assets
-  keep the virtual paths the pak records, and the Content Browser shows them
+  keep the virtual paths the pak records, and the Content Explorer shows them
   under the mount name.
 - paks are never creation targets; cooks reference their assets without copying
   them.
@@ -374,7 +374,7 @@ Rules:
 
 ### Browser Positioning
 
-Content Browser presents project layout as identity-aware content, not as an
+Content Explorer presents project layout as identity-aware content, not as an
 undifferentiated file explorer.
 
 Top-level browser groups:
@@ -416,7 +416,7 @@ roots or target folders outside the project layout policy.
 | ------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `Oxygen.Editor.Projects`        | `Project.oxy`, mount validation, project creation layout validation, project cook-scope facts. |
 | `Oxygen.Editor.ProjectBrowser`  | predefined template presentation and create-from-template workflow.                            |
-| `Oxygen.Editor.ContentBrowser`  | user-facing projection of authoring, local, config, packages, and derived roots.               |
+| `Oxygen.Editor.ContentExplorer` | user-facing projection of authoring, local, config, packages, and derived roots.               |
 | `Oxygen.Editor.WorldEditor`     | scene document create/open/save under `Content/Scenes`.                                        |
 | `Oxygen.Editor.MaterialEditor`  | material descriptor create/open/save under `Content/Materials` or selected material target.    |
 | `Oxygen.Editor.ContentPipeline` | import/cook outputs under derived roots and cooked indexes.                                    |
@@ -555,7 +555,7 @@ public interface IAuthoringTargetResolver
     AuthoringTarget ResolveCreateTarget(
         ProjectContext project,
         AssetKind assetKind,
-        ContentBrowserSelection? selection);
+        ContentFolderSelection? selection);
 }
 
 public sealed record AuthoringTarget(
@@ -571,8 +571,8 @@ Rules:
 - `ProjectContext` supplies the active project root, authoring mounts, and local
   folder mounts.
 - `AssetKind` maps to the kind folders in the default creation target table.
-- `ContentBrowserSelection` is optional and contains the selected root/folder
-  identity from Content Browser, never a raw cooked path.
+- `ContentFolderSelection` is optional and contains the selected root/folder
+  identity from Content Explorer, never a raw cooked path.
 - `ResolveCreateTarget` applies the matrix in
   [Default Creation Targets](#default-creation-targets).
 - `FallbackReason` is set when the resolver ignores a selected folder because it
@@ -582,7 +582,7 @@ Required consumers:
 
 - WorldEditor scene create.
 - MaterialEditor material create.
-- Content Browser create-from-context actions.
+- Content Explorer create-from-context actions.
 - Future geometry/script/prefab/animation creation/import surfaces.
 
 ## 9. UI Surfaces
@@ -594,7 +594,7 @@ Project Browser:
 - create-project errors name the template field, folder path, or mount token
   that failed.
 
-Content Browser:
+Content Explorer:
 
 - authoring, local, config, packages, and derived roots use the labels defined
   in Browser Positioning.
@@ -650,7 +650,7 @@ Layout-related failures use existing project/content domains:
 ## 13. Dependency Rules
 
 - `Oxygen.Editor.Projects` owns project layout policy.
-- `Oxygen.Editor.ContentBrowser` consumes project layout policy; it must not
+- `Oxygen.Editor.ContentExplorer` consumes project layout policy; it must not
   invent authoring roots from arbitrary project-root folders.
 - `Oxygen.Editor.ContentPipeline` consumes mount/cook-scope policy; it must not
   define project templates.
@@ -693,7 +693,7 @@ Project layout/template work is complete when these checks pass:
 12. Create actions under a local mount use that mount only when the local mount
     is explicitly selected as the creation target; otherwise they resolve to the
     default `Content` asset-kind folder.
-13. Content Browser shows authoring, local, config, packages, cooked, imported,
+13. Content Explorer shows authoring, local, config, packages, cooked, imported,
     and build roots with the required labels.
 14. `Content/SourceMedia` rows reduce to source/importable state, not cooked
     state.

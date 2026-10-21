@@ -15,7 +15,7 @@ public sealed class AuthoringTargetResolver : IAuthoringTargetResolver
     public AuthoringTarget ResolveCreateTarget(
         ProjectContext project,
         AuthoringAssetKind assetKind,
-        ContentBrowserSelection? selection)
+        ContentFolderSelection? selection)
     {
         ArgumentNullException.ThrowIfNull(project);
 

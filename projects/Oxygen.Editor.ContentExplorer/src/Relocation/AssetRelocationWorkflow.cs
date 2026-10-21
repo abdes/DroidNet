@@ -17,9 +17,9 @@ using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Relocation;
+namespace Oxygen.Editor.ContentExplorer.Relocation;
 
-/// <summary>Runs Content Browser renames, moves, copies and deletes, and reports their outcomes.</summary>
+/// <summary>Runs Content Explorer renames, moves, copies and deletes, and reports their outcomes.</summary>
 /// <remarks>
 /// Renames and moves, of scenes as of any asset, are recorded in the session's global history, so they undo and redo in
 /// order with everything else recorded there; copies and deletes are not recorded and leave the history as it is. The
@@ -135,9 +135,9 @@ public sealed partial class AssetRelocationWorkflow(
             return await this.CopyAsync(sources, targetFolder, "Paste").ConfigureAwait(true);
         }
 
-        var moves = sources.Where(path => path.Parent != targetFolder)
-            .Select(path => new AssetRelocationMove(path, targetFolder.Combine(path.Name))).ToArray();
-        return moves.Length == 0 ? null : await this.RelocateAsync(new AssetRelocationRequest { Moves = moves }, "Move").ConfigureAwait(true);
+        return relocation.CreatePasteRequest(sources, targetFolder) is { } request
+            ? await this.RelocateAsync(request, "Move").ConfigureAwait(true)
+            : null;
     }
 
     /// <inheritdoc/>
@@ -276,32 +276,24 @@ public sealed partial class AssetRelocationWorkflow(
             .OrderBy(static document => document.Title, StringComparer.OrdinalIgnoreCase)];
     }
 
-    // A rejected or rolled-back undo or redo changed nothing, so its entry stays in the history. While another undo or
-    // redo runs, the history replays nothing.
+    // The relocation service replays the history; a rejected undo or redo is reported under the entry it named.
     private async Task<AssetRelocationOutcome?> ReplayAsync(bool undo)
     {
-        var label = undo ? this.UndoLabel : this.RedoLabel;
-        if (label is null || this.history.IsBusy)
-        {
-            return null;
-        }
-
         var title = undo ? "Undo" : "Redo";
-        this.LogReplayRequested(title, label);
+        var named = undo ? this.UndoLabel : this.RedoLabel;
+        string? label;
         try
         {
-            if (undo)
-            {
-                await this.history.UndoAsync(CancellationToken.None).ConfigureAwait(true);
-            }
-            else
-            {
-                await this.history.RedoAsync(CancellationToken.None).ConfigureAwait(true);
-            }
+            label = await (undo ? relocation.UndoAsync(this.history, CancellationToken.None) : relocation.RedoAsync(this.history, CancellationToken.None)).ConfigureAwait(true);
         }
         catch (AssetRelocationException error)
         {
-            return this.Publish(new(Succeeded: false, $"{title} {label}", error.Message));
+            return this.Publish(new(Succeeded: false, $"{title} {named}", error.Message));
+        }
+
+        if (label is null)
+        {
+            return null;
         }
 
         var message = undo ? "Restored the previous names, locations and references." : "Applied the names, locations and references again.";

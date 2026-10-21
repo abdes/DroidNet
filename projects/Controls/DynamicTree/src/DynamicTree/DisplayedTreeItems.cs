@@ -18,7 +18,7 @@ namespace DroidNet.Controls;
 /// This view exists because of two failures of binding the repeater to the view model's collection directly.
 /// </para>
 /// <para>
-/// A view model can outlive the trees that show it: the Content Browser, for instance, rebuilds its view over the same
+/// A view model can outlive the trees that show it: the Content Explorer, for instance, rebuilds its view over the same
 /// view model. An <c>ItemsRepeater</c> subscribes to the <see cref="INotifyCollectionChanged"/> of its source and never
 /// lets go, so every discarded tree kept listening to the rows. When the rows were reset, a discarded repeater failed
 /// the notification with <c>E_FAIL</c>, and that failure stopped the collection from notifying the live tree, which

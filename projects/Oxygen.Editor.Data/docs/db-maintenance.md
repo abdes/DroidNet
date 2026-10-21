@@ -303,7 +303,7 @@ Use descriptive, action-oriented names:
 **Good examples:**
 
 - `AddTemplateUsageTable`
-- `RenameContentBrowserStateColumn`
+- `RenameLastOpenedSceneColumn`
 - `AddIndexToProjectLocation`
 - `IncreasePathLengthLimit`
 

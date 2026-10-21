@@ -4,10 +4,9 @@
 
 using AwesomeAssertions;
 using DroidNet.Routing;
-using Oxygen.Editor.ContentBrowser.Shell;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Tests;
+namespace Oxygen.Editor.ContentExplorer.Tests;
 
 /// <summary>Preserves selected folder sets through the production router's query serialization.</summary>
 [TestClass]
@@ -19,7 +18,7 @@ public sealed class RouteStateMappingTests
     public void MultipleFoldersSurviveRouterNormalization()
     {
         AssetPath[] folders = [AssetPath.Parse("/Cooked/Content/Models/Crate/Geometry"), AssetPath.Parse("/Cooked/Content/Models/Crate/Materials")];
-        var url = "/(left:project//right:assets/tiles)" + RouteStateMapping.BuildSelectedQuery(folders);
+        var url = "/(left:folders//right:assets/tiles)" + RouteStateMapping.BuildSelectedQuery(folders);
         var serialized = DefaultUrlSerializer.Instance.Serialize(DefaultUrlSerializer.Instance.Parse(url));
         _ = RouteStateMapping.ParseSelectedFoldersFromUrl(url).Should().Equal(folders);
         _ = RouteStateMapping.ParseSelectedFoldersFromUrl(serialized).Should().Equal(folders);
@@ -32,8 +31,8 @@ public sealed class RouteStateMappingTests
         var folder = AssetPath.Parse("/Content/Materials");
 
         _ = RouteStateMapping.BuildSelectedQuery([folder]).Should().Be("?selected=%2FContent%2FMaterials");
-        _ = RouteStateMapping.ParseSelectedFoldersFromUrl("/(left:project//right:assets/tiles)?selected=%2FContent%2FMaterials").Should().Equal(folder);
-        _ = RouteStateMapping.ParseSelectedFoldersFromUrl("/(left:project//right:assets/tiles)?selected=Content%2FMaterials").Should().BeEmpty();
+        _ = RouteStateMapping.ParseSelectedFoldersFromUrl("/(left:folders//right:assets/tiles)?selected=%2FContent%2FMaterials").Should().Equal(folder);
+        _ = RouteStateMapping.ParseSelectedFoldersFromUrl("/(left:folders//right:assets/tiles)?selected=Content%2FMaterials").Should().BeEmpty();
         _ = RouteStateMapping.BuildSelectedQuery([]).Should().BeEmpty("no folder selected browses the whole project");
     }
 }

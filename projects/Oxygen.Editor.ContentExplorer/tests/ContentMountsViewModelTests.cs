@@ -5,14 +5,14 @@
 using AwesomeAssertions;
 using DroidNet.Aura.Dialogs;
 using Moq;
-using Oxygen.Editor.ContentBrowser.ProjectExplorer;
+using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.ContentBrowser.Tests;
+namespace Oxygen.Editor.ContentExplorer.Tests;
 
 /// <summary>Checks the Content mounts dialog: listing, adding, renaming, unmounting and the resulting project mounts.</summary>
 [TestClass]
@@ -118,7 +118,7 @@ public sealed class ContentMountsViewModelTests
             _ = model.HasError.Should().BeFalse(model.ErrorMessage);
 
             var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
-            ProjectLayoutViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
+            ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
 
             _ = candidate.AuthoringMounts.Select(static mount => (mount.Name, mount.RelativePath)).Should().Equal(
                 ("Content", "Content"),
@@ -172,7 +172,7 @@ public sealed class ContentMountsViewModelTests
             _ = model.Mounts.Select(static row => row.Kind).TakeLast(2).Should().Equal(ContentMountKind.PakLibrary, ContentMountKind.EngineContent);
 
             var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
-            ProjectLayoutViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
+            ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
 
             _ = candidate.PakFileMounts.Should().Equal(new PakFileMount("Props", FileSystemPath.From(pak)));
             _ = candidate.AuthoringMounts.Select(static mount => mount.Name).Concat(candidate.LocalFolderMounts.Select(static mount => mount.Name))
@@ -200,7 +200,7 @@ public sealed class ContentMountsViewModelTests
         _ = model.Validate().Should().BeTrue();
 
         var candidate = new ProjectInfo(project.Name, project.Category, project.ProjectRoot.FullPath);
-        ProjectLayoutViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
+        ContentFoldersViewModel.ApplyMountRows(project, candidate, model.Mounts, static _ => true);
 
         _ = candidate.CookedContentOrder.Should().Equal(new CookedContentSource(CookedContentSourceKind.ProjectOutput), new CookedContentSource(CookedContentSourceKind.PakFile, "Rocks"));
     }

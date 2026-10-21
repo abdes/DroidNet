@@ -37,7 +37,7 @@ editor and the foundation for later incremental versions.
 V0.1 must establish:
 
 1. The editor UI architecture for workspace, docking, scene hierarchy,
-   inspector, viewport, content browser, validation, and command surfaces.
+   inspector, viewport, content explorer, validation, and command surfaces.
 2. A complete scene-authoring workflow for the scoped component set: transform,
    geometry, camera, directional light, material assignment, and scene
    environment.

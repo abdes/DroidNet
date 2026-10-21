@@ -48,13 +48,13 @@ public interface IProjectUsageService
     public Task<ProjectUsage?> GetProjectUsageAsync(string name, string location);
 
     /// <summary>
-    /// Updates the content browser state for a specific project identified by its name and location.
+    /// Updates the content explorer state for a specific project identified by its name and location.
     /// </summary>
     /// <param name="name">The name of the project.</param>
     /// <param name="location">The location of the project.</param>
-    /// <param name="contentBrowserState">The new content browser state.</param>
+    /// <param name="contentExplorerState">The new content explorer state.</param>
     /// <returns>A <see cref="Task"/> representing the asynchronous operation.</returns>
-    public Task UpdateContentBrowserStateAsync(string name, string location, string contentBrowserState);
+    public Task UpdateContentExplorerStateAsync(string name, string location, string contentExplorerState);
 
     /// <summary>
     /// Updates the last opened scene for a specific project identified by its name and location.

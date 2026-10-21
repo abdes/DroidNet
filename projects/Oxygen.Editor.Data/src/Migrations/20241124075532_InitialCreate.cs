@@ -62,7 +62,7 @@ public partial class InitialCreate : Migration
                 TimesOpened = table.Column<int>(type: "INTEGER", nullable: false),
                 LastUsedOn = table.Column<DateTime>(type: "TEXT", nullable: false),
                 LastOpenedScene = table.Column<string>(type: "TEXT", maxLength: 255, nullable: false),
-                ContentBrowserState = table.Column<string>(type: "TEXT", maxLength: 2048, nullable: false),
+                ContentExplorerState = table.Column<string>(type: "TEXT", maxLength: 2048, nullable: false),
             },
             constraints: table => table.PrimaryKey(name: "PK_ProjectsUsage", columns: x => x.Id));
 

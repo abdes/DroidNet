@@ -4,7 +4,7 @@
 
 using DroidNet.Mvvm.Generators;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets;
 
 /// <summary>Provides the shared browser search and filter controls.</summary>
 [ViewModel(typeof(AssetBrowserQuery))]

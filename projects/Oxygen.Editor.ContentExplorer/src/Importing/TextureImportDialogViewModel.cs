@@ -10,7 +10,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Textures;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Importing;
+namespace Oxygen.Editor.ContentExplorer.Importing;
 
 /// <summary>Reviews a standalone image's name, destination and native texture settings.</summary>
 public sealed partial class TextureImportDialogViewModel : ObservableObject

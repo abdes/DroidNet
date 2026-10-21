@@ -48,9 +48,9 @@ Native tests check what reaches the engine. They edit through the scene's
 authoring, its history and its document, never through a panel's view model or
 controls. A panel's own behavior is tested by its module.
 
-Content Browser filtering, navigation, asset presentation and import-dialog tests
-live under `Oxygen.Editor.ContentBrowser/tests`. Its controls use the separate
-`Oxygen.Editor.ContentBrowser.UI.Tests` project. Material transaction/history
+Content Explorer filtering, navigation, asset presentation and import-dialog tests
+live under `Oxygen.Editor.ContentExplorer/tests`. Its controls use the separate
+`Oxygen.Editor.ContentExplorer.UI.Tests` project. Material transaction/history
 and view coverage lives under `Oxygen.Editor.MaterialEditor/tests` (its views in the
 `Oxygen.Editor.MaterialEditor.UI.Tests` project).
 

@@ -12,7 +12,7 @@ public sealed partial class AssetFeed
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Unable to refresh asset status for the Content Browser.")]
+        Message = "Unable to refresh asset status for the Content Explorer.")]
     private static partial void LogRefreshFailed(ILogger logger, Exception exception);
 
     private void LogRefreshFailed(Exception exception) => LogRefreshFailed(this.logger, exception);

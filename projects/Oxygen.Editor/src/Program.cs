@@ -24,6 +24,7 @@ using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.ContentExplorer;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.CookedInspector;
 using Oxygen.Editor.Cooking;
@@ -423,6 +424,7 @@ public static partial class Program
         container.Register<WorkspaceView>(Reuse.Transient);
 
         // The features of the workspace windows: each window registers their services in its own container.
+        container.Register<IFeatureModule, ContentExplorerModule>(Reuse.Singleton);
         container.Register<IFeatureModule, CookedInspectorModule>(Reuse.Singleton);
         container.Register<IFeatureModule, CookingModule>(Reuse.Singleton);
         container.Register<IFeatureModule, MaterialEditorModule>(Reuse.Singleton);

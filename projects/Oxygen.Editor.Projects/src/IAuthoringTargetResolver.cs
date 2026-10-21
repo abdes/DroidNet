@@ -14,10 +14,10 @@ public interface IAuthoringTargetResolver
     /// </summary>
     /// <param name="project">The active project context.</param>
     /// <param name="assetKind">The kind of asset being created.</param>
-    /// <param name="selection">The optional Content Browser selection.</param>
+    /// <param name="selection">The optional Content Explorer selection.</param>
     /// <returns>The resolved authoring target.</returns>
     public AuthoringTarget ResolveCreateTarget(
         ProjectContext project,
         AuthoringAssetKind assetKind,
-        ContentBrowserSelection? selection);
+        ContentFolderSelection? selection);
 }

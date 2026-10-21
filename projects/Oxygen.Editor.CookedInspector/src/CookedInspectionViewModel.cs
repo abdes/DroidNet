@@ -86,7 +86,7 @@ public sealed partial class CookedInspectionViewModel(IContentPipelineService pi
 
     /// <summary>Gets the current operation summary.</summary>
     [ObservableProperty]
-    public partial string StatusText { get; private set; } = "Inspect a folder or an asset in the Content Browser, or a cook run in the Cooking panel, to see its cooked output here.";
+    public partial string StatusText { get; private set; } = "Inspect a folder or an asset in the Content Explorer, or a cook run in the Cooking panel, to see its cooked output here.";
 
     /// <summary>Gets the captured report time and counts.</summary>
     [ObservableProperty]
@@ -226,7 +226,7 @@ public sealed partial class CookedInspectionViewModel(IContentPipelineService pi
             if (uri is not null && !this.closed)
             {
                 this.Message = await showAsset(uri).ConfigureAwait(true)
-                    ? string.Empty : "This source is no longer available in the Content Browser.";
+                    ? string.Empty : "This source is no longer available in the Content Explorer.";
             }
         }
         catch (Exception exception)

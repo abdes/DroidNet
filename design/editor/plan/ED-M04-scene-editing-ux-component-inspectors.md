@@ -63,7 +63,7 @@ Only these LLDs gate ED-M04 implementation:
 Supporting context, not ED-M04 implementation gates:
 
 - [material-editor.md](../lld/material-editor.md), for the ED-M04 to ED-M05 material-slot seam.
-- [content-browser-asset-identity.md](../lld/content-browser-asset-identity.md), for future material picker compatibility.
+- [content-explorer-asset-identity.md](../lld/content-explorer-asset-identity.md), for future material picker compatibility.
 - [documents-and-commands.md](../lld/documents-and-commands.md), for ED-M03 command/dirty/undo contracts.
 
 ## 5. Scope

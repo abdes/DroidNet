@@ -38,7 +38,7 @@ The module uses Entity Framework Core with SQLite for local-first, zero-configur
 ✅ **Recent Projects Management** — Track and display recently used projects with usage statistics
 ✅ **Template History** — Remember frequently used project templates
 ✅ **Flexible Settings System** — Store arbitrary module configuration as JSON with type-safe base classes
-✅ **Session Restoration** — Save and restore last opened scene and content browser state per project
+✅ **Session Restoration** — Save and restore last opened scene and content explorer state per project
 ✅ **Multi-Level Caching** — In-memory caching for high-performance reads
 ✅ **Change Notifications** — Subscribe to setting changes for reactive UI updates
 ✅ **EF Core Migrations** — Schema versioning and evolution support
@@ -259,8 +259,8 @@ await projectUsageService.UpdateLastOpenedSceneAsync(
     @"C:\Dev\MyProject",
     "Scenes/MainMenu.scene");
 
-// Update content browser state
-await projectUsageService.UpdateContentBrowserStateAsync(
+// Update content explorer state
+await projectUsageService.UpdateContentExplorerStateAsync(
     "MyProject",
     @"C:\Dev\MyProject",
     JsonSerializer.Serialize(new { path = "/Assets", filter = "textures" }));
@@ -460,7 +460,7 @@ Task<bool> HasRecentlyUsedProjectsAsync();
 Task<IList<ProjectUsage>> GetMostRecentlyUsedProjectsAsync(uint sizeLimit = 10);
 Task<ProjectUsage?> GetProjectUsageAsync(string name, string location);
 Task UpdateProjectUsageAsync(string name, string location);
-Task UpdateContentBrowserStateAsync(string name, string location, string contentBrowserState);
+Task UpdateContentExplorerStateAsync(string name, string location, string contentExplorerState);
 Task UpdateLastOpenedSceneAsync(string name, string location, string lastOpenedScene);
 Task UpdateProjectNameAndLocationAsync(string oldName, string oldLocation, string newName, string? newLocation = null);
 Task DeleteProjectUsageAsync(string name, string location);

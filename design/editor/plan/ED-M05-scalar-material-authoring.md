@@ -57,7 +57,7 @@ milestone work, not polish.
 Only these LLDs gate ED-M05 implementation:
 
 - [material-editor.md](../lld/material-editor.md)
-- [content-browser-asset-identity.md](../lld/content-browser-asset-identity.md), ED-M05 material-picker slice only
+- [content-explorer-asset-identity.md](../lld/content-explorer-asset-identity.md), ED-M05 material-picker slice only
 - [asset-primitives.md](../lld/asset-primitives.md), ED-M05 material slice only
 - [content-pipeline.md](../lld/content-pipeline.md), ED-M05 material cook/catalog slice only
 - [diagnostics-operation-results.md](../lld/diagnostics-operation-results.md), ED-M05 operation kinds/domains/prefixes

@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Converters;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets.Converters;
 
 /// <summary>Converts a status tone (Neutral, Caution, Critical or Success) to the theme's status dot brush.</summary>
 public sealed partial class StatusToneToBrushConverter : IValueConverter

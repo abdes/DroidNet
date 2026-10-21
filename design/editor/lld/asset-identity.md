@@ -10,7 +10,7 @@ Define how every asset of an Oxygen project is identified, how one asset names
 another, which source produced each asset, when two producers conflict, and
 which names and paths the engine and the editor accept. The engine cooker, the
 loose cooked index, the pak planner, the runtime resolver and the editor's
-content pipeline, relocation, Content Browser and family checks all follow this
+content pipeline, relocation, Content Explorer and family checks all follow this
 one contract; each rule below states where it lives and which tests pin it.
 
 The contract answers the questions a user's actions raise:
@@ -43,7 +43,7 @@ The contract answers the questions a user's actions raise:
 
 - [content-pipeline.md](content-pipeline.md): manifests, jobs, cook execution
   and publication, which carry and enforce the identities defined here.
-- [content-browser-asset-identity.md](content-browser-asset-identity.md):
+- [content-explorer-asset-identity.md](content-explorer-asset-identity.md):
   browsing, picking and relocation UX built on these identities.
 - [asset-primitives.md](asset-primitives.md): the `Oxygen.Managed.Assets` and
   `Oxygen.Managed.Core` primitives (`AssetPath`, `AssetFileTypes`, the loose
@@ -340,7 +340,7 @@ hold:
 | `Oxygen.Managed.Assets`         | `AssetFileTypes` (identity, containers, reference fields), the formats, the loose index reader                                                              | Knowing projects                                                           |
 | `Oxygen.Editor.World`           | `SceneReferenceFields` (the scene document's reference fields)                                                                                              | Rules of other families                                                    |
 | `Oxygen.Editor.ContentPipeline` | Cook input resolution, the provenance map, the producer check, `SourceCollisions`, relocation, import retention and its identities                          | Presenting containers ([#80](https://github.com/abdes/DroidNet/issues/80)) |
-| `Oxygen.Editor.ContentBrowser`  | Listing a container as one asset, not its products                                                                                                          | Ownership rules                                                            |
+| `Oxygen.Editor.ContentExplorer` | Listing a container as one asset, not its products                                                                                                          | Ownership rules                                                            |
 
 ## 7. Data Contracts
 
@@ -443,7 +443,7 @@ through its import (5.2).
 
 ## 9. UI Surfaces
 
-- The Content Browser lists a container as one asset, its source; a model's and
+- The Content Explorer lists a container as one asset, its source; a model's and
   an input source's products are not listed, in the project or in a pak tree.
   Pickers list products from the catalog, so a model's material can be assigned
   to a slot and a context picked as a starting context.
@@ -525,7 +525,7 @@ code that reads the old form.
 - [#79](https://github.com/abdes/DroidNet/issues/79): explicit renaming of a
   model's product.
 - [#80](https://github.com/abdes/DroidNet/issues/80): presenting a container and
-  its products in the Content Browser.
+  its products in the Content Explorer.
 - [#81](https://github.com/abdes/DroidNet/issues/81): two source files of one
   name in different folders, cooked to one identity by a hand-written manifest,
   are taken for one producer.

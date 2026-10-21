@@ -8,7 +8,7 @@ Start with [catalogs](#catalogs), [authoring](#authoring) or
 
 `IAssetCatalog` provides scoped enumeration and change notifications. Providers
 cover authoring files, loose cooked indexes and paks, including the engine's
-`engine.pak`. The Content Browser combines their records with project mount
+`engine.pak`. The Content Explorer combines their records with project mount
 order and cooking status.
 
 ```csharp

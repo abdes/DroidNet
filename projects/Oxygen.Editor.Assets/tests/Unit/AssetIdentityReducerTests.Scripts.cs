@@ -9,7 +9,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.Assets.Unit.Tests;
 
 /// <summary>
-/// Script and input sources in the Content Browser.
+/// Script and input sources in the Content Explorer.
 /// </summary>
 public sealed partial class AssetIdentityReducerTests
 {

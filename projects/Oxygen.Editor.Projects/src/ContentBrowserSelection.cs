@@ -5,8 +5,8 @@
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
-///     Content Browser folder selection passed to project-layout target resolution.
+///     Content Explorer folder selection passed to project-layout target resolution.
 /// </summary>
-/// <param name="ProjectRelativeFolder">Project-relative folder selected in the Content Browser.</param>
+/// <param name="ProjectRelativeFolder">Project-relative folder selected in the Content Explorer.</param>
 /// <param name="LocalMountName">Explicit local mount name selected as a creation target, if any.</param>
-public sealed record ContentBrowserSelection(string? ProjectRelativeFolder, string? LocalMountName = null);
+public sealed record ContentFolderSelection(string? ProjectRelativeFolder, string? LocalMountName = null);

@@ -12,13 +12,13 @@ using Microsoft.UI.Xaml.Markup;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Testing;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using static DroidNet.Tests.UiTestHosting;
-using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
-using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
+using static Oxygen.Editor.ContentExplorer.TestSupport.ExplorerControls;
+using static Oxygen.Editor.ContentExplorer.TestSupport.ExplorerTestData;
 
-namespace Oxygen.Editor.ContentBrowser.UI.Tests.Assets;
+namespace Oxygen.Editor.ContentExplorer.UI.Tests.Assets;
 
 [TestClass]
 public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
@@ -31,7 +31,7 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public Task AssetStatusUpdatesPreserveBrowserSelectionAndScroll(bool tiles) => EnqueueAsync(async () =>
+    public Task AssetStatusUpdatesPreserveExplorerSelectionAndScroll(bool tiles) => EnqueueAsync(async () =>
     {
         var items = Enumerable.Range(0, 20).Select(TestAssetEntries.CookedMaterial).ToArray();
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>(items);
@@ -39,7 +39,7 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var projects = CreateQueryProject();
-        var state = new ContentBrowserState();
+        var state = new ContentExplorerState();
         var hosting = CreateStatusHosting();
         using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, hosting) : new ListLayoutViewModel(provider.Object, projects, state, hosting);
         FrameworkElement view = tiles ? new TilesLayoutView
@@ -82,7 +82,7 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
             updates.OnNext(items.ToArray());
             await WaitForRenderAsync().ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);
-            AssertBrowserRowState(selector, row, container, focus, offset, model, items[10]);
+            AssertExplorerRowState(selector, row, container, focus, offset, model, items[10]);
         }
         finally
         {

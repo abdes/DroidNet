@@ -7,7 +7,7 @@ using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 
 /// <summary>
 /// Represents the view for displaying assets in a tiles layout in the World Editor.

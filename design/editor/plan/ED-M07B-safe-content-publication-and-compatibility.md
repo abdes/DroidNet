@@ -27,7 +27,7 @@ running-editor UI review and the
 [content-pipeline.md](../lld/content-pipeline.md) sections 16-19,
 [content-cooking-workflows.md](../lld/content-cooking-workflows.md),
 [cooking-panel.md](../lld/cooking-panel.md),
-[content-browser-asset-identity.md](../lld/content-browser-asset-identity.md),
+[content-explorer-asset-identity.md](../lld/content-explorer-asset-identity.md),
 [material-editor.md](../lld/material-editor.md),
 [property-inspector.md](../lld/property-inspector.md) section 9.1,
 [runtime-integration.md](../lld/runtime-integration.md),

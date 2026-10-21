@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Assets.Materials;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Converters;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets.Converters;
 
 /// <summary>
 /// Converts a material's base colour to an opaque swatch brush. The colour is stored linear; it is shown as the

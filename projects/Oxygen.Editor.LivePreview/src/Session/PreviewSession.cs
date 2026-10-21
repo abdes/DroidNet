@@ -48,7 +48,7 @@ public sealed partial class PreviewSession(
     IProjectManagerService projectManager,
     IOperationResultPublisher results,
     IStatusReducer status,
-    ILoggerFactory? loggerFactory = null) : ObservableObject, IAsyncDisposable
+    ILoggerFactory? loggerFactory = null) : ObservableObject, IContentMountChanges, IAsyncDisposable
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger<PreviewSession>() ?? NullLogger<PreviewSession>.Instance;
     private readonly OwnerThread owner = OwnerThread.Capture();
@@ -93,14 +93,7 @@ public sealed partial class PreviewSession(
                 _ => Task.FromResult(this.State == PreviewSessionState.Ready),
             };
 
-    /// <summary>Applies a confirmed content-mount change, while no cook publishes.</summary>
-    /// <param name="expected">The project context accepted when editing began.</param>
-    /// <param name="candidate">The candidate configuration.</param>
-    /// <param name="cancellationToken">Cancels queued or uncommitted work.</param>
-    /// <returns>
-    /// <see langword="true"/> once the change is saved, mounted and active; <see langword="false"/> when another project
-    /// became active before the saved change could be shown.
-    /// </returns>
+    /// <inheritdoc/>
     public async Task<bool> ChangeMountsAsync(ProjectContext expected, ProjectInfo candidate, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(expected);

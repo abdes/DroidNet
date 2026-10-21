@@ -4,14 +4,14 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Panes.Assets;
+using Oxygen.Editor.ContentExplorer.Panes.Assets;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
 
-namespace Oxygen.Editor.ContentBrowser.Tests;
+namespace Oxygen.Editor.ContentExplorer.Tests;
 
 /// <summary>Checks which rows a browsed cooked-library folder shows.</summary>
 [TestClass]

@@ -5,7 +5,7 @@
 namespace Oxygen.Managed.Core.Diagnostics;
 
 /// <summary>
-/// Stable diagnostic codes for asset identity and Content Browser rows.
+/// Stable diagnostic codes for asset identity and Content Explorer rows.
 /// </summary>
 public static class AssetIdentityDiagnosticCodes
 {

@@ -37,7 +37,7 @@
                 <Setter Property="BorderThickness" Value="0" />
             </Style>
 
-            <!--  A context's name: strong text that shows the context in the Content Browser.  -->
+            <!--  A context's name: strong text that shows the context in the Content Explorer.  -->
             <Style x:Key="ContextNameLink" TargetType="HyperlinkButton">
                 <Setter Property="Padding" Value="0" />
                 <Setter Property="FontWeight" Value="SemiBold" />
@@ -202,7 +202,7 @@
                                                 <MenuFlyoutItem
                                                     Command="{x:Bind RevealCommand}"
                                                     Icon="{ui:FontIcon Glyph='&#xE8B7;'}"
-                                                    Text="Show in Content Browser"
+                                                    Text="Show in Content Explorer"
                                                     Visibility="{x:Bind CanReveal, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
                                                 <MenuFlyoutItem
                                                     Command="{x:Bind ResetPriorityCommand}"
@@ -231,11 +231,11 @@
 
                                         <HyperlinkButton
                                             Grid.Column="1"
-                                            AutomationProperties.HelpText="Show in Content Browser"
+                                            AutomationProperties.HelpText="Show in Content Explorer"
                                             AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}"
                                             Command="{x:Bind RevealCommand}"
                                             Style="{StaticResource ContextNameLink}"
-                                            ToolTipService.ToolTip="Show in Content Browser"
+                                            ToolTipService.ToolTip="Show in Content Explorer"
                                             Visibility="{x:Bind CanReveal, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
                                             <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
                                         </HyperlinkButton>

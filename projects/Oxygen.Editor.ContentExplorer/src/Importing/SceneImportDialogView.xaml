@@ -1,9 +1,9 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.ContentBrowser.Importing.SceneImportDialogView"
+    x:Class="Oxygen.Editor.ContentExplorer.Importing.SceneImportDialogView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:Oxygen.Editor.ContentBrowser.Importing"
+    xmlns:local="using:Oxygen.Editor.ContentExplorer.Importing"
     x:DataType="local:SceneImportDialogViewModel">
     <StackPanel
         MinWidth="360"

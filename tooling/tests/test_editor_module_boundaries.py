@@ -112,10 +112,6 @@ ENGINE_EXCEPTIONS: dict[str, frozenset[str]] = {
 DISSOLVE_WORLD_EDITOR = "#69 S1.13 dissolves the World Editor"
 TEST_BOUNDARIES = "#69 S1.14 removes cross-module internals grants"
 PENDING_REFERENCES: dict[tuple[str, str], str] = {
-    (
-        "Oxygen.Editor.WorldEditor",
-        "Oxygen.Editor.ContentExplorer",
-    ): DISSOLVE_WORLD_EDITOR,
     ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Runtime"): DISSOLVE_WORLD_EDITOR,
     ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Interop"): DISSOLVE_WORLD_EDITOR,
 }

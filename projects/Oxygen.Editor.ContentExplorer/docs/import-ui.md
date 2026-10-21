@@ -1,6 +1,6 @@
-# Content Browser — Import Dialog (UI Sketch)
+# Content Explorer — Import Dialog (UI Sketch)
 
-This document sketches the Content Browser (CB) **Import** dialog UI, inspired by UE’s asset import experience, but adapted to the current Oxygen pipeline MVP and WinUI 3 best practices.
+This document sketches the Content Explorer (CE) **Import** dialog UI, inspired by UE’s asset import experience, but adapted to the current Oxygen pipeline MVP and WinUI 3 best practices.
 
 Primary goals:
 
@@ -53,7 +53,7 @@ This preserves the “pipeline configuration” feeling without overbuilding.
   - Example: `C:\Users\...\Box.glb`
   - Include a small `Copy` button (icon) to copy the full path to clipboard.
 - `Destination:`
-  - A folder picker / destination selector representing _the target virtual folder_ in the project (default: current folder in CB).
+  - A folder picker / destination selector representing _the target virtual folder_ in the project (default: current folder in CE).
   - A read-only derived label showing the mount point (MVP default: `Content`).
     - Example: `Mount point: Content`
 
@@ -162,7 +162,7 @@ If import completes successfully:
 
 Post-close expectations:
 
-- Content Browser refreshes whatever view it is presenting (loose files and/or cooked catalog).
+- Content Explorer refreshes whatever view it is presenting (loose files and/or cooked catalog).
 - If the import produced cooked index updates, cooked catalog providers should emit `Changes`.
 
 ---
@@ -194,7 +194,7 @@ Inputs:
 
 - `string SourcePath`
 - `string ProjectRoot`
-- `string DestinationRelativeFolder` (CB-selected folder)
+- `string DestinationRelativeFolder` (CE-selected folder)
 
 Options (MVP):
 

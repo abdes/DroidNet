@@ -2,14 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Runtime;
-using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Editor.ContentBrowser.Shell;
+using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
@@ -60,7 +58,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     private IPlacementService? placement;
     private IAssetCatalog? assetCatalog;
     private PreviewSession? previewSession;
-    private IMessenger? messenger;
     private IProject? initialSceneProject;
 
     /// <summary>
@@ -118,10 +115,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         await base.OnNavigatedToAsync(route, navigationContext).ConfigureAwait(true);
         this.OnScriptingNavigated();
 
-        // Ensure messenger is available (resolve from container as fallback)
-        this.messenger ??= this.container.Resolve<IMessenger>();
-        this.messenger?.RegisterAll(this);
-
         // The preview starts the engine and mounts the project's content; the start scene opens even when it fails, so
         // authoring still works and the workspace shows why the preview is unavailable.
         if (this.previewSession is { } session && this.projectContextService.ActiveProject is { } project)
@@ -177,13 +170,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     /// <inheritdoc />
     protected override void OnSetupChildContainer(IContainer childContainer)
     {
-        childContainer.Register<IMessenger, StrongReferenceMessenger>(Reuse.Singleton);
-
-        // Resolve messenger instance from the child container so the view model can use it.
-        this.messenger = childContainer.Resolve<IMessenger>();
-        this.messenger.Register<OpenCookedInspectionRequestMessage>(this, (_, message) => message.Reply(this.OpenInspectionAsync(message)));
-        this.messenger.Register<ChangeContentMountsRequestMessage>(this, (_, message) => message.Reply(this.ChangeContentMountsAsync(message)));
-
         // The panels and commands of the window, its documents, their kinds and editors, its document area and its
         // document service, and the placement of documents and panels.
         RegisterContributions(childContainer, this.modules);
@@ -233,30 +219,24 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         _ = childContainer.Resolve<DocumentAreaViewModel>();
         _ = childContainer.Resolve<WindowCloseCoordinator>();
 
-        childContainer.Register<ContentBrowserViewModel>(Reuse.Transient);
-        childContainer.Register<ContentBrowserView>(Reuse.Transient);
-        this.RegisterOutputPanels(childContainer);
+        this.RegisterPreviewSession(childContainer);
         this.RegisterScriptServices(childContainer);
 
-        // The cook listens to the catalog's changes from the moment the workspace opens, and the Content Browser's
+        // The cook listens to the catalog's changes from the moment the workspace opens, and the Content Explorer's
         // Cook on change toggle reaches the same instance. It reads the family facts, registered with the scripts.
         _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>();
-
-        this.RegisterContentBrowserPorts(childContainer);
 
         // The features activate last: their activation may use any feature's services.
         foreach (var module in this.modules)
         {
             module.ActivateWindowServices(childContainer);
         }
-
-        this.cookedInspections = childContainer.Resolve<ICookedInspections>();
     }
 
     /// <inheritdoc />
     protected override Task OnInitialNavigationAsync(ILocalRouterContext context)
         => context.LocalRouter.NavigateAsync(
-            "/(renderer:dx//se:se;right;w=350//props:props;bottom=se//cb:cb;bottom;h=340//log:log;with=cb//cook:cook;with=cb//problems:problems;with=cb//inspect:inspect;with=cb)");
+            "/(renderer:dx//se:se;right;w=350//props:props;bottom=se//content:content;bottom;h=340//log:log;with=content//cook:cook;with=content//problems:problems;with=content//inspect:inspect;with=content)");
 
     /// <inheritdoc />
     protected override void Dispose(bool disposing)
@@ -274,7 +254,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             this.documentArea = null;
             this.placement = null;
             this.assetCatalog = null;
-            this.messenger?.UnregisterAll(this);
         }
 
         base.Dispose(disposing);
@@ -290,13 +269,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
                 Children = new Routes(
                 [
                     new Route { Outlet = "renderer", Path = "dx", ViewModelType = typeof(DocumentAreaViewModel) },
-                    new Route
-                    {
-                        Outlet = "cb",
-                        Path = "cb",
-                        MatchMethod = PathMatch.Full,
-                        ViewModelType = typeof(ContentBrowserViewModel),
-                    },
                     .. modules.SelectMany(static module => module.Panels).Select(static panel => new Route
                     {
                         Outlet = panel.Id, Path = panel.Id, MatchMethod = PathMatch.Full, ViewModelType = panel.ViewModelType,
@@ -329,11 +301,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         childContainer.Register<Oxygen.Editor.ContentPipeline.Cooking.IUnsavedCookInputs, Oxygen.Editor.ContentPipeline.Cooking.UnsavedCookInputs>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.Shell.Documents.IHistoryService, Oxygen.Editor.Shell.Documents.HistoryService>(Reuse.Singleton);
 
-        // The project's global history: the Content Browser's child container records into this instance, and it ends
+        // The project's global history: the Content Explorer's child container records into this instance, and it ends
         // with the workspace.
         _ = childContainer.Resolve<Oxygen.Editor.Shell.Documents.IHistoryService>();
 
-        // One instance for the workspace: open documents register as participants on it, and the Content Browser's
+        // One instance for the workspace: open documents register as participants on it, and the Content Explorer's
         // child container must reach the same instance instead of creating its own on first use.
         _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>();
 
@@ -342,18 +314,18 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Authoring.IAssetAuthoring>();
     }
 
-    private void RegisterOutputPanels(IContainer childContainer)
+    // The project's preview, which also applies the content-mount changes the Content Explorer confirms.
+    private void RegisterPreviewSession(IContainer childContainer)
     {
         childContainer.Register<PreviewSession>(Reuse.Singleton);
+        childContainer.RegisterMapping<IContentMountChanges, PreviewSession>();
         this.previewSession = childContainer.Resolve<PreviewSession>();
         this.ObservePreviewSession();
-
     }
 
     private async Task OpenInitialSceneAsync()
     {
-        if (this.messenger is null
-            || this.projectManager.CurrentProject is not { } project
+        if (this.projectManager.CurrentProject is not { } project
             || this.projectContextService.ActiveProject is not { } context
             || this.assetCatalog is not { } catalog
             || !context.OpenInitialScene

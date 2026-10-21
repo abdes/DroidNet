@@ -341,8 +341,8 @@ document, and `Document` has no counters.
 
 Cooked inspection is a panel, not a document. The workspace has one
 `CookedInspector` panel, routed and docked like Cooking and Problems. An
-inspection request (`OpenCookedInspectionRequestMessage`, from the Content
-Explorer and from a cook run) sets the panel's scope (`CookedInspectionScope`:
+inspection request (the Shell's `ICookedInspections`, called by the Content
+Explorer and by a cook run) sets the panel's scope (`CookedInspectionScope`:
 project, folder or asset, the cooked source, validate) and reveals the panel; a
 request for the scope it already shows inspects it again. With no scope the
 panel says how to start an inspection. The panel keeps its sections, search,

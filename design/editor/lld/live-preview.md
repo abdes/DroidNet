@@ -71,7 +71,7 @@ Actors:
   Explorer and the Inspector;
 - `OpenDocuments`, which holds the open documents, and the Shell's document
   service, which opens and shows them;
-- the Content Browser and the asset feed, which show each asset's preview state;
+- the Content Explorer and the asset feed, which show each asset's preview state;
 - the cook and its publication, which replace the project's cooked content;
 - the embedded engine: one per process, shared by every window;
 - the player: an external process that runs the project;
@@ -97,7 +97,7 @@ Actors:
    the current scene.
 6. **Reload or close.** A scene reloaded from disk shows the reloaded content; a
    closed scene leaves the engine and releases its viewports.
-7. **See preview state of assets.** The Content Browser shows whether each asset
+7. **See preview state of assets.** The Content Explorer shows whether each asset
    is available to the engine, loading or failed.
 8. **Play.** The user presses Play. The editor saves, cooks the scene, launches
    the player (or tells a running one to play the scene), and lists the player's
@@ -285,7 +285,7 @@ public sealed class ScenePreviewEventArgs(DocumentId document) : EventArgs
 One per open project.
 
 ```csharp
-public sealed partial class PreviewSession : ObservableObject, IAsyncDisposable
+public sealed partial class PreviewSession : ObservableObject, IContentMountChanges, IAsyncDisposable
 {
     public PreviewSessionState State { get; }   // NotStarted, Starting, Ready, EngineUnavailable, ContentUnavailable
     public PreviewFailure? Failure { get; }     // Code, Title, Message
@@ -318,9 +318,10 @@ public sealed partial class PreviewSession : ObservableObject, IAsyncDisposable
   became active first.
 - Disposal disposes the publication preview registration and releases the
   project's cooked roots; the engine keeps running.
-- The workspace forwards a confirmed mount change as
-  `ChangeMountsAsync(expected, candidate)`, shows `State` and `Failure`, and
-  binds Retry.
+- The session implements ContentPipeline's `IContentMountChanges`
+  (`Oxygen.Editor.ContentPipeline.Mounting`), through which the Content
+  Explorer applies a confirmed mount change. The workspace shows `State` and
+  `Failure`, and binds Retry.
 
 ### 5.7 Play
 

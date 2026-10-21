@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 
 /// <summary>Brings an explicitly requested row into view without moving focus after a newer user action.</summary>
 internal static class AssetSelectionReveal

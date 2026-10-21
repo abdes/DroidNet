@@ -1,23 +1,24 @@
 <Project Sdk="MSTest.Sdk">
     <PropertyGroup>
         <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
-        <RootNamespace>Oxygen.Editor.ContentBrowser.UI.Tests</RootNamespace>
+        <RootNamespace>Oxygen.Editor.ContentExplorer.UI.Tests</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <DroidNetTestTier>Unit</DroidNetTestTier>
     </PropertyGroup>
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Assets/testing/Oxygen.Editor.Assets.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testing/Oxygen.Editor.ContentPipeline.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentExplorer/src/Oxygen.Editor.ContentExplorer.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions.Testing" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Fixtures/LooseCookedIndexFixture.cs" />
-        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/BrowserControls.cs" Link="Support/BrowserControls.cs" />
-        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/BrowserQuerySupport.cs" Link="Support/BrowserQuerySupport.cs" />
-        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/BrowserRevealFixture.cs" Link="Support/BrowserRevealFixture.cs" />
-        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/BrowserSelectionSupport.cs" Link="Support/BrowserSelectionSupport.cs" />
-        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/BrowserTestData.cs" Link="Support/BrowserTestData.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerControls.cs" Link="Support/ExplorerControls.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerQuerySupport.cs" Link="Support/ExplorerQuerySupport.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerRevealFixture.cs" Link="Support/ExplorerRevealFixture.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerSelectionSupport.cs" Link="Support/ExplorerSelectionSupport.cs" />
+        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerTestData.cs" Link="Support/ExplorerTestData.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/EngineContentPakFixture.cs" Link="Support/EngineContentPakFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
         <Compile Include="$(ProjectsRoot)/UITests.Shared/testsupport/ScaledXamlHost.cs" Link="Support/ScaledXamlHost.cs" />

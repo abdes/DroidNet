@@ -117,7 +117,7 @@ At V0.1, the editor exists at the intersection of:
 - document and docking systems
 - managed scene authoring domain
 - property inspectors and viewport tools
-- content browser and asset identity
+- content explorer and asset identity
 - descriptor/manifest generation and cooking
 - embedded Oxygen Engine runtime
 - Vortex-rendered editor viewports
@@ -136,7 +136,7 @@ flowchart TB
         UI[Editor UI surfaces]
         World[Authoring domains]
         Commands[Commands, dirty state, undo]
-        CB[Content Browser]
+        CB[Content Explorer]
         Pipeline[Content Pipeline]
         Runtime[Managed runtime boundary]
         Interop[C++/CLI interop boundary]
@@ -283,7 +283,7 @@ This drives:
 
 ### 3.5 Asset Identity And Content Workflow
 
-The content browser is not a file explorer skin. V0.1 requires source,
+The content explorer is not a file explorer skin. V0.1 requires source,
 generated/descriptor, and cooked states to be understandable and actionable,
 and asset picking must use identity instead of raw cooked path text.
 
@@ -354,7 +354,7 @@ The architectural layers are:
 flowchart TB
     Shell[Shell and project browser]
     Workspace[Workspace, documents, docking, routes]
-    FeatureUI[Feature editor UI<br/>hierarchy, inspectors, viewports, content browser]
+    FeatureUI[Feature editor UI<br/>hierarchy, inspectors, viewports, content explorer]
     AppServices[Application services<br/>commands, documents, asset catalog, settings, operation results]
     Domains[Authoring domains<br/>scene, material, physics, project, asset identity]
     Pipeline[Pipeline services<br/>persistence, descriptors, import, cook, mount refresh]
@@ -376,7 +376,7 @@ flowchart TB
 The concrete dependency graph in section 14 is authoritative. Application
 services orchestrate domain, pipeline, and runtime collaborators; domain models
 do not depend on pipeline or UI implementations. Lower layers must not depend
-on workspace, inspector, content-browser, or shell implementation details.
+on workspace, inspector, content-explorer, or shell implementation details.
 
 ## 6. Module Ownership
 
@@ -408,7 +408,7 @@ template payload mechanics belong in LLDs that implement this contract.
 | `Oxygen.Editor.Problems`        | passive panel                           | problem list over every asset problem source and the running scene's problems                                                                          | problem production                                                                             |
 | `Oxygen.Editor.Physics`         | planned shared physics authoring domain | physics authoring data used by physics scenes and scene-attached physics components                                                                    | WinUI, editor documents, runtime handles, native interop                                       |
 | `Oxygen.Editor.PhysicsEditor`   | planned physics scene sidecar editor    | physics scene documents/tools, physics validation presentation                                                                                         | shared physics domain ownership, reusable cook primitives, native engine calls, project policy |
-| `Oxygen.Editor.ContentBrowser`  | asset browsing and picking UX           | project asset navigation, catalog UI, source/descriptor/cooked views, asset picker UI, content diagnostics presentation                                | scene component mutation policy, project template management, engine mounting                  |
+| `Oxygen.Editor.ContentExplorer` | asset browsing and picking UX           | project asset navigation, catalog UI, source/descriptor/cooked views, asset picker UI, content diagnostics presentation                                | scene component mutation policy, project template management, engine mounting                  |
 | `Oxygen.Editor.ContentPipeline` | editor asset tooling orchestration      | import, cook, pak, inspect, asset jobs, descriptor/manifest workflow, pipeline diagnostics, native cooker/content tool adapters                        | panels, feature-specific authoring policy, low-level cooked binary structures                  |
 | `Oxygen.Editor.Projects`        | project metadata and project services   | project metadata, project settings, content root policy, project-level cook scope/policy                                                               | WinUI panels, scene inspector UI, native interop, cook execution internals                     |
 | `Oxygen.Editor.Runtime`         | managed engine runtime boundary         | engine lifecycle, effective runtime settings, surface leases, view service, cooked-root mount service, runtime diagnostics                             | authoring defaults, project policy, UI workflow, scene serialization                           |
@@ -430,7 +430,7 @@ to live and how editor services interact with game project files.
 | `Projects` to content pipeline     | `Projects` owns project identity, manifest validation, content-root policy, and cook-scope facts. It does not execute import, cook, pak, mount, or content-pipeline jobs.                   |
 | `ContentPipeline` to projects      | `ContentPipeline` reads project facts through project-service contracts when it needs cook scope, authored roots, or project identity. It does not own project creation or manifest policy. |
 | `WorldEditor` to project layout    | `WorldEditor` creates, opens, and saves scene documents through project/document services. It does not decide global project layout or write cooked output directly.                        |
-| `ContentBrowser` to scene editing  | Content Browser can return asset identity and diagnostics. It does not mutate scene components or material slots directly.                                                                  |
+| `ContentExplorer` to scene editing | Content Explorer can return asset identity and diagnostics. It does not mutate scene components or material slots directly.                                                                 |
 | Native interop to authoring policy | Native code exposes capabilities. Managed editor modules own authoring defaults, game project policy, UI behavior, and workflow decisions.                                                  |
 
 ## 8. Workflow Architecture
@@ -633,7 +633,7 @@ Editor-service contract:
 | ------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `Oxygen.Editor.Projects`        | manifest, declared mounts, project metadata, project configuration, project cook scope             | manifest and project-level configuration through project services                  | import, cook, mount runtime roots, mutate scene/material assets directly          |
 | `Oxygen.Editor.ProjectBrowser`  | template metadata, project manifest summary, recent project state, validation result               | new project payload through project creation services, recent project state        | define asset layout policy, edit authored assets                                  |
-| `Oxygen.Editor.ContentBrowser`  | authored roots, local mounts, source media, descriptors, cooked indexes, derived-state diagnostics | user-requested asset files through feature commands or delegated creation services | treat cooked paths as authored identity, invoke cook/mount as browse side effects |
+| `Oxygen.Editor.ContentExplorer` | authored roots, local mounts, source media, descriptors, cooked indexes, derived-state diagnostics | user-requested asset files through feature commands or delegated creation services | treat cooked paths as authored identity, invoke cook/mount as browse side effects |
 | `Oxygen.Editor.WorldEditor`     | scene documents and asset references through document/project services                             | scene documents through command/document save paths                                | choose project layout policy, write cooked output directly                        |
 | `Oxygen.Editor.MaterialEditor`  | material descriptors and material asset identity through document/content services                 | material descriptors through material document save paths                          | write scene assignments directly, write cooked output directly                    |
 | `Oxygen.Editor.ContentPipeline` | authored content roots, source media, descriptors, project cook scope                              | generated descriptors, import intermediates, cooked output, cooked indexes         | own UI browsing policy or project-template policy                                 |
@@ -687,7 +687,7 @@ support:
 
 - material asset creation/open
 - scalar property inspection and edit
-- content browser selection with thumbnail or clear visual identity
+- content explorer selection with thumbnail or clear visual identity
 - assignment to geometry
 - save/reopen
 - cook
@@ -782,9 +782,9 @@ The material editor contract:
 - material preview/runtime operations pass through runtime/content-pipeline
   boundaries
 
-### 10.6 Content Browser and Asset Identity
+### 10.6 Content Explorer and Asset Identity
 
-The content browser contract:
+The content explorer contract:
 
 - source, descriptor/generated, cooked, mounted, missing, and broken states are
   distinguishable
@@ -918,7 +918,7 @@ The editor content model distinguishes:
 - mounted cooked roots
 - missing/broken references
 
-The content browser must make these states understandable without exposing raw
+The content explorer must make these states understandable without exposing raw
 cooked paths as the primary user-facing identity.
 
 ### 12.2 Import and Descriptor Generation
@@ -1016,7 +1016,7 @@ flowchart TB
     WorldEditor[Oxygen.Editor.WorldEditor]
     MaterialEditor[Oxygen.Editor.MaterialEditor]
     PhysicsEditor[Oxygen.Editor.PhysicsEditor]
-    ContentBrowser[Oxygen.Editor.ContentBrowser]
+    ContentExplorer[Oxygen.Editor.ContentExplorer]
     Projects[Oxygen.Editor.Projects]
     Pipeline[Oxygen.Editor.ContentPipeline]
     Runtime[Oxygen.Editor.Runtime]
@@ -1039,7 +1039,7 @@ flowchart TB
     WorldEditor --> Docs
     WorldEditor --> Schemas
     WorldEditor --> World
-    WorldEditor --> ContentBrowser
+    WorldEditor --> ContentExplorer
     WorldEditor --> Projects
     WorldEditor --> Pipeline
     WorldEditor --> Runtime
@@ -1054,10 +1054,10 @@ flowchart TB
     PhysicsEditor --> Physics
     PhysicsEditor --> Pipeline
     PhysicsEditor --> Runtime
-    ContentBrowser --> UI
-    ContentBrowser --> Assets
-    ContentBrowser --> Projects
-    ContentBrowser --> Pipeline
+    ContentExplorer --> UI
+    ContentExplorer --> Assets
+    ContentExplorer --> Projects
+    ContentExplorer --> Pipeline
     Pipeline --> Assets
     Pipeline --> Projects
     Pipeline --> Interop
@@ -1085,8 +1085,8 @@ contract package or inversion point rather than creating a compile-time cycle.
 | `WorldEditor`                 | `World`                        | scene authoring domain                                        |
 | `WorldEditor`                 | `Runtime`                      | live preview and scene sync boundary                          |
 | `WorldEditor`                 | `ContentPipeline`              | scene save/cook/mount workflows                               |
-| `ContentBrowser`              | `Assets`                       | asset identity and catalog data                               |
-| `ContentBrowser`              | `ContentPipeline`              | source/generated/cooked state and pipeline actions            |
+| `ContentExplorer`             | `Assets`                       | asset identity and catalog data                               |
+| `ContentExplorer`             | `ContentPipeline`              | source/generated/cooked state and pipeline actions            |
 | `ContentPipeline`             | `Projects`                     | project identity, authored roots, and cook-scope facts        |
 | `ContentPipeline`             | `Assets`                       | reusable asset/cook primitives                                |
 | `ContentPipeline`             | `Interop`                      | native cooker/content tool adapters                           |
@@ -1100,7 +1100,7 @@ contract package or inversion point rather than creating a compile-time cycle.
 | -------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | `World` -> WinUI, `WorldEditor`, `Runtime`, or `Interop`             | scene domain must remain pure authoring data                      |
 | `Physics` -> WinUI, `PhysicsEditor`, `Runtime`, or `Interop`         | shared physics domain must remain reusable                        |
-| `ContentBrowser` -> `WorldEditor`                                    | content browsing must not depend on scene editor internals        |
+| `ContentExplorer` -> `WorldEditor`                                   | content browsing must not depend on scene editor internals        |
 | `ProjectBrowser` -> `WorldEditor`                                    | project startup must not depend on workspace internals            |
 | `Documents` -> `WorldEditor`                                         | generic document contracts must not depend on scene UI            |
 | `Projects` -> runtime UI/lifecycle behavior                          | project policy must not require a live engine                     |

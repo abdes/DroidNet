@@ -7,7 +7,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets;
 
 /// <summary>Shows the contents of browsed library mounts, one row per asset each library provides.</summary>
 public static class CookedLibraryFolders

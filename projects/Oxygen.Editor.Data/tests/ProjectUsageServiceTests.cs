@@ -126,7 +126,7 @@ public class ProjectUsageServiceTests : DatabaseTests
     }
 
     [TestMethod]
-    public async Task UpdateContentBrowserStateAsync_ShouldUpdateContentBrowserState()
+    public async Task UpdateContentExplorerStateAsync_ShouldUpdateContentExplorerState()
     {
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
@@ -139,22 +139,22 @@ public class ProjectUsageServiceTests : DatabaseTests
             {
                 Name = "Project1",
                 Location = "Location1",
-                ContentBrowserState = "OldState",
+                ContentExplorerState = "OldState",
             };
             _ = context.ProjectUsageRecords.Add(project);
             _ = await context.SaveChangesAsync(this.CancellationToken).ConfigureAwait(false);
 
             // Act
-            await service.UpdateContentBrowserStateAsync("Project1", "Location1", "NewState").ConfigureAwait(false);
+            await service.UpdateContentExplorerStateAsync("Project1", "Location1", "NewState").ConfigureAwait(false);
 
             // Assert
             var result = await service.GetProjectUsageAsync("Project1", "Location1").ConfigureAwait(false);
-            _ = result!.ContentBrowserState.Should().Be("NewState");
+            _ = result!.ContentExplorerState.Should().Be("NewState");
         }
     }
 
     [TestMethod]
-    public async Task UpdateContentBrowserStateAsync_ShouldFireDebugAssertionIfRecordDoesNotExist()
+    public async Task UpdateContentExplorerStateAsync_ShouldFireDebugAssertionIfRecordDoesNotExist()
     {
         var scope = this.Container.OpenScope();
         await using (scope.ConfigureAwait(false))
@@ -163,11 +163,11 @@ public class ProjectUsageServiceTests : DatabaseTests
             var service = scope.Resolve<ProjectUsageService>();
 
             // Act
-            await service.UpdateContentBrowserStateAsync("NonExistentProject", "NonExistentLocation", "NewState").ConfigureAwait(false);
+            await service.UpdateContentExplorerStateAsync("NonExistentProject", "NonExistentLocation", "NewState").ConfigureAwait(false);
 
             // Assert
 #if DEBUG
-            _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.Contains("Project usage record must exist before updating content browser state"));
+            _ = this.TraceListener.RecordedMessages.Should().Contain(message => message.Contains("Project usage record must exist before updating content explorer state"));
 #endif
         }
     }

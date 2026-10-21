@@ -10,7 +10,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.SceneInspector.SceneSettings;
 
 /// <summary>
-/// One starting input context of the Play section: its name, which shows it in the Content Browser, its priority,
+/// One starting input context of the Play section: its name, which shows it in the Content Explorer, its priority,
 /// shown as the context's own until overridden, and its removal.
 /// </summary>
 public sealed partial class StartingInputContextRowViewModel : ObservableObject
@@ -57,7 +57,7 @@ public sealed partial class StartingInputContextRowViewModel : ObservableObject
     [ObservableProperty]
     public partial bool CanEdit { get; private set; }
 
-    /// <summary>Gets a value indicating whether the context can be shown in the Content Browser.</summary>
+    /// <summary>Gets a value indicating whether the context can be shown in the Content Explorer.</summary>
     public bool CanReveal => !this.IsMissing;
 
     /// <summary>Starts an interactive priority edit; the value is committed when it completes.</summary>

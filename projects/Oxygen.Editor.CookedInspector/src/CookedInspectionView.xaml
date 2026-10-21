@@ -171,7 +171,7 @@
                                     <HyperlinkButton
                                         HorizontalAlignment="Left"
                                         Click="OnShowAsset"
-                                        Content="Show in Content Browser"
+                                        Content="Show in Content Explorer"
                                         Tag="{x:Bind Origin.SourceAssetUri}"
                                         Visibility="{x:Bind SourceActionVisibility}" />
                                 </StackPanel>
@@ -211,7 +211,7 @@
                     <HyperlinkButton
                         HorizontalAlignment="Left"
                         Click="OnShowAsset"
-                        Content="Show in Content Browser"
+                        Content="Show in Content Explorer"
                         Tag="{x:Bind ViewModel.ScopedAsset.Identity, Mode=OneWay}" />
                 </StackPanel>
             </ScrollViewer>

@@ -17,7 +17,7 @@ and [tests](tests/README.md).
 | Cooking       | Cooking status, progress, recovery actions and workspace presentation     |
 | Inspection    | Read-only inspection of cooked assets                                     |
 
-Content Browser and MaterialEditor are separate modules. Their isolated tests
+Content Explorer and MaterialEditor are separate modules. Their isolated tests
 belong to their own projects; WorldEditor integration tests cover the workflows
 that coordinate them with scene documents and native preview.
 

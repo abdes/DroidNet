@@ -56,7 +56,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
     /// <param name="contextSource">Reads what the project says about a mapping context: whether an input file
     /// declares it, and its priority.</param>
     /// <param name="inspectSceneNode">Selects a node in the Scene Explorer.</param>
-    /// <param name="revealAsset">Shows an asset in the Content Browser.</param>
+    /// <param name="revealAsset">Shows an asset in the Content Explorer.</param>
     /// <param name="inputSources">The project's input sources; a change to one reads the contexts again.</param>
     internal PlaySectionViewModel(
         Func<SceneAuthoring?>? authoringProvider,
@@ -250,7 +250,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
             return [.. contexts.Select(entry => entry.Context == context ? entry with { Priority = authored } : entry)];
         });
 
-    /// <summary>Shows a starting input context in the Content Browser.</summary>
+    /// <summary>Shows a starting input context in the Content Explorer.</summary>
     /// <param name="context">The context.</param>
     /// <returns>The completion of the navigation.</returns>
     internal Task RevealContextAsync(AssetPath context) => this.revealAsset?.Invoke(context) ?? Task.CompletedTask;

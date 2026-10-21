@@ -7,7 +7,6 @@ using System.Diagnostics;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
 using DroidNet.Mvvm.Converters;
@@ -16,10 +15,10 @@ using DroidNet.Routing.WinUI;
 using DroidNet.Storage;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Importing;
-using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Editor.ContentBrowser.Panes.Assets;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+using Oxygen.Editor.ContentExplorer.Importing;
+using Oxygen.Editor.ContentExplorer.Panes.Assets;
+using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
+using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
@@ -32,20 +31,21 @@ using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentExplorer;
 
 /// <summary>
 ///     The ViewModel for the <see cref="AssetsView" /> view.
 /// </summary>
 /// <param name="automaticCooking">Cooks changed sources and holds the project's Cook on change setting.</param>
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
-/// <param name="contentBrowserState">The content browser state to track selection changes.</param>
+/// <param name="contentExplorerState">The content explorer state to track selection changes.</param>
 /// <param name="projectContextService">The active project context service.</param>
 /// <param name="contentPipelineService">The explicit editor content-pipeline service.</param>
-/// <param name="assetProvider">The shared content-browser asset provider.</param>
+/// <param name="assetProvider">The shared content-explorer asset provider.</param>
 /// <param name="operationResults">The operation-result publisher.</param>
 /// <param name="statusReducer">The operation status reducer.</param>
 /// <param name="storage">The storage provider.</param>
+/// <param name="folders">The Content Folders pane, which shows and creates the folders this pane asks for.</param>
 /// <param name="dialogService">The existing dialog and folder-picker service.</param>
 /// <param name="windowManagerService">The window manager service.</param>
 /// <param name="shell">The clipboard and File Explorer actions.</param>
@@ -57,17 +57,18 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="documents">Saves the unsaved documents a cook reads, after asking; without it a cook does not ask.</param>
 /// <param name="unsavedInputs">Finds the unsaved documents a cook reads; without it a cook does not ask.</param>
 /// <param name="assetReveal">Shows the source of an imported asset; without it Show Source reports it unavailable.</param>
+/// <param name="cookedInspections">Inspects cooked output; without it Inspect and Validate report it unavailable.</param>
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ViewModelToView vmToViewConverter,
-    ContentBrowserState contentBrowserState,
+    ContentExplorerState contentExplorerState,
     IProjectContextService projectContextService,
     IContentPipelineService contentPipelineService,
     IAssetFeed assetProvider,
     IOperationResultPublisher operationResults,
     IStatusReducer statusReducer,
     IStorageProvider storage,
-    IMessenger messenger,
+    IContentFoldersPane folders,
     IDialogService dialogService,
     IWindowManagerService windowManagerService,
     IDesktopIntegration shell,
@@ -78,7 +79,8 @@ public partial class AssetsViewModel(
     IPlacementService? placement = null,
     IDocumentService? documents = null,
     IUnsavedCookInputs? unsavedInputs = null,
-    IAssetReveal? assetReveal = null) : AbstractOutletContainer, IRoutingAware
+    IAssetReveal? assetReveal = null,
+    ICookedInspections? cookedInspections = null) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
 
@@ -120,14 +122,14 @@ public partial class AssetsViewModel(
             this.PropertyChanging += this.OnLayoutViewModelChanging;
             this.PropertyChanged += this.OnLayoutViewModelChanged;
 
-            // Listen for changes to ContentBrowserState selection via PropertyChanged
-            contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
+            // Listen for changes to ContentExplorerState selection via PropertyChanged
+            contentExplorerState.PropertyChanged += this.OnContentExplorerStatePropertyChanged;
 
             relocation?.Completed += this.OnRelocationCompleted;
             relocation?.HistoryChanged += this.OnRelocationHistoryChanged;
             automaticCooking.PropertyChanged += this.OnAutomaticCookingChanged;
 
-            // Indexing is started by ContentBrowserViewModel - no need to start here
+            // Indexing is started by ContentExplorerViewModel - no need to start here
             this.isInitialized = true;
         }
 
@@ -218,11 +220,10 @@ public partial class AssetsViewModel(
         {
             if (disposing)
             {
-                messenger.UnregisterAll(this);
                 automaticCooking.PropertyChanged -= this.OnAutomaticCookingChanged;
 
                 // Cleanup event subscriptions
-                contentBrowserState.PropertyChanged -= this.OnContentBrowserStatePropertyChanged;
+                contentExplorerState.PropertyChanged -= this.OnContentExplorerStatePropertyChanged;
                 relocation?.Completed -= this.OnRelocationCompleted;
                 relocation?.HistoryChanged -= this.OnRelocationHistoryChanged;
 
@@ -320,15 +321,15 @@ public partial class AssetsViewModel(
         return "/" + mountName + "/Textures";
     }
 
-    private void OnContentBrowserStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
+    private void OnContentExplorerStatePropertyChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (!this.disposed && e.PropertyName is nameof(ContentBrowserState.SelectedFolders) or nameof(ContentBrowserState.SelectedAssets))
+        if (!this.disposed && e.PropertyName is nameof(ContentExplorerState.SelectedFolders) or nameof(ContentExplorerState.SelectedAssets))
         {
             this.NotifyCookSelection();
         }
 
         // The sources tree also cuts and copies folders onto the shared clipboard.
-        if (!this.disposed && e.PropertyName is nameof(ContentBrowserState.Clipboard))
+        if (!this.disposed && e.PropertyName is nameof(ContentExplorerState.Clipboard))
         {
             this.NotifyAssetActions();
         }
@@ -390,9 +391,8 @@ public partial class AssetsViewModel(
 
             Debug.WriteLine($"[AssetsViewModel] Requesting navigation to folder: {folder.Location}");
 
-            // Request navigation via the messenger. This allows ProjectLayoutViewModel
-            // to handle the navigation, ensuring correct virtual path resolution.
-            _ = messenger.Send(new NavigateToFolderRequestMessage(folder));
+            // The Content Folders pane selects it, resolving the virtual path that shows it.
+            await folders.ShowFolderAsync(folder).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -497,7 +497,7 @@ public partial class AssetsViewModel(
         }
 
         var folder = this.GetSelectedFolder();
-        return project.AuthoringMounts.Any(mount => !ProjectExplorer.ProjectLayoutViewModel.IsPersistedProjectRelativeVirtualMount(mount)
+        return project.AuthoringMounts.Any(mount => !ContentFoldersViewModel.IsPersistedProjectRelativeVirtualMount(mount)
             && string.Equals(folder.Mount, mount.Name, StringComparison.Ordinal));
     }
 
@@ -524,7 +524,7 @@ public partial class AssetsViewModel(
     {
         if (this.CanCreateFolder())
         {
-            _ = messenger.Send(new CreateFolderRequestMessage(this.GetSelectedFolder()));
+            _ = folders.CreateFolderAsync(this.GetSelectedFolder());
         }
     }
 
@@ -616,20 +616,19 @@ public partial class AssetsViewModel(
         var scope = asset?.CookedMetadata is not null && AssetPath.TryParse(asset.DisplayPath, out var shown) ? shown : identity ?? this.GetSelectedFolder();
         try
         {
-            if (projectContextService.ActiveProject is not { } project)
+            if (projectContextService.ActiveProject is null)
             {
                 return;
             }
 
-            var request = messenger.Send(new OpenCookedInspectionRequestMessage(project, scope, validate)
+            var inspection = new CookedInspectionRequest(scope, validate)
             {
                 Asset = identity,
                 CookedSource = asset?.CookedMetadata,
-                DisplayName = asset?.DisplayName,
-            });
-            if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
+            };
+            if (cookedInspections is null || !await cookedInspections.InspectAsync(inspection).ConfigureAwait(true))
             {
-                throw new InvalidOperationException("The inspection document could not be opened in this workspace.");
+                throw new InvalidOperationException("The Cooked Inspector could not take this inspection in this window.");
             }
         }
         catch (Exception ex)
@@ -785,7 +784,7 @@ public partial class AssetsViewModel(
 
     // The folder that folder-wide commands act on: the first selected one, or the Content mount when none is.
     private AssetPath GetSelectedFolder()
-        => contentBrowserState.SelectedFolders.Order().FirstOrDefault() ?? AssetPath.Content;
+        => contentExplorerState.SelectedFolders.Order().FirstOrDefault() ?? AssetPath.Content;
 
     [RelayCommand]
     private Task ImportAsync() => this.ImportPickedSourceAsync(models: true, textures: true);
@@ -867,7 +866,7 @@ public partial class AssetsViewModel(
             {
                 if (assetReveal is null || !await assetReveal.RevealAsync([source]).ConfigureAwait(true))
                 {
-                    await dialogService.ShowMessageAsync("Show source", "The retained model source is no longer available in Content Browser.").ConfigureAwait(true);
+                    await dialogService.ShowMessageAsync("Show source", "The retained model source is no longer available in Content Explorer.").ConfigureAwait(true);
                 }
             }
         }

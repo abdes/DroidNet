@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.ContentBrowser.Relocation;
+namespace Oxygen.Editor.ContentExplorer.Relocation;
 
 /// <summary>Logging helpers for <see cref="AssetRelocationWorkflow"/>.</summary>
 public sealed partial class AssetRelocationWorkflow
@@ -27,15 +27,6 @@ public sealed partial class AssetRelocationWorkflow
 
     private void LogReviewCancelled(string title, int referrers, int open)
         => LogReviewCancelled(this.logger, title, referrers + open);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
-        Message = "{Action} of '{Label}' requested.")]
-    private static partial void LogReplayRequested(ILogger logger, string action, string label);
-
-    private void LogReplayRequested(string action, string label)
-        => LogReplayRequested(this.logger, action, label);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

@@ -120,7 +120,7 @@ public class DatabaseSchemaTests : DatabaseTests
             Name = "Test Project",
             LastUsedOn = DateTime.UtcNow,
             LastOpenedScene = "Test Scene",
-            ContentBrowserState = "Test State",
+            ContentExplorerState = "Test State",
             TimesOpened = 1,
         };
 

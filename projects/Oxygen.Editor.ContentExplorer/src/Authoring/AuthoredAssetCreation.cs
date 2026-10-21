@@ -17,7 +17,7 @@ using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.ContentBrowser.Authoring;
+namespace Oxygen.Editor.ContentExplorer.Authoring;
 
 /// <summary>
 /// New Script, New Input File, New Scene and New Material: asks for a name and folder, has the content pipeline create
@@ -26,7 +26,7 @@ namespace Oxygen.Editor.ContentBrowser.Authoring;
 /// </summary>
 /// <param name="dialogs">The dialog service.</param>
 /// <param name="projects">The active project.</param>
-/// <param name="browserState">The Content Browser state, whose selected folder is the default destination.</param>
+/// <param name="browserState">The Content Explorer state, whose selected folder is the default destination.</param>
 /// <param name="authoring">Proposes and checks the name and folder, and writes the file.</param>
 /// <param name="codeEditor">The code editor service.</param>
 /// <param name="operationResults">The operation-result publisher.</param>
@@ -35,7 +35,7 @@ namespace Oxygen.Editor.ContentBrowser.Authoring;
 public sealed class AuthoredAssetCreation(
     IDialogService dialogs,
     IProjectContextService projects,
-    ContentBrowserState browserState,
+    ContentExplorerState browserState,
     IAssetAuthoring authoring,
     ICodeEditorService codeEditor,
     IOperationResultPublisher operationResults,

@@ -67,7 +67,7 @@ redefined by the schedule.
 | [Settings architecture](../lld/settings-architecture.md)                                                                 | Authored settings, local workspace state, runtime-session and startup preferences                       |
 | [Script authoring](../lld/script-authoring.md)                                                                           | Script assets, Scripting component, parameters, script cooking, Play and Problems                       |
 | [Viewport and tools](../lld/viewport-and-tools.md)                                                                       | HUD, view modes, picking, outline, framing, gizmos, snapping, helpers and drag-and-drop placement       |
-| [Content Browser asset identity](../lld/content-browser-asset-identity.md)                                               | Browser layout, views, commands, thumbnails and drag sources                                            |
+| [Content Browser asset identity](../lld/content-explorer-asset-identity.md)                                              | Browser layout, views, commands, thumbnails and drag sources                                            |
 | [Documents and commands](../lld/documents-and-commands.md)                                                               | Save/close lifecycle, command outcomes and document ownership                                           |
 | [Cooking workflows](../lld/content-cooking-workflows.md)                                                                 | Save/Cook/reimport/recovery actions exposed by the scene toolbar and Content Browser                    |
 | [Engine deferred capabilities](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md) | Post-V0.1 exclusions and source-local TODO IDs                                                          |
@@ -1026,7 +1026,7 @@ renames rewrite referrers. Moving to GUID identity would be another format
 milestone across Data, Cooker, Content and every editor serializer, and it would
 still need a reverse index for delete warnings and Find references. Relocation
 is therefore a reference-aware project transaction; the contract is
-[Content Browser LLD §9.5](../lld/content-browser-asset-identity.md#95-asset-relocation).
+[Content Browser LLD §9.5](../lld/content-explorer-asset-identity.md#95-asset-relocation).
 
 1. **Reference index.** Every authored outgoing reference, read structurally per
    file kind rather than by text search: scene component and material-slot

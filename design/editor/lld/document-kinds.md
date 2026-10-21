@@ -105,7 +105,7 @@ outside the editor (a code editor, a paint tool, source control); the relocation
 workflow, which renames, moves and deletes assets; Play and Cook, which ask
 which of their inputs have unsaved edits.
 
-1. **Open an asset.** The user double-clicks a material in the Content Browser,
+1. **Open an asset.** The user double-clicks a material in the Content Explorer,
    or opens a scene from the Scene Explorer, from a new-material command or by
    reopening the previous scene. If that file is already open anywhere, its
    document comes forward. Otherwise the kind that edits the file opens it.

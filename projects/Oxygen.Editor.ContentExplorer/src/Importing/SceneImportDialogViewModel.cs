@@ -10,7 +10,7 @@ using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Importing;
+namespace Oxygen.Editor.ContentExplorer.Importing;
 
 /// <summary>Reviews a model's name and authoring destination before import begins.</summary>
 public sealed partial class SceneImportDialogViewModel : ObservableObject

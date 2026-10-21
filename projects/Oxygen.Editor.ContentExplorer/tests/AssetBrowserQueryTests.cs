@@ -9,7 +9,7 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Tests;
+namespace Oxygen.Editor.ContentExplorer.Tests;
 
 /// <summary>Checks shared asset query semantics without invoking discovery or cooking.</summary>
 [TestClass]

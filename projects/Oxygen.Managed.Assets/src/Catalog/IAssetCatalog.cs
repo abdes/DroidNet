@@ -14,7 +14,7 @@ namespace Oxygen.Managed.Assets.Catalog;
 /// </para>
 /// <para>
 /// The scope is always client-controlled via <see cref="AssetQuery"/>. This allows different
-/// consumers (Content Browser, property editors, etc.) to query within a selected folder, a mount
+/// consumers (Content Explorer, property editors, etc.) to query within a selected folder, a mount
 /// point, or the entire registry.
 /// </para>
 /// </remarks>

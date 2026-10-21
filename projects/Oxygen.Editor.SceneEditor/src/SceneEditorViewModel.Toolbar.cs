@@ -173,7 +173,7 @@ public partial class SceneEditorViewModel
 
     private bool CanBrowseToAsset() => this.GetSelectedAssets().Count > 0;
 
-    /// <summary>Reveals and selects the selected nodes' geometry and material assets in the Content Browser (Ctrl+B).</summary>
+    /// <summary>Reveals and selects the selected nodes' geometry and material assets in the Content Explorer (Ctrl+B).</summary>
     [RelayCommand(CanExecute = nameof(CanBrowseToAsset))]
     private async Task BrowseToAsset()
     {

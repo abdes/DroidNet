@@ -193,7 +193,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
 
         if (this.scriptCreation is not { IsAvailable: true } creation)
         {
-            this.ErrorMessage = "New Script is available once the Content Browser is open.";
+            this.ErrorMessage = "New Script is available once the Content Explorer is open.";
             return;
         }
 

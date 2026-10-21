@@ -15,7 +15,7 @@ selecting a failure or warning before a successful outcome. Activation follows
 the initiating menu's dismissal so the menu cannot hide the recovery surface.
 Purely automatic queues remain quiet. Cooking is the sole progress/recovery
 surface for submitted cooks; clear previous browser cook feedback when a new
-request starts and do not publish a second cook-result banner in Content Browser.
+request starts and do not publish a second cook-result banner in Content Explorer.
 
 Reuse the workspace docking system, ContentPipeline coordinator, ordinary
 document saves, shared operation results, and existing logging infrastructure. The panel
@@ -32,7 +32,7 @@ This contract belongs to ED-M07B.5d-f and complements
 
 | Topic                    | Accepted behavior                                                                                                                                      |
 | ------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------ |
-| Default docking          | Bottom, tabbed alongside Content Browser and Logs; rearrange through existing docking.                                                                 |
+| Default docking          | Bottom, tabbed alongside Content Explorer and Logs; rearrange through existing docking.                                                                |
 | Organization             | Compact list of active, queued, and recent cooks on the left, using status icons beside names; details for one selected cook on the right.             |
 | Issues                   | Directly beneath the selected cook's progress summary, grouped by affected asset. Technical output has its own section within Cooking.                 |
 | Output                   | Show the selected run's progress messages and technical output inside Cooking. Understanding a cook never requires switching to the global Logs panel. |
@@ -55,7 +55,7 @@ themes, rather than duplicating the wireframe's colours.
 
 ### Dock And Toolbar
 
-For new/reset layouts, Cooking joins the bottom Content Browser / Logs group.
+For new/reset layouts, Cooking joins the bottom Content Explorer / Logs group.
 Respect restored user layouts. Opening a previously hidden Cooking panel restores
 its last docking location. A View/docking command makes it discoverable again;
 hiding it never cancels work or clears history.
@@ -108,10 +108,10 @@ Keep the following order:
    this same action row, after the recovery controls. Inspect opens the current
    published output for the selected run's original scope in a read-only document
    tab; it does not cook or alter run selection. Its tooltip identifies that scope.
-   The existing Content Browser menu entry remains available.
+   The existing Content Explorer menu entry remains available.
    Successful model cooks also offer an icon-only Show imported assets action
    immediately after Inspect, with a tooltip. It reveals the available native
-   outputs together in Content Browser, opens the Cooked tree if needed and
+   outputs together in Content Explorer, opens the Cooked tree if needed and
    clears only filters that would hide those outputs. Run completion never
    invokes this navigation automatically. Unretained external-file failures
    have no Inspect action because they have no project asset to inspect.
@@ -315,7 +315,7 @@ editor validation are separate acceptance steps.
 | WorldEditor workspace                               | Dock registration, run-list/details/output presentation, stable selection and reading position, and property/document navigation.                                                      |
 | Document and property pipelines                     | Ordinary save/conflict commands and shared schema-derived bounds; preserve existing edit/history behavior.                                                                             |
 | Shared operation results and logging infrastructure | Immutable finalized outcomes, actionable diagnostic identity, and run-correlated messages available directly in Cooking. Reuse capture/storage without requiring the global Logs view. |
-| Content Browser and typed pickers                   | Concise current state from the same publication authority and navigation to the relevant Cooking run.                                                                                  |
+| Content Explorer and typed pickers                  | Concise current state from the same publication authority and navigation to the relevant Cooking run.                                                                                  |
 
 Run presentation consumes snapshots/events from the owning coordinator. It does
 not infer success from filesystem timestamps or parse free-form log text as the

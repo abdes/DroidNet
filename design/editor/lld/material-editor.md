@@ -53,7 +53,7 @@ revisions require the normal explicit Save/discard flow.
   publication.
 - [live-engine-sync.md](live-engine-sync.md): current runtime intent and async
   completion ownership.
-- [content-browser-asset-identity.md](content-browser-asset-identity.md):
+- [content-explorer-asset-identity.md](content-explorer-asset-identity.md):
   browser/picker identity.
 
 ## 4. Integration Baseline
@@ -92,7 +92,7 @@ promise light on nearby geometry.
 | --------------------------------- | ---------------------------------------------------------------------- |
 | MaterialEditor                    | Material documents, property commands, history and swatch UI.          |
 | Managed.Assets                    | Typed immutable material data and canonical source reader/writer.      |
-| ContentBrowser                    | Create/open entry points, asset identity and material picker.          |
+| ContentExplorer                   | Create/open entry points, asset identity and material picker.          |
 | ContentPipeline                   | Saved-input capture, native cook, provenance and publication.          |
 | WorldEditor                       | Per-instance geometry-slot assignments and explicit repair commands.   |
 | Native Data/Cooker/Content/Vortex | Slot inventory, binary formats, loaded materials and actual rendering. |
@@ -150,7 +150,7 @@ uses the existing texture capture/cook path, including independent ORM channels.
 The asset name is the source file stem: `Content/Materials/Gold.omat.json` is
 shown and saved as `Gold`. URI and derived editor GUID are read-only identity
 information. Do not introduce an independently editable descriptor name. Asset
-file rename/reference repair remains the Content Browser's responsibility.
+file rename/reference repair remains the Content Explorer's responsibility.
 
 ### 7.3 Field table and numeric contract
 
@@ -274,7 +274,7 @@ old/new identity evidence.
 ## 9. UI Surfaces
 
 Use the existing Material Editor document, shared property cards/number boxes,
-Content Browser create/open flow and material picker. Present one compact shared
+Content Explorer create/open flow and material picker. Present one compact shared
 cook-state chip near the name, current inline field diagnostics and an
 approximate swatch. Routine success does not create a banner.
 

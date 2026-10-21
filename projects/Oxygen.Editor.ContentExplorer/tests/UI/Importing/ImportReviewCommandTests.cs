@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
 using DroidNet.Mvvm;
@@ -12,7 +11,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Importing;
+using Oxygen.Editor.ContentExplorer.Importing;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
@@ -23,7 +22,7 @@ using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.ContentBrowser.UI.Tests.Importing;
+namespace Oxygen.Editor.ContentExplorer.UI.Tests.Importing;
 
 [TestClass]
 public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfaceTests
@@ -67,7 +66,7 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             Mock.Of<IOperationResultPublisher>(),
             Mock.Of<IStatusReducer>(),
             Mock.Of<DroidNet.Storage.IStorageProvider>(),
-            new StrongReferenceMessenger(),
+            Mock.Of<Oxygen.Editor.ContentExplorer.Panes.ContentFolders.IContentFoldersPane>(),
             dialogs.Object,
             windows.Object,
             Mock.Of<IDesktopIntegration>(),
@@ -117,9 +116,9 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
         return dialogs;
     }
 
-    private static ContentBrowserState CreateSceneFolderImportState()
+    private static ContentExplorerState CreateSceneFolderImportState()
     {
-        var state = new ContentBrowserState();
+        var state = new ContentExplorerState();
         state.SetSelectedFolders([AssetPath.Parse("/Content/Scenes")]);
         return state;
     }

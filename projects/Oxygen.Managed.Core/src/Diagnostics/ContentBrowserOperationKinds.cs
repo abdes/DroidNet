@@ -5,17 +5,17 @@
 namespace Oxygen.Managed.Core.Diagnostics;
 
 /// <summary>
-/// Stable Content Browser operation-kind names used by editor operation results.
+/// Stable Content Explorer operation-kind names used by editor operation results.
 /// </summary>
-public static class ContentBrowserOperationKinds
+public static class ContentExplorerOperationKinds
 {
     /// <summary>
-    /// Content Browser navigation.
+    /// Content Explorer navigation.
     /// </summary>
-    public const string Navigate = "ContentBrowser.Navigate";
+    public const string Navigate = "ContentExplorer.Navigate";
 
     /// <summary>
-    /// Content Browser refresh.
+    /// Content Explorer refresh.
     /// </summary>
-    public const string Refresh = "ContentBrowser.Refresh";
+    public const string Refresh = "ContentExplorer.Refresh";
 }

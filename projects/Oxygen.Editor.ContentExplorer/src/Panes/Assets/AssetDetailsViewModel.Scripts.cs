@@ -9,7 +9,7 @@ using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets;
 
 /// <summary>
 /// Script and input facts of the details pane: declared parameters, problem counts and the declaring input file.

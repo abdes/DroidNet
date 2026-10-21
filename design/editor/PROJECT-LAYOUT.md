@@ -159,7 +159,7 @@ feature project.
 | `projects/Oxygen.Editor.Problems`        | The Problems panel: the problems of every asset family and of the running scene, grouped by file; selecting a runtime problem's node; coming forward on a runtime error.                            | Problem production.                                                                                               |
 | `projects/Oxygen.Editor.Physics`         | Shared physics authoring domain objects used by physics scenes and scene-attached physics components.                                                                                               | WinUI, editor documents, runtime engine handles, native interop.                                                  |
 | `projects/Oxygen.Editor.PhysicsEditor`   | Full physics scene sidecar editor workspace, physics scene documents/tools, physics validation presentation.                                                                                        | Shared physics domain ownership, reusable cook primitives, native engine calls, project policy.                   |
-| `projects/Oxygen.Editor.ContentBrowser`  | Project asset navigation, catalogs UI, source/descriptor/cooked views, asset picker UI, content diagnostics presentation.                                                                           | Scene component mutation policy, project template management, engine mounting.                                    |
+| `projects/Oxygen.Editor.ContentExplorer` | The Content Explorer panel: the project's content folders and mounts, and the assets of the folders it shows, with their search, filters, layouts, details and import dialogs.                      | Relocation and creation logic (ContentPipeline), the asset pickers (Pickers), engine mounting.                    |
 | `projects/Oxygen.Editor.ContentPipeline` | Editor tooling orchestration for import, cook, pak, inspect, asset jobs, pipeline diagnostics, and engine cooker/content tool adapters.                                                             | Panels, feature-specific authoring policy, low-level cooked binary structures.                                    |
 | `projects/Oxygen.Editor.Projects`        | Project metadata, services, settings, content root policy, project-level cook scope facts.                                                                                                          | WinUI panels, scene inspector UI, native interop, cook execution/orchestration.                                   |
 | `projects/Oxygen.Editor.Runtime`         | Managed engine lifecycle, effective runtime settings application, surface leases, view service, cooked-root mount service, runtime diagnostics.                                                     | Authoring defaults, project policy, UI workflow, scene serialization.                                             |
@@ -238,7 +238,7 @@ Use this before adding a file:
    or project settings policy?**
    Put it in `Oxygen.Editor.Projects`.
 10. **Is it browsing, filtering, picking, or diagnosing assets for the user?**
-    Put it in `Oxygen.Editor.ContentBrowser`.
+    Put it in `Oxygen.Editor.ContentExplorer`.
 11. **Is it embedded engine lifecycle, surface/view leasing, runtime settings
     application, cooked-root mounting, or runtime diagnostics?**
     Put it in `Oxygen.Editor.Runtime`.
@@ -294,12 +294,13 @@ projects/Oxygen.Editor.WorldEditor/src/
 ```
 
 ```text
-projects/Oxygen.Editor.ContentBrowser/src/
-+-- Catalog/                # asset catalog models and indexing adapters
-+-- References/             # asset reference picker/resolver UI contracts
-+-- Views/                  # source/cooked/descriptor views
-+-- Diagnostics/            # content/cook validation presentation
-+-- State/                  # content browser navigation and selection state
+projects/Oxygen.Editor.ContentExplorer/src/
++-- Panes/ContentFolders/   # content folders and mounts tree, mount dialogs
++-- Panes/Assets/           # asset rows, details, actions and layouts
++-- State/                  # search, filters, presentation and selection
++-- Importing/              # scene and texture import dialogs
++-- Relocation/             # rename, move, copy and delete as the user asks
++-- Authoring/              # New Script, Input File, Scene and Material
 ```
 
 ```text
@@ -359,13 +360,13 @@ WorldEditor patch. Its domain type goes in `World`; its inspector goes in
 
 These examples are normative:
 
-| Scenario                                              | Placement                                                                                                                                                                                                                          |
-| ----------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Widget reused by multiple Oxygen editor features      | `Oxygen.Editor.UI`, unless it is generic enough for DroidNet controls.                                                                                                                                                             |
-| Asset pipeline operations: import, cook, pak, inspect | `Oxygen.Editor.ContentPipeline` for tooling services; `Oxygen.Managed.Assets` for reusable primitives; `ContentBrowser` or owning editor for panels; `Projects` for project policy; `Interop` only for native engine capabilities. |
-| Material editor                                       | `Oxygen.Editor.MaterialEditor` for material documents/UI/tools; reusable material source/asset/cook primitives in `Oxygen.Managed.Assets`; preview/runtime work through `Runtime` and `Interop`.                                   |
-| Physics scene sidecar editor                          | `Oxygen.Editor.PhysicsEditor` for physics scene UI/documents/tools; shared physics authoring model in `Oxygen.Editor.Physics`; sidecar generation through `ContentPipeline`; project policy through `Projects`.                    |
-| Scene component editor                                | Domain component in `World`; inspector in `SceneInspector`; reusable fields in `Oxygen.Editor.UI`; live operation through `Runtime`; native operation through `Interop`.                                                           |
+| Scenario                                              | Placement                                                                                                                                                                                                                           |
+| ----------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Widget reused by multiple Oxygen editor features      | `Oxygen.Editor.UI`, unless it is generic enough for DroidNet controls.                                                                                                                                                              |
+| Asset pipeline operations: import, cook, pak, inspect | `Oxygen.Editor.ContentPipeline` for tooling services; `Oxygen.Managed.Assets` for reusable primitives; `ContentExplorer` or owning editor for panels; `Projects` for project policy; `Interop` only for native engine capabilities. |
+| Material editor                                       | `Oxygen.Editor.MaterialEditor` for material documents/UI/tools; reusable material source/asset/cook primitives in `Oxygen.Managed.Assets`; preview/runtime work through `Runtime` and `Interop`.                                    |
+| Physics scene sidecar editor                          | `Oxygen.Editor.PhysicsEditor` for physics scene UI/documents/tools; shared physics authoring model in `Oxygen.Editor.Physics`; sidecar generation through `ContentPipeline`; project policy through `Projects`.                     |
+| Scene component editor                                | Domain component in `World`; inspector in `SceneInspector`; reusable fields in `Oxygen.Editor.UI`; live operation through `Runtime`; native operation through `Interop`.                                                            |
 
 ## 12. New Project Rule
 

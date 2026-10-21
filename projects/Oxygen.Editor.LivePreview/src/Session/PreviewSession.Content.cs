@@ -117,7 +117,7 @@ public sealed partial class PreviewSession
         catch (Exception exception)
         {
             this.LogCookedRootRefreshFailed(exception, stage, active.ProjectRoot.FullPath, mounted ? "mounted" : "unavailable");
-            var title = mounted ? "Content Browser unavailable" : "Preview unavailable";
+            var title = mounted ? "Content Explorer unavailable" : "Preview unavailable";
             var message = $"Failed while {stage}: {exception.Message.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries).FirstOrDefault()}";
             RuntimeOperationResults.PublishFailure(
                 results,

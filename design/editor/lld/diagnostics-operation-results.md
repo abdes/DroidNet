@@ -213,7 +213,7 @@ ED-M05 prefix allocations:
 | Prefix                  | Owner                                                                      |
 | ----------------------- | -------------------------------------------------------------------------- |
 | `OXE.MATERIAL.*`        | Material editor scalar authoring and material-document validation.         |
-| `OXE.ASSETID.*`         | Content browser / asset picker identity and resolve diagnostics.           |
+| `OXE.ASSETID.*`         | Content explorer / asset picker identity and resolve diagnostics.          |
 | `OXE.CONTENTPIPELINE.*` | Content-pipeline orchestration diagnostics surfaced by material workflows. |
 
 ED-M05 may also add material-specific codes under existing ED-M03 prefixes when
@@ -292,7 +292,7 @@ Domains are stable vocabulary, not class names.
 | `SceneAuthoring`       | ED-M03                                      | Scene commands/property editing.                                     |
 | `LiveSync`             | ED-M03                                      | Live scene sync.                                                     |
 | `MaterialAuthoring`    | ED-M05                                      | Material editor scalar authoring and descriptor validation.          |
-| `AssetIdentity`        | ED-M05                                      | Content browser/picker asset identity and resolve state.             |
+| `AssetIdentity`        | ED-M05                                      | Content explorer/picker asset identity and resolve state.            |
 | `ContentPipeline`      | ED-M05 material cook slice; expanded ED-M07 | Content pipeline orchestration.                                      |
 | `AssetImport`          | ED-M05                                      | Asset import.                                                        |
 | `AssetCook`            | ED-M07                                      | Cook execution.                                                      |
@@ -545,9 +545,9 @@ ED-M05 producers and operation kinds:
 | material document service                    | `Material.Save`             | `Document`                                      |
 | material document service / content pipeline | `Material.Cook`             | `ContentPipeline`                               |
 | geometry material slot command               | `Material.AssignToGeometry` | `SceneAuthoring` / `AssetIdentity` / `LiveSync` |
-| material picker/content browser              | `Asset.Query`               | `AssetIdentity`                                 |
-| material picker/content browser              | `Asset.Resolve`             | `AssetIdentity`                                 |
-| material picker/content browser              | `Material.Pick`             | `AssetIdentity`                                 |
+| material picker/content explorer             | `Asset.Query`               | `AssetIdentity`                                 |
+| material picker/content explorer             | `Asset.Resolve`             | `AssetIdentity`                                 |
+| material picker/content explorer             | `Material.Pick`             | `AssetIdentity`                                 |
 
 ED-M05 implementation adds the corresponding `FailureDomain` values and
 diagnostic-code constants to `Oxygen.Managed.Core` before material workflows
@@ -555,15 +555,15 @@ publish results.
 
 ED-M06 producers and operation kinds:
 
-| Producer                          | Operation Kind            | Domain                                  |
-| --------------------------------- | ------------------------- | --------------------------------------- |
-| content browser asset provider    | `Asset.Browse`            | `AssetIdentity`                         |
-| content browser / picker provider | `Asset.Query`             | `AssetIdentity`                         |
-| content browser / picker provider | `Asset.Resolve`           | `AssetIdentity`                         |
-| content browser shell             | `ContentBrowser.Navigate` | `AssetIdentity` / `ProjectContentRoots` |
-| content browser shell             | `ContentBrowser.Refresh`  | `AssetIdentity`                         |
-| content browser row/details       | `Asset.CopyIdentity`      | `AssetIdentity`                         |
-| material picker                   | `Material.Pick`           | `AssetIdentity`                         |
+| Producer                           | Operation Kind             | Domain                                  |
+| ---------------------------------- | -------------------------- | --------------------------------------- |
+| content explorer asset provider    | `Asset.Browse`             | `AssetIdentity`                         |
+| content explorer / picker provider | `Asset.Query`              | `AssetIdentity`                         |
+| content explorer / picker provider | `Asset.Resolve`            | `AssetIdentity`                         |
+| content explorer shell             | `ContentExplorer.Navigate` | `AssetIdentity` / `ProjectContentRoots` |
+| content explorer shell             | `ContentExplorer.Refresh`  | `AssetIdentity`                         |
+| content explorer row/details       | `Asset.CopyIdentity`       | `AssetIdentity`                         |
+| material picker                    | `Material.Pick`            | `AssetIdentity`                         |
 
 ED-M06 operation results should be quiet for high-frequency filter/search
 changes. Results are required for refresh/query/resolve failures, broken
@@ -633,7 +633,7 @@ Examples:
 - project opens, last scene missing: `PartiallySucceeded`.
 - project manifest malformed: `Failed`.
 - project opens and workspace restores completely: `Succeeded`.
-- project opens and a stale content browser folder is ignored with a warning:
+- project opens and a stale content explorer folder is ignored with a warning:
   `SucceededWithWarnings`.
 - project opens but a requested restoration sub-step fails with an error:
   `PartiallySucceeded`.
@@ -668,7 +668,7 @@ Forbidden:
 - diagnostics contracts must not depend on WorldEditor-specific types.
 - diagnostics contracts in `Oxygen.Managed.Core` must not depend on feature
   projects such as `Oxygen.Editor.WorldEditor`, `Oxygen.Editor.ProjectBrowser`,
-  or `Oxygen.Editor.ContentBrowser`.
+  or `Oxygen.Editor.ContentExplorer`.
 - host diagnostics services in `Oxygen.Editor` must not depend on feature UI
   projects for their public contracts.
 - low-level domain libraries must not depend on feature UI to report errors.
@@ -739,7 +739,7 @@ implements the surface.
 
 ED-M06 diagnostics are complete when:
 
-- content browser query failure publishes `Asset.Browse` or `Asset.Query` under
+- content explorer query failure publishes `Asset.Browse` or `Asset.Query` under
   `AssetIdentity` with selected folder and search/filter facts.
 - broken descriptor rows carry `OXE.ASSETID.Descriptor.Broken` diagnostics
   without crashing browser refresh.
@@ -749,7 +749,7 @@ ED-M06 diagnostics are complete when:
   `OXE.PROJECT.CONTENT_ROOT.InvalidSelection` under `ProjectContentRoots`.
 - stale source/cooked state is a warning diagnostic under `ContentPipeline`, not
   an `AssetCook` failure.
-- Content Browser output/log summaries include operation ID and selected virtual
+- Content Explorer output/log summaries include operation ID and selected virtual
   folder for failed browse/refresh operations.
 
 ED-M07 diagnostics are complete when:

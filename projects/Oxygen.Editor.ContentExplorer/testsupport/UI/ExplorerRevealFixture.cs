@@ -1,0 +1,258 @@
+// Distributed under the MIT License. See accompanying file LICENSE or copy
+// at https://opensource.org/licenses/MIT.
+// SPDX-License-Identifier: MIT
+
+using System.Collections.Immutable;
+using System.Globalization;
+using System.Reactive.Subjects;
+using AwesomeAssertions;
+using DroidNet.Aura.Dialogs;
+using DroidNet.Aura.Windowing;
+using DroidNet.Routing;
+using DroidNet.Storage;
+using DroidNet.Storage.Native;
+using DryIoc;
+using Microsoft.Extensions.Logging;
+using Moq;
+using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
+using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
+using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.ContentPipeline.Incremental;
+using Oxygen.Editor.ContentPipeline.Mounting;
+using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.Projects;
+using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions;
+using static DroidNet.Tests.UiTestHosting;
+using static Oxygen.Editor.ContentExplorer.TestSupport.ExplorerTestData;
+
+namespace Oxygen.Editor.ContentExplorer.TestSupport;
+
+internal sealed partial class ExplorerRevealFixture : IDisposable
+{
+    public Mock<IContentPipelineService> HistoryPipeline { get; } = new();
+
+    public AssetEntry[] ConfigureHistoryJourney()
+    {
+        foreach (var folder in new[]
+        {
+            "Materials",
+            "Geometry",
+            "Scenes",
+        }
+
+        )
+        {
+            _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content", folder));
+        }
+
+        var rows = Enumerable.Range(0, 1000).Select(index =>
+        {
+            var (folder, suffix, kind) = (index % 3) switch
+            {
+                0 => ("Materials", ".omat", AssetKind.Material),
+                1 => ("Geometry", ".ogeo", AssetKind.Geometry),
+                _ => ("Scenes", ".oscene", AssetKind.Scene),
+            };
+            return CreateNavigationAsset(string.Create(CultureInfo.InvariantCulture, $"/Content/{folder}/Item{index:D4}{suffix}"), kind);
+        }).ToArray();
+        this.items.OnNext(rows);
+        _ = this.HistoryPipeline.Setup(value => value.CookAssetAsync(It.IsAny<AssetPath>(), It.IsAny<CancellationToken>(), It.IsAny<ProjectContext?>())).ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
+        _ = this.HistoryPipeline.Setup(value => value.CookFolderAsync(It.IsAny<AssetPath>(), It.IsAny<CancellationToken>())).ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Folder, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
+        this.container.Unregister<IContentPipelineService>();
+        this.container.RegisterInstance(this.HistoryPipeline.Object);
+        return rows;
+    }
+
+    public void PublishHistoryRows(IReadOnlyList<AssetEntry> rows) => this.items.OnNext(rows);
+
+    public async Task<(string physical, string expected)> ConfigurePhysicalNavigationAsync(string mount, CancellationToken token)
+    {
+        if (string.Equals(mount, "Library", StringComparison.Ordinal))
+        {
+            _ = this.SetLibraryOutput();
+            return ("Library/Materials", "Library/Materials");
+        }
+
+        if (string.Equals(mount, "Cooked", StringComparison.Ordinal))
+        {
+            var cooked = CreateNavigationAsset("/Content/Materials/Red.omat", AssetKind.Material) with
+            {
+                SourcePath = null,
+                DescriptorPath = null,
+                PrimaryState = AssetState.Cooked,
+            };
+            await this.SetCookedOutputsAsync([cooked], token).ConfigureAwait(true);
+            return (Path.GetRelativePath(this.directory.FullName, Path.Combine(this.publishedOutputRoot!, "Materials")), "Published/Content/Materials");
+        }
+
+        this.Projects.Activate(this.Projects.ActiveProject! with { AuthoringMounts = [new("Game", "Content")] });
+        return ("Content/Materials", "Game/Materials");
+    }
+
+    public async Task NavigateHistoryFolderAsync(string folder, CancellationToken cancellationToken, bool relativeToContent = true)
+    {
+        var path = relativeToContent ? Path.Combine(this.directory.FullName, "Content", folder) : Path.Combine(this.directory.FullName, folder);
+        var location = await this.container.Resolve<DroidNet.Storage.IStorageProvider>().GetFolderFromPathAsync(path, cancellationToken).ConfigureAwait(true);
+        await this.Folders.NavigateToFolderAsync(location).ConfigureAwait(true);
+    }
+
+    private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-ExplorerReveal-");
+    private readonly RealFileSystem fileSystem = new();
+    private readonly Container container = new();
+    private readonly BehaviorSubject<IReadOnlyList<AssetEntry>> items;
+    private readonly Mock<ILogger> logger = new();
+
+    public ExplorerRevealFixture(bool persisted = false, string cookedAlias = "Cooked")
+    {
+        _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, "Content", "Materials"));
+        _ = Directory.CreateDirectory(Path.Combine(this.directory.FullName, ".cooked", "Content", "Materials"));
+        this.Material = CreateNavigationAsset("/Content/Materials/Blue.omat", AssetKind.Material);
+        this.items = new([this.Material]);
+        var provider = CreateQueryProvider(this.items);
+        this.Provider = provider;
+        _ = provider.Setup(value => value.ResolveAsync(this.Material.Identity, It.IsAny<CancellationToken>())).ReturnsAsync(this.Material);
+        var info = new ProjectInfo("Explorer", Category.Games, this.directory.FullName)
+        {
+            AuthoringMounts = [new("Content", "Content")],
+        };
+        if (persisted)
+        {
+            info.AuthoringMounts.Add(new(cookedAlias, ".cooked"));
+        }
+
+        this.Projects.Activate(ProjectContext.FromProjectInfo(info, this.fileSystem));
+        var mountChanges = new Mock<IContentMountChanges>();
+        _ = mountChanges.Setup(value => value.ChangeMountsAsync(It.IsAny<ProjectContext>(), It.IsAny<ProjectInfo>(), It.IsAny<CancellationToken>()))
+            .Callback((ProjectContext _, ProjectInfo candidate, CancellationToken _) =>
+            {
+                this.MountChanges++;
+                this.Projects.Activate(ProjectContext.FromProjectInfo(candidate, this.fileSystem));
+            })
+            .ReturnsAsync(true);
+        this.container.RegisterInstance<IProjectContextService>(this.Projects);
+        var storage = new NativeStorageProvider(new RealFileSystem());
+        this.container.RegisterInstance<IStorageProvider>(storage);
+        this.container.RegisterInstance(CreateNavigationPublication(this.Projects, storage));
+        this.container.RegisterInstance(mountChanges.Object);
+        this.container.RegisterInstance(provider.Object);
+        this.container.RegisterInstance(CreateStatusHosting());
+        _ = this.logger.Setup(value => value.IsEnabled(It.IsAny<LogLevel>())).Returns(value: true);
+        var logging = new Mock<ILoggerFactory>();
+        _ = logging.Setup(value => value.CreateLogger(It.IsAny<string>())).Returns(this.logger.Object);
+        this.container.RegisterInstance<ILoggerFactory>(logging.Object);
+        this.container.RegisterInstance(this.Dialogs.Object);
+        this.container.RegisterInstance(Mock.Of<IAssetCatalog>(catalog => catalog.Changes == System.Reactive.Linq.Observable.Never<AssetChange>()));
+        this.container.RegisterInstance(Mock.Of<IAssetFolderSource>(folders => folders.FolderChanges == System.Reactive.Linq.Observable.Never<AssetPath>()));
+        this.container.RegisterInstance(Mock.Of<IAutomaticCookService>());
+        this.container.RegisterInstance(Mock.Of<IProjectManagerService>());
+        this.container.RegisterInstance(Mock.Of<IContentPipelineService>());
+        this.container.RegisterInstance<IEngineContentPak>(new Oxygen.Editor.ContentPipeline.TestSupport.EngineContentPakFixture());
+        this.container.RegisterInstance(Mock.Of<IOperationResultPublisher>());
+        this.container.RegisterInstance(Mock.Of<IStatusReducer>());
+        this.container.RegisterInstance(Mock.Of<IWindowManagerService>());
+        this.container.RegisterInstance(new Oxygen.Editor.Textures.TextureImport(new RealFileSystem()));
+        this.Explorer = new(this.container, Mock.Of<IRouter>(), this.Projects, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
+    }
+
+    public ProjectContextService Projects { get; } = new();
+
+    public AssetEntry Material { get; }
+
+    public ContentExplorerViewModel Explorer { get; }
+
+    public Mock<IAssetFeed> Provider { get; }
+
+    public Mock<IDialogService> Dialogs { get; } = new();
+
+    public string Diagnostics => string.Join(Environment.NewLine, this.logger.Invocations.Where(static call => string.Equals(call.Method.Name, "Log", StringComparison.Ordinal)).Select(static call => call.Arguments[2]?.ToString() + " " + call.Arguments[3]?.ToString()));
+
+    public ContentFoldersViewModel Folders => (ContentFoldersViewModel)this.Explorer.LeftPaneViewModel!;
+
+    public AssetsLayoutViewModel Layout => (AssetsLayoutViewModel)((AssetsViewModel)this.Explorer.RightPaneViewModel!).LayoutViewModel!;
+
+    public int MountChanges { get; private set; }
+
+    private string? publishedOutputRoot;
+
+    public async Task SetCookedOutputsAsync(IReadOnlyList<AssetEntry> outputs, CancellationToken token)
+    {
+        var project = this.Projects.ActiveProject!;
+        var key = Guid.CreateVersion7();
+        var root = CookPublicationPaths.Generation(project.ProjectRoot.FullPath, key);
+        Directory.CreateDirectory(root);
+        await File.WriteAllBytesAsync(Path.Combine(root, CookedGeneration.MarkerFileName), [], token).ConfigureAwait(true);
+        var digest = new string('0', 64);
+        var products = outputs.Select(item =>
+        {
+            var path = item.Identity.VirtualPath;
+            var descriptor = path["/Content/".Length..];
+            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(root, descriptor))!);
+            var kind = item.Kind == AssetKind.Geometry ? ContentCookAssetKind.Geometry : ContentCookAssetKind.Material;
+            var sourceUri = item.Identity.WithAuthoringSuffix();
+            var sourceRelativePath = path.TrimStart('/') + ".json";
+            var sourcePath = project.ProjectRoot.Combine(sourceRelativePath);
+            return new CookProvenance.Product(sourceUri, digest, [], [new(new(sourceUri, item.Identity, kind, "Content", path) { DescriptorRelativePath = descriptor }, "Content")])
+            {
+                ReuseFingerprint = digest,
+                SourceInput = new(sourceUri, kind, "Content", sourceRelativePath, sourcePath, ContentCookInputRole.Primary),
+                SourceFiles = [new(sourceUri, sourcePath, sourceRelativePath, digest)],
+                DeclaredOutputs = [new(path, kind == ContentCookAssetKind.Geometry ? "geometry" : "material", string.Empty, Required: true)],
+            };
+        }).ToImmutableArray();
+        var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(project), [new(CookPublicationRootOwner.Project, "Content", key, digest, LibraryPath: null)], products, new("logical-folder-fixture", digest, [], [], []));
+        document.Validate(project);
+        var files = new NativeAtomicFileStore(new RealFileSystem());
+        using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(true);
+        var documentPath = CookPublicationPaths.Document(project.ProjectRoot.FullPath, document.OperationId);
+        Directory.CreateDirectory(Path.GetDirectoryName(documentPath)!);
+        var version = await files.WriteAsync(documentPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(true);
+        var headPath = CookPublicationPaths.Head(project.ProjectRoot.FullPath);
+        var previous = await files.ReadAsync(headPath, token).ConfigureAwait(true);
+        var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
+        _ = await files.WriteAsync(headPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), previous.Version, token).ConfigureAwait(true);
+        this.publishedOutputRoot = root;
+        this.items.OnNext(outputs);
+    }
+
+    public AssetEntry SetLibraryOutput()
+    {
+        var root = Path.Combine(this.directory.FullName, "Library");
+        _ = Directory.CreateDirectory(Path.Combine(root, "Materials"));
+        File.WriteAllBytes(Path.Combine(root, "Materials/Shared.omat"), [1]);
+        File.WriteAllBytes(Path.Combine(root, "container.index.bin"), [1]);
+        var item = CreateNavigationAsset("/Art/Shared.omat", AssetKind.Material) with
+        {
+            SourcePath = null,
+            DescriptorPath = null,
+            PrimaryState = AssetState.Cooked,
+            CookedMetadata = new(FileSystemPath.From(root), "Materials/Shared.omat", Guid.NewGuid(), new(1, 2), 1, 1, new string('0', 64))
+            {
+                VirtualPath = AssetPath.Parse("/Art/Shared.omat"),
+            },
+        };
+        this.Projects.Activate(this.Projects.ActiveProject! with { LocalFolderMounts = [new("Library", FileSystemPath.From(root))] });
+        _ = this.Provider.Setup(provider => provider.ResolveAsync(item.Identity, It.IsAny<CancellationToken>())).ReturnsAsync(item);
+        this.items.OnNext([item]);
+        return item;
+    }
+
+    public async Task OpenAsync()
+    {
+        await this.Explorer.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), Mock.Of<INavigationContext>(value => value.NavigationTarget == new object())).ConfigureAwait(true);
+        _ = this.Explorer.LeftPaneViewModel.Should().NotBeNull(this.Diagnostics);
+    }
+
+    public void Dispose()
+    {
+        this.Explorer.Dispose();
+        this.container.Dispose();
+        this.items.Dispose();
+        this.directory.Delete(recursive: true);
+    }
+}

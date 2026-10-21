@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.System;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 
 /// <summary>
 /// Keeps a results selector and its layout's multi-selection in step, and gives every view the same

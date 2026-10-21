@@ -249,7 +249,7 @@
                     HorizontalAlignment="Left"
                     AutomationProperties.Name="Show imported assets"
                     Command="{x:Bind ViewModel.ShowImportedAssetsCommand}"
-                    ToolTipService.ToolTip="Show imported assets in Content Browser"
+                    ToolTipService.ToolTip="Show imported assets in Content Explorer"
                     Visibility="{x:Bind ViewModel.SelectedRun.ShowImportedAssetsVisibility, Mode=OneWay}">
                     <FontIcon FontSize="14" Glyph="&#xE8B7;" />
                 </Button>

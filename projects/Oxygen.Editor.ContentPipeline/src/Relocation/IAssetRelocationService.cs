@@ -52,6 +52,36 @@ public interface IAssetRelocationService
     /// <exception cref="AssetRelocationException">The request was rejected or failed; no file is left changed.</exception>
     public Task<AssetRelocationPlan> RelocateAsync(AssetRelocationRequest request, string label, HistoryKeeper history, CancellationToken cancellationToken);
 
+    /// <summary>
+    /// The moves that paste cut items into a folder: each item that is not already in it moves there under its name.
+    /// </summary>
+    /// <param name="sources">The virtual paths on the clipboard.</param>
+    /// <param name="targetFolder">The folder to paste into.</param>
+    /// <returns>The request, or <see langword="null"/> when every item is already in that folder.</returns>
+    public AssetRelocationRequest? CreatePasteRequest(IReadOnlyList<AssetPath> sources, AssetPath targetFolder);
+
+    /// <summary>Undoes the latest entry of a history, which a relocation recorded or any other change did.</summary>
+    /// <remarks>
+    /// While the history replays another entry, nothing runs. A rejected or rolled-back undo changes nothing, and its
+    /// entry stays in the history.
+    /// </remarks>
+    /// <param name="history">The history.</param>
+    /// <param name="cancellationToken">Cancels before the first change.</param>
+    /// <returns>What the undone entry was, such as <c>Rename</c>, or <see langword="null"/> when nothing was undone.</returns>
+    /// <exception cref="AssetRelocationException">The undo was rejected or failed; no file is left changed.</exception>
+    public Task<string?> UndoAsync(HistoryKeeper history, CancellationToken cancellationToken);
+
+    /// <summary>Redoes the latest undone entry of a history.</summary>
+    /// <remarks>
+    /// While the history replays another entry, nothing runs. A rejected or rolled-back redo changes nothing, and its
+    /// entry stays in the history.
+    /// </remarks>
+    /// <param name="history">The history.</param>
+    /// <param name="cancellationToken">Cancels before the first change.</param>
+    /// <returns>What the redone entry was, or <see langword="null"/> when nothing was redone.</returns>
+    /// <exception cref="AssetRelocationException">The redo was rejected or failed; no file is left changed.</exception>
+    public Task<string?> RedoAsync(HistoryKeeper history, CancellationToken cancellationToken);
+
     /// <summary>Finds the authored files that reference an asset, or any asset inside a folder.</summary>
     /// <param name="virtualPath">The asset or folder.</param>
     /// <param name="cancellationToken">Cancels the scan.</param>

@@ -26,7 +26,7 @@ public interface ICookRecovery
     /// <returns>Whether the report was opened.</returns>
     public Task<bool> InspectAsync(CookRunSnapshot run);
 
-    /// <summary>Reveals the selected run's imported outputs in the Content Browser on explicit request.</summary>
+    /// <summary>Reveals the selected run's imported outputs in the Content Explorer on explicit request.</summary>
     /// <param name="run">The successful run and its actual output identities.</param>
     /// <returns>Whether available output assets were revealed.</returns>
     public Task<bool> ShowImportedAssetsAsync(CookRunSnapshot run);

@@ -201,10 +201,10 @@
                     VerticalAlignment="Center"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{StaticResource CaptionTextBlockStyle}"
-                    Text="The opened scene is the root; scene switching belongs in the Content Browser."
+                    Text="The opened scene is the root; scene switching belongs in the Content Explorer."
                     TextTrimming="CharacterEllipsis"
                     TextWrapping="NoWrap"
-                    ToolTipService.ToolTip="The opened scene is the root; scene switching belongs in the Content Browser." />
+                    ToolTipService.ToolTip="The opened scene is the root; scene switching belongs in the Content Explorer." />
                 <ToggleButton
                     x:Name="TreeDensityToggle"
                     Grid.Column="1"

@@ -34,8 +34,8 @@ public sealed partial class CodeEditorService(
     /// <summary>The code of a failure to start the code editor.</summary>
     public const string EditorLaunchFailed = DiagnosticCodes.ScriptPrefix + "EDITOR_LAUNCH_FAILED";
 
-    /// <summary>The per-user code editor choice in the editor database, under the key it was first stored with.</summary>
-    internal static readonly SettingKey<CodeEditorPreference> Key = new("ContentBrowser", "CodeEditor");
+    /// <summary>The per-user code editor choice in the editor database.</summary>
+    internal static readonly SettingKey<CodeEditorPreference> Key = new("CodeEditor", "Preference");
 
     private readonly ILogger logger = loggerFactory?.CreateLogger<CodeEditorService>() ?? NullLogger<CodeEditorService>.Instance;
 

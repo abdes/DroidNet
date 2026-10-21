@@ -10,12 +10,13 @@ using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 
 /// <summary>
 /// A base ViewModel for the assets view layout.
@@ -23,13 +24,13 @@ namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 public abstract partial class AssetsLayoutViewModel(
     IAssetFeed assetProvider,
     IProjectContextService projectContextService,
-    ContentBrowserState contentBrowserState,
+    ContentExplorerState contentExplorerState,
     HostingContext hostingContext,
     IScripts? scripts = null) : ObservableObject, IRoutingAware, IDisposable
 {
     private readonly IAssetFeed assetProvider = assetProvider;
     private readonly IProjectContextService projectContextService = projectContextService;
-    private readonly ContentBrowserState contentBrowserState = contentBrowserState;
+    private readonly ContentExplorerState contentExplorerState = contentExplorerState;
     private readonly HostingContext hostingContext = hostingContext;
 
     private IDisposable? subscription;
@@ -56,12 +57,12 @@ public abstract partial class AssetsLayoutViewModel(
     public event EventHandler? SelectionRevealRequested;
 
     /// <summary>
-    /// Gets the collection of content browser asset rows.
+    /// Gets the collection of content explorer asset rows.
     /// </summary>
     public ObservableCollection<AssetBrowserRow> Assets { get; } = [];
 
     /// <summary>Gets the shared session query used by every layout.</summary>
-    public AssetBrowserQuery Query => this.contentBrowserState.Query;
+    public AssetBrowserQuery Query => this.contentExplorerState.Query;
 
     /// <summary>Gets the empty-state visibility after initial discovery.</summary>
     public Visibility EmptyVisibility => !this.isLoading && this.Assets.Count == 0 ? Visibility.Visible : Visibility.Collapsed;
@@ -84,7 +85,7 @@ public abstract partial class AssetsLayoutViewModel(
     public Visibility BrowseSourceVisibility => !this.Query.IsActive && this.IsCookedScope() ? Visibility.Visible : Visibility.Collapsed;
 
     /// <summary>Gets the shared result order, tile size and view.</summary>
-    public AssetBrowserPresentation Presentation => this.contentBrowserState.Presentation;
+    public AssetBrowserPresentation Presentation => this.contentExplorerState.Presentation;
 
     /// <summary>
     /// Gets or sets the active asset. Setting it selects that asset alone; null clears the selection.
@@ -104,7 +105,7 @@ public abstract partial class AssetsLayoutViewModel(
     /// <summary>Gets the visual rows of every selected asset.</summary>
     public IReadOnlyList<AssetBrowserRow> SelectedRows => [.. this.selectedAssets.Select(asset => this.FindRow(asset.Identity)).OfType<AssetBrowserRow>()];
 
-    private bool IsActiveLayout => !this.disposed && ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this);
+    private bool IsActiveLayout => !this.disposed && ReferenceEquals(this.contentExplorerState.ActiveAssetLayout, this);
 
     /// <summary>Replaces the selection with visible assets; hidden or unknown assets are dropped.</summary>
     /// <param name="assets">The assets to select in selection order; the last becomes active.</param>
@@ -171,12 +172,12 @@ public abstract partial class AssetsLayoutViewModel(
         {
             await (this.initialization ??= this.InitializeAsync()).ConfigureAwait(true);
             ObjectDisposedException.ThrowIf(this.disposed, this);
-            if (!ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this))
+            if (!ReferenceEquals(this.contentExplorerState.ActiveAssetLayout, this))
             {
                 this.pendingReveal = null;
             }
 
-            this.contentBrowserState.ActiveAssetLayout = this;
+            this.contentExplorerState.ActiveAssetLayout = this;
             if (this.hasSnapshot)
             {
                 this.ReplaceItems(this.latestItems);
@@ -245,7 +246,7 @@ public abstract partial class AssetsLayoutViewModel(
     internal AssetBrowserRow? TakeSelectionToReveal()
     {
         var row = this.SelectedRow;
-        if (this.disposed || !ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this)
+        if (this.disposed || !ReferenceEquals(this.contentExplorerState.ActiveAssetLayout, this)
             || row is null || this.pendingReveal is null || row.Item.Identity != this.pendingReveal)
         {
             return null;
@@ -268,12 +269,12 @@ public abstract partial class AssetsLayoutViewModel(
                 _ = this.initialSnapshotCompletion?.TrySetCanceled();
                 this.subscription?.Dispose();
                 this.scriptChanges?.Dispose();
-                this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
+                this.contentExplorerState.PropertyChanged -= this.ContentExplorerState_PropertyChanged;
                 this.Query.Changed -= this.OnQueryChanged;
                 this.Presentation.SortChanged -= this.OnQueryChanged;
-                if (ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this))
+                if (ReferenceEquals(this.contentExplorerState.ActiveAssetLayout, this))
                 {
-                    this.contentBrowserState.ActiveAssetLayout = null;
+                    this.contentExplorerState.ActiveAssetLayout = null;
                 }
             }
 
@@ -287,7 +288,7 @@ public abstract partial class AssetsLayoutViewModel(
     /// <param name="item">The asset row that was invoked.</param>
     protected void OnItemInvoked(AssetEntry item)
     {
-        if (!this.disposed && ReferenceEquals(this.contentBrowserState.ActiveAssetLayout, this)
+        if (!this.disposed && ReferenceEquals(this.contentExplorerState.ActiveAssetLayout, this)
             && this.Assets.FirstOrDefault(row => row.Item.Identity == item.Identity) is { } current)
         {
             this.ItemInvoked?.Invoke(this, new AssetsViewItemInvokedEventArgs(current.Item));
@@ -322,7 +323,7 @@ public abstract partial class AssetsLayoutViewModel(
         this.initialSnapshotCompletion = firstSnapshot;
         this.subscription?.Dispose();
         this.scriptChanges?.Dispose();
-        this.contentBrowserState.PropertyChanged -= this.ContentBrowserState_PropertyChanged;
+        this.contentExplorerState.PropertyChanged -= this.ContentExplorerState_PropertyChanged;
         this.Query.Changed -= this.OnQueryChanged;
         this.Presentation.SortChanged -= this.OnQueryChanged;
         this.scriptChanges = scripts is null ? null : Observable.FromEventPattern<ScriptChangedEventArgs>(
@@ -340,10 +341,10 @@ public abstract partial class AssetsLayoutViewModel(
                 },
                 exception => firstSnapshot.TrySetException(exception),
                 () => firstSnapshot.TrySetResult());
-        this.contentBrowserState.PropertyChanged += this.ContentBrowserState_PropertyChanged;
+        this.contentExplorerState.PropertyChanged += this.ContentExplorerState_PropertyChanged;
         this.Query.Changed += this.OnQueryChanged;
         this.Presentation.SortChanged += this.OnQueryChanged;
-        var refresh = this.contentBrowserState.AssetInitialization ??= this.RefreshAsync();
+        var refresh = this.contentExplorerState.AssetInitialization ??= this.RefreshAsync();
         try
         {
             await refresh.ConfigureAwait(true);
@@ -351,9 +352,9 @@ public abstract partial class AssetsLayoutViewModel(
         }
         catch
         {
-            if (ReferenceEquals(this.contentBrowserState.AssetInitialization, refresh))
+            if (ReferenceEquals(this.contentExplorerState.AssetInitialization, refresh))
             {
-                this.contentBrowserState.AssetInitialization = null;
+                this.contentExplorerState.AssetInitialization = null;
             }
 
             throw;
@@ -363,9 +364,9 @@ public abstract partial class AssetsLayoutViewModel(
         this.NotifyEmptyState();
     }
 
-    private void ContentBrowserState_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
+    private void ContentExplorerState_PropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (string.Equals(e.PropertyName, nameof(ContentBrowserState.SelectedFolders), StringComparison.Ordinal))
+        if (string.Equals(e.PropertyName, nameof(ContentExplorerState.SelectedFolders), StringComparison.Ordinal))
         {
             this.ReplaceItems(this.latestItems);
         }
@@ -382,11 +383,11 @@ public abstract partial class AssetsLayoutViewModel(
         this.latestItems = items;
         this.hasSnapshot = true;
         var selectedIdentities = this.IsActiveLayout
-            ? this.contentBrowserState.SelectedIdentities : [.. this.selectedAssets.Select(static asset => asset.Identity)];
+            ? this.contentExplorerState.SelectedIdentities : [.. this.selectedAssets.Select(static asset => asset.Identity)];
         var existing = this.Assets.ToDictionary(static row => row.Item.Identity);
         // Rows show the active project's assets and read its files; without a project there are none.
         var project = this.projectContextService.ActiveProject;
-        var scopedItems = project is null ? [] : CookedLibraryFolders.ForFolders(items, project, this.contentBrowserState.SelectedFolders);
+        var scopedItems = project is null ? [] : CookedLibraryFolders.ForFolders(items, project, this.contentExplorerState.SelectedFolders);
         // A container is one asset, its source file: its products (a model's materials, an input source's
         // actions) are not listed, and pickers and references reach them by identity.
         var inScope = scopedItems.Where(static item => AssetFileTypes.ContainerOf(item.Identity) is null)
@@ -438,9 +439,9 @@ public abstract partial class AssetsLayoutViewModel(
     {
         if (this.IsActiveLayout)
         {
-            this.contentBrowserState.SelectedIdentity = this.selectedAsset?.Identity;
-            this.contentBrowserState.SelectedIdentities = [.. this.selectedAssets.Select(static asset => asset.Identity)];
-            this.contentBrowserState.PublishSelection(this.selectedAssets);
+            this.contentExplorerState.SelectedIdentity = this.selectedAsset?.Identity;
+            this.contentExplorerState.SelectedIdentities = [.. this.selectedAssets.Select(static asset => asset.Identity)];
+            this.contentExplorerState.PublishSelection(this.selectedAssets);
         }
     }
 
@@ -448,7 +449,7 @@ public abstract partial class AssetsLayoutViewModel(
     {
         if (this.IsActiveLayout)
         {
-            this.contentBrowserState.PublishCounts(this.Assets.Count, this.scopeCount);
+            this.contentExplorerState.PublishCounts(this.Assets.Count, this.scopeCount);
         }
     }
 
@@ -457,24 +458,24 @@ public abstract partial class AssetsLayoutViewModel(
     [RelayCommand]
     private void BrowseSource()
     {
-        var sourceFolders = this.contentBrowserState.SelectedFolders
+        var sourceFolders = this.contentExplorerState.SelectedFolders
             .Select(folder => ProjectCookedFolders.TryMap(folder, this.projectCookedFolders, out var source) ? source : folder)
             .ToArray();
         if (sourceFolders.Any(static folder => folder is null))
         {
             // All of the output browses the sources of every authoring folder.
-            this.contentBrowserState.SetSelectedFolders(this.projectContextService.ActiveProject?.AuthoringMounts
-                .Where(static mount => !ProjectExplorer.ProjectLayoutViewModel.IsPersistedProjectRelativeVirtualMount(mount))
+            this.contentExplorerState.SetSelectedFolders(this.projectContextService.ActiveProject?.AuthoringMounts
+                .Where(static mount => !ContentFoldersViewModel.IsPersistedProjectRelativeVirtualMount(mount))
                 .Select(static mount => AssetPath.Create(mount.Name)) ?? []);
         }
         else
         {
-            this.contentBrowserState.SetSelectedFolders(sourceFolders.OfType<AssetPath>());
+            this.contentExplorerState.SetSelectedFolders(sourceFolders.OfType<AssetPath>());
         }
     }
 
     private bool IsCookedScope()
-        => this.contentBrowserState.SelectedFolders.Any(folder => ProjectCookedFolders.TryMap(folder, this.projectCookedFolders, out _));
+        => this.contentExplorerState.SelectedFolders.Any(folder => ProjectCookedFolders.TryMap(folder, this.projectCookedFolders, out _));
 
     private void NotifyEmptyState()
     {
@@ -493,7 +494,7 @@ public abstract partial class AssetsLayoutViewModel(
         => IsInSelectedFolders(
             asset.DisplayPath,
             asset.Identity,
-            this.contentBrowserState.SelectedFolders,
+            this.contentExplorerState.SelectedFolders,
             this.projectContextService.ActiveProject is not null,
             HasCookedProjection(asset),
             this.projectCookedFolders);

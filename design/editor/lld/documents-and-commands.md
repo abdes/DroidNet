@@ -267,7 +267,7 @@ state. It is not an undoable command service.
 `RenameSceneAsync` coordinates a saved scene-asset rename with the authoring
 lifetime, save gate, document title, source/cook notifications and history. Its
 Projects-owned `RenameSceneAssetAsync` operation is reusable by future asset
-rename consumers; Content Browser rename and Save As are not wired to it yet.
+rename consumers; Content Explorer rename and Save As are not wired to it yet.
 Rename preserves authored identity and pre-existing/newer dirty edits instead
 of saving the live graph. A clean document remains clean because the rename
 itself is already persisted. Undo/Redo call the same persistence operation and

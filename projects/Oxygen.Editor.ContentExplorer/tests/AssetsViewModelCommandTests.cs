@@ -3,11 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using Moq;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
-using Oxygen.Editor.ContentBrowser.Relocation;
+using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
+using Oxygen.Editor.ContentExplorer.Relocation;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
@@ -20,7 +19,7 @@ using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.ContentBrowser.Tests;
+namespace Oxygen.Editor.ContentExplorer.Tests;
 
 /// <summary>Checks which results commands are available for a selection and folder, and why the others are not.</summary>
 [TestClass]
@@ -31,7 +30,7 @@ public sealed class AssetsViewModelCommandTests
     [TestMethod]
     public async Task SelectionDecidesCommandAvailability()
     {
-        var (browser, state, _) = await CreateBrowserAsync().ConfigureAwait(false);
+        var (browser, state, _) = await CreateExplorerAsync().ConfigureAwait(false);
         using (browser)
         {
             _ = browser.CopyPathCommand.CanExecute(parameter: null).Should().BeFalse();
@@ -62,13 +61,13 @@ public sealed class AssetsViewModelCommandTests
     [TestMethod]
     public async Task RelocationCommandsFollowSelectionAndExplainWhy()
     {
-        var root = Path.Combine(Path.GetTempPath(), "OxygenBrowserCommands", Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "OxygenExplorerCommands", Guid.NewGuid().ToString("N"));
         var clayPath = Path.Combine(root, "Content", "Materials", "Clay.omat.json");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(clayPath)!);
         await File.WriteAllTextAsync(clayPath, "{}").ConfigureAwait(false);
         var workflow = new Mock<IAssetRelocationWorkflow>();
         _ = workflow.Setup(value => value.PromptNameAsync("Rename", "Clay")).ReturnsAsync("Brick");
-        var (browser, state, _) = await CreateBrowserAsync(root, workflow.Object).ConfigureAwait(false);
+        var (browser, state, _) = await CreateExplorerAsync(root, workflow.Object).ConfigureAwait(false);
         try
         {
             using (browser)
@@ -117,13 +116,13 @@ public sealed class AssetsViewModelCommandTests
     [TestMethod]
     public async Task FolderFromTheSourcesTreePastesAsAFolder()
     {
-        var root = Path.Combine(Path.GetTempPath(), "OxygenBrowserCommands", Guid.NewGuid().ToString("N"));
+        var root = Path.Combine(Path.GetTempPath(), "OxygenExplorerCommands", Guid.NewGuid().ToString("N"));
         var clayPath = Path.Combine(root, "Content", "Materials", "Clay.omat.json");
         _ = Directory.CreateDirectory(Path.GetDirectoryName(clayPath)!);
         _ = Directory.CreateDirectory(Path.Combine(root, "Content", "Props"));
         await File.WriteAllTextAsync(clayPath, "{}").ConfigureAwait(false);
         var workflow = new Mock<IAssetRelocationWorkflow>();
-        var (browser, state, _) = await CreateBrowserAsync(root, workflow.Object).ConfigureAwait(false);
+        var (browser, state, _) = await CreateExplorerAsync(root, workflow.Object).ConfigureAwait(false);
         try
         {
             using (browser)
@@ -155,17 +154,13 @@ public sealed class AssetsViewModelCommandTests
     [TestMethod]
     public async Task NewFolderTargetsWritableFoldersOnly()
     {
-        var (browser, state, messenger) = await CreateBrowserAsync().ConfigureAwait(false);
+        var (browser, state, folders) = await CreateExplorerAsync().ConfigureAwait(false);
         using (browser)
         {
-            CreateFolderRequestMessage? request = null;
-            messenger.Register<CreateFolderRequestMessage>(this, (_, message) => request = message);
-
             state.SetSelectedFolders([AssetPath.Parse("/Content/Materials")]);
             _ = browser.CreateFolderCommand.CanExecute(parameter: null).Should().BeTrue();
             browser.CreateFolderCommand.Execute(parameter: null);
-            _ = request.Should().NotBeNull();
-            _ = request!.ParentFolder.Should().Be(AssetPath.Parse("/Content/Materials"));
+            folders.Verify(pane => pane.CreateFolderAsync(AssetPath.Parse("/Content/Materials")), Times.Once);
 
             state.SetSelectedFolders([AssetPath.Parse("/Cooked/Content")]);
             _ = browser.CreateFolderCommand.CanExecute(parameter: null).Should().BeFalse();
@@ -173,7 +168,7 @@ public sealed class AssetsViewModelCommandTests
         }
     }
 
-    private static async Task<(AssetsViewModel browser, ContentBrowserState state, IMessenger messenger)> CreateBrowserAsync(string? root = null, IAssetRelocationWorkflow? relocation = null)
+    private static async Task<(AssetsViewModel browser, ContentExplorerState state, Mock<IContentFoldersPane> folders)> CreateExplorerAsync(string? root = null, IAssetRelocationWorkflow? relocation = null)
     {
         var projects = new ProjectContextService();
         // A test that names a folder works on the disk; the others in memory.
@@ -182,8 +177,8 @@ public sealed class AssetsViewModelCommandTests
             Name = "Commands",
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
         });
-        var state = new ContentBrowserState();
-        var messenger = new StrongReferenceMessenger();
+        var state = new ContentExplorerState();
+        var folders = new Mock<IContentFoldersPane>();
         var browser = new AssetsViewModel(
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new DroidNet.Mvvm.Converters.ViewModelToView(Mock.Of<DroidNet.Mvvm.IViewLocator>()),
@@ -194,14 +189,14 @@ public sealed class AssetsViewModelCommandTests
             Mock.Of<IOperationResultPublisher>(),
             Mock.Of<IStatusReducer>(),
             Mock.Of<DroidNet.Storage.IStorageProvider>(),
-            messenger,
+            folders.Object,
             Mock.Of<DroidNet.Aura.Dialogs.IDialogService>(),
             Mock.Of<DroidNet.Aura.Windowing.IWindowManagerService>(),
             Mock.Of<IDesktopIntegration>(),
             new TextureImport(new MockFileSystem()),
             relocation);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(false);
-        return (browser, state, messenger);
+        return (browser, state, folders);
     }
 
     private static AssetEntry CreateAsset(string path, AssetKind kind, FileSystemPath? descriptor)

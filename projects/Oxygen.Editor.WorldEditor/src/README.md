@@ -49,9 +49,9 @@ The editor is built with a **modular architecture** featuring:
 #### 1. Workspace Management
 
 - **Primary Coordinator**: `WorkspaceViewModel` manages the main docking workspace layout
-- **Default Layout**: Organizes UI into multiple panels (renderer, scene explorer, properties, content browser, output)
+- **Default Layout**: Organizes UI into multiple panels (renderer, scene explorer, properties, content explorer, output)
 
-#### 2. Content Browser
+#### 2. Content Explorer
 
 - **Dual Pane Interface**: Project tree navigation + asset display
 - **Navigation Features**: Breadcrumb navigation, history management, hierarchical folder traversal
@@ -138,15 +138,15 @@ projects/Oxygen.Editor.World/src/
 ├── Oxygen.Editor.World.csproj       # Project file
 ├── README.md                              # This file
 │
-├── ContentBrowser/                        # Asset management and navigation
+├── ContentExplorer/                        # Asset management and navigation
 │   ├── AssetsViewModel.cs                 # Main assets view model
-│   ├── ContentBrowserViewModel.cs         # Dual-pane browser coordinator
+│   ├── ContentExplorerViewModel.cs         # Dual-pane browser coordinator
 │   ├── AssetsIndexingService.cs           # Asset indexing and management
-│   ├── ProjectLayoutViewModel.cs          # Project tree navigation
+│   ├── ContentFoldersViewModel.cs          # Project tree navigation
 │   └── [Layout Views]                     # Tile/list layout implementations
 │
 ├── ProjectExplorer/                       # Project navigation
-│   └── ProjectLayoutViewModel.cs          # Project tree implementation
+│   └── ContentFoldersViewModel.cs          # Project tree implementation
 │
 ├── PropertiesEditor/                      # Property editing system
 │   ├── SceneInspectorViewModel.cs        # Main properties editor

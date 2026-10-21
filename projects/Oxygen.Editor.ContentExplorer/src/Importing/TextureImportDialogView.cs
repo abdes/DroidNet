@@ -7,7 +7,7 @@ using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.ContentBrowser.Importing;
+namespace Oxygen.Editor.ContentExplorer.Importing;
 
 /// <summary>Programmatic review content for standalone image texture import.</summary>
 public sealed class TextureImportDialogView : UserControl

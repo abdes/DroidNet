@@ -7,7 +7,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.ContentBrowser.Importing;
+namespace Oxygen.Editor.ContentExplorer.Importing;
 
 /// <summary>Compact model import review content hosted by the existing dialog service.</summary>
 [ViewModel(typeof(SceneImportDialogViewModel))]

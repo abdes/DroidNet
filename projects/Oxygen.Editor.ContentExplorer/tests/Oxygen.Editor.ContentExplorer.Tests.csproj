@@ -7,7 +7,7 @@
         <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
         <DefaultItemExcludes>$(DefaultItemExcludes);UI/**</DefaultItemExcludes>
 
-        <RootNamespace>Oxygen.Editor.ContentBrowser.Tests</RootNamespace>
+        <RootNamespace>Oxygen.Editor.ContentExplorer.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>

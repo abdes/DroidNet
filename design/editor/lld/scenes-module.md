@@ -54,12 +54,12 @@ Actors:
 - the user;
 - the scene's views: the scene editor (viewports and gizmos), the Scene Explorer
   and the Inspector, which all edit one scene;
-- the Content Browser, which creates, renames, moves, duplicates and deletes
+- the Content Explorer, which creates, renames, moves, duplicates and deletes
   assets;
 - the engine, which shows the scene through LivePreview;
 - the cook, and tools outside the editor.
 
-1. **Open a scene.** The user double-clicks a scene in the Content Browser, or
+1. **Open a scene.** The user double-clicks a scene in the Content Explorer, or
    the editor opens the project's start scene. The scene opens as a document,
    and the engine shows it. Opening it again brings it forward.
 2. **Edit the scene.** The user adds a light, renames a node and sets its
@@ -77,7 +77,7 @@ Actors:
    the common document behavior. A scene that is clean reloads quietly when its
    file changes, and the views and the engine show the reloaded scene.
 7. **Rename or move a scene asset.** The user renames `Level1` to `Intro` in the
-   Content Browser or at the root of the Scene Explorer, whether the scene is
+   Content Explorer or at the root of the Scene Explorer, whether the scene is
    open or not. Its file is renamed, the scenes that reference it are rewritten,
    an open scene follows its file and takes the new title, and one Undo in the
    global history reverses the whole rename.
@@ -161,7 +161,7 @@ Two rules are the scene's own:
 
 ContentPipeline applies them, in the reference format that reads and rewrites
 scene files for a relocation. New Scene lives in ContentPipeline's authoring
-service, beside New Script and New Input File, because the Content Browser,
+service, beside New Script and New Input File, because the Content Explorer,
 which offers it, does not depend on Scenes. There is no scene-specific asset
 command, rename operation or browser refresh.
 
@@ -204,7 +204,7 @@ edit:
    needs no scene-specific rewrite.
 2. **Scenes live in any folder of an authoring mount,** as materials and
    textures do, and are addressed by their files, not by name. New Scene creates
-   the scene in the folder the Content Browser shows.
+   the scene in the folder the Content Explorer shows.
 3. **Renaming, moving, duplicating and deleting a scene go through the
    relocation service (5.4):** one path for every asset, with global undo, file
    reports and followers.
@@ -311,12 +311,12 @@ notifications. The views publish operation results
 - Scenes references no WinUI, no Runtime and no LivePreview.
 - ContentPipeline does not reference Scenes (decision 13).
 - Projects holds nothing scene-specific.
-- The Content Browser does not depend on Scenes.
+- The Content Explorer does not depend on Scenes.
 
 ## 14. Validation Gates
 
 - `Oxygen.Editor.Scenes.Tests`, without the WinUI host.
-- The World Editor, Content Browser, ContentPipeline, Projects, Documents and
+- The World Editor, Content Explorer, ContentPipeline, Projects, Documents and
   LivePreview tests that cover the callers.
 
 ## 15. Open Issues

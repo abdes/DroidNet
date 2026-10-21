@@ -43,7 +43,7 @@ the cooked inspector and the problems panel.
   publications, cook status and cook runs the feed reads.
 - [live-preview.md](live-preview.md): the module that implements the preview
   port.
-- [content-browser-asset-identity.md](content-browser-asset-identity.md): how
+- [content-explorer-asset-identity.md](content-explorer-asset-identity.md): how
   the explorer shows identities.
 
 ## 4. Current Baseline
@@ -201,10 +201,17 @@ The content explorer (`Oxygen.Editor.ContentExplorer`) owns browsing:
 `AssetBrowserRow`, `AssetFileFacts`, `CookedLibraryFolders` (the rows a browsed
 library folder shows) and `ProjectCookedFolders`, in its `Panes.Assets`
 namespace beside the pane that uses them; the query and layouts; the import
-dialogs; and the presentation of entry badges (decision 4). It holds no
-relocation or creation workflow (ContentPipeline), no navigation or document
-request messages (Shell commands), and no desktop integration such as revealing
-a file or launching the code editor (Shell). MaterialEditor depends on Assets,
+dialogs; the presentation of entry badges (decision 4); and the relocation
+and creation dialogs: the rename, delete and New asset dialogs and the outcomes
+they show. The rules behind those dialogs are ContentPipeline's:
+`IAssetRelocationService` owns a relocation's plan, transaction and history,
+the moves a paste of cut items makes and the replay of undo and redo, and
+`IAssetAuthoring` creates an asset from its family's template. The explorer
+sends no messages: it inspects cooked output through the Shell's
+`ICookedInspections`, applies a mount change through ContentPipeline's
+`IContentMountChanges` and calls between its own panes. Desktop integration,
+such as revealing a file or launching the code editor, is the Shell's
+(`IDesktopIntegration`, `ICodeEditorService`). MaterialEditor depends on Assets,
 not on the explorer.
 
 ### 5.6 The preview port
@@ -317,8 +324,28 @@ the catalog reports a change to it
 
 ## 7. Data Contracts
 
-- `AssetEntry`: one logical asset, with identity (`AssetPath`), kind, origin,
-  state, cook status and activity, runtime availability and diagnostics codes.
+- `AssetEntry`: one logical asset. Its record holds the identity
+  (`AssetPath`), display name and path, kind, primary and derived state,
+  runtime availability, the source, descriptor and cooked files it has, its
+  GUID, diagnostic codes and whether a picker may select it. Its properties add
+  the import source of an imported product, the cooked metadata it shows and
+  the copies it overrides or that override it, cook status and activity, and
+  what the surfaces derive from them: origin (`Engine`, `Package`, `Content`),
+  `PrimaryBadge` and its tooltip, `TypeDisplayName`, `CanCook`, `CanReimport`
+  and `Information`.
+- `AssetKind`: `Folder`, `Material`, `Geometry`, `Scene`, `Texture`, `Image`,
+  `ImportSettings`, `ForeignSource` (a model to import), `CookedData`,
+  `CookedTable`, `Script`, `InputAction`, `InputMappingContext`, `InputFile`,
+  `PhysicsScene` and `Unknown`; `AssetKinds` classifies files and cooked
+  records into it.
+- `AssetState`: `Packaged` (inside a pak: read-only, nothing to edit or cook),
+  `Source`, `Descriptor`, `Cooked`, `Stale` (cooked output older than its
+  source), `Missing` (a reference to nothing) and `Broken` (present but
+  unreadable or invalid).
+- `AssetRuntimeAvailability`, the preview's overlay on an entry:
+  `NotApplicable`, `Unknown`, `NotMounted`, `Mounted`, `Unavailable` (the
+  preview is not running or is incompatible), `Updating` and `Failed` (a
+  current load or application failed).
 - `AssetRuntimeStatus`, `AssetRuntimeRequest`, `AssetRuntimeContentState`: the
   preview port's values (5.6).
 - `ICookPublicationReader`, `ICookPublicationReadLease`: the publication read

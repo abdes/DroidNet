@@ -20,7 +20,7 @@ namespace Oxygen.Editor.Cooking;
 
 /// <summary>
 /// Saves what a cook reads, after asking, and shows where a cook's issues and outputs are: the scene property or script
-/// slot an issue names, the cooked inspection of a run's scope, and a run's imported assets in the Content Browser.
+/// slot an issue names, the cooked inspection of a run's scope, and a run's imported assets in the Content Explorer.
 /// </summary>
 /// <param name="projects">The active project.</param>
 /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
@@ -28,7 +28,7 @@ namespace Oxygen.Editor.Cooking;
 /// <param name="unsaved">What finds the unsaved documents a cook reads.</param>
 /// <param name="placement">Where documents and panels show.</param>
 /// <param name="selection">The scene selection every panel follows.</param>
-/// <param name="reveal">What shows assets in the Content Browser.</param>
+/// <param name="reveal">What shows assets in the Content Explorer.</param>
 /// <param name="inspections">What opens the cooked inspection.</param>
 public sealed class CookRecovery(
     IProjectContextService projects,

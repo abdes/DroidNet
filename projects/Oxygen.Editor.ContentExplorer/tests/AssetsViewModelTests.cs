@@ -4,7 +4,7 @@
 
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.ContentBrowser.Tests;
+namespace Oxygen.Editor.ContentExplorer.Tests;
 
 [TestClass]
 public sealed class AssetsViewModelTests

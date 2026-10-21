@@ -33,7 +33,7 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
     /// <param name="observerScheduler">The injected catalog-notification scheduler.</param>
     /// <param name="observeEnvironment">Reads the runtime environment that renders a scene.</param>
     /// <param name="inputContextSource">Reads what the project says about a mapping context.</param>
-    /// <param name="revealAsset">Shows an asset in the Content Browser.</param>
+    /// <param name="revealAsset">Shows an asset in the Content Explorer.</param>
     /// <param name="projects">The active project, whose files hold its texture descriptors; with the catalog, it lists
     /// the cube textures.</param>
     /// <param name="inputSources">The project's input sources, whose changes the Play section follows.</param>

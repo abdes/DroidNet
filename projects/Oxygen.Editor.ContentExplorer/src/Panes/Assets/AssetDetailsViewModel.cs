@@ -15,7 +15,7 @@ using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
+namespace Oxygen.Editor.ContentExplorer.Panes.Assets;
 
 /// <summary>
 /// The docked details pane: everything known about the selected asset, or a summary of a multi-selection.
@@ -26,7 +26,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     // Lets long paths wrap after each separator instead of in the middle of a name.
     private const char PathBreak = '​';
 
-    private readonly ContentBrowserState state;
+    private readonly ContentExplorerState state;
     private readonly IProjectContextService projects;
     private readonly IDesktopIntegration shell;
     private readonly Relocation.IAssetRelocationWorkflow? relocation;
@@ -44,7 +44,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     /// <param name="hosting">The UI host, whose dispatcher shows the scripts' changes; without it they are shown on the
     /// thread that raises them.</param>
     public AssetDetailsViewModel(
-        ContentBrowserState state,
+        ContentExplorerState state,
         IProjectContextService projects,
         IDesktopIntegration shell,
         Relocation.IAssetRelocationWorkflow? relocation = null,
@@ -200,7 +200,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
 
     private void OnStateChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (string.Equals(args.PropertyName, nameof(ContentBrowserState.SelectedAssets), StringComparison.Ordinal))
+        if (string.Equals(args.PropertyName, nameof(ContentExplorerState.SelectedAssets), StringComparison.Ordinal))
         {
             this.Refresh();
         }

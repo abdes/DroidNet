@@ -790,7 +790,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         return false;
     }
 
-    // A scene's name is its file name: renaming the scene renames its file, as the Content Browser does, with one entry in
+    // A scene's name is its file name: renaming the scene renames its file, as the Content Explorer does, with one entry in
     // the global history; its document follows the file.
     private async Task<TreeItemRenameResult> RenameSceneAssetAsync(string name)
     {

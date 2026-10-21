@@ -16,16 +16,16 @@ this LLD owns the authoring workflow. Physics bindings are out of scope.
 
 ## 1. Scenarios
 
-| ID  | Scenario                                                                                                                             |
-| --- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| SC1 | Create a script from the Content Browser; it opens in the user's code editor.                                                        |
-| SC2 | Declare parameters in the script; after saving, the inspector shows one field per parameter.                                         |
-| SC3 | Add a Scripting component to a node; add, remove and reorder slots; pick a script per slot.                                          |
-| SC4 | Set parameter values: numbers with ranges and units, vectors and colors, choices, and references to assets, input actions and nodes. |
-| SC5 | See script errors on save, in the inspector, on the script in the Content Browser and in Problems; open the code editor at the line. |
-| SC6 | Save, cook and reopen keep slots and values; renaming or moving a referenced asset or node keeps the reference.                      |
-| SC7 | Press Play: the scene runs in the player with scripts and input; logs and errors stream back; editing a script reloads it live.      |
-| SC8 | Stop, change something, and Play again.                                                                                              |
+| ID  | Scenario                                                                                                                              |
+| --- | ------------------------------------------------------------------------------------------------------------------------------------- |
+| SC1 | Create a script from the Content Explorer; it opens in the user's code editor.                                                        |
+| SC2 | Declare parameters in the script; after saving, the inspector shows one field per parameter.                                          |
+| SC3 | Add a Scripting component to a node; add, remove and reorder slots; pick a script per slot.                                           |
+| SC4 | Set parameter values: numbers with ranges and units, vectors and colors, choices, and references to assets, input actions and nodes.  |
+| SC5 | See script errors on save, in the inspector, on the script in the Content Explorer and in Problems; open the code editor at the line. |
+| SC6 | Save, cook and reopen keep slots and values; renaming or moving a referenced asset or node keeps the reference.                       |
+| SC7 | Press Play: the scene runs in the player with scripts and input; logs and errors stream back; editing a script reloads it live.       |
+| SC8 | Stop, change something, and Play again.                                                                                               |
 
 ## 2. Traceability and links
 
@@ -37,7 +37,7 @@ family (model, slot rules, facts, ports) is in
 [property inspector](property-inspector.md),
 [property pipeline](property-pipeline.md),
 [scene authoring model](scene-authoring-model.md),
-[content browser identity](content-browser-asset-identity.md),
+[content explorer identity](content-explorer-asset-identity.md),
 [content pipeline](content-pipeline.md), [cooking panel](cooking-panel.md),
 [diagnostics and operation results](diagnostics-operation-results.md),
 [settings](settings-architecture.md).
@@ -47,7 +47,7 @@ family (model, slot rules, facts, ports) is in
 - Scenes carry scene-level script references (`SceneReferencesData.Scripts`)
   with typed pickers. They are cook dependencies for scripts loaded at runtime
   by other scripts; nothing executes them. They stay as they are.
-- The Content Browser knows the Script kind for cooked `.oscript` outputs only;
+- The Content Explorer knows the Script kind for cooked `.oscript` outputs only;
   `Content/Scripts` exists in new projects.
 - The editor cannot create input actions or mapping contexts and does not cook
   input files. Editor input authoring belongs to
@@ -75,7 +75,7 @@ writing (`relocation.source_collision`); a pair made outside the editor is
 refused by the cook, both files named (`OXE.ASSETCOOK.IdentityCollision`,
 [asset identity](asset-identity.md#56-collisions)).
 
-**New Script** (Content Browser New menu, beside New Material; SD-9): a dialog
+**New Script** (Content Explorer New menu, beside New Material; SD-9): a dialog
 asks for a name and a folder, prefilled with a free name and the folder being
 browsed (`Content/Scripts` at a mount root). It writes `<Name>.lua`, selects it
 and opens it in the code editor. The template:
@@ -187,7 +187,7 @@ A **Scripting** section, added through Add Component, shown for a single
 selected node (multi-selection shows a message to select one node).
 
 - One card per slot, in order: a script picker (filtered to Script assets, with
-  New Script, which runs the Content Browser's New Script and picks the new
+  New Script, which runs the Content Explorer's New Script and picks the new
   script), Edit in the code editor, the execution order field, move up and down,
   and remove. Add Component starts the section with one empty slot. The card
   header shows the script name and, when the script has problems, a badge with
@@ -271,10 +271,10 @@ Settings that decide how the scene starts as a game are properties of the scene,
 not of its nodes, as in Unreal's World Settings. The scene inspector gains a
 **Play** section beside the environment sections.
 
-| Field                   | Source/default                                                  | UI/effect                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
-| ----------------------- | --------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Starting camera         | Camera node reference in the scene; unset                       | A list of Automatic and the scene's cameras by name. With Automatic, the description reads "Resolves to _name_ (first in hierarchy)", the name selecting that camera in the Scene Explorer; a deleted camera replaces it with the error. Cooked as `starting_camera`.                                                                                                                                                                                                |
-| Starting input contexts | List of mapping context references, each with a priority; empty | "Add" lists the contexts not yet started. The contexts show highest priority first, the order the engine evaluates them; equal priorities keep the order they were added in. Each row has its name, which shows the context in the Content Browser, its priority, shown as the context's own until overridden, with a reset while overridden, and Remove; a context menu repeats them. A missing context shows an error icon and "Missing", and can only be removed. |
+| Field                   | Source/default                                                  | UI/effect                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
+| ----------------------- | --------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Starting camera         | Camera node reference in the scene; unset                       | A list of Automatic and the scene's cameras by name. With Automatic, the description reads "Resolves to _name_ (first in hierarchy)", the name selecting that camera in the Scene Explorer; a deleted camera replaces it with the error. Cooked as `starting_camera`.                                                                                                                                                                                                 |
+| Starting input contexts | List of mapping context references, each with a priority; empty | "Add" lists the contexts not yet started. The contexts show highest priority first, the order the engine evaluates them; equal priorities keep the order they were added in. Each row has its name, which shows the context in the Content Explorer, its priority, shown as the context's own until overridden, with a reset while overridden, and Remove; a context menu repeats them. A missing context shows an error icon and "Missing", and can only be removed. |
 
 - Higher priority wins; equal priorities resolve in list order. The cooked
   `starting_input_contexts` always carries the effective priority.

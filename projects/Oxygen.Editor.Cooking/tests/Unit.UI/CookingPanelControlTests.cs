@@ -201,7 +201,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         var button = view.FindDescendant<Button>(item => string.Equals(item.Name, "ShowImportedAssetsButton", StringComparison.Ordinal))!;
         var inspect = view.FindDescendant<Button>(item => string.Equals(item.Name, "InspectButton", StringComparison.Ordinal))!;
         _ = button.Visibility.Should().Be(Visibility.Visible);
-        _ = ToolTipService.GetToolTip(button).Should().Be("Show imported assets in Content Browser");
+        _ = ToolTipService.GetToolTip(button).Should().Be("Show imported assets in Content Explorer");
         var point = button.TransformToVisual(view).TransformPoint(default);
         var inspectPoint = inspect.TransformToVisual(view).TransformPoint(default);
         _ = point.X.Should().BeGreaterThanOrEqualTo(inspectPoint.X + inspect.ActualWidth);
@@ -296,7 +296,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         var dock = ToolDock.New();
         var browser = Dockable.New(Guid.NewGuid().ToString("N"));
         var cooking = Dockable.New(Guid.NewGuid().ToString("N"));
-        var browserView = new TextBlock { Text = "Content Browser" };
+        var browserView = new TextBlock { Text = "Content Explorer" };
         var cookingView = new CookingPanelView { ViewModel = model };
         browser.ViewModel = browserView;
         cooking.ViewModel = cookingView;

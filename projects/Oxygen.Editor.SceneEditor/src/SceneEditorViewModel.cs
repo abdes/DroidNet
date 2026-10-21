@@ -59,7 +59,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="statusReducer">The diagnostic status reducer.</param>
     /// <param name="contentPipelineService">The explicit content cooking service.</param>
     /// <param name="container">DI container used to create child services for viewports.</param>
-    /// <param name="assetReveal">What shows assets in the Content Browser.</param>
+    /// <param name="assetReveal">What shows assets in the Content Explorer.</param>
     /// <param name="previewSettings">The shared project preview preferences.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="engineSettings">The engine startup settings, whose logging verbosity the editor edits; optional.</param>

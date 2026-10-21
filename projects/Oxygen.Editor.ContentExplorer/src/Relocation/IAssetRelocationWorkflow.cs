@@ -5,10 +5,10 @@
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser.Relocation;
+namespace Oxygen.Editor.ContentExplorer.Relocation;
 
 /// <summary>
-/// The Content Browser's rename, move, copy and delete workflow: it asks for names and confirmations, has the content
+/// The Content Explorer's rename, move, copy and delete workflow: it asks for names and confirmations, has the content
 /// pipeline make the change and reports the outcome; the asset feed and the sources tree follow the pipeline's report
 /// of the changed files. Undo and Redo run the session's global history. Only a delete of content that other content
 /// uses asks for confirmation.
@@ -83,7 +83,7 @@ public interface IAssetRelocationWorkflow
     public Task<string?> PromptNameAsync(string title, string initial);
 }
 
-/// <summary>The result of a Content Browser change.</summary>
+/// <summary>The result of a Content Explorer change.</summary>
 /// <param name="Succeeded">Whether the change committed.</param>
 /// <param name="Title">The operation title.</param>
 /// <param name="Message">What changed, or why it failed.</param>

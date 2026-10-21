@@ -6,16 +6,16 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Panes.Assets;
-using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
-using Oxygen.Editor.ContentBrowser.Relocation;
+using Oxygen.Editor.ContentExplorer.Panes.Assets;
+using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
+using Oxygen.Editor.ContentExplorer.Relocation;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentBrowser;
+namespace Oxygen.Editor.ContentExplorer;
 
 /// <summary>
 /// Commands that act on the selected assets: open, rename, move, copy, delete, references, paths, File Explorer
@@ -30,10 +30,10 @@ public partial class AssetsViewModel
     private IReadOnlyList<AssetTarget>? selectionTargets;
 
     /// <summary>Gets the selected assets of the active layout; the last is the active asset.</summary>
-    public IReadOnlyList<AssetEntry> SelectedAssets => contentBrowserState.SelectedAssets;
+    public IReadOnlyList<AssetEntry> SelectedAssets => contentExplorerState.SelectedAssets;
 
     /// <summary>Gets the shared result order, view and tile size.</summary>
-    public AssetBrowserPresentation Presentation => contentBrowserState.Presentation;
+    public AssetBrowserPresentation Presentation => contentExplorerState.Presentation;
 
     /// <summary>Gets a value indicating whether the result bar offers Undo of the global history's latest entry.</summary>
     [ObservableProperty]
@@ -64,8 +64,8 @@ public partial class AssetsViewModel
     /// <summary>Gets what Paste does, or why it is unavailable.</summary>
     public string PasteToolTip => Explain(
         "Paste (Ctrl+V)",
-        contentBrowserState.Clipboard.Count == 0 ? "Cut or copy items first." : this.IsSelectedFolderWritable() ? null : "Choose a folder under Content or another authoring folder.",
-        contentBrowserState.IsClipboardCut ? "Moves the cut items here." : "Copies the items here.");
+        contentExplorerState.Clipboard.Count == 0 ? "Cut or copy items first." : this.IsSelectedFolderWritable() ? null : "Choose a folder under Content or another authoring folder.",
+        contentExplorerState.IsClipboardCut ? "Moves the cut items here." : "Copies the items here.");
 
     /// <summary>Gets what Duplicate does, or why it is unavailable.</summary>
     public string DuplicateToolTip => Explain("Duplicate (Ctrl+D)", this.GetDuplicateBlocker(), "Creates a copy next to each item.");
@@ -309,10 +309,10 @@ public partial class AssetsViewModel
             return;
         }
 
-        contentBrowserState.SetClipboard([.. this.DescribeSelection().Select(static target => target.VirtualPath!)], isCut);
+        contentExplorerState.SetClipboard([.. this.DescribeSelection().Select(static target => target.VirtualPath!)], isCut);
     }
 
-    private bool CanPaste() => relocation is not null && contentBrowserState.Clipboard.Count != 0 && this.IsSelectedFolderWritable();
+    private bool CanPaste() => relocation is not null && contentExplorerState.Clipboard.Count != 0 && this.IsSelectedFolderWritable();
 
     [RelayCommand(CanExecute = nameof(CanPaste))]
     private async Task PasteAsync()
@@ -323,10 +323,10 @@ public partial class AssetsViewModel
         }
 
         var folder = this.GetSelectedFolder();
-        var isCut = contentBrowserState.IsClipboardCut;
-        if (await relocation.PasteAsync(contentBrowserState.Clipboard, isCut, folder).ConfigureAwait(true) is { Succeeded: true } && isCut)
+        var isCut = contentExplorerState.IsClipboardCut;
+        if (await relocation.PasteAsync(contentExplorerState.Clipboard, isCut, folder).ConfigureAwait(true) is { Succeeded: true } && isCut)
         {
-            contentBrowserState.ClearClipboard();
+            contentExplorerState.ClearClipboard();
         }
     }
 
