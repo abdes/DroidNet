@@ -3,18 +3,17 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Runtime.Diagnostics;
-using Oxygen.Editor.World.Diagnostics;
+using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.Scenes.Interaction;
 
 /// <summary>
 /// Owns the editor-only interaction state of a project's scenes: which nodes are hidden in the
@@ -22,7 +21,7 @@ namespace Oxygen.Editor.World.Workspace;
 /// </summary>
 /// <remarks>
 /// <para>
-/// This is workspace state, not authoring state. Changing it never writes
+/// This is editor state, not authoring state. Changing it never writes
 /// <c>SceneNodeFlags::kVisible</c>, never dirties a scene document, never records an undo step and
 /// never asks for a cook. The ratified boundary between the three states — editor hide, editor lock
 /// and authored scene visibility — is in the Explorer plan's "Show in Editor &amp; Lock" contract,
@@ -37,19 +36,20 @@ namespace Oxygen.Editor.World.Workspace;
 /// </remarks>
 /// <param name="settings">The editor settings manager, accessed serially by this service.</param>
 /// <param name="results">The visible diagnostic publisher.</param>
-/// <param name="status">The workspace diagnostic status.</param>
+/// <param name="status">The diagnostic status reducer.</param>
 /// <param name="loggerFactory">The optional logger factory.</param>
-public sealed partial class WorkspaceInteractionService(
+public sealed partial class SceneNodeInteraction(
     IEditorSettingsManager settings,
     IOperationResultPublisher results,
     IStatusReducer status,
-    ILoggerFactory? loggerFactory = null) : ObservableObject, Oxygen.Editor.Scenes.Authoring.ISceneNodeInteraction
+    ILoggerFactory? loggerFactory = null) : ISceneNodeInteraction
 {
     /// <summary>The project-scoped interaction identity in the editor database.</summary>
+    /// <remarks>The key keeps its original name because projects store it.</remarks>
     internal static readonly SettingKey<ProjectInteraction> Key = new("WorldEditor", "SceneInteraction");
 
-    private readonly ILogger logger = loggerFactory?.CreateLogger<WorkspaceInteractionService>()
-        ?? NullLogger<WorkspaceInteractionService>.Instance;
+    private readonly ILogger logger = loggerFactory?.CreateLogger<SceneNodeInteraction>()
+        ?? NullLogger<SceneNodeInteraction>.Instance;
 
     // Serializes database access across project switches, exactly like the preview preferences.
     private Task persistence = Task.CompletedTask;
@@ -97,7 +97,7 @@ public sealed partial class WorkspaceInteractionService(
 
         var restoration = this.RestoreAfterAsync(this.persistence, project, sceneId, generation);
         this.persistence = restoration.ContinueWith(
-            static completed => { _ = completed.Exception; },
+            static completed => _ = completed.Exception,
             CancellationToken.None,
             TaskContinuationOptions.ExecuteSynchronously,
             TaskScheduler.Default);
@@ -264,7 +264,7 @@ public sealed partial class WorkspaceInteractionService(
         this.persistence = this.SavePendingAfterAsync(this.persistence);
     }
 
-    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Workspace state persistence must report storage failures without losing later writes or crashing the Explorer bindings.")]
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Interaction state persistence must report storage failures without losing later writes or crashing the Explorer bindings.")]
     private async Task SavePendingAfterAsync(Task previous)
     {
         await previous.ConfigureAwait(true);
@@ -287,6 +287,7 @@ public sealed partial class WorkspaceInteractionService(
         }
     }
 
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A stored state that cannot be read, whatever the settings store fails with, is reported and the scene starts with nothing hidden or locked instead of failing to open.")]
     private async Task RestoreAfterAsync(Task previous, ProjectContext project, SceneId sceneId, long generation)
     {
         await previous.ConfigureAwait(true);
@@ -326,12 +327,12 @@ public sealed partial class WorkspaceInteractionService(
                 project,
                 "INVALID_STATE",
                 "Editor interaction state was not restored",
-                "The saved workspace state is invalid. Scene visibility, locks and Explorer category filters use their defaults.",
-                new InvalidDataException("Workspace interaction state contains an invalid scene record."));
+                "The saved interaction state is invalid. Scene visibility, locks and Explorer category filters use their defaults.",
+                new InvalidDataException("Interaction state contains an invalid scene record."));
             return;
         }
 
-        this.scenes = new Dictionary<SceneId, SceneInteraction>(stored.Scenes);
+        this.scenes = [with(stored.Scenes)];
         if (this.scenes.TryGetValue(sceneId, out var scene))
         {
             this.hiddenNodeIds = [.. scene.HiddenNodeIds];
@@ -344,7 +345,7 @@ public sealed partial class WorkspaceInteractionService(
     private void ReportFailure(ProjectContext project, string code, string title, string message, Exception exception)
     {
         this.LogInteractionFailure(exception, code, project.ProjectRoot);
-        RuntimeOperationResults.PublishFailure(
+        _ = SceneOperationResults.PublishFailure(
             results,
             status,
             RuntimeOperationKinds.SettingsApply,
@@ -373,14 +374,4 @@ public sealed partial class WorkspaceInteractionService(
         IReadOnlyList<NodeId> HiddenNodeIds,
         IReadOnlyList<NodeId> LockedNodeIds,
         SceneCategories Categories);
-}
-
-/// <summary>The Scene Explorer node categories to display.</summary>
-/// <param name="ShowMeshes">Whether mesh-category rows are displayed.</param>
-/// <param name="ShowLights">Whether light-category rows are displayed.</param>
-/// <param name="ShowCameras">Whether camera-category rows are displayed.</param>
-public sealed record SceneCategories(bool ShowMeshes, bool ShowLights, bool ShowCameras)
-{
-    /// <summary>Gets the filter that includes every category.</summary>
-    public static SceneCategories All { get; } = new(ShowMeshes: true, ShowLights: true, ShowCameras: true);
 }

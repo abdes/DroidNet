@@ -6,13 +6,13 @@ using System.Globalization;
 using Oxygen.Managed.Core;
 using Windows.ApplicationModel.DataTransfer;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.Scenes.Nodes;
 
 /// <summary>
-/// Describes scene nodes dragged out of the Scene Explorer, so other panes, such as node fields in the inspector,
-/// can accept them.
+/// The scene-node drag payload: the nodes a drag carries, written by the part that starts the drag and read by any part
+/// that accepts them, such as node fields in the inspector.
 /// </summary>
-internal static class SceneNodeDragData
+public static class SceneNodeDragData
 {
     /// <summary>The data format: the dragged node identities, separated by semicolons.</summary>
     public const string Format = "application/vnd.oxygen.scene-nodes";

@@ -7,7 +7,7 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Pickers;
-using Oxygen.Editor.World.SceneExplorer;
+using Oxygen.Editor.Scenes.Nodes;
 
 namespace Oxygen.Editor.World.Inspector.Scripting;
 

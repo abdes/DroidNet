@@ -4,7 +4,6 @@
 
 using System.Globalization;
 using System.Reactive.Linq;
-using System.Reactive.Threading.Tasks;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Microsoft.UI.Xaml;
@@ -21,12 +20,12 @@ namespace Oxygen.Editor.CookedInspector;
 /// The Cooked Inspector panel: a read-only report of the cooked output of one scope, which each inspection request
 /// replaces. A request for the scope it already shows inspects it again.
 /// </summary>
-public sealed partial class CookedInspectionViewModel : ObservableObject, IDisposable
+/// <param name="pipeline">The shared read-only pipeline boundary.</param>
+/// <param name="assetProvider">Current shared catalog facts for a specifically opened asset.</param>
+/// <param name="projects">The active project lifetime.</param>
+/// <param name="showAsset">Explicit navigation in the owning workspace.</param>
+public sealed partial class CookedInspectionViewModel(IContentPipelineService pipeline, IAssetFeed assetProvider, IProjectContextService projects, Func<AssetPath, Task<bool>> showAsset) : ObservableObject, IDisposable
 {
-    private readonly IContentPipelineService pipeline;
-    private readonly IAssetFeed assetProvider;
-    private readonly IProjectContextService projects;
-    private readonly Func<AssetPath, Task<bool>> showAsset;
     private Func<Task>? cancelInspection;
     private Task currentWork = Task.CompletedTask;
     private long requestVersion;
@@ -34,19 +33,6 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
     private bool closed;
     private InspectionAssetRow[] allAssets = [];
     private InspectionFileRow[] allFiles = [];
-
-    /// <summary>Initializes a new instance of the <see cref="CookedInspectionViewModel"/> class.</summary>
-    /// <param name="pipeline">The shared read-only pipeline boundary.</param>
-    /// <param name="assetProvider">Current shared catalog facts for a specifically opened asset.</param>
-    /// <param name="projects">The active project lifetime.</param>
-    /// <param name="showAsset">Explicit navigation in the owning workspace.</param>
-    public CookedInspectionViewModel(IContentPipelineService pipeline, IAssetFeed assetProvider, IProjectContextService projects, Func<AssetPath, Task<bool>> showAsset)
-    {
-        this.pipeline = pipeline;
-        this.assetProvider = assetProvider;
-        this.projects = projects;
-        this.showAsset = showAsset;
-    }
 
     /// <summary>Gets the inspected scope's name, or what to do when nothing is inspected yet.</summary>
     public string Scope => this.scope is not { } current
@@ -239,7 +225,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
         {
             if (uri is not null && !this.closed)
             {
-                this.Message = await this.showAsset(uri).ConfigureAwait(true)
+                this.Message = await showAsset(uri).ConfigureAwait(true)
                     ? string.Empty : "This source is no longer available in the Content Browser.";
             }
         }
@@ -302,7 +288,7 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
         }
     }
 
-    private async Task<(CookedOutputReport report, AssetEntry? asset)> ReadReportAsync(Task previous, long version, CookedInspectionScope request, bool validate)
+    private async Task<(CookedOutputReport Report, AssetEntry? Asset)> ReadReportAsync(Task previous, long version, CookedInspectionScope request, bool validate)
     {
         using var cancellation = new CancellationTokenSource();
         var cancellationWork = Task.CompletedTask;
@@ -321,12 +307,13 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
             cancellation.Token.ThrowIfCancellationRequested();
             var project = this.GetCurrentProject(request);
             var asset = request.Asset is { } identity ? await this.ResolveInspectedAssetAsync(identity, project, request, cancellation.Token).ConfigureAwait(true) : null;
+
             // A packaged asset is read from its pak: the project has no cooked output of it to inspect.
             var report = asset is { IsPackaged: true }
                 ? new CookedOutputReport(request.Project.ProjectId, request.Scope, DateTimeOffset.UtcNow, [])
-                : await this.pipeline.InspectCookedOutputAsync(request.Scope, cancellation.Token, validate, project).ConfigureAwait(true);
+                : await pipeline.InspectCookedOutputAsync(request.Scope, cancellation.Token, validate, project).ConfigureAwait(true);
             cancellation.Token.ThrowIfCancellationRequested();
-            if (!ReferenceEquals(project, this.projects.ActiveProject))
+            if (!ReferenceEquals(project, projects.ActiveProject))
             {
                 throw new OperationCanceledException("The project configuration changed during inspection.");
             }
@@ -350,13 +337,13 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
     }
 
     private ProjectContext GetCurrentProject(CookedInspectionScope request)
-        => this.projects.ActiveProject is { } project && project.ProjectId == request.Project.ProjectId
+        => projects.ActiveProject is { } project && project.ProjectId == request.Project.ProjectId
             && project.ProjectRoot == request.Project.ProjectRoot
             ? project : throw new OperationCanceledException("The inspection's project was closed or replaced.");
 
     private async Task<AssetEntry?> ResolveInspectedAssetAsync(AssetPath identity, ProjectContext project, CookedInspectionScope request, CancellationToken cancellationToken)
     {
-        var asset = await this.assetProvider.ResolveAsync(identity, cancellationToken).ConfigureAwait(true);
+        var asset = await assetProvider.ResolveAsync(identity, cancellationToken).ConfigureAwait(true);
         if (asset is not null && request.CookedSource is { } requested)
         {
             var source = asset.OverriddenCookedSources.Prepend(asset.CookedMetadata).OfType<Oxygen.Managed.Assets.Catalog.CookedAssetMetadata>()
@@ -370,9 +357,9 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
     private void ApplyReport(CookedOutputReport report)
     {
         this.Report = report;
-        this.allAssets = report.Roots.SelectMany(root => root.Inspection.Assets.Select(asset => this.CreateAssetRow(root, asset))).ToArray();
-        this.allFiles = report.Roots.SelectMany(root => root.Inspection.Files.Select(file => new InspectionFileRow(root.Name, root.Inspection.CookedRoot, file))).ToArray();
-        this.Issues = report.Roots.SelectMany(root => root.Inspection.Diagnostics.Concat(root.Validation?.Diagnostics ?? []).Select(issue => new InspectionIssueRow(root.Name, issue))).ToArray();
+        this.allAssets = [.. report.Roots.SelectMany(root => root.Inspection.Assets.Select(asset => this.CreateAssetRow(root, asset)))];
+        this.allFiles = [.. report.Roots.SelectMany(root => root.Inspection.Files.Select(file => new InspectionFileRow(root.Name, root.Inspection.CookedRoot, file)))];
+        this.Issues = [.. report.Roots.SelectMany(root => root.Inspection.Diagnostics.Concat(root.Validation?.Diagnostics ?? []).Select(issue => new InspectionIssueRow(root.Name, issue)))];
         this.StatusText = report.Roots.Any(static root => !root.Inspection.Succeeded || root.Validation?.Succeeded == false)
                 || this.Issues.Any(static issue => issue.Diagnostic.Severity is DiagnosticSeverity.Error or DiagnosticSeverity.Fatal) ? "Inspection has errors"
             : this.ScopedAsset is { IsPackaged: true } && this.allAssets.Length == 0 ? this.ScopedAsset.PrimaryBadge
@@ -392,8 +379,8 @@ public sealed partial class CookedInspectionViewModel : ObservableObject, IDispo
     {
         var selected = this.SelectedAsset?.Key;
         var search = this.SearchText.Trim();
-        this.Assets = this.allAssets.Where(asset => asset.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || asset.Asset.VirtualPath.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
-        this.Files = this.allFiles.Where(file => file.Name.Contains(search, StringComparison.OrdinalIgnoreCase)).ToArray();
+        this.Assets = [.. this.allAssets.Where(asset => asset.Name.Contains(search, StringComparison.OrdinalIgnoreCase) || asset.Asset.VirtualPath.Contains(search, StringComparison.OrdinalIgnoreCase))];
+        this.Files = [.. this.allFiles.Where(file => file.Name.Contains(search, StringComparison.OrdinalIgnoreCase))];
         this.SelectedAsset = this.Assets.FirstOrDefault(asset => string.Equals(asset.Key, selected, StringComparison.Ordinal)) ?? (this.Assets.Count > 0 ? this.Assets[0] : null);
     }
 

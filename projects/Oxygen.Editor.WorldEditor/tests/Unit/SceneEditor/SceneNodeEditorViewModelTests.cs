@@ -16,12 +16,11 @@ using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
@@ -59,7 +58,7 @@ internal sealed class SceneNodeEditorViewModelTests
         var child = new SceneNode(scene) { Name = "Child" };
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
-        var interaction = new WorkspaceInteractionService(
+        var interaction = new SceneNodeInteraction(
             new Mock<IEditorSettingsManager>(MockBehavior.Loose).Object,
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer());
@@ -156,7 +155,7 @@ internal sealed class SceneNodeEditorViewModelTests
         FakeMaterialSlotProvider slots,
         SceneTab tab,
         IList<SceneNode> selectedNodes,
-        WorkspaceInteractionService? interaction = null)
+        SceneNodeInteraction? interaction = null)
     {
         // The document edits its own copy of the scene, so the selection holds the document's nodes. They show no
         // components: the component editors need a window.
@@ -165,11 +164,6 @@ internal sealed class SceneNodeEditorViewModelTests
         {
             node.Components.Clear();
         }
-
-        var messenger = new StrongReferenceMessenger();
-        messenger.Register<SceneNodeSelectionRequestMessage>(
-            recipient: new object(),
-            handler: (_, message) => message.Reply(nodes));
 
         var documents = new TestDocumentArea(tab.Document);
         var selectionService = new SceneSelectionService();
@@ -183,9 +177,8 @@ internal sealed class SceneNodeEditorViewModelTests
                 DispatcherScheduler = null!,
             },
             new ViewModelToView(new Mock<IViewLocator>().Object),
-            messenger,
+            new StrongReferenceMessenger(),
             documents,
-            default,
             Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             scenePreview,
             selectionService,

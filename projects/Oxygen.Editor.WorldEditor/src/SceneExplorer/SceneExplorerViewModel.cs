@@ -7,7 +7,6 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
 using DroidNet.Controls.Selection;
 using DroidNet.Documents;
@@ -16,24 +15,24 @@ using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.EditorView;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Views;
+using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Diagnostics;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -47,22 +46,26 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     // The selection source of viewport picks; their rows scroll into view.
     private const string ViewportSelectionSource = "Viewport";
 
+    // The selection source of the Inspector's "inspect this node" requests; the row is revealed and focused.
+    private const string InspectorSelectionSource = "Inspector";
+
     private readonly ILogger<SceneExplorerViewModel> logger;
-    private readonly IMessenger messenger;
     private readonly IRouter router;
     private readonly IProjectManagerService projectManager;
     private readonly IDocumentArea documentArea;
     private readonly OpenDocuments openDocuments;
-    private readonly WindowId windowId;
     private readonly ISceneSelectionService selectionService;
     private readonly IOperationResultPublisher? operationResults;
     private readonly IStatusReducer? statusReducer;
-    private readonly Workspace.WorkspaceInteractionService? interaction;
+    private readonly SceneNodeInteraction? interaction;
     private readonly IProjectContextService? projectContexts;
     private readonly Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation;
     private readonly Oxygen.Editor.Shell.Documents.IHistoryService? histories;
     private readonly Oxygen.Editor.Shell.Windows.IPlacementService? placement;
     private readonly Oxygen.Editor.Shell.Documents.IDocumentService? documents;
+    private readonly ISceneViews? views;
+    private readonly ISceneAvailability? availability;
+    private readonly IDisposable? commandRegistration;
     private readonly SceneExplorerProjection projection = new();
     private readonly SemaphoreSlim searchGate = new(1, 1);
     private readonly System.Threading.Lock searchLifetimeLock = new();
@@ -127,11 +130,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     ///     Initializes a new instance of the <see cref="SceneExplorerViewModel" /> class.
     /// </summary>
     /// <param name="projectManager">The project manager service.</param>
-    /// <param name="messenger">The messenger service used for cross-component communication.</param>
     /// <param name="router">The router service used for navigation events.</param>
     /// <param name="documentArea">The window's document area, whose active scene document the explorer shows.</param>
     /// <param name="openDocuments">The open documents: the explorer shows the scene document opened last, and follows its reloads.</param>
-    /// <param name="windowId">The window, which the explorer's window-scoped messages name.</param>
     /// <param name="selectionService">The document selection service.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
@@ -152,26 +153,32 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="histories">Optional history service whose global history records a scene file rename.</param>
     /// <param name="placement">Optional placement, which shows a scene document that becomes active in the window's place for its scene.</param>
     /// <param name="documents">Optional document service, which saves the unsaved documents before a scene file rename, after asking.</param>
+    /// <param name="views">Optional scene views, which frame nodes and run camera commands in the scene's editor.</param>
+    /// <param name="availability">Optional scene availability, which reports a scene that failed to load and reloads the previous one.</param>
+    /// <param name="commands">Optional command service, with which the explorer registers as a command handler.</param>
     public SceneExplorerViewModel(
         IProjectManagerService projectManager,
-        IMessenger messenger,
         IRouter router,
         IDocumentArea documentArea,
         OpenDocuments openDocuments,
-        WindowId windowId,
         ISceneSelectionService selectionService,
         ILoggerFactory? loggerFactory = null,
         IOperationResultPublisher? operationResults = null,
         IStatusReducer? statusReducer = null,
-        Workspace.WorkspaceInteractionService? interaction = null,
+        SceneNodeInteraction? interaction = null,
         IProjectContextService? projectContexts = null,
         Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation = null,
         Oxygen.Editor.Shell.Documents.IHistoryService? histories = null,
         Oxygen.Editor.Shell.Windows.IPlacementService? placement = null,
-        Oxygen.Editor.Shell.Documents.IDocumentService? documents = null)
+        Oxygen.Editor.Shell.Documents.IDocumentService? documents = null,
+        ISceneViews? views = null,
+        ISceneAvailability? availability = null,
+        ICommandService? commands = null)
         : base(loggerFactory)
     {
         this.documents = documents;
+        this.views = views;
+        this.availability = availability;
         this.relocation = relocation;
         this.histories = histories;
         this.placement = placement;
@@ -188,11 +195,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ??
                       NullLoggerFactory.Instance.CreateLogger<SceneExplorerViewModel>();
         this.projectManager = projectManager;
-        this.messenger = messenger;
         this.router = router;
         this.documentArea = documentArea;
         this.openDocuments = openDocuments;
-        this.windowId = windowId;
         this.selectionService = selectionService;
         this.selectionService.SelectionChanged += this.OnSelectionServiceChanged;
         this.SelectionSettled += this.OnTreeSelectionSettled;
@@ -203,14 +208,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.UndoStack = this.History.UndoStack;
         this.RedoStack = this.History.RedoStack;
 
-        this.RegisterMessages(messenger);
-
         // Default selection mode for Scene Explorer is multiple selection.
         this.SelectionMode = SelectionMode.Multiple;
 
         // The explorer shows the window's active scene document.
         documentArea.ActiveDocumentChanged += this.OnActiveDocumentChanged;
         this.RegisterSceneLifetime();
+        this.commandRegistration = commands?.Register(this);
     }
 
     /// <summary>
@@ -628,7 +632,12 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 service.StateChanged -= this.OnInteractionStateChanged;
             }
 
-            this.messenger.UnregisterAll(this);
+            this.commandRegistration?.Dispose();
+            if (this.availability is { } source)
+            {
+                source.SceneUnavailable -= this.OnSceneUnavailable;
+            }
+
 
             // Ensure any in-flight scene load is cancelled and the CTS is disposed.
             try
@@ -767,7 +776,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="node">The scene node to test.</param>
     /// <param name="service">The workspace interaction owner.</param>
     /// <returns><see langword="true"/> when an ancestor of <paramref name="node"/> is hidden.</returns>
-    private static bool HasHiddenSceneAncestor(SceneNode node, Workspace.WorkspaceInteractionService service)
+    private static bool HasHiddenSceneAncestor(SceneNode node, SceneNodeInteraction service)
     {
         for (var parent = node.Parent; parent is not null; parent = parent.Parent)
         {
@@ -819,34 +828,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
     }
 
-    private void RegisterMessages(IMessenger messenger)
-    {
-        messenger.Register<SceneNodeSelectionRequestMessage>(this, this.OnSceneNodeSelectionRequested);
-        messenger.Register<InspectSceneNodeMessage>(this, (_, message) =>
-        {
-            if (!this.isDisposed && message.WindowId == this.windowId && !message.HasReceivedResponse)
-            {
-                message.Reply(this.InspectNodeAsync(message.NodeId));
-            }
-        });
-        messenger.Register<SceneEditRequestMessage>(this, (_, message) =>
-        {
-            if (!this.isDisposed && this.Scene is not null && this.SceneDocumentId == message.DocumentId)
-            {
-                _ = this.RunEditRequestAsync(message.Request);
-            }
-        });
-        messenger.Register<SceneShortcutMessage>(this, (_, message) =>
-        {
-            if (!this.isDisposed && !message.HasReceivedResponse && this.Scene is not null
-                && ReferenceEquals(this.documentArea.ActiveDocument, this.sceneDocument)
-                && this.RunShortcut(message.Shortcut))
-            {
-                message.Reply(response: true);
-            }
-        });
-    }
-
     [RelayCommand(CanExecute = nameof(CanRenameSelected))]
     private void RenameSelected()
     {
@@ -861,40 +842,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         => this.GetContextDisabledReason(
             SceneExplorerCommandKind.Rename,
             this.CaptureExplorerContext(anchor: null, background: false)) is null;
-
-    /// <summary>Runs the viewport's Ctrl+Z, Ctrl+Y and Delete through the Explorer's own commands.</summary>
-    private async Task RunEditRequestAsync(SceneEditRequest request)
-    {
-        switch (request)
-        {
-            case SceneEditRequest.Undo:
-                await this.UndoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-                break;
-            case SceneEditRequest.Redo:
-                await this.RedoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
-                break;
-            case SceneEditRequest.Delete when this.DeleteAction is IAsyncRelayCommand delete && delete.CanExecute(parameter: null):
-                await delete.ExecuteAsync(parameter: null).ConfigureAwait(true);
-                break;
-            default:
-                break;
-        }
-    }
-
-    private bool RunShortcut(SceneShortcut shortcut)
-    {
-        switch (shortcut)
-        {
-            case SceneShortcut.Rename when this.RenameAction.CanExecute(parameter: null):
-                this.RenameAction.Execute(parameter: null);
-                return true;
-            case SceneShortcut.FindInExplorer when this.FindRequested is { } findRequested:
-                findRequested(this, EventArgs.Empty);
-                return true;
-            default:
-                return false;
-        }
-    }
 
     [RelayCommand]
     private async Task Undo()
@@ -1320,30 +1267,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
     }
 
-    private void OnSceneNodeSelectionRequested(object recipient, SceneNodeSelectionRequestMessage message)
-    {
-        _ = recipient;
-
-        if (this.Scene is null)
-        {
-            message.Reply(Array.Empty<SceneNode>());
-            return;
-        }
-
-        message.Reply([.. this.selectionService.GetSelectedNodes(this.SceneDocumentId, this.Scene.AttachedObject)]);
-    }
-
-    private async Task<bool> InspectNodeAsync(NodeId nodeId)
-    {
-        if (this.Scene is null || this.projection.GetNode(nodeId) is null)
-        {
-            return false;
-        }
-
-        await this.ClearSearchAsync().ConfigureAwait(true);
-        return await this.SetSelectedNodes([nodeId], focusPrimary: true).ConfigureAwait(true);
-    }
-
     private async Task<int> SearchCoreAsync(string query, int generation)
     {
         if (generation != Volatile.Read(ref this.searchGeneration))
@@ -1764,7 +1687,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         };
         if (nodeIds is not null)
         {
-            _ = this.messenger.Send(new FrameSceneNodesRequestMessage(this.SceneDocumentId, nodeIds));
+            _ = this.views?.FrameAsync(this.SceneDocumentId, nodeIds);
         }
     }
 
@@ -1805,7 +1728,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // Foreign selections forward the received context verbatim: re-deriving it from the rows
         // that happened to resolve would silently shrink the authoritative selection.
         var context = authoritativeContext ?? BuildSelectionContext(items, this.ActiveItem);
-        var nodes = items.OfType<SceneNodeAdapter>().Select(adapter => adapter.AttachedObject).ToList();
 
         this.suppressSelectionSync = true;
         try
@@ -1818,7 +1740,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         this.lastPublishedContext = context;
-        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. nodes], context, this.SceneDocumentId));
     }
 
     /// <summary>
@@ -1849,7 +1770,15 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     {
         try
         {
-            _ = await this.ApplySelectionContextAsync(args.Context).ConfigureAwait(true);
+            // The Inspector asks to inspect a node: a search that hides its row ends, and the row takes the focus.
+            var inspecting = string.Equals(args.Source, InspectorSelectionSource, StringComparison.Ordinal)
+                && args.Context.SelectedNodeIds.Any(id => this.projection.GetNode(id) is not null);
+            if (inspecting)
+            {
+                await this.ClearSearchAsync().ConfigureAwait(true);
+            }
+
+            _ = await this.ApplySelectionContextAsync(args.Context, focusPrimary: inspecting).ConfigureAwait(true);
 
             // A viewport pick scrolls its row into view, leaving keyboard focus in the viewport.
             if (string.Equals(args.Source, ViewportSelectionSource, StringComparison.Ordinal)
@@ -2402,7 +2331,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
     }
 
-    private void ApplyCategoryFilters(Workspace.SceneCategories categories)
+    private void ApplyCategoryFilters(SceneCategories categories)
     {
         this.isApplyingCategoryFilters = true;
         try

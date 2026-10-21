@@ -4,7 +4,6 @@
 
 using AwesomeAssertions;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls.Menus;
 using DroidNet.Documents;
 using DroidNet.Routing;
@@ -14,10 +13,10 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
@@ -224,14 +223,13 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     {
         using var harness = new AuthoringHarness(out var scene, out var node);
         node.Components.Add(new PerspectiveCamera { Name = "Camera" });
-        var requests = new List<SceneCameraCommandMessage>();
-        harness.Messenger.Register<SceneCameraViewportStateRequestMessage>(this, (_, message) => message.Reply(new SceneCameraViewportState(ViewedCameraId: null, IsPiloting: false)));
-        harness.Messenger.Register<SceneCameraCommandMessage>(this, (_, message) =>
-        {
-            requests.Add(message);
-            message.Reply(Task.FromResult(true));
-        });
-        using var explorer = harness.Build();
+        var requests = new List<(NodeId Node, SceneCameraCommand Command)>();
+        var views = new Mock<ISceneViews>();
+        _ = views.Setup(value => value.CameraStateOf(harness.DocumentId)).Returns(new SceneCameraViewState(ViewedCameraId: null, IsPiloting: false));
+        _ = views.Setup(value => value.RunCameraCommandAsync(harness.DocumentId, It.IsAny<NodeId>(), It.IsAny<SceneCameraCommand>()))
+            .Callback((DocumentId _, NodeId camera, SceneCameraCommand command) => requests.Add((camera, command)))
+            .ReturnsAsync(true);
+        using var explorer = harness.Build(views.Object);
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         _ = await explorer.SetSelectedNodes([node.Id]).ConfigureAwait(true);
         var row = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(true);
@@ -242,9 +240,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         await GetMenuCommand(menu, "Pilot camera").ExecuteAsync(parameter: null).ConfigureAwait(true);
         await GetMenuCommand(menu, "Align camera to view").ExecuteAsync(parameter: null).ConfigureAwait(true);
 
-        _ = requests.Select(static request => (request.NodeId, request.Command)).Should()
-            .Equal((node.Id, SceneCameraCommand.Pilot), (node.Id, SceneCameraCommand.AlignToView));
-        harness.Messenger.UnregisterAll(this);
+        _ = requests.Should().Equal((node.Id, SceneCameraCommand.Pilot), (node.Id, SceneCameraCommand.AlignToView));
     });
 
     [TestMethod]
@@ -252,8 +248,9 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     {
         using var harness = new AuthoringHarness(out var scene, out var node);
         node.Components.Add(new OrthographicCamera { Name = "Camera" });
-        harness.Messenger.Register<SceneCameraViewportStateRequestMessage>(this, (_, message) => message.Reply(new SceneCameraViewportState(node.Id, IsPiloting: true)));
-        using var explorer = harness.Build();
+        var views = new Mock<ISceneViews>();
+        _ = views.Setup(value => value.CameraStateOf(harness.DocumentId)).Returns(new SceneCameraViewState(node.Id, IsPiloting: true));
+        using var explorer = harness.Build(views.Object);
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         _ = await explorer.SetSelectedNodes([node.Id]).ConfigureAwait(true);
         var row = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(true);
@@ -264,7 +261,6 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         var align = menu.Items.Single(static item => item.Text == "Align camera to view");
         _ = align.IsEnabled.Should().BeFalse();
         _ = align.HelpText.Should().Contain("return it to the editor camera");
-        harness.Messenger.UnregisterAll(this);
     });
 
     [TestMethod]
@@ -325,7 +321,8 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         /// <summary>Gets the explorer layout of the harness's first scene.</summary>
         public IList<ExplorerEntryData> Layout => this.openDocuments[0].Layout;
 
-        public IMessenger Messenger { get; } = new StrongReferenceMessenger();
+        /// <summary>Gets the identity of the harness's first scene document.</summary>
+        public DocumentId DocumentId => this.openDocuments[0].DocumentId;
 
         public void Dispose()
         {
@@ -345,9 +342,10 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
             return added;
         }
 
-        public SceneExplorerViewModel Build()
-            => new(this.Manager.Object, this.Messenger, Mock.Of<IRouter>(), this.Documents,
+        public SceneExplorerViewModel Build(ISceneViews? views = null)
+            => new(this.Manager.Object, Mock.Of<IRouter>(), this.Documents,
                 this.OpenDocuments,
-                default, new SceneSelectionService());
+                new SceneSelectionService(),
+                views: views);
     }
 }

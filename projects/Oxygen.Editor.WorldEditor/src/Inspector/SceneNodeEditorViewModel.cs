@@ -10,7 +10,6 @@ using DroidNet.Mvvm.Converters;
 using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentBrowser.Messages;
@@ -22,15 +21,13 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Components;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Inspector;
@@ -40,6 +37,9 @@ namespace Oxygen.Editor.World.Inspector;
 /// </summary>
 public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<SceneNode>, IDisposable
 {
+    // The selection source of this inspector's "inspect this node" requests; the Scene Explorer reveals and focuses the row.
+    private const string InspectorSelectionSource = "Inspector";
+
     private readonly ILogger logger;
 
     private readonly Dictionary<Type, IPropertyEditor<SceneNode>> editorInstances = [];
@@ -47,14 +47,16 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly IMessenger messenger;
     private readonly IDocumentArea documentArea;
     private readonly IScenePreview scenePreview;
-    private readonly WorkspaceInteractionService? interaction;
-    private readonly WindowId windowId;
+    private readonly SceneNodeInteraction? interaction;
     private readonly DispatcherQueue? dispatcher;
     private readonly InspectorSelectionObserver selectionObserver;
     private readonly EnvironmentViewModel environmentEditor;
     private readonly NodeRenderingViewModel renderingEditor;
     private readonly ISceneSelectionService sceneSelectionService;
     private (DocumentId document, string property)? pendingEnvironmentFocus;
+
+    // The atmosphere source the inspector selected, whose directional light it shows once the selection arrives.
+    private NodeId? pendingAtmosphereSource;
 
     private bool isDisposed;
     private Document? watchedDocument;
@@ -76,7 +78,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="vmToViewConverter">The converter for resolving views from viewmodels.</param>
     /// <param name="messenger">The messenger for MVVM messaging.</param>
     /// <param name="documentArea">The window's document area, whose active scene document the inspector shows.</param>
-    /// <param name="windowId">The window, which node inspection requests name.</param>
     /// <param name="assetProvider">The shared asset identity and availability feed.</param>
     /// <param name="scenePreview">The engine preview, which reports the fields still waiting for the engine.</param>
     /// <param name="selectionService">The authoritative document selection owner, used to hydrate the typed context at startup.</param>
@@ -95,7 +96,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         ViewModelToView vmToViewConverter,
         IMessenger messenger,
         IDocumentArea documentArea,
-        WindowId windowId,
         IAssetFeed assetProvider,
         IScenePreview scenePreview,
         ISceneSelectionService selectionService,
@@ -103,7 +103,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         IProjectContextService projectContexts,
         IInputSources inputSources,
         ILoggerFactory? loggerFactory = null,
-        WorkspaceInteractionService? interaction = null,
+        SceneNodeInteraction? interaction = null,
         IScripts? scripts = null,
         ICodeEditorService? codeEditor = null)
         : base(loggerFactory)
@@ -116,7 +116,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.scenePreview = scenePreview;
         this.interaction = interaction;
         this.sceneSelectionService = selectionService;
-        this.windowId = windowId;
         this.VmToViewConverter = vmToViewConverter;
         this.dispatcher = hosting.Dispatcher;
         this.scenePreview.PendingFieldsChanged += this.OnPendingFieldsChanged;
@@ -144,20 +143,15 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             inputSources);
         this.renderingEditor = new NodeRenderingViewModel(this.AuthoringOf);
 
-        this.items = this.messenger.Send(new SceneNodeSelectionRequestMessage()).SelectedEntities;
-        this.activeScene = this.items.FirstOrDefault()?.Scene;
-
-        // The request reply carries nodes only; startup must additionally hydrate the authoritative
-        // typed context, or a folder-only selection initializes as "scene properties".
+        // Startup hydrates the authoritative typed context with the nodes: a folder-only selection
+        // must initialize as the grouping summary, not as "scene properties".
         var activeDocument = this.ActiveSceneDocumentId;
-        this.activeDocumentId = this.activeScene is null ? null : activeDocument;
+        this.activeScene = this.ResolveDocumentScene(activeDocument);
         this.selectionContext = this.sceneSelectionService.GetContext(activeDocument ?? DocumentId.Empty);
-        if (this.HasSelectionSummary)
-        {
-            this.items = [];
-        }
-
-        this.activeScene ??= this.ResolveDocumentScene(activeDocument);
+        this.items = this.activeScene is { } shownScene && activeDocument is { } shownDocument && !this.HasSelectionSummary
+            ? this.sceneSelectionService.GetSelectedNodes(shownDocument, shownScene).ToList()
+            : [];
+        this.activeDocumentId = this.items.Count == 0 ? null : activeDocument;
 
         if (interaction is { } interactionService)
         {
@@ -171,7 +165,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.SubscribeToComponentCollections();
         this.LogConstructed(this.items.Count);
 
-        this.RegisterSceneMessages(hosting);
+        this.RegisterSceneSubscriptions();
         this.RegisterComponentMessages(hosting);
     }
 
@@ -318,6 +312,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         this.scenePreview.PendingFieldsChanged -= this.OnPendingFieldsChanged;
         this.sceneSelectionService.PropertyFocusRequested -= this.OnPropertyFocusRequested;
+        this.sceneSelectionService.SelectionChanged -= this.OnSelectionServiceChanged;
         this.scenePreview.ReadyChanged -= this.OnPreviewReadyChanged;
         this.documentArea.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
         this.WatchContent(document: null);
@@ -485,18 +480,29 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             return;
         }
 
-        var request = this.messenger.Send(new InspectSceneNodeMessage(nodeId, this.windowId));
-        if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
+        if (this.ActiveSceneDocumentId is not { } documentId)
         {
             throw new InvalidOperationException("The atmosphere source could not be revealed in Scene Explorer.");
         }
 
-        if (this.items.Count == 1 && ReferenceEquals(this.items.First(), node))
+        // The Explorer reveals and focuses the row for a selection written by this source; the selection may reach the
+        // inspector later, through its dispatcher.
+        this.pendingAtmosphereSource = node.Id;
+        this.sceneSelectionService.SetSelection(documentId, [node], InspectorSelectionSource);
+        this.ApplyPendingAtmosphereFilter();
+    }
+
+    private void ApplyPendingAtmosphereFilter()
+    {
+        if (this.pendingAtmosphereSource is not { } source || this.items.Count != 1 || this.items.First().Id != source)
         {
-            this.SetComponentFilter(typeof(DirectionalLightComponent));
-            this.RefreshPropertyEditors(refreshValues: false);
-            this.RefreshEditorInputState();
+            return;
         }
+
+        this.pendingAtmosphereSource = null;
+        this.SetComponentFilter(typeof(DirectionalLightComponent));
+        this.RefreshPropertyEditors(refreshValues: false);
+        this.RefreshEditorInputState();
     }
 
     private HashSet<Type> GetApplicablePropertyEditorTypes()
@@ -550,41 +556,28 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         return instance;
     }
 
-    private void RegisterSceneMessages(HostingContext hosting)
+    private void RegisterSceneSubscriptions()
     {
-        this.messenger.Register<SceneAuthoringUnloadedMessage>(this, (_, message) =>
-            _ = hosting.Dispatcher.DispatchAsync(() =>
-            {
-                if (this.isDisposed || this.activeDocumentId != message.DocumentId)
-                {
-                    return;
-                }
-
-                if (this.watchedDocument?.Id == message.DocumentId)
-                {
-                    this.WatchContent(document: null);
-                }
-
-                this.items = [];
-                this.SubscribeToComponentCollections();
-                this.activeScene = null;
-                this.activeDocumentId = null;
-                this.selectionContext = this.sceneSelectionService.GetContext(DocumentId.Empty);
-                this.RefreshPendingLiveSyncState();
-                this.environmentEditor.SetScene(value: null);
-                this.NotifySelectionRoutingChanged();
-                this.UpdateItemsCollection(this.items);
-            }));
-
         this.documentArea.ActiveDocumentChanged += this.OnActiveDocumentChanged;
         this.WatchContent(this.documentArea.ActiveDocument);
-        this.RegisterSelectionMessages(hosting);
+        this.sceneSelectionService.SelectionChanged += this.OnSelectionServiceChanged;
     }
 
     // A scene document that becomes active, or reloads while active, hydrates the inspector from its scene.
     private void OnActiveDocumentChanged(object? sender, EventArgs args)
     {
-        if (this.isDisposed || this.documentArea.ActiveDocument is not { Content: SceneContent } active || ReferenceEquals(active, this.watchedDocument))
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        // The watched scene document closed: the inspector has nothing to show for it.
+        if (this.watchedDocument is { } watched && !this.documentArea.Documents.Contains(watched))
+        {
+            this.ClearClosedDocument(watched.Id);
+        }
+
+        if (this.documentArea.ActiveDocument is not { Content: SceneContent } active || ReferenceEquals(active, this.watchedDocument))
         {
             return;
         }
@@ -638,36 +631,78 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.ApplyPendingEnvironmentFocus();
     }
 
-    private void RegisterSelectionMessages(HostingContext hosting)
+    private void ClearClosedDocument(DocumentId documentId)
     {
-        this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
-            _ = hosting.Dispatcher.DispatchAsync(() =>
-            {
-                if (this.isDisposed || (message.DocumentId is { } documentId
-                    && (this.ActiveSceneDocumentId != documentId
-                        || !ReferenceEquals(this.sceneSelectionService.GetContext(documentId), message.SelectionContext))))
-                {
-                    return;
-                }
+        if (this.activeDocumentId != documentId && this.watchedDocument?.Id != documentId)
+        {
+            return;
+        }
 
-                this.selectionContext = message.SelectionContext;
+        if (this.watchedDocument?.Id == documentId)
+        {
+            this.WatchContent(document: null);
+        }
 
-                // Folder and mixed batches show the grouping summary: their node subset must
-                // not populate component editors as if the whole selection were nodes.
-                this.items = this.HasSelectionSummary ? [] : message.SelectedEntities;
-                if (this.items.FirstOrDefault()?.Scene is { } selectedScene)
-                {
-                    this.activeScene = selectedScene;
-                    this.activeDocumentId = message.DocumentId ?? this.activeDocumentId;
-                }
+        this.items = [];
+        this.SubscribeToComponentCollections();
+        this.activeScene = null;
+        this.activeDocumentId = null;
+        this.selectionContext = this.sceneSelectionService.GetContext(DocumentId.Empty);
+        this.RefreshPendingLiveSyncState();
+        this.environmentEditor.SetScene(value: null);
+        this.NotifySelectionRoutingChanged();
+        this.UpdateItemsCollection(this.items);
+    }
 
-                this.RefreshPendingLiveSyncState();
-                this.environmentEditor.SetScene(this.HasEnvironmentView ? this.activeScene : null);
-                this.NotifySelectionRoutingChanged();
-                this.LogSelectionChanged(this.items.Count);
-                this.UpdateItemsCollection(this.items);
-                this.SubscribeToComponentCollections();
-            }));
+    // A selection of the active scene document written by any source (the explorer, the viewport, an inspector request).
+    private void OnSelectionServiceChanged(object? sender, SceneSelectionChangedEventArgs args)
+    {
+        _ = sender;
+        if (this.isDisposed)
+        {
+            return;
+        }
+
+        if (this.dispatcher is { } queue)
+        {
+            _ = queue.DispatchAsync(() => this.ApplySelection(args));
+        }
+        else
+        {
+            this.ApplySelection(args);
+        }
+    }
+
+    private void ApplySelection(SceneSelectionChangedEventArgs args)
+    {
+        if (this.isDisposed
+            || this.ActiveSceneDocumentId != args.DocumentId
+            || !ReferenceEquals(this.sceneSelectionService.GetContext(args.DocumentId), args.Context))
+        {
+            return;
+        }
+
+        this.selectionContext = args.Context;
+
+        // Folder and mixed batches show the grouping summary: their node subset must
+        // not populate component editors as if the whole selection were nodes.
+        var scene = this.ResolveDocumentScene(args.DocumentId);
+        this.items = this.HasSelectionSummary || scene is null
+            ? []
+            : this.sceneSelectionService.GetSelectedNodes(args.DocumentId, scene).ToList();
+        if (this.items.FirstOrDefault()?.Scene is { } selectedScene)
+        {
+            this.activeScene = selectedScene;
+            this.activeDocumentId = args.DocumentId;
+        }
+
+        this.RefreshPendingLiveSyncState();
+        this.environmentEditor.SetScene(this.HasEnvironmentView ? this.activeScene : null);
+        this.NotifySelectionRoutingChanged();
+        this.LogSelectionChanged(this.items.Count);
+        this.UpdateItemsCollection(this.items);
+        this.SubscribeToComponentCollections();
+        this.ApplyPendingAtmosphereFilter();
     }
 
     private void RegisterComponentMessages(HostingContext hosting)

@@ -4,13 +4,11 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Messages;
+using Oxygen.Editor.Scenes.Views;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
@@ -32,14 +30,20 @@ public partial class SceneExplorerViewModel
         this.openDocuments.Opened += this.OnSceneDocumentOpened;
         this.openDocuments.Closed += this.OnSceneDocumentClosed;
         this.projectClipboardSubscription = this.projectContexts?.ProjectChanged.Subscribe(new ClipboardProjectObserver(this));
-        this.messenger.Register<SceneUnavailableMessage>(this, (_, message) =>
+        if (this.availability is { } source)
         {
-            if (!this.isDisposed && message.WindowId == this.windowId)
-            {
-                this.HasUnavailableScene = true;
-                this.CanReloadPreviousScene = message.CanReloadPrevious;
-            }
-        });
+            source.SceneUnavailable += this.OnSceneUnavailable;
+        }
+    }
+
+    private void OnSceneUnavailable(object? sender, SceneUnavailableEventArgs args)
+    {
+        _ = sender;
+        if (!this.isDisposed)
+        {
+            this.HasUnavailableScene = true;
+            this.CanReloadPreviousScene = args.CanReloadPrevious;
+        }
     }
 
     // The explorer shows the scene document opened last: a scene that opens replaces the one shown.
@@ -186,7 +190,6 @@ public partial class SceneExplorerViewModel
             this.searchExpandedFolderIds.Clear();
             this.searchExpandedNodeIds.Clear();
             this.interaction?.ClearActiveScene();
-            _ = this.messenger.Send(new SceneAuthoringUnloadedMessage(closed.Id));
         }
         finally
         {
@@ -202,10 +205,9 @@ public partial class SceneExplorerViewModel
     [RelayCommand(CanExecute = nameof(CanReloadPreviousScene))]
     private async Task ReloadPreviousSceneAsync()
     {
-        var request = this.messenger.Send(new ReloadPreviousSceneRequestMessage(this.windowId));
-        if (request.HasReceivedResponse)
+        if (this.availability is { } source)
         {
-            _ = await request.Response.ConfigureAwait(true);
+            _ = await source.ReloadPreviousAsync().ConfigureAwait(true);
         }
     }
 

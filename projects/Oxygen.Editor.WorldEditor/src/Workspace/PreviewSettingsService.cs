@@ -11,7 +11,6 @@ using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;

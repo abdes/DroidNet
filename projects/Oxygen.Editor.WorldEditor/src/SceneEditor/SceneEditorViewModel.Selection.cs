@@ -2,12 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Selection;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -21,6 +19,20 @@ public partial class SceneEditorViewModel
 {
     private const string ViewportSelectionSource = "Viewport";
 
+    /// <summary>Frames nodes in the focused viewport; no nodes frame the whole scene.</summary>
+    /// <param name="nodeIds">The nodes to frame.</param>
+    /// <returns>Whether a viewport framed them.</returns>
+    internal async Task<bool> FrameNodesAsync(IReadOnlyList<NodeId> nodeIds)
+    {
+        if (this.isDisposed || this.GetActiveViewport() is not { } viewport)
+        {
+            return false;
+        }
+
+        await viewport.FrameAsync(nodeIds).ConfigureAwait(true);
+        return true;
+    }
+
     private ISceneSelectionService? SelectionService
         => this.container.Resolve<ISceneSelectionService>(IfUnresolved.ReturnDefault);
 
@@ -29,15 +41,6 @@ public partial class SceneEditorViewModel
         viewport.SelectionPicked = this.ApplyViewportSelection;
         viewport.SelectedNodesProvider = this.GetSelectedNodeIds;
     }
-
-    private void RegisterSelectionMessages()
-        => this.messenger.Register<FrameSceneNodesRequestMessage>(this, (_, message) =>
-        {
-            if (!this.isDisposed && message.DocumentId == this.Document.Id && this.GetActiveViewport() is { } viewport)
-            {
-                _ = viewport.FrameAsync(message.NodeIds);
-            }
-        });
 
     private IReadOnlyList<NodeId> GetSelectedNodeIds()
         => this.SelectionService?.GetContext(this.Document.Id).SelectedNodeIds ?? [];

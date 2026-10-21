@@ -98,7 +98,7 @@ public sealed class CookRecovery(
     public Task<bool> InspectAsync(CookRunSnapshot run)
     {
         ArgumentNullException.ThrowIfNull(run);
-        if (!IsActiveProject(run))
+        if (!this.IsActiveProject(run))
         {
             return Task.FromResult(false);
         }
@@ -114,7 +114,7 @@ public sealed class CookRecovery(
     public Task<bool> ShowImportedAssetsAsync(CookRunSnapshot run)
     {
         ArgumentNullException.ThrowIfNull(run);
-        return IsActiveProject(run) && !run.ImportedOutputs.IsEmpty
+        return this.IsActiveProject(run) && !run.ImportedOutputs.IsEmpty
             ? reveal.RevealAsync(run.ImportedOutputs)
             : Task.FromResult(false);
     }

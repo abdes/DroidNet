@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using DroidNet.Tests;
@@ -11,7 +10,6 @@ using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
@@ -37,7 +35,7 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
         var second = AddNumericNode(fixture.Scene, 80);
         SetNumericSource(fixture.Node, kind, 60);
         using var host = fixture.CreateInspectorHost(kind);
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([fixture.Node, second]));
+        fixture.Select(fixture.Node, second);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
         {
         }).ConfigureAwait(true);
@@ -79,7 +77,7 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
         var number = view.FindDescendant<NumberBox>(element => Equals(element.Tag, field))!;
         RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
         number.NumberValue = 90;
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([second]));
+        fixture.Select(second);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
         {
         }).ConfigureAwait(true);
@@ -107,7 +105,7 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
         fixture.Scene.RootNodes.Add(second);
 
         using var host = fixture.CreateInspectorHost("Transform");
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([fixture.Node, second]));
+        fixture.Select(fixture.Node, second);
         var model = (TransformViewModel)host.PropertyEditors.Single(editor => MatchesInspector(editor, "Transform"));
         var view = new TransformView { ViewModel = model };
         var scroller = new ScrollViewer { Content = view };
@@ -148,7 +146,7 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
         fixture.Scene.RootNodes.Add(second);
 
         using var host = fixture.CreateInspectorHost("Transform");
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([fixture.Node, second]));
+        fixture.Select(fixture.Node, second);
         var model = (TransformViewModel)host.PropertyEditors.Single(editor => MatchesInspector(editor, "Transform"));
         var view = new TransformView { ViewModel = model };
         var scroller = new ScrollViewer { Content = view };

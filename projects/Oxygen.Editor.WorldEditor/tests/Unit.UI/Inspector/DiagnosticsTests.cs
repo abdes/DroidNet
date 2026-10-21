@@ -3,13 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
@@ -57,7 +55,7 @@ internal sealed class DiagnosticsTests : DroidNet.Tests.VisualUserInterfaceTests
         _ = model.AspectRatioDiagnostic.Message.Should().Be(unrelatedError);
         _ = view.FindDescendants().OfType<TextBlock>().Should().Contain(text => text.Text == unrelatedError && text.Visibility == Microsoft.UI.Xaml.Visibility.Visible);
         var second = AddNumericNode(fixture.Scene, 80);
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([second]));
+        fixture.Select(second);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
         {
         }).ConfigureAwait(true);

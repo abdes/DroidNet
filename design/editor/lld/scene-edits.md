@@ -410,8 +410,7 @@ results, selection and the engine port use them; no `Guid` and no `SceneNode`
 crosses those APIs.
 
 The node-interaction port is `ISceneNodeInteraction` (Authoring), implemented by
-the workspace (`WorkspaceInteractionService` in the World Editor), which keeps
-and persists the state:
+`SceneNodeInteraction` (Interaction), which keeps and persists the state:
 
 ```csharp
 public interface ISceneNodeInteraction
@@ -693,9 +692,7 @@ explicit interface implementations. Hierarchy and layout logic lives in the
 hierarchy and layout edits; there is no separate mutator or organizer.
 
 Outside Scenes: the engine projection and content demand are LivePreview's
-(5.8); the node-interaction state is the workspace's
-(`WorkspaceInteractionService`); the material slot inventory is
-ContentPipeline's.
+(5.8); the material slot inventory is ContentPipeline's.
 
 ## 7. Data Contracts
 

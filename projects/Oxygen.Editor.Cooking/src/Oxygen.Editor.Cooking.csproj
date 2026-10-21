@@ -11,6 +11,7 @@
         <PackageTags>oxygen;gameengine</PackageTags>
         <RootNamespace>Oxygen.Editor.Cooking</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml;
@@ -12,7 +11,6 @@ using Moq;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
@@ -98,7 +96,7 @@ internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfac
         _ = camera.NearPlaneDiagnostic.Message.Should().NotBeEmpty();
         host.SelectComponentFilter(typeof(TransformComponent));
         var other = AddNumericNode(fixture.Scene, 80);
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([other]));
+        fixture.Select(other);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = camera.NearPlaneDiagnostic.Message.Should().BeEmpty();
         _ = host.ComponentFilters.Should().OnlyContain(option => !option.HasValidationErrors);

@@ -482,6 +482,29 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   that feature's types and the document host stops constructing it. Gate: that
   feature's tests; UI test failures go to the reviewer; visible changes wait for
   the reviewer's acceptance (decision 8).
+
+  Before the three scene features move, they stop exchanging window messages
+  ([scenes-module.md](../lld/scenes-module.md) decision 6), each message going
+  to the owner of its behavior. Nothing visible changes.
+
+  | Today                                                                                                  | Replacement                                                                                                                                                                                    |
+  | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+  | `SceneNodeSelectionChangedMessage`, `SceneNodeSelectionRequestMessage`                                 | `ISceneSelectionService.SelectionChanged` and `GetSelectedNodes`                                                                                                                               |
+  | `InspectSceneNodeMessage`                                                                              | `ISceneSelectionService.SetSelection`; the Explorer reveals what another part selects                                                                                                          |
+  | `SceneAuthoringUnloadedMessage`                                                                        | Removed: the Inspector follows the documents                                                                                                                                                   |
+  | `SceneShortcutMessage`, the workspace's key map, `SceneEditRequestMessage`                             | Commands with stable ids and key gestures, contributed by the feature that runs them (`IFeatureModule.Commands`); `Edit.Delete` is the Shell's; the viewport's Undo and Redo are the Shell's   |
+  | `FrameSceneNodesRequestMessage`, `SceneCameraCommandMessage`, `SceneCameraViewportStateRequestMessage` | Scenes port `ISceneViews` (frame nodes, camera commands, camera state), keyed by `DocumentId` and implemented by the scene editor                                                              |
+  | `SceneUnavailableMessage`, `ReloadPreviousSceneRequestMessage`                                         | Scenes port `ISceneAvailability`, implemented by the window's scene document lifetime                                                                                                          |
+  | `WorkspaceInteractionService`, `SceneCategories`                                                       | Scenes, as the implementation of `ISceneNodeInteraction` (amends scenes-module decision 8: three features use it); its failures publish through `SceneOperationResults`, which moves to Scenes |
+  | `SceneNodeDragData`                                                                                    | Scenes: the scene-node drag payload, which the Inspector's script slots read                                                                                                                   |
+
+  Commands are the automation surface: a command takes no arguments and acts on
+  the window's active document and its selection, so a script runs it by id
+  without focus, as a key does. Parts register their handlers with
+  `ICommandService` while they live; a command goes to the parts around the
+  focus, then the active document's editor, then the registered handlers.
+  Behavior that needs arguments is a service call on a port, never a command.
+
 - **S1.13 Dissolve the World Editor.** Nothing is left in
   `Oxygen.Editor.WorldEditor`; the project and its test projects are deleted,
   `Oxygen.Editor.World` drops its internals grant to it, and the application

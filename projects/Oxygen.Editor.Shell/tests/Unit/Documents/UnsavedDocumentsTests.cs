@@ -45,7 +45,7 @@ public sealed class UnsavedDocumentsTests
         _ = found[0].Id.Should().Be(intro.Id);
         _ = found[0].File.Should().Be(intro.File);
         _ = found[0].Title.Should().Be(intro.Title);
-        _ = raised.Should().BeGreaterThan(0);
+        _ = raised.Should().BePositive();
     }
 
     /// <summary>A folder names the documents inside it, and another path names none of them.</summary>
@@ -81,7 +81,7 @@ public sealed class UnsavedDocumentsTests
 
         _ = saved.Succeeded.Should().BeTrue(saved.Message);
         _ = unsaved.Find([Notes.PathOf("Intro")]).Should().BeEmpty();
-        _ = raised.Should().BeGreaterThan(0);
+        _ = raised.Should().BePositive();
     }
 
     /// <summary>A document that closes with its changes is gone from the report.</summary>
@@ -99,6 +99,6 @@ public sealed class UnsavedDocumentsTests
         notes.Documents.Close(intro);
 
         _ = unsaved.Find([Notes.PathOf("Intro")]).Should().BeEmpty();
-        _ = raised.Should().BeGreaterThan(0);
+        _ = raised.Should().BePositive();
     }
 }

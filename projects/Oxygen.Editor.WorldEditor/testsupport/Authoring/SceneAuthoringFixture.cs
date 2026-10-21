@@ -9,11 +9,11 @@ using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -22,11 +22,11 @@ namespace Oxygen.Editor.WorldEditor.TestSupport;
 /// <summary>A scene document with a camera and sun node, open in a document area, for the views and models that edit it.</summary>
 internal sealed partial class SceneAuthoringFixture : IDisposable
 {
-    private readonly WorkspaceInteractionService? interaction;
+    private readonly SceneNodeInteraction? interaction;
 
     /// <summary>Initializes a new instance of the <see cref="SceneAuthoringFixture"/> class.</summary>
     /// <param name="interaction">Optional workspace interaction state the document's edits respect.</param>
-    public SceneAuthoringFixture(WorkspaceInteractionService? interaction = null)
+    public SceneAuthoringFixture(SceneNodeInteraction? interaction = null)
     {
         this.interaction = interaction;
         this.PublishSurface(EngineAssets.BasicShape("Cube"));
@@ -91,6 +91,11 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     /// <param name="geometry">The geometry.</param>
     public void PublishSurface(AssetPath geometry)
         => this.Slots.Publish(new GeometryMaterialSlotMetadata(geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64), [new(TargetFor(geometry).SlotId, "Surface", [new(0, 0, Guid.Empty)])]));
+
+    /// <summary>Writes the node selection of the fixture's document through the shared selection service, as the Explorer, a viewport or another panel does.</summary>
+    /// <param name="nodes">The selected nodes, of which the last is primary; none clears the selection.</param>
+    public void Select(params SceneNode[] nodes)
+        => this.Selection.SetSelection(this.Tab.DocumentId, nodes, "Test");
 
     public void Dispose()
     {

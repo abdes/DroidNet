@@ -4,7 +4,6 @@
 
 using System.Collections.Specialized;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
 using DroidNet.Documents;
 using DroidNet.Routing;
@@ -15,8 +14,9 @@ using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Views;
+using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.WorldEditor.TestSupport;
@@ -33,7 +33,7 @@ namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 public sealed partial class SceneExplorerSelectionTests
 {
     [TestMethod]
-    public async Task FolderOnlySelection_PublishesFolderKindAndTypedMessageContext()
+    public async Task FolderOnlySelection_PublishesFolderKindAndTypedContext()
     {
         using var harness = new SelectionHarness(out var scene, out _, out var folderId);
         using var explorer = harness.Build();
@@ -47,9 +47,9 @@ public sealed partial class SceneExplorerSelectionTests
         _ = context.SelectedNodeIds.Should().BeEmpty("a folder selection must not claim its contained nodes");
         _ = context.SelectedFolderIds.Should().Equal(folderId);
         _ = context.PrimaryFolderId.Should().Be(folderId);
-        var message = harness.Received[^1];
-        _ = message.SelectionContext.Kind.Should().Be(SceneSelectionKind.Folder);
-        _ = message.SelectedEntities.Should().BeEmpty();
+        var change = harness.Received[^1];
+        _ = change.Context.Kind.Should().Be(SceneSelectionKind.Folder);
+        _ = harness.SelectionService.GetSelectedNodes(change.DocumentId, scene).Should().BeEmpty();
     }
 
     [TestMethod]
@@ -138,15 +138,13 @@ public sealed partial class SceneExplorerSelectionTests
         using var harness = new SelectionHarness(out var scene, out var node, out _);
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
-        var requests = new List<FrameSceneNodesRequestMessage>();
-        harness.Messenger.Register<FrameSceneNodesRequestMessage>(requests, (recipient, message) => ((List<FrameSceneNodesRequestMessage>)recipient).Add(message));
         var nodeAdapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
 
         explorer.InvokeItem(nodeAdapter!);
 
-        _ = requests.Should().ContainSingle();
-        _ = requests[0].DocumentId.Should().Be(harness.DocumentIdOf(scene));
-        _ = requests[0].NodeIds.Should().Equal(node.Id);
+        harness.Views.Verify(
+            views => views.FrameAsync(harness.DocumentIdOf(scene), It.Is<IReadOnlyList<NodeId>>(ids => ids.SequenceEqual(new[] { node.Id }))),
+            Times.Once);
     }
 
     [TestMethod]
@@ -210,22 +208,6 @@ public sealed partial class SceneExplorerSelectionTests
     }
 
     [TestMethod]
-    public async Task MessageWithoutContext_DerivesNodeClassificationFromEntities()
-    {
-        using var harness = new SelectionHarness(out var scene, out var node, out _);
-        using var explorer = harness.Build();
-        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
-        var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
-
-        var message = new SceneNodeSelectionChangedMessage([node]);
-
-        _ = message.SelectionContext.Kind.Should().Be(SceneSelectionKind.Node);
-        _ = message.SelectionContext.PrimaryNodeId.Should().Be(node.Id);
-        _ = new SceneNodeSelectionChangedMessage([]).SelectionContext.Should().Be(SceneSelectionContext.Empty, "an empty node-only publish is Empty, not Scene");
-        _ = adapter.Should().NotBeNull();
-    }
-
-    [TestMethod]
     public async Task SetSelectedNodes_UnresolvableId_KeepsAuthoritativeContextAndStillNotifies()
     {
         using var harness = new SelectionHarness(out var scene, out _, out _);
@@ -237,9 +219,9 @@ public sealed partial class SceneExplorerSelectionTests
         var applied = await explorer.SetSelectedNodes([unaddressable]).ConfigureAwait(false);
 
         _ = applied.Should().BeFalse("the named id has no row in this projection");
-        _ = harness.Received.Should().HaveCount(baseline + 1, "a changed authoritative context notifies consumers even when the visible row set does not move");
+        _ = harness.Received.Should().HaveCountGreaterThan(baseline, "a changed authoritative context notifies consumers even when the visible row set does not move");
         var last = harness.Received[^1];
-        _ = last.SelectionContext.SelectedNodeIds.Should().Equal(unaddressable);
+        _ = last.Context.SelectedNodeIds.Should().Equal(unaddressable);
         _ = harness.SelectionService.GetContext(harness.DocumentIdOf(scene)).SelectedNodeIds.Should().Equal(unaddressable);
     }
 
@@ -436,8 +418,8 @@ public sealed partial class SceneExplorerSelectionTests
             this.Documents = documents;
 
             this.SelectionService = new SceneSelectionService();
-            this.Messenger = new StrongReferenceMessenger();
-            this.Messenger.Register<SceneNodeSelectionChangedMessage>(this, (recipient, message) => ((SelectionHarness)recipient).Received.Add(message));
+            this.SelectionService.SelectionChanged += (_, args) => this.Received.Add(args);
+            _ = this.Views.Setup(views => views.FrameAsync(It.IsAny<DocumentId>(), It.IsAny<IReadOnlyList<NodeId>>())).ReturnsAsync(true);
         }
 
         public Mock<IProjectManagerService> Manager { get; }
@@ -448,9 +430,11 @@ public sealed partial class SceneExplorerSelectionTests
         public Editor.Documents.OpenDocuments OpenDocuments => this.openDocuments[0].Documents;
         public SceneSelectionService SelectionService { get; }
 
-        public StrongReferenceMessenger Messenger { get; }
+        /// <summary>Gets the scene views the Explorer asks to frame nodes.</summary>
+        public Mock<ISceneViews> Views { get; } = new();
 
-        public List<SceneNodeSelectionChangedMessage> Received { get; } = [];
+        /// <summary>Gets every selection change the service announced, whoever wrote it.</summary>
+        public List<SceneSelectionChangedEventArgs> Received { get; } = [];
 
         public void Dispose()
         {
@@ -470,15 +454,15 @@ public sealed partial class SceneExplorerSelectionTests
             return added;
         }
 
-        public SceneExplorerViewModel Build()
+        public SceneExplorerViewModel Build(ICommandService? commands = null)
             => new(
                 this.Manager.Object,
-                this.Messenger,
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.OpenDocuments,
-                default,
-                this.SelectionService);
+                this.SelectionService,
+                views: this.Views.Object,
+                commands: commands);
 
         /// <summary>Appends a node to a scene of the harness through its document, as the editor's create actions do.</summary>
         /// <param name="scene">The scene.</param>

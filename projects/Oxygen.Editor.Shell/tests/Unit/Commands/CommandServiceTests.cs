@@ -6,14 +6,15 @@ using AwesomeAssertions;
 using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Editor.Shell.Commands;
+using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Unit.Tests.Documents;
 
 namespace Oxygen.Editor.Shell.Unit.Tests.Commands;
 
 /// <summary>
-/// Undo and Redo go to the active document's editor when it handles them, then to the active document's history, and to
-/// the global history when no document is active.
+/// A command goes to the active document's editor, then to the registered handlers; Undo and Redo that none handles go to
+/// the active document's history, and to the global history when no document is active.
 /// </summary>
 [TestClass]
 public sealed class CommandServiceTests
@@ -26,7 +27,7 @@ public sealed class CommandServiceTests
         using var histories = new HistoryService();
         var undone = 0;
         histories.GlobalHistory.AddChange("Rename", Rename);
-        var service = new CommandService(Mock.Of<IDocumentService>(), Mock.Of<IDocumentArea>(), histories);
+        var service = new CommandService(Mock.Of<IDocumentService>(), Mock.Of<IDocumentArea>(), histories, NoContributions());
 
         _ = (await service.ExecuteAsync(ShellCommands.Undo.Id, context: null).ConfigureAwait(false)).Should().BeTrue();
 
@@ -54,7 +55,7 @@ public sealed class CommandServiceTests
         _ = editor.Setup(value => value.ExecuteAsync(ShellCommands.Undo.Id)).Returns(Task.CompletedTask);
         var documents = new Mock<IDocumentService>();
         _ = documents.SetupGet(value => value.ActiveEditor).Returns(editor.Object);
-        var service = new CommandService(documents.Object, Mock.Of<IDocumentArea>(), histories);
+        var service = new CommandService(documents.Object, Mock.Of<IDocumentArea>(), histories, NoContributions());
 
         _ = (await service.ExecuteAsync(ShellCommands.Undo.Id, context: null).ConfigureAwait(false)).Should().BeTrue();
 
@@ -74,11 +75,67 @@ public sealed class CommandServiceTests
         document.History.AddChange("Edit", static () => { });
         var area = new Mock<IDocumentArea>();
         _ = area.SetupGet(value => value.ActiveDocument).Returns(document);
-        var service = new CommandService(Mock.Of<IDocumentService>(), area.Object, histories);
+        var service = new CommandService(Mock.Of<IDocumentService>(), area.Object, histories, NoContributions());
 
         _ = (await service.ExecuteAsync(ShellCommands.Undo.Id, context: null).ConfigureAwait(false)).Should().BeTrue();
 
         _ = document.IsDirty.Should().BeFalse();
         _ = histories.GlobalHistory.CanUndo.Should().BeTrue();
     }
+
+    /// <summary>A registered handler runs a command no editor handles, without a control to start from, until it is removed.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task ARegisteredHandlerRunsTheCommandUntilItIsRemoved()
+    {
+        using var histories = new HistoryService();
+        var handler = new Mock<ICommandHandler>();
+        _ = handler.Setup(value => value.CanExecute("Scene.Rename")).Returns(value: true);
+        _ = handler.Setup(value => value.ExecuteAsync("Scene.Rename")).Returns(Task.CompletedTask);
+        var service = new CommandService(Mock.Of<IDocumentService>(), Mock.Of<IDocumentArea>(), histories, NoContributions());
+
+        var registration = service.Register(handler.Object);
+        _ = service.CanExecute("Scene.Rename", context: null).Should().BeTrue();
+        _ = (await service.ExecuteAsync("Scene.Rename", context: null).ConfigureAwait(false)).Should().BeTrue();
+        registration.Dispose();
+
+        _ = service.CanExecute("Scene.Rename", context: null).Should().BeFalse();
+        _ = (await service.ExecuteAsync("Scene.Rename", context: null).ConfigureAwait(false)).Should().BeFalse();
+        handler.Verify(value => value.ExecuteAsync("Scene.Rename"), Times.Once);
+    }
+
+    /// <summary>The active document's editor comes before the registered handlers.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task TheActiveEditorComesBeforeTheRegisteredHandlers()
+    {
+        using var histories = new HistoryService();
+        var editor = new Mock<ICommandHandler>();
+        _ = editor.Setup(value => value.CanExecute("Scene.Duplicate")).Returns(value: true);
+        _ = editor.Setup(value => value.ExecuteAsync("Scene.Duplicate")).Returns(Task.CompletedTask);
+        var documents = new Mock<IDocumentService>();
+        _ = documents.SetupGet(value => value.ActiveEditor).Returns(editor.Object);
+        var registered = new Mock<ICommandHandler>();
+        _ = registered.Setup(value => value.CanExecute("Scene.Duplicate")).Returns(value: true);
+        var service = new CommandService(documents.Object, Mock.Of<IDocumentArea>(), histories, NoContributions());
+        using var registration = service.Register(registered.Object);
+
+        _ = (await service.ExecuteAsync("Scene.Duplicate", context: null).ConfigureAwait(false)).Should().BeTrue();
+
+        editor.Verify(value => value.ExecuteAsync("Scene.Duplicate"), Times.Once);
+        registered.Verify(value => value.ExecuteAsync(It.IsAny<string>()), Times.Never);
+    }
+
+    /// <summary>The window's commands are the Shell's and the contributed ones.</summary>
+    [TestMethod]
+    public void TheCommandsAreTheShellsAndTheContributedOnes()
+    {
+        using var histories = new HistoryService();
+        var rename = new CommandDescriptor("Scene.Rename", "Rename");
+        var service = new CommandService(Mock.Of<IDocumentService>(), Mock.Of<IDocumentArea>(), histories, new ContributionRegistry([], [rename]));
+
+        _ = service.Commands.Should().Contain([ShellCommands.Undo, rename]);
+    }
+
+    private static ContributionRegistry NoContributions() => new([], []);
 }

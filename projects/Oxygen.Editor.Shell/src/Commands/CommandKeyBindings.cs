@@ -3,17 +3,23 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Mvvm;
+using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
+using Windows.System;
+using Windows.UI.Core;
 
 namespace Oxygen.Editor.Shell.Commands;
 
 /// <summary>Binds a window frame's keys to its commands.</summary>
 public static class CommandKeyBindings
 {
-    /// <summary>Adds a keyboard accelerator to a window frame for each key gesture of each command.</summary>
+    /// <summary>
+    /// Adds a keyboard accelerator to a window frame for each key gesture of each command; a gesture that comes after the
+    /// focused part runs from the keys the parts leave unhandled.
+    /// </summary>
     /// <param name="frame">The window's frame, the element that holds every part of the window.</param>
     /// <param name="commands">The window's commands.</param>
     public static void Attach(UIElement frame, ICommandService commands)
@@ -22,14 +28,26 @@ public static class CommandKeyBindings
         ArgumentNullException.ThrowIfNull(commands);
         var work = new WorkTracker(frame);
         frame.KeyboardAcceleratorPlacementMode = KeyboardAcceleratorPlacementMode.Hidden;
+        var late = new List<(CommandKeyGesture Gesture, string CommandId)>();
         foreach (var command in commands.Commands)
         {
             foreach (var gesture in command.KeyGestures)
             {
+                if (gesture.AfterFocusedPart)
+                {
+                    late.Add((gesture, command.Id));
+                    continue;
+                }
+
                 var accelerator = new KeyboardAccelerator { Key = gesture.Key, Modifiers = gesture.Modifiers };
                 accelerator.Invoked += (_, args) => OnInvoked(frame, work, commands, command.Id, args);
                 frame.KeyboardAccelerators.Add(accelerator);
             }
+        }
+
+        if (late.Count > 0)
+        {
+            frame.KeyDown += (_, args) => OnKeyDown(frame, work, commands, late, args);
         }
     }
 
@@ -48,6 +66,35 @@ public static class CommandKeyBindings
         var context = work.Context ?? (focus is not null && IsInside(focus, frame) ? focus : null);
         _ = commands.ExecuteAsync(commandId, context);
     }
+
+    // A key the focused part left unhandled, that is not held down and not typed into text, runs its command when
+    // something runs it.
+    private static void OnKeyDown(UIElement frame, WorkTracker work, ICommandService commands, IReadOnlyList<(CommandKeyGesture Gesture, string CommandId)> gestures, KeyRoutedEventArgs args)
+    {
+        var root = frame.XamlRoot;
+        var focus = root is not null ? FocusManager.GetFocusedElement(root) as DependencyObject : null;
+        if (args.Handled || args.KeyStatus.WasKeyDown || IsTextEntry(focus))
+        {
+            return;
+        }
+
+        var modifiers = CurrentModifiers();
+        var commandId = gestures.FirstOrDefault(entry => entry.Gesture.Key == args.Key && entry.Gesture.Modifiers == modifiers).CommandId;
+        var context = work.Context ?? (focus is not null && IsInside(focus, frame) ? focus : null);
+        if (commandId is not null && commands.CanExecute(commandId, context))
+        {
+            args.Handled = true;
+            _ = commands.ExecuteAsync(commandId, context);
+        }
+    }
+
+    private static VirtualKeyModifiers CurrentModifiers()
+        => (IsDown(VirtualKey.Control) ? VirtualKeyModifiers.Control : VirtualKeyModifiers.None)
+            | (IsDown(VirtualKey.Shift) ? VirtualKeyModifiers.Shift : VirtualKeyModifiers.None)
+            | (IsDown(VirtualKey.Menu) ? VirtualKeyModifiers.Menu : VirtualKeyModifiers.None);
+
+    private static bool IsDown(VirtualKey key)
+        => InputKeyboardSource.GetKeyStateForCurrentThread(key).HasFlag(CoreVirtualKeyStates.Down);
 
     private static bool IsTextEntry(DependencyObject? element)
     {

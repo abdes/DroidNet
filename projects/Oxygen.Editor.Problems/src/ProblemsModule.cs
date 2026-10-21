@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DryIoc;
+using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
 
 namespace Oxygen.Editor.Problems;
@@ -15,6 +16,9 @@ public sealed class ProblemsModule : IFeatureModule
 
     /// <inheritdoc />
     public IReadOnlyList<PanelDescriptor> Panels { get; } = [new(PanelId, ProblemsViewModel.BaseTitle, typeof(ProblemsViewModel))];
+
+    /// <inheritdoc />
+    public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
 
     /// <inheritdoc />
     public void RegisterWindowServices(IContainer window)

@@ -4,13 +4,25 @@
 
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Diagnostics;
+namespace Oxygen.Editor.Scenes;
 
 /// <summary>
 /// Shared helpers for publishing scene authoring operation results.
 /// </summary>
 public static class SceneOperationResults
 {
+    /// <summary>Publishes a failed operation with one error diagnostic.</summary>
+    /// <param name="publisher">The operation result publisher.</param>
+    /// <param name="statusReducer">The reducer that derives the result status and severity.</param>
+    /// <param name="operationKind">The operation kind.</param>
+    /// <param name="domain">The failure domain.</param>
+    /// <param name="code">The diagnostic code.</param>
+    /// <param name="title">The result title.</param>
+    /// <param name="message">The user-facing message.</param>
+    /// <param name="affectedScope">The scope the operation affected.</param>
+    /// <param name="exception">The exception behind the diagnostic, if any.</param>
+    /// <param name="technicalMessage">The technical message; defaults to the exception message.</param>
+    /// <returns>The published operation id.</returns>
     public static Guid PublishFailure(
         IOperationResultPublisher publisher,
         IStatusReducer statusReducer,
@@ -36,6 +48,18 @@ public static class SceneOperationResults
             exception,
             technicalMessage);
 
+    /// <summary>Publishes a completed operation with one warning diagnostic.</summary>
+    /// <param name="publisher">The operation result publisher.</param>
+    /// <param name="statusReducer">The reducer that derives the result status and severity.</param>
+    /// <param name="operationKind">The operation kind.</param>
+    /// <param name="domain">The failure domain.</param>
+    /// <param name="code">The diagnostic code.</param>
+    /// <param name="title">The result title.</param>
+    /// <param name="message">The user-facing message.</param>
+    /// <param name="affectedScope">The scope the operation affected.</param>
+    /// <param name="exception">The exception behind the diagnostic, if any.</param>
+    /// <param name="technicalMessage">The technical message; defaults to the exception message.</param>
+    /// <returns>The published operation id.</returns>
     public static Guid PublishWarning(
         IOperationResultPublisher publisher,
         IStatusReducer statusReducer,

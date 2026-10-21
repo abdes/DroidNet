@@ -17,16 +17,6 @@ public partial class SceneEditorViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "Unregistering from messages for document {DocumentId}")]
-    private static partial void LogUnregisteringFromMessages(ILogger logger, DocumentId documentId);
-
-    [Conditional("DEBUG")]
-    private void LogUnregisteringFromMessages(DocumentId documentId)
-        => LogUnregisteringFromMessages(this.logger, documentId);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
         Message = "Deferring layout change to {Layout} until scene ready for document {DocumentId}")]
     private static partial void LogDeferringLayoutChange(ILogger logger, SceneViewLayout layout, DocumentId documentId);
 

@@ -3,12 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
@@ -33,9 +31,10 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Environment");
         var folderId = FolderId.New();
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage(
-            [],
-            new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId)));
+        fixture.Selection.Publish(
+            fixture.Tab.DocumentId,
+            new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId),
+            "Test");
         _ = host.HasSelectionSummary.Should().BeTrue();
         _ = host.InspectorTitle.Should().Be("Grouping Summary");
         _ = host.HasEnvironmentView.Should().BeFalse("a folder selection is not the scene context");
@@ -53,9 +52,10 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Transform");
         var folderId = FolderId.New();
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage(
-            [fixture.Node],
-            new SceneSelectionContext(SceneSelectionKind.Mixed, [fixture.Node.Id], [folderId], fixture.Node.Id, PrimaryFolderId: null)));
+        fixture.Selection.Publish(
+            fixture.Tab.DocumentId,
+            new SceneSelectionContext(SceneSelectionKind.Mixed, [fixture.Node.Id], [folderId], fixture.Node.Id, PrimaryFolderId: null),
+            "Test");
         _ = host.HasSelectionSummary.Should().BeTrue();
         _ = host.InspectorTitle.Should().Be("Selection Summary");
         _ = host.PropertyEditors.Should().BeEmpty("the node subset of a mixed batch must not pose as the whole selection");
@@ -70,9 +70,10 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
     {
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Environment");
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage(
-            [],
-            new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNodeId: null, PrimaryFolderId: null)));
+        fixture.Selection.Publish(
+            fixture.Tab.DocumentId,
+            new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNodeId: null, PrimaryFolderId: null),
+            "Test");
         _ = host.HasEnvironmentView.Should().BeTrue();
         _ = host.HasSelectionSummary.Should().BeFalse();
         _ = host.InspectorTitle.Should().Be("Scene Inspector");
@@ -87,9 +88,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
     {
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Transform");
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage(
-            [fixture.Node],
-            new SceneSelectionContext(SceneSelectionKind.Node, [fixture.Node.Id], [], fixture.Node.Id, PrimaryFolderId: null)));
+        fixture.Select(fixture.Node);
         _ = host.HasSelectionSummary.Should().BeFalse();
         _ = host.HasEnvironmentView.Should().BeFalse();
         _ = host.InspectorTitle.Should().Be("Component Inspector");
@@ -98,17 +97,17 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
     });
 
     [TestMethod]
-    public Task SelectionMessageForAnotherDocumentDoesNotChangeInspector() => EnqueueAsync(() =>
+    public Task SelectionOfAnotherDocumentDoesNotChangeInspector() => EnqueueAsync(() =>
     {
         using var fixture = new SceneAuthoringFixture();
-        fixture.Selection.SetSelection(fixture.Tab.DocumentId, [fixture.Node], "test");
+        fixture.Select(fixture.Node);
         using var host = fixture.CreateInspectorHost("Transform");
         var folderId = FolderId.New();
 
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage(
-            [],
+        fixture.Selection.Publish(
+            DocumentId.New(),
             new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId),
-            DocumentId.New()));
+            "Test");
 
         _ = host.SelectedNode.Should().BeSameAs(fixture.Node);
         _ = host.HasSelectionSummary.Should().BeFalse();
@@ -116,16 +115,28 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
     });
 
     [TestMethod]
-    public Task SupersededSelectionMessageDoesNotReplaceCurrentSelection() => EnqueueAsync(() =>
+    public Task SupersededSelectionChangeDoesNotReplaceCurrentSelection() => EnqueueAsync(() =>
     {
         using var fixture = new SceneAuthoringFixture();
         var folderId = FolderId.New();
         var previous = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId);
-        fixture.Selection.Publish(fixture.Tab.DocumentId, previous, "test");
-        fixture.Selection.SetSelection(fixture.Tab.DocumentId, [fixture.Node], "test");
+
+        // A subscriber that runs before the Inspector replaces the folder selection while it is still being announced:
+        // the Inspector then sees a change whose context the service no longer holds.
+        var superseded = false;
+        fixture.Selection.SelectionChanged += (_, args) =>
+        {
+            if (!superseded && ReferenceEquals(args.Context, previous))
+            {
+                superseded = true;
+                fixture.Select(fixture.Node);
+            }
+        };
         using var host = fixture.CreateInspectorHost("Transform");
 
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([], previous, fixture.Tab.DocumentId));
+        fixture.Selection.Publish(fixture.Tab.DocumentId, previous, "Test");
+
+        _ = superseded.Should().BeTrue();
 
         _ = host.SelectedNode.Should().BeSameAs(fixture.Node);
         _ = host.InspectorTitle.Should().Be("Component Inspector");
@@ -139,9 +150,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var host = fixture.CreateInspectorHost("Transform");
         var missingNodeId = NodeId.New();
         var context = new SceneSelectionContext(SceneSelectionKind.Node, [missingNodeId], [], missingNodeId, PrimaryFolderId: null);
-        fixture.Selection.Publish(fixture.Tab.DocumentId, context, "test");
-
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([], context, fixture.Tab.DocumentId));
+        fixture.Selection.Publish(fixture.Tab.DocumentId, context, "Test");
 
         _ = host.HasEnvironmentView.Should().BeFalse();
         _ = host.PropertyEditors.Should().BeEmpty();
@@ -158,13 +167,10 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var host = fixture.CreateInspectorHost("Transform");
         var folderId = FolderId.New();
         var folderContext = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId);
-        fixture.Selection.Publish(fixture.Tab.DocumentId, folderContext, "test");
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([], folderContext, fixture.Tab.DocumentId));
+        fixture.Selection.Publish(fixture.Tab.DocumentId, folderContext, "Test");
         _ = host.PropertyEditors.Should().BeEmpty();
 
-        fixture.Selection.SetSelection(fixture.Tab.DocumentId, [fixture.Node], "test");
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage(
-            [fixture.Node], fixture.Selection.GetContext(fixture.Tab.DocumentId), fixture.Tab.DocumentId));
+        fixture.Select(fixture.Node);
 
         _ = host.SelectedNode.Should().BeSameAs(fixture.Node);
         _ = host.PropertyEditors.Should().NotBeEmpty();

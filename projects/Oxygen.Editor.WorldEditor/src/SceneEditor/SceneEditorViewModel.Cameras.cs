@@ -3,16 +3,17 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
-using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core;
 
@@ -30,8 +31,24 @@ public partial class SceneEditorViewModel
     private const float SizeTolerance = 1.0e-4F;
     private const float FieldOfViewTolerance = 1.0e-3F;
 
-    private Workspace.WorkspaceInteractionService? Interaction
-        => this.container.Resolve<Workspace.WorkspaceInteractionService>(IfUnresolved.ReturnDefault);
+    /// <summary>Runs a camera command in the focused viewport, while this editor is the window's active one.</summary>
+    /// <param name="nodeId">The camera node.</param>
+    /// <param name="command">The command.</param>
+    /// <returns>Whether the command ran.</returns>
+    internal Task<bool> RunCameraCommandAsync(NodeId nodeId, SceneCameraCommand command)
+        => !this.isDisposed && this.IsActiveDocument()
+            ? this.ExecuteCameraCommandAsync(nodeId, command)
+            : Task.FromResult(false);
+
+    /// <summary>Gets what the focused viewport shows, while this editor is the window's active one.</summary>
+    /// <returns>The viewport's camera state, or <see langword="null"/> when this editor has no viewport to ask.</returns>
+    internal SceneCameraViewState? CameraViewState()
+        => !this.isDisposed && this.IsActiveDocument() && this.GetActiveViewport() is { } viewport
+            ? new SceneCameraViewState(viewport.SceneCamera?.NodeId, viewport.IsPilotingSceneCamera)
+            : null;
+
+    private SceneNodeInteraction? Interaction
+        => this.container.Resolve<SceneNodeInteraction>(IfUnresolved.ReturnDefault);
 
     private void AttachCameraServices(ViewportViewModel viewport)
     {
@@ -41,44 +58,24 @@ public partial class SceneEditorViewModel
         viewport.CameraPoseCommitter = this.CommitCameraPoseAsync;
     }
 
-    private void RegisterCameraMessages()
+    // Selecting one camera node previews it in the focused pane; the selection also scopes Browse to Asset.
+    private void OnSelectionServiceChanged(object? sender, SceneSelectionChangedEventArgs args)
     {
-        this.messenger.Register<SceneCameraViewportStateRequestMessage>(this, (_, message) =>
+        _ = sender;
+        if (this.isDisposed || args.DocumentId != this.Document.Id || this.scene is not { } selectedScene
+            || this.SelectionService is not { } service)
         {
-            if (!this.isDisposed && message.WindowId == this.windowId && this.IsActiveDocument()
-                && !message.HasReceivedResponse && this.GetActiveViewport() is { } viewport)
-            {
-                message.Reply(new SceneCameraViewportState(viewport.SceneCamera?.NodeId, viewport.IsPilotingSceneCamera));
-            }
-        });
-        this.messenger.Register<SceneCameraCommandMessage>(this, (_, message) =>
-        {
-            if (!this.isDisposed && message.WindowId == this.windowId && this.IsActiveDocument()
-                && !message.HasReceivedResponse)
-            {
-                message.Reply(this.ExecuteCameraCommandAsync(message.NodeId, message.Command));
-            }
-        });
+            return;
+        }
 
-        // Selecting one camera node previews it in the focused pane; the selection also scopes Browse to Asset.
-        this.messenger.Register<SceneNodeSelectionChangedMessage>(this, (_, message) =>
-        {
-            var foreign = message.DocumentId is { } documentId
-                ? documentId != this.Document.Id
-                : !this.IsActiveDocument();
-            if (this.isDisposed || foreign)
-            {
-                return;
-            }
-
-            this.UpdateSelectedNodes(message.SelectedEntities);
-            this.UpdateSelectionOutline(message.SelectionContext);
-            this.UpdateTransformGizmo();
-            this.selectedCamera = message.SelectedEntities is [{ } node] && node.Components.OfType<CameraComponent>().Any()
-                ? new SceneCameraChoice(node.Id, node.Name)
-                : null;
-            this.UpdateInsets();
-        });
+        var nodes = service.GetSelectedNodes(args.DocumentId, selectedScene);
+        this.UpdateSelectedNodes(nodes);
+        this.UpdateSelectionOutline(args.Context);
+        this.UpdateTransformGizmo();
+        this.selectedCamera = nodes is [{ } node] && node.Components.OfType<CameraComponent>().Any()
+            ? new SceneCameraChoice(node.Id, node.Name)
+            : null;
+        this.UpdateInsets();
     }
 
     private bool IsActiveDocument()
@@ -131,9 +128,8 @@ public partial class SceneEditorViewModel
 
     private SceneCameraChoice? GetSelectedCamera()
     {
-        var request = this.messenger.Send(new SceneNodeSelectionRequestMessage());
-        return request.HasReceivedResponse
-            && request.SelectedEntities is [{ } node]
+        return this.scene is { } current
+            && this.SelectionService?.GetSelectedNodes(this.Document.Id, current) is [{ } node]
             && node.Components.OfType<CameraComponent>().Any()
                 ? new SceneCameraChoice(node.Id, node.Name)
                 : null;

@@ -31,7 +31,7 @@ public sealed class DocumentTabTests
         document.History.AddChange(new SimpleAction(static () => { }) { Key = "edit" });
         _ = tab.IsDirty.Should().BeTrue();
 
-        document.History.Undo();
+        await document.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = tab.IsDirty.Should().BeFalse();
         _ = changes.Should().Equal(nameof(tab.IsDirty), nameof(tab.IsDirty));
     }

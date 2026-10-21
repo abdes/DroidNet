@@ -5,7 +5,6 @@
 using System.Reactive.Subjects;
 using System.Runtime.InteropServices.WindowsRuntime;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using DroidNet.Tests;
@@ -17,7 +16,6 @@ using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
@@ -66,7 +64,7 @@ internal sealed partial class ResponsiveLayoutTests
             };
             _ = second.AddComponent(CreateInspectorGeometry());
             fixture.Scene.RootNodes.Add(second);
-            _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([fixture.Node, second]));
+            fixture.Select(fixture.Node, second);
         }
 
         var view = new SceneNodeEditorView
@@ -133,7 +131,7 @@ internal sealed partial class ResponsiveLayoutTests
             _ = third.AddComponent(new SpotLightComponent { Name = "Light" });
             fixture.Scene.RootNodes.Add(second);
             fixture.Scene.RootNodes.Add(third);
-            _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([fixture.Node, second, third]));
+            fixture.Select(fixture.Node, second, third);
         }
 
         var view = new SceneNodeEditorView

@@ -71,7 +71,6 @@ public sealed partial class SceneEditorQuickAddMenuTests
             this.Editor = new(
                 this.Metadata.Tab,
                 new TestDocumentArea(this.Metadata.Document),
-                default,
                 Mock.Of<IEngineService>(),
                 Mock.Of<Oxygen.Editor.LivePreview.Scenes.IScenePreview>(),
                 input.Object,

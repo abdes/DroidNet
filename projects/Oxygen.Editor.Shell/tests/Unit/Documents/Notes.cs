@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
-using System.Collections.Immutable;
 using System.Security.Cryptography;
 using System.Text;
 using DroidNet.Storage;
@@ -13,7 +12,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.Shell.Unit.Tests.Documents;
 
 /// <summary>A minimal document kind for the Shell's tests: a text note held in memory.</summary>
-internal sealed class Notes : IDisposable
+internal sealed partial class Notes : IDisposable
 {
     public Notes() => this.Documents = new OpenDocuments([this.Kind], this.Files);
 
@@ -67,7 +66,7 @@ internal sealed class Notes : IDisposable
 
     internal sealed class NoteContent : IDocumentContent
     {
-        /// <summary>Gets or sets whether text is being typed, which finishing the edits ends.</summary>
+        /// <summary>Gets or sets a value indicating whether text is being typed, which finishing the edits ends.</summary>
         public bool Pending { get; set; }
 
         public bool HasEditsInProgress => this.Pending;
@@ -94,7 +93,7 @@ internal sealed class Notes : IDisposable
         public Task<FileSnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
             => Task.FromResult(this.files.TryGetValue(path, out var content)
                 ? new FileSnapshot([.. content], VersionOf(content))
-                : new FileSnapshot(ImmutableArray<byte>.Empty, FileVersion.Missing));
+                : new FileSnapshot([], FileVersion.Missing));
 
         public Task<FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> content, FileVersion expected, CancellationToken cancellationToken = default)
         {

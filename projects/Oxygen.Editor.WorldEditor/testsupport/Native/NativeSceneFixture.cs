@@ -48,7 +48,6 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.Cooking;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
@@ -83,6 +82,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private readonly MaterialValidation materialValidation = new();
     private readonly MaterialDocumentKind materialKind;
     private readonly StrongReferenceMessenger messenger = new();
+    private readonly SceneSelectionService selections = new();
     private readonly HostingContext hosting;
     private readonly BehaviorSubject<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>> feedAssets = new([]);
     private readonly SceneDocumentKind sceneKind;
@@ -295,7 +295,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         var cook = new MaterialCookService(services.Pipeline, services.Projects, NullLogger<MaterialCookService>.Instance);
         DocumentEditorDescriptor[] editors =
         [
-            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, windowId, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, this.messenger, preferences)) { IsClosable = false, IsOnePerArea = true },
+            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, this.messenger, preferences)) { IsClosable = false, IsOnePerArea = true },
             new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Projects)),
         ];
         this.TransitionArea = new DocumentArea(documents, this.OpenDocuments, editors, windowId, static _ => { });
@@ -356,8 +356,8 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     public SceneNodeEditorViewModel CreateInspectorHost(IList<SceneNode> selection, Oxygen.Editor.Assets.IAssetFeed? assets = null, IGeometryMaterialSlotProvider? materialSlots = null)
     {
         this.activeMaterialSlotProvider = materialSlots ?? this.materialPipeline.Pipeline;
-        this.messenger.Register<SceneNodeSelectionRequestMessage>(this, (_, message) => message.Reply(selection));
-        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.area, default, assets ?? this.AssetCatalog.Object, this.Preview, new SceneSelectionService(), this.materialSlotProvider, this.Projects, new FakeInputSources());
+        this.selections.SetSelection(this.Document.Id, [.. selection], "Test");
+        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.area, assets ?? this.AssetCatalog.Object, this.Preview, this.selections, this.materialSlotProvider, this.Projects, new FakeInputSources());
     }
 
     /// <summary>Opens the fixture's scene on a running engine, starting the shared engine only if it is not running.</summary>
@@ -412,7 +412,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         this.OpenScene(file);
         this.Model.SetScene(this.Source);
         await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
-        _ = this.messenger.Send(new SceneNodeSelectionChangedMessage([.. this.Source.RootNodes]));
+        this.selections.SetSelection(this.Document.Id, [.. this.Source.RootNodes], "Test");
     }
 
     public async Task<RuntimeNodeState> ReadNodeAsync(NodeId nodeId, CancellationToken cancellationToken)
@@ -441,7 +441,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
         var preferences = new Oxygen.Editor.World.Workspace.PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.Projects, publisher.Object, new OperationStatusReducer());
         await preferences.RestoreAsync(this.Projects.ActiveProject!).ConfigureAwait(true);
-        return new(this.Tab, this.area, default, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), Mock.Of<IContentPipelineService>(), container, this.messenger, preferences);
+        return new(this.Tab, this.area, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), Mock.Of<IContentPipelineService>(), container, this.messenger, preferences);
     }
 
     /// <summary>Starts the project's preview session over the cook services, as the workspace does.</summary>

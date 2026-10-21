@@ -12,7 +12,7 @@ namespace Oxygen.Editor.Shell.Contributions;
 public sealed class ContributionRegistry
 {
     private readonly Dictionary<string, PanelDescriptor> panels;
-    private readonly Dictionary<string, string> titles = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, string> titles = [with(StringComparer.Ordinal)];
     private readonly Dictionary<string, CommandDescriptor> commands;
 
     /// <summary>Initializes a new instance of the <see cref="ContributionRegistry"/> class.</summary>

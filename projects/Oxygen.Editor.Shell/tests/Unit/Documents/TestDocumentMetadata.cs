@@ -16,7 +16,7 @@ namespace Oxygen.Editor.Shell.Unit.Tests.Documents;
 ///     The id of the document. If <see langword="null" />, a new id is assigned.
 /// </param>
 [ExcludeFromCodeCoverage]
-public class TestDocumentMetadata(DocumentId? documentId = null) : IDocumentMetadata
+public partial class TestDocumentMetadata(DocumentId? documentId = null) : IDocumentMetadata
 {
     /// <inheritdoc/>
     public event PropertyChangedEventHandler? PropertyChanged;

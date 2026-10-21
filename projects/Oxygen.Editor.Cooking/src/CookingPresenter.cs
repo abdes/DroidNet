@@ -7,7 +7,7 @@ using Oxygen.Editor.Shell.Windows;
 namespace Oxygen.Editor.Cooking;
 
 /// <summary>Brings the Cooking panel forward when explicit work asks for it.</summary>
-public sealed class CookingPresenter : IDisposable
+public sealed partial class CookingPresenter : IDisposable
 {
     private readonly CookingPanelViewModel model;
     private readonly IPlacementService placement;

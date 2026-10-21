@@ -146,8 +146,8 @@ projects/Oxygen.Editor.World/src/
 │   └── [Layout Views]                     # Tile/list layout implementations
 │
 ├── Messages/                              # Inter-module communication
-│   ├── SceneNodeSelectionChangedMessage.cs
-│   └── SceneNodeSelectionRequestMessage.cs
+│   ├── ComponentAddRequestedMessage.cs
+│   └── ComponentRemoveRequestedMessage.cs
 │
 ├── ProjectExplorer/                       # Project navigation
 │   └── ProjectLayoutViewModel.cs          # Project tree implementation

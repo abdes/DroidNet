@@ -21,7 +21,7 @@ namespace Oxygen.Editor.Shell.Unit.UI.Tests.Documents;
 [TestClass]
 [TestCategory("UITest")]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository's discovery configuration.")]
-public sealed class DocumentConflictPanelTests : VisualUserInterfaceTests
+public sealed partial class DocumentConflictPanelTests : VisualUserInterfaceTests
 {
     /// <summary>Reload requires a second explicit discard action before touching the document.</summary>
     /// <returns>The test task.</returns>
@@ -105,7 +105,7 @@ public sealed class DocumentConflictPanelTests : VisualUserInterfaceTests
     }
 
     /// <summary>A note document with an unsaved edit whose file another program changed.</summary>
-    private sealed class ConflictedNote : IDisposable
+    private sealed partial class ConflictedNote : IDisposable
     {
         private readonly Notes notes;
 

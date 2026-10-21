@@ -2,7 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World.Diagnostics;
+using Oxygen.Editor.Scenes;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -30,7 +31,7 @@ namespace Oxygen.Editor.World.Workspace;
 /// <param name="results">The visible diagnostic publisher.</param>
 /// <param name="status">The workspace diagnostic status.</param>
 public sealed partial class EditingViewMaskService(
-    WorkspaceInteractionService interaction,
+    SceneNodeInteraction interaction,
     IOperationResultPublisher results,
     IStatusReducer status) : IDisposable
 {
@@ -76,7 +77,7 @@ public sealed partial class EditingViewMaskService(
     /// </summary>
     /// <remarks>
     /// The intended dispatch, once the runtime transport lands, is a revisioned full snapshot of
-    /// <see cref="WorkspaceInteractionService.HiddenNodeIds"/> targeted at the active scene
+    /// <see cref="SceneNodeInteraction.HiddenNodeIds"/> targeted at the active scene
     /// activation, ordered after any preceding world commands so a node created in the same batch
     /// is covered (D8a R7/DD3).
     /// </remarks>

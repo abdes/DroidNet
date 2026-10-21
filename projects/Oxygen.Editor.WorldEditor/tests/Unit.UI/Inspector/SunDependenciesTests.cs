@@ -3,14 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml.Automation.Peers;
 using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 
@@ -74,26 +72,20 @@ internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceT
         _ = fixture.Document.History.UndoStack.Should().HaveCount(2);
     });
 
-    /// <summary>Inspect waits for Explorer selection before applying its component filter without authoring edits.</summary>
+    /// <summary>Inspect selects the source node through the selection service before applying its component filter, without authoring edits.</summary>
     /// <returns>The navigation regression task.</returns>
     [TestMethod]
-    public Task InspectAtmosphereSourceWaitsForSelectionAndPreservesDirectionalFilter() => EnqueueAsync(async () =>
+    public Task InspectAtmosphereSourceSelectsNodeAndPreservesDirectionalFilter() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Environment");
         var model = host.PropertyEditors.OfType<EnvironmentViewModel>().Single();
         var source = model.AtmosphereLights.SunOptions.Single(option => option.NodeId == fixture.Node.Id);
-        fixture.Messenger.Register<InspectSceneNodeMessage>(this, (_, message) => message.Reply(RevealAsync()));
-
-        async Task<bool> RevealAsync()
-        {
-            await Task.Yield();
-            _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([]));
-            _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([fixture.Node]));
-            return true;
-        }
+        var sources = new List<string>();
+        fixture.Selection.SelectionChanged += (_, args) => sources.Add(args.Source);
 
         await model.AtmosphereLights.InspectAtmosphereSourceAsync(source).ConfigureAwait(true);
+        _ = sources.Should().Equal("Inspector");
         _ = host.SelectedNode.Should().BeSameAs(fixture.Node);
         _ = host.SelectedComponentType.Should().Be<DirectionalLightComponent>();
         _ = host.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<DirectionalLightViewModel>();

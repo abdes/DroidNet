@@ -11,7 +11,6 @@ using DroidNet.Documents;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LevelEditor;
@@ -21,7 +20,6 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -44,7 +42,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly IStatusReducer statusReducer;
     private readonly IContentPipelineService contentPipelineService;
     private readonly IDocumentArea documentArea;
-    private readonly WindowId windowId;
     private readonly IContainer container;
     private Oxygen.Editor.World.Scene? scene;
     private bool sceneReady;
@@ -57,7 +54,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// </summary>
     /// <param name="tab">The scene document's tab.</param>
     /// <param name="documentArea">The document area of the editor's window, which says whether the scene is active.</param>
-    /// <param name="windowId">The window identifier, for the window's camera messages.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
     /// <param name="scenePreview">Reports when the engine shows the document's scene.</param>
     /// <param name="inputCommitter">Completes the focused inspector control's text input.</param>
@@ -65,14 +61,13 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="statusReducer">The diagnostic status reducer.</param>
     /// <param name="contentPipelineService">The explicit content cooking service.</param>
     /// <param name="container">DI container used to create child services for viewports.</param>
-    /// <param name="messenger">The messenger used for inter-component communication.</param>
+    /// <param name="messenger">The messenger, for the requests to show assets in the Content Browser.</param>
     /// <param name="previewSettings">The shared project preview preferences.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="engineSettings">The engine startup settings, whose logging verbosity the editor edits; optional.</param>
     public SceneEditorViewModel(
         DocumentTab tab,
         IDocumentArea documentArea,
-        WindowId windowId,
         IEngineService engineService,
         IScenePreview scenePreview,
         IDocumentInputCommitter inputCommitter,
@@ -97,7 +92,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.statusReducer = statusReducer;
         this.contentPipelineService = contentPipelineService;
         this.documentArea = documentArea;
-        this.windowId = windowId;
         this.loggerFactory = loggerFactory;
         this.Viewports = [];
         this.Tab = tab ?? throw new ArgumentNullException(nameof(tab));
@@ -113,7 +107,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
         // Defer creating viewports until the engine shows the document's scene: the preview's readiness triggers the
         // layout restoration, which avoids creating engine views before the scene exists ("frame context has no scene").
-        this.RegisterMessages();
+        this.RegisterSubscriptions();
+        this.container.Resolve<SceneEditorViews>(IfUnresolved.ReturnDefault)?.Attach(this);
         this.Document.ContentReplaced += this.OnDocumentContentReplaced;
         this.InitializePlay();
         scenePreview.ReadyChanged += this.OnPreviewReadyChanged;
@@ -234,9 +229,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.Document.ContentReplaced -= this.OnDocumentContentReplaced;
 
             this.scenePreview.ReadyChanged -= this.OnPreviewReadyChanged;
-            this.LogUnregisteringFromMessages(this.Document.Id);
-
-            this.messenger.UnregisterAll(this);
+            this.UnregisterSubscriptions();
+            this.container.Resolve<SceneEditorViews>(IfUnresolved.ReturnDefault)?.Detach(this);
             this.DisposeTransformTools();
             this.DisposePlay();
 
@@ -252,12 +246,11 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         }
     }
 
-    private void RegisterMessages()
-    {
-        this.RegisterCameraMessages();
-        this.RegisterSelectionMessages();
-        this.RegisterShortcutMessages();
-    }
+    private void RegisterSubscriptions()
+        => this.SelectionService?.SelectionChanged += this.OnSelectionServiceChanged;
+
+    private void UnregisterSubscriptions()
+        => this.SelectionService?.SelectionChanged -= this.OnSelectionServiceChanged;
 
     [RelayCommand]
     private async Task Save() => await this.SaveAsync().ConfigureAwait(true);

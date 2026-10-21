@@ -43,6 +43,7 @@ public record ExplorerEntryData
     /// Gets child entries for folder nodes.
     /// </summary>
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Roslynator", "RCS1085:Use auto-implemented property", Justification = "Children can only be set during initialization, but EnsureChildren() can lazily populate it when needed.")]
     public IList<ExplorerEntryData>? Children
     {
         get => this.children;

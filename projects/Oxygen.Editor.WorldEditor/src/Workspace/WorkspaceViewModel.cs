@@ -23,17 +23,17 @@ using Oxygen.Editor.Routing;
 using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Layout;
 using Oxygen.Editor.Shell.Windows;
-using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Managed.Assets.Catalog;
@@ -185,20 +185,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             : null;
     }
 
-    /// <summary>Runs an editor-wide scene shortcut in the active scene editor or Scene Explorer.</summary>
-    /// <param name="shortcut">The shortcut.</param>
-    /// <returns><see langword="true"/> when a receiver ran it.</returns>
-    internal bool RunSceneShortcut(SceneShortcut shortcut)
-    {
-        if (this.messenger is not { } messenger)
-        {
-            return false;
-        }
-
-        var request = messenger.Send(new SceneShortcutMessage(shortcut));
-        return request.HasReceivedResponse && request.Response;
-    }
-
     /// <inheritdoc />
     protected override void OnSetupChildContainer(IContainer childContainer)
     {
@@ -207,7 +193,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         // Per-window on purpose: it observes this window's workspace hidden set and unsubscribes when
         // the window closes, so a second window cannot inherit a stale "pending suppression" state.
         this.editingViewMask = new Oxygen.Editor.World.Workspace.EditingViewMaskService(
-            childContainer.Resolve<Oxygen.Editor.World.Workspace.WorkspaceInteractionService>(),
+            childContainer.Resolve<SceneNodeInteraction>(),
             childContainer.Resolve<IOperationResultPublisher>(),
             childContainer.Resolve<IStatusReducer>()).Start();
         childContainer.Register<IMessenger, StrongReferenceMessenger>(Reuse.Singleton);
@@ -222,6 +208,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         // document service, and the placement of documents and panels.
         RegisterContributions(childContainer, this.modules);
         RegisterDocuments(childContainer);
+        childContainer.Register<SceneEditorViews>(Reuse.Singleton);
+        childContainer.RegisterMapping<ISceneViews, SceneEditorViews>();
         childContainer.Register<ICommandService, CommandService>(Reuse.Singleton);
         childContainer.Register<IPlacementService, DockingPlacementService>(Reuse.Singleton);
 
@@ -259,6 +247,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         _ = childContainer.Resolve<DocumentAreaViewModel>();
         _ = childContainer.Resolve<WindowCloseCoordinator>();
         childContainer.Register<SceneDocumentLifetime>(Reuse.Singleton);
+        childContainer.RegisterMapping<ISceneAvailability, SceneDocumentLifetime>();
         this.sceneLifetime = childContainer.Resolve<SceneDocumentLifetime>();
 
         childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
@@ -371,7 +360,9 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     // The panels the features contribute, which the registry checks once.
     private static void RegisterContributions(IContainer childContainer, IEnumerable<IFeatureModule> modules)
         => childContainer.RegisterDelegate(
-            _ => new ContributionRegistry([.. modules.SelectMany(static module => module.Panels)], []),
+            _ => new ContributionRegistry(
+                [.. modules.SelectMany(static module => module.Panels)],
+                [.. SceneEditorCommands.All, .. SceneExplorerCommands.All, .. modules.SelectMany(static module => module.Commands)]),
             Reuse.Singleton);
 
     private static void RegisterInspectorEditors(IContainer childContainer)

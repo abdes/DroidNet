@@ -9,7 +9,7 @@ namespace Oxygen.Editor.Scenes.Authoring;
 
 /// <summary>
 /// The editing state of scene nodes that is not part of the scene: nodes hidden in the editor and nodes locked against
-/// editing. Commands obey it; the workspace keeps and persists it.
+/// editing. Commands obey it; <see cref="Interaction.SceneNodeInteraction"/> keeps and persists it per project.
 /// </summary>
 public interface ISceneNodeInteraction
 {

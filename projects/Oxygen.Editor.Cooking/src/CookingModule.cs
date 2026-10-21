@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DryIoc;
+using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
 
 namespace Oxygen.Editor.Cooking;
@@ -15,6 +16,9 @@ public sealed class CookingModule : IFeatureModule
 
     /// <inheritdoc />
     public IReadOnlyList<PanelDescriptor> Panels { get; } = [new(PanelId, "Cooking", typeof(CookingPanelViewModel))];
+
+    /// <inheritdoc />
+    public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
 
     /// <inheritdoc />
     public void RegisterWindowServices(IContainer window)

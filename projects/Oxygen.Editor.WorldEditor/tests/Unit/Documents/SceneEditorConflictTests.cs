@@ -150,7 +150,6 @@ internal sealed partial class SceneEditorConflictTests
             this.Editor = new(
                 this.Tab,
                 documents,
-                default,
                 Mock.Of<IEngineService>(),
                 this.Preview.Object,
                 input.Object,

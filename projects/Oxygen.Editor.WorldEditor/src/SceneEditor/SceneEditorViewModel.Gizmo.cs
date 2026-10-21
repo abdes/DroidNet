@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
@@ -12,8 +11,8 @@ using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Editor.World.Workspace;
@@ -457,13 +456,13 @@ public partial class SceneEditorViewModel
 
                 break;
             case ViewportEditCommand.Delete:
-                _ = this.messenger.Send(new SceneEditRequestMessage(this.Document.Id, SceneEditRequest.Delete));
+                await this.RunShellCommandAsync(ShellCommands.Delete).ConfigureAwait(true);
                 break;
             case ViewportEditCommand.Undo:
-                _ = this.messenger.Send(new SceneEditRequestMessage(this.Document.Id, SceneEditRequest.Undo));
+                await this.RunShellCommandAsync(ShellCommands.Undo).ConfigureAwait(true);
                 break;
             case ViewportEditCommand.Redo:
-                _ = this.messenger.Send(new SceneEditRequestMessage(this.Document.Id, SceneEditRequest.Redo));
+                await this.RunShellCommandAsync(ShellCommands.Redo).ConfigureAwait(true);
                 break;
             default:
                 break;

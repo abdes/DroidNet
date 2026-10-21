@@ -2,21 +2,73 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Shell.Commands;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
-/// <content>Undo and Redo while the Scene Explorer has the focus: they run its own commands, which reconcile the tree.</content>
+/// <content>
+/// The commands the explorer runs while it shows the window's active scene document: rename, find, delete, and Undo and
+/// Redo, which run its own commands so the tree reconciles.
+/// </content>
 public partial class SceneExplorerViewModel : ICommandHandler
 {
     /// <inheritdoc/>
     public bool CanExecute(string commandId)
-        => (string.Equals(commandId, ShellCommands.Undo.Id, StringComparison.Ordinal) && this.UndoCommand.CanExecute(parameter: null))
-            || (string.Equals(commandId, ShellCommands.Redo.Id, StringComparison.Ordinal) && this.RedoCommand.CanExecute(parameter: null));
+    {
+        if (this.isDisposed || this.Scene is null || !ReferenceEquals(this.documentArea.ActiveDocument, this.sceneDocument))
+        {
+            return false;
+        }
+
+        return commandId switch
+        {
+            _ when Is(commandId, ShellCommands.Undo) => this.sceneDocument?.History.CanUndo == true && this.UndoCommand.CanExecute(parameter: null),
+            _ when Is(commandId, ShellCommands.Redo) => this.sceneDocument?.History.CanRedo == true && this.RedoCommand.CanExecute(parameter: null),
+            _ when Is(commandId, ShellCommands.Delete) => this.DeleteAction.CanExecute(parameter: null),
+            _ when Is(commandId, SceneExplorerCommands.Rename) => this.RenameAction.CanExecute(parameter: null),
+            _ when Is(commandId, SceneExplorerCommands.FindInExplorer) => this.FindRequested is not null,
+            _ => false,
+        };
+    }
 
     /// <inheritdoc/>
-    public Task ExecuteAsync(string commandId)
-        => string.Equals(commandId, ShellCommands.Undo.Id, StringComparison.Ordinal)
-            ? this.UndoCommand.ExecuteAsync(parameter: null)
-            : this.RedoCommand.ExecuteAsync(parameter: null);
+    public async Task ExecuteAsync(string commandId)
+    {
+        if (!this.CanExecute(commandId))
+        {
+            return;
+        }
+
+        if (Is(commandId, ShellCommands.Undo))
+        {
+            await this.UndoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+        }
+        else if (Is(commandId, ShellCommands.Redo))
+        {
+            await this.RedoCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
+        }
+        else if (Is(commandId, ShellCommands.Delete))
+        {
+            if (this.DeleteAction is IAsyncRelayCommand delete)
+            {
+                await delete.ExecuteAsync(parameter: null).ConfigureAwait(true);
+            }
+            else
+            {
+                this.DeleteAction.Execute(parameter: null);
+            }
+        }
+        else if (Is(commandId, SceneExplorerCommands.Rename))
+        {
+            this.RenameAction.Execute(parameter: null);
+        }
+        else if (Is(commandId, SceneExplorerCommands.FindInExplorer))
+        {
+            this.FindRequested?.Invoke(this, EventArgs.Empty);
+        }
+    }
+
+    private static bool Is(string commandId, CommandDescriptor command)
+        => string.Equals(commandId, command.Id, StringComparison.Ordinal);
 }

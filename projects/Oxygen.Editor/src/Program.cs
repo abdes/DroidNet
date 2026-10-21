@@ -40,6 +40,7 @@ using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.ProjectBrowser.Views;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Desktop;
@@ -277,7 +278,7 @@ public static partial class Program
 
         // Editor hide / lock workspace state: one owner, project-scoped typed settings, serialized writes.
         container.RegisterDelegate(
-            resolver => new WorkspaceInteractionService(
+            resolver => new SceneNodeInteraction(
                 resolver.Resolve<IEditorSettingsManager>(),
                 resolver.Resolve<IOperationResultPublisher>(),
                 resolver.Resolve<IStatusReducer>(),
@@ -285,7 +286,7 @@ public static partial class Program
             Reuse.Singleton);
 
         // Scene commands obey the same hide / lock state through the Scenes interface.
-        container.RegisterMapping<Oxygen.Editor.Scenes.Authoring.ISceneNodeInteraction, WorkspaceInteractionService>();
+        container.RegisterMapping<Oxygen.Editor.Scenes.Authoring.ISceneNodeInteraction, SceneNodeInteraction>();
 
         // Scene viewport layout and pane cameras: user-local workspace state, serialized writes.
         container.RegisterDelegate(

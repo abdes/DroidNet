@@ -3,12 +3,13 @@
 // SPDX-License-Identifier: MIT
 
 using DryIoc;
+using Oxygen.Editor.Shell.Commands;
 
 namespace Oxygen.Editor.Shell.Contributions;
 
 /// <summary>
-/// A feature's part in a workspace window: the panels it contributes and the services, view models and views it
-/// registers in each window.
+/// A feature's part in a workspace window: the panels and commands it contributes and the services, view models and
+/// views it registers in each window.
 /// </summary>
 /// <remarks>
 /// The application registers one instance of each module. A workspace window registers every module's services into
@@ -18,6 +19,9 @@ public interface IFeatureModule
 {
     /// <summary>Gets the panels the feature contributes.</summary>
     public IReadOnlyList<PanelDescriptor> Panels { get; }
+
+    /// <summary>Gets the commands the feature contributes; its parts run them.</summary>
+    public IReadOnlyList<CommandDescriptor> Commands { get; }
 
     /// <summary>Registers the feature's services, view models and views in a workspace window.</summary>
     /// <param name="window">The window's container.</param>

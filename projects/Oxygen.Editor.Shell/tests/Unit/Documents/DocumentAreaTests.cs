@@ -12,7 +12,7 @@ namespace Oxygen.Editor.Shell.Unit.Tests.Documents;
 
 /// <summary>Checks the document area of a window: its tabs, its active document, and the documents it closes.</summary>
 [TestClass]
-public sealed class DocumentAreaTests
+public sealed partial class DocumentAreaTests
 {
     private static readonly WindowId Window = new(1);
     private static readonly WindowId OtherWindow = new(2);
@@ -198,7 +198,7 @@ public sealed class DocumentAreaTests
         public Task<bool> ConfirmAsync(IReadOnlyList<DocumentCloseItem> documents) => Task.FromResult(true);
     }
 
-    private sealed class IgnoredResults : IOperationResultPublisher
+    private sealed partial class IgnoredResults : IOperationResultPublisher
     {
         public void Publish(OperationResult result)
         {
@@ -206,7 +206,7 @@ public sealed class DocumentAreaTests
 
         public IDisposable Subscribe(IObserver<OperationResult> observer) => new Unsubscriber();
 
-        private sealed class Unsubscriber : IDisposable
+        private sealed partial class Unsubscriber : IDisposable
         {
             public void Dispose()
             {

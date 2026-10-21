@@ -13,9 +13,11 @@ namespace Oxygen.Editor.Shell.Unit.Tests.Documents;
 
 /// <summary>Exercises the close of document tabs through each window's close coordinator, with stand-in editors and prompt.</summary>
 [TestClass]
-public sealed class DocumentCloseWorkflowTests
+public sealed partial class DocumentCloseWorkflowTests
 {
     private static readonly WindowId Window = new(1);
+
+    public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
     public async Task CancelTabClosePreservesDocumentAndActiveContext()
@@ -103,7 +105,7 @@ public sealed class DocumentCloseWorkflowTests
         });
         var document = await fixture.OpenAsync("Retry").ConfigureAwait(false);
         var attempt = 0;
-        document.Save = async () => ++attempt == 2 && (await document.Tab.Document.SaveAsync().ConfigureAwait(false)).Succeeded;
+        document.Save = async () => ++attempt == 2 && (await document.Tab.Document.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded;
 
         _ = (await fixture.Service.CloseDocumentAsync(Window, document.Tab.DocumentId).ConfigureAwait(false)).Should().BeTrue();
         _ = attempt.Should().Be(2);
@@ -186,7 +188,7 @@ public sealed class DocumentCloseWorkflowTests
         var document = await fixture.OpenAsync("Newer edits").ConfigureAwait(false);
         document.Save = async () =>
         {
-            var saved = (await document.Tab.Document.SaveAsync().ConfigureAwait(false)).Succeeded;
+            var saved = (await document.Tab.Document.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).Succeeded;
             document.Tab.Document.History.AddChange("Newer", static () => { });
             return saved;
         };
@@ -249,11 +251,12 @@ public sealed class DocumentCloseWorkflowTests
     }
 
     /// <summary>Open note documents with an unsaved edit each, shown in the tabs of one or two windows.</summary>
-    private sealed class Fixture(Func<IReadOnlyList<DocumentCloseItem>, Task<bool>> prompt) : IDisposable
+    private sealed partial class Fixture(Func<IReadOnlyList<DocumentCloseItem>, Task<bool>> prompt) : IDisposable
     {
         private readonly Notes notes = new();
         private readonly Dictionary<WindowId, DocumentCloseCoordinator> coordinators = [];
         private readonly List<IDisposable> coordinatorUses = [];
+        private readonly List<DocumentTab> tabs = [];
 
         public Mock<IOperationResultPublisher> Results { get; } = new();
 
@@ -267,6 +270,7 @@ public sealed class DocumentCloseWorkflowTests
             var document = await this.notes.OpenAsync(title, CancellationToken.None).ConfigureAwait(false);
             document.History.AddChange("Edit", static () => { });
             var tab = new DocumentTab(document, new DocumentEditorDescriptor(this.notes.Kind, static _ => new object()) { IsClosable = closable });
+            this.tabs.Add(tab);
             var participant = new Participant(tab);
             _ = (await this.Service.OpenDocumentAsync(target, tab).ConfigureAwait(false)).Should().BeTrue();
             this.CoordinatorOf(target).Register(tab, participant);
@@ -277,6 +281,7 @@ public sealed class DocumentCloseWorkflowTests
         public void Dispose()
         {
             this.coordinatorUses.ForEach(static use => use.Dispose());
+            this.tabs.ForEach(static tab => tab.Dispose());
             this.notes.Dispose();
         }
 
@@ -299,15 +304,9 @@ public sealed class DocumentCloseWorkflowTests
     }
 
     /// <summary>Stands in for a document's editor at close: it saves the document, or discards its edits.</summary>
-    private sealed class Participant : IDocumentCloseParticipant
+    private sealed class Participant(DocumentTab tab) : IDocumentCloseParticipant
     {
-        public Participant(DocumentTab tab)
-        {
-            this.Tab = tab;
-            this.Save = async () => (await tab.Document.SaveAsync().ConfigureAwait(false)).Succeeded;
-        }
-
-        public DocumentTab Tab { get; }
+        public DocumentTab Tab { get; } = tab;
 
         public bool Saved { get; private set; }
 
@@ -317,7 +316,7 @@ public sealed class DocumentCloseWorkflowTests
 
         public bool IsPreparing { get; private set; }
 
-        public Func<Task<bool>> Save { get; set; }
+        public Func<Task<bool>> Save { get; set; } = async () => (await tab.Document.SaveAsync().ConfigureAwait(false)).Succeeded;
 
         public Task PrepareForCloseAsync()
         {

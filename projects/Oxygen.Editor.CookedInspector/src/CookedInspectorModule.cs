@@ -6,6 +6,7 @@ using DryIoc;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Windows;
 
@@ -19,6 +20,9 @@ public sealed class CookedInspectorModule : IFeatureModule
 
     /// <inheritdoc />
     public IReadOnlyList<PanelDescriptor> Panels { get; } = [new(PanelId, "Cooked Inspector", typeof(CookedInspectionViewModel))];
+
+    /// <inheritdoc />
+    public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
 
     /// <inheritdoc />
     public void RegisterWindowServices(IContainer window)

@@ -43,6 +43,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that opening a document keys its tab by the metadata's document id.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_WithValidMetadata_KeysTheTabByItsDocumentId()
     {
@@ -68,6 +69,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that opening a document adds it to the window's document collection.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_AddsDocumentToWindowCollection()
     {
@@ -87,6 +89,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that opening a document with shouldSelect=true sets it as active.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_WithShouldSelectTrue_SetsActiveDocument()
     {
@@ -109,6 +112,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that opening a document with shouldSelect=false does not set it as active.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_WithShouldSelectFalse_DoesNotSetActiveDocument()
     {
@@ -129,6 +133,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that closing an existing document returns true.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_WithExistingDocument_ReturnsTrue()
     {
@@ -147,6 +152,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that closing a document removes it from the collection.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_RemovesDocumentFromCollection()
     {
@@ -166,6 +172,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that closing a non-existent document returns false.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_WithNonExistentDocument_ReturnsFalse()
     {
@@ -182,6 +189,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that closing with veto returns false and document remains open.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_WithVeto_ReturnsFalseAndDocumentRemainsOpen()
     {
@@ -204,6 +212,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that closing with force=true bypasses veto.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_WithForceTrue_BypassesVeto()
     {
@@ -227,6 +236,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that closing the active document clears the active document ID.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_ClearsActiveDocumentId()
     {
@@ -246,6 +256,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that a document has one tab: a second tab for it is refused, in its window or another.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_ForADocumentWithATab_IsRefused()
     {
@@ -269,6 +280,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that two documents may both have tabs that cannot be closed: the editors decide what each window shows.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_WithSecondNonClosableDocument_KeepsBoth()
     {
@@ -288,6 +300,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that detaching a tab is refused and leaves it in its window: no window can receive a torn-out tab yet.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task DetachDocumentAsync_IsRefusedAndKeepsTheTab()
     {
@@ -307,6 +320,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that attaching a document returns true.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task AttachDocumentAsync_WithValidMetadata_ReturnsTrue()
     {
@@ -326,6 +340,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that attaching a document adds it to the window's collection.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task AttachDocumentAsync_AddsDocumentToCollection()
     {
@@ -348,6 +363,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that selecting an existing document returns true.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task SelectDocumentAsync_WithExistingDocument_ReturnsTrue()
     {
@@ -366,6 +382,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that selecting a document sets it as active.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task SelectDocumentAsync_SetsDocumentAsActive()
     {
@@ -386,6 +403,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that selecting a non-existent document returns false.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task SelectDocumentAsync_WithNonExistentDocument_ReturnsFalse()
     {
@@ -416,6 +434,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that GetOpenDocuments returns all open documents for a window.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task GetOpenDocuments_ReturnsAllOpenDocuments()
     {
@@ -446,6 +465,7 @@ public class DocumentTabsTests
     /// <summary>
     /// Test that GetActiveDocumentId returns the active document ID.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task GetActiveDocumentId_ReturnsActiveDocumentId()
     {

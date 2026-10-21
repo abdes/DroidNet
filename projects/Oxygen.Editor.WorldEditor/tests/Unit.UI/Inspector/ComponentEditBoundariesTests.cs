@@ -5,7 +5,6 @@
 using System.Globalization;
 using System.Numerics;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using Microsoft.UI;
@@ -13,7 +12,6 @@ using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Controls;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
@@ -134,7 +132,7 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
             var second = AddNumericNode(fixture.Scene, 80);
             target = second.Components.OfType<TransformComponent>().Single();
             target.LocalScale = new(2, 1, 1);
-            _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([fixture.Node, second]));
+            fixture.Select(fixture.Node, second);
         }
 
         var transform = host.PropertyEditors.OfType<TransformViewModel>().Single();

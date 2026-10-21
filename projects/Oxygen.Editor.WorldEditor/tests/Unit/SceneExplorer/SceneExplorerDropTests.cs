@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
 using DroidNet.Routing;
 using Moq;
@@ -163,11 +162,9 @@ public sealed partial class SceneExplorerDropTests
         {
             var explorer = new SceneExplorerViewModel(
                 this.Manager.Object,
-                new StrongReferenceMessenger(),
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.OpenDocuments,
-                default,
                 new SceneSelectionService());
             this.SceneAdapter = explorer.Scene;
             return explorer;

@@ -163,7 +163,7 @@ public partial class SceneEditorViewModel
                 : new NodePlacement(camera.FocusPoint);
     }
 
-    private void UpdateSelectedNodes(IList<SceneNode> nodes)
+    private void UpdateSelectedNodes(IReadOnlyList<SceneNode> nodes)
     {
         this.selectedNodes = [.. nodes];
         this.BrowseToAssetCommand.NotifyCanExecuteChanged();

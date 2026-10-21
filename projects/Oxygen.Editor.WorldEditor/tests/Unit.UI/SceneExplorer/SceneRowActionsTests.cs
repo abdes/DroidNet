@@ -18,14 +18,13 @@ using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Moq;
 using Oxygen.Editor.Data.Services;
-using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 using Windows.Foundation;
@@ -283,35 +282,25 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = Glyph(childActions, "EyeGlyph").Glyph.Should().Be("\uE890", "the eye reflects only this node's explicit hidden entry");
     });
 
-    /// <summary>Verifies actions save and restore typed workspace state without dirtying authored content.</summary>
+    /// <summary>Verifies the eye and lock hide and lock the node in the interaction state without dirtying authored content.</summary>
+    /// <remarks>The interaction state's own tests check that it saves and restores what the rows set.</remarks>
     /// <returns>The UI test task.</returns>
     [TestMethod]
-    public Task RowActions_PersistAndRestoreWorkspaceState_WithoutDirtyingTheScene() => EnqueueAsync(async () =>
+    public Task RowActions_HideAndLockTheNode_WithoutDirtyingTheScene() => EnqueueAsync(async () =>
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
         host.Actions.SetRowHovered(hovered: true);
         await InvokeEyeAsync(host).ConfigureAwait(true);
         Invoke(Button(host.Actions, "LockButton"));
         await WaitForRenderAsync().ConfigureAwait(true);
-        await host.Interaction.RestoreAsync(host.Fixture.Projects.ActiveProject!, host.Node.Scene.Id).ConfigureAwait(true);
-        await WaitForRenderAsync().ConfigureAwait(true);
 
+        _ = host.Interaction.IsHidden(host.Node.Id).Should().BeTrue();
+        _ = host.Interaction.IsLocked(host.Node.Id).Should().BeTrue();
         _ = host.Adapter.IsHiddenInEditor.Should().BeTrue();
         _ = host.Adapter.IsLocked.Should().BeTrue();
-        _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("\uED1A");
-        _ = Glyph(host.Actions, "LockGlyph").Glyph.Should().Be("\uE72E");
+        _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("");
+        _ = Glyph(host.Actions, "LockGlyph").Glyph.Should().Be("");
         _ = host.Fixture.Document.IsDirty.Should().BeFalse();
-        host.Settings.Verify(
-            settings => settings.SaveSettingAsync(
-                WorkspaceInteractionService.Key,
-                It.Is<WorkspaceInteractionService.ProjectInteraction>(state =>
-                    state.Scenes.ContainsKey(host.Node.Scene.Id)
-                    && state.Scenes[host.Node.Scene.Id].HiddenNodeIds.Contains(host.Node.Id)
-                    && state.Scenes[host.Node.Scene.Id].LockedNodeIds.Contains(host.Node.Id)),
-                It.IsAny<SettingContext>(),
-                It.IsAny<IProgress<SettingsProgress>>(),
-                It.IsAny<CancellationToken>()),
-            Times.AtLeastOnce);
     });
 
     /// <summary>Verifies complete fixed-width slots remain aligned across depths and do not shift labels.</summary>
@@ -459,9 +448,8 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     /// <returns>The disposable host with the view-model, scene and realized row.</returns>
     internal static async Task<RowHost> CreateRowHostAsync()
     {
-        var settings = CreateInteractionSettings();
-        var interaction = new WorkspaceInteractionService(
-            settings.Object,
+        var interaction = new SceneNodeInteraction(
+            Mock.Of<IEditorSettingsManager>(),
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer());
         SceneAuthoringFixture? fixture = null;
@@ -477,11 +465,9 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             var metadata = fixture.Tab;
             viewModel = new SceneExplorerViewModel(
                 Mock.Of<IProjectManagerService>(),
-                fixture.Messenger,
                 Mock.Of<IRouter>(),
                 fixture.Area,
                 metadata.Documents,
-                default,
                 new SceneSelectionService(),
                 interaction: interaction,
                 projectContexts: fixture.Projects);
@@ -495,7 +481,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             await WaitForRenderAsync().ConfigureAwait(true);
             var tree = (DynamicTree)view.FindName("ExplorerTree")!;
             var row = Row(tree, adapter);
-            var host = new RowHost(fixture, viewModel, view, interaction, settings, adapter, secondaryAdapter, childAdapter, tree, row, row.FindDescendant<SceneRowActions>()!);
+            var host = new RowHost(fixture, viewModel, view, interaction, adapter, secondaryAdapter, childAdapter, tree, row, row.FindDescendant<SceneRowActions>()!);
             fixture = null;
             viewModel = null;
             return host;
@@ -566,41 +552,11 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         return (bitmap.PixelWidth, Enumerable.Range(0, pixels.Length / 4).Select(index => pixels[(index * 4) + 3]).ToArray());
     }
 
-    private static Mock<IEditorSettingsManager> CreateInteractionSettings()
-    {
-        WorkspaceInteractionService.ProjectInteraction? stored = null;
-        var settings = new Mock<IEditorSettingsManager>();
-        _ = settings.Setup(manager => manager.LoadSettingAsync(
-                WorkspaceInteractionService.Key,
-                It.IsAny<SettingContext>(),
-                It.IsAny<IProgress<SettingsProgress>>(),
-                It.IsAny<CancellationToken>()))
-            .Returns(() => Task.FromResult(stored));
-        _ = settings.Setup(manager => manager.SaveSettingAsync(
-                WorkspaceInteractionService.Key,
-                It.IsAny<WorkspaceInteractionService.ProjectInteraction>(),
-                It.IsAny<SettingContext>(),
-                It.IsAny<IProgress<SettingsProgress>>(),
-                It.IsAny<CancellationToken>()))
-            .Returns((
-                SettingKey<WorkspaceInteractionService.ProjectInteraction> _,
-                WorkspaceInteractionService.ProjectInteraction value,
-                SettingContext _,
-                IProgress<SettingsProgress> _,
-                CancellationToken _) =>
-            {
-                stored = value;
-                return Task.CompletedTask;
-            });
-        return settings;
-    }
-
     /// <summary>Owns the fixture and realized Explorer row used by Scene Explorer UI tests.</summary>
     /// <param name="Fixture">The scene authoring fixture.</param>
     /// <param name="ViewModel">The Explorer view-model.</param>
     /// <param name="View">The loaded Explorer view.</param>
     /// <param name="Interaction">The workspace interaction state owner.</param>
-    /// <param name="Settings">The settings mock that stores interaction state.</param>
     /// <param name="Adapter">The primary scene-node adapter.</param>
     /// <param name="SecondaryAdapter">A second root-node adapter.</param>
     /// <param name="ChildAdapter">A nested child-node adapter.</param>
@@ -611,8 +567,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         SceneAuthoringFixture Fixture,
         SceneExplorerViewModel ViewModel,
         SceneExplorerView View,
-        WorkspaceInteractionService Interaction,
-        Mock<IEditorSettingsManager> Settings,
+        SceneNodeInteraction Interaction,
         SceneNodeAdapter Adapter,
         SceneNodeAdapter SecondaryAdapter,
         SceneNodeAdapter ChildAdapter,

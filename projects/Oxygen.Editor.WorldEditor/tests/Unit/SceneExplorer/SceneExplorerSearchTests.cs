@@ -4,7 +4,6 @@
 
 using System.Text.Json;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using Moq;
 using Oxygen.Editor.Projects;
@@ -39,7 +38,7 @@ public sealed partial class SceneExplorerSearchTests
         _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        using var explorer = new SceneExplorerViewModel(manager.Object, new StrongReferenceMessenger(), Mock.Of<IRouter>(), documents, metadata.Documents, default, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(manager.Object, Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
 
@@ -348,11 +347,9 @@ public sealed partial class SceneExplorerSearchTests
         public SceneExplorerViewModel Build()
             => new(
                 this.Manager.Object,
-                new StrongReferenceMessenger(),
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.OpenDocuments,
-                default,
                 new SceneSelectionService());
     }
 }

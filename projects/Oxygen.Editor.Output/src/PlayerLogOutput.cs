@@ -13,7 +13,7 @@ namespace Oxygen.Editor.Output;
 /// Adds the player's output to the output buffer, as the <see cref="PlayerSource"/> source; a new session's start
 /// clears the buffer.
 /// </summary>
-internal sealed class PlayerLogOutput : IDisposable
+internal sealed partial class PlayerLogOutput : IDisposable
 {
     /// <summary>The source of the player's entries.</summary>
     public const string PlayerSource = "Player";

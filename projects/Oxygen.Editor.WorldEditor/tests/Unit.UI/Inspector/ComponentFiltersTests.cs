@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
@@ -11,12 +10,11 @@ using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Edits.Components;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.Workspace;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core.Diagnostics;
@@ -38,7 +36,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
     [TestMethod]
     public Task LockChangeAndComponentFilterKeepInspectorInputsDisabled() => EnqueueAsync(async () =>
     {
-        var interaction = new WorkspaceInteractionService(
+        var interaction = new SceneNodeInteraction(
             Mock.Of<IEditorSettingsManager>(),
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer());
@@ -124,7 +122,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = second.AddComponent(new PerspectiveCamera { Name = "Camera", FieldOfView = 80 });
         fixture.Scene.RootNodes.Add(second);
         model.SelectComponentFilter(typeof(DirectionalLightComponent));
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([fixture.Node, second]));
+        fixture.Select(fixture.Node, second);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         var light = model.ComponentFilters.Single(option => option.ComponentType == typeof(DirectionalLightComponent));
@@ -137,7 +135,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         var camera = model.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<PerspectiveCameraViewModel>().Which;
         _ = camera.FieldOfView.IsMixed.Should().BeTrue();
         _ = model.SelectedComponent.Should().BeNull("a multi-node filter must not expose a single-node deletion target");
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([]));
+        fixture.Select();
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         _ = model.ComponentFilters.Should().BeEmpty();
@@ -254,7 +252,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
         fixture.Area.Activate(metadata.Document);
-        _ = fixture.Messenger.Send(new SceneNodeSelectionChangedMessage([node]));
+        fixture.Selection.SetSelection(metadata.DocumentId, [node], "Test");
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         _ = model.SelectedNode.Should().BeSameAs(node);

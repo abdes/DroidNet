@@ -5,7 +5,6 @@
 using System.ComponentModel;
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
 using DroidNet.Controls.Menus;
 using Microsoft.UI.Xaml.Controls;
@@ -18,9 +17,8 @@ using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Messages;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
@@ -826,11 +824,8 @@ public partial class SceneExplorerViewModel
         => node.AttachedObject.Components.OfType<CameraComponent>().Any();
 
     /// <summary>What the window's active viewport shows, or null when no scene viewport exists.</summary>
-    private SceneCameraViewportState? QueryCameraViewport()
-    {
-        var request = this.messenger.Send(new SceneCameraViewportStateRequestMessage(this.windowId));
-        return request.HasReceivedResponse ? request.Response : null;
-    }
+    private SceneCameraViewState? QueryCameraViewport()
+        => this.views?.CameraStateOf(this.SceneDocumentId);
 
     private string? GetCameraActionDisabledReason(SceneExplorerCommandKind kind, SceneNodeAdapter[] nodes, bool single)
     {
@@ -868,10 +863,9 @@ public partial class SceneExplorerViewModel
             SceneExplorerCommandKind.PilotCamera => viewing && viewport!.IsPiloting ? SceneCameraCommand.StopPiloting : SceneCameraCommand.Pilot,
             _ => SceneCameraCommand.AlignToView,
         };
-        var request = this.messenger.Send(new SceneCameraCommandMessage(this.windowId, nodeId, command));
-        if (request.HasReceivedResponse)
+        if (this.views is { } sceneViews)
         {
-            _ = await request.Response.ConfigureAwait(true);
+            _ = await sceneViews.RunCameraCommandAsync(this.SceneDocumentId, nodeId, command).ConfigureAwait(true);
         }
     }
 

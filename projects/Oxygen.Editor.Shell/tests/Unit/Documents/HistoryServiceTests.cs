@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using AwesomeAssertions;
 using DroidNet.TimeMachine;
 using Oxygen.Editor.Shell.Documents;
@@ -32,7 +33,7 @@ public sealed class HistoryServiceTests
         _ = service.GlobalHistory.CanUndo.Should().BeTrue();
 
         void Record(HistoryKeeper history, int from, int to)
-            => history.AddChange($"Set {to}", () =>
+            => history.AddChange(string.Create(CultureInfo.InvariantCulture, $"Set {to}"), () =>
             {
                 value = from;
                 Record(history, to, from);

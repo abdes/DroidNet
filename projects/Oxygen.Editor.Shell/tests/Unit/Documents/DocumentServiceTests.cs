@@ -21,7 +21,7 @@ namespace Oxygen.Editor.Shell.Unit.Tests.Documents;
 /// documents in step with their files.
 /// </summary>
 [TestClass]
-public sealed class DocumentServiceTests
+public sealed partial class DocumentServiceTests
 {
     private static readonly WindowId Window = new(5);
 
@@ -263,7 +263,7 @@ public sealed class DocumentServiceTests
     private static UnsavedDocument Describe(Document document) => new(document.Id, document.File, document.Title);
 
     /// <summary>A window with a document area of notes and the document service over it.</summary>
-    private sealed class Fixture : IDisposable
+    private sealed partial class Fixture : IDisposable
     {
         public Fixture(bool onePerArea = false, bool approveClose = true, FakeRelocations? relocations = null)
         {
@@ -328,7 +328,7 @@ public sealed class DocumentServiceTests
     }
 
     /// <summary>Stands in for a note's editor: it saves its document and counts the saves.</summary>
-    private sealed class RecordingEditor(Document document) : IAsyncSaveable, IDocumentCloseParticipant, IDisposable
+    private sealed partial class RecordingEditor(Document document) : IAsyncSaveable, IDocumentCloseParticipant, IDisposable
     {
         public int Saves { get; private set; }
 
@@ -354,7 +354,7 @@ public sealed class DocumentServiceTests
     }
 
     /// <summary>Relocations that a test makes happen.</summary>
-    private sealed class FakeRelocations : IDocumentRelocations
+    private sealed partial class FakeRelocations : IDocumentRelocations
     {
         private Func<Func<Document, DocumentRelocation?>, Task>? follower;
 
@@ -370,7 +370,7 @@ public sealed class DocumentServiceTests
 
         public void Delete(FileSystemPath file) => this.FilesDeleted?.Invoke(this, new DocumentFilesDeletedEventArgs([file]));
 
-        private sealed class Unfollow(FakeRelocations owner) : IDisposable
+        private sealed partial class Unfollow(FakeRelocations owner) : IDisposable
         {
             public void Dispose() => owner.follower = null;
         }

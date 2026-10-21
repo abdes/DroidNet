@@ -23,13 +23,13 @@ public sealed class DocumentConflictTests
     public async Task CopyAndReloadSerializeWithoutAcknowledgingTheOriginalEarly()
     {
         using var notes = new Notes();
-        var tab = await OpenDirtyAsync(notes, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var tab = await OpenDirtyAsync(notes, this.TestContext.CancellationToken).ConfigureAwait(false);
         var copyCompleted = new TaskCompletionSource<DocumentConflictResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var documents = new Mock<IDocumentService>();
         _ = documents.Setup(value => value.SaveCopyAsync(tab.Document, "Copy")).Returns(copyCompleted.Task);
         _ = documents.Setup(value => value.ReloadAsync(tab.Document)).Returns(async () =>
         {
-            _ = await tab.Document.ReloadAsync().ConfigureAwait(false);
+            _ = await tab.Document.ReloadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
             return new DocumentConflictResult(Succeeded: true, "Reloaded");
         });
         var item = new DocumentCloseItem(tab, () => Task.FromResult(false), documents.Object);
@@ -53,7 +53,7 @@ public sealed class DocumentConflictTests
     public async Task FailedRecoveryCanRetryWithoutLosingTheDirtyDocument()
     {
         using var notes = new Notes();
-        var tab = await OpenDirtyAsync(notes, this.TestContext.CancellationToken).ConfigureAwait(false);
+        using var tab = await OpenDirtyAsync(notes, this.TestContext.CancellationToken).ConfigureAwait(false);
         var documents = new Mock<IDocumentService>();
         _ = documents.SetupSequence(value => value.ReloadAsync(tab.Document))
             .ThrowsAsync(new IOException("Read denied"))

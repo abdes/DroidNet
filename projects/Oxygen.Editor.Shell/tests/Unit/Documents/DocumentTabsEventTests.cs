@@ -42,6 +42,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentOpened event is raised when opening a document.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_RaisesDocumentOpenedEvent()
     {
@@ -61,6 +62,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentOpened event contains correct window ID.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_DocumentOpenedEvent_ContainsCorrectWindowId()
     {
@@ -81,6 +83,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentOpened event contains correct metadata.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_DocumentOpenedEvent_ContainsCorrectMetadata()
     {
@@ -101,6 +104,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentOpened event contains correct indexHint.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_DocumentOpenedEvent_ContainsCorrectIndexHint()
     {
@@ -122,6 +126,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentOpened event contains correct shouldSelect flag.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_DocumentOpenedEvent_ContainsCorrectShouldSelect()
     {
@@ -142,6 +147,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentClosing event is raised when closing a document.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_RaisesDocumentClosingEvent()
     {
@@ -163,6 +169,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentClosing event contains correct force flag.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_DocumentClosingEvent_ContainsCorrectForceFlag()
     {
@@ -185,6 +192,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentClosing event is raised even with force=true.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_WithForceTrue_StillRaisesDocumentClosingEvent()
     {
@@ -210,6 +218,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentClosed event is raised after closing a document.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_RaisesDocumentClosedEvent()
     {
@@ -231,6 +240,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentClosed event contains correct metadata.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_DocumentClosedEvent_ContainsCorrectMetadata()
     {
@@ -253,6 +263,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentClosed event is NOT raised when close is vetoed.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task CloseDocumentAsync_WhenVetoed_DoesNotRaiseDocumentClosedEvent()
     {
@@ -277,6 +288,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that a refused detach raises no DocumentDetached event.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task DetachDocumentAsync_IsRefusedWithoutAnEvent()
     {
@@ -296,6 +308,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentAttached event is raised when attaching a document.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task AttachDocumentAsync_RaisesDocumentAttachedEvent()
     {
@@ -318,6 +331,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentAttached event contains correct metadata.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task AttachDocumentAsync_DocumentAttachedEvent_ContainsCorrectMetadata()
     {
@@ -341,6 +355,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentAttached event contains correct indexHint.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task AttachDocumentAsync_DocumentAttachedEvent_ContainsCorrectIndexHint()
     {
@@ -365,6 +380,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentActivated event is raised when selecting a document.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task SelectDocumentAsync_RaisesDocumentActivatedEvent()
     {
@@ -386,6 +402,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentActivated event contains correct document ID.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task SelectDocumentAsync_DocumentActivatedEvent_ContainsCorrectDocumentId()
     {
@@ -408,6 +425,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentActivated event is NOT raised for non-existent document.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task SelectDocumentAsync_WithNonExistentDocument_DoesNotRaiseEvent()
     {
@@ -427,6 +445,7 @@ public class DocumentTabsEventTests
     /// <summary>
     /// Test that DocumentActivated event is raised when opening with shouldSelect=true.
     /// </summary>
+    /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task OpenDocumentAsync_WithShouldSelectTrue_RaisesDocumentActivatedEvent()
     {

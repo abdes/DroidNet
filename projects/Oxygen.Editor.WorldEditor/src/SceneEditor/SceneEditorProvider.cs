@@ -33,7 +33,6 @@ public sealed class SceneEditorProvider(SceneDocumentKind kind, IContainer conta
         => new(
             tab,
             container.Resolve<IDocumentArea>(),
-            container.Resolve<WindowId>(),
             container.Resolve<IEngineService>(),
             container.Resolve<IScenePreview>(),
             container.Resolve<IDocumentInputCommitter>(),

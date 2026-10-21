@@ -111,8 +111,9 @@ Schemas, `Oxygen.Editor.Documents`, Projects, ContentPipeline,
 - **Selection** (`ISceneSelectionService`), keyed by `DocumentId`, with its own
   event.
 - **Node lock and visibility,** behind the port `ISceneNodeInteraction`, because
-  edits obey it. The workspace implements it (`WorkspaceInteractionService` in
-  the World Editor) and keeps and persists the state.
+  edits obey it, and its implementation, `SceneNodeInteraction`, which keeps
+  and persists the state per project, with the Explorer's category filters
+  (`SceneCategories`).
 - **The explorer layout** data (`ExplorerEntryData`, `FolderId`) and the
   clipboard model.
 - **The scene files** (`SceneFiles`): the project's scenes as the asset catalog
@@ -223,10 +224,12 @@ edit:
    `OpenDocuments` and each document's `SceneAuthoring.Changed`, and publishes
    the surface the views read through `IScenePreview`, keyed by `DocumentId`
    (readiness, pending fields, sky light) ([live-preview.md](live-preview.md)).
-8. **Only node lock and visibility go to Scenes,** as the port
-   `ISceneNodeInteraction`; its implementation, `WorkspaceInteractionService`,
-   stays with the workspace. Preview, viewport and transform tool settings are
-   the scene editor's view preferences and live with the scene editor.
+8. **Of the editing state, only node lock and visibility go to Scenes,** as
+   the port `ISceneNodeInteraction` and its implementation,
+   `SceneNodeInteraction`, because the Scene Explorer, the scene editor and the
+   Inspector all read and change it. Preview, viewport and transform tool
+   settings are the scene editor's view preferences and live with the scene
+   editor.
 9. **The script slot edits (`ScriptSlotEdits`) are in Scenes,** built on
    Scripting's `Script` with its declared parameters; the slot rules are
    Scripting's.

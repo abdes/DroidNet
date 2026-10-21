@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls;
 using DroidNet.Routing;
 using DroidNet.TimeMachine;
@@ -206,11 +205,9 @@ public sealed partial class SceneExplorerAuthoringTests
             IProjectContextService? contexts = null)
             => new(
                 this.Manager.Object,
-                new StrongReferenceMessenger(),
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.OpenDocuments,
-                default,
                 new SceneSelectionService(),
                 projectContexts: contexts,
                 relocation: relocation,

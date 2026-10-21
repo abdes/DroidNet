@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Routing;
 using DroidNet.TimeMachine;
 using Microsoft.UI;
@@ -245,7 +244,6 @@ public sealed partial class SceneDocumentLifetimeTests
     /// </summary>
     private sealed partial class LifetimeFixture : IDisposable
     {
-        private readonly StrongReferenceMessenger messenger = new();
 
         private LifetimeFixture()
         {
@@ -274,11 +272,9 @@ public sealed partial class SceneDocumentLifetimeTests
                 Mock.Of<IOperationResultPublisher>());
             this.Explorer = new SceneExplorerViewModel(
                 this.Files.ProjectManager,
-                this.messenger,
                 Mock.Of<IRouter>(),
                 this.Area,
                 this.Files.Documents,
-                this.Window,
                 selection,
                 projectContexts: this.Contexts);
             this.Participant = new SceneParticipant(this);

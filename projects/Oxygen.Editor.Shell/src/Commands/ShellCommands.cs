@@ -44,6 +44,10 @@ public static class ShellCommands
         KeyGestures = [new(VirtualKey.V, VirtualKeyModifiers.Control)],
     };
 
+    /// <summary>Gets the command that deletes the selection of the part the user works in.</summary>
+    /// <remarks>It has no key: each part keeps its own Delete key until one Delete key serves every part (#86).</remarks>
+    public static CommandDescriptor Delete { get; } = new("Edit.Delete", "Delete") { Category = "Edit" };
+
     /// <summary>Gets every command the Shell contributes.</summary>
-    public static IReadOnlyList<CommandDescriptor> All { get; } = [Undo, Redo, Cut, Copy, Paste];
+    public static IReadOnlyList<CommandDescriptor> All { get; } = [Undo, Redo, Cut, Copy, Paste, Delete];
 }
