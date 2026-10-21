@@ -319,24 +319,29 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         }
     });
 
-    /// <summary>Catalog changes during preparation cannot install a closed or superseded project's tree.</summary>
+    /// <summary>
+    /// Catalog changes during preparation cannot install the tree of a closed session, or of mounts that a content mount
+    /// change superseded: the explorer shows the project once, from its current mounts.
+    /// </summary>
     [TestMethod]
     [DataRow(false, false)]
     [DataRow(true, false)]
     [DataRow(false, true)]
     [DataRow(true, true)]
-    public Task TreePreparationRejectsOldProjectAfterCatalogChange(bool close, bool failObsoleteRead) => EnqueueAsync(async () =>
+    public Task TreePreparationRejectsSupersededMountsAfterCatalogChange(bool close, bool failObsoleteRead) => EnqueueAsync(async () =>
     {
         using var firstDirectory = new NavigationDirectory();
-        using var nextDirectory = new NavigationDirectory();
         var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var storage = new Mock<IStorageProvider>();
         storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string root, string path) => Path.Combine(root, path));
+        var obsolete = true;
         storage.Setup(value => value.GetFolderFromPathAsync(It.IsAny<string>(), It.IsAny<CancellationToken>())).Returns(async (string path, CancellationToken token) =>
         {
-            if (string.Equals(path, firstDirectory.Path, StringComparison.Ordinal))
+            // Only the first read, which the change supersedes, waits and may fail; the current mounts read the same root.
+            if (string.Equals(path, firstDirectory.Path, StringComparison.Ordinal) && obsolete)
             {
+                obsolete = false;
                 entered.TrySetResult();
                 await release.Task.WaitAsync(token).ConfigureAwait(true);
                 if (failObsoleteRead)
@@ -367,7 +372,8 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
             }
             else
             {
-                session.ChangeContext(first with { ProjectId = Guid.NewGuid(), Name = "Next", ProjectRoot = FileSystemPath.From(nextDirectory.Path) });
+                // A mount change keeps the session and its project; only the mounts change.
+                session.ChangeContext(first with { AuthoringMounts = [new("Cooked", ".cooked"), new("Content", "Content")] });
                 changes.OnNext(new(Oxygen.Managed.Assets.Catalog.AssetChangeKind.Added, AssetPath.Parse("/Cooked/Published.omat")));
             }
         }
@@ -383,7 +389,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         }
         else
         {
-            _ = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Should().ContainSingle().Which.ProjectRootFolder.Location.Should().Be(nextDirectory.Path);
+            _ = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Should().ContainSingle().Which.ProjectRootFolder.Location.Should().Be(firstDirectory.Path);
         }
     });
 
