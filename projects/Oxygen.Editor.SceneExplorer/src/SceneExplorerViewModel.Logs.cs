@@ -10,7 +10,7 @@ using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer;
 
 /// <summary>Logging helpers for <see cref="SceneExplorerViewModel"/>.</summary>
 public partial class SceneExplorerViewModel

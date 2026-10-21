@@ -5,7 +5,7 @@
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Shell.Commands;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer;
 
 /// <content>
 /// The commands the explorer runs while it shows the window's active scene document: rename, find, delete, and Undo and

@@ -18,10 +18,11 @@ using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Views;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer;
 
 /// <summary>Captured command surfaces for the Explorer.</summary>
 public partial class SceneExplorerViewModel

@@ -32,11 +32,12 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer;
 
 /// <summary>
 ///     The ViewModel for the <see cref="SceneExplorer.SceneExplorerView" /> view.

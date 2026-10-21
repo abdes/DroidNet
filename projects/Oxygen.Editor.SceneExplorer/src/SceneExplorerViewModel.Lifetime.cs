@@ -9,8 +9,9 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Views;
+using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer;
 
 public partial class SceneExplorerViewModel
 {

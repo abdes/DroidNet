@@ -35,7 +35,6 @@ using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.SceneEditor;
-using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -250,8 +249,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         childContainer.RegisterMapping<ISceneAvailability, SceneDocumentLifetime>();
         this.sceneLifetime = childContainer.Resolve<SceneDocumentLifetime>();
 
-        childContainer.Register<SceneExplorerViewModel>(Reuse.Transient);
-        childContainer.Register<SceneExplorerView>(Reuse.Transient);
         childContainer.Register<ContentBrowserViewModel>(Reuse.Transient);
         childContainer.Register<ContentBrowserView>(Reuse.Transient);
         this.RegisterOutputPanels(childContainer);
@@ -330,13 +327,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
                     new Route { Outlet = "renderer", Path = "dx", ViewModelType = typeof(DocumentAreaViewModel) },
                     new Route
                     {
-                        Outlet = "se",
-                        Path = "se",
-                        MatchMethod = PathMatch.Full,
-                        ViewModelType = typeof(SceneExplorerViewModel),
-                    },
-                    new Route
-                    {
                         Outlet = "cb",
                         Path = "cb",
                         MatchMethod = PathMatch.Full,
@@ -362,7 +352,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         => childContainer.RegisterDelegate(
             _ => new ContributionRegistry(
                 [.. modules.SelectMany(static module => module.Panels)],
-                [.. SceneEditorCommands.All, .. SceneExplorerCommands.All, .. modules.SelectMany(static module => module.Commands)]),
+                [.. SceneEditorCommands.All, .. modules.SelectMany(static module => module.Commands)]),
             Reuse.Singleton);
 
     private static void RegisterInspectorEditors(IContainer childContainer)

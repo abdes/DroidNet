@@ -7,7 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.WorldEditor.SceneEditor;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
+namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
 
 [TestClass]
 [ExcludeFromCodeCoverage]

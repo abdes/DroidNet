@@ -14,7 +14,7 @@ using Oxygen.Editor.Scenes.Nodes;
 using Windows.Foundation;
 using static DroidNet.Controls.DynamicTreeViewModel;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer;
 
 /// <summary>A hierarchical authoring view of a scene's nodes and logical folders.</summary>
 [ViewModel(typeof(SceneExplorerViewModel))]

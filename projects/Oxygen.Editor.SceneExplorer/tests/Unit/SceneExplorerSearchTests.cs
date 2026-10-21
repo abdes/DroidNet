@@ -13,10 +13,9 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 
 /// <summary>Ensures scene search reveals collapsed matches and restores expansion on clear.</summary>
 [TestClass]

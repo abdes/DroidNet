@@ -9,7 +9,9 @@ reference it.
   files of a `TestProject`, read and written by the real atomic store on the
   project's file system (Testably's `MockFileSystem` in unit tests). `Write`
   puts a scene in its file as another program would, `FileOf` names a scene's
-  file, and `OpenAsync` opens it.
+  file, and `OpenAsync` opens it. `BeforeRead` holds a read until the test
+  releases it, and `otherKinds` opens other documents, such as materials, beside
+  the scenes.
 - `TestScenes.Open(scene)` writes a scene a test built to a file of an
   in-memory project and opens it, as the editor opens it. The `TestScene` it
   returns holds the document and the document's own scene and nodes (`NodeOf`);

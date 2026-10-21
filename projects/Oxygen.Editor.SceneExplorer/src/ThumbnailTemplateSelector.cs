@@ -6,10 +6,8 @@ using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using DataTemplate = Microsoft.UI.Xaml.DataTemplate;
 using DependencyObject = Microsoft.UI.Xaml.DependencyObject;
-using SceneAdapter = Oxygen.Editor.World.SceneExplorer.SceneAdapter;
-using SceneNodeAdapter = Oxygen.Editor.World.SceneExplorer.SceneNodeAdapter;
 
-namespace Oxygen.Editor.World.Utils;
+namespace Oxygen.Editor.SceneExplorer;
 
 /// <summary>
 ///     A <see cref="DataTemplateSelector" /> that maps a <see cref="TreeItemAdapter" /> to a template that can be used to
@@ -47,7 +45,7 @@ public partial class ThumbnailTemplateSelector : DataTemplateSelector
         {
             SceneAdapter => this.SceneTemplate,
             SceneNodeAdapter => this.EntityTemplate,
-            Oxygen.Editor.World.SceneExplorer.FolderAdapter => this.FolderTemplate,
+            FolderAdapter => this.FolderTemplate,
             _ => null,
         };
 }

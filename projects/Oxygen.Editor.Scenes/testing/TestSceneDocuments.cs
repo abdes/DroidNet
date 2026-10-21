@@ -33,13 +33,14 @@ public sealed partial class TestSceneDocuments : IDisposable
     /// <param name="project">The project whose <see cref="TestProject.ContentMount"/> mount holds the scene files.</param>
     /// <param name="interaction">The lock and hide state every scene document's edits respect, if any.</param>
     /// <param name="redirects">The asset moves and deletions every scene document's edits see, if any.</param>
-    public TestSceneDocuments(TestProject project, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null)
+    /// <param name="otherKinds">The kinds of the other documents the test opens beside its scenes, if any.</param>
+    public TestSceneDocuments(TestProject project, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IEnumerable<IDocumentKind>? otherKinds = null)
     {
         ArgumentNullException.ThrowIfNull(project);
         this.Project = project;
-        this.Files = new NativeAtomicFileStore(project.Context.FileSystem);
+        this.Files = new GatedFileStore(new NativeAtomicFileStore(project.Context.FileSystem), this);
         this.Kind = new SceneDocumentKind(project.Context, interaction, redirects);
-        this.Open = new OpenDocuments([this.Kind], this.Files);
+        this.Open = new OpenDocuments([this.Kind, .. otherKinds ?? []], this.Files);
     }
 
     /// <summary>Gets the project the scenes belong to.</summary>
@@ -53,6 +54,12 @@ public sealed partial class TestSceneDocuments : IDisposable
 
     /// <summary>Gets the store the documents read and write their files with.</summary>
     public IAtomicFileStore Files { get; }
+
+    /// <summary>
+    /// Gets or sets what a read of a file waits for, given the file's full path: a test holds a read with it, to order
+    /// a read against other work.
+    /// </summary>
+    public Func<string, Task>? BeforeRead { get; set; }
 
     /// <summary>Gets the file of a scene: its name under the project's <see cref="TestProject.ContentMount"/> mount.</summary>
     /// <param name="name">The scene's name.</param>
@@ -111,4 +118,23 @@ public sealed partial class TestSceneDocuments : IDisposable
 
     /// <inheritdoc/>
     public void Dispose() => this.Open.Dispose();
+
+    // The real store, whose reads first wait for what the test set.
+    private sealed class GatedFileStore(IAtomicFileStore inner, TestSceneDocuments documents) : IAtomicFileStore
+    {
+        /// <inheritdoc/>
+        public async Task<FileSnapshot> ReadAsync(string path, CancellationToken cancellationToken = default)
+        {
+            if (documents.BeforeRead is { } gate)
+            {
+                await gate(path).ConfigureAwait(false);
+            }
+
+            return await inner.ReadAsync(path, cancellationToken).ConfigureAwait(false);
+        }
+
+        /// <inheritdoc/>
+        public Task<FileVersion> WriteAsync(string path, ReadOnlyMemory<byte> content, FileVersion expected, CancellationToken cancellationToken = default)
+            => inner.WriteAsync(path, content, expected, cancellationToken);
+    }
 }

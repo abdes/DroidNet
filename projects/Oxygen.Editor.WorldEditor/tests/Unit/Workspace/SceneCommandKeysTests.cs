@@ -5,7 +5,6 @@
 using AwesomeAssertions;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.World.SceneEditor;
-using Oxygen.Editor.World.SceneExplorer;
 using Windows.System;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
@@ -29,16 +28,9 @@ public sealed class SceneCommandKeysTests
     }
 
     [TestMethod]
-    public void SceneExplorerCommands_BindTheExplorerChordsAfterTheFocusedPart()
+    public void SceneEditorCommands_HaveUniqueIdentities()
     {
-        AssertKey(SceneExplorerCommands.Rename, VirtualKey.F2, VirtualKeyModifiers.None);
-        AssertKey(SceneExplorerCommands.FindInExplorer, VirtualKey.F, VirtualKeyModifiers.Control);
-    }
-
-    [TestMethod]
-    public void SceneCommands_HaveUniqueIdentities()
-    {
-        var ids = SceneEditorCommands.All.Concat(SceneExplorerCommands.All).Select(static command => command.Id).ToArray();
+        var ids = SceneEditorCommands.All.Select(static command => command.Id).ToArray();
 
         _ = ids.Should().OnlyHaveUniqueItems();
     }

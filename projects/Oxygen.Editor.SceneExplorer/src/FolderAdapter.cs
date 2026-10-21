@@ -5,7 +5,7 @@
 using DroidNet.Controls;
 using Oxygen.Editor.Scenes.Layout;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer;
 
 /// <summary>
 /// Editor-only tree adapter representing a folder/grouping inside the Scene Explorer.

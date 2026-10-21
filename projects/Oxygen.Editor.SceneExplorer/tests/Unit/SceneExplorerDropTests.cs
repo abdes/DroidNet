@@ -13,9 +13,8 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.SceneExplorer;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 
 /// <summary>Ensures a drop moves or copies the dragged items in the scene document, and the tree follows.</summary>
 [TestClass]

@@ -4,7 +4,7 @@
 
 using System.Windows.Input;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer;
 
 /// <summary>
 /// A context-bound invocation adapter: binds a menu action to a frozen execute/eligibility pair so

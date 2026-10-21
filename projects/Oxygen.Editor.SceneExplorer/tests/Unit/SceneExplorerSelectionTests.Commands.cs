@@ -5,9 +5,8 @@
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Shell.Commands;
-using Oxygen.Editor.World.SceneExplorer;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 
 /// <summary>The Explorer as a command handler: it runs its commands only while it shows the window's active document.</summary>
 public sealed partial class SceneExplorerSelectionTests

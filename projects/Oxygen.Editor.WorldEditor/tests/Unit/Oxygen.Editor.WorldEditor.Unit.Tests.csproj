@@ -12,7 +12,6 @@
 
     <ItemGroup>
       <ProjectReference Include="..\..\src\Oxygen.Editor.WorldEditor.csproj" />
-      <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.SceneExplorer\src\Oxygen.Editor.SceneExplorer.csproj" />
       <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Input\testing\Oxygen.Editor.Input.Testing.csproj" />
       <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Scripting\testing\Oxygen.Editor.Scripting.Testing.csproj" />
       <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Scenes\testing\Oxygen.Editor.Scenes.Testing.csproj" />

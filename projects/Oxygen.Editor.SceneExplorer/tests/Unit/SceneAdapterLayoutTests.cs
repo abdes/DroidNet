@@ -5,10 +5,9 @@
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 
 /// <summary>Ensures layout realization keeps one adapter per scene node and preserves layout order.</summary>
 [TestClass]

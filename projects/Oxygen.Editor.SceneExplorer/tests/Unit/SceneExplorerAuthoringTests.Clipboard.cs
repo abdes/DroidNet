@@ -6,7 +6,7 @@ using System.Text.Json;
 using AwesomeAssertions;
 using DroidNet.Controls;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 
 /// <summary>The Explorer's clipboard state; what a paste does to the scene is <c>SceneClipboard</c>'s to test.</summary>
 public sealed partial class SceneExplorerAuthoringTests

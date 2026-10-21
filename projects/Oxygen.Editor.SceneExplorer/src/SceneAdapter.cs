@@ -4,9 +4,10 @@
 
 using DroidNet.Controls;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer;
 
 /// <summary>
 ///     A <see cref="DynamicTree" /> item adapter for the <see cref="Scene" /> model class.

@@ -19,11 +19,10 @@ using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 
 /// <summary>
 /// C16-C19/T5: the Explorer publishes the full classified selection (row kinds, ordered

@@ -23,13 +23,14 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core.Diagnostics;
 using Windows.Foundation;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.UI.Tests;
 
 /// <summary>Exercises the design contract on realized Scene Explorer rows and their owning commands.</summary>
 [TestClass]
@@ -153,16 +154,16 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = host.Adapter.IsLocked.Should().Be(locked);
         _ = host.Adapter.IsSelected.Should().BeFalse();
         _ = host.SecondaryAdapter.IsSelected.Should().BeTrue();
-        _ = host.Fixture.Document.History.UndoStack.Should().ContainSingle("the real command owner records one hide operation");
-        _ = host.Fixture.Document.IsDirty.Should().BeFalse();
+        _ = host.TestScene.Document.History.UndoStack.Should().ContainSingle("the real command owner records one hide operation");
+        _ = host.TestScene.Document.IsDirty.Should().BeFalse();
         _ = host.Node.IsVisible.Should().Be(authoredVisibility);
         AssertSlot(Button(host.Actions, "LockButton"), locked, hovered: true);
 
-        await host.Fixture.Document.History.UndoAsync().ConfigureAwait(true);
+        await host.TestScene.Document.History.UndoAsync().ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = host.Adapter.IsHiddenInEditor.Should().BeFalse();
         _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("\uE890");
-        await host.Fixture.Document.History.RedoAsync().ConfigureAwait(true);
+        await host.TestScene.Document.History.RedoAsync().ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = host.Adapter.IsHiddenInEditor.Should().BeTrue();
         _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("\uED1A");
@@ -206,8 +207,8 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         host.Actions.SetRowHovered(hovered: false);
         AssertSlot(Button(host.Actions, "EyeButton"), hidden, hovered: false);
         AssertSlot(Button(host.Actions, "LockButton"), suppressed: false, hovered: false);
-        _ = host.Fixture.Document.History.UndoStack.Should().BeEmpty();
-        _ = host.Fixture.Document.IsDirty.Should().BeFalse();
+        _ = host.TestScene.Document.History.UndoStack.Should().BeEmpty();
+        _ = host.TestScene.Document.IsDirty.Should().BeFalse();
     });
 
     /// <summary>Verifies both row slots paint nonempty glyphs with distinct state shapes, independent of opacity.</summary>
@@ -300,7 +301,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = host.Adapter.IsLocked.Should().BeTrue();
         _ = Glyph(host.Actions, "EyeGlyph").Glyph.Should().Be("");
         _ = Glyph(host.Actions, "LockGlyph").Glyph.Should().Be("");
-        _ = host.Fixture.Document.IsDirty.Should().BeFalse();
+        _ = host.TestScene.Document.IsDirty.Should().BeFalse();
     });
 
     /// <summary>Verifies complete fixed-width slots remain aligned across depths and do not shift labels.</summary>
@@ -444,7 +445,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         }
     });
 
-    /// <summary>Creates a realized Explorer row and its authoring fixture for UI scenarios.</summary>
+    /// <summary>Creates a realized Explorer row over a scene document open in a document area, for UI scenarios.</summary>
     /// <returns>The disposable host with the view-model, scene and realized row.</returns>
     internal static async Task<RowHost> CreateRowHostAsync()
     {
@@ -452,27 +453,29 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             Mock.Of<IEditorSettingsManager>(),
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer());
-        SceneAuthoringFixture? fixture = null;
+        TestScene? testScene = null;
         SceneExplorerViewModel? viewModel = null;
         try
         {
-            fixture = new SceneAuthoringFixture(interaction);
-            var scene = fixture.Scene;
+            testScene = TestScenes.Open(RowScene(), interaction);
+            var scene = testScene.Scene;
+            var node = scene.RootNodes[0];
             var secondaryNode = new SceneNode(scene) { Name = "Secondary" };
             var childNode = new SceneNode(scene) { Name = "Nested child" };
             scene.RootNodes.Add(secondaryNode);
-            fixture.Node.AddChild(childNode);
-            var metadata = fixture.TestScene;
+            node.AddChild(childNode);
+            var projects = new ProjectContextService();
+            projects.Activate(testScene.Project);
             viewModel = new SceneExplorerViewModel(
                 Mock.Of<IProjectManagerService>(),
                 Mock.Of<IRouter>(),
-                fixture.Area,
-                metadata.Documents,
+                new TestDocumentArea(testScene.Document),
+                testScene.Documents,
                 new SceneSelectionService(),
                 interaction: interaction,
-                projectContexts: fixture.Projects);
+                projectContexts: projects);
             await viewModel.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
-            var adapter = (SceneNodeAdapter)(await viewModel.FindAdapterByNodeIdAsync(fixture.Node.Id).ConfigureAwait(true))!;
+            var adapter = (SceneNodeAdapter)(await viewModel.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(true))!;
             await viewModel.ExpandItemAsync(adapter).ConfigureAwait(true);
             var secondaryAdapter = (SceneNodeAdapter)(await viewModel.FindAdapterByNodeIdAsync(secondaryNode.Id).ConfigureAwait(true))!;
             var childAdapter = (SceneNodeAdapter)(await viewModel.FindAdapterByNodeIdAsync(childNode.Id).ConfigureAwait(true))!;
@@ -481,16 +484,27 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             await WaitForRenderAsync().ConfigureAwait(true);
             var tree = (DynamicTree)view.FindName("ExplorerTree")!;
             var row = Row(tree, adapter);
-            var host = new RowHost(fixture, viewModel, view, interaction, adapter, secondaryAdapter, childAdapter, tree, row, row.FindDescendant<SceneRowActions>()!);
-            fixture = null;
+            var host = new RowHost(testScene, node, viewModel, view, interaction, adapter, secondaryAdapter, childAdapter, tree, row, row.FindDescendant<SceneRowActions>()!);
+            testScene = null;
             viewModel = null;
             return host;
         }
         finally
         {
             viewModel?.Dispose();
-            fixture?.Dispose();
+            testScene?.Dispose();
         }
+    }
+
+    // A scene whose one root node carries a camera and a sun, as a scene a user starts from.
+    private static Scene RowScene()
+    {
+        var scene = new Scene { Name = "UI Test Scene" };
+        var node = new SceneNode(scene) { Name = "Camera and sun" };
+        _ = node.AddComponent(new PerspectiveCamera { Name = "Camera", NearPlane = 0.1f, FarPlane = 1000 });
+        _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun" });
+        scene.RootNodes.Add(node);
+        return scene;
     }
 
     private static void AssertSlot(Button button, bool suppressed, bool hovered)
@@ -552,8 +566,9 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         return (bitmap.PixelWidth, Enumerable.Range(0, pixels.Length / 4).Select(index => pixels[(index * 4) + 3]).ToArray());
     }
 
-    /// <summary>Owns the fixture and realized Explorer row used by Scene Explorer UI tests.</summary>
-    /// <param name="Fixture">The scene authoring fixture.</param>
+    /// <summary>Owns the scene document and realized Explorer row used by Scene Explorer UI tests.</summary>
+    /// <param name="TestScene">The scene document.</param>
+    /// <param name="Node">The primary node, the scene's first root node.</param>
     /// <param name="ViewModel">The Explorer view-model.</param>
     /// <param name="View">The loaded Explorer view.</param>
     /// <param name="Interaction">The workspace interaction state owner.</param>
@@ -564,7 +579,8 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     /// <param name="Row">The primary realized row.</param>
     /// <param name="Actions">The primary row's action controls.</param>
     internal sealed record RowHost(
-        SceneAuthoringFixture Fixture,
+        TestScene TestScene,
+        SceneNode Node,
         SceneExplorerViewModel ViewModel,
         SceneExplorerView View,
         SceneNodeInteraction Interaction,
@@ -575,14 +591,11 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         DynamicTreeItem Row,
         SceneRowActions Actions) : IDisposable
     {
-        /// <summary>Gets the primary node used to create the test host.</summary>
-        public SceneNode Node => this.Fixture.Node;
-
         /// <inheritdoc />
         public void Dispose()
         {
             this.ViewModel.Dispose();
-            this.Fixture.Dispose();
+            this.TestScene.Dispose();
         }
     }
 }

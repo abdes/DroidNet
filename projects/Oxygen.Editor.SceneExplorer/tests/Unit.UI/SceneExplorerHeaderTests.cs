@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.UI.Tests;
 
 /// <summary>Verifies the Scene Explorer header's search and row-filter affordances.</summary>
 [TestClass]

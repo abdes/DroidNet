@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Scenes.Selection;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer;
 
 /// <summary>
 /// Identifies an Explorer authoring action shared by the toolbar, context menu and keyboard.

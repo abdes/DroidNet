@@ -40,6 +40,7 @@ using Oxygen.Editor.ProjectBrowser.ViewModels;
 using Oxygen.Editor.ProjectBrowser.Views;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.SceneExplorer;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.Shell.Contributions;
@@ -422,6 +423,7 @@ public static partial class Program
         container.Register<IFeatureModule, CookingModule>(Reuse.Singleton);
         container.Register<IFeatureModule, OutputModule>(Reuse.Singleton);
         container.Register<IFeatureModule, ProblemsModule>(Reuse.Singleton);
+        container.Register<IFeatureModule, SceneExplorerModule>(Reuse.Singleton);
     }
 
     private static void RegisterAssetServices(IContainer container)

@@ -18,11 +18,9 @@ using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.UI.Tests;
 
 /// <summary>Verifies captured context-menu targets without physical input or focus dependencies.</summary>
 [TestClass]

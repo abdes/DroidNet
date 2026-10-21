@@ -15,11 +15,9 @@ using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 
 /// <summary>Ensures tab activation reuses open authoring instead of rereading and discarding it.</summary>
 [TestClass]

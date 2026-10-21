@@ -4,9 +4,8 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Selection;
-using Oxygen.Editor.World.SceneExplorer;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 
 /// <summary>Ensures the context-menu shape and eligibility cover every row kind.</summary>
 [TestClass]

@@ -6,7 +6,7 @@ using DroidNet.Controls;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer;
 
 /// <summary>
 /// Owns the Scene Explorer's stable node/folder adapter index and adapter tracking for the loaded

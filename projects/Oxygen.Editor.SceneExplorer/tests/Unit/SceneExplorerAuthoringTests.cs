@@ -15,10 +15,9 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
+namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 
 /// <summary>Ensures the Explorer's create, rename and paste actions change the scene document, one undo step each.</summary>
 [TestClass]

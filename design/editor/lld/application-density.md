@@ -77,7 +77,7 @@ Terms used below:
   [TreePresentation.cs](../../../projects/Controls/DemoApp/Tree/TreePresentation.cs).
 - **Compact pinned in the editor.** Three files merge WinUI Compact
   unconditionally, so no setting can turn it off:
-  [SceneExplorerView.xaml](../../../projects/Oxygen.Editor.WorldEditor/src/SceneExplorer/SceneExplorerView.xaml),
+  [SceneExplorerView.xaml](../../../projects/Oxygen.Editor.SceneExplorer/src/SceneExplorerView.xaml),
   [SceneNodeEditorView.xaml](../../../projects/Oxygen.Editor.WorldEditor/src/Inspector/SceneNodeEditorView.xaml)
   and
   [SceneInspectorStyles.xaml](../../../projects/Oxygen.Editor.WorldEditor/src/Inspector/SceneInspectorStyles.xaml).
