@@ -666,17 +666,22 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   from `Oxygen.Editor.Composition` to that module, and so do the registrations
   of `WorkspaceWindowModule` that belong to one. Hand-built test containers move
   to `TestHelpers`' host-equivalent builder, which composes these modules (the
-  rest of S1.15). Gate: topology test, reviewer's editor build.
+  rest of S1.15). `Oxygen.Editor.App` drops the project references that only
+  its old registrations needed. Gate: topology test, reviewer's editor build.
 
 ### Phase 4: Project Session
 
 - **S4.1** `IProjectSessionHost`, `IProjectSession`, `ISessionEvents`,
   `CookPublicationRecovery` split, the Shell's histories bound to the session,
   session clipboard, and the reworked `ProjectActivationCoordinator` with its
-  cancel, replace and navigation-failure contract.
+  cancel, replace and navigation-failure contract. The topology test gains the
+  Session layer's checks.
 - **S4.2** Clusters, one commit each: preferences, assets, content pipeline and
   cooking, scene stack, script tooling, Play. Each injects `ProjectContext`,
-  deletes its `ProjectChanged` reset and uses the session lifetime token.
+  deletes its `ProjectChanged` reset and uses the session lifetime token. The
+  preferences cluster also ends the window keyed settings manager's use of a
+  root-tracked `PersistentState`, which today leaves one `DbContext` held by the
+  editor scope per project switch until exit.
 - **S4.3** Remove `CurrentProject` and delete `IProjectContextService`.
 - **S4.4** Close and exit (shell design section 6): the Shell's close and exit
   becomes the only subscriber to Aura's `WindowClosing`. Window participants
@@ -699,9 +704,12 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 - **S5.2** `IRetainedViewModel` in Routing, Aura and Router, with tests.
 - **S5.3** In the Shell: window scope factory, window registry, placement over
   the new window kinds, layout store; the document service receives resolved
-  requests.
+  requests. `DocumentAreaView` stops being a singleton view. Scope disposal,
+  fire-and-forget from synchronous `Dispose` since S2.3, becomes awaited by the
+  window's close before S5.4 gives scopes async disposables. The window scope
+  factory's tests cover window and panel activation.
 - **S5.4** Panel registry and `IPanelHost`, then the six panels one commit each,
-  Content Explorer first.
+  Content Explorer first; `AssetsView` stops being a singleton view.
 - **S5.5** Floating-window host proving the move contract.
 - Gate: the spec's Phase 5 tests; the reviewer validates a second window and a
   moved panel in the editor. Visible UI stays uncommitted until the reviewer
@@ -709,8 +717,9 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 
 ### Phase 6: service location and static messengers
 
-- **S6.1** Remove `IContainer` from `SceneEditorViewModel`, `WorkspaceViewModel`
-  and `ContentExplorerViewModel`, and the `ReturnDefault` paths. **S6.2**
+- **S6.1** Remove `IContainer` from `SceneEditorViewModel`, `SceneEditorProvider`,
+  `WorkspaceViewModel` and `ContentExplorerViewModel` (which still looks services
+  up through its window scope's resolver), and the `ReturnDefault` paths. **S6.2**
   Replace what is left of `WeakReferenceMessenger.Default` and
   `StrongReferenceMessenger.Default` (S1.12 removes the window messenger and
   the features' messages). **S6.3** Apply the disposal policy to
@@ -718,7 +727,8 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 
 ### Phase 7: documentation
 
-- Replace the spec with the final topology reference and update
+- Replace the spec with the final topology reference (its Phase 2 text still
+  names `GenerateResolutionExpressions`) and update
   `lld/project-workspace-shell.md` and `ARCHITECTURE.md` section 8.1. Section 2
   decision 1 has already kept the layout documents current.
 
