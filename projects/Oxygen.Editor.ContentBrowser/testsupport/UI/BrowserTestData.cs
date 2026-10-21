@@ -16,17 +16,6 @@ namespace Oxygen.Editor.ContentBrowser.TestSupport;
 
 internal static class BrowserTestData
 {
-    internal static AssetEntry CreateStatusAsset(int index)
-    {
-        var name = string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Material {index:00}");
-        var identity = AssetPath.Create("Content", name + ".omat");
-        var file = FileSystemPath.From("C:/Query" + identity.VirtualPath + AssetPath.AuthoringSuffix);
-        return new(identity, name, AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Unknown, identity.VirtualPath, file, file, CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
-        {
-            CookStatus = new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], []),
-        };
-    }
-
     internal static Oxygen.Editor.ContentPipeline.Publication.CookPublicationService CreateNavigationPublication(ProjectContextService projects, IStorageProvider storage)
     {
         var files = new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());

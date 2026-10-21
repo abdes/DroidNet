@@ -11,6 +11,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Markup;
 using Moq;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Assets.Testing;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using static DroidNet.Tests.UiTestHosting;
@@ -32,7 +33,7 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
     [DataRow(true)]
     public Task AssetStatusUpdatesPreserveBrowserSelectionAndScroll(bool tiles) => EnqueueAsync(async () =>
     {
-        var items = Enumerable.Range(0, 20).Select(CreateStatusAsset).ToArray();
+        var items = Enumerable.Range(0, 20).Select(TestAssetEntries.CookedMaterial).ToArray();
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>(items);
         var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);

@@ -5,11 +5,11 @@
 using System.Reactive.Linq;
 using Moq;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Assets.Testing;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -24,7 +24,7 @@ internal sealed class GeometryFixture : IDisposable
             Geometry = EngineAssets.BasicShape("Cube"),
         };
         _ = this.Authoring.Node.AddComponent(this.Geometry);
-        var geometry = CreateStatusAsset(0) with
+        var geometry = TestAssetEntries.CookedMaterial(0) with
         {
             Identity = this.GeometryAsset,
             DisplayName = "Custom",
@@ -32,7 +32,7 @@ internal sealed class GeometryFixture : IDisposable
             DerivedState = null,
             CookStatus = new(this.GeometryAsset, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], []),
         };
-        var material = CreateStatusAsset(1) with
+        var material = TestAssetEntries.CookedMaterial(1) with
         {
             Identity = this.MaterialAsset,
             CookStatus = new(this.MaterialAsset, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], []),

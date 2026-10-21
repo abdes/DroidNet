@@ -10,6 +10,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Assets.Testing;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Pickers;
@@ -17,7 +18,6 @@ using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
-using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
@@ -31,7 +31,7 @@ internal sealed class GeometryStatusTests : DroidNet.Tests.VisualUserInterfaceTe
     [TestMethod]
     public Task GeometryPickerSharesStatusWithoutReplacingItsFocusedChoice() => EnqueueAsync(async () =>
     {
-        var asset = CreateStatusAsset(0) with
+        var asset = TestAssetEntries.CookedMaterial(0) with
         {
             Identity = AssetPath.Parse("/Content/Geometry/Custom.ogeo"),
             DisplayName = "Custom",

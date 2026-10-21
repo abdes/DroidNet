@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <Title>Oxygen Editor Assets Testing</Title>
+        <Description>Test kit of the Assets module: the asset entries the feed publishes for common assets, for the tests of the parts that show assets.</Description>
+        <PackageTags>oxygen;editor;assets;testing</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <RootNamespace>Oxygen.Editor.Assets.Testing</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Assets\src\Oxygen.Editor.Assets.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\src\Oxygen.Editor.ContentPipeline.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
+    </ItemGroup>
+
+</Project>

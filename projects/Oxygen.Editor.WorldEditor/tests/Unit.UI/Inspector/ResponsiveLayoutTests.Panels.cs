@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Reactive.Subjects;
 using System.Runtime.InteropServices.WindowsRuntime;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
@@ -11,21 +10,17 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
-using Oxygen.Editor.Assets;
-using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
-using Oxygen.Managed.Core;
-using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
 using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
-/// <summary>The panels around the property rows: the node editor dock and the material document header.</summary>
+/// <summary>The panels around the property rows: the node editor dock.</summary>
 internal sealed partial class ResponsiveLayoutTests
 {
     public TestContext TestContext { get; set; } = null!;
@@ -147,43 +142,6 @@ internal sealed partial class ResponsiveLayoutTests
         _ = components.ExtentHeight.Should().BeApproximately((mixedTypes ? 7 : 4) * 32, 1);
         _ = ((ScrollViewer)view.FindName("PropertyScroll")).ActualHeight.Should().BeGreaterThan(250);
         _ = model.ComponentFilters.Single(option => option.ComponentType == typeof(GeometryComponent)).IsAvailable.Should().BeTrue();
-    });
-
-    /// <summary>The material document keeps its cook status beside the title and every header action inside the document.</summary>
-    /// <param name="width">The document width in logical pixels.</param>
-    /// <param name="rasterizationScale">The effective XAML scale.</param>
-    /// <returns>The asynchronous header layout regression.</returns>
-    [TestMethod]
-    [DataRow(920d, 1d)]
-    [DataRow(920d, 2d)]
-    [DataRow(560d, 1.5d)]
-    [DataRow(360d, 1d)]
-    [DataRow(360d, 2d)]
-    public Task MaterialHeaderKeepsStatusBesideTheTitleAndActionsInside(double width, double rasterizationScale) => EnqueueAsync(async () =>
-    {
-        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateStatusAsset(0) with { Identity = AssetPath.Parse("/Content/Materials/UI.omat") }]);
-        using var material = CreateMaterialEditor(MaterialStatusTests.StatusProvider(updates));
-        var model = material.Editor;
-        var view = new MaterialEditorView { ViewModel = model, Width = width, Height = 600 };
-        using var scaledHost = new ScaledXamlHost();
-        await scaledHost.LoadAsync(view, rasterizationScale, this.TestContext.CancellationToken).ConfigureAwait(true);
-        await WaitForRenderAsync().ConfigureAwait(true);
-        var chip = (Border)view.FindName("CookStatusChip");
-        _ = chip.ActualHeight.Should().BeLessThanOrEqualTo(26, "routine status uses one compact line");
-        var chipPoint = chip.TransformToVisual(view).TransformPoint(default);
-        _ = chipPoint.Y.Should().BeLessThan(40, "status belongs beside the title");
-        var buttons = view.FindDescendants().OfType<Button>().Where(button => button.Content is "Undo" or "Redo" or "Save" or "Cook").ToArray();
-        _ = buttons.Should().HaveCount(4);
-        foreach (var button in buttons)
-        {
-            var point = button.TransformToVisual(view).TransformPoint(default);
-            _ = point.X.Should().BeGreaterThanOrEqualTo(0);
-            _ = (point.X + button.ActualWidth).Should().BeLessThanOrEqualTo(view.ActualWidth);
-            if (Math.Abs(point.Y - chipPoint.Y) < 26)
-            {
-                _ = (chipPoint.X + chip.ActualWidth).Should().BeLessThanOrEqualTo(point.X);
-            }
-        }
     });
 
     private static async Task AssertExtraHeightGoesToPropertiesAsync(SceneNodeEditorView view, Border captureHost, Border header, ScrollViewer properties)

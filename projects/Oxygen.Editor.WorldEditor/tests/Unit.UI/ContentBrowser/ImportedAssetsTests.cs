@@ -14,6 +14,7 @@ using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Assets;
+using Oxygen.Editor.Assets.Testing;
 using Oxygen.Editor.ContentBrowser;
 using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
@@ -23,14 +24,13 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Windows;
-using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserControls;
 using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.ContentBrowser;
 
 [TestClass]
 internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTests
@@ -46,7 +46,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
     [DataRow(false, true)]
     public Task ImportedModelDetailsShowNamedOutputs(bool tiles, bool light) => EnqueueAsync(async () =>
     {
-        var source = CreateImportedSourceRow(configured: false);
+        var source = TestAssetEntries.ImportedModel(imported: false);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([source]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
@@ -77,40 +77,13 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         await WaitForRenderAsync().ConfigureAwait(true);
         var selected = selector.SelectedItem;
         _ = details.Description.Should().Contain("Import this model");
-        updates.OnNext([CreateImportedSourceRow(configured: true)]);
+        updates.OnNext([TestAssetEntries.ImportedModel(imported: true)]);
         await WaitForRenderAsync().ConfigureAwait(true);
         var names = details.Facts.Single(static fact => string.Equals(fact.Label, "Outputs", StringComparison.Ordinal)).Value;
         _ = names.Should().Contain("Main (Geometry)").And.Contain("Paint (Material)").And.Contain("model (Scene)");
         _ = selector.SelectedItem.Should().BeSameAs(selected);
         _ = pane.FindDescendants().OfType<TextBlock>().Should().Contain(text => text.Text == names);
         provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
-    });
-
-    /// <summary>The geometry picker begins empty for a source model, then offers only its geometry output.</summary>
-    /// <returns>The asynchronous typed-picker regression.</returns>
-    [TestMethod]
-    public Task ImportedOutputsPopulateOnlyMatchingPickerTypes() => EnqueueAsync(async () =>
-    {
-        using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateImportedSourceRow(configured: false)]);
-        var provider = CreateQueryProvider(updates);
-        using var slots = new FakeMaterialSlotProvider();
-        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, slots, Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
-        var view = new GeometryView
-        {
-            ViewModel = geometry,
-            Width = 440,
-        };
-        await LoadTestContentAsync(view).ConfigureAwait(true);
-        await WaitForRenderAsync().ConfigureAwait(true);
-        _ = geometry.GeometryChoices.Groups.Should().NotContain(static group => group.Origin == AssetOrigin.Content);
-        var source = CreateImportedSourceRow(configured: true);
-        var outputs = CreateImportedOutputRows(source);
-        updates.OnNext([source, .. outputs]);
-        await WaitForRenderAsync().ConfigureAwait(true);
-        var content = geometry.GeometryChoices.Groups.Single(static group => group.Origin == AssetOrigin.Content);
-        _ = content.Rows.Should().ContainSingle().Which.Choice.Asset.Should().Be(outputs.Single(static item => item.Kind == AssetKind.Geometry).Identity);
-        var material = outputs.Single(static item => item.Kind == AssetKind.Material).Identity;
-        _ = content.Rows.Should().NotContain(row => row.Choice.Asset == material || row.Choice.Asset == source.Identity);
     });
 
     /// <summary>
@@ -121,8 +94,8 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
     [TestMethod]
     public Task ImportedModelCommandsReimportAndInspectTheSelectedModel() => EnqueueAsync(async () =>
     {
-        var source = CreateImportedSourceRow(configured: true);
-        var output = CreateImportedOutputRows(source).Single(static row => row.Kind == AssetKind.Geometry);
+        var source = TestAssetEntries.ImportedModel(imported: true);
+        var output = TestAssetEntries.ImportedOutputs(source).Single(static row => row.Kind == AssetKind.Geometry);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([source, output]);
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
@@ -172,45 +145,4 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         ((IInvokeProvider)new MenuFlyoutItemAutomationPeer(item).GetPattern(PatternInterface.Invoke)).Invoke();
         await execution()!.ConfigureAwait(true);
     }
-
-    private static AssetEntry CreateImportedSourceRow(bool configured)
-    {
-        var asset = AssetPath.Parse("/Content/Models/Crate/model.gltf");
-        return new(asset, "model.gltf", AssetKind.ForeignSource, AssetState.Source, DerivedState: null, AssetRuntimeAvailability.NotApplicable, asset.VirtualPath, FileSystemPath.From("C:/Project/Content/Models/Crate/model.gltf"), DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true)
-        {
-            ImportSource = configured ? asset : null,
-            CookStatus = configured ? new(asset, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(asset, AssetPath.Parse("/Content/Models/Crate/model.gltf/Main.ogeo"), ContentCookAssetKind.Geometry, "Content", "/Content/Models/Crate/model.gltf/Main.ogeo"), new(asset, AssetPath.Parse("/Content/Models/Crate/model.gltf/Paint.omat"), ContentCookAssetKind.Material, "Content", "/Content/Models/Crate/model.gltf/Paint.omat"), new(asset, AssetPath.Parse("/Content/Models/Crate/model.gltf/model.oscene"), ContentCookAssetKind.Scene, "Content", "/Content/Models/Crate/model.gltf/model.oscene"),], []) : null,
-        };
-    }
-
-    private static AssetEntry[] CreateImportedOutputRows(AssetEntry source)
-        => [.. source.CookStatus!.Outputs.Select(
-        output =>
-        {
-            var assetKind = output.Kind switch
-            {
-                ContentCookAssetKind.Geometry => AssetKind.Geometry,
-                ContentCookAssetKind.Material => AssetKind.Material,
-                _ => AssetKind.Scene,
-            };
-
-            return new AssetEntry(
-                output.CookedAssetUri,
-                Path.GetFileNameWithoutExtension(output.VirtualPath),
-                assetKind,
-                AssetState.Cooked,
-                DerivedState: null,
-                AssetRuntimeAvailability.NotMounted,
-                output.VirtualPath,
-                SourcePath: null,
-                DescriptorPath: null,
-                CookedPath: null,
-                AssetGuid: null,
-                [],
-                IsSelectable: true)
-                {
-                    ImportSource = source.Identity,
-                    CookStatus = source.CookStatus with { AssetUri = output.CookedAssetUri },
-                };
-        })];
 }

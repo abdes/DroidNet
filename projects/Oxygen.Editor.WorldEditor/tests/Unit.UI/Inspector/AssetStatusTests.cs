@@ -9,12 +9,12 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Moq;
+using Oxygen.Editor.Assets.Testing;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.World.Inspector.Geometry;
 using static DroidNet.Tests.UiTestHosting;
-using static Oxygen.Editor.ContentBrowser.TestSupport.BrowserTestData;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
 
@@ -28,7 +28,7 @@ internal sealed class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
     [TestMethod]
     public Task MaterialStatusUpdatesPreserveTheOpenPickerChoice() => EnqueueAsync(async () =>
     {
-        var asset = CreateStatusAsset(0);
+        var asset = TestAssetEntries.CookedMaterial(0);
         var material = asset with { Kind = Oxygen.Editor.Assets.AssetKind.Material };
         using var updates = new BehaviorSubject<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>>([material]);
         var catalog = new Mock<Oxygen.Editor.Assets.IAssetFeed>();

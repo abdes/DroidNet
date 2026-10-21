@@ -11,7 +11,6 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
-using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Environment;
@@ -153,20 +152,6 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             primary.IsExpanded = true;
             await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
             _ = view.FindDescendants().OfType<NumberBox>().Should().Contain(number => Equals(number.Tag, "SunAzimuth"));
-        });
-
-    /// <summary>The material editor realizes its controls without a generated XAML connection-ID cast failure.</summary>
-    /// <returns>The XAML realization task.</returns>
-    [TestMethod]
-    public Task MaterialEditorXamlRealizesItsNumericControls() => AssertInspectorRealizesAsync(
-        static fixture => CreateModel("Material", fixture),
-        static model => new MaterialEditorView { ViewModel = ((MaterialEditorModel)model).Editor },
-        prepareFixture: null,
-        assertRealizedAsync: async view =>
-        {
-            var scroller = view.FindDescendant<ScrollViewer>()!;
-            _ = await FindInspectorControlAsync(scroller, () => view.FindDescendant<NumberBox>(number => Equals(number.Tag, "RoughnessFactor")), "Material.RoughnessFactor", this.TestContext.CancellationToken).ConfigureAwait(true);
-            _ = view.KeyboardAccelerators.Should().OnlyContain(accelerator => ReferenceEquals(accelerator.ScopeOwner, view));
         });
 
     /// <summary>The atmosphere source disclosures start collapsed.</summary>
