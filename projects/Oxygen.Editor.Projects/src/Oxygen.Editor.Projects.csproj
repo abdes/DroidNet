@@ -16,11 +16,13 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="System.Linq.Async" />
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Composition\src\Composition.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Storage\src\Storage.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Data\src\Oxygen.Editor.Data.csproj" />

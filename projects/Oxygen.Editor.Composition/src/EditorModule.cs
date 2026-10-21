@@ -27,11 +27,9 @@ using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Output;
 using Oxygen.Editor.Problems;
+using Oxygen.Editor.ProjectExplorer;
 using Oxygen.Editor.ProjectExplorer.Activation;
-using Oxygen.Editor.ProjectExplorer.Projects;
-using Oxygen.Editor.ProjectExplorer.Templates;
 using Oxygen.Editor.ProjectExplorer.ViewModels;
-using Oxygen.Editor.ProjectExplorer.Views;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor;
@@ -64,6 +62,8 @@ public static class EditorModule
     private static readonly IScopeModule<IApplicationLayer>[] Modules =
     [
         new ShellModule(),
+        new ProjectsModule(),
+        new ProjectExplorerModule(),
     ];
 
     /// <summary>
@@ -217,23 +217,7 @@ public static class EditorModule
         container.Register<IStorageProvider, NativeStorageProvider>(Reuse.Singleton);
         container.RegisterDelegate(context => context.Resolve<IStorageProvider>().AtomicFiles, Reuse.Singleton);
 
-        // Register the universal template source with NO key, so it gets selected when injected an
-        // instance of ITemplateSource. Register specific template source implementations KEYED.
-        // They are injected only as a collection of implementation instances, only by the universal
-        // source.
-        container.Register<ITemplatesSource, UniversalTemplatesSource>(Reuse.Singleton);
-        container.Register<ITemplatesSource, LocalTemplatesSource>(Reuse.Singleton, serviceKey: Uri.UriSchemeFile);
-        container.Register<ITemplatesService, TemplatesService>(Reuse.Transient);
-
-        container.Register<IProjectExplorerService, ProjectExplorerService>(Reuse.Singleton);
         container.Register<IProjectActivationCoordinator, ProjectActivationCoordinator>(Reuse.Singleton);
-        container.Register<IProjectValidationService, ProjectValidationService>(Reuse.Singleton);
-        container.Register<IProjectContextService, ProjectContextService>(Reuse.Singleton);
-        container.Register<IProjectCookScopeProvider, ProjectCookScopeProvider>(Reuse.Singleton);
-        container.Register<IAuthoringTargetResolver, AuthoringTargetResolver>(Reuse.Singleton);
-        container.Register<IProjectCreationService, ProjectCreationService>(Reuse.Singleton);
-        container.Register<IRecentProjectAdapter, RecentProjectAdapter>(Reuse.Singleton);
-        container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
         container.Register<IProjectFolder, ActiveProjectFolder>(Reuse.Singleton);
     }
 
@@ -291,15 +275,6 @@ public static class EditorModule
     {
         container.Register<MainShellViewModel>(Reuse.Transient);
         container.Register<MainShellView>(Reuse.Transient);
-
-        container.Register<MainViewModel>(Reuse.Transient);
-        container.Register<MainView>(Reuse.Transient);
-        container.Register<HomeViewModel>(Reuse.Transient);
-        container.Register<HomeView>(Reuse.Transient);
-        container.Register<NewProjectViewModel>(Reuse.Transient);
-        container.Register<NewProjectView>(Reuse.Transient);
-        container.Register<OpenProjectViewModel>(Reuse.Transient);
-        container.Register<OpenProjectView>(Reuse.Transient);
 
         container.Register<WorkspaceViewModel>(Reuse.Transient);
         container.Register<WorkspaceView>(Reuse.Transient);
