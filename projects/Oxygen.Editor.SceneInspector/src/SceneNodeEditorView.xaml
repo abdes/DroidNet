@@ -6,12 +6,14 @@
     xmlns:controls="using:DroidNet.Controls"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:local="using:Oxygen.Editor.SceneInspector"
+    xmlns:presentation="using:Oxygen.Editor.SceneInspector.Presentation"
+    xmlns:scenesettings="using:Oxygen.Editor.SceneInspector.SceneSettings"
     x:Name="Root"
     KeyboardAcceleratorPlacementMode="Hidden"
     SizeChanged="OnInspectorSizeChanged">
     <UserControl.Resources>
         <ctkcvt:BoolToVisibilityConverter x:Key="HasSelectionToVisibilityConverter" />
-        <local:ComponentToGlyphConverter x:Key="ComponentToGlyphConverter" />
+        <presentation:ComponentToGlyphConverter x:Key="ComponentToGlyphConverter" />
     </UserControl.Resources>
     <Grid Padding="4">
         <Grid.Resources>
@@ -227,7 +229,7 @@
                 Text="{x:Bind ViewModel.SelectionSummaryText, Mode=OneWay}"
                 TextWrapping="Wrap"
                 Visibility="{x:Bind ViewModel.HasSelectionNotice, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
-            <local:EnvironmentView
+            <scenesettings:EnvironmentView
                 Grid.Row="4"
                 ViewModel="{x:Bind ViewModel.EnvironmentEditor}"
                 Visibility="{x:Bind ViewModel.HasEnvironmentView, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />

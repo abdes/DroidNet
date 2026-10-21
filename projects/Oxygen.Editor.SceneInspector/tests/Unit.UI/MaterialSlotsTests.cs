@@ -5,7 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Pickers;
-using Oxygen.Editor.SceneInspector.Geometry;
+using Oxygen.Editor.SceneInspector.Components.Geometry;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;

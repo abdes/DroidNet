@@ -1,0 +1,314 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.SceneInspector.SceneSettings.PlaySectionView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:local="using:Oxygen.Editor.SceneInspector.SceneSettings"
+    xmlns:pickers="using:Oxygen.Editor.Pickers"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+
+            <!--  A setting's title, and the line that explains it.  -->
+            <Style x:Key="PlaySettingTitle" TargetType="TextBlock">
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="TextTrimming" Value="CharacterEllipsis" />
+            </Style>
+            <Style
+                x:Key="PlaySettingDescription"
+                BasedOn="{StaticResource CaptionTextBlockStyle}"
+                TargetType="TextBlock">
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorSecondaryBrush}" />
+                <Setter Property="TextWrapping" Value="Wrap" />
+            </Style>
+
+            <!--  The icon buttons of a context row.  -->
+            <Style x:Key="PlayRowButton" TargetType="Button">
+                <Setter Property="Width" Value="32" />
+                <Setter Property="Height" Value="32" />
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="VerticalAlignment" Value="Center" />
+                <Setter Property="Background" Value="Transparent" />
+                <Setter Property="BorderThickness" Value="0" />
+            </Style>
+
+            <!--  A context's name: strong text that shows the context in the Content Browser.  -->
+            <Style x:Key="ContextNameLink" TargetType="HyperlinkButton">
+                <Setter Property="Padding" Value="0" />
+                <Setter Property="FontWeight" Value="SemiBold" />
+                <Setter Property="Foreground" Value="{ThemeResource TextFillColorPrimaryBrush}" />
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <editorcontrols:PropertiesExpander
+        x:Name="Section"
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        Description="How the scene starts when you press Play."
+        Header="Play"
+        HeaderIcon="{ui:FontIcon Glyph='&#xE768;'}"
+        IsExpanded="True"
+        Tag="Play;Starting camera;Starting input contexts">
+        <editorcontrols:PropertiesExpander.Items>
+            <TextBlock
+                FontSize="12"
+                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                Text="{x:Bind ViewModel.ErrorMessage, Mode=OneWay}"
+                TextWrapping="Wrap"
+                Visibility="{x:Bind ViewModel.HasError, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+            <!--  Starting camera: the title and what Automatic resolves to, then the list.  -->
+            <Grid
+                x:Name="StartingCameraRow"
+                Padding="0,4"
+                ColumnSpacing="16"
+                RowSpacing="8">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition x:Name="CameraPickerColumn" Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="Auto" />
+                </Grid.RowDefinitions>
+                <StackPanel VerticalAlignment="Center" Spacing="2">
+                    <TextBlock Style="{StaticResource PlaySettingTitle}" Text="Starting camera" />
+                    <TextBlock Style="{StaticResource PlaySettingDescription}" Visibility="{x:Bind ViewModel.ShowsAutomaticCamera, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                        <Run Text="Resolves to " />
+                        <Hyperlink Click="OnAutomaticCameraClick" ToolTipService.ToolTip="Select it in the Scene Explorer">
+                            <Run Text="{x:Bind ViewModel.AutomaticCameraName, Mode=OneWay}" />
+                        </Hyperlink>
+                        <Run Text=" (first in hierarchy)" />
+                    </TextBlock>
+                    <TextBlock
+                        Style="{StaticResource PlaySettingDescription}"
+                        Text="The scene has no camera."
+                        Visibility="{x:Bind ViewModel.ShowsNoCamera, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                    <TextBlock
+                        Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                        Style="{StaticResource PlaySettingDescription}"
+                        Text="{x:Bind ViewModel.CameraError, Mode=OneWay}"
+                        Visibility="{x:Bind ViewModel.HasCameraError, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                </StackPanel>
+                <ComboBox
+                    x:Name="StartingCameraPicker"
+                    Grid.Column="1"
+                    MinWidth="180"
+                    VerticalAlignment="Center"
+                    AutomationProperties.Name="Starting camera"
+                    DisplayMemberPath="Name"
+                    IsEnabled="{x:Bind ViewModel.CanEdit, Mode=OneWay}"
+                    ItemsSource="{x:Bind ViewModel.CameraChoices}"
+                    SelectedItem="{x:Bind ViewModel.SelectedCamera, Mode=TwoWay}"
+                    ToolTipService.ToolTip="The camera the game first shows. Scripts can switch cameras while it runs." />
+
+                <VisualStateManager.VisualStateGroups>
+                    <!--  A narrow inspector puts the list under the title.  -->
+                    <VisualStateGroup>
+                        <VisualState>
+                            <VisualState.StateTriggers>
+                                <ui:ControlSizeTrigger MaxWidth="320" TargetElement="{Binding ElementName=StartingCameraRow}" />
+                            </VisualState.StateTriggers>
+                            <VisualState.Setters>
+                                <Setter Target="CameraPickerColumn.Width" Value="0" />
+                                <Setter Target="StartingCameraPicker.(Grid.Column)" Value="0" />
+                                <Setter Target="StartingCameraPicker.(Grid.Row)" Value="1" />
+                                <Setter Target="StartingCameraPicker.HorizontalAlignment" Value="Stretch" />
+                            </VisualState.Setters>
+                        </VisualState>
+                    </VisualStateGroup>
+                </VisualStateManager.VisualStateGroups>
+            </Grid>
+
+            <!--  Starting input contexts: the title and its rule, Add, then the contexts.  -->
+            <StackPanel x:Name="StartingInputContexts" Spacing="8">
+                <Grid ColumnSpacing="16">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Style="{StaticResource PlaySettingTitle}" Text="Starting input contexts" />
+                        <TextBlock Style="{StaticResource PlaySettingDescription}" Text="Active contexts ordered by priority (higher overrides lower)" />
+                    </StackPanel>
+                    <!--  The border keeps the reason on hover while Add is disabled.  -->
+                    <Border
+                        Grid.Column="1"
+                        VerticalAlignment="Center"
+                        Background="Transparent"
+                        ToolTipService.ToolTip="{x:Bind ViewModel.AddToolTip, Mode=OneWay}">
+                        <DropDownButton
+                            AutomationProperties.HelpText="{x:Bind ViewModel.AddToolTip, Mode=OneWay}"
+                            AutomationProperties.Name="Add input context"
+                            IsEnabled="{x:Bind ViewModel.CanAddContext, Mode=OneWay}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <FontIcon FontSize="12" Glyph="&#xE710;" />
+                                <TextBlock Text="Add" />
+                            </StackPanel>
+                            <DropDownButton.Flyout>
+                                <Flyout x:Name="AddContextFlyout" Placement="BottomEdgeAlignedRight">
+                                    <pickers:AssetPicker
+                                        Width="300"
+                                        ChoiceInvoked="OnContextChoiceInvoked"
+                                        Model="{x:Bind ViewModel.ContextChoices}" />
+                                </Flyout>
+                            </DropDownButton.Flyout>
+                        </DropDownButton>
+                    </Border>
+                </Grid>
+
+                <Border
+                    Background="{ThemeResource CardBackgroundFillColorSecondaryBrush}"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1"
+                    CornerRadius="{ThemeResource ControlCornerRadius}">
+                    <Grid>
+                        <TextBlock
+                            Margin="12,10"
+                            Style="{StaticResource PlaySettingDescription}"
+                            Text="No input context starts. Input does nothing until a script activates one."
+                            Visibility="{x:Bind ViewModel.HasNoContexts, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                        <ListView
+                            AutomationProperties.Name="Starting input contexts"
+                            ItemsSource="{x:Bind ViewModel.Contexts}"
+                            ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                            ScrollViewer.VerticalScrollMode="Disabled"
+                            SelectionMode="None">
+                            <ListView.ItemContainerStyle>
+                                <Style BasedOn="{StaticResource DefaultListViewItemStyle}" TargetType="ListViewItem">
+                                    <Setter Property="Padding" Value="12,4,4,4" />
+                                    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+                                </Style>
+                            </ListView.ItemContainerStyle>
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="local:StartingInputContextRowViewModel">
+                                    <Grid x:Name="ContextRow" ColumnSpacing="8">
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="*" />
+                                            <ColumnDefinition Width="Auto" />
+                                            <ColumnDefinition Width="64" />
+                                            <!--  Reserved, so Remove lines up whether or not the priority is overridden.  -->
+                                            <ColumnDefinition Width="32" />
+                                            <ColumnDefinition Width="32" />
+                                        </Grid.ColumnDefinitions>
+                                        <Grid.ContextFlyout>
+                                            <MenuFlyout>
+                                                <MenuFlyoutItem
+                                                    Command="{x:Bind RevealCommand}"
+                                                    Icon="{ui:FontIcon Glyph='&#xE8B7;'}"
+                                                    Text="Show in Content Browser"
+                                                    Visibility="{x:Bind CanReveal, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                                                <MenuFlyoutItem
+                                                    Command="{x:Bind ResetPriorityCommand}"
+                                                    Icon="{ui:FontIcon Glyph='&#xE777;'}"
+                                                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                                    Text="{x:Bind ResetToolTip, Mode=OneWay}"
+                                                    Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                                                <MenuFlyoutItem
+                                                    Command="{x:Bind RemoveCommand}"
+                                                    Icon="{ui:FontIcon Glyph='&#xE711;'}"
+                                                    IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                                    Text="Remove" />
+                                            </MenuFlyout>
+                                        </Grid.ContextFlyout>
+
+                                        <FontIcon
+                                            FontSize="14"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Glyph="&#xE765;"
+                                            Visibility="{x:Bind CanReveal, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                                        <FontIcon
+                                            FontSize="14"
+                                            Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                            Glyph="&#xE783;"
+                                            Visibility="{x:Bind IsMissing, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+
+                                        <HyperlinkButton
+                                            Grid.Column="1"
+                                            AutomationProperties.HelpText="Show in Content Browser"
+                                            AutomationProperties.Name="{x:Bind DisplayName, Mode=OneWay}"
+                                            Command="{x:Bind RevealCommand}"
+                                            Style="{StaticResource ContextNameLink}"
+                                            ToolTipService.ToolTip="Show in Content Browser"
+                                            Visibility="{x:Bind CanReveal, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock Text="{x:Bind DisplayName, Mode=OneWay}" TextTrimming="CharacterEllipsis" />
+                                        </HyperlinkButton>
+                                        <StackPanel
+                                            Grid.Column="1"
+                                            VerticalAlignment="Center"
+                                            Visibility="{x:Bind IsMissing, Mode=OneWay, Converter={StaticResource BoolToVisibility}}">
+                                            <TextBlock
+                                                Style="{StaticResource PlaySettingTitle}"
+                                                Text="{x:Bind DisplayName, Mode=OneWay}"
+                                                ToolTipService.ToolTip="{x:Bind DisplayName, Mode=OneWay}" />
+                                            <TextBlock
+                                                Foreground="{ThemeResource SystemFillColorCriticalBrush}"
+                                                Style="{StaticResource PlaySettingDescription}"
+                                                Text="Missing" />
+                                        </StackPanel>
+
+                                        <TextBlock
+                                            x:Name="PriorityLabel"
+                                            Grid.Column="2"
+                                            VerticalAlignment="Center"
+                                            Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                                            Text="Priority" />
+                                        <controls:NumberBox
+                                            Grid.Column="3"
+                                            AutomationProperties.Name="Priority"
+                                            EditSessionCompleted="OnPriorityCompleted"
+                                            EditSessionStarted="OnPriorityStarted"
+                                            IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                            Mask="~."
+                                            NumberValue="{x:Bind Priority, Mode=TwoWay}"
+                                            Style="{StaticResource SceneNumberBoxStyle}"
+                                            ToolTipService.ToolTip="Higher priorities take input first." />
+                                        <Button
+                                            Grid.Column="4"
+                                            AutomationProperties.Name="{x:Bind ResetToolTip, Mode=OneWay}"
+                                            Command="{x:Bind ResetPriorityCommand}"
+                                            Content="{ui:FontIcon Glyph='&#xE777;',
+                                                                  FontSize=12}"
+                                            IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                            Style="{StaticResource PlayRowButton}"
+                                            ToolTipService.ToolTip="{x:Bind ResetToolTip, Mode=OneWay}"
+                                            Visibility="{x:Bind IsOverridden, Mode=OneWay, Converter={StaticResource BoolToVisibility}}" />
+                                        <Button
+                                            Grid.Column="5"
+                                            AutomationProperties.Name="Remove"
+                                            Command="{x:Bind RemoveCommand}"
+                                            Content="{ui:FontIcon Glyph='&#xE711;',
+                                                                  FontSize=12}"
+                                            IsEnabled="{x:Bind CanEdit, Mode=OneWay}"
+                                            Style="{StaticResource PlayRowButton}"
+                                            ToolTipService.ToolTip="Remove" />
+
+                                        <VisualStateManager.VisualStateGroups>
+                                            <!--  A narrow inspector keeps the name: the box still names itself Priority.  -->
+                                            <VisualStateGroup>
+                                                <VisualState>
+                                                    <VisualState.StateTriggers>
+                                                        <ui:ControlSizeTrigger MaxWidth="300" TargetElement="{Binding ElementName=ContextRow}" />
+                                                    </VisualState.StateTriggers>
+                                                    <VisualState.Setters>
+                                                        <Setter Target="PriorityLabel.Visibility" Value="Collapsed" />
+                                                    </VisualState.Setters>
+                                                </VisualState>
+                                            </VisualStateGroup>
+                                        </VisualStateManager.VisualStateGroups>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                </Border>
+            </StackPanel>
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

@@ -6,7 +6,7 @@ using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
-using Oxygen.Editor.SceneInspector.Scripting;
+using Oxygen.Editor.SceneInspector.Components.Scripting;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Scripting.Testing;

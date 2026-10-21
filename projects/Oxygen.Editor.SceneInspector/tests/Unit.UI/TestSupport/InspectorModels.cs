@@ -2,6 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.SceneInspector.Components.Cameras;
+using Oxygen.Editor.SceneInspector.Components.Lights;
+using Oxygen.Editor.SceneInspector.Components.Rendering;
+using Oxygen.Editor.SceneInspector.Components.Transform;
+using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.SceneInspector.TestSupport;

@@ -12,6 +12,7 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Controls;
+using Oxygen.Editor.SceneInspector.Components.Transform;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorModels;

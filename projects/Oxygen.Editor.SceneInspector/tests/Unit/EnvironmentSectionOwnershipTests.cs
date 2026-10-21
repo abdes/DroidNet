@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using DroidNet.Controls;
+using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.SceneInspector.TestSupport;
 
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;

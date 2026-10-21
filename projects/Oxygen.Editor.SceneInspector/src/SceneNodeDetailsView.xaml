@@ -5,9 +5,10 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
     xmlns:local="using:Oxygen.Editor.SceneInspector"
-    xmlns:menus="using:DroidNet.Controls.Menus">
+    xmlns:menus="using:DroidNet.Controls.Menus"
+    xmlns:presentation="using:Oxygen.Editor.SceneInspector.Presentation">
     <UserControl.Resources>
-        <local:ItemsTypeToIconConverter x:Key="ItemsTypeToIconConverter" />
+        <presentation:ItemsTypeToIconConverter x:Key="ItemsTypeToIconConverter" />
     </UserControl.Resources>
     <Grid MinHeight="32" ColumnSpacing="6">
         <Grid.ColumnDefinitions>

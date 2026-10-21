@@ -8,6 +8,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Managed.Core;
 

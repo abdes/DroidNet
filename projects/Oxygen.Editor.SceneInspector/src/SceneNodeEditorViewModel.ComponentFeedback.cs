@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.SceneInspector.Editing;
+
 namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Keeps component feedback discoverable independently of the visible property section.</summary>

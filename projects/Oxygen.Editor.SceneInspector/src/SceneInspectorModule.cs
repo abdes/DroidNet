@@ -3,8 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using DryIoc;
-using Oxygen.Editor.SceneInspector.Geometry;
-using Oxygen.Editor.SceneInspector.Scripting;
+using Oxygen.Editor.SceneInspector.Components.Cameras;
+using Oxygen.Editor.SceneInspector.Components.Fog;
+using Oxygen.Editor.SceneInspector.Components.Geometry;
+using Oxygen.Editor.SceneInspector.Components.Lights;
+using Oxygen.Editor.SceneInspector.Components.Rendering;
+using Oxygen.Editor.SceneInspector.Components.Scripting;
+using Oxygen.Editor.SceneInspector.Components.Transform;
+using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
 
@@ -29,28 +35,17 @@ public sealed class SceneInspectorModule : IFeatureModule
         window.Register<SceneNodeEditorViewModel>(Reuse.Transient);
         window.Register<SceneNodeEditorView>(Reuse.Transient);
 
-        // The component and environment editors, whose views the inspector's view locator resolves.
-        window.Register<TransformViewModel>(Reuse.Transient);
+        // The views the panel's view locator resolves for its editors; the panel creates the editors themselves.
         window.Register<TransformView>(Reuse.Transient);
-        window.Register<PerspectiveCameraViewModel>(Reuse.Transient);
         window.Register<PerspectiveCameraView>(Reuse.Transient);
-        window.Register<DirectionalLightViewModel>(Reuse.Transient);
         window.Register<DirectionalLightView>(Reuse.Transient);
-        window.Register<OrthographicCameraViewModel>(Reuse.Transient);
         window.Register<OrthographicCameraView>(Reuse.Transient);
-        window.Register<PointLightViewModel>(Reuse.Transient);
         window.Register<PointLightView>(Reuse.Transient);
-        window.Register<SpotLightViewModel>(Reuse.Transient);
         window.Register<SpotLightView>(Reuse.Transient);
-        window.Register<LocalFogVolumeViewModel>(Reuse.Transient);
         window.Register<LocalFogVolumeView>(Reuse.Transient);
-        window.Register<ScriptingViewModel>(Reuse.Transient);
         window.Register<ScriptingView>(Reuse.Transient);
-        window.Register<NodeRenderingViewModel>(Reuse.Transient);
         window.Register<NodeRenderingView>(Reuse.Transient);
-        window.Register<EnvironmentViewModel>(Reuse.Transient);
         window.Register<EnvironmentView>(Reuse.Transient);
-        window.Register<GeometryViewModel>(Reuse.Transient);
         window.Register<GeometryView>(Reuse.Transient);
     }
 

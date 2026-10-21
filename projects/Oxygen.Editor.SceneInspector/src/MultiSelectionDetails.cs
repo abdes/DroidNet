@@ -7,6 +7,7 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.SceneInspector;

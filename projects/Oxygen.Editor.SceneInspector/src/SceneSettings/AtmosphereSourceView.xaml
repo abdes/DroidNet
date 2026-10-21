@@ -1,0 +1,70 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.SceneInspector.SceneSettings.AtmosphereSourceView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <StackPanel Spacing="4">
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{Binding SunAzimuthDiagnostic.Message}"
+            FontSize="14"
+            HasError="{Binding SunAzimuthDiagnostic.HasError}"
+            Label="Azimuth"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{Binding SunAzimuth, Mode=TwoWay}"
+            Tag="SunAzimuth"
+            Unit="°" />
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{Binding SunElevationDiagnostic.Message}"
+            FontSize="14"
+            HasError="{Binding SunElevationDiagnostic.HasError}"
+            Label="Elevation"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{Binding SunElevation, Mode=TwoWay}"
+            Tag="SunElevation"
+            Unit="°" />
+        <editorcontrols:InspectorNumberField
+            CardStyle="{StaticResource ScenePropertyCardStyle}"
+            EditSessionCompleted="NumberEditCompleted"
+            EditSessionStarted="NumberEditStarted"
+            ErrorText="{Binding AngularSizeRadiansDiagnostic.Message}"
+            FontSize="14"
+            HasError="{Binding AngularSizeRadiansDiagnostic.HasError}"
+            Label="Angular diameter"
+            NumberStyle="{StaticResource SceneNumberBoxStyle}"
+            NumberValue="{Binding AngularDiameterDegrees, Mode=TwoWay}"
+            Tag="AngularSizeRadians"
+            Unit="°" />
+        <editorcontrols:InspectorColorField
+            Blue="{Binding DiskScaleB, Mode=TwoWay}"
+            ComponentMask="~.#"
+            DiagnosticSpacing="2"
+            EditSessionCompleted="ColorEditCompleted"
+            EditSessionStarted="ColorEditStarted"
+            ErrorText="{Binding AtmosphereDiskLuminanceScaleRgbDiagnostic.Message}"
+            FontSize="14"
+            Green="{Binding DiskScaleG, Mode=TwoWay}"
+            HasError="{Binding AtmosphereDiskLuminanceScaleRgbDiagnostic.HasError}"
+            Kind="Multiplier"
+            Label="Disk luminance scale"
+            Red="{Binding DiskScaleR, Mode=TwoWay}"
+            Tag="DiskScale" />
+        <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Per-pixel transmittance">
+            <ToggleSwitch IsOn="{Binding UsePerPixelAtmosphereTransmittance, Mode=TwoWay}" />
+        </editorcontrols:PropertyCard>
+    </StackPanel>
+</UserControl>

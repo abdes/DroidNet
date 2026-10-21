@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.SceneInspector.Components.Lights.PointLightView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:components="using:Oxygen.Editor.SceneInspector.Components"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:lights="using:Oxygen.Editor.SceneInspector.Components.Lights"
+    xmlns:local="using:Oxygen.Editor.SceneInspector"
+    xmlns:ui="using:CommunityToolkit.WinUI">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <editorcontrols:PropertiesExpander
+        HorizontalAlignment="Stretch"
+        HorizontalContentAlignment="Stretch"
+        Description="{x:Bind ViewModel.Description, Mode=OneWay}"
+        Header="{x:Bind ViewModel.Header, Mode=OneWay}"
+        HeaderIcon="{ui:FontIcon Glyph='&#xE706;'}"
+        IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
+        <editorcontrols:PropertiesExpander.Items>
+            <lights:LocalLightPropertiesView ViewModel="{x:Bind ViewModel, Mode=OneWay}" />
+        </editorcontrols:PropertiesExpander.Items>
+    </editorcontrols:PropertiesExpander>
+</UserControl>

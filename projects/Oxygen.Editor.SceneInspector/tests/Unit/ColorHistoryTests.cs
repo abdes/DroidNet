@@ -5,6 +5,9 @@
 using System.Numerics;
 using AwesomeAssertions;
 using DroidNet.Controls;
+using Oxygen.Editor.SceneInspector.Components.Lights;
+using Oxygen.Editor.SceneInspector.Editing;
+using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using static Oxygen.Editor.SceneInspector.TestSupport.SceneTestData;
 

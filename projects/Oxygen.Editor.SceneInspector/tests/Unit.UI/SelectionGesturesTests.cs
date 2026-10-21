@@ -7,6 +7,7 @@ using CommunityToolkit.WinUI;
 using DroidNet.Controls;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.SceneInspector.Components.Transform;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;

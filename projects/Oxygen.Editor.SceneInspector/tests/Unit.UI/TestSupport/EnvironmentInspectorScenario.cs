@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.SceneInspector.SceneSettings;
 
 namespace Oxygen.Editor.SceneInspector.TestSupport;
 

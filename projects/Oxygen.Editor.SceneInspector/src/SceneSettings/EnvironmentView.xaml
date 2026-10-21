@@ -1,0 +1,193 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.SceneInspector.SceneSettings.EnvironmentView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:environment="using:Oxygen.Editor.SceneInspector.SceneSettings"
+    xmlns:seg="using:CommunityToolkit.WinUI.Controls">
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml" />
+            </ResourceDictionary.MergedDictionaries>
+            <Style BasedOn="{StaticResource QuietInspectorAction}" TargetType="Button" />
+            <Style x:Key="ScopeItemStyle" TargetType="seg:SegmentedItem">
+                <Setter Property="MinWidth" Value="0" />
+                <Setter Property="MinHeight" Value="27" />
+                <Setter Property="FontSize" Value="11" />
+                <Setter Property="FontWeight" Value="Normal" />
+                <Setter Property="Padding" Value="4,3" />
+                <Setter Property="Margin" Value="0" />
+                <Setter Property="HorizontalContentAlignment" Value="Center" />
+                <Setter Property="Template">
+                    <Setter.Value>
+                        <ControlTemplate TargetType="seg:SegmentedItem">
+                            <Border
+                                x:Name="ScopeBackground"
+                                Padding="{TemplateBinding Padding}"
+                                Background="Transparent"
+                                CornerRadius="4">
+                                <ContentPresenter
+                                    x:Name="ScopeContent"
+                                    HorizontalAlignment="Center"
+                                    Content="{TemplateBinding Content}" />
+                                <VisualStateManager.VisualStateGroups>
+                                    <VisualStateGroup x:Name="CommonStates">
+                                        <VisualState x:Name="Normal" />
+                                        <VisualState x:Name="PointerOver">
+                                            <VisualState.Setters>
+                                                <Setter Target="ScopeBackground.Background" Value="{ThemeResource ControlFillColorSecondaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="Pressed" />
+                                        <VisualState x:Name="Disabled" />
+                                        <VisualState x:Name="Selected">
+                                            <VisualState.Setters>
+                                                <Setter Target="ScopeBackground.Background" Value="{StaticResource SceneScopeSelectionBrush}" />
+                                                <Setter Target="ScopeContent.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="PointerOverSelected">
+                                            <VisualState.Setters>
+                                                <Setter Target="ScopeBackground.Background" Value="{StaticResource SceneScopeSelectionBrush}" />
+                                                <Setter Target="ScopeContent.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                        <VisualState x:Name="PressedSelected">
+                                            <VisualState.Setters>
+                                                <Setter Target="ScopeBackground.Background" Value="{StaticResource SceneScopeSelectionBrush}" />
+                                                <Setter Target="ScopeContent.Foreground" Value="{ThemeResource AccentTextFillColorPrimaryBrush}" />
+                                            </VisualState.Setters>
+                                        </VisualState>
+                                    </VisualStateGroup>
+                                </VisualStateManager.VisualStateGroups>
+                            </Border>
+                        </ControlTemplate>
+                    </Setter.Value>
+                </Setter>
+            </Style>
+        </ResourceDictionary>
+    </UserControl.Resources>
+    <Grid>
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <StackPanel Margin="8,0,8,8" Spacing="6">
+            <Grid Margin="4,2,4,2">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <FontIcon
+                    Margin="0,0,8,0"
+                    FontSize="18"
+                    Glyph="&#xE81E;" />
+                <TextBlock
+                    Grid.Column="1"
+                    FontWeight="SemiBold"
+                    Text="{x:Bind ViewModel.SceneName, Mode=OneWay}"
+                    TextTrimming="CharacterEllipsis" />
+                <TextBlock
+                    Grid.Column="2"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="Scene" />
+            </Grid>
+            <Grid ColumnSpacing="4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*" />
+                    <ColumnDefinition Width="Auto" />
+                </Grid.ColumnDefinitions>
+                <TextBox
+                    x:Name="ScenePropertySearchBox"
+                    Grid.ColumnSpan="2"
+                    MinHeight="30"
+                    Padding="30,4,32,4"
+                    FontSize="12"
+                    PlaceholderText="Find a scene property…" />
+                <FontIcon
+                    Margin="8,0,0,0"
+                    HorizontalAlignment="Left"
+                    FontSize="14"
+                    Glyph="&#xE721;"
+                    IsHitTestVisible="False" />
+                <Button
+                    x:Name="ClearPropertySearchButton"
+                    Grid.Column="1"
+                    Background="Transparent"
+                    BorderThickness="0"
+                    Click="ClearScenePropertySearch_Click"
+                    ToolTipService.ToolTip="Clear property search"
+                    Visibility="Collapsed">
+                    <FontIcon Glyph="&#xE894;" />
+                </Button>
+            </Grid>
+            <seg:Segmented
+                x:Name="ScenePropertyScopeSelector"
+                Padding="0"
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                Background="Transparent"
+                BorderThickness="0"
+                ItemContainerStyle="{StaticResource ScopeItemStyle}"
+                SelectedIndex="0"
+                SelectionChanged="ScenePropertyScope_Changed">
+                <seg:Segmented.Template>
+                    <ControlTemplate TargetType="seg:Segmented">
+                        <ItemsPresenter />
+                    </ControlTemplate>
+                </seg:Segmented.Template>
+                <seg:Segmented.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <seg:EqualPanel Spacing="3" />
+                    </ItemsPanelTemplate>
+                </seg:Segmented.ItemsPanel>
+                <seg:SegmentedItem Content="All" />
+                <seg:SegmentedItem Content="Play" />
+                <seg:SegmentedItem Content="Environment" />
+                <seg:SegmentedItem Content="Post-processing" />
+                <seg:SegmentedItem Content="References" />
+            </seg:Segmented>
+        </StackPanel>
+        <ScrollViewer
+            x:Name="ScenePropertyScroll"
+            Grid.Row="1"
+            HorizontalScrollBarVisibility="Disabled"
+            HorizontalScrollMode="Disabled"
+            VerticalScrollBarVisibility="Auto">
+            <StackPanel
+                x:Name="SceneSections"
+                Margin="8,0"
+                Spacing="8">
+                <TextBlock
+                    x:Name="EnvironmentHeading"
+                    Margin="4,10,4,2"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="Environment" />
+                <TextBlock
+                    x:Name="NoScenePropertyMatches"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="No scene properties match this search."
+                    TextWrapping="Wrap"
+                    Visibility="Collapsed" />
+                <environment:PlaySectionView x:Name="PlayView" ViewModel="{x:Bind ViewModel.Play, Mode=OneWay}" />
+                <environment:SceneReferencesSectionView x:Name="SceneReferencesView" ViewModel="{x:Bind ViewModel.SceneReferences, Mode=OneWay}" />
+                <environment:AtmosphereLightsSectionView x:Name="AtmosphereLightsView" ViewModel="{x:Bind ViewModel.AtmosphereLights, Mode=OneWay}" />
+                <environment:BackdropSectionView x:Name="BackdropView" ViewModel="{x:Bind ViewModel.Backdrop, Mode=OneWay}" />
+                <environment:SkyAtmosphereSectionView x:Name="SkyAtmosphereView" ViewModel="{x:Bind ViewModel.SkyAtmosphere, Mode=OneWay}" />
+                <environment:SkyLightSectionView x:Name="SkyLightView" ViewModel="{x:Bind ViewModel.SkyLight, Mode=OneWay}" />
+                <environment:FogSectionView x:Name="FogView" ViewModel="{x:Bind ViewModel.Fog, Mode=OneWay}" />
+                <TextBlock
+                    x:Name="PostProcessingHeading"
+                    Margin="4,10,4,2"
+                    FontWeight="SemiBold"
+                    Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                    Text="Post-processing" />
+                <environment:ExposureSectionView x:Name="ExposureView" ViewModel="{x:Bind ViewModel.Exposure, Mode=OneWay}" />
+                <environment:PostProcessingSectionView x:Name="PostProcessingView" ViewModel="{x:Bind ViewModel.PostProcessing, Mode=OneWay}" />
+            </StackPanel>
+        </ScrollViewer>
+    </Grid>
+</UserControl>

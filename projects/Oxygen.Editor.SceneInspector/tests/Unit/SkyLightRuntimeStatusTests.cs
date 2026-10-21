@@ -4,7 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.LivePreview.Scenes;
-using Oxygen.Editor.SceneInspector.Environment;
+using Oxygen.Editor.SceneInspector.SceneSettings;
 
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 

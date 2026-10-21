@@ -6,6 +6,7 @@ using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;

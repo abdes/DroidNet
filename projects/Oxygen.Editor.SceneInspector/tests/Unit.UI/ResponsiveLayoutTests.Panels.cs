@@ -162,7 +162,7 @@ internal sealed partial class ResponsiveLayoutTests
         var editors = view.ViewModel!.PropertyEditors.ToArray();
         Toggle(ComponentButton(view, typeof(GeometryComponent)));
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = view.ViewModel!.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<Oxygen.Editor.SceneInspector.Geometry.GeometryViewModel>();
+        _ = view.ViewModel!.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<Oxygen.Editor.SceneInspector.Components.Geometry.GeometryViewModel>();
         var all = multiple ? (ToolBarToggleButton)view.FindName("MultiAllComponentsButton") : (ToolBarToggleButton)((SceneNodeDetailsView)view.FindName("NodeDetails")).FindName("AllComponentsButton");
         Toggle(all);
         await WaitForRenderAsync().ConfigureAwait(true);

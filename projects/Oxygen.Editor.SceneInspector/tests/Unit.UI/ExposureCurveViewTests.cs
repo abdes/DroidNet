@@ -11,7 +11,7 @@ using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
-using Oxygen.Editor.SceneInspector.Environment;
+using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.SceneInspector.TestSupport;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using NumberBox = DroidNet.Controls.NumberBox;

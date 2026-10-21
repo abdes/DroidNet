@@ -13,7 +13,7 @@ using Oxygen.Editor.Assets.Testing;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Pickers;
-using Oxygen.Editor.SceneInspector.Geometry;
+using Oxygen.Editor.SceneInspector.Components.Geometry;
 using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;

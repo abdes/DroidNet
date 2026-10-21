@@ -1,0 +1,188 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.SceneInspector.Components.Geometry.GeometryView"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:controls="using:DroidNet.Controls"
+    xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
+    xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:editorcontrols="using:Oxygen.Editor.Controls"
+    xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
+    xmlns:pickers="using:Oxygen.Editor.Pickers"
+    xmlns:ui="using:CommunityToolkit.WinUI"
+    x:Name="root"
+    mc:Ignorable="d">
+
+    <UserControl.Resources>
+        <ResourceDictionary>
+            <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
+
+            <DataTemplate x:Key="AssetThumbnailTemplate">
+                <Border
+                    Width="24"
+                    Height="24"
+                    BorderBrush="{ThemeResource CardStrokeColorDefaultBrush}"
+                    BorderThickness="1">
+                    <Viewbox HorizontalAlignment="Center" VerticalAlignment="Center">
+                        <FontIcon Glyph="{Binding}" />
+                    </Viewbox>
+                </Border>
+            </DataTemplate>
+        </ResourceDictionary>
+    </UserControl.Resources>
+
+    <Grid>
+        <editorcontrols:PropertiesExpander
+            Padding="2"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Top"
+            HorizontalContentAlignment="Stretch"
+            Description="{x:Bind ViewModel.Description, Mode=OneWay}"
+            Header="{x:Bind ViewModel.Header, Mode=OneWay}"
+            HeaderIcon="{ui:FontIcon Glyph='&#xF158;'}"
+            IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
+            <editorcontrols:PropertiesExpander.Items>
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Asset">
+                    <Grid HorizontalAlignment="Stretch" ColumnSpacing="8">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+
+                        <controls:Thumbnail
+                            Width="24"
+                            Height="24"
+                            VerticalAlignment="Center"
+                            Content="{x:Bind ViewModel.AssetThumbnailGlyph, Mode=OneWay}"
+                            ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
+
+                        <muxc:SplitButton
+                            x:Name="AssetSplitButton"
+                            Grid.Column="1"
+                            HorizontalAlignment="Stretch"
+                            Content="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}"
+                            ToolTipService.ToolTip="{x:Bind ViewModel.AssetButtonLabel, Mode=OneWay}">
+                            <muxc:SplitButton.Flyout>
+                                <Flyout x:Name="AssetPickerFlyout">
+                                    <pickers:AssetPicker ChoiceInvoked="OnGeometryChoiceInvoked" Model="{x:Bind ViewModel.GeometryChoices}" />
+                                </Flyout>
+                            </muxc:SplitButton.Flyout>
+                        </muxc:SplitButton>
+                    </Grid>
+                </editorcontrols:PropertyCard>
+
+                <editorcontrols:PropertyCard
+                    HorizontalContentAlignment="Stretch"
+                    PropertyName="Slot"
+                    Visibility="{x:Bind ViewModel.ShowMaterialSlotSelector, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    <ComboBox
+                        x:Name="MaterialSlotSelector"
+                        HorizontalAlignment="Stretch"
+                        DisplayMemberPath="DisplayName"
+                        ItemsSource="{x:Bind ViewModel.MaterialSlots, Mode=OneWay}"
+                        SelectedItem="{x:Bind ViewModel.SelectedMaterialSlot, Mode=TwoWay}" />
+                </editorcontrols:PropertyCard>
+
+                <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Material">
+                    <Grid HorizontalAlignment="Stretch" ColumnSpacing="4">
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="Auto" />
+                        </Grid.ColumnDefinitions>
+
+                        <controls:Thumbnail
+                            Width="24"
+                            Height="24"
+                            VerticalAlignment="Center"
+                            Content="{x:Bind ViewModel.MaterialThumbnailGlyph, Mode=OneWay}"
+                            ContentTemplate="{StaticResource AssetThumbnailTemplate}" />
+
+                        <Border
+                            x:Name="MaterialValueBorder"
+                            Grid.Column="1"
+                            Margin="4,0,0,0"
+                            BorderBrush="Transparent"
+                            BorderThickness="1"
+                            CornerRadius="{ThemeResource ControlCornerRadius}">
+                            <muxc:SplitButton
+                                x:Name="MaterialSplitButton"
+                                HorizontalAlignment="Stretch"
+                                Content="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}"
+                                IsEnabled="{x:Bind ViewModel.CanEditMaterialSlot, Mode=OneWay}"
+                                ToolTipService.ToolTip="{x:Bind ViewModel.MaterialToolTip, Mode=OneWay}">
+                                <muxc:SplitButton.Flyout>
+                                    <Flyout x:Name="MaterialPickerFlyout" Opening="OnMaterialPickerOpening">
+                                        <pickers:AssetPicker ChoiceInvoked="OnMaterialChoiceInvoked" Model="{x:Bind ViewModel.MaterialChoices}" />
+                                    </Flyout>
+                                </muxc:SplitButton.Flyout>
+                            </muxc:SplitButton>
+                        </Border>
+                        <Button
+                            Grid.Column="2"
+                            Padding="6"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Refresh material slots"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Command="{x:Bind ViewModel.RefreshMaterialSlotsCommand}"
+                            ToolTipService.ToolTip="Refresh material slots: read this geometry's slots again from its cooked output, for example after a cook or reimport.">
+                            <FontIcon
+                                FontSize="14"
+                                Glyph="&#xE72C;"
+                                RenderTransformOrigin="0.5,0.5">
+                                <FontIcon.RenderTransform>
+                                    <RotateTransform x:Name="RefreshMaterialSlotsRotation" />
+                                </FontIcon.RenderTransform>
+                            </FontIcon>
+                        </Button>
+                        <Button
+                            Grid.Column="3"
+                            Padding="6"
+                            VerticalAlignment="Center"
+                            AutomationProperties.Name="Clear unresolved material assignments"
+                            Background="Transparent"
+                            BorderThickness="0"
+                            Command="{x:Bind ViewModel.ClearUnresolvedMaterialSlotsCommand}"
+                            ToolTipService.ToolTip="Clear unresolved assignments: remove material overrides that target another geometry or a slot this geometry no longer has. Resolved overrides are kept; Undo restores them."
+                            Visibility="{x:Bind ViewModel.HasUnresolvedMaterialSlots, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            <FontIcon FontSize="14" Glyph="&#xE894;" />
+                        </Button>
+                    </Grid>
+                </editorcontrols:PropertyCard>
+            </editorcontrols:PropertiesExpander.Items>
+        </editorcontrols:PropertiesExpander>
+        <VisualStateManager.VisualStateGroups>
+            <VisualStateGroup x:Name="MaterialSlotStatus">
+                <VisualState x:Name="MaterialSlotsResolved" />
+                <VisualState x:Name="MaterialSlotsInError">
+                    <VisualState.StateTriggers>
+                        <StateTrigger IsActive="{x:Bind ViewModel.HasMaterialSlotError, Mode=OneWay}" />
+                    </VisualState.StateTriggers>
+                    <VisualState.Setters>
+                        <Setter Target="MaterialValueBorder.BorderBrush" Value="{ThemeResource SystemFillColorCriticalBrush}" />
+                    </VisualState.Setters>
+                </VisualState>
+            </VisualStateGroup>
+            <VisualStateGroup x:Name="MaterialSlotLoading">
+                <VisualState x:Name="MaterialSlotsIdle" />
+                <VisualState x:Name="MaterialSlotsLoading">
+                    <VisualState.StateTriggers>
+                        <StateTrigger IsActive="{x:Bind ViewModel.IsMaterialSlotLoading, Mode=OneWay}" />
+                    </VisualState.StateTriggers>
+                    <Storyboard>
+                        <DoubleAnimation
+                            RepeatBehavior="Forever"
+                            Storyboard.TargetName="RefreshMaterialSlotsRotation"
+                            Storyboard.TargetProperty="Angle"
+                            From="0"
+                            To="360"
+                            Duration="0:0:1" />
+                    </Storyboard>
+                </VisualState>
+            </VisualStateGroup>
+        </VisualStateManager.VisualStateGroups>
+    </Grid>
+</UserControl>

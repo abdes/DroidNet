@@ -28,7 +28,6 @@
     </ItemGroup>
 
     <ItemGroup>
-        <ProjectReference Include="$(ProjectsRoot)/Controls/DynamicTree/src/Controls.DynamicTree.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Controls/InPlaceEdit/src/Controls.InPlaceEdit.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Controls/Menus/src/Controls.Menus.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Controls/ToolBars/src/Controls.ToolBars.csproj" />

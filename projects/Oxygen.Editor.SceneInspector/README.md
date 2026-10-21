@@ -14,3 +14,16 @@ implement them.
 
 The shared property controls are Oxygen.Editor.Controls'; the asset pickers are
 Oxygen.Editor.Pickers'.
+
+## Layout
+
+| Folder           | Holds                                                                                                                                                                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/`           | The module, the panel, the node header and what routes the selection to the editors.                                                                                                                                                                                |
+| `Components/`    | The factory that creates the editor of each component kind, and one folder per component family: `Transform/`, `Cameras/`, `Lights/`, `Fog/`, `Rendering/` (the node's visibility and shadow flags), `Geometry/` and `Scripting/`, each with its editors and views. |
+| `SceneSettings/` | What the panel shows when the scene itself is selected: its environment, play settings and references, one section each.                                                                                                                                            |
+| `Editing/`       | Edit sessions and gestures over the scene's authoring, field values and diagnostics.                                                                                                                                                                                |
+| `Presentation/`  | Field applicability, search, converters and the scene field catalog.                                                                                                                                                                                                |
+
+The views merge `SceneInspectorStyles.xaml`. The shared inspector controls'
+theme is `Oxygen.Editor.Controls`', which the application merges.
