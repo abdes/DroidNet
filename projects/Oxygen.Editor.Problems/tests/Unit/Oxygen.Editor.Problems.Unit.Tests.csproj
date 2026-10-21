@@ -7,6 +7,7 @@
         <RootNamespace>Oxygen.Editor.Problems.Unit.Tests</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
         <DroidNetTestTier>Unit</DroidNetTestTier>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>
@@ -18,6 +19,7 @@
         <ProjectReference Include="../../src/Oxygen.Editor.Problems.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Input\testing\Oxygen.Editor.Input.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Scripting\testing\Oxygen.Editor.Scripting.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Scenes\testing\Oxygen.Editor.Scenes.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\testing\Oxygen.Editor.Projects.Testing.csproj" />
     </ItemGroup>
 

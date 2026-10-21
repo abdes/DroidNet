@@ -206,7 +206,7 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
     /// <returns>The panel's identity; <see langword="null"/> for <see cref="PlayPanel.None"/>.</returns>
     internal static string? PanelIdOf(PlayPanel panel) => panel switch
     {
-        PlayPanel.Problems => Workspace.WorkspaceViewModel.ProblemsDockId,
+        PlayPanel.Problems => "problems",
         PlayPanel.Cooking => "cook",
         PlayPanel.Output => "log",
         _ => null,

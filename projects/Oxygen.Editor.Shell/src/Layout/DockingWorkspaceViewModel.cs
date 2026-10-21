@@ -247,9 +247,9 @@ public abstract partial class DockingWorkspaceViewModel(
         {
             var dockableActiveRoute = this.activeRoute!.Children.First(c => c.Outlet == dockableId);
             var dockable = RoutedDockable.New(dockableId, dockableActiveRoute);
-            if (this.childContainer.Resolve<ContributionRegistry>(IfUnresolved.ReturnDefault)?.FindPanel(dockableId) is { } panel)
+            if (this.childContainer.Resolve<ContributionRegistry>(IfUnresolved.ReturnDefault)?.TitleOf(dockableId) is { } title)
             {
-                dockable.Title = panel.Title;
+                dockable.Title = title;
             }
 
             this.deferredDockables.Add(dockable);

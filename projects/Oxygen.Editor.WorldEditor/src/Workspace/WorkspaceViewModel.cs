@@ -313,7 +313,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
             this.editingViewMask?.Dispose();
             this.editingViewMask = null;
-            this.DisposeScriptServices();
             this.ShutdownPlayServices();
 
             _ = this.previewSession?.DisposeAsync();
@@ -373,10 +372,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
                     new Route
                     {
                         Outlet = "cook", Path = "cook", MatchMethod = PathMatch.Full, ViewModelType = typeof(CookingPanelViewModel),
-                    },
-                    new Route
-                    {
-                        Outlet = ProblemsDockId, Path = ProblemsDockId, MatchMethod = PathMatch.Full, ViewModelType = typeof(Oxygen.Editor.World.Problems.ProblemsViewModel),
                     },
                     new Route
                     {

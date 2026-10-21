@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml.Input;
 using Microsoft.UI.Xaml.Media;
 using Windows.System;
 
-namespace Oxygen.Editor.World.Problems;
+namespace Oxygen.Editor.Problems;
 
 /// <summary>
 /// The Problems panel: problems grouped by file beside the full diagnostic of the selected one.
@@ -66,11 +66,8 @@ public sealed partial class ProblemsView : UserControl
 
     private void Detach()
     {
-        if (this.observed is not null)
-        {
-            this.observed.PropertyChanged -= this.OnViewModelPropertyChanged;
-            this.observed = null;
-        }
+        this.observed?.PropertyChanged -= this.OnViewModelPropertyChanged;
+        this.observed = null;
     }
 
     // The details take part of the panel only while a problem is selected.

@@ -7,7 +7,7 @@ using Oxygen.Editor.Scripting;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Problems;
+namespace Oxygen.Editor.Problems;
 
 /// <summary>
 /// One row of the Problems panel: a problem of any asset family, shown by its type.
@@ -51,7 +51,7 @@ public sealed record ProblemEntry(AssetProblem Problem)
     /// <summary>Gets the full diagnostic: a script problem as the engine renders it, any other in the same layout.</summary>
     public string Rendered => this.Problem is ScriptProblem script
         ? script.Rendered
-        : $"{this.SeverityText.ToLowerInvariant()}[{this.Code}]: {this.Message}\n"
+        : $"{this.SeverityKeyword}[{this.Code}]: {this.Message}\n"
             + (this.Problem.File is { } file ? $" --> {file}" + (this.Location.Length > 0 ? ":" + this.Location : string.Empty) + "\n" : string.Empty);
 
     /// <summary>Gets what the problem means and how to resolve it, or empty.</summary>
@@ -59,4 +59,12 @@ public sealed record ProblemEntry(AssetProblem Problem)
 
     /// <summary>Gets the name read by screen readers.</summary>
     public string AccessibleName => $"{this.SeverityText} {this.Code}: {this.Message}" + (this.Location.Length > 0 ? ", line " + this.Location : string.Empty);
+
+    // The word the engine renders a diagnostic with.
+    private string SeverityKeyword => this.Problem.Severity switch
+    {
+        >= DiagnosticSeverity.Error => "error",
+        DiagnosticSeverity.Warning => "warning",
+        _ => "note",
+    };
 }

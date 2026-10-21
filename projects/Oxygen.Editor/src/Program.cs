@@ -30,6 +30,7 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Diagnostics;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Output;
+using Oxygen.Editor.Problems;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
@@ -415,6 +416,7 @@ public static partial class Program
 
         // The features of the workspace windows: each window registers their services in its own container.
         container.Register<IFeatureModule, OutputModule>(Reuse.Singleton);
+        container.Register<IFeatureModule, ProblemsModule>(Reuse.Singleton);
     }
 
     private static void RegisterAssetServices(IContainer container)

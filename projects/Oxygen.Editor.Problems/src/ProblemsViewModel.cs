@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.ObjectModel;
+using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.LivePreview.Play;
@@ -12,7 +13,7 @@ using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Problems;
+namespace Oxygen.Editor.Problems;
 
 /// <summary>
 /// The Problems panel: the problems of every asset family of the project (script analysis, input sources) and of the
@@ -36,14 +37,18 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     private readonly IProjectContextService projects;
     private readonly IScripts? scripts;
     private readonly IRuntimeProblemSource? runtime;
+    private readonly IRuntimeProblemNodes nodes;
 
     /// <summary>Initializes a new instance of the <see cref="ProblemsViewModel"/> class.</summary>
     /// <param name="sources">The problem sources: the family facts, and the running scene's problems.</param>
     /// <param name="codeEditor">The code editor that opens a problem's location.</param>
     /// <param name="projects">The active project, for project-relative file names.</param>
-    public ProblemsViewModel(IEnumerable<IAssetProblemSource> sources, ICodeEditorService codeEditor, IProjectContextService projects)
+    /// <param name="nodes">What shows the node a runtime problem names.</param>
+    public ProblemsViewModel(IEnumerable<IAssetProblemSource> sources, ICodeEditorService codeEditor, IProjectContextService projects, IRuntimeProblemNodes nodes)
     {
         ArgumentNullException.ThrowIfNull(sources);
+        ArgumentNullException.ThrowIfNull(nodes);
+        this.nodes = nodes;
         this.sources = [.. sources.Distinct()];
         this.codeEditor = codeEditor;
         this.projects = projects;
@@ -92,10 +97,7 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
 
     /// <summary>Gets a value indicating whether the selected problem names a node of the scene that played.</summary>
     public bool CanSelectNode => this.Selected?.Problem is RuntimeScriptProblem { SlotNode: not null } problem
-        && this.NodeSelector is not null && this.runtime?.NodeOf(problem) is not null;
-
-    /// <summary>Gets or sets what shows a runtime problem's node: its scene document, with the node selected.</summary>
-    internal Func<RuntimeScriptProblem, Task<bool>>? NodeSelector { get; set; }
+        && this.runtime?.NodeOf(problem) is not null;
 
     /// <summary>Formats the tab title.</summary>
     /// <param name="errors">The number of errors.</param>
@@ -106,12 +108,12 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
         var title = BaseTitle;
         if (errors > 0)
         {
-            title += $"  ⛔ {errors}";
+            title += string.Create(CultureInfo.InvariantCulture, $"  ⛔ {errors}");
         }
 
         if (warnings > 0)
         {
-            title += $"  ⚠ {warnings}";
+            title += string.Create(CultureInfo.InvariantCulture, $"  ⚠ {warnings}");
         }
 
         return title;
@@ -172,9 +174,9 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     [RelayCommand(CanExecute = nameof(CanSelectNode))]
     private async Task SelectNodeAsync()
     {
-        if (this.Selected?.Problem is RuntimeScriptProblem problem && this.NodeSelector is { } select)
+        if (this.Selected?.Problem is RuntimeScriptProblem problem)
         {
-            _ = await select(problem).ConfigureAwait(true);
+            _ = await this.nodes.SelectAsync(problem).ConfigureAwait(true);
         }
     }
 
@@ -190,12 +192,14 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
         var groups = this.sources
             .SelectMany(static source => source.Problems)
             .GroupBy(static problem => problem.File ?? string.Empty, StringComparer.OrdinalIgnoreCase)
-            .Select(file => new ProblemFileGroup(
-                file.Key,
-                file.Key.Length == 0 ? PlaySessionGroup
+            .Select(file =>
+            {
+                var displayPath = file.Key.Length == 0 ? PlaySessionGroup
                     : root is not null && Path.IsPathFullyQualified(file.Key) && FileSystemPath.From(file.Key) is var path && path.IsSameOrInside(root) ? path.GetPathBelow(root)
-                    : file.Key,
-                [.. file.OrderBy(static problem => problem.Line ?? 0).ThenBy(static problem => problem.Column ?? 0).Select(static problem => new ProblemEntry(problem))]))
+                    : file.Key;
+                var entries = file.OrderBy(static problem => problem.Line ?? 0).ThenBy(static problem => problem.Column ?? 0).Select(static problem => new ProblemEntry(problem));
+                return new ProblemFileGroup(file.Key, displayPath, [.. entries]);
+            })
             .OrderBy(static group => group.DisplayPath, StringComparer.OrdinalIgnoreCase)
             .ToList();
 

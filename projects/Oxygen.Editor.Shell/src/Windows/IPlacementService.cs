@@ -22,4 +22,10 @@ public interface IPlacementService
     /// <param name="placement">Where to show it.</param>
     /// <returns><see langword="true"/> when the panel is shown.</returns>
     public Task<bool> ShowPanelAsync(string panelId, WindowPlacement placement = WindowPlacement.Current);
+
+    /// <summary>Sets the title a panel's tab shows, for a panel whose title follows its state, such as its problem counts.</summary>
+    /// <remarks>A panel that is not shown yet shows the title when it appears.</remarks>
+    /// <param name="panelId">The panel's identity.</param>
+    /// <param name="title">The title.</param>
+    public void SetPanelTitle(string panelId, string title);
 }

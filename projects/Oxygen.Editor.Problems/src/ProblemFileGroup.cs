@@ -4,7 +4,7 @@
 
 using System.Globalization;
 
-namespace Oxygen.Editor.World.Problems;
+namespace Oxygen.Editor.Problems;
 
 /// <summary>
 /// The problems of one file in the Problems panel.

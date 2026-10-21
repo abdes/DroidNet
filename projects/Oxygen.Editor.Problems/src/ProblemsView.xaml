@@ -1,9 +1,9 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.World.Problems.ProblemsView"
+    x:Class="Oxygen.Editor.Problems.ProblemsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:Oxygen.Editor.World.Problems"
+    xmlns:local="using:Oxygen.Editor.Problems"
     x:Name="Root"
     Background="{ThemeResource LayerFillColorDefaultBrush}">
     <UserControl.Resources>

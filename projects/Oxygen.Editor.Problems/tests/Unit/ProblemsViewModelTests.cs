@@ -3,31 +3,27 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Play;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Problems.Unit.Tests.TestSupport;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Editor.Shell.Desktop;
-using Oxygen.Editor.World.Problems;
 using Oxygen.Managed.Assets.Authoring.Input;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
+namespace Oxygen.Editor.Problems.Unit.Tests;
 
 /// <summary>
 /// The Problems panel follows every problem source (the scripts, the input sources, the running scene): grouped by
 /// file, counted in its title, cleared when fixed.
 /// </summary>
 [TestClass]
-public sealed partial class ProblemsViewModelTests
+internal sealed class ProblemsViewModelTests
 {
     private const string MovePath = @"C:\Project\Content\Player\move.lua";
     private static readonly AssetPath Move = AssetPath.Parse("/Content/Player/move.oscript");
@@ -168,49 +164,5 @@ public sealed partial class ProblemsViewModelTests
         };
 
     private ProblemsViewModel CreateModel()
-    {
-        var projects = new Mock<IProjectContextService>();
-        _ = projects.SetupGet(static service => service.ActiveProject).Returns(TestProject.Create(new MockFileSystem()).Context with { ProjectId = Guid.Empty, Name = "Test", AuthoringMounts = [] });
-        return new ProblemsViewModel([this.scripts, this.inputs, this.runtime], this.codeEditor.Object, projects.Object)
-        {
-            NodeSelector = this.runtime.SelectAsync,
-        };
-    }
-
-    private sealed class FakeRuntimeProblems : IRuntimeProblemSource
-    {
-        private readonly List<RuntimeScriptProblem> problems = [];
-
-        public event EventHandler? ProblemsChanged;
-
-        public IReadOnlyList<AssetProblem> Problems => this.problems;
-
-        public List<RuntimeScriptProblem> Selected { get; } = [];
-
-        public DocumentId Document { get; } = DocumentId.New();
-
-        public NodeId Node { get; } = NodeId.New();
-
-        // A problem that names a node is found in the scene that played.
-        public (DocumentId Document, NodeId Node)? NodeOf(RuntimeScriptProblem problem)
-            => problem.SlotNode is not null ? (this.Document, this.Node) : null;
-
-        public Task<bool> SelectAsync(RuntimeScriptProblem problem)
-        {
-            this.Selected.Add(problem);
-            return Task.FromResult(true);
-        }
-
-        public void Report(RuntimeScriptProblem problem)
-        {
-            this.problems.Add(problem);
-            this.ProblemsChanged?.Invoke(this, EventArgs.Empty);
-        }
-
-        public void Clear()
-        {
-            this.problems.Clear();
-            this.ProblemsChanged?.Invoke(this, EventArgs.Empty);
-        }
-    }
+        => TestProblems.CreateModel([this.scripts, this.inputs, this.runtime], this.codeEditor.Object, this.runtime);
 }

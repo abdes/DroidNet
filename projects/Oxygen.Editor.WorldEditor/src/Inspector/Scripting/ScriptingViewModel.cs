@@ -17,8 +17,8 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Scripting;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Problems;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -221,7 +221,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <summary>Shows a problem in the Problems panel.</summary>
     /// <param name="problem">The problem.</param>
     internal void ShowProblem(ScriptProblem problem)
-        => _ = this.messenger?.Send(new ShowScriptProblemMessage(problem));
+        => _ = this.messenger?.Send(new ShowProblemMessage(problem));
 
     /// <summary>Finds the assets an asset parameter of a native type accepts.</summary>
     /// <param name="assetType">The native asset type the parameter declares.</param>
