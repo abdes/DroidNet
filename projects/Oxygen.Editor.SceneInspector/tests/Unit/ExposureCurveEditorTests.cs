@@ -17,7 +17,7 @@ public sealed class ExposureCurveEditorTests
     public async Task CurveKeys_AddRemoveAndHistoryUseTheExistingSceneOwner()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(() => fixture.Authoring);
+        using var model = new SceneSettingsViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         var editor = model.Exposure.CurveEditor;
         editor.AddKeyCommand.Execute(parameter: null);
@@ -40,7 +40,7 @@ public sealed class ExposureCurveEditorTests
     public async Task CurveKeyPolicy_RetainsStableRowsAndRejectsNonFiniteOrUnorderedCoordinates()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(() => fixture.Authoring);
+        using var model = new SceneSettingsViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         model.Exposure.AutoExposureCompensationCurve = [new(-2, 0), new(0, 1), new(2, 0)];
         await model.PendingEdits.ConfigureAwait(false);
@@ -62,7 +62,7 @@ public sealed class ExposureCurveEditorTests
     public async Task CurveKeyLimit_DisabledInputAndDisposalDoNotSubmitEdits()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(() => fixture.Authoring);
+        using var model = new SceneSettingsViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         model.Exposure.AutoExposureCompensationCurve = [.. Enumerable.Range(0, 64).Select(index => new ExposureCompensationKeyData(index, 0))];
         await model.PendingEdits.ConfigureAwait(false);
@@ -84,7 +84,7 @@ public sealed class ExposureCurveEditorTests
     public async Task CurveGesture_CancelRestoresTheCapturedCurveWithoutNewHistory()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(() => fixture.Authoring);
+        using var model = new SceneSettingsViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         model.Exposure.AutoExposureCompensationCurve = [new(0, 1)];
         await model.PendingEdits.ConfigureAwait(false);

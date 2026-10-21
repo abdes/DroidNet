@@ -28,8 +28,8 @@ internal sealed class AerialStartTests : DroidNet.Tests.VisualUserInterfaceTests
     {
         using var fixture = new SceneAuthoringFixture();
         fixture.Scene.Hydrate(fixture.Scene.Dehydrate() with { Environment = new SceneEnvironmentData { SkyAtmosphere = new SkyAtmosphereEnvironmentData { AerialPerspectiveStartDepthMeters = -1 }, }, });
-        using var model = (EnvironmentViewModel)CreateModel("Environment", fixture);
-        var view = new EnvironmentView
+        using var model = (SceneSettingsViewModel)CreateModel("Environment", fixture);
+        var view = new SceneSettingsView
         {
             ViewModel = model,
         };

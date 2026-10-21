@@ -25,7 +25,7 @@ internal sealed class ExposureCurveViewTests : VisualUserInterfaceTests
     public Task CurveViewMultipleKeysShareHeadersAndStretchPreviewWithAccessibleFields() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(() => fixture.Authoring);
+        using var model = new SceneSettingsViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         model.Exposure.AutoExposureCompensationCurve = [new(-2, 0), new(0, 1), new(2, 0)];
         await model.PendingEdits.ConfigureAwait(true);
@@ -56,7 +56,7 @@ internal sealed class ExposureCurveViewTests : VisualUserInterfaceTests
     public Task CurveViewKeyTextValidationAndRemoveKeepTheSceneTransactionOwner() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(() => fixture.Authoring);
+        using var model = new SceneSettingsViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         model.Exposure.AutoExposureCompensationCurve = [new(-2, 0), new(0, 1), new(2, 0)];
         await model.PendingEdits.ConfigureAwait(true);

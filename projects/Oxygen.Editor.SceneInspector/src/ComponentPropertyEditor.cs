@@ -2,52 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.ComponentModel;
-using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.SceneInspector;
 
-/// <summary>
-/// Base class for property editors for component sections in the details panel.
-/// </summary>
-public abstract partial class ComponentPropertyEditor : ObservableObject, IDetailsSection, IPropertyEditor<SceneNode>
+/// <summary>A section that edits one component kind, or one node property group, on every selected node.</summary>
+public abstract class ComponentPropertyEditor : InspectorSection
 {
-    /// <inheritdoc />
-    [ObservableProperty]
-    public partial bool IsExpanded { get; set; } = true;
-
-    /// <inheritdoc />
-    public abstract string Header { get; }
-
-    /// <inheritdoc />
-    public abstract string Description { get; }
-
-    /// <summary>Gets a value indicating whether the visible section can accept control input.</summary>
-    internal bool IsInputEnabled { get; private set; } = true;
-
-    /// <summary>Gets the feedback retained for the current authoring targets.</summary>
-    internal virtual InspectorFieldDiagnostics? ValidationFeedback => null;
-
-    /// <inheritdoc />
+    /// <summary>Shows the section's values for the selected nodes and targets its edits at them.</summary>
+    /// <param name="items">The selected nodes, all of which have the section's component.</param>
     public abstract void UpdateValues(ICollection<SceneNode> items);
-
-    /// <summary>Changes input availability without discarding the current targets or feedback.</summary>
-    /// <param name="enabled">Whether the section is visible and can accept new input.</param>
-    internal void SetInputEnabled(bool enabled)
-    {
-        if (this.IsInputEnabled == enabled)
-        {
-            return;
-        }
-
-        this.IsInputEnabled = enabled;
-        this.OnInputEnabledChanged(enabled);
-    }
-
-    /// <summary>Ends obsolete control gestures when a section becomes hidden.</summary>
-    /// <param name="enabled">Whether input is enabled.</param>
-    protected virtual void OnInputEnabledChanged(bool enabled)
-    {
-    }
 }

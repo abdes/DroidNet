@@ -3,11 +3,10 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.SceneInspector.Editing;
@@ -23,6 +22,7 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
 {
     private readonly IAssetFeed? assetProvider;
     private readonly IScheduler observerScheduler;
+    private readonly ILogger logger;
     private IDisposable? assetSubscription;
     private bool disposed;
 
@@ -30,11 +30,14 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
     /// <param name="owner">The borrowed scene edit lifetime.</param>
     /// <param name="assetProvider">The shared texture catalog.</param>
     /// <param name="observerScheduler">The injected notification scheduler.</param>
+    /// <param name="logger">Reports catalog refresh failures.</param>
     internal ExposureSectionViewModel(
         SceneEnvironmentEditOwner owner,
         IAssetFeed? assetProvider,
-        IScheduler observerScheduler)
+        IScheduler observerScheduler,
+        ILogger logger)
     {
+        this.logger = logger;
         this.EditOwner = owner;
         this.assetProvider = assetProvider;
         this.observerScheduler = observerScheduler;
@@ -309,7 +312,7 @@ public sealed partial class ExposureSectionViewModel : ObservableObject, IDispos
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ObjectDisposedException or OperationCanceledException)
         {
-            Debug.WriteLine($"[ExposureSectionViewModel] Metering mask asset refresh failed: {exception}");
+            this.LogMeteringMaskRefreshFailed(exception);
         }
     }
 

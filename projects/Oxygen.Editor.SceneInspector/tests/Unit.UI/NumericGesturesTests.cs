@@ -139,12 +139,12 @@ internal sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceT
         _ = number.NumberValue.Should().Be(before);
     });
 
-    private static UserControl ResolveNumericView(IPropertyEditor<SceneNode> model, string field) => model switch
+    private static UserControl ResolveNumericView(InspectorSection model, string field) => model switch
     {
-        EnvironmentViewModel environment => field switch
+        SceneSettingsViewModel environment => field switch
         {
             "PlanetRadiusKm" or "AtmosphereHeightKm" => new SkyAtmosphereSectionView { ViewModel = environment.SkyAtmosphere },
-            _ => new EnvironmentView { ViewModel = environment },
+            _ => new SceneSettingsView { ViewModel = environment },
         },
         _ => CreateNumericView(model),
     };

@@ -17,7 +17,7 @@ public sealed class SceneInspectorModuleTests
 
         var panel = module.Panels.Should().ContainSingle().Subject;
         _ = panel.Id.Should().Be(SceneInspectorModule.PanelId);
-        _ = panel.ViewModelType.Should().Be<SceneNodeEditorViewModel>();
+        _ = panel.ViewModelType.Should().Be<SceneInspectorViewModel>();
         _ = module.Commands.Should().BeEmpty();
     }
 }

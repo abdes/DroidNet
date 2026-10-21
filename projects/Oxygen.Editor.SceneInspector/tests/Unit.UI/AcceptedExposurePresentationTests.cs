@@ -24,9 +24,9 @@ internal sealed class AcceptedExposurePresentationTests : VisualUserInterfaceTes
     public Task AcceptedExposureFieldsUseCleanLabels(string key, string label) => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(() => fixture.Authoring);
+        using var model = new SceneSettingsViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
-        var view = new EnvironmentView { ViewModel = model, Width = 480, Height = 780 };
+        var view = new SceneSettingsView { ViewModel = model, Width = 480, Height = 780 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         ((TextBox)view.FindName("ScenePropertySearchBox")).Text = key;
         await WaitForRenderAsync().ConfigureAwait(true);

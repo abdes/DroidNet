@@ -2,11 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.ObjectModel;
-using System.Diagnostics;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Hosting.WinUI;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Inspection;
@@ -16,12 +16,10 @@ using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Components.Geometry;
@@ -43,6 +41,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly PropertyBinding<AssetPath?> geometryUriBinding = new(SceneProperties.Geometry.GeometryUriDescriptor);
     private readonly DispatcherQueue dispatcherQueue;
+    private readonly ILogger logger;
 
     private IDisposable? assetChangesSubscription;
     private IDisposable? materialResultsSubscription;
@@ -59,13 +58,16 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <param name="materialSlots">The native geometry slot inventory reader.</param>
     /// <param name="projectContexts">The active project lifetime.</param>
     /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
+    /// <param name="loggerFactory">Creates the logger that reports asset feed failures.</param>
     public GeometryViewModel(
         HostingContext hosting,
         IAssetFeed assetProvider,
         IGeometryMaterialSlotProvider materialSlots,
         IProjectContextService projectContexts,
-        Func<SceneAuthoring?>? authoringProvider = null)
+        Func<SceneAuthoring?>? authoringProvider = null,
+        ILoggerFactory? loggerFactory = null)
     {
+        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<GeometryViewModel>();
         this.assetProvider = assetProvider;
         this.materialSlots = materialSlots;
         this.projectContexts = projectContexts;
@@ -331,7 +333,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
                 this.latestMaterialAssets = assets;
                 this.ApplyContentMaterials();
             }),
-            ex => Debug.WriteLine($"[GeometryViewModel] Error in material picker stream: {ex}"));
+            this.LogAssetFeedFailed);
     }
 
     // Lists the materials the slot accepts, keeping the one assigned now even when it is gone.
@@ -356,7 +358,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
                 {
                     if (t.IsFaulted)
                     {
-                        Debug.WriteLine($"[GeometryViewModel] UI dispatch failed: {t.Exception}");
+                        this.LogDispatchFailed(t.Exception!);
                     }
                 },
                 CancellationToken.None,

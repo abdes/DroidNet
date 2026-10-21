@@ -7,10 +7,16 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Utils;
 
-namespace Oxygen.Editor.SceneInspector.Editing;
+namespace Oxygen.Editor.Scenes.Nodes;
 
-/// <summary>Converts Z-up, emitted-forward -Y source direction without owning authoring commands.</summary>
-internal static class DirectionalLightOrientation
+/// <summary>
+/// Converts between a directional light node's rotation and the world direction it shines from, as azimuth and elevation.
+/// </summary>
+/// <remarks>
+/// The world is Z-up and a light emits along its local -Y. A child's world rotation is its local rotation applied
+/// first, then its ancestors'; a node that ignores its parent's transform has its local rotation as its world one.
+/// </remarks>
+public static class DirectionalLightOrientation
 {
     private const float RadToDeg = 180f / MathF.PI;
     private const float DegToRad = MathF.PI / 180f;
@@ -18,11 +24,11 @@ internal static class DirectionalLightOrientation
     private static readonly Vector3 EngineUp = new(0f, 0f, 1f);
 
     /// <summary>Projects world direction into the target's authored parent-relative rotation.</summary>
-    /// <param name="node">The captured target node.</param>
-    /// <param name="azimuthDegrees">The world azimuth.</param>
-    /// <param name="elevationDegrees">The world elevation.</param>
-    /// <returns>The authored local rotation.</returns>
-    internal static Quaternion LocalRotation(SceneNode node, float azimuthDegrees, float elevationDegrees)
+    /// <param name="node">The light's node.</param>
+    /// <param name="azimuthDegrees">The world azimuth, clockwise from +Y.</param>
+    /// <param name="elevationDegrees">The world elevation, clamped short of the poles.</param>
+    /// <returns>The node's local rotation that makes the light shine from that direction.</returns>
+    public static Quaternion LocalRotation(SceneNode node, float azimuthDegrees, float elevationDegrees)
     {
         var azimuth = azimuthDegrees * DegToRad;
         var elevation = Math.Clamp(elevationDegrees, -89.9f, 89.9f) * DegToRad;
@@ -34,9 +40,9 @@ internal static class DirectionalLightOrientation
     }
 
     /// <summary>Reads world direction using the engine's emitted-forward convention.</summary>
-    /// <param name="node">The source node.</param>
-    /// <returns>The world azimuth and elevation in degrees.</returns>
-    internal static (float azimuth, float elevation) DisplayAngles(SceneNode node)
+    /// <param name="node">The light's node.</param>
+    /// <returns>The world azimuth, in [-180, 180), and elevation, in degrees.</returns>
+    public static (float azimuth, float elevation) DisplayAngles(SceneNode node)
     {
         var emitted = NormalizeOrFallback(Vector3.Transform(EngineForward, WorldRotation(node)), EngineForward);
         var direction = -emitted;

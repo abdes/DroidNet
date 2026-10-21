@@ -14,7 +14,6 @@ using Oxygen.Editor.SceneInspector.Components.Lights;
 using Oxygen.Editor.SceneInspector.Components.Scripting;
 using Oxygen.Editor.SceneInspector.Components.Transform;
 using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.SceneInspector.Components;
@@ -31,7 +30,7 @@ internal static class InspectorEditorFactory
     /// <param name="authoring">The authoring of the scene being inspected.</param>
     /// <param name="scripts">The scripting services, when the host provides them.</param>
     /// <returns>The component construction operations.</returns>
-    internal static Dictionary<Type, Func<IPropertyEditor<SceneNode>>> Create(
+    internal static Dictionary<Type, Func<ComponentPropertyEditor>> Create(
         HostingContext hosting,
         IAssetFeed assets,
         IGeometryMaterialSlotProvider slots,
@@ -42,7 +41,7 @@ internal static class InspectorEditorFactory
         => new()
         {
             [typeof(TransformComponent)] = () => new TransformViewModel(logger, authoring),
-            [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, slots, projects, authoring),
+            [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, slots, projects, authoring, logger),
             [typeof(PerspectiveCamera)] = () => new PerspectiveCameraViewModel(authoring),
             [typeof(OrthographicCamera)] = () => new OrthographicCameraViewModel(authoring),
             [typeof(DirectionalLightComponent)] = () => new DirectionalLightViewModel(authoring),

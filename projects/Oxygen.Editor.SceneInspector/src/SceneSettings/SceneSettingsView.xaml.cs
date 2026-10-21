@@ -14,16 +14,16 @@ using Oxygen.Editor.Schemas;
 namespace Oxygen.Editor.SceneInspector.SceneSettings;
 
 /// <summary>Composes section-owned views and orchestrates scene browsing and diagnostic navigation.</summary>
-[ViewModel(typeof(EnvironmentViewModel))]
-public sealed partial class EnvironmentView
+[ViewModel(typeof(SceneSettingsViewModel))]
+public sealed partial class SceneSettingsView
 {
     private readonly InspectorSearchModel search = EnvironmentFieldCatalog.Create();
     private readonly InspectorSceneFieldRegistry registry;
-    private EnvironmentViewModel? observedModel;
+    private SceneSettingsViewModel? observedModel;
     private InspectorPropertyScope propertyScope;
 
-    /// <summary>Initializes a new instance of the <see cref="EnvironmentView"/> class.</summary>
-    public EnvironmentView()
+    /// <summary>Initializes a new instance of the <see cref="SceneSettingsView"/> class.</summary>
+    public SceneSettingsView()
     {
         this.InitializeComponent();
         this.registry = new(this.search, (IValueConverter)this.Resources["InspectorDiagnosticVisibility"]);

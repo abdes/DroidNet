@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
+using System.Collections.ObjectModel;
+using System.ComponentModel;
+using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm.Converters;
@@ -23,6 +25,7 @@ using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Components;
+using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
@@ -37,33 +40,36 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>
-///     ViewModel for editing properties of selected SceneNode entities in the World Editor.
+/// The Properties panel of a scene: the sections that edit the selected nodes' components, or the scene's settings when
+/// the scene itself is selected, each edit going through the scene document's authoring.
 /// </summary>
-public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<SceneNode>, ISceneComponentEdits, IDisposable
+public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNodeEdits, IDisposable
 {
     // The selection source of this inspector's "inspect this node" requests; the Scene Explorer reveals and focuses the row.
     private const string InspectorSelectionSource = "Inspector";
 
     private readonly ILogger logger;
 
-    private readonly Dictionary<Type, IPropertyEditor<SceneNode>> editorInstances = [];
-    private readonly Dictionary<Type, Func<IPropertyEditor<SceneNode>>> propertyEditorFactories;
+    private readonly Dictionary<Type, ComponentPropertyEditor> editorInstances = [];
+    private readonly Dictionary<Type, Func<ComponentPropertyEditor>> propertyEditorFactories;
     private readonly IAssetReveal assetReveal;
-    private readonly IDocumentArea documentArea;
+    private readonly InspectedSceneDocuments documents;
     private readonly IScenePreview scenePreview;
     private readonly SceneNodeInteraction? interaction;
     private readonly DispatcherQueue? dispatcher;
     private readonly InspectorSelectionObserver selectionObserver;
-    private readonly EnvironmentViewModel environmentEditor;
+    private readonly SceneSettingsViewModel sceneSettings;
     private readonly NodeRenderingViewModel renderingEditor;
     private readonly ISceneSelectionService sceneSelectionService;
+
+    // The nodes whose property changes refresh the panel's own properties.
+    private readonly List<SceneNode> observedNodes = [];
     private (DocumentId document, string property)? pendingEnvironmentFocus;
 
     // The atmosphere source the inspector selected, whose directional light it shows once the selection arrives.
     private NodeId? pendingAtmosphereSource;
 
     private bool isDisposed;
-    private Document? watchedDocument;
     private ICollection<SceneNode> items;
     private Scene? activeScene;
 
@@ -76,7 +82,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private SceneSelectionContext selectionContext = SceneSelectionContext.Empty;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="SceneNodeEditorViewModel"/> class.
+    /// Initializes a new instance of the <see cref="SceneInspectorViewModel"/> class.
     /// </summary>
     /// <param name="hosting">The hosting context for WinUI dispatching.</param>
     /// <param name="vmToViewConverter">The converter for resolving views from viewmodels.</param>
@@ -88,16 +94,16 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="materialSlots">The current native geometry slot inventories.</param>
     /// <param name="projectContexts">The active project lifetime.</param>
     /// <param name="inputSources">The project's input sources, which declare the scene's starting input contexts.</param>
+    /// <param name="loggerFactory">
+    ///     Optional factory for creating loggers. If provided, enables detailed logging of the
+    ///     recognition process. If <see langword="null" />, logging is disabled.
+    /// </param>
     /// <param name="interaction">The shared editor lock owner.</param>
     /// <param name="scripts">The scripts, for script slot parameters and problems.</param>
     /// <param name="codeEditor">The code editor, for editing a slot's script.</param>
     /// <param name="scriptCreation">What creates a script for a slot, with New Script.</param>
     /// <param name="problems">What shows a script's problem in the Problems panel.</param>
-    /// <param name="loggerFactory">
-    ///     Optional factory for creating loggers. If provided, enables detailed logging of the
-    ///     recognition process. If <see langword="null" />, logging is disabled.
-    /// </param>
-    public SceneNodeEditorViewModel(
+    public SceneInspectorViewModel(
         HostingContext hosting,
         ViewModelToView vmToViewConverter,
         IAssetReveal assetReveal,
@@ -114,13 +120,12 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         ICodeEditorService? codeEditor = null,
         IScriptCreation? scriptCreation = null,
         IProblemReveal? problems = null)
-        : base(loggerFactory)
     {
-        this.logger = loggerFactory?.CreateLogger<SceneNodeEditorViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneNodeEditorViewModel>();
+        this.logger = loggerFactory?.CreateLogger<SceneInspectorViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneInspectorViewModel>();
         this.LoggerFactory = loggerFactory;
 
         this.assetReveal = assetReveal;
-        this.documentArea = documentArea;
+        this.documents = new InspectedSceneDocuments(documentArea, this.ShowDocument, this.ClearClosedDocument);
         this.scenePreview = scenePreview;
         this.interaction = interaction;
         this.sceneSelectionService = selectionService;
@@ -139,7 +144,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             loggerFactory,
             this.AuthoringOf,
             new InspectorScriptServices(scripts, codeEditor, scriptCreation, problems));
-        this.environmentEditor = new EnvironmentViewModel(
+        this.sceneSettings = new SceneSettingsViewModel(
             this.AuthoringOf,
             assetProvider,
             this.InspectAtmosphereSource,
@@ -148,13 +153,14 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             context => StartingContextRules.Describe(projectContexts.ActiveProject, context, inputSources.Find),
             asset => this.RevealAssetAsync(projectContexts, asset),
             projectContexts,
-            inputSources);
+            inputSources,
+            loggerFactory);
         this.renderingEditor = new NodeRenderingViewModel(this.AuthoringOf);
 
         // Startup hydrates the authoritative typed context with the nodes: a folder-only selection
         // must initialize as the grouping summary, not as "scene properties".
-        var activeDocument = this.ActiveSceneDocumentId;
-        this.activeScene = this.ResolveDocumentScene(activeDocument);
+        var activeDocument = this.documents.ActiveSceneId;
+        this.activeScene = this.documents.SceneOf(activeDocument);
         this.selectionContext = this.sceneSelectionService.GetContext(activeDocument ?? DocumentId.Empty);
         this.items = this.activeScene is { } shownScene && activeDocument is { } shownDocument && !this.HasSelectionSummary
             ? this.sceneSelectionService.GetSelectedNodes(shownDocument, shownScene).ToList()
@@ -168,16 +174,28 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         this.NotifyLockEligibilityChanged();
         this.RefreshPendingLiveSyncState();
-        this.environmentEditor.SetScene(this.HasEnvironmentView ? this.activeScene : null);
-        this.UpdateItemsCollection(this.items);
+        this.sceneSettings.SetScene(this.HasSceneSettings ? this.activeScene : null);
+        this.ShowItems();
         this.SubscribeToComponentCollections();
         this.LogConstructed(this.items.Count);
 
-        this.RegisterSceneSubscriptions();
+        this.sceneSelectionService.SelectionChanged += this.OnSelectionServiceChanged;
     }
 
+    /// <summary>Gets the sections shown for the selection: the scene's settings, or the selected nodes' components.</summary>
+    public ObservableCollection<InspectorSection> PropertyEditors { get; } = [];
+
+    /// <summary>Gets a value indicating whether any node is selected.</summary>
+    public bool HasItems => this.items.Count > 0;
+
+    /// <summary>Gets a value indicating whether several nodes are selected.</summary>
+    public bool HasMultipleItems => this.items.Count > 1;
+
+    /// <summary>Gets the number of selected nodes.</summary>
+    public int ItemsCount => this.items.Count;
+
     /// <summary>Gets the scene-level editor hosted outside component-property scrolling.</summary>
-    public EnvironmentViewModel EnvironmentEditor => this.environmentEditor;
+    public SceneSettingsViewModel SceneSettingsEditor => this.sceneSettings;
 
     /// <summary>
     /// Gets a value indicating whether exactly one item is selected.
@@ -238,8 +256,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
     }
 
-    /// <summary>Gets a value indicating whether the scene environment editor is the active surface.</summary>
-    public bool HasEnvironmentView => !this.HasItems
+    /// <summary>Gets a value indicating whether the scene settings editor is the active surface.</summary>
+    public bool HasSceneSettings => !this.HasItems
         && this.selectionContext.Kind is SceneSelectionKind.Empty or SceneSelectionKind.Scene
         && this.activeScene is not null;
 
@@ -304,20 +322,37 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// </summary>
     public ViewModelToView VmToViewConverter { get; }
 
-    /// <summary>
-    /// Gets the undo/redo history for the currently selected scene document.
-    /// </summary>
-    public HistoryKeeper History => this.DocumentOf(this.items.FirstOrDefault()?.Scene ?? this.activeScene)?.History ?? UndoRedo.Default[this];
+    // The scene the panel inspects: the selected nodes' scene, or the active scene document's.
+    private Scene? InspectedScene => this.items.FirstOrDefault()?.Scene ?? this.activeScene;
+
+    // The history of the inspected scene's document; none while no scene document is open.
+    private HistoryKeeper? History => this.documents.DocumentOf(this.InspectedScene)?.History;
+
+    /// <summary>Refreshes the visible sections' values from the selected nodes and the scene.</summary>
+    public void RefreshPropertyEditorValues()
+    {
+        this.RefreshOwnProperties();
+        this.UpdatePropertyEditorsValues();
+    }
 
     /// <inheritdoc />
     public async Task AddComponentAsync(SceneNode node, string kind)
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(kind);
-        if (this.AuthoringOf(node.Scene) is { } authoring)
+        if (this.documents.AuthoringOf(node.Scene) is { } authoring)
         {
             _ = await authoring.ExecuteAsync(SceneComponents.Add(authoring, node.Id, kind)).ConfigureAwait(true);
         }
+    }
+
+    /// <inheritdoc />
+    public async Task<bool> RenameAsync(SceneNode node, string name)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(name);
+        return this.documents.AuthoringOf(node.Scene) is { } authoring
+            && (await authoring.ExecuteAsync(new RenameNode(node.Id, name)).ConfigureAwait(true)).Succeeded;
     }
 
     /// <inheritdoc />
@@ -325,7 +360,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     {
         ArgumentNullException.ThrowIfNull(node);
         ArgumentNullException.ThrowIfNull(component);
-        if (this.AuthoringOf(node.Scene) is { } authoring)
+        if (this.documents.AuthoringOf(node.Scene) is { } authoring)
         {
             _ = await authoring.ExecuteAsync(new RemoveComponent(node.Id, component.Id)).ConfigureAwait(true);
         }
@@ -343,13 +378,13 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.sceneSelectionService.PropertyFocusRequested -= this.OnPropertyFocusRequested;
         this.sceneSelectionService.SelectionChanged -= this.OnSelectionServiceChanged;
         this.scenePreview.ReadyChanged -= this.OnPreviewReadyChanged;
-        this.documentArea.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
-        this.WatchContent(document: null);
+        this.documents.Dispose();
         if (this.interaction is { } interactionService)
         {
             interactionService.StateChanged -= this.OnWorkspaceInteractionStateChanged;
         }
 
+        this.ObserveNodes([]);
         this.selectionObserver.Dispose();
         this.StopObservingComponentFeedback();
         foreach (var editor in this.editorInstances.Values.OfType<IDisposable>())
@@ -357,7 +392,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             editor.Dispose();
         }
 
-        this.environmentEditor.Dispose();
+        this.sceneSettings.Dispose();
         this.renderingEditor.Dispose();
         this.editorInstances.Clear();
         this.boundEditors.Clear();
@@ -374,39 +409,97 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <returns>Completion of the redo.</returns>
     internal Task RedoAsync() => this.AuthoringOf() is { } authoring ? authoring.RedoAsync() : Task.CompletedTask;
 
-    /// <inheritdoc/>
-    protected override void RefreshOwnProperties()
+    // Shows the current nodes: follows their property changes, and shows the sections that apply to them.
+    private void ShowItems()
+    {
+        this.ObserveNodes(this.items);
+        this.RefreshOwnProperties();
+        this.RefreshPropertyEditors();
+    }
+
+    private void ObserveNodes(IEnumerable<SceneNode> nodes)
+    {
+        foreach (var node in this.observedNodes)
+        {
+            node.PropertyChanged -= this.OnNodePropertyChanged;
+        }
+
+        this.observedNodes.Clear();
+        this.observedNodes.AddRange(nodes);
+        foreach (var node in this.observedNodes)
+        {
+            node.PropertyChanged += this.OnNodePropertyChanged;
+        }
+    }
+
+    private void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs args) => this.RefreshOwnProperties();
+
+    private void RefreshOwnProperties()
     {
         try
         {
-            base.RefreshOwnProperties();
+            this.OnPropertyChanged(nameof(this.ItemsCount));
+            this.OnPropertyChanged(nameof(this.HasItems));
+            this.OnPropertyChanged(nameof(this.HasMultipleItems));
+            this.OnPropertyChanged(nameof(this.IsSingleItemSelected));
+            this.OnPropertyChanged(nameof(this.SelectedNode));
+            this.NotifyLockEligibilityChanged();
+            this.OnPropertyChanged(nameof(this.HasInspectorContent));
+            this.NotifySelectionRoutingChanged();
+            this.RefreshPendingLiveSyncState();
         }
         catch (Exception ex)
         {
-            this.LogUnexpectedException("RefreshOwnProperties", ex);
+            this.LogUnexpectedException(nameof(this.RefreshOwnProperties), ex);
             throw;
         }
-
-        this.OnPropertyChanged(nameof(this.IsSingleItemSelected));
-        this.OnPropertyChanged(nameof(this.SelectedNode));
-        this.NotifyLockEligibilityChanged();
-        this.OnPropertyChanged(nameof(this.HasInspectorContent));
-        this.OnPropertyChanged(nameof(this.InspectorTitle));
-        this.NotifySelectionRoutingChanged();
-        this.RefreshPendingLiveSyncState();
     }
 
-    /// <inheritdoc/>
-    protected override ICollection<IPropertyEditor<SceneNode>> FilterPropertyEditors()
+    /// <summary>Refreshes section visibility and binds each visible section to the current selection.</summary>
+    /// <param name="refreshValues">Whether the authoring selection or source values also need rebinding.</param>
+    private void RefreshPropertyEditors(bool refreshValues = true)
     {
-        Debug.WriteLine($"[SceneNodeEditorViewModel] FilterPropertyEditors called. Items count: {this.items.Count}");
-        var filteredEditors = new Dictionary<Type, IPropertyEditor<SceneNode>>();
-        var result = new List<IPropertyEditor<SceneNode>>();
-
-        this.environmentEditor.SetScene(this.HasEnvironmentView ? this.activeScene : null);
-        if (this.HasEnvironmentView)
+        var shown = this.FilterPropertyEditors();
+        for (var index = this.PropertyEditors.Count - 1; index >= 0; index--)
         {
-            result.Add(this.environmentEditor);
+            var section = this.PropertyEditors[index];
+            if (!shown.Contains(section))
+            {
+                this.PropertyEditors.RemoveAt(index);
+                section.SetInputEnabled(enabled: false);
+            }
+        }
+
+        // Preserve canonical section order when a filter restores existing sections.
+        var targetIndex = 0;
+        foreach (var section in shown)
+        {
+            var currentIndex = this.PropertyEditors.IndexOf(section);
+            if (currentIndex < 0)
+            {
+                this.PropertyEditors.Insert(targetIndex, section);
+            }
+            else if (currentIndex != targetIndex)
+            {
+                this.PropertyEditors.Move(currentIndex, targetIndex);
+            }
+
+            ++targetIndex;
+        }
+
+        if (refreshValues)
+        {
+            this.UpdatePropertyEditorsValues();
+        }
+    }
+
+    private List<InspectorSection> FilterPropertyEditors()
+    {
+        var result = new List<InspectorSection>();
+        this.sceneSettings.SetScene(this.HasSceneSettings ? this.activeScene : null);
+        if (this.HasSceneSettings)
+        {
+            result.Add(this.sceneSettings);
         }
 
         var keysToCheck = this.GetApplicablePropertyEditorTypes();
@@ -421,14 +514,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             return result;
         }
 
-        Debug.WriteLine($"[SceneNodeEditorViewModel] Keys to check after filtering: {string.Join(", ", keysToCheck.Select(k => k.Name))}");
-        this.AddApplicablePropertyEditors(filteredEditors, keysToCheck);
-
-        var before = this.propertyEditorFactories.Count;
-        var after = filteredEditors.Count;
-        this.LogFiltered(before, after);
-
-        result.AddRange(filteredEditors.Values);
+        var shown = this.propertyEditorFactories.Where(factory => keysToCheck.Contains(factory.Key)).Select(this.GetOrCreatePropertyEditor).ToList();
+        this.LogFiltered(this.propertyEditorFactories.Count, shown.Count);
+        result.AddRange(shown);
 
         // Node rendering flags follow every component section, in the unfiltered view only, and
         // only for nodes the flags affect.
@@ -440,23 +528,18 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         return result;
     }
 
-    /// <inheritdoc />
-    protected override void DeactivatePropertyEditor(IPropertyEditor<SceneNode> editor)
-        => ((ComponentPropertyEditor)editor).SetInputEnabled(enabled: false);
-
-    /// <inheritdoc />
-    protected override void UpdatePropertyEditorsValues()
+    private void UpdatePropertyEditorsValues()
     {
         var selection = this.items.ToArray();
-        foreach (var editor in this.editorInstances.Values.Cast<ComponentPropertyEditor>().ToArray())
+        foreach (var editor in this.editorInstances.Values.ToArray())
         {
             editor.UpdateValues(selection);
             _ = this.boundEditors.Add(editor);
             editor.SetInputEnabled(this.IsEditorInputEnabled(editor));
         }
 
-        this.environmentEditor.UpdateValues(selection);
-        this.environmentEditor.SetInputEnabled(this.PropertyEditors.Contains(this.environmentEditor));
+        this.sceneSettings.Refresh();
+        this.sceneSettings.SetInputEnabled(this.PropertyEditors.Contains(this.sceneSettings));
         this.renderingEditor.UpdateValues(selection);
         this.renderingEditor.SetInputEnabled(this.IsEditorInputEnabled(this.renderingEditor));
     }
@@ -466,18 +549,13 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     {
         this.OnPropertyChanged(nameof(this.HasSelectionSummary));
         this.OnPropertyChanged(nameof(this.HasSelectionNotice));
-        this.OnPropertyChanged(nameof(this.HasEnvironmentView));
+        this.OnPropertyChanged(nameof(this.HasSceneSettings));
         this.OnPropertyChanged(nameof(this.SelectionSummaryText));
         this.OnPropertyChanged(nameof(this.InspectorTitle));
     }
 
-    private Scene? ResolveDocumentScene(DocumentId? documentId)
-        => documentId is { } id && this.documentArea.Documents.FirstOrDefault(document => document.Id == id)?.Content is SceneContent content
-            ? content.Scene
-            : null;
-
     private Task<SkyLightObservation?> ObserveSkyLightAsync(Scene scene, CancellationToken cancellationToken)
-        => this.DocumentOf(scene) is { } document
+        => this.documents.DocumentOf(scene) is { } document
             ? this.scenePreview.ObserveSkyLightAsync(document.Id, cancellationToken)
             : Task.FromResult<SkyLightObservation?>(null);
 
@@ -503,7 +581,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             return;
         }
 
-        if (this.ActiveSceneDocumentId is not { } documentId)
+        if (this.documents.ActiveSceneId is not { } documentId)
         {
             throw new InvalidOperationException("The atmosphere source could not be revealed in Scene Explorer.");
         }
@@ -531,113 +609,37 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private HashSet<Type> GetApplicablePropertyEditorTypes()
     {
         var keysToCheck = new HashSet<Type>(this.propertyEditorFactories.Keys);
-        Debug.WriteLine($"[SceneNodeEditorViewModel] propertyEditorFactories has {this.propertyEditorFactories.Count} factories: {string.Join(", ", this.propertyEditorFactories.Keys.Select(k => k.Name))}");
-
         foreach (var entity in this.items)
         {
-            Debug.WriteLine($"[SceneNodeEditorViewModel] Checking entity: {entity.Name}, Components: {string.Join(", ", entity.Components.Select(c => c.GetType().Name))}");
-            foreach (var key in keysToCheck.ToList()
-                         .Where(key => entity.Components.All(component => component.GetType() != key)))
-            {
-                Debug.WriteLine($"[SceneNodeEditorViewModel] Removing key {key.Name} (component not found on entity)");
-                _ = keysToCheck.Remove(key);
-            }
+            keysToCheck.RemoveWhere(key => entity.Components.All(component => component.GetType() != key));
         }
 
         return keysToCheck;
     }
 
-    private void AddApplicablePropertyEditors(
-        Dictionary<Type, IPropertyEditor<SceneNode>> filteredEditors,
-        HashSet<Type> keysToCheck)
-    {
-        foreach (var kvp in this.propertyEditorFactories)
-        {
-            if (!keysToCheck.Contains(kvp.Key))
-            {
-                continue;
-            }
-
-            filteredEditors[kvp.Key] = this.GetOrCreatePropertyEditor(kvp);
-        }
-    }
-
-    private IPropertyEditor<SceneNode> GetOrCreatePropertyEditor(
-        KeyValuePair<Type, Func<IPropertyEditor<SceneNode>>> factory)
+    private ComponentPropertyEditor GetOrCreatePropertyEditor(KeyValuePair<Type, Func<ComponentPropertyEditor>> factory)
     {
         if (this.editorInstances.TryGetValue(factory.Key, out var instance))
         {
-            Debug.WriteLine($"[SceneNodeEditorViewModel] Reusing existing editor instance for {factory.Key.Name}");
             return instance;
         }
 
-        Debug.WriteLine($"[SceneNodeEditorViewModel] Creating NEW editor instance for {factory.Key.Name}");
         instance = factory.Value();
-        ((ComponentPropertyEditor)instance).SetInputEnabled(enabled: false);
+        instance.SetInputEnabled(enabled: false);
         this.editorInstances[factory.Key] = instance;
-        this.ObserveComponentFeedback(factory.Key, (ComponentPropertyEditor)instance);
+        this.ObserveComponentFeedback(factory.Key, instance);
         return instance;
     }
 
-    private void RegisterSceneSubscriptions()
-    {
-        this.documentArea.ActiveDocumentChanged += this.OnActiveDocumentChanged;
-        this.WatchContent(this.documentArea.ActiveDocument);
-        this.sceneSelectionService.SelectionChanged += this.OnSelectionServiceChanged;
-    }
-
-    // A scene document that becomes active, or reloads while active, hydrates the inspector from its scene.
-    private void OnActiveDocumentChanged(object? sender, EventArgs args)
+    // A scene document that became active, or reloaded while active: the inspector shows its scene.
+    private void ShowDocument(Document document)
     {
         if (this.isDisposed)
         {
             return;
         }
 
-        // The watched scene document closed: the inspector has nothing to show for it.
-        if (this.watchedDocument is { } watched && !this.documentArea.Documents.Contains(watched))
-        {
-            this.ClearClosedDocument(watched.Id);
-        }
-
-        if (this.documentArea.ActiveDocument is not { Content: SceneContent } active || ReferenceEquals(active, this.watchedDocument))
-        {
-            return;
-        }
-
-        this.WatchContent(active);
-        this.ShowDocument(active);
-    }
-
-    private void WatchContent(Document? document)
-    {
-        if (this.watchedDocument is { } previous)
-        {
-            previous.ContentReplaced -= this.OnContentReplaced;
-        }
-
-        this.watchedDocument = document is { Content: SceneContent } ? document : null;
-        if (this.watchedDocument is { } current)
-        {
-            current.ContentReplaced += this.OnContentReplaced;
-        }
-    }
-
-    private void OnContentReplaced(object? sender, DocumentContentReplacedEventArgs args)
-    {
-        if (!this.isDisposed && sender is Document document && ReferenceEquals(this.documentArea.ActiveDocument, document))
-        {
-            this.ShowDocument(document);
-        }
-    }
-
-    private void ShowDocument(Document document)
-    {
         var scene = SceneContent.Of(document).Scene;
-        if (this.items.Any(node => !ReferenceEquals(node.Scene, scene)))
-        {
-            this.items = [];
-        }
 
         // A fresh document session hydrates the authoritative typed context for that
         // document: a folder selection reopens as the grouping summary, not scene properties.
@@ -647,34 +649,31 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.activeScene = scene;
         this.activeDocumentId = document.Id;
         this.RefreshPendingLiveSyncState();
-        this.environmentEditor.SetScene(this.HasEnvironmentView ? scene : null);
+        this.sceneSettings.SetScene(this.HasSceneSettings ? scene : null);
         this.NotifySelectionRoutingChanged();
-        this.UpdateItemsCollection(this.items);
+        this.ShowItems();
         this.SubscribeToComponentCollections();
         this.ApplyPendingEnvironmentFocus();
     }
 
+    // The watched scene document closed: the inspector has nothing to show for it.
     private void ClearClosedDocument(DocumentId documentId)
     {
-        if (this.activeDocumentId != documentId && this.watchedDocument?.Id != documentId)
+        if (this.isDisposed)
         {
             return;
         }
 
-        if (this.watchedDocument?.Id == documentId)
-        {
-            this.WatchContent(document: null);
-        }
-
+        _ = documentId;
         this.items = [];
         this.SubscribeToComponentCollections();
         this.activeScene = null;
         this.activeDocumentId = null;
         this.selectionContext = this.sceneSelectionService.GetContext(DocumentId.Empty);
         this.RefreshPendingLiveSyncState();
-        this.environmentEditor.SetScene(value: null);
+        this.sceneSettings.SetScene(value: null);
         this.NotifySelectionRoutingChanged();
-        this.UpdateItemsCollection(this.items);
+        this.ShowItems();
     }
 
     // A selection of the active scene document written by any source (the explorer, the viewport, an inspector request).
@@ -699,7 +698,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private void ApplySelection(SceneSelectionChangedEventArgs args)
     {
         if (this.isDisposed
-            || this.ActiveSceneDocumentId != args.DocumentId
+            || this.documents.ActiveSceneId != args.DocumentId
             || !ReferenceEquals(this.sceneSelectionService.GetContext(args.DocumentId), args.Context))
         {
             return;
@@ -709,7 +708,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         // Folder and mixed batches show the grouping summary: their node subset must
         // not populate component editors as if the whole selection were nodes.
-        var scene = this.ResolveDocumentScene(args.DocumentId);
+        var scene = this.documents.SceneOf(args.DocumentId);
         this.items = this.HasSelectionSummary || scene is null
             ? []
             : this.sceneSelectionService.GetSelectedNodes(args.DocumentId, scene).ToList();
@@ -720,10 +719,10 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         this.RefreshPendingLiveSyncState();
-        this.environmentEditor.SetScene(this.HasEnvironmentView ? this.activeScene : null);
+        this.sceneSettings.SetScene(this.HasSceneSettings ? this.activeScene : null);
         this.NotifySelectionRoutingChanged();
         this.LogSelectionChanged(this.items.Count);
-        this.UpdateItemsCollection(this.items);
+        this.ShowItems();
         this.SubscribeToComponentCollections();
         this.ApplyPendingAtmosphereFilter();
     }
@@ -737,9 +736,9 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
         this.pendingEnvironmentFocus = null;
         this.items = [];
-        this.environmentEditor.SetScene(this.activeScene);
-        this.UpdateItemsCollection(this.items);
-        this.environmentEditor.RequestFieldFocus(target.property);
+        this.sceneSettings.SetScene(this.activeScene);
+        this.ShowItems();
+        this.sceneSettings.RequestFieldFocus(target.property);
     }
 
     // The scene's properties show once the scene is the shown one; until then the request waits.
@@ -749,17 +748,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.ApplyPendingEnvironmentFocus();
     }
 
-    private SceneAuthoring? AuthoringOf()
-        => this.AuthoringOf(this.items.FirstOrDefault()?.Scene ?? this.activeScene);
-
-    private DocumentId? ActiveSceneDocumentId
-        => this.documentArea.ActiveDocument is { Content: SceneContent } active ? active.Id : null;
-
-    private Document? DocumentOf(Scene? scene)
-        => scene is null ? null : this.documentArea.Documents.FirstOrDefault(document => document.Content is SceneContent content && ReferenceEquals(content.Scene, scene));
-
-    private SceneAuthoring? AuthoringOf(Scene? scene)
-        => (this.DocumentOf(scene)?.Content as SceneContent)?.Authoring;
+    private SceneAuthoring? AuthoringOf() => this.documents.AuthoringOf(this.InspectedScene);
 
     private void OnPendingFieldsChanged(object? sender, ScenePreviewEventArgs e)
     {
@@ -821,7 +810,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     {
         if (change == InspectorSelectionChange.Structure)
         {
-            this.UpdateItemsCollection(this.items);
+            this.ShowItems();
             this.SubscribeToComponentCollections();
         }
         else

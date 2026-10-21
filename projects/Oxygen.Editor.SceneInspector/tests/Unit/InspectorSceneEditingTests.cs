@@ -158,7 +158,7 @@ public sealed class InspectorSceneEditingTests
     public async Task EnvironmentDrag_IsOneUndoStepAndTheFieldFollowsUndoAndRedo()
     {
         using var testScene = TestScenes.Open(CreateScene());
-        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
+        using var editor = new SceneSettingsViewModel(() => testScene.Authoring);
         editor.SetScene(testScene.Scene);
         var original = editor.Backdrop.SolidColorR;
         editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
@@ -183,7 +183,7 @@ public sealed class InspectorSceneEditingTests
     {
         using var testScene = TestScenes.Open(CreateScene());
         var original = SceneSkyFields.SolidColorOf(testScene.Scene.Environment);
-        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
+        using var editor = new SceneSettingsViewModel(() => testScene.Authoring);
         editor.SetScene(testScene.Scene);
         editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
         editor.Backdrop.SolidColorR = 0.8f;
@@ -205,7 +205,7 @@ public sealed class InspectorSceneEditingTests
         var scene = CreateScene();
         using var testScene = Open(scene, DirectionalLightNode(scene, "Sun", AtmosphereLightSlot.Primary), out var sun);
         var light = sun.Components.OfType<DirectionalLightComponent>().Single();
-        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
+        using var editor = new SceneSettingsViewModel(() => testScene.Authoring);
         editor.SetScene(testScene.Scene);
         if (gesture)
         {
@@ -230,7 +230,7 @@ public sealed class InspectorSceneEditingTests
     public async Task EnvironmentDiagnostic_KeepsTheBoundInstanceWhenTheSceneArrives()
     {
         using var testScene = TestScenes.Open(CreateScene());
-        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
+        using var editor = new SceneSettingsViewModel(() => testScene.Authoring);
         var boundDiagnostic = editor.Exposure.ManualExposureEvDiagnostic;
         editor.SetScene(testScene.Scene);
 
@@ -249,7 +249,7 @@ public sealed class InspectorSceneEditingTests
         var scene = CreateScene();
         var sun = DirectionalLightNode(scene, "Sun", AtmosphereLightSlot.Primary);
         scene.RootNodes.Add(sun);
-        using var editor = new EnvironmentViewModel();
+        using var editor = new SceneSettingsViewModel();
         editor.SetScene(scene);
         _ = editor.AtmosphereLights.SelectedSun!.NodeId.Should().Be(sun.Id);
 
@@ -268,7 +268,7 @@ public sealed class InspectorSceneEditingTests
         var second = CreateScene();
         var secondSun = DirectionalLightNode(second, "Second Sun", AtmosphereLightSlot.Primary);
         second.RootNodes.Add(secondSun);
-        using var editor = new EnvironmentViewModel();
+        using var editor = new SceneSettingsViewModel();
         editor.SetScene(first);
         editor.SetScene(second);
         var selected = editor.AtmosphereLights.SelectedSun;
@@ -291,7 +291,7 @@ public sealed class InspectorSceneEditingTests
         var secondBuilt = CameraNode(scene, 60);
         secondBuilt.Name = "Gameplay";
         using var testScene = Open(scene, firstBuilt, secondBuilt, out _, out var second);
-        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
+        using var editor = new SceneSettingsViewModel(() => testScene.Authoring);
         editor.SetScene(testScene.Scene);
         var play = editor.Play;
 
@@ -313,7 +313,7 @@ public sealed class InspectorSceneEditingTests
     {
         var scene = CreateScene();
         using var testScene = Open(scene, CameraNode(scene, 60), CameraNode(scene, 60), out _, out var second);
-        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
+        using var editor = new SceneSettingsViewModel(() => testScene.Authoring);
         editor.SetScene(testScene.Scene);
         var play = editor.Play;
         play.SelectedCamera = play.CameraChoices.Single(choice => choice.Id == second.Id);
@@ -344,7 +344,7 @@ public sealed class InspectorSceneEditingTests
         scene.RootNodes.Add(camera);
         scene.SetStartingCamera(camera.Id);
         _ = scene.RootNodes.Remove(camera);
-        using var editor = new EnvironmentViewModel();
+        using var editor = new SceneSettingsViewModel();
 
         editor.SetScene(scene);
 
@@ -360,7 +360,7 @@ public sealed class InspectorSceneEditingTests
         var scene = CreateScene();
         scene.SetStartingInputContexts([new StartingInputContextData(GameplayContext), new StartingInputContextData(MenuContext)]);
         using var testScene = TestScenes.Open(scene);
-        using var editor = new EnvironmentViewModel(() => testScene.Authoring, inputContextSource: uri => uri == GameplayContext ? new InputContextSource(IsProjectContext: true, DeclaredPriority: 3) : InputContextSource.External);
+        using var editor = new SceneSettingsViewModel(() => testScene.Authoring, inputContextSource: uri => uri == GameplayContext ? new InputContextSource(IsProjectContext: true, DeclaredPriority: 3) : InputContextSource.External);
         editor.SetScene(testScene.Scene);
         var gameplay = editor.Play.Contexts[0];
 
@@ -387,7 +387,7 @@ public sealed class InspectorSceneEditingTests
     {
         var scene = CreateScene();
         scene.SetStartingInputContexts([new StartingInputContextData(GameplayContext), new StartingInputContextData(MenuContext)]);
-        using var editor = new EnvironmentViewModel(
+        using var editor = new SceneSettingsViewModel(
             inputContextSource: uri => uri == GameplayContext
                 ? new InputContextSource(IsProjectContext: true, DeclaredPriority: null)
                 : new InputContextSource(IsProjectContext: true, DeclaredPriority: 0));

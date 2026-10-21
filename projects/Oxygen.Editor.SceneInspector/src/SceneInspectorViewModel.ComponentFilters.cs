@@ -10,7 +10,7 @@ using Oxygen.Editor.World.Components;
 namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Owns component filtering without changing authored selection or properties.</summary>
-public sealed partial class SceneNodeEditorViewModel
+public sealed partial class SceneInspectorViewModel
 {
     private readonly HashSet<ComponentPropertyEditor> boundEditors = [];
     private SceneNode[] filterNodes = [];
@@ -78,7 +78,7 @@ public sealed partial class SceneNodeEditorViewModel
 
     private void RefreshEditorInputState()
     {
-        foreach (var editor in this.editorInstances.Values.Cast<ComponentPropertyEditor>().ToArray())
+        foreach (var editor in this.editorInstances.Values.ToArray())
         {
             if (this.boundEditors.Add(editor))
             {
@@ -112,7 +112,7 @@ public sealed partial class SceneNodeEditorViewModel
 
     private void ReconcileComponentFilters()
     {
-        var document = this.documentArea.ActiveDocument?.Id;
+        var document = this.documents.ActiveDocument?.Id;
         var selectedType = this.selectedComponentType;
         if (!ReferenceEquals(this.filterScene, this.activeScene) || this.filterDocument != document
             || this.filterNodes.Length != this.items.Count

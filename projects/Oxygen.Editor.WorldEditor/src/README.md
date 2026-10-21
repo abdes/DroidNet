@@ -149,7 +149,7 @@ projects/Oxygen.Editor.World/src/
 │   └── ProjectLayoutViewModel.cs          # Project tree implementation
 │
 ├── PropertiesEditor/                      # Property editing system
-│   ├── SceneNodeEditorViewModel.cs        # Main properties editor
+│   ├── SceneInspectorViewModel.cs        # Main properties editor
 │   ├── TransformViewModel.cs              # Transform component editor
 │   └── PropertiesExpander.cs              # Property display control
 │

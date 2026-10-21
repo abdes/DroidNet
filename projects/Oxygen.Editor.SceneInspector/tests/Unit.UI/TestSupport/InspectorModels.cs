@@ -39,7 +39,7 @@ internal static partial class InspectorModels
                 light.UpdateValues([fixture.Node]);
                 return light;
             case "Environment":
-                var environment = new EnvironmentViewModel(() => fixture.Authoring)
+                var environment = new SceneSettingsViewModel(() => fixture.Authoring)
                 {
                     IsExpanded = true,
                 };

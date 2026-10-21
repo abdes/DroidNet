@@ -31,8 +31,8 @@ internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceT
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Environment");
         _ = host.HasInspectorContent.Should().BeTrue();
-        var model = host.PropertyEditors.OfType<EnvironmentViewModel>().Single();
-        var view = new EnvironmentView
+        var model = host.PropertyEditors.OfType<SceneSettingsViewModel>().Single();
+        var view = new SceneSettingsView
         {
             ViewModel = model,
         };
@@ -80,7 +80,7 @@ internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceT
     {
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Environment");
-        var model = host.PropertyEditors.OfType<EnvironmentViewModel>().Single();
+        var model = host.PropertyEditors.OfType<SceneSettingsViewModel>().Single();
         var source = model.AtmosphereLights.SunOptions.Single(option => option.NodeId == fixture.Node.Id);
         var sources = new List<string>();
         fixture.Selection.SelectionChanged += (_, args) => sources.Add(args.Source);
@@ -106,7 +106,7 @@ internal sealed class SunDependenciesTests : DroidNet.Tests.VisualUserInterfaceT
         light.AtmosphereSlot = Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary;
         var originalAngularSize = light.AngularSizeRadians;
         using var host = fixture.CreateInspectorHost("Environment");
-        var model = host.PropertyEditors.OfType<EnvironmentViewModel>().Single();
+        var model = host.PropertyEditors.OfType<SceneSettingsViewModel>().Single();
         model.AtmosphereLights.PrimaryAtmosphereSource.AngularDiameterDegrees = 1;
         await model.AtmosphereLights.PrimaryAtmosphereSource.PendingEdits.ConfigureAwait(true);
         model.AtmosphereLights.ClearSunCommand.Execute(parameter: null);

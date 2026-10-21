@@ -37,7 +37,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
             "Test");
         _ = host.HasSelectionSummary.Should().BeTrue();
         _ = host.InspectorTitle.Should().Be("Grouping Summary");
-        _ = host.HasEnvironmentView.Should().BeFalse("a folder selection is not the scene context");
+        _ = host.HasSceneSettings.Should().BeFalse("a folder selection is not the scene context");
         _ = host.HasItems.Should().BeFalse("folder identities must not be reduced to node entities");
         _ = host.PropertyEditors.Should().BeEmpty();
         _ = host.SelectionSummaryText.Should().Contain("grouping");
@@ -74,10 +74,10 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
             fixture.TestScene.DocumentId,
             new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNodeId: null, PrimaryFolderId: null),
             "Test");
-        _ = host.HasEnvironmentView.Should().BeTrue();
+        _ = host.HasSceneSettings.Should().BeTrue();
         _ = host.HasSelectionSummary.Should().BeFalse();
         _ = host.InspectorTitle.Should().Be("Scene Inspector");
-        _ = host.PropertyEditors.Should().Contain(host.EnvironmentEditor);
+        _ = host.PropertyEditors.Should().Contain(host.SceneSettingsEditor);
         return Task.CompletedTask;
     });
 
@@ -90,7 +90,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var host = fixture.CreateInspectorHost("Transform");
         fixture.Select(fixture.Node);
         _ = host.HasSelectionSummary.Should().BeFalse();
-        _ = host.HasEnvironmentView.Should().BeFalse();
+        _ = host.HasSceneSettings.Should().BeFalse();
         _ = host.InspectorTitle.Should().Be("Component Inspector");
         _ = host.HasItems.Should().BeTrue();
         return Task.CompletedTask;
@@ -152,7 +152,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         var context = new SceneSelectionContext(SceneSelectionKind.Node, [missingNodeId], [], missingNodeId, PrimaryFolderId: null);
         fixture.Selection.Publish(fixture.TestScene.DocumentId, context, "Test");
 
-        _ = host.HasEnvironmentView.Should().BeFalse();
+        _ = host.HasSceneSettings.Should().BeFalse();
         _ = host.PropertyEditors.Should().BeEmpty();
         _ = host.HasSelectionNotice.Should().BeTrue();
         _ = host.SelectionSummaryText.Should().Contain("not available");
@@ -174,7 +174,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
 
         _ = host.SelectedNode.Should().BeSameAs(fixture.Node);
         _ = host.PropertyEditors.Should().NotBeEmpty();
-        _ = host.HasEnvironmentView.Should().BeFalse();
+        _ = host.HasSceneSettings.Should().BeFalse();
         _ = host.HasSelectionSummary.Should().BeFalse();
         return Task.CompletedTask;
     });

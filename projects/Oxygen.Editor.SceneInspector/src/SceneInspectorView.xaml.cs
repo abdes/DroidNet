@@ -16,15 +16,15 @@ namespace Oxygen.Editor.SceneInspector;
 /// <summary>
 ///     Represents the view for editing a scene node in the properties editor.
 /// </summary>
-[ViewModel(typeof(SceneNodeEditorViewModel))]
-public sealed partial class SceneNodeEditorView : UserControl
+[ViewModel(typeof(SceneInspectorViewModel))]
+public sealed partial class SceneInspectorView : UserControl
 {
-    private SceneNodeEditorViewModel? observedModel;
+    private SceneInspectorViewModel? observedModel;
 
     /// <summary>
-    ///     Initializes a new instance of the <see cref="SceneNodeEditorView" /> class.
+    ///     Initializes a new instance of the <see cref="SceneInspectorView" /> class.
     /// </summary>
-    public SceneNodeEditorView()
+    public SceneInspectorView()
     {
         this.InitializeComponent();
 
@@ -46,7 +46,7 @@ public sealed partial class SceneNodeEditorView : UserControl
     // never keeps a discarded view alive.
     private void OnPropertySectionLoaded(object sender, RoutedEventArgs args)
     {
-        if (sender is ContentPresenter { Content: IViewFor view, Tag: IDetailsSection model })
+        if (sender is ContentPresenter { Content: IViewFor view, Tag: InspectorSection model })
         {
             view.ViewModel = model;
         }
@@ -83,7 +83,7 @@ public sealed partial class SceneNodeEditorView : UserControl
 
     private void OnModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (string.Equals(args.PropertyName, nameof(SceneNodeEditorViewModel.SelectedComponentType), StringComparison.Ordinal))
+        if (string.Equals(args.PropertyName, nameof(SceneInspectorViewModel.SelectedComponentType), StringComparison.Ordinal))
         {
             _ = this.PropertyScroll.ChangeView(horizontalOffset: null, verticalOffset: 0, zoomFactor: null, disableAnimation: true);
         }

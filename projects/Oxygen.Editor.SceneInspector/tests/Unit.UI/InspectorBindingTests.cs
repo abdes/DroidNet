@@ -143,7 +143,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     [TestMethod]
     public Task AtmosphereLightsXamlRealizesItsNumericControls() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Environment", fixture),
-        static model => new AtmosphereLightsSectionView { ViewModel = ((EnvironmentViewModel)model).AtmosphereLights },
+        static model => new AtmosphereLightsSectionView { ViewModel = ((SceneSettingsViewModel)model).AtmosphereLights },
         static fixture => fixture.Node.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot = Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary,
         async view =>
         {
@@ -430,9 +430,9 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
     {
         using var first = new SceneAuthoringFixture();
         using var second = new SceneAuthoringFixture();
-        using var firstModel = (EnvironmentViewModel)CreateModel("Environment", first);
-        using var secondModel = (EnvironmentViewModel)CreateModel("Environment", second);
-        var view = new EnvironmentView { ViewModel = firstModel, Width = 420, Height = 780 };
+        using var firstModel = (SceneSettingsViewModel)CreateModel("Environment", first);
+        using var secondModel = (SceneSettingsViewModel)CreateModel("Environment", second);
+        var view = new SceneSettingsView { ViewModel = firstModel, Width = 420, Height = 780 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         view.ViewModel = secondModel;
         await WaitForRenderAsync().ConfigureAwait(true);
@@ -576,13 +576,13 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = number.NumberValue.Should().Be(before);
     });
 
-    private static async Task<(SceneAuthoringFixture fixture, EnvironmentViewModel model, AtmosphereLightsSectionView view)> LoadAtmosphereLightsSectionAsync(
+    private static async Task<(SceneAuthoringFixture fixture, SceneSettingsViewModel model, AtmosphereLightsSectionView view)> LoadAtmosphereLightsSectionAsync(
         Func<FrameworkElement, Task> loadContent,
         double width = 420)
     {
         var fixture = new SceneAuthoringFixture();
         fixture.Node.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot = Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary;
-        var model = (EnvironmentViewModel)CreateModel("Environment", fixture);
+        var model = (SceneSettingsViewModel)CreateModel("Environment", fixture);
         var view = new AtmosphereLightsSectionView { ViewModel = model.AtmosphereLights };
         var host = new Grid { Width = width, Height = 780, RequestedTheme = ElementTheme.Dark, Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Windows.UI.Color.FromArgb(255, 37, 40, 43)) };
         host.Resources.MergedDictionaries.Add(new ResourceDictionary { Source = new Uri("ms-appx:///Microsoft.UI.Xaml/DensityStyles/Compact.xaml") });

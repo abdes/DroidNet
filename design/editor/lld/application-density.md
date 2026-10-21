@@ -78,7 +78,7 @@ Terms used below:
 - **Compact pinned in the editor.** Three files merge WinUI Compact
   unconditionally, so no setting can turn it off:
   [SceneExplorerView.xaml](../../../projects/Oxygen.Editor.SceneExplorer/src/SceneExplorerView.xaml),
-  [SceneNodeEditorView.xaml](../../../projects/Oxygen.Editor.SceneInspector/src/SceneNodeEditorView.xaml)
+  [SceneInspectorView.xaml](../../../projects/Oxygen.Editor.SceneInspector/src/SceneInspectorView.xaml)
   and
   [SceneInspectorStyles.xaml](../../../projects/Oxygen.Editor.SceneInspector/src/SceneInspectorStyles.xaml).
   The editor's main panes therefore look Compact today.

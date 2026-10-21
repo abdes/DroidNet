@@ -36,7 +36,7 @@ internal static class InspectorControls
             return parentElement;
         }
 
-        if (view is EnvironmentView environment)
+        if (view is SceneSettingsView environment)
         {
             foreach (var section in new[] { "AtmosphereLights", "Backdrop", "SkyAtmosphere", "SkyLight", "Fog", "Exposure", "ToneMapping" })
             {
@@ -57,7 +57,7 @@ internal static class InspectorControls
         _ => typeof(TransformComponent),
     };
 
-    internal static ToggleButton ComponentButton(SceneNodeEditorView view, Type type) => view.FindDescendant<ToggleButton>(button => button.Tag is InspectorComponentFilter option && option.ComponentType == type)!;
+    internal static ToggleButton ComponentButton(SceneInspectorView view, Type type) => view.FindDescendant<ToggleButton>(button => button.Tag is InspectorComponentFilter option && option.ComponentType == type)!;
 
     internal static void Toggle(ToggleButton button) => ((IToggleProvider)new ToggleButtonAutomationPeer(button).GetPattern(PatternInterface.Toggle)).Toggle();
 
@@ -151,7 +151,7 @@ internal static class InspectorControls
         }
     }
 
-    internal static async Task<VectorBox> FindVisibleVectorAsync(EnvironmentView view, ScrollViewer scroller, string field)
+    internal static async Task<VectorBox> FindVisibleVectorAsync(SceneSettingsView view, ScrollViewer scroller, string field)
     {
         for (var step = 0; step <= 100; step++)
         {
@@ -297,16 +297,16 @@ internal static class InspectorControls
         }
     }
 
-    internal static bool MatchesInspector(IPropertyEditor<SceneNode> model, string kind) => kind switch
+    internal static bool MatchesInspector(InspectorSection model, string kind) => kind switch
     {
         "Camera" => model is PerspectiveCameraViewModel,
         "Light" => model is DirectionalLightViewModel,
-        "Environment" => model is EnvironmentViewModel,
+        "Environment" => model is SceneSettingsViewModel,
         "Transform" => model is TransformViewModel,
         _ => false,
     };
 
-    internal static UserControl CreateNumericView(IPropertyEditor<SceneNode> model) => model switch
+    internal static UserControl CreateNumericView(InspectorSection model) => model switch
     {
         PerspectiveCameraViewModel camera => new PerspectiveCameraView
         {
@@ -316,7 +316,7 @@ internal static class InspectorControls
         {
             ViewModel = light,
         },
-        EnvironmentViewModel environment => new EnvironmentView
+        SceneSettingsViewModel environment => new SceneSettingsView
         {
             ViewModel = environment,
         },
@@ -343,19 +343,19 @@ internal static class InspectorControls
         _ => throw new ArgumentException("Expected a numeric inspector.", nameof(model)),
     };
 
-    internal static Task PendingNumericEdits(IPropertyEditor<SceneNode> model) => model switch
+    internal static Task PendingNumericEdits(InspectorSection model) => model switch
     {
         TransformViewModel transform => transform.PendingEdits,
         PerspectiveCameraViewModel camera => camera.PendingEdits,
         DirectionalLightViewModel light => light.PendingEdits,
-        EnvironmentViewModel environment => environment.PendingEdits,
+        SceneSettingsViewModel environment => environment.PendingEdits,
         OrthographicCameraViewModel orthographic => orthographic.PendingEdits,
         LocalLightViewModel light => light.PendingEdits,
         NodeRenderingViewModel rendering => rendering.PendingEdits,
         _ => throw new ArgumentException("Expected a numeric inspector.", nameof(model)),
     };
 
-    internal static async Task<ComboBox> FindSunPickerAsync(EnvironmentView view, ScrollViewer scroller, EnvironmentViewModel model)
+    internal static async Task<ComboBox> FindSunPickerAsync(SceneSettingsView view, ScrollViewer scroller, SceneSettingsViewModel model)
     {
         for (var step = 0; step <= 40; step++)
         {

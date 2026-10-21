@@ -13,7 +13,7 @@ namespace Oxygen.Editor.Scenes.Edits.Hierarchy;
 /// </summary>
 /// <remarks>
 /// The composition follows the editor's established convention (see
-/// <c>DirectionalLightOrientation.WorldRotation</c>): a child's world transform is its local
+/// <see cref="Nodes.DirectionalLightOrientation"/>): a child's world transform is its local
 /// transform applied first, then its ancestors'. For row-vector matrices this is
 /// <c>world = local * parentWorld</c>; a node with <see cref="SceneNode.IgnoreParentTransform"/>
 /// set (or without a parent) has <c>world = local</c>. Local matrices are composed as

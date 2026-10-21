@@ -4,10 +4,10 @@
 
 using System.Collections.ObjectModel;
 using System.ComponentModel;
-using System.Diagnostics;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.SceneInspector.Presentation;
@@ -25,6 +25,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly IAssetFeed? assetProvider;
     private readonly IScheduler observerScheduler;
+    private readonly ILogger logger;
     private readonly List<AssetEntry> assets = [];
     private IDisposable? assetSubscription;
     private Scene? scene;
@@ -37,11 +38,14 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     /// <param name="assetProvider">The shared content catalog used by typed pickers.</param>
     /// <param name="observerScheduler">The scheduler used for catalog notifications.</param>
+    /// <param name="logger">Reports catalog failures.</param>
     internal SceneReferencesSectionViewModel(
         Func<SceneAuthoring?>? authoringProvider,
         IAssetFeed? assetProvider,
-        IScheduler observerScheduler)
+        IScheduler observerScheduler,
+        ILogger logger)
     {
+        this.logger = logger;
         this.authoringProvider = authoringProvider;
         this.assetProvider = assetProvider;
         this.observerScheduler = observerScheduler;
@@ -268,7 +272,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
             if (exception is not OperationCanceledException || !cancellationToken.IsCancellationRequested)
             {
                 this.SetCatalogNotice("Could not refresh the shared content catalog. " + exception.Message);
-                Debug.WriteLine($"[SceneReferencesSectionViewModel] Catalog refresh failed: {exception}");
+                this.LogCatalogRefreshFailed(exception);
             }
         }
     }
@@ -425,7 +429,7 @@ public sealed partial class SceneReferencesSectionViewModel : ObservableObject, 
     private void OnCatalogFeedError(Exception exception)
     {
         this.SetCatalogNotice("The shared content catalog could not be read. " + exception.Message);
-        Debug.WriteLine($"[SceneReferencesSectionViewModel] Catalog feed failed: {exception}");
+        this.LogCatalogFeedFailed(exception);
     }
 
     private void SetCatalogNotice(string value)

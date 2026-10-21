@@ -16,7 +16,7 @@ public sealed class EnvironmentSectionOwnershipTests
     public async Task SectionEdits_ShareOneSceneGestureAndCanonicalDiagnostics()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(() => fixture.Authoring);
+        using var model = new SceneSettingsViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         _ = model.Backdrop.EditOwner.Should().BeSameAs(model.EditOwner);
         _ = model.SkyAtmosphere.EditOwner.Should().BeSameAs(model.EditOwner);
@@ -40,7 +40,7 @@ public sealed class EnvironmentSectionOwnershipTests
     public async Task HiddenSections_RejectLateInputWithoutCreatingAnotherEditOwner()
     {
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(() => fixture.Authoring);
+        using var model = new SceneSettingsViewModel(() => fixture.Authoring);
         model.SetScene(fixture.Scene);
         var owner = model.EditOwner;
         var sky = model.SkyAtmosphere;

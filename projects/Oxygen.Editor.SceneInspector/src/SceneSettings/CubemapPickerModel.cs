@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.ObjectModel;
 using System.IO.Abstractions;
 using System.Reactive.Concurrency;
 using System.Reactive.Linq;

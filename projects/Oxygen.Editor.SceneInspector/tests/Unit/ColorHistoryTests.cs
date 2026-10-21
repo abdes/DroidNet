@@ -34,7 +34,7 @@ public sealed class ColorHistoryTests
     {
         using var fixture = new SceneAuthoringFixture();
         using var model = CreateColorModel(kind, fixture);
-        if (model is EnvironmentViewModel environment)
+        if (model is SceneSettingsViewModel environment)
         {
             environment.Backdrop.SetSolidColor(Vector3.One);
             await environment.PendingEdits.ConfigureAwait(true);
@@ -43,12 +43,12 @@ public sealed class ColorHistoryTests
         fixture.Document.History.Clear();
         var before = ReadSceneColor(fixture, kind);
         var owner = (IInspectorEditSessionOwner)model;
-        owner.BeginEditSession(model is EnvironmentViewModel ? "SolidColor" : "Color", NumberBoxEditInteractionKind.PointerDrag);
+        owner.BeginEditSession(model is SceneSettingsViewModel ? "SolidColor" : "Color", NumberBoxEditInteractionKind.PointerDrag);
         var preview = default(Vector3);
         for (var sample = 1; sample <= samples; sample++)
         {
             preview = new Vector3(0.15f * sample, 0.25f, 0.5f);
-            if (model is EnvironmentViewModel background)
+            if (model is SceneSettingsViewModel background)
             {
                 background.Backdrop.SetSolidColor(preview);
             }
@@ -75,13 +75,13 @@ public sealed class ColorHistoryTests
         }
     }
 
-    private static Task PendingColorEdits(IDisposable model) => model is EnvironmentViewModel environment ? environment.PendingEdits : ((DirectionalLightViewModel)model).PendingEdits;
+    private static Task PendingColorEdits(IDisposable model) => model is SceneSettingsViewModel environment ? environment.PendingEdits : ((DirectionalLightViewModel)model).PendingEdits;
 
     private static IDisposable CreateColorModel(string kind, SceneAuthoringFixture fixture)
     {
         if (string.Equals(kind, "Environment", StringComparison.Ordinal))
         {
-            var model = new EnvironmentViewModel(() => fixture.Authoring);
+            var model = new SceneSettingsViewModel(() => fixture.Authoring);
             model.SetScene(fixture.Scene);
             return model;
         }

@@ -7,7 +7,7 @@ using Oxygen.Editor.SceneInspector.Editing;
 namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Keeps component feedback discoverable independently of the visible property section.</summary>
-public sealed partial class SceneNodeEditorViewModel
+public sealed partial class SceneInspectorViewModel
 {
     private readonly List<(InspectorFieldDiagnostics source, EventHandler handler)> feedbackSubscriptions = [];
 

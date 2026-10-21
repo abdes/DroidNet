@@ -18,7 +18,7 @@ namespace Oxygen.Editor.SceneInspector.TestSupport;
 
 internal sealed partial class SceneAuthoringFixture
 {
-    public SceneNodeEditorViewModel CreateInspectorHost(string kind, bool realizeViews = false, Oxygen.Editor.Assets.IAssetFeed? assetProvider = null)
+    public SceneInspectorViewModel CreateInspectorHost(string kind, bool realizeViews = false, Oxygen.Editor.Assets.IAssetFeed? assetProvider = null)
     {
         if (!string.Equals(kind, "Environment", StringComparison.Ordinal))
         {
@@ -28,7 +28,7 @@ internal sealed partial class SceneAuthoringFixture
         var locator = new Mock<IViewLocator>();
         if (realizeViews)
         {
-            _ = locator.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is Oxygen.Editor.SceneInspector.Components.Geometry.GeometryViewModel ? new Oxygen.Editor.SceneInspector.Components.Geometry.GeometryView() : CreateNumericView((IPropertyEditor<SceneNode>)model));
+            _ = locator.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is Oxygen.Editor.SceneInspector.Components.Geometry.GeometryViewModel ? new Oxygen.Editor.SceneInspector.Components.Geometry.GeometryView() : CreateNumericView((InspectorSection)model));
         }
 
         var catalog = new Mock<Oxygen.Editor.Assets.IAssetFeed>();

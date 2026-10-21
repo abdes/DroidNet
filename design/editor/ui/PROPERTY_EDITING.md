@@ -128,9 +128,9 @@ accessing child namescopes to construct layout. Aerial Start realization,
 scrolling and focus live in the Sky section, with acknowledgement only after
 focus succeeds.
 
-`EnvironmentViewModel` owns scene identity and five stable child models:
-Background, Sky Atmosphere, Exposure, Atmosphere Lights and Post Processing.
-Ordinary sections borrow one `SceneEnvironmentEditOwner` and its canonical
+`SceneSettingsViewModel` owns scene identity and its stable section models:
+Backdrop, Sky Light, Sky Atmosphere, Fog, Exposure, Post Processing, Atmosphere
+Lights, Scene References and Play. The environment sections borrow one `SceneEnvironmentEditOwner` and its canonical
 diagnostics/coordinator. Atmosphere Lights owns source-role observation, initial
 reset snapshots, the role-assignment coordinator and the two canonical Light
 models. Exposure owns the scheduled texture feed and curve editor. Child views

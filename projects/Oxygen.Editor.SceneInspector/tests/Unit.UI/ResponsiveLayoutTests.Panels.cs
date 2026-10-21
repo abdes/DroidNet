@@ -61,7 +61,7 @@ internal sealed partial class ResponsiveLayoutTests
             fixture.Select(fixture.Node, second);
         }
 
-        var view = new SceneNodeEditorView
+        var view = new SceneInspectorView
         {
             ViewModel = model,
             Width = width,
@@ -128,7 +128,7 @@ internal sealed partial class ResponsiveLayoutTests
             fixture.Select(fixture.Node, second, third);
         }
 
-        var view = new SceneNodeEditorView
+        var view = new SceneInspectorView
         {
             ViewModel = model,
             Width = 360,
@@ -143,7 +143,7 @@ internal sealed partial class ResponsiveLayoutTests
         _ = model.ComponentFilters.Single(option => option.ComponentType == typeof(GeometryComponent)).IsAvailable.Should().BeTrue();
     });
 
-    private static async Task AssertExtraHeightGoesToPropertiesAsync(SceneNodeEditorView view, Border captureHost, Border header, ScrollViewer properties)
+    private static async Task AssertExtraHeightGoesToPropertiesAsync(SceneInspectorView view, Border captureHost, Border header, ScrollViewer properties)
     {
         if (view.Height > 300)
         {
@@ -157,7 +157,7 @@ internal sealed partial class ResponsiveLayoutTests
         }
     }
 
-    private static async Task AssertScaledComponentSelectionAsync(SceneNodeEditorView view, bool multiple)
+    private static async Task AssertScaledComponentSelectionAsync(SceneInspectorView view, bool multiple)
     {
         var editors = view.ViewModel!.PropertyEditors.ToArray();
         Toggle(ComponentButton(view, typeof(GeometryComponent)));
@@ -170,7 +170,7 @@ internal sealed partial class ResponsiveLayoutTests
         _ = view.ViewModel!.IsAllComponentsSelected.Should().BeTrue();
     }
 
-    private static void AssertAllToggle(SceneNodeEditorView view, bool multiple)
+    private static void AssertAllToggle(SceneInspectorView view, bool multiple)
     {
         var all = multiple ? (ToolBarToggleButton)view.FindName("MultiAllComponentsButton") : (ToolBarToggleButton)((SceneNodeDetailsView)view.FindName("NodeDetails")).FindName("AllComponentsButton");
         var toolbar = all.FindAscendant<ToolBar>()!;

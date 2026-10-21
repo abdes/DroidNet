@@ -51,7 +51,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
             TestProject.Create(new MockFileSystem()).Context,
             fixture.Scene.Id).ConfigureAwait(true);
         using var model = fixture.CreateInspectorHost("Light", realizeViews: true);
-        var view = new SceneNodeEditorView { ViewModel = model, Width = 420, Height = 600 };
+        var view = new SceneInspectorView { ViewModel = model, Width = 420, Height = 600 };
         await LoadTestContentAsync(view).ConfigureAwait(true);
 
         var editor = model.PropertyEditors.OfType<DirectionalLightViewModel>().Single();
@@ -74,7 +74,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         using var fixture = new SceneAuthoringFixture();
         MakeGeometryOnly(fixture);
         using var model = fixture.CreateInspectorHost("Transform", realizeViews: true);
-        var view = new SceneNodeEditorView
+        var view = new SceneInspectorView
         {
             ViewModel = model,
             Width = 360,
@@ -145,7 +145,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         _ = model.ComponentFilters.Should().BeEmpty();
-        _ = model.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<EnvironmentViewModel>();
+        _ = model.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<SceneSettingsViewModel>();
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     });
 
@@ -183,7 +183,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         using var model = fixture.CreateInspectorHost("Camera", realizeViews: true);
         model.SelectComponentFilter(typeof(PerspectiveCamera));
         var camera = (PerspectiveCameraViewModel)model.PropertyEditors.Single();
-        var view = new SceneNodeEditorView
+        var view = new SceneInspectorView
         {
             ViewModel = model,
             Width = 360,
@@ -217,7 +217,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         };
         _ = fixture.Node.AddComponent(point);
         using var model = fixture.CreateInspectorHost("Transform", realizeViews: true);
-        var view = new SceneNodeEditorView
+        var view = new SceneInspectorView
         {
             ViewModel = model,
             Width = 360,
@@ -276,7 +276,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
     {
         using var fixture = new SceneAuthoringFixture();
         using var model = fixture.CreateInspectorHost("Camera", realizeViews: true);
-        var view = new SceneNodeEditorView
+        var view = new SceneInspectorView
         {
             ViewModel = model,
             Width = 360,
@@ -306,7 +306,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         var component = fixture.Node.Components.OfType<GeometryComponent>().Single();
         var header = new SceneNodeDetailsView
         {
-            ComponentEdits = model,
+            NodeEdits = model,
             IsAllComponentsSelected = false,
         };
         if (selectedFirst)

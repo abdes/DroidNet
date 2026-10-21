@@ -18,7 +18,6 @@ using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Components.Scripting;

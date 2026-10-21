@@ -23,7 +23,7 @@ public sealed class SceneInspectorModule : IFeatureModule
     public const string PanelId = "props";
 
     /// <inheritdoc />
-    public IReadOnlyList<PanelDescriptor> Panels { get; } = [new(PanelId, "Properties", typeof(SceneNodeEditorViewModel))];
+    public IReadOnlyList<PanelDescriptor> Panels { get; } = [new(PanelId, "Properties", typeof(SceneInspectorViewModel))];
 
     /// <inheritdoc />
     public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
@@ -32,8 +32,8 @@ public sealed class SceneInspectorModule : IFeatureModule
     public void RegisterWindowServices(IContainer window)
     {
         ArgumentNullException.ThrowIfNull(window);
-        window.Register<SceneNodeEditorViewModel>(Reuse.Transient);
-        window.Register<SceneNodeEditorView>(Reuse.Transient);
+        window.Register<SceneInspectorViewModel>(Reuse.Transient);
+        window.Register<SceneInspectorView>(Reuse.Transient);
 
         // The views the panel's view locator resolves for its editors; the panel creates the editors themselves.
         window.Register<TransformView>(Reuse.Transient);
@@ -45,7 +45,7 @@ public sealed class SceneInspectorModule : IFeatureModule
         window.Register<LocalFogVolumeView>(Reuse.Transient);
         window.Register<ScriptingView>(Reuse.Transient);
         window.Register<NodeRenderingView>(Reuse.Transient);
-        window.Register<EnvironmentView>(Reuse.Transient);
+        window.Register<SceneSettingsView>(Reuse.Transient);
         window.Register<GeometryView>(Reuse.Transient);
     }
 

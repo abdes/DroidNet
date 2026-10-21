@@ -11,7 +11,6 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
-using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -26,7 +25,7 @@ namespace Oxygen.Editor.SceneInspector;
 /// <remarks>
 /// The view model wires to the <c>SceneNode.PropertyChanged</c> events of the
 /// current <see cref="Node"/> to keep UI-bound properties (for example <see cref="Name"/>)
-/// in sync. Component add/remove requests go to <see cref="ComponentEdits"/>, so that the editor host performs the
+/// in sync. Renames and component add/remove requests go to <see cref="NodeEdits"/>, so that the editor host performs the
 /// actual mutations and records them in the scene's history.
 /// </remarks>
 public sealed partial class SceneNodeDetailsViewModel : ObservableObject
@@ -52,8 +51,8 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         this.LogConstructed(this.dispatcher is not null);
     }
 
-    /// <summary>Gets or sets what adds and removes the node's components, typically the parent inspector.</summary>
-    public ISceneComponentEdits? ComponentEdits { get; set; }
+    /// <summary>Gets or sets what renames the node and adds and removes its components, typically the parent inspector.</summary>
+    public ISceneNodeEdits? NodeEdits { get; set; }
 
     /// <summary>
     /// Gets or sets the <see cref="ILoggerFactory"/> used by this view-model.
@@ -187,19 +186,15 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             _ => null,
         };
 
+    // The scene's authoring renames the node, as one step of its history; a refused name shows the node's own again.
     partial void OnNameChanged(string? value)
     {
-        if (this.doNotPropagateName)
+        if (this.doNotPropagateName || this.Node is not { } node || value is null || string.Equals(value, node.Name, StringComparison.Ordinal))
         {
             return;
         }
 
-        if (this.Node is null || value is null)
-        {
-            return;
-        }
-
-        this.Node.Name = value;
+        _ = this.RenameAsync(node, value);
     }
 
     partial void OnSelectedComponentChanged(GameComponent? value)
@@ -272,7 +267,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             return;
         }
 
-        _ = this.ComponentEdits?.RemoveComponentAsync(this.Node, comp);
+        _ = this.NodeEdits?.RemoveComponentAsync(this.Node, comp);
     }
 
     private bool CanDeleteComponent(GameComponent? comp) => this.Node is not null && this.IsCurrentComponent(comp) && comp?.IsLocked == false;
@@ -298,7 +293,22 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         }
 
         // The inspector, the single mutator of the node, performs the add.
-        _ = this.ComponentEdits?.AddComponentAsync(this.Node, kind);
+        _ = this.NodeEdits?.AddComponentAsync(this.Node, kind);
+    }
+
+    private async Task RenameAsync(SceneNode node, string name)
+    {
+        if (this.NodeEdits is { } edits && await edits.RenameAsync(node, name).ConfigureAwait(true))
+        {
+            return;
+        }
+
+        if (ReferenceEquals(this.Node, node))
+        {
+            this.doNotPropagateName = true;
+            this.Name = node.Name;
+            this.doNotPropagateName = false;
+        }
     }
 
     private void SyncFromNode()

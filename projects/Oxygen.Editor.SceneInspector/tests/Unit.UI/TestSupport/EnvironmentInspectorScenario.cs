@@ -10,21 +10,21 @@ using Oxygen.Editor.SceneInspector.SceneSettings;
 
 namespace Oxygen.Editor.SceneInspector.TestSupport;
 
-// Drives an EnvironmentView inspector through fixture, model, view and the search/scope chrome.
-// - Search filtering is synchronous: EnvironmentView registers a TextBox.Text property-changed
+// Drives an SceneSettingsView inspector through fixture, model, view and the search/scope chrome.
+// - Search filtering is synchronous: SceneSettingsView registers a TextBox.Text property-changed
 //   callback on ScenePropertySearchBox that calls ApplyScenePropertyFilter directly, so section
 //   and card Visibility can be asserted immediately after setting Text; SearchAsync's single
 //   render-pass wait exists for ItemsRepeater realization coherence before measuring or
 //   revealing an item, not for visibility correctness.
 // - SelectScopeAsync replaces the magic SelectedIndex values with the labels declared in
-//   EnvironmentView.xaml (0=All, 1=Environment, 2=Post-processing, 3=References).
+//   SceneSettingsView.xaml (0=All, 1=Environment, 2=Post-processing, 3=References).
 // - loadContent is a delegate because LoadTestContentAsync is protected static on the UI test
 //   base class and unreachable from testsupport; tests pass their method group.
 internal sealed class EnvironmentInspectorScenario : IDisposable
 {
     private bool disposed;
 
-    private EnvironmentInspectorScenario(SceneAuthoringFixture fixture, EnvironmentViewModel model, EnvironmentView view)
+    private EnvironmentInspectorScenario(SceneAuthoringFixture fixture, SceneSettingsViewModel model, SceneSettingsView view)
     {
         this.Fixture = fixture;
         this.Model = model;
@@ -33,9 +33,9 @@ internal sealed class EnvironmentInspectorScenario : IDisposable
 
     internal SceneAuthoringFixture Fixture { get; }
 
-    internal EnvironmentViewModel Model { get; }
+    internal SceneSettingsViewModel Model { get; }
 
-    internal EnvironmentView View { get; }
+    internal SceneSettingsView View { get; }
 
     internal static async Task<EnvironmentInspectorScenario> LoadAsync(
         Func<FrameworkElement, Task> loadContent,
@@ -44,17 +44,17 @@ internal sealed class EnvironmentInspectorScenario : IDisposable
         ElementTheme theme = ElementTheme.Default,
         ScenarioHost host = ScenarioHost.Grid,
         Action<SceneAuthoringFixture>? prepareFixture = null,
-        Func<EnvironmentViewModel, Task>? prepareModel = null)
+        Func<SceneSettingsViewModel, Task>? prepareModel = null)
     {
         var fixture = new SceneAuthoringFixture();
         prepareFixture?.Invoke(fixture);
-        var model = (EnvironmentViewModel)InspectorModels.CreateModel("Environment", fixture);
+        var model = (SceneSettingsViewModel)InspectorModels.CreateModel("Environment", fixture);
         if (prepareModel is not null)
         {
             await prepareModel(model).ConfigureAwait(true);
         }
 
-        var view = new EnvironmentView { ViewModel = model };
+        var view = new SceneSettingsView { ViewModel = model };
         var content = host switch
         {
             ScenarioHost.Scroll => Sized(new ScrollViewer { Content = view, VerticalScrollBarVisibility = ScrollBarVisibility.Auto }, width, height),
@@ -145,7 +145,7 @@ internal sealed class EnvironmentInspectorScenario : IDisposable
         return element;
     }
 
-    private static Grid LoadedGrid(EnvironmentView view, double? width, double? height, ElementTheme theme)
+    private static Grid LoadedGrid(SceneSettingsView view, double? width, double? height, ElementTheme theme)
     {
         var grid = new Grid();
         if (width.HasValue)

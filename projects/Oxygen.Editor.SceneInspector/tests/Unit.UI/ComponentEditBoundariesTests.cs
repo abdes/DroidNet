@@ -45,7 +45,7 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
         var type = FeedbackType(kind);
         host.SelectComponentFilter(type);
         var editor = host.PropertyEditors.Single();
-        var view = new SceneNodeEditorView
+        var view = new SceneInspectorView
         {
             ViewModel = host,
             Width = 450,
@@ -98,7 +98,7 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
         using var host = fixture.CreateInspectorHost("Transform", realizeViews: true);
         host.SelectComponentFilter(typeof(TransformComponent));
         var transform = host.PropertyEditors.OfType<TransformViewModel>().Single();
-        var view = new SceneNodeEditorView
+        var view = new SceneInspectorView
         {
             ViewModel = host,
             Width = 450,

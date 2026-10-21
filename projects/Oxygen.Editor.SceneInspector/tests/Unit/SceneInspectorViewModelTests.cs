@@ -30,7 +30,7 @@ namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
 [TestCategory("Inspector")]
-internal sealed class SceneNodeEditorViewModelTests
+internal sealed class SceneInspectorViewModelTests
 {
     public TestContext TestContext { get; set; }
 
@@ -151,7 +151,7 @@ internal sealed class SceneNodeEditorViewModelTests
         _ = testScene.Document.History.UndoStack.Should().ContainSingle();
     }
 
-    private static SceneNodeEditorViewModel CreateSut(
+    private static SceneInspectorViewModel CreateSut(
         IScenePreview scenePreview,
         FakeMaterialSlotProvider slots,
         TestScene testScene,
@@ -170,7 +170,7 @@ internal sealed class SceneNodeEditorViewModelTests
         var selectionService = new SceneSelectionService();
         selectionService.SetSelection(testScene.DocumentId, nodes, "Test");
 
-        return new SceneNodeEditorViewModel(
+        return new SceneInspectorViewModel(
             new HostingContext
             {
                 Dispatcher = null!,

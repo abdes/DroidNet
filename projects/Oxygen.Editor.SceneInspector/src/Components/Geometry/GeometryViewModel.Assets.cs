@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using Oxygen.Editor.Assets;
 using Oxygen.Managed.Core;
 
@@ -17,7 +16,7 @@ public sealed partial class GeometryViewModel
     {
         this.assetChangesSubscription = this.assetProvider.Items.Subscribe(
             items => this.DispatchOnUi(() => this.ApplySharedAssets(items)),
-            exception => Debug.WriteLine($"[GeometryViewModel] Shared asset status failed: {exception}"));
+            this.LogAssetFeedFailed);
         _ = this.RefreshSharedAssetsAsync();
     }
 
@@ -29,7 +28,7 @@ public sealed partial class GeometryViewModel
         }
         catch (Exception exception) when (exception is IOException or UnauthorizedAccessException or InvalidDataException or ObjectDisposedException or OperationCanceledException)
         {
-            Debug.WriteLine($"[GeometryViewModel] Shared asset refresh failed: {exception}");
+            this.LogAssetRefreshFailed(exception);
         }
     }
 

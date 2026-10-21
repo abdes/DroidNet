@@ -26,7 +26,7 @@ public sealed class EnvironmentSchedulingTests
         var scheduler = new HistoricalScheduler();
         var provider = CreateProvider(source);
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(assetProvider: provider.Object, observerScheduler: scheduler);
+        using var model = new SceneSettingsViewModel(assetProvider: provider.Object, observerScheduler: scheduler);
         model.SetScene(fixture.Scene);
         var deliveryThreads = new List<int>();
         model.Exposure.MeteringMaskChoices.Groups.CollectionChanged += (_, _) => deliveryThreads.Add(System.Environment.CurrentManagedThreadId);
@@ -56,7 +56,7 @@ public sealed class EnvironmentSchedulingTests
         var scheduler = new HistoricalScheduler();
         var provider = CreateProvider(source);
         using var fixture = new SceneAuthoringFixture();
-        var model = new EnvironmentViewModel(assetProvider: provider.Object, observerScheduler: scheduler);
+        var model = new SceneSettingsViewModel(assetProvider: provider.Object, observerScheduler: scheduler);
         model.SetScene(fixture.Scene);
         source.OnNext([CreateTexture("Queued")]);
 
@@ -74,7 +74,7 @@ public sealed class EnvironmentSchedulingTests
         using var source = new Subject<IReadOnlyList<AssetEntry>>();
         var provider = CreateProvider(source);
         using var fixture = new SceneAuthoringFixture();
-        using var model = new EnvironmentViewModel(assetProvider: provider.Object);
+        using var model = new SceneSettingsViewModel(assetProvider: provider.Object);
         model.SetScene(fixture.Scene);
 
         source.OnNext([CreateTexture("Synchronous")]);
@@ -83,7 +83,7 @@ public sealed class EnvironmentSchedulingTests
         _ = MaskRows(model)[0].Choice.Name.Should().Be("Synchronous");
     }
 
-    private static IReadOnlyList<AssetChoiceRow> MaskRows(EnvironmentViewModel model)
+    private static IReadOnlyList<AssetChoiceRow> MaskRows(SceneSettingsViewModel model)
         => [.. model.Exposure.MeteringMaskChoices.Groups.SelectMany(static group => group.Rows)];
 
     private static Mock<IAssetFeed> CreateProvider(IObservable<IReadOnlyList<AssetEntry>> items)

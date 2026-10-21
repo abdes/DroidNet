@@ -42,7 +42,7 @@ internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfac
         RejectComponentValue(editor);
         await this.WaitForFeedbackAsync(editor).ConfigureAwait(true);
         var message = editor.ValidationFeedback!.Summary;
-        var view = new SceneNodeEditorView
+        var view = new SceneInspectorView
         {
             ViewModel = host,
             Width = 360,
@@ -131,7 +131,7 @@ internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfac
         using var host = fixture.CreateInspectorHost("Camera", realizeViews: true);
         host.SelectComponentFilter(typeof(PerspectiveCamera));
         var camera = host.PropertyEditors.OfType<PerspectiveCameraViewModel>().Single();
-        var view = new SceneNodeEditorView
+        var view = new SceneInspectorView
         {
             ViewModel = host,
             Width = 360,

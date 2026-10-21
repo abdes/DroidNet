@@ -5,6 +5,8 @@
 using System.ComponentModel;
 using System.Reactive.Concurrency;
 using DroidNet.Controls;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.LivePreview.Scenes;
@@ -18,13 +20,13 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.SceneInspector.SceneSettings;
 
 /// <summary>Owns scene identity, shared edit lifetime and parent-owned section composition.</summary>
-public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner
+public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposable, IInspectorEditSessionOwner
 {
     private readonly Func<Scene, CancellationToken, Task<SkyLightObservation?>>? observeEnvironment;
     private Scene? scene;
     private bool disposed;
 
-    /// <summary>Initializes a new instance of the <see cref="EnvironmentViewModel"/> class.</summary>
+    /// <summary>Initializes a new instance of the <see cref="SceneSettingsViewModel"/> class.</summary>
     /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     /// <param name="assetProvider">The shared content catalog.</param>
     /// <param name="inspectSceneNode">The existing hierarchy navigation operation.</param>
@@ -35,7 +37,8 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
     /// <param name="projects">The active project, whose files hold its texture descriptors; with the catalog, it lists
     /// the cube textures.</param>
     /// <param name="inputSources">The project's input sources, whose changes the Play section follows.</param>
-    public EnvironmentViewModel(
+    /// <param name="loggerFactory">Creates the loggers that report catalog failures.</param>
+    public SceneSettingsViewModel(
         Func<SceneAuthoring?>? authoringProvider = null,
         IAssetFeed? assetProvider = null,
         Func<NodeId, Task>? inspectSceneNode = null,
@@ -44,8 +47,10 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         Func<AssetPath, InputContextSource>? inputContextSource = null,
         Func<AssetPath, Task>? revealAsset = null,
         IProjectContextService? projects = null,
-        IInputSources? inputSources = null)
+        IInputSources? inputSources = null,
+        ILoggerFactory? loggerFactory = null)
     {
+        var loggers = loggerFactory ?? NullLoggerFactory.Instance;
         this.observeEnvironment = observeEnvironment;
         this.EditOwner = new(authoringProvider, this.RefreshFromScene, this.ValidationFeedback);
         var scheduler = observerScheduler ?? ImmediateScheduler.Instance;
@@ -54,10 +59,10 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         this.SkyLight = new(this.EditOwner, cubeTextures, scheduler);
         this.SkyAtmosphere = new(this.EditOwner);
         this.Fog = new(this.EditOwner);
-        this.Exposure = new(this.EditOwner, assetProvider, observerScheduler ?? ImmediateScheduler.Instance);
+        this.Exposure = new(this.EditOwner, assetProvider, observerScheduler ?? ImmediateScheduler.Instance, loggers.CreateLogger<ExposureSectionViewModel>());
         this.PostProcessing = new(this.EditOwner);
         this.AtmosphereLights = new(this.EditOwner, authoringProvider, inspectSceneNode);
-        this.SceneReferences = new(authoringProvider, assetProvider, observerScheduler ?? ImmediateScheduler.Instance);
+        this.SceneReferences = new(authoringProvider, assetProvider, observerScheduler ?? ImmediateScheduler.Instance, loggers.CreateLogger<SceneReferencesSectionViewModel>());
         this.Play = new(authoringProvider, assetProvider, scheduler, inputContextSource, inspectSceneNode, revealAsset, inputSources);
     }
 
@@ -146,18 +151,8 @@ public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDis
         this.RefreshFromScene();
     }
 
-    /// <inheritdoc />
-    public override void UpdateValues(ICollection<SceneNode> items)
-    {
-        if (items.Count > 0)
-        {
-            this.SetScene(value: null);
-        }
-        else
-        {
-            this.RefreshFromScene();
-        }
-    }
+    /// <summary>Shows the bound scene's current values again.</summary>
+    internal void Refresh() => this.RefreshFromScene();
 
     /// <inheritdoc />
     public void BeginEditSession(string field, NumberBoxEditInteractionKind interaction) => this.EditOwner.BeginEditSession(field, interaction);

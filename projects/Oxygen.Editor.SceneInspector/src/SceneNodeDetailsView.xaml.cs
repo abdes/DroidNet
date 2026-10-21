@@ -35,13 +35,13 @@ public sealed partial class SceneNodeDetailsView : UserControl
         new PropertyMetadata(defaultValue: null, OnNodeChanged));
 
     /// <summary>
-    /// Identifies the <see cref="ComponentEdits"/> dependency property.
+    /// Identifies the <see cref="NodeEdits"/> dependency property.
     /// </summary>
-    public static readonly DependencyProperty ComponentEditsProperty = DependencyProperty.Register(
-        nameof(ComponentEdits),
-        typeof(ISceneComponentEdits),
+    public static readonly DependencyProperty NodeEditsProperty = DependencyProperty.Register(
+        nameof(NodeEdits),
+        typeof(ISceneNodeEdits),
         typeof(SceneNodeDetailsView),
-        new PropertyMetadata(defaultValue: null, OnComponentEditsChanged));
+        new PropertyMetadata(defaultValue: null, OnNodeEditsChanged));
 
     /// <summary>
     /// Identifies the <see cref="LoggerFactory"/> dependency property.
@@ -61,7 +61,7 @@ public sealed partial class SceneNodeDetailsView : UserControl
         this.InitializeComponent();
 
         this.ViewModel.Node = this.Node;
-        this.ViewModel.ComponentEdits = this.ComponentEdits;
+        this.ViewModel.NodeEdits = this.NodeEdits;
         this.ViewModel.LoggerFactory = this.LoggerFactory;
     }
 
@@ -93,12 +93,12 @@ public sealed partial class SceneNodeDetailsView : UserControl
 
     /// <summary>
     /// Gets or sets what adds and removes the node's components. Typically bound to the parent
-    /// <see cref="SceneNodeEditorViewModel"/>, so each change is one step of the scene's history.
+    /// <see cref="SceneInspectorViewModel"/>, so each change is one step of the scene's history.
     /// </summary>
-    public ISceneComponentEdits? ComponentEdits
+    public ISceneNodeEdits? NodeEdits
     {
-        get => (ISceneComponentEdits?)this.GetValue(ComponentEditsProperty);
-        set => this.SetValue(ComponentEditsProperty, value);
+        get => (ISceneNodeEdits?)this.GetValue(NodeEditsProperty);
+        set => this.SetValue(NodeEditsProperty, value);
     }
 
     /// <summary>
@@ -146,14 +146,14 @@ public sealed partial class SceneNodeDetailsView : UserControl
         view.SyncSelectedComponent();
     }
 
-    private static void OnComponentEditsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
+    private static void OnNodeEditsChanged(DependencyObject d, DependencyPropertyChangedEventArgs e)
     {
         if (d is not SceneNodeDetailsView view)
         {
             return;
         }
 
-        view.ViewModel!.ComponentEdits = (ISceneComponentEdits?)e.NewValue;
+        view.ViewModel!.NodeEdits = (ISceneNodeEdits?)e.NewValue;
     }
 
     private static void OnSelectedComponentChanged(DependencyObject sender, DependencyPropertyChangedEventArgs args)

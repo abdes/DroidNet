@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.SceneInspector.SceneNodeEditorView"
+    x:Class="Oxygen.Editor.SceneInspector.SceneInspectorView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
@@ -75,11 +75,11 @@
                         <local:SceneNodeDetailsView
                             x:Name="NodeDetails"
                             AllComponentsRequested="OnAllComponentsRequested"
-                            ComponentEdits="{x:Bind ViewModel, Mode=OneWay}"
                             IsAllComponentsSelected="{x:Bind ViewModel.IsAllComponentsSelected, Mode=OneWay}"
                             IsEnabled="{x:Bind ViewModel.CanEditSelectedNodes, Mode=OneWay}"
                             LoggerFactory="{x:Bind ViewModel.LoggerFactory}"
                             Node="{x:Bind ViewModel.SelectedNode, Mode=OneWay}"
+                            NodeEdits="{x:Bind ViewModel, Mode=OneWay}"
                             SelectedComponent="{x:Bind ViewModel.SelectedComponent, Mode=OneWay}"
                             Visibility="{x:Bind ViewModel.IsSingleItemSelected, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
                         <Grid MinHeight="32" Visibility="{x:Bind ViewModel.HasMultipleItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
@@ -208,7 +208,7 @@
                         </ItemsPanelTemplate>
                     </ItemsControl.ItemsPanel>
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="local:IDetailsSection">
+                        <DataTemplate x:DataType="local:InspectorSection">
                             <!--  Each section fills the inspector's width; sized to its content, a section's width would follow its own layout.  -->
                             <ContentPresenter
                                 HorizontalContentAlignment="Stretch"
@@ -229,10 +229,10 @@
                 Text="{x:Bind ViewModel.SelectionSummaryText, Mode=OneWay}"
                 TextWrapping="Wrap"
                 Visibility="{x:Bind ViewModel.HasSelectionNotice, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
-            <scenesettings:EnvironmentView
+            <scenesettings:SceneSettingsView
                 Grid.Row="4"
-                ViewModel="{x:Bind ViewModel.EnvironmentEditor}"
-                Visibility="{x:Bind ViewModel.HasEnvironmentView, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
+                ViewModel="{x:Bind ViewModel.SceneSettingsEditor}"
+                Visibility="{x:Bind ViewModel.HasSceneSettings, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}" />
         </Grid>
     </Grid>
 </UserControl>
