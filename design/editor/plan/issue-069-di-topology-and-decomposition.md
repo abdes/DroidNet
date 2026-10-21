@@ -705,24 +705,52 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   process stays up. If WinAppSDK ends the process, stop and raise the shutdown
   policy before continuing.
 
-### Phase 5: Docking, windows, placement, panels
+### Phase 5: Documents across windows, panels in one
 
-- **S5.1** Docking per `IDocker` (registries, id counter, messenger), no
-  `Dockable.FromId` in editor code, dynamic workspace window targets. Docking
-  library tests first.
-- **S5.2** `IRetainedViewModel` in Routing, Aura and Router, with tests.
-- **S5.3** In the Shell: window scope factory, window registry, placement over
-  the new window kinds, layout store; the document service receives resolved
-  requests. `DocumentAreaView` stops being a singleton view. Scope disposal,
-  fire-and-forget from synchronous `Dispose` since S2.3, becomes awaited by the
-  window's close before S5.4 gives scopes async disposables. The window scope
-  factory's tests cover window and panel activation.
-- **S5.4** Panel registry and `IPanelHost`, then the six panels one commit each,
-  Content Explorer first; `AssetsView` stops being a singleton view.
-- **S5.5** Floating-window host proving the move contract.
-- Gate: the spec's Phase 5 tests; the reviewer validates a second window and a
-  moved panel in the editor. Visible UI stays uncommitted until the reviewer
-  accepts it.
+Rescoped on 2026-10-21 with the owner. The editor has one workspace window, and
+no requirement or design yet asks for panels in several windows; that work is
+[#88](https://github.com/abdes/DroidNet/issues/88). Documents, however, already
+offer tear-out: Aura's tab drag is live in the editor (`WithDrag`) and the
+Shell refuses every detach, waiting for document windows. Phase 5 makes
+document tear-out and re-attach real, keeps panels in the workspace window but
+retained across close and reopen, and makes project switching safe for the
+docking state.
+
+- **S5.1 Docking per docker.** The dockable and dock registries, the dock id
+  counter and the `DockPanelViewModel` messenger move behind `IDocker`, and
+  `Dockable.FromId` and `Dockable.All` leave editor code. Panel ids are fixed
+  (`log`, `se` and so on), and on a project switch the router activates the new
+  workspace before the old window closes, so process-wide registries collide.
+  Docking library tests first; an editor test switches projects with both
+  workspaces alive.
+- **S5.2 Retained panels in the workspace window.** `IRetainedViewModel` in
+  Routing, Aura and Router, with tests. A session panel registry owns each
+  panel's view model: closing a panel destroys its view and dockable, keeps its
+  view model and state, and `ShowPanelAsync` recreates a closed panel's
+  dockable from its route and re-attaches the retained view model (the View
+  menu of ED-M09A reopens panels through it). `AssetsView` stops being a
+  singleton view. Panels never move between windows.
+- **S5.3 Document windows.** Tearing a document tab out opens a document window
+  (Aura's Document category) hosting a document area: tabs only, no docks.
+  Document view models and histories stay in the session; only the view is
+  recreated in the target window, and the Scene Editor's viewports release
+  their surfaces in the old window and acquire them on the new window's panel.
+  Dropping a tab on another window's tab strip moves it there through
+  `AttachDocumentAsync`. A session window registry lets document requests
+  resolve to their window instead of being broadcast and filtered. Dialogs and
+  focus find their window at call time. Closing a document window closes its
+  documents with the usual unsaved prompt, and Cancel keeps it open (owner's
+  decision). `DocumentAreaView` is created per window, and scope disposal,
+  fire-and-forget from synchronous `Dispose` since S2.3, is awaited by the
+  window's close.
+- **S5.4 Lifetime tests.** `DocumentAreaViewModel` view switching (unit), a
+  viewport's unload, reload and re-attach (unit), a document moved between
+  windows with the native surface count checked (integration), closing a window
+  that holds a dirty document, and window activation.
+- Gate: those tests, and in the running editor: tear a scene tab out, edit and
+  undo there, drag it back, close a document window holding a dirty document,
+  close and reopen a panel with its state intact, and switch projects. Visible
+  UI stays uncommitted until the reviewer accepts it.
 
 ### Phase 6: service location and static messengers
 
@@ -756,32 +784,32 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 Status values: `done`, `in progress`, `not started`. Update the row in the commit
 that lands the work. Checked against the tree on 2026-10-20.
 
-| Slice                                       | Status        | Notes                                                                                                                                                                                       |
-| ------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S0.1 Startup hygiene                        | `done`        |                                                                                                                                                                                             |
-| S1.1 Assets                                 | `done`        | Remaining items listed in the slice move with S1.8 and S1.11                                                                                                                                |
-| S1.2 Cook on change                         | `done`        |                                                                                                                                                                                             |
-| S1.3 Foreground cooks                       | `done`        |                                                                                                                                                                                             |
-| S1.4a Global history                        | `done`        |                                                                                                                                                                                             |
-| S1.4 Pipeline workflows out of UI           | `done`        |                                                                                                                                                                                             |
-| S1.4c Removing one cooked product           | `done`        | `1e32de33f`                                                                                                                                                                                 |
-| S1.5 Document kinds                         | `done`        |                                                                                                                                                                                             |
-| S1.6 Scenes                                 | `done`        |                                                                                                                                                                                             |
-| S1.7 LivePreview                            | `done`        |                                                                                                                                                                                             |
-| S1.8 Asset family modules                   | `done`        | See the sub-slice table below                                                                                                                                                               |
-| S1.9 Cook on change over checked inputs     | `done`        |                                                                                                                                                                                             |
-| S1.10 Shell                                 | `done`        | Consistent clipboard and delete commands across parts: #86                                                                                                                                  |
-| S1.11 Unsaved documents                     | `done`        | Shell `UnsavedDocuments` implements the port; Play, Cook and relocation ask before they run                                                                                                 |
-| S1.12 Features                              | `done`        | See the feature table below; the Texture Editor and History panel moved to ED-M09A                                                                                                          |
-| S1.13 Dissolve the World Editor             | `done`        | The workspace window is the composition root's; its native integration tests and benchmark are the composition root's integration suite; the initial scene lookups are Scenes' `SceneFiles` |
-| S1.14 Test boundaries                       | `done`        | Kits of Managed.Core, Managed.Assets and Interop; the ContentPipeline kit fakes `ICookPublicationReader`, which the Content Explorer consumes                                               |
-| S1.15 Enforcement                           | `done`        | Boundary test and project construction; the editor's hand-built test containers are `HostContainer`s, and the topology tests compose the registration modules over one                      |
-| S2.1 to S2.3 Scope factory and topology     | `done`        | `DroidNet.Composition`; the composition root in `Oxygen.Editor.Composition` with its topology and project-switch tests; workspace and Content Explorer scopes on the factory                |
-| S3.1 Registration modules                   | `done`        | Modules per subsystem and layer; `EditorModule` composes the editor scope through `ScopeFactory.CreateRoot`; the App references only what its host and XAML use                             |
-| S4.1 to S4.4 Project Session                | `not started` |                                                                                                                                                                                             |
-| S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                                                                                                                                                             |
-| S6.1 to S6.3 Service location and messenger | `not started` |                                                                                                                                                                                             |
-| S7 Documentation                            | `not started` |                                                                                                                                                                                             |
+| Slice                                                | Status        | Notes                                                                                                                                                                                       |
+| ---------------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S0.1 Startup hygiene                                 | `done`        |                                                                                                                                                                                             |
+| S1.1 Assets                                          | `done`        | Remaining items listed in the slice move with S1.8 and S1.11                                                                                                                                |
+| S1.2 Cook on change                                  | `done`        |                                                                                                                                                                                             |
+| S1.3 Foreground cooks                                | `done`        |                                                                                                                                                                                             |
+| S1.4a Global history                                 | `done`        |                                                                                                                                                                                             |
+| S1.4 Pipeline workflows out of UI                    | `done`        |                                                                                                                                                                                             |
+| S1.4c Removing one cooked product                    | `done`        | `1e32de33f`                                                                                                                                                                                 |
+| S1.5 Document kinds                                  | `done`        |                                                                                                                                                                                             |
+| S1.6 Scenes                                          | `done`        |                                                                                                                                                                                             |
+| S1.7 LivePreview                                     | `done`        |                                                                                                                                                                                             |
+| S1.8 Asset family modules                            | `done`        | See the sub-slice table below                                                                                                                                                               |
+| S1.9 Cook on change over checked inputs              | `done`        |                                                                                                                                                                                             |
+| S1.10 Shell                                          | `done`        | Consistent clipboard and delete commands across parts: #86                                                                                                                                  |
+| S1.11 Unsaved documents                              | `done`        | Shell `UnsavedDocuments` implements the port; Play, Cook and relocation ask before they run                                                                                                 |
+| S1.12 Features                                       | `done`        | See the feature table below; the Texture Editor and History panel moved to ED-M09A                                                                                                          |
+| S1.13 Dissolve the World Editor                      | `done`        | The workspace window is the composition root's; its native integration tests and benchmark are the composition root's integration suite; the initial scene lookups are Scenes' `SceneFiles` |
+| S1.14 Test boundaries                                | `done`        | Kits of Managed.Core, Managed.Assets and Interop; the ContentPipeline kit fakes `ICookPublicationReader`, which the Content Explorer consumes                                               |
+| S1.15 Enforcement                                    | `done`        | Boundary test and project construction; the editor's hand-built test containers are `HostContainer`s, and the topology tests compose the registration modules over one                      |
+| S2.1 to S2.3 Scope factory and topology              | `done`        | `DroidNet.Composition`; the composition root in `Oxygen.Editor.Composition` with its topology and project-switch tests; workspace and Content Explorer scopes on the factory                |
+| S3.1 Registration modules                            | `done`        | Modules per subsystem and layer; `EditorModule` composes the editor scope through `ScopeFactory.CreateRoot`; the App references only what its host and XAML use                             |
+| S4.1 to S4.4 Project Session                         | `not started` |                                                                                                                                                                                             |
+| S5.1 to S5.4 Documents across windows, panels in one | `not started` |                                                                                                                                                                                             |
+| S6.1 to S6.3 Service location and messenger          | `not started` |                                                                                                                                                                                             |
+| S7 Documentation                                     | `not started` |                                                                                                                                                                                             |
 
 ### S1.8 sub-slices
 
