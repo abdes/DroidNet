@@ -10,7 +10,7 @@ using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 internal sealed class ModelImportScenario : DroidNet.Tests.VisualUserInterfaceTests
 {

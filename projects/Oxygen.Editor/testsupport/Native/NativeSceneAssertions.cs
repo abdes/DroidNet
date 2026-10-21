@@ -9,9 +9,9 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeFieldCases;
+using static Oxygen.Editor.TestSupport.NativeFieldCases;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 internal static class NativeSceneAssertions
 {

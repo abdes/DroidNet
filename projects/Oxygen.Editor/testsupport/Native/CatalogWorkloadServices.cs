@@ -11,7 +11,7 @@ using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Testably.Abstractions;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 internal sealed partial class CatalogWorkloadServices : IDisposable
 {

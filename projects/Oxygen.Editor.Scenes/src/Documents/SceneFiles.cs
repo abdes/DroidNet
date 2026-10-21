@@ -63,12 +63,12 @@ public static class SceneFiles
         => (await ListAsync(catalog, project, cancellationToken).ConfigureAwait(true))
             .FirstOrDefault(location => string.Equals(SceneContent.NameOf(location.File.Name), name, StringComparison.OrdinalIgnoreCase));
 
-    /// <summary>Resolves a scene from a last-opened name by file stem, file name, or stable ID.</summary>
+    /// <summary>Finds a scene by the name the editor remembered for it: its name, its file name or its id.</summary>
     /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
     /// <param name="project">The project whose scene files are searched.</param>
-    /// <param name="lastOpenedScene">The persisted last-opened scene name.</param>
+    /// <param name="lastOpenedScene">The remembered name.</param>
     /// <returns>Where the matching scene is, or <see langword="null"/> when no scene matches.</returns>
-    public static async Task<ProjectAssetLocation?> ResolveSceneByNameOrIdAsync(IAssetCatalog catalog, ProjectContext project, string? lastOpenedScene)
+    public static async Task<ProjectAssetLocation?> FindByNameOrIdAsync(IAssetCatalog catalog, ProjectContext project, string? lastOpenedScene)
     {
         if (string.IsNullOrWhiteSpace(lastOpenedScene))
         {
@@ -86,11 +86,11 @@ public static class SceneFiles
         return await FindByNameAsync(catalog, project, sceneName).ConfigureAwait(true);
     }
 
-    /// <summary>Resolves the scene a workspace opens first: the one activation asked for, else the project's start scene.</summary>
+    /// <summary>Finds the scene a workspace opens first: the one activation asked for, else the project's start scene.</summary>
     /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
     /// <param name="context">The project.</param>
     /// <returns>The scene's asset URI, or <see langword="null"/> when there is none to open.</returns>
-    public static async Task<AssetPath?> ResolveInitialSceneAsync(IAssetCatalog catalog, ProjectContext context)
+    public static async Task<AssetPath?> FindInitialAsync(IAssetCatalog catalog, ProjectContext context)
     {
         ArgumentNullException.ThrowIfNull(context);
 

@@ -11,7 +11,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 /// <summary>The authored fields whose values the native tests compare with the engine's.</summary>
 internal static class NativeFieldCases

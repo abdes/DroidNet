@@ -5,12 +5,12 @@
 using AwesomeAssertions;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
+using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
+using static Oxygen.Editor.TestSupport.NativeSceneData;
 
-namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.SceneEditor;
+namespace Oxygen.Editor.Integration.UI.Tests.SceneEditor;
 
 [TestClass]
 public sealed partial class SceneReplacementTests : DroidNet.Tests.VisualUserInterfaceTests

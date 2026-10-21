@@ -12,7 +12,7 @@ using Moq;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 /// <summary>
 ///     Owns the one native engine a test process shares, as the editor shares one engine across

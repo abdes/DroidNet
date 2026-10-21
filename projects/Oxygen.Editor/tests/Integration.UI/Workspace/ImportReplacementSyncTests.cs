@@ -9,14 +9,14 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Scenes.Edits.Assets;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.TestSupport;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.ModelImportScenario;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
-using static Oxygen.Editor.WorldEditor.TestSupport.PublicationWorkflows;
+using static Oxygen.Editor.TestSupport.ModelImportScenario;
+using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
+using static Oxygen.Editor.TestSupport.NativeSceneData;
+using static Oxygen.Editor.TestSupport.PublicationWorkflows;
 
-namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Workspace;
+namespace Oxygen.Editor.Integration.UI.Tests.Workspace;
 
 /// <summary>Checks that replacing an imported model's source reaches the open scene's existing consumers.</summary>
 [TestClass]

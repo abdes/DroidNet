@@ -25,7 +25,7 @@ using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Workspace;
+namespace Oxygen.Editor.LivePreview.Unit.UI.Tests.Session;
 
 [TestClass]
 internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserInterfaceTests

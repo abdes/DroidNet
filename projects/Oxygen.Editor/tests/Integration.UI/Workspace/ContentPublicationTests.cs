@@ -14,14 +14,14 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Edits.Components;
+using Oxygen.Editor.TestSupport;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
-using static Oxygen.Editor.WorldEditor.TestSupport.PublicationWorkflows;
+using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
+using static Oxygen.Editor.TestSupport.PublicationWorkflows;
 
-namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Workspace;
+namespace Oxygen.Editor.Integration.UI.Tests.Workspace;
 
 [TestClass]
 public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserInterfaceTests

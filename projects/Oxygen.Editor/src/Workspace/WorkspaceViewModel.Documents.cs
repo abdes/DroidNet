@@ -17,7 +17,7 @@ using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.Workspace;
 
 /// <content>The window's documents: their kinds and editors, its document area and the Shell's document service.</content>
 public partial class WorkspaceViewModel

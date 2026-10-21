@@ -9,14 +9,14 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeFieldCases;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
+using static Oxygen.Editor.TestSupport.NativeFieldCases;
+using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
 
-namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.SceneExplorer;
+namespace Oxygen.Editor.Integration.UI.Tests.SceneExplorer;
 
 /// <summary>Verifies native local TRS through authored hierarchy command history.</summary>
 [TestClass]

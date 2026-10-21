@@ -30,7 +30,7 @@ using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.Workspace;
 
 /// <summary>
 ///     The ViewModel of the world editor docking workspace.
@@ -297,7 +297,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         // Seed the default scene for projects that predate DefaultSceneId before resolving it.
         await this.MigrateDefaultSceneAsync(catalog, project, context).ConfigureAwait(true);
 
-        var scene = await SceneFiles.ResolveInitialSceneAsync(catalog, this.projectContextService.ActiveProject ?? context).ConfigureAwait(true);
+        var scene = await SceneFiles.FindInitialAsync(catalog, this.projectContextService.ActiveProject ?? context).ConfigureAwait(true);
         if (scene is null)
         {
             return;
@@ -341,7 +341,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             }
 
             var lastOpened = usage.LastOpenedScene;
-            if (await SceneFiles.ResolveSceneByNameOrIdAsync(catalog, context, lastOpened).ConfigureAwait(true) is not { } migrated
+            if (await SceneFiles.FindByNameOrIdAsync(catalog, context, lastOpened).ConfigureAwait(true) is not { } migrated
                 || await SceneFiles.ReadIdAsync(context, migrated).ConfigureAwait(true) is not { } migratedId)
             {
                 return;

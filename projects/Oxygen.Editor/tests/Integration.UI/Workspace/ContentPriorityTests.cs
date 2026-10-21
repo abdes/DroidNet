@@ -6,11 +6,11 @@ using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Edits.Assets;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
+using Oxygen.Editor.TestSupport;
+using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
+using static Oxygen.Editor.TestSupport.NativeSceneData;
 
-namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Workspace;
+namespace Oxygen.Editor.Integration.UI.Tests.Workspace;
 
 [TestClass]
 public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInterfaceTests

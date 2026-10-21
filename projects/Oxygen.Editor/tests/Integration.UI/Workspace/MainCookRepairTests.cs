@@ -9,13 +9,13 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
-using static Oxygen.Editor.WorldEditor.TestSupport.PublicationWorkflows;
+using static Oxygen.Editor.TestSupport.NativeSceneData;
+using static Oxygen.Editor.TestSupport.PublicationWorkflows;
 
-namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Workspace;
+namespace Oxygen.Editor.Integration.UI.Tests.Workspace;
 
 [TestClass]
 public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInterfaceTests

@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Shapes;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Controls;
+namespace Oxygen.Editor.Controls.Unit.UI.Tests.Styles;
 
 /// <summary>A switch at the end of a settings row reads like Windows Settings: its On or Off text, then the rail at
 /// the row's right edge.</summary>

@@ -4,7 +4,7 @@
 
 using DroidNet.Docking;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.Workspace;
 
 /// <summary>Brings panels forward for the workspace's own notices.</summary>
 public partial class WorkspaceViewModel

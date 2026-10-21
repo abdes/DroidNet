@@ -29,10 +29,10 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
+using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
+using static Oxygen.Editor.TestSupport.NativeSceneData;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 internal static class PublicationWorkflows
 {

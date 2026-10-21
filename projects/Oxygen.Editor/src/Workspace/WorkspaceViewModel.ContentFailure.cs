@@ -7,7 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Docking;
 using Oxygen.Editor.LivePreview.Session;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.Workspace;
 
 /// <summary>Shows why the project preview is unavailable, independently of which output panel is selected.</summary>
 public partial class WorkspaceViewModel

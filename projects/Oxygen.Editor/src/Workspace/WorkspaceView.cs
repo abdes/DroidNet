@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Shell.Layout;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.Workspace;
 
 /// <summary>
 /// A view for the World Editor workspace: a docking workspace view.

@@ -7,7 +7,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 internal static class NativeSceneData
 {

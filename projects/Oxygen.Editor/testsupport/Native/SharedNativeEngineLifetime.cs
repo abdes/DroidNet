@@ -5,7 +5,7 @@
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 /// <summary>Shuts the shared native engine down once, after the last test of the process.</summary>
 [TestClass]

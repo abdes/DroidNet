@@ -16,14 +16,14 @@ using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
 
-namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Authoring;
+namespace Oxygen.Editor.Integration.UI.Tests.Authoring;
 
 [TestClass]
 internal sealed class BackgroundColorTests : DroidNet.Tests.VisualUserInterfaceTests

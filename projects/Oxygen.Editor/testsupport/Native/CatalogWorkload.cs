@@ -15,7 +15,7 @@ using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 internal static class CatalogWorkload
 {

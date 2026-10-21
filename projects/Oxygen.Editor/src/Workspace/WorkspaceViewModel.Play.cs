@@ -6,7 +6,7 @@ using DryIoc;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Managed.Assets.Diagnostics;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.Workspace;
 
 /// <summary>
 /// Play sessions of the workspace: the player runs the scenes of this project and ends with the workspace. The

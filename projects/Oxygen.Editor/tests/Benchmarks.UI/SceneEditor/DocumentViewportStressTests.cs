@@ -4,9 +4,9 @@
 
 using DroidNet.TestHelpers;
 using DroidNet.Tests;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.TestSupport;
 
-namespace Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests.SceneEditor;
+namespace Oxygen.Editor.Benchmarks.UI.Tests.SceneEditor;
 
 [TestClass]
 [ReleaseOnly]

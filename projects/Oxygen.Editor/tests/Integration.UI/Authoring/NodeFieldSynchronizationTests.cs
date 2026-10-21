@@ -6,14 +6,14 @@ using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.TestSupport;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeFieldCases;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
+using static Oxygen.Editor.TestSupport.NativeFieldCases;
+using static Oxygen.Editor.TestSupport.NativeSceneData;
 
-namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Authoring;
+namespace Oxygen.Editor.Integration.UI.Tests.Authoring;
 
 [TestClass]
 public sealed partial class NodeFieldSynchronizationTests : DroidNet.Tests.VisualUserInterfaceTests

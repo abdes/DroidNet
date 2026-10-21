@@ -4,11 +4,11 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeFieldCases;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
+using Oxygen.Editor.TestSupport;
+using static Oxygen.Editor.TestSupport.NativeFieldCases;
+using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
 
-namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Authoring;
+namespace Oxygen.Editor.Integration.UI.Tests.Authoring;
 
 [TestClass]
 public sealed partial class EnvironmentDefaultsTests : DroidNet.Tests.VisualUserInterfaceTests

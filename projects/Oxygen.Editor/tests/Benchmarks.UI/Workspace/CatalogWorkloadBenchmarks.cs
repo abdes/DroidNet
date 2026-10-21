@@ -20,15 +20,15 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.LivePreview.Assets;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.TestSupport;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentExplorer.TestSupport.ExplorerControls;
-using static Oxygen.Editor.WorldEditor.TestSupport.CatalogWorkload;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
+using static Oxygen.Editor.TestSupport.CatalogWorkload;
+using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
 
-namespace Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests.Workspace;
+namespace Oxygen.Editor.Benchmarks.UI.Tests.Workspace;
 
 [TestClass]
 [ReleaseOnly]

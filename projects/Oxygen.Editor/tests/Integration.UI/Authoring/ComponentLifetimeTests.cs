@@ -6,13 +6,13 @@ using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Nodes;
+using Oxygen.Editor.TestSupport;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Interop;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
+using static Oxygen.Editor.TestSupport.NativeSceneData;
 
-namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Authoring;
+namespace Oxygen.Editor.Integration.UI.Tests.Authoring;
 
 [TestClass]
 public sealed partial class ComponentLifetimeTests : DroidNet.Tests.VisualUserInterfaceTests

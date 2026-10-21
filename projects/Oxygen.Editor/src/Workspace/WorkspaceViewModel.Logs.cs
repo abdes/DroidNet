@@ -5,7 +5,7 @@
 using Microsoft.Extensions.Logging;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.Workspace;
 
 /// <summary>Logging helpers for <see cref="WorkspaceViewModel"/>.</summary>
 public partial class WorkspaceViewModel

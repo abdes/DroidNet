@@ -13,11 +13,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Cooking;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.TestSupport;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.CatalogWorkload;
+using static Oxygen.Editor.TestSupport.CatalogWorkload;
 
-namespace Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests.Cooking;
+namespace Oxygen.Editor.Benchmarks.UI.Tests.Cooking;
 
 [TestClass]
 [ReleaseOnly]

@@ -8,7 +8,7 @@ using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Assets.Diagnostics;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.Workspace;
 
 /// <summary>
 /// Script and input authoring services of the workspace: the script and input facts, the code editor and project

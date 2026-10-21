@@ -6,7 +6,7 @@ using System.Reflection;
 using System.Runtime.ExceptionServices;
 using Oxygen.Editor.Runtime.Engine;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 /// <summary>
 /// Passes everything to a real engine and remembers the last scene activation it accepted, so a test can observe the

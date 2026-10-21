@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.Tests;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.TestSupport;
 
-namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Documents;
+namespace Oxygen.Editor.Integration.UI.Tests.Documents;
 
 [TestClass]
 public sealed class DocumentViewportLifetimeTests : VisualUserInterfaceTests

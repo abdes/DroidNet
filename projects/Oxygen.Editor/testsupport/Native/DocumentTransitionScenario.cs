@@ -12,10 +12,10 @@ using Oxygen.Editor.SceneEditor;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
+using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
+using static Oxygen.Editor.TestSupport.NativeSceneData;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInterfaceTests
 {

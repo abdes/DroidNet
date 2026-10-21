@@ -51,7 +51,7 @@ using Oxygen.Editor.Services;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
-using Oxygen.Editor.World.Workspace;
+using Oxygen.Editor.Workspace;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core.Services;

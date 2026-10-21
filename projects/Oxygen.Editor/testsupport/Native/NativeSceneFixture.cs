@@ -54,9 +54,9 @@ using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions;
-using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
+using static Oxygen.Editor.TestSupport.NativeSceneData;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.TestSupport;
 
 internal sealed class NativeSceneFixture : IAsyncDisposable
 {
