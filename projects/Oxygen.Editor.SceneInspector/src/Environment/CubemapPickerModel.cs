@@ -10,11 +10,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.SceneInspector.Geometry;
 using Oxygen.Editor.Textures;
-using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Lists the project's cube textures for a cubemap field, with search.</summary>
 /// <remarks>

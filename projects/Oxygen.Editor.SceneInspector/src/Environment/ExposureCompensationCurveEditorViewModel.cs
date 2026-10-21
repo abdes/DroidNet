@@ -9,7 +9,7 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns curve-key editing policy while borrowing the scene's existing edit owner.</summary>
 public sealed partial class ExposureCompensationCurveEditorViewModel : ObservableObject, IDisposable

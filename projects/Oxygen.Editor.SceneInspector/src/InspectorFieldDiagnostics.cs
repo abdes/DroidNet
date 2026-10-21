@@ -5,7 +5,7 @@
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Schemas;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Maintains target-lifetime and property-scoped diagnostic ordering.</summary>
 internal sealed class InspectorFieldDiagnostics

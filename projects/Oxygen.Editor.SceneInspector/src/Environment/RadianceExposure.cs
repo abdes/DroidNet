@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>
 /// Presents a linear radiance multiplier in exposure stops, as a physical

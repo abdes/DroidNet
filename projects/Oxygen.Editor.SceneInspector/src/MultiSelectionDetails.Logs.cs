@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Logging helpers for <see cref="MultiSelectionDetails{T}"/>.</summary>
 public abstract partial class MultiSelectionDetails<T>

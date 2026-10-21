@@ -4,15 +4,16 @@
 
 using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Owns local fog volume selection and command lifetime; typed bindings are the scalar state.</summary>
 public sealed partial class LocalFogVolumeViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner

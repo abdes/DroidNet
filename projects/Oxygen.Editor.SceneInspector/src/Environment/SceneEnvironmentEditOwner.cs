@@ -7,8 +7,9 @@ using DroidNet.Controls;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns the single scene-environment edit lifetime borrowed by all section models.</summary>
 public sealed class SceneEnvironmentEditOwner : ObservableObject, IInspectorEditSessionOwner, IDisposable

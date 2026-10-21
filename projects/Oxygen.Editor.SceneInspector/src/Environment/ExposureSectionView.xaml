@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.World.Inspector.Environment.ExposureSectionView"
+    x:Class="Oxygen.Editor.SceneInspector.Environment.ExposureSectionView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
-    xmlns:environment="using:Oxygen.Editor.World.Inspector.Environment"
+    xmlns:environment="using:Oxygen.Editor.SceneInspector.Environment"
     xmlns:pickers="using:Oxygen.Editor.Pickers">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml" />
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <Style BasedOn="{StaticResource QuietInspectorAction}" TargetType="Button" />
         </ResourceDictionary>

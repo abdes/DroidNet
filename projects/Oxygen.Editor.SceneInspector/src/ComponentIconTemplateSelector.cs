@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml.Controls;
 using DataTemplate = Microsoft.UI.Xaml.DataTemplate;
 using DependencyObject = Microsoft.UI.Xaml.DependencyObject;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>
 /// Selects a thumbnail template for a component row.

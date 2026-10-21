@@ -9,7 +9,7 @@ using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Scenes.Nodes;
 
-namespace Oxygen.Editor.World.Inspector.Scripting;
+namespace Oxygen.Editor.SceneInspector.Scripting;
 
 /// <summary>The Scripting section of the node inspector.</summary>
 [ViewModel(typeof(ScriptingViewModel))]

@@ -7,13 +7,13 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media.Imaging;
 using Windows.Graphics.Imaging;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 internal static class InspectorCapture
 {
     internal static async Task SaveIfRequestedAsync(FrameworkElement element, string name)
     {
-        var directory = Environment.GetEnvironmentVariable("OXYGEN_UI_CAPTURE_DIRECTORY");
+        var directory = System.Environment.GetEnvironmentVariable("OXYGEN_UI_CAPTURE_DIRECTORY");
         if (string.IsNullOrWhiteSpace(directory))
         {
             return;

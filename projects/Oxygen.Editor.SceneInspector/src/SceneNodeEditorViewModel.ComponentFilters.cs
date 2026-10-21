@@ -4,9 +4,10 @@
 
 using System.Collections.ObjectModel;
 using DroidNet.Documents;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Owns component filtering without changing authored selection or properties.</summary>
 public sealed partial class SceneNodeEditorViewModel

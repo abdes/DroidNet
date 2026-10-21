@@ -6,7 +6,7 @@ using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Spot light inspector view.</summary>
 [ViewModel(typeof(SpotLightViewModel))]

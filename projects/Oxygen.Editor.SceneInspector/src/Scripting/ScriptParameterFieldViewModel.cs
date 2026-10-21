@@ -13,7 +13,7 @@ using Oxygen.Editor.Scripting;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Scripting;
+namespace Oxygen.Editor.SceneInspector.Scripting;
 
 /// <summary>
 /// One field of a script slot: the value of one declared parameter, edited with the control its type and hints call

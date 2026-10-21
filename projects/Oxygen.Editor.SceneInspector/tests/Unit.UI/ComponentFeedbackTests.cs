@@ -8,16 +8,15 @@ using DroidNet.Controls;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
-using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.SceneTestData;
 using NumberBox = DroidNet.Controls.NumberBox;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 [TestClass]
 internal sealed class ComponentFeedbackTests : DroidNet.Tests.VisualUserInterfaceTests

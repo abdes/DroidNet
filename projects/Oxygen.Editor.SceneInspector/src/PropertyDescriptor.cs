@@ -4,7 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>
 ///     Represents metadata and state for a property in the properties editor, including visibility and enabled state.

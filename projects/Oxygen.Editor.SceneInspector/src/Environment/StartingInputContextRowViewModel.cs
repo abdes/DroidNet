@@ -7,7 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>
 /// One starting input context of the Play section: its name, which shows it in the Content Browser, its priority,

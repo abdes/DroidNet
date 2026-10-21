@@ -29,8 +29,6 @@ using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Layout;
 using Oxygen.Editor.Shell.Windows;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -245,10 +243,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         // Cook on change toggle reaches the same instance. It reads the family facts, registered with the scripts.
         _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>();
 
-        childContainer.Register<SceneNodeEditorViewModel>(Reuse.Transient);
-        childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
         childContainer.Register<MaterialEditorView>(Reuse.Transient);
-        RegisterInspectorEditors(childContainer);
         this.RegisterContentBrowserPorts(childContainer);
 
         // The features activate last: their activation may use any feature's services.
@@ -304,13 +299,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
                         MatchMethod = PathMatch.Full,
                         ViewModelType = typeof(ContentBrowserViewModel),
                     },
-                    new Route
-                    {
-                        Outlet = "props",
-                        Path = "props",
-                        MatchMethod = PathMatch.Full,
-                        ViewModelType = typeof(SceneNodeEditorViewModel),
-                    },
                     .. modules.SelectMany(static module => module.Panels).Select(static panel => new Route
                     {
                         Outlet = panel.Id, Path = panel.Id, MatchMethod = PathMatch.Full, ViewModelType = panel.ViewModelType,
@@ -326,32 +314,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
                 [.. modules.SelectMany(static module => module.Panels)],
                 [.. modules.SelectMany(static module => module.Commands)]),
             Reuse.Singleton);
-
-    private static void RegisterInspectorEditors(IContainer childContainer)
-    {
-        childContainer.Register<TransformViewModel>(Reuse.Transient);
-        childContainer.Register<TransformView>(Reuse.Transient);
-        childContainer.Register<PerspectiveCameraViewModel>(Reuse.Transient);
-        childContainer.Register<PerspectiveCameraView>(Reuse.Transient);
-        childContainer.Register<DirectionalLightViewModel>(Reuse.Transient);
-        childContainer.Register<DirectionalLightView>(Reuse.Transient);
-        childContainer.Register<OrthographicCameraViewModel>(Reuse.Transient);
-        childContainer.Register<OrthographicCameraView>(Reuse.Transient);
-        childContainer.Register<PointLightViewModel>(Reuse.Transient);
-        childContainer.Register<PointLightView>(Reuse.Transient);
-        childContainer.Register<SpotLightViewModel>(Reuse.Transient);
-        childContainer.Register<SpotLightView>(Reuse.Transient);
-        childContainer.Register<LocalFogVolumeViewModel>(Reuse.Transient);
-        childContainer.Register<LocalFogVolumeView>(Reuse.Transient);
-        childContainer.Register<Inspector.Scripting.ScriptingViewModel>(Reuse.Transient);
-        childContainer.Register<Inspector.Scripting.ScriptingView>(Reuse.Transient);
-        childContainer.Register<NodeRenderingViewModel>(Reuse.Transient);
-        childContainer.Register<NodeRenderingView>(Reuse.Transient);
-        childContainer.Register<EnvironmentViewModel>(Reuse.Transient);
-        childContainer.Register<EnvironmentView>(Reuse.Transient);
-        childContainer.Register<GeometryViewModel>(Reuse.Transient);
-        childContainer.Register<GeometryView>(Reuse.Transient);
-    }
 
     private static void RegisterContentServices(IContainer childContainer)
     {

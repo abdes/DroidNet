@@ -10,13 +10,13 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.SceneInspector.Geometry;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns exposure modes, related bounds, curve policy and the scheduled texture catalog.</summary>
 public sealed partial class ExposureSectionViewModel : ObservableObject, IDisposable

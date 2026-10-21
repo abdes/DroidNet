@@ -9,7 +9,7 @@ using Oxygen.Editor.Controls;
 using EditorPropertiesExpander = Oxygen.Editor.Controls.PropertiesExpander;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
 
-namespace Oxygen.Editor.World.Inspector.Presentation;
+namespace Oxygen.Editor.SceneInspector.Presentation;
 
 /// <summary>Connects explicitly registered section-owned controls to headless browsing state.</summary>
 internal sealed class InspectorSceneFieldRegistry(InspectorSearchModel search, IValueConverter visibility)

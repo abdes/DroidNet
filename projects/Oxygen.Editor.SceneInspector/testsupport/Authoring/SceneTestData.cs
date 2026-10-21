@@ -10,7 +10,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.SceneInspector.TestSupport;
 
 internal static class SceneTestData
 {

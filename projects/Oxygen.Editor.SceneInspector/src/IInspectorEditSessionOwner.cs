@@ -4,7 +4,7 @@
 
 using DroidNet.Controls;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Connects existing field controls to the document's gesture transaction.</summary>
 public interface IInspectorEditSessionOwner

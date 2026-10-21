@@ -6,7 +6,7 @@ using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns curve presentation and numeric adapters, not the parent-owned edit model.</summary>
 [ViewModel(typeof(ExposureCompensationCurveEditorViewModel))]

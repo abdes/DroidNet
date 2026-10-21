@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.SceneInspector.TestSupport;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
 public sealed class CameraBindingOwnershipTests

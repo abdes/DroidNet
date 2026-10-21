@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.World.Inspector.DirectionalLightShadowsView"
+    x:Class="Oxygen.Editor.SceneInspector.DirectionalLightShadowsView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls">

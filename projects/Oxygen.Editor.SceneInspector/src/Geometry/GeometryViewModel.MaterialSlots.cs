@@ -6,10 +6,11 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Assets;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 
-namespace Oxygen.Editor.World.Inspector.Geometry;
+namespace Oxygen.Editor.SceneInspector.Geometry;
 
 /// <summary>Projects current native slots and captures picker targets across asynchronous catalog work.</summary>
 public sealed partial class GeometryViewModel

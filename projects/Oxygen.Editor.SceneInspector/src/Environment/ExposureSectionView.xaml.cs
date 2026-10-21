@@ -6,10 +6,10 @@ using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Pickers;
-using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World.Inspector.Presentation;
+using Oxygen.Editor.SceneInspector.Geometry;
+using Oxygen.Editor.SceneInspector.Presentation;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns exposure disclosure, numeric and texture flyout adapters.</summary>
 [ViewModel(typeof(ExposureSectionViewModel))]

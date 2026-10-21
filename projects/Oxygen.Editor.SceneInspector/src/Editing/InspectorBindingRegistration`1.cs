@@ -7,7 +7,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Editing;
+namespace Oxygen.Editor.SceneInspector.Editing;
 
 /// <summary>Owns typed binding subscriptions and routes requests through the existing captured-target coordinator.</summary>
 /// <typeparam name="T">The authored value type.</typeparam>

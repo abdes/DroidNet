@@ -5,7 +5,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.LivePreview.Scenes;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Explains, from the rendered state, why the sky light casts no image-based lighting.</summary>
 public sealed partial class SkyLightSectionViewModel

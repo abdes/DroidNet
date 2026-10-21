@@ -18,7 +18,7 @@ using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.SceneInspector.TestSupport;
 
 /// <summary>A scene document with a camera and sun node, open in a document area, for the views and models that edit it.</summary>
 internal sealed partial class SceneAuthoringFixture : IDisposable

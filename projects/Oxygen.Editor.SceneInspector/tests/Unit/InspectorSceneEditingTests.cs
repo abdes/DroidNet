@@ -10,11 +10,10 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 /// <summary>
 /// Checks that the Inspector's component, environment and Play models turn what people type and drag into the scene

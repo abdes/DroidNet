@@ -10,14 +10,13 @@ using DroidNet.Controls;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Controls;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
-using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.SceneTestData;
 using NumberBox = DroidNet.Controls.NumberBox;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 [TestClass]
 internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserInterfaceTests

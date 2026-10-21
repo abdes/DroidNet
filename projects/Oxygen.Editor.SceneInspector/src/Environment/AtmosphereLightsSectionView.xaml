@@ -1,16 +1,16 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.World.Inspector.Environment.AtmosphereLightsSectionView"
+    x:Class="Oxygen.Editor.SceneInspector.Environment.AtmosphereLightsSectionView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
-    xmlns:local="using:Oxygen.Editor.World.Inspector"
+    xmlns:local="using:Oxygen.Editor.SceneInspector"
     xmlns:ui="using:CommunityToolkit.WinUI">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml" />
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibilityConverter" />
             <Style BasedOn="{StaticResource QuietInspectorAction}" TargetType="Button" />

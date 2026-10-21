@@ -11,7 +11,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.SceneInspector.TestSupport;
 
 /// <summary>A scene node with a geometry component, and an asset feed that lists a geometry and a material that need cooking.</summary>
 internal sealed class GeometryFixture : IDisposable

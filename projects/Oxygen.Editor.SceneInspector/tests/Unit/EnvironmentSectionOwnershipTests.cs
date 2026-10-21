@@ -4,10 +4,9 @@
 
 using AwesomeAssertions;
 using DroidNet.Controls;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.SceneInspector.TestSupport;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
 public sealed class EnvironmentSectionOwnershipTests

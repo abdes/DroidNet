@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using Oxygen.Editor.SceneInspector.Presentation;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.World.Inspector.Presentation;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
 public sealed class InspectorSearchModelTests

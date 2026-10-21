@@ -7,12 +7,13 @@ using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.SceneInspector.Geometry;
+using Oxygen.Editor.SceneInspector.Scripting;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World.Inspector.Scripting;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Constructs inspector-local editors from the host's existing scoped dependencies.</summary>
 internal static class InspectorEditorFactory

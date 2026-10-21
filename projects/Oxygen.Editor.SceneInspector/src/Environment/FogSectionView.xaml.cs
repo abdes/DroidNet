@@ -5,10 +5,10 @@
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.SceneInspector.Presentation;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.World.Inspector.Presentation;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns fog composition and its numeric and color adapters.</summary>
 [ViewModel(typeof(FogSectionViewModel))]

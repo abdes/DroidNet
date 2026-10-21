@@ -5,11 +5,10 @@
 using System.Numerics;
 using AwesomeAssertions;
 using DroidNet.Controls;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
+using Oxygen.Editor.SceneInspector.TestSupport;
+using static Oxygen.Editor.SceneInspector.TestSupport.SceneTestData;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
 public sealed class ColorHistoryTests

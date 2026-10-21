@@ -2,13 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.SceneInspector.Editing;
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
-using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.World.Inspector.Editing;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>
 /// Node "Rendering" section: authored Scene Visibility and geometry Cast/Receive Shadows, edited as

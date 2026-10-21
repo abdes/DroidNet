@@ -11,11 +11,10 @@ using Moq;
 using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Inspector;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.SceneInspector.TestSupport;
 
 internal sealed partial class SceneAuthoringFixture
 {
@@ -29,7 +28,7 @@ internal sealed partial class SceneAuthoringFixture
         var locator = new Mock<IViewLocator>();
         if (realizeViews)
         {
-            _ = locator.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is Oxygen.Editor.World.Inspector.Geometry.GeometryViewModel ? new Oxygen.Editor.World.Inspector.Geometry.GeometryView() : CreateNumericView((IPropertyEditor<SceneNode>)model));
+            _ = locator.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is Oxygen.Editor.SceneInspector.Geometry.GeometryViewModel ? new Oxygen.Editor.SceneInspector.Geometry.GeometryView() : CreateNumericView((IPropertyEditor<SceneNode>)model));
         }
 
         var catalog = new Mock<Oxygen.Editor.Assets.IAssetFeed>();

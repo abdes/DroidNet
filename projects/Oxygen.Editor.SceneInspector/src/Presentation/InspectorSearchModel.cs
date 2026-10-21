@@ -4,7 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Oxygen.Editor.World.Inspector.Presentation;
+namespace Oxygen.Editor.SceneInspector.Presentation;
 
 /// <summary>Scene-inspector search, applicability and temporary disclosure state.</summary>
 public sealed partial class InspectorSearchModel : ObservableObject

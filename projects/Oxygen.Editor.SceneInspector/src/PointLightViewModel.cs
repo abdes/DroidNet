@@ -5,9 +5,10 @@
 
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Point light inspector editing.</summary>
 public sealed partial class PointLightViewModel : LocalLightViewModel

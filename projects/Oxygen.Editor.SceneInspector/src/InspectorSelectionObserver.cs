@@ -5,10 +5,11 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Microsoft.UI.Dispatching;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Owns selected component and material-slot observation, suppressing queued work from old selections.</summary>
 internal sealed class InspectorSelectionObserver(DispatcherQueue? dispatcher, Action<InspectorSelectionChange> changed) : IDisposable

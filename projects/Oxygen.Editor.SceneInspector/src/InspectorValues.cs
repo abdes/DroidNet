@@ -4,7 +4,7 @@
 
 using System.Numerics;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Converts the doubles inspector controls edit to the single-precision values the scene stores.</summary>
 internal static class InspectorValues

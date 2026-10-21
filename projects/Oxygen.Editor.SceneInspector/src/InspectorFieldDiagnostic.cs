@@ -4,7 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>The current error for one field, separate from operation history.</summary>
 public sealed partial class InspectorFieldDiagnostic : ObservableObject

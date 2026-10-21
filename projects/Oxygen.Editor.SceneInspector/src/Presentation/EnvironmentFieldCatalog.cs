@@ -8,7 +8,7 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Inspector.Presentation;
+namespace Oxygen.Editor.SceneInspector.Presentation;
 
 /// <summary>Explicit presentation metadata for the 91 scene cards.</summary>
 internal static class EnvironmentFieldCatalog

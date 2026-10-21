@@ -5,10 +5,10 @@
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
+using Oxygen.Editor.SceneInspector.Presentation;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.World.Inspector.Presentation;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns atmosphere composition, numeric adapters and Aerial Start realization/focus.</summary>
 [ViewModel(typeof(SkyAtmosphereSectionViewModel))]

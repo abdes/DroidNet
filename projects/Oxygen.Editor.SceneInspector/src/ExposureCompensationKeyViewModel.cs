@@ -5,7 +5,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Editable view state for one authored exposure compensation key.</summary>
 internal sealed partial class ExposureCompensationKeyViewModel(ExposureCompensationKeyData key) : ObservableObject

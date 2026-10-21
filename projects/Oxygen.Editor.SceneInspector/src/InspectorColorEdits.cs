@@ -6,7 +6,7 @@ using System.Runtime.CompilerServices;
 using DroidNet.Controls;
 using Oxygen.Editor.Controls;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Routes <see cref="InspectorColorField"/> edits to an inspector edit owner.</summary>
 /// <remarks>

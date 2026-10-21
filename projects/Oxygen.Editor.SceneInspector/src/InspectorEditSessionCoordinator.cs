@@ -8,7 +8,7 @@ using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Captures control targets and runs each control gesture as one scene gesture: previews, then one commit.</summary>
 internal sealed partial class InspectorEditSessionCoordinator(

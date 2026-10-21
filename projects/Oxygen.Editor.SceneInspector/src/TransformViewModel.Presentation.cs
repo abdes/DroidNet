@@ -6,7 +6,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Ends hidden transform gestures without discarding field feedback.</summary>
 public sealed partial class TransformViewModel

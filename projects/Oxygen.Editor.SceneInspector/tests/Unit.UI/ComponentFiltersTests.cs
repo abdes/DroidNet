@@ -9,22 +9,21 @@ using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.SceneInspector.Geometry;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
-using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.SceneTestData;
 using NumberBox = DroidNet.Controls.NumberBox;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 [TestClass]
 internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterfaceTests

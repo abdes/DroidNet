@@ -10,13 +10,14 @@ using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.SceneInspector.Presentation;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
-using Oxygen.Editor.World.Inspector.Presentation;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns typed scene asset-reference assignments and retained unresolved references.</summary>
 public sealed partial class SceneReferencesSectionViewModel : ObservableObject, IDisposable

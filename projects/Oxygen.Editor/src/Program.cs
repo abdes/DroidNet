@@ -43,6 +43,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor;
 using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.SceneExplorer;
+using Oxygen.Editor.SceneInspector;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Services;
 using Oxygen.Editor.Shell.Contributions;
@@ -427,6 +428,7 @@ public static partial class Program
         container.Register<IFeatureModule, ProblemsModule>(Reuse.Singleton);
         container.Register<IFeatureModule, SceneEditorModule>(Reuse.Singleton);
         container.Register<IFeatureModule, SceneExplorerModule>(Reuse.Singleton);
+        container.Register<IFeatureModule, SceneInspectorModule>(Reuse.Singleton);
     }
 
     private static void RegisterAssetServices(IContainer container)

@@ -4,7 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>A component type available for filtering the current node selection.</summary>
 /// <param name="componentType">The component type, independent of any selected instance.</param>

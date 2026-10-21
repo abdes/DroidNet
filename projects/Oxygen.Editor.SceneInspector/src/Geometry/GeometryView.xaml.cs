@@ -6,7 +6,7 @@ using System.Diagnostics;
 using DroidNet.Mvvm.Generators;
 using Oxygen.Editor.Pickers;
 
-namespace Oxygen.Editor.World.Inspector.Geometry;
+namespace Oxygen.Editor.SceneInspector.Geometry;
 
 /// <summary>
 ///     Represents the view for editing geometry properties in the World Editor.

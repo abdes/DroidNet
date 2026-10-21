@@ -11,12 +11,13 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns source roles, source observation, canonical light editors and initial-state reset snapshots.</summary>
 public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject, IDisposable

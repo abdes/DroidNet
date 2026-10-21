@@ -4,9 +4,9 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.LivePreview.Scenes;
-using Oxygen.Editor.World.Inspector.Environment;
+using Oxygen.Editor.SceneInspector.Environment;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
 public sealed class SkyLightRuntimeStatusTests

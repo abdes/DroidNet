@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World.Inspector.Presentation;
+namespace Oxygen.Editor.SceneInspector.Presentation;
 
 /// <summary>The authored mode in which a stored value applies.</summary>
 public enum InspectorFieldApplicability

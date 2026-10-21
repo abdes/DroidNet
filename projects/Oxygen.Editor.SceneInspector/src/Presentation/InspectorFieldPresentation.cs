@@ -5,7 +5,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Schemas;
 
-namespace Oxygen.Editor.World.Inspector.Presentation;
+namespace Oxygen.Editor.SceneInspector.Presentation;
 
 /// <summary>Search metadata and observable presentation for one existing field.</summary>
 public sealed partial class InspectorFieldPresentation : ObservableObject

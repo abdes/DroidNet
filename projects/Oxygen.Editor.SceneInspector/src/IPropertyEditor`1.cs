@@ -2,7 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.World;
+
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>
 ///     Defines a contract for editing properties of one or more <see cref="GameObject"/> instances in a properties editor UI.

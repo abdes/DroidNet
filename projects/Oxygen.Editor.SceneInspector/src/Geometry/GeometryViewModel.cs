@@ -12,18 +12,19 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Geometry;
+namespace Oxygen.Editor.SceneInspector.Geometry;
 
 /// <summary>
 /// ViewModel that provides editing support for the <see cref="GeometryComponent"/> of one or

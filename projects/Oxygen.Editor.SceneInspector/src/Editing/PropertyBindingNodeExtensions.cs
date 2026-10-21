@@ -5,7 +5,7 @@
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Editing;
+namespace Oxygen.Editor.SceneInspector.Editing;
 
 /// <summary>Updates Schemas bindings from the Inspector's node selection.</summary>
 internal static class PropertyBindingNodeExtensions

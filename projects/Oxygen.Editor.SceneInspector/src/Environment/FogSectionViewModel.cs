@@ -8,7 +8,7 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns height fog and volumetric fog display adapters and their channel edits.</summary>
 public sealed partial class FogSectionViewModel : ObservableObject

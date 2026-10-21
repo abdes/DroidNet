@@ -148,9 +148,10 @@ feature project.
 | `projects/Oxygen.Editor.Documents`       | Generic document abstractions shared by editor features.                                                                                                                                            | World-editor-specific scene document behavior.                                                                    |
 | `projects/Oxygen.Editor.Schemas`         | Schema/overlay catalog, typed properties/edits, mixed values, snapshots, apply/session mechanics.                                                                                                   | Feature UI/policy, runtime lifecycle, native calls, cooked binary offsets.                                        |
 | `projects/Oxygen.Editor.World`           | Pure authoring scene/domain model: scenes, nodes, components, scene serialization, scene-owned settings, authoring references.                                                                      | WinUI, routing, docking, runtime engine handles, interop, cook execution.                                         |
-| `projects/Oxygen.Editor.WorldEditor`     | Open scene workspace: documents, inspector, commands, selection, scene validation presentation, scene-engine sync orchestration.                                                                    | Native calls directly from view models, reusable asset import/cook primitives, project-wide cook policy.          |
+| `projects/Oxygen.Editor.WorldEditor`     | Open scene workspace: documents, commands, selection, scene validation presentation, scene-engine sync orchestration.                                                                               | Native calls directly from view models, reusable asset import/cook primitives, project-wide cook policy.          |
 | `projects/Oxygen.Editor.MaterialEditor`  | Full material document/editor workspace, material inspector/tools, material preview UI, material validation presentation.                                                                           | Reusable asset/cook primitives, native engine calls, project policy.                                              |
 | `projects/Oxygen.Editor.SceneEditor`     | The scene editor: viewports, cameras, transform gizmos and tools, the toolbar and the Play bar; the preview, viewport and transform tool settings.                                                  | Applying authoring state to the engine, Play sessions, native calls (it reaches the engine through Runtime only). |
+| `projects/Oxygen.Editor.SceneInspector`  | The Properties panel of a scene: the selected nodes' components, the scene's environment and the script slots.                                                                                      | Scene edit rules, the shared property controls, engine calls.                                                     |
 | `projects/Oxygen.Editor.SceneExplorer`   | The Scene Explorer panel: the tree of the active scene's nodes and explorer folders, where nodes are created, renamed, moved, grouped, hidden, locked and selected.                                 | Scene edit rules and the shared selection.                                                                        |
 | `projects/Oxygen.Editor.CookedInspector` | The Cooked Inspector panel: a read-only report of the cooked output of a scope, and the information of the asset it inspects.                                                                       | Reading and validating cooked output.                                                                             |
 | `projects/Oxygen.Editor.Cooking`         | The Cooking panel: the cook runs of the project with their issues, output and assets; saving what a cook reads, and showing where its issues and outputs are.                                       | Cook orchestration.                                                                                               |
@@ -221,11 +222,12 @@ Use this before adding a file:
    settings?**
    Put it in `Oxygen.Editor.World`.
 5. **Is it UI or view-model behavior for editing an open scene?**
-   Put it in `Oxygen.Editor.WorldEditor`.
+   Put it in the scene feature that shows it: `Oxygen.Editor.SceneEditor`
+   (viewports and tools), `Oxygen.Editor.SceneExplorer` (the hierarchy) or
+   `Oxygen.Editor.SceneInspector` (properties).
 6. **Is it a scene mutation, undo/redo operation, dirty-state transition, or
    validation trigger?**
-   Put it in `Oxygen.Editor.WorldEditor/src/Commands` or
-   `Oxygen.Editor.WorldEditor/src/Services/Validation`.
+   Put it in `Oxygen.Editor.Scenes`, with the scene's edits and their rules.
 7. **Is it a reusable asset identity, catalog, import, cook, or loose-index
    primitive?**
    Put it in `Oxygen.Managed.Assets`.
@@ -261,15 +263,15 @@ Use this before adding a file:
 
 Durable settings follow [settings-architecture.md](lld/settings-architecture.md):
 
-| Setting Scope                                | Placement                                                 |
-| -------------------------------------------- | --------------------------------------------------------- |
-| Editor setting infrastructure                | `Oxygen.Editor.Data`                                      |
-| Editor setting meaning and app-wide defaults | `Oxygen.Editor` or the owning feature                     |
-| Project settings                             | `Oxygen.Editor.Projects`                                  |
-| Workspace layout/state                       | `Oxygen.Editor` shell services and editor data            |
-| Scene environment/render intent              | `Oxygen.Editor.World` plus `Oxygen.Editor.WorldEditor` UI |
-| Runtime effective settings                   | `Oxygen.Editor.Runtime`                                   |
-| Diagnostic overrides                         | app launch/debug infrastructure                           |
+| Setting Scope                                | Placement                                                    |
+| -------------------------------------------- | ------------------------------------------------------------ |
+| Editor setting infrastructure                | `Oxygen.Editor.Data`                                         |
+| Editor setting meaning and app-wide defaults | `Oxygen.Editor` or the owning feature                        |
+| Project settings                             | `Oxygen.Editor.Projects`                                     |
+| Workspace layout/state                       | `Oxygen.Editor` shell services and editor data               |
+| Scene environment/render intent              | `Oxygen.Editor.World` plus `Oxygen.Editor.SceneInspector` UI |
+| Runtime effective settings                   | `Oxygen.Editor.Runtime`                                      |
+| Diagnostic overrides                         | app launch/debug infrastructure                              |
 
 Do not add a setting only as a command-line switch or environment variable.
 Diagnostic overrides are temporary and must not become product configuration.
@@ -288,15 +290,7 @@ projects/Oxygen.Editor.UI/src/
 
 ```text
 projects/Oxygen.Editor.WorldEditor/src/
-+-- Commands/              # undoable scene/document commands
-+-- Inspector/
-|   +-- Components/         # per-component property editors
-|   +-- Environment/        # scene environment editors
-|   +-- Fields/             # reusable inspector field controls/view models
-+-- Services/
-|   +-- Sync/               # live engine sync adapters
-|   +-- Validation/         # structured scene validation
-+-- Cooking/                # scene document adapters over ContentPipeline
++-- Workspace/             # the workspace window: its container, routes and layout
 ```
 
 ```text
@@ -358,7 +352,7 @@ Most editor features touch several projects. Split them by product:
 
 Example: a new scene component should not be implemented as one large
 WorldEditor patch. Its domain type goes in `World`; its inspector goes in
-`WorldEditor`; its asset references use `Assets`; its cook policy goes through
+`SceneInspector`; its asset references use `Assets`; its cook policy goes through
 `Projects`; its live operation goes through `Runtime`.
 
 ## 11. Feature Module Examples
@@ -371,7 +365,7 @@ These examples are normative:
 | Asset pipeline operations: import, cook, pak, inspect | `Oxygen.Editor.ContentPipeline` for tooling services; `Oxygen.Managed.Assets` for reusable primitives; `ContentBrowser` or owning editor for panels; `Projects` for project policy; `Interop` only for native engine capabilities. |
 | Material editor                                       | `Oxygen.Editor.MaterialEditor` for material documents/UI/tools; reusable material source/asset/cook primitives in `Oxygen.Managed.Assets`; preview/runtime work through `Runtime` and `Interop`.                                   |
 | Physics scene sidecar editor                          | `Oxygen.Editor.PhysicsEditor` for physics scene UI/documents/tools; shared physics authoring model in `Oxygen.Editor.Physics`; sidecar generation through `ContentPipeline`; project policy through `Projects`.                    |
-| Scene component editor                                | Domain component in `World`; inspector in `WorldEditor`; reusable fields in `Oxygen.Editor.UI`; live operation through `Runtime`; native operation through `Interop`.                                                              |
+| Scene component editor                                | Domain component in `World`; inspector in `SceneInspector`; reusable fields in `Oxygen.Editor.UI`; live operation through `Runtime`; native operation through `Interop`.                                                           |
 
 ## 12. New Project Rule
 

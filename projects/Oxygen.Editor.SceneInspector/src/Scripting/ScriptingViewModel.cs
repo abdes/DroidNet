@@ -16,11 +16,12 @@ using Oxygen.Editor.Scenes.Edits.Scripting;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Windows;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Scripting;
+namespace Oxygen.Editor.SceneInspector.Scripting;
 
 /// <summary>
 /// The Scripting section of a node: one card per script slot, in order. Every change is one undoable scene edit.

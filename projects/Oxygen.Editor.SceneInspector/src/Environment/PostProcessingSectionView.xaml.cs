@@ -5,9 +5,9 @@
 using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
-using Oxygen.Editor.World.Inspector.Presentation;
+using Oxygen.Editor.SceneInspector.Presentation;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Composes the smaller related effects without redundant per-effect models.</summary>
 [ViewModel(typeof(PostProcessingSectionViewModel))]

@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Pickers;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Composes typed asset pickers and retained scene-reference rows.</summary>
 [ViewModel(typeof(SceneReferencesSectionViewModel))]

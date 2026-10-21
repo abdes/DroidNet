@@ -5,14 +5,15 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls;
 using Microsoft.Extensions.Logging;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.World.Utils;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Owns transform values and mixed/diagnostic presentation; the edit controller owns gesture lifetime.</summary>
 public sealed partial class TransformViewModel : ComponentPropertyEditor, IDisposable

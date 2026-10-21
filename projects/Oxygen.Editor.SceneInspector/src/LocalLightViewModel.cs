@@ -4,16 +4,17 @@
 
 using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector.Editing;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Shared point/spot light inspector: common light, shadow and emission fields.</summary>
 public abstract partial class LocalLightViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner

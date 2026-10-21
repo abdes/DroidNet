@@ -1,18 +1,18 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.World.Inspector.Scripting.ScriptingView"
+    x:Class="Oxygen.Editor.SceneInspector.Scripting.ScriptingView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:editorcontrols="using:Oxygen.Editor.Controls"
-    xmlns:local="using:Oxygen.Editor.World.Inspector.Scripting"
+    xmlns:local="using:Oxygen.Editor.SceneInspector.Scripting"
     xmlns:pickers="using:Oxygen.Editor.Pickers"
     xmlns:ui="using:CommunityToolkit.WinUI">
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml" />
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
             <ctkcvt:BoolToVisibilityConverter x:Key="BoolToVisibility" />
             <ctkcvt:BoolToVisibilityConverter

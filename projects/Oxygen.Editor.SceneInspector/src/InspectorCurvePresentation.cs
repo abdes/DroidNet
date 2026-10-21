@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Projects authored exposure keys into the view's compact curve preview.</summary>
 internal static class InspectorCurvePresentation

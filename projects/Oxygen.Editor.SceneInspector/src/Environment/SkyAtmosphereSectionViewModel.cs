@@ -9,7 +9,7 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns atmosphere display units, channel edits and Aerial Start validation.</summary>
 public sealed partial class SkyAtmosphereSectionViewModel : ObservableObject

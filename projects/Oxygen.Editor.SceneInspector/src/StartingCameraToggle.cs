@@ -6,9 +6,10 @@ using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>
 /// The Starting camera check box of a camera section: it edits the scene's one starting camera reference, so

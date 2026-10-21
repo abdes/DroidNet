@@ -5,9 +5,8 @@
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World.Inspector;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
 public sealed class InspectorFieldDiagnosticsTests

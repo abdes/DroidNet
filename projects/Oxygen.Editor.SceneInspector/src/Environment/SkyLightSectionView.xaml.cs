@@ -6,11 +6,11 @@ using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.SceneInspector.Geometry;
+using Oxygen.Editor.SceneInspector.Presentation;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World.Inspector.Presentation;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Composes the sky light's source, multipliers and disclosures.</summary>
 [ViewModel(typeof(SkyLightSectionViewModel))]

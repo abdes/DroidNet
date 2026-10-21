@@ -7,7 +7,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.World.Components;
 
-namespace Oxygen.Editor.World.Inspector.Scripting;
+namespace Oxygen.Editor.SceneInspector.Scripting;
 
 /// <summary>
 /// A value a slot holds for a parameter its script no longer declares, or declares with another type. The cook fails

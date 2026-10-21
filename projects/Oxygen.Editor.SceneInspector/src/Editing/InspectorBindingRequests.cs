@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Schemas.Bindings;
 
-namespace Oxygen.Editor.World.Inspector.Editing;
+namespace Oxygen.Editor.SceneInspector.Editing;
 
 /// <summary>
 /// Forwards control values to a binding only when they change the authored value.

@@ -5,12 +5,12 @@
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Pickers;
-using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Editor.SceneInspector.Geometry;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World.Slots;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 [TestClass]
 internal sealed class MaterialSlotsTests : DroidNet.Tests.VisualUserInterfaceTests

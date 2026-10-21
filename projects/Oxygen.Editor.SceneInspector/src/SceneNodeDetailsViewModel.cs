@@ -13,9 +13,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Nodes;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>
 /// ViewModel for <see cref="SceneNodeDetailsView"/>. This ViewModel assumes a single

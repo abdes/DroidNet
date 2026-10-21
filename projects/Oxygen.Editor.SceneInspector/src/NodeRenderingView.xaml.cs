@@ -4,7 +4,7 @@
 
 using DroidNet.Mvvm.Generators;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Node Rendering section view.</summary>
 [ViewModel(typeof(NodeRenderingViewModel))]

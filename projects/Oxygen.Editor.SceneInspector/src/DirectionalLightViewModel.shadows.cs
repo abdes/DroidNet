@@ -5,7 +5,7 @@
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Owns cascade input applicability without rewriting stored authoring values.</summary>
 public sealed partial class DirectionalLightViewModel

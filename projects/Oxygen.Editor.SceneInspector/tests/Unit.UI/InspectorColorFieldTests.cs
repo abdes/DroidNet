@@ -10,11 +10,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Controls;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using NumberBox = DroidNet.Controls.NumberBox;
 using PropertyCard = Oxygen.Editor.Controls.PropertyCard;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 /// <summary>Exercises the inspector color row: a property card around a linear ColorBox.</summary>
 [TestClass]
@@ -73,7 +73,7 @@ internal sealed class InspectorColorFieldTests : VisualUserInterfaceTests
         var host = new Grid { Width = width, HorizontalAlignment = HorizontalAlignment.Left, RequestedTheme = ElementTheme.Light };
         host.Resources.MergedDictionaries.Add(new ResourceDictionary
         {
-            Source = new Uri("ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml"),
+            Source = new Uri("ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml"),
         });
         return host;
     }

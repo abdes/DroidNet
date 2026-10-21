@@ -4,7 +4,7 @@
 
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Editing;
+namespace Oxygen.Editor.SceneInspector.Editing;
 
 /// <summary>Refreshes one typed inspector binding regardless of its value type.</summary>
 internal interface IInspectorBindingRefresh : IDisposable

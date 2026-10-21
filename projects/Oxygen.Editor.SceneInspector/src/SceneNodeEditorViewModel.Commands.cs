@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Shell.Commands;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <content>Undo and Redo while the inspector has the focus: they run through the scene's authoring and refresh the fields.</content>
 public sealed partial class SceneNodeEditorViewModel : ICommandHandler

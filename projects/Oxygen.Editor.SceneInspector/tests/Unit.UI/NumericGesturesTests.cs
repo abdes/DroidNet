@@ -11,15 +11,14 @@ using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Controls;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.SceneInspector.Environment;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Inspector.Environment;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
 using NumberBox = DroidNet.Controls.NumberBox;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 [TestClass]
 internal sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceTests

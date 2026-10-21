@@ -12,14 +12,13 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Controls;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
+using Oxygen.Editor.SceneInspector.TestSupport;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorModels;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
 using NumberBox = DroidNet.Controls.NumberBox;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 /// <summary>
 ///     The one home of the inspector's responsive layout: property rows, their fields and feedback, and the panels
@@ -607,7 +606,7 @@ internal sealed partial class ResponsiveLayoutTests : VisualUserInterfaceTests
         var host = new Grid { Width = width, HorizontalAlignment = HorizontalAlignment.Left };
         host.Resources.MergedDictionaries.Add(new ResourceDictionary
         {
-            Source = new Uri("ms-appx:///Oxygen.Editor.WorldEditor/Inspector/SceneInspectorStyles.xaml"),
+            Source = new Uri("ms-appx:///Oxygen.Editor.SceneInspector/SceneInspectorStyles.xaml"),
         });
         return host;
     }

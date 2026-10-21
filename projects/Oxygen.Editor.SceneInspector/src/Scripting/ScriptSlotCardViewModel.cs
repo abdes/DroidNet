@@ -13,7 +13,7 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Inspector.Scripting;
+namespace Oxygen.Editor.SceneInspector.Scripting;
 
 /// <summary>
 /// One script slot in the Scripting section: its script, execution order and position, its problems, and one field per

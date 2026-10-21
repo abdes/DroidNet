@@ -26,10 +26,11 @@ using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Windows;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>
 ///     ViewModel for editing properties of selected SceneNode entities in the World Editor.

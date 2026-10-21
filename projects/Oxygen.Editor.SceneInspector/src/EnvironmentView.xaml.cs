@@ -8,11 +8,11 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.SceneInspector.Environment;
+using Oxygen.Editor.SceneInspector.Presentation;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World.Inspector.Environment;
-using Oxygen.Editor.World.Inspector.Presentation;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Composes section-owned views and orchestrates scene browsing and diagnostic navigation.</summary>
 [ViewModel(typeof(EnvironmentViewModel))]

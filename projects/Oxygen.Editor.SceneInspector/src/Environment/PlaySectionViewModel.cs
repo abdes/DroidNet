@@ -11,14 +11,15 @@ using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.SceneInspector.Presentation;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Settings;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector.Presentation;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>
 /// The scene's Play section: the camera a played scene starts viewing through and the input mapping contexts it

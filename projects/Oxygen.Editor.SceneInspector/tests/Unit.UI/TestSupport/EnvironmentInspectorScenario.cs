@@ -6,9 +6,8 @@ using AwesomeAssertions;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.World.Inspector;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.SceneInspector.TestSupport;
 
 // Drives an EnvironmentView inspector through fixture, model, view and the search/scope chrome.
 // - Search filtering is synchronous: EnvironmentView registers a TextBox.Text property-changed

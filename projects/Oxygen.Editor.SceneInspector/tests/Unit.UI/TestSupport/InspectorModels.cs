@@ -3,9 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.SceneInspector.TestSupport;
 
 internal static partial class InspectorModels
 {

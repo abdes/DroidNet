@@ -6,14 +6,13 @@ using System.Numerics;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml.Controls;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 public sealed partial class InspectorBindingTests
 {

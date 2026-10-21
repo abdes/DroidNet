@@ -10,7 +10,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>
 /// Owns the one backdrop choice (atmosphere, cubemap or solid color) and the

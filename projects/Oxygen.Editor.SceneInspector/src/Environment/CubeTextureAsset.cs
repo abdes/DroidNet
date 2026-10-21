@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Assets;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>A cube texture of the project's catalog.</summary>
 /// <param name="Asset">The catalog item.</param>

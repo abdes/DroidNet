@@ -6,7 +6,7 @@ using System.Collections.Immutable;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Inspector.Presentation;
+namespace Oxygen.Editor.SceneInspector.Presentation;
 
 /// <summary>Identifies a source-role presentation independently of its stored properties.</summary>
 /// <param name="Role">The role whose existing light model supplies the editor.</param>

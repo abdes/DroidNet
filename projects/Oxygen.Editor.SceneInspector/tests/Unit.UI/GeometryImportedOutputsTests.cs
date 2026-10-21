@@ -8,10 +8,10 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Testing;
 using Oxygen.Editor.ContentPipeline.Testing;
-using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Editor.SceneInspector.Geometry;
 using static DroidNet.Tests.UiTestHosting;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 /// <summary>The geometry picker offers an imported model's geometry output, never the model itself.</summary>
 [TestClass]

@@ -4,11 +4,10 @@
 
 using AwesomeAssertions;
 using DroidNet.Controls;
-using Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.TestSupport;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
 public sealed class ExposureCurveEditorTests

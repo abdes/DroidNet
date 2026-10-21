@@ -4,13 +4,13 @@
 
 using AwesomeAssertions;
 using DroidNet.Documents;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 /// <summary>
 /// T5/C16: the Inspector routes by the classified selection context — folders and mixed

@@ -7,7 +7,7 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Media;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>
 ///     Represents the view for editing transform properties in the World Editor.

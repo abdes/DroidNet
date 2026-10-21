@@ -11,18 +11,17 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
+using Oxygen.Editor.SceneInspector.Environment;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Inspector.Environment;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorModels;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
 using NumberBox = DroidNet.Controls.NumberBox;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 [TestClass]
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "partial class with public part")]

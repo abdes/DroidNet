@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml.Data;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Compacts mask-formatted inspector values without changing their precision or units.</summary>
 public sealed partial class CompactNumberDisplayConverter : IValueConverter

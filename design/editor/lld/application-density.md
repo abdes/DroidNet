@@ -78,9 +78,9 @@ Terms used below:
 - **Compact pinned in the editor.** Three files merge WinUI Compact
   unconditionally, so no setting can turn it off:
   [SceneExplorerView.xaml](../../../projects/Oxygen.Editor.SceneExplorer/src/SceneExplorerView.xaml),
-  [SceneNodeEditorView.xaml](../../../projects/Oxygen.Editor.WorldEditor/src/Inspector/SceneNodeEditorView.xaml)
+  [SceneNodeEditorView.xaml](../../../projects/Oxygen.Editor.SceneInspector/src/SceneNodeEditorView.xaml)
   and
-  [SceneInspectorStyles.xaml](../../../projects/Oxygen.Editor.WorldEditor/src/Inspector/SceneInspectorStyles.xaml).
+  [SceneInspectorStyles.xaml](../../../projects/Oxygen.Editor.SceneInspector/src/SceneInspectorStyles.xaml).
   The editor's main panes therefore look Compact today.
 - **Literal sizes in XAML.** Hundreds of literal `FontSize`, `Height`,
   `MinHeight`, `Padding` and `Margin` values sit in WorldEditor, ContentBrowser,

@@ -11,7 +11,7 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Pickers;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Shows the scene's Play section: its starting camera and starting input contexts.</summary>
 [ViewModel(typeof(PlaySectionViewModel))]

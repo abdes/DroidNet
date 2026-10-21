@@ -4,7 +4,7 @@
 
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>An entry of the starting camera list: Automatic, a camera, or the authored camera that is gone.</summary>
 /// <remarks>Entries compare by identity, so the list keeps its entries while the cameras are unchanged and a

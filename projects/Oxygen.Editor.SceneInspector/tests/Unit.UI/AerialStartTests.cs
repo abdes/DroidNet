@@ -6,15 +6,14 @@ using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.Schemas;
-using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorModels;
 using NumberBox = DroidNet.Controls.NumberBox;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 [TestClass]
 internal sealed class AerialStartTests : DroidNet.Tests.VisualUserInterfaceTests

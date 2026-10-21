@@ -5,11 +5,12 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Refreshes current environment values and only the affected sun-reference dependencies.</summary>
 public sealed partial class AtmosphereLightsSectionViewModel

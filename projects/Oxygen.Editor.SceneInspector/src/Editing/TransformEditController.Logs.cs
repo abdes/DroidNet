@@ -5,7 +5,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.World.Inspector.Editing;
+namespace Oxygen.Editor.SceneInspector.Editing;
 
 /// <summary>
 ///   Logging methods for <see cref="TransformEditController"/>.

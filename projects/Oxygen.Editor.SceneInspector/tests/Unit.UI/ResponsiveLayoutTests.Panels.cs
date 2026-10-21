@@ -10,15 +10,14 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Markup;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorModels;
-using static Oxygen.Editor.WorldEditor.TestSupport.SceneTestData;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorModels;
+using static Oxygen.Editor.SceneInspector.TestSupport.SceneTestData;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 /// <summary>The panels around the property rows: the node editor dock.</summary>
 internal sealed partial class ResponsiveLayoutTests
@@ -163,7 +162,7 @@ internal sealed partial class ResponsiveLayoutTests
         var editors = view.ViewModel!.PropertyEditors.ToArray();
         Toggle(ComponentButton(view, typeof(GeometryComponent)));
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = view.ViewModel!.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<Oxygen.Editor.World.Inspector.Geometry.GeometryViewModel>();
+        _ = view.ViewModel!.PropertyEditors.Should().ContainSingle().Which.Should().BeOfType<Oxygen.Editor.SceneInspector.Geometry.GeometryViewModel>();
         var all = multiple ? (ToolBarToggleButton)view.FindName("MultiAllComponentsButton") : (ToolBarToggleButton)((SceneNodeDetailsView)view.FindName("NodeDetails")).FindName("AllComponentsButton");
         Toggle(all);
         await WaitForRenderAsync().ConfigureAwait(true);

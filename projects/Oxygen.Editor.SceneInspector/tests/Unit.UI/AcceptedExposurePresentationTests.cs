@@ -7,11 +7,10 @@ using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Controls;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
+using Oxygen.Editor.SceneInspector.TestSupport;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 [TestClass]
 internal sealed class AcceptedExposurePresentationTests : VisualUserInterfaceTests

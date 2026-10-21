@@ -4,7 +4,7 @@
 
 using DroidNet.Mvvm.Generators;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Point light inspector view.</summary>
 [ViewModel(typeof(PointLightViewModel))]

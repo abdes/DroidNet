@@ -5,7 +5,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.World.Inspector.Scripting;
+namespace Oxygen.Editor.SceneInspector.Scripting;
 
 /// <summary>Picks the editor template of a script parameter field from its kind.</summary>
 public sealed partial class ScriptFieldTemplateSelector : DataTemplateSelector

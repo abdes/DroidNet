@@ -2,14 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.SceneInspector.Editing;
+using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
-using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.World.Inspector.Editing;
-using Oxygen.Managed.Core;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Owns orthographic camera selection and command lifetime; typed bindings are the sole scalar state.</summary>
 public sealed partial class OrthographicCameraViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner

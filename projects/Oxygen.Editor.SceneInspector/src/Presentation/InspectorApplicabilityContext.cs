@@ -5,7 +5,7 @@
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Inspector.Presentation;
+namespace Oxygen.Editor.SceneInspector.Presentation;
 
 /// <summary>The authored modes that decide which stored scene fields apply.</summary>
 /// <param name="Exposure">The exposure mode.</param>

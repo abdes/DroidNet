@@ -4,9 +4,9 @@
 
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
-using Oxygen.Editor.World.Inspector.Presentation;
+using Oxygen.Editor.SceneInspector.Presentation;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Composes the parent's canonical source editors and independent source actions.</summary>
 [ViewModel(typeof(AtmosphereLightsSectionViewModel))]

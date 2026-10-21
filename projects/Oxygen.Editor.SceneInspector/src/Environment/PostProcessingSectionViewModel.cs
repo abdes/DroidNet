@@ -6,7 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World.Serialization;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns the related tone mapping, grading and bloom values, without creating another edit lifetime.</summary>
 public sealed partial class PostProcessingSectionViewModel : ObservableObject

@@ -9,13 +9,13 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.SceneInspector.Environment;
 using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.World.Inspector.Environment;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Owns scene identity, shared edit lifetime and parent-owned section composition.</summary>
 public sealed partial class EnvironmentViewModel : ComponentPropertyEditor, IDisposable, IInspectorEditSessionOwner

@@ -22,11 +22,10 @@ using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
+namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
 [TestCategory("Inspector")]

@@ -5,9 +5,10 @@
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Spot light inspector editing; cone angles are authored in radians and shown in degrees.</summary>
 public sealed partial class SpotLightViewModel : LocalLightViewModel

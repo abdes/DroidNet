@@ -6,7 +6,7 @@ using DroidNet.Controls;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Composes shadow/cascade presentation using the same owning light model.</summary>
 [ViewModel(typeof(DirectionalLightViewModel))]

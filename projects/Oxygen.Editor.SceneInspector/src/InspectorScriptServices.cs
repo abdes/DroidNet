@@ -6,7 +6,7 @@ using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Windows;
 
-namespace Oxygen.Editor.World.Inspector;
+namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>The services the scripting inspector uses when the host provides them.</summary>
 /// <param name="Scripts">The scripts, for script slot parameters and problems.</param>

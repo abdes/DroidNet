@@ -6,17 +6,17 @@ using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.SceneInspector.Scripting;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector.Scripting;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Scripting;
+namespace Oxygen.Editor.SceneInspector.Unit.Tests.Scripting;
 
 /// <summary>
 /// The Scripting section shows one card per slot with one field per declared parameter, and turns field edits into

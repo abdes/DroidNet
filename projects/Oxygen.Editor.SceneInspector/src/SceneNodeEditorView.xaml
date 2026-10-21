@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.World.Inspector.SceneNodeEditorView"
+    x:Class="Oxygen.Editor.SceneInspector.SceneNodeEditorView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:controls="using:DroidNet.Controls"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
-    xmlns:local="using:Oxygen.Editor.World.Inspector"
+    xmlns:local="using:Oxygen.Editor.SceneInspector"
     x:Name="Root"
     KeyboardAcceleratorPlacementMode="Hidden"
     SizeChanged="OnInspectorSizeChanged">

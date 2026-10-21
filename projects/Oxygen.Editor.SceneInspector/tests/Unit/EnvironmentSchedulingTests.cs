@@ -8,11 +8,10 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Pickers;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 
 [TestClass]
 public sealed class EnvironmentSchedulingTests
@@ -29,12 +28,12 @@ public sealed class EnvironmentSchedulingTests
         using var model = new EnvironmentViewModel(assetProvider: provider.Object, observerScheduler: scheduler);
         model.SetScene(fixture.Scene);
         var deliveryThreads = new List<int>();
-        model.Exposure.MeteringMaskChoices.Groups.CollectionChanged += (_, _) => deliveryThreads.Add(Environment.CurrentManagedThreadId);
+        model.Exposure.MeteringMaskChoices.Groups.CollectionChanged += (_, _) => deliveryThreads.Add(System.Environment.CurrentManagedThreadId);
         var original = CreateTexture("First");
 
         await Task.Run(() => source.OnNext([original]), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = MaskRows(model).Should().BeEmpty("notifications must wait for the supplied scheduler");
-        var observerThread = Environment.CurrentManagedThreadId;
+        var observerThread = System.Environment.CurrentManagedThreadId;
         scheduler.Start();
         _ = MaskRows(model).Should().ContainSingle();
         _ = deliveryThreads.Should().OnlyContain(thread => thread == observerThread);

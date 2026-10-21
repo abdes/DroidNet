@@ -6,11 +6,11 @@ using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.WorldEditor.TestSupport;
+using Oxygen.Editor.SceneInspector.TestSupport;
 using Windows.Foundation;
 using NumberBox = DroidNet.Controls.NumberBox;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 /// <summary>Verifies bounded inspector field discovery during scrolling and layout changes.</summary>
 [TestClass]

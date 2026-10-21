@@ -11,13 +11,12 @@ using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
 using Microsoft.UI.Xaml.Shapes;
-using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.Inspector.Environment;
-using Oxygen.Editor.WorldEditor.TestSupport;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
+using Oxygen.Editor.SceneInspector.Environment;
+using Oxygen.Editor.SceneInspector.TestSupport;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using NumberBox = DroidNet.Controls.NumberBox;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 [TestClass]
 internal sealed class ExposureCurveViewTests : VisualUserInterfaceTests

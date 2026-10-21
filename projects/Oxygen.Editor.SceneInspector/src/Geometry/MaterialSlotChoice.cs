@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.World.Slots;
 
-namespace Oxygen.Editor.World.Inspector.Geometry;
+namespace Oxygen.Editor.SceneInspector.Geometry;
 
 /// <summary>One observed native slot; its label never establishes assignment identity.</summary>
 /// <param name="Target">The geometry, opaque slot and observed inventory revision.</param>

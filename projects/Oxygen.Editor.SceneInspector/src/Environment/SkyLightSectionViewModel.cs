@@ -10,7 +10,7 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Environment;
+namespace Oxygen.Editor.SceneInspector.Environment;
 
 /// <summary>Owns the sky light's image-based lighting fields and their edits.</summary>
 public sealed partial class SkyLightSectionViewModel : ObservableObject, IDisposable

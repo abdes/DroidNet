@@ -6,7 +6,7 @@ using System.Diagnostics;
 using Oxygen.Editor.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspector.Geometry;
+namespace Oxygen.Editor.SceneInspector.Geometry;
 
 /// <summary>Projects shared identities and availability into stable geometry choices.</summary>
 public sealed partial class GeometryViewModel

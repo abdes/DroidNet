@@ -7,11 +7,11 @@ using CommunityToolkit.WinUI;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
+using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using Expander = Microsoft.UI.Xaml.Controls.Expander;
 using NumberBox = DroidNet.Controls.NumberBox;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspector;
+namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
 
 public sealed partial class InspectorBindingTests
 {
@@ -21,7 +21,7 @@ public sealed partial class InspectorBindingTests
     private const string AppliesInAutoExposureSpotMeteringCopy = "applies in Auto exposure mode with Spot metering";
     private const string StoredValueNotePrefixCopy = "Stored value";
 
-    private static readonly Dictionary<string, Func<Oxygen.Editor.WorldEditor.TestSupport.EnvironmentInspectorScenario, Task>> VectorFieldPreparations = new(StringComparer.Ordinal)
+    private static readonly Dictionary<string, Func<Oxygen.Editor.SceneInspector.TestSupport.EnvironmentInspectorScenario, Task>> VectorFieldPreparations = new(StringComparer.Ordinal)
     {
         ["GroundAlbedo"] = scenario => scenario.ExpandGroupAsync("SkyAtmosphereSection", "Planet & ground"),
         ["SolidColor"] = scenario =>
@@ -32,7 +32,7 @@ public sealed partial class InspectorBindingTests
     };
 
     // Shows the solid color backdrop without recording authoring history.
-    private static void ShowSolidColorBackdrop(Oxygen.Editor.WorldEditor.TestSupport.SceneAuthoringFixture fixture)
+    private static void ShowSolidColorBackdrop(Oxygen.Editor.SceneInspector.TestSupport.SceneAuthoringFixture fixture)
         => fixture.Scene.SetEnvironment(fixture.Scene.Environment with
         {
             AtmosphereEnabled = false,

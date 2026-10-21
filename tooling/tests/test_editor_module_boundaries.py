@@ -120,10 +120,6 @@ PENDING_REFERENCES: dict[tuple[str, str], str] = {
         "Oxygen.Editor.WorldEditor",
         "Oxygen.Editor.MaterialEditor",
     ): DISSOLVE_WORLD_EDITOR,
-    (
-        "Oxygen.Editor.WorldEditor",
-        "Oxygen.Editor.SceneInspector",
-    ): DISSOLVE_WORLD_EDITOR,
     ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Runtime"): DISSOLVE_WORLD_EDITOR,
     ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Interop"): DISSOLVE_WORLD_EDITOR,
 }
@@ -152,10 +148,7 @@ PENDING_GRANTS: dict[tuple[str, str], str] = {
     },
     **{
         ("Controls.InPlaceEdit", grantee): TEST_BOUNDARIES
-        for grantee in (
-            "Oxygen.Editor.WorldEditor.Unit.UI.Tests",
-            "Oxygen.Editor.WorldEditor.Integration.UI.Tests",
-        )
+        for grantee in ("Oxygen.Editor.SceneInspector.Unit.UI.Tests",)
     },
 }
 

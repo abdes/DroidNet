@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Utils;
 
-namespace Oxygen.Editor.World.Inspector.Editing;
+namespace Oxygen.Editor.SceneInspector.Editing;
 
 /// <summary>Converts Z-up, emitted-forward -Y source direction without owning authoring commands.</summary>
 internal static class DirectionalLightOrientation
