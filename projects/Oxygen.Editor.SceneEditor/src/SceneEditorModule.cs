@@ -3,6 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using DryIoc;
+using Microsoft.Extensions.Logging;
+using Oxygen.Editor.Data;
+using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Views;
@@ -45,6 +50,7 @@ public sealed class SceneEditorModule : IFeatureModule
         scope.Register<SceneDocumentLifetime>(Reuse.Singleton);
         scope.RegisterMapping<ISceneAvailability, SceneDocumentLifetime>();
         scope.Register<PreviewSettingsLifetime>(Reuse.Singleton);
+        RegisterPreferences(scope);
 
         // Per window on purpose: it observes this window's hidden nodes and ends with the window, so a second window
         // cannot inherit a stale notice.
@@ -53,6 +59,32 @@ public sealed class SceneEditorModule : IFeatureModule
                 resolver.Resolve<SceneNodeInteraction>(),
                 resolver.Resolve<IOperationResultPublisher>(),
                 resolver.Resolve<IStatusReducer>()).Start(),
+            Reuse.Singleton);
+    }
+
+    // The preferences stored per project: preview settings and viewport layouts. They are the window's until the
+    // project session owns them; the gizmo preferences, kept across projects, are the editor's.
+    private static void RegisterPreferences(IRegistrator scope)
+    {
+        // A dedicated manager owns a separate DbContext; preview I/O is serialized by its service.
+        scope.Register<IEditorSettingsManager, EditorSettingsManager>(Reuse.Singleton, serviceKey: nameof(PreviewSettingsService));
+        scope.RegisterDelegate(
+            resolver => new PreviewSettingsService(
+                resolver.Resolve<IEngineService>(),
+                resolver.Resolve<IEditorSettingsManager>(serviceKey: nameof(PreviewSettingsService)),
+                resolver.Resolve<IProjectContextService>(),
+                resolver.Resolve<IOperationResultPublisher>(),
+                resolver.Resolve<IStatusReducer>(),
+                resolver.Resolve<ILoggerFactory>()),
+            Reuse.Singleton);
+
+        // Scene viewport layout and pane cameras: user-local workspace state, serialized writes.
+        scope.RegisterDelegate(
+            resolver => new ViewportStateService(
+                resolver.Resolve<IEditorSettingsManager>(),
+                resolver.Resolve<IOperationResultPublisher>(),
+                resolver.Resolve<IStatusReducer>(),
+                resolver.Resolve<ILoggerFactory>()),
             Reuse.Singleton);
     }
 }

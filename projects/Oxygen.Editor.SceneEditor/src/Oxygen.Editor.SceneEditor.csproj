@@ -26,6 +26,7 @@
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)/Composition/src/Composition.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Config/src/Config.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Controls/InPlaceEdit/src/Controls.InPlaceEdit.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Controls/Menus/src/Controls.Menus.csproj" />

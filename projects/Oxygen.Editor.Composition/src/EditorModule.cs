@@ -59,7 +59,7 @@ namespace Oxygen.Editor;
 /// </remarks>
 public static class EditorModule
 {
-    // The editor-layer modules of the subsystems.
+    // The modules of the subsystems in the editor scope.
     private static readonly IScopeModule<IApplicationLayer>[] Modules =
     [
         new ShellModule(),
@@ -69,6 +69,7 @@ public static class EditorModule
         new LivePreviewModule(),
         new MaterialsModule(),
         new TexturesModule(),
+        new SceneEditorSettingsModule(),
     ];
 
     /// <summary>
@@ -191,12 +192,6 @@ public static class EditorModule
         RegisterDiagnosticsServices(container);
         container.Register<IEngineService, EngineService>(Reuse.Singleton);
 
-        // Transform gizmo snapping and space: per-user preferences kept across projects, serialized writes.
-        container.RegisterDelegate(
-            resolver => new TransformToolSettingsService(
-                resolver.Resolve<IEditorSettingsManager>(),
-                resolver.Resolve<ILoggerFactory>()),
-            Reuse.Singleton);
         container.Register<EngineShutdownService>(Reuse.Singleton);
         container.RegisterDelegate<IHostedService>(resolver => resolver.Resolve<EngineShutdownService>(), Reuse.Singleton);
 
