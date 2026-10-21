@@ -733,9 +733,10 @@ checked URIs, source-collision reporting from the cook (`5d5c2bc0e`).
 
 ### S1.12 features
 
-| #   | Feature         | Status | Notes                                                                                                                              |
-| --- | --------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Output          | `done` | Features join the workspace through the Shell's `IFeatureModule`; Output reads the player's log through LivePreview's `IPlayerLog` |
-| 2   | Problems        | `done` |                                                                                                                                    |
-| 3   | Cooking         | `done` |                                                                                                                                    |
-| 4   | CookedInspector | `done` |                                                                                                                                    |
+| #   | Feature         | Status        | Notes                                                                                                                              |
+| --- | --------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Output          | `done`        | Features join the workspace through the Shell's `IFeatureModule`; Output reads the player's log through LivePreview's `IPlayerLog` |
+| 2   | Problems        | `done`        |                                                                                                                                    |
+| 3   | Cooking         | `done`        |                                                                                                                                    |
+| 4   | CookedInspector | `done`        |                                                                                                                                    |
+| 5   | SceneExplorer   | `in progress` |                                                                                                                                    |

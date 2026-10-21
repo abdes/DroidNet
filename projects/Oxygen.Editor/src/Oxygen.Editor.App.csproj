@@ -75,6 +75,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Output\src\Oxygen.Editor.Output.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Problems\src\Oxygen.Editor.Problems.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ProjectBrowser\src\Oxygen.Editor.ProjectBrowser.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.SceneExplorer\src\Oxygen.Editor.SceneExplorer.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Shell\src\Oxygen.Editor.Shell.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Storage\src\Storage.csproj" />
