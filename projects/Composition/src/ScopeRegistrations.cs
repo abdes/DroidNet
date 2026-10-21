@@ -11,7 +11,7 @@ namespace DroidNet.Composition;
 /// </summary>
 /// <remarks>
 ///     A service is identified by its type and its key. A request without a key, or with one of DryIoc's
-///     default keys, asks for the default registration. A constructed generic type is provided by a
+///     default keys, asks for a default registration, whichever default key it has. A constructed generic type is provided by a
 ///     registration of its generic type definition (DryIoc's <c>IsRegistered</c> answers no for
 ///     <c>ILogger&lt;T&gt;</c> when only <c>ILogger&lt;&gt;</c> is registered).
 /// </remarks>
@@ -53,7 +53,9 @@ public static class ScopeRegistrations
     /// <remarks>
     ///     A registration shadows the parent chain when the chain provides the same type and key (a
     ///     closed generic type is also provided by its definition) or, for a generic type definition,
-    ///     when the chain registers one of its constructed types under the same key.
+    ///     when the chain registers one of its constructed types under the same key. Every scope
+    ///     shadows its parent's <see cref="ScopeHandle" /> with its own, so that shadow is always
+    ///     declared.
     /// </remarks>
     public static IReadOnlyList<ServiceRegistrationInfo> FindUndeclaredShadows(
         IContainer scope,
@@ -77,13 +79,21 @@ public static class ScopeRegistrations
 
     private static bool Registers(IContainer container, Type serviceType, object? serviceKey)
     {
-        var key = Normalize(serviceKey) ?? DefaultKey.Value;
-        return container.IsRegistered(serviceType, key)
-            || (serviceType.IsConstructedGenericType && container.IsRegistered(serviceType.GetGenericTypeDefinition(), key));
+        var key = Normalize(serviceKey);
+        return RegistersKey(container, serviceType, key)
+            || (serviceType.IsConstructedGenericType && RegistersKey(container, serviceType.GetGenericTypeDefinition(), key));
     }
 
+    // A default request is served by any default registration: DryIoc keys the default registrations of one type
+    // DefaultKey.Of(0), Of(1) and so on, and keeps the index of each one when another is unregistered.
+    private static bool RegistersKey(IContainer container, Type serviceType, object? serviceKey)
+        => container.GetAllServiceFactories(serviceType).Any(factory => serviceKey is null
+            ? factory.Key is null or DefaultKey
+            : Equals(factory.Key, serviceKey));
+
     private static bool IsDeclared(Type serviceType, IReadOnlyCollection<Type> shadows)
-        => shadows.Contains(serviceType)
+        => serviceType == typeof(ScopeHandle)
+            || shadows.Contains(serviceType)
             || (serviceType.IsConstructedGenericType && shadows.Contains(serviceType.GetGenericTypeDefinition()));
 
     private static bool Shadows(ScopeHandle parent, ServiceRegistrationInfo registration)

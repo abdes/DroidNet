@@ -207,6 +207,26 @@ public sealed class ScopeChainTests
     }
 
     [TestMethod]
+    public async Task Resolve_RootDefaultLeftAfterAnotherIsUnregistered_ReturnsTheRemainingDefault()
+    {
+        // Arrange: the remaining default registration keeps its default key, DefaultKey.Of(1).
+        using var host = TestScopes.CreateHost(root =>
+        {
+            root.Register<IService, Service>(Reuse.Singleton);
+            root.Register<IService, OtherService>(Reuse.Singleton);
+        });
+        host.Unregister<IService>(serviceKey: DefaultKey.Value);
+        await using var root = ScopeFactory.CreateRoot(host);
+        var window = this.factory.CreateScope<IWindowLayer>(root);
+
+        // Act
+        var service = window.Resolver.Resolve<IService>();
+
+        // Assert
+        _ = service.Should().BeOfType<OtherService>().And.BeSameAs(host.Resolve<IService>());
+    }
+
+    [TestMethod]
     public async Task Resolve_CollectionOfRootServices_SeesOnlyTheScopeRegistrations()
     {
         // Arrange
@@ -250,6 +270,56 @@ public sealed class ScopeChainTests
 
         // Assert
         _ = session.Resolver.Resolve<IService>().Should().NotBeSameAs(window.Resolver.Resolve<IService>());
+    }
+
+    [TestMethod]
+    public async Task Resolve_ScopeHandleInEveryScope_ReturnsThatScopesOwnHandle()
+    {
+        // Arrange
+        using var host = TestScopes.CreateHost();
+        await using var chain = this.CreateChain(ScopeFactory.CreateRoot(host));
+
+        // Act
+        var fromRoot = host.Resolve<ScopeHandle>();
+        var fromSession = chain.Session.Resolver.Resolve<ScopeHandle>();
+        var fromWindow = chain.Window.Resolver.Resolve<ScopeHandle>();
+        var fromPanel = chain.Panel.Resolver.Resolve<ScopeHandle>();
+
+        // Assert
+        _ = fromRoot.Should().BeSameAs(chain.Root);
+        _ = fromSession.Should().BeSameAs(chain.Session);
+        _ = fromWindow.Should().BeSameAs(chain.Window);
+        _ = fromPanel.Should().BeSameAs(chain.Panel);
+    }
+
+    [TestMethod]
+    public async Task Resolve_ScopeOwner_ReceivesTheHandleOfTheScopeThatBuildsIt()
+    {
+        // Arrange
+        using var host = TestScopes.CreateHost();
+        await using var root = ScopeFactory.CreateRoot(host);
+        var window = this.factory.CreateScope<IWindowLayer>(root, scope => scope.Register<ScopeOwner>(Reuse.Transient));
+        var panel = this.factory.CreateScope<IPanelLayer>(window);
+
+        // Act
+        var owner = panel.Resolver.Resolve<ScopeOwner>();
+
+        // Assert: the window builds the owner, so the owner's scopes go under the window.
+        _ = owner.Scope.Should().BeSameAs(window);
+    }
+
+    [TestMethod]
+    public void CreateRoot_HostWithARootScope_Throws()
+    {
+        // Arrange
+        using var host = TestScopes.CreateHost();
+        _ = ScopeFactory.CreateRoot(host);
+
+        // Act
+        var act = () => ScopeFactory.CreateRoot(host);
+
+        // Assert
+        _ = act.Should().Throw<ContainerException>();
     }
 
     private Chain CreateChain(ScopeHandle root)

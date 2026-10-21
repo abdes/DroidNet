@@ -19,6 +19,10 @@ namespace DroidNet.Composition;
 ///     a scope may own UI objects. Disposing a handle again does nothing.
 ///     </para>
 ///     <para>
+///     Each scope registers its own handle, so a service that takes a <see cref="ScopeHandle" />
+///     receives the handle of the scope that builds it: a scope owner creates its child scopes under it.
+///     </para>
+///     <para>
 ///     The handle of the root scope wraps the host's container and never disposes it; the host does.
 ///     </para>
 /// </remarks>

@@ -104,6 +104,14 @@ internal static class Fixtures
         public IService Service { get; } = service;
     }
 
+    /// <summary>A scope owner: it creates its child scopes under the scope that builds it.</summary>
+    /// <param name="scope">The handle of the scope that builds the owner.</param>
+    public sealed class ScopeOwner(ScopeHandle scope)
+    {
+        /// <summary>Gets the handle the owner received.</summary>
+        public ScopeHandle Scope { get; } = scope;
+    }
+
     /// <summary>A service with an optional dependency that no scope registers.</summary>
     /// <param name="missing">The optional dependency.</param>
     public sealed class OptionalConsumer(IMissingService? missing = null)

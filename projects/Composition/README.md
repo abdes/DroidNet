@@ -16,7 +16,7 @@ Registration modules fill it, and a tree of scope handles owns it.
 
 ```mermaid
 flowchart TB
-    Root["Root handle<br/>host container, never disposed by the handle"]
+    Root["Root handle<br/>over the host container"]
     Session["Session scope"]
     Window["Window scope"]
     Panel["Panel scope"]
@@ -47,6 +47,11 @@ and the scope has one unknown-service resolver, which asks its immediate parent.
 - `Func<>`, `Lazy<>` and keyed services resolve through the chain. Collections
   (`IEnumerable<T>`, `ResolveMany`) see only the scope's own registrations.
 - `IServiceProvider` and `IContainer` resolve to the scope itself.
+- `ScopeHandle` resolves to the scope's own handle: `CreateRoot` registers the
+  root handle in the host, and every scope registers its own, an implicit
+  declared shadow. A scope owner, such as a view model that creates its child
+  scopes, takes `ScopeHandle` and receives the handle of the scope that builds
+  it.
 
 A rules object of a parent is never reused: DryIoc appends resolvers to the
 rules it is given, so the root's resolver would run first and throw for a

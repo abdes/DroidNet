@@ -34,14 +34,18 @@ public sealed class ScopeFactory
     private readonly Rules rules = DryIocAdapter.MicrosoftDependencyInjectionRules.WithoutTrackingDisposableTransients();
 
     /// <summary>
-    ///     Creates the handle of the root scope over the host's container.
+    ///     Creates the handle of the root scope over the host's container, and registers it in that
+    ///     container.
     /// </summary>
     /// <param name="host">The container the host built. The handle never disposes it.</param>
     /// <returns>The root scope's handle.</returns>
+    /// <exception cref="ContainerException">The host already has a root scope.</exception>
     public static ScopeHandle CreateRoot(IContainer host)
     {
         ArgumentNullException.ThrowIfNull(host);
-        return new ScopeHandle(host, parent: null, ownsContainer: false);
+        var handle = new ScopeHandle(host, parent: null, ownsContainer: false);
+        host.RegisterInstance(handle, IfAlreadyRegistered.Throw);
+        return handle;
     }
 
     /// <summary>
@@ -59,9 +63,10 @@ public sealed class ScopeFactory
     /// </exception>
     /// <exception cref="ObjectDisposedException"><paramref name="parent" /> has been disposed.</exception>
     /// <remarks>
-    ///     The new scope then creates the activation list of every module, module by module, in order.
-    ///     When registration or activation fails, the new scope's container is disposed and the parent
-    ///     is left unchanged.
+    ///     The new scope registers its own handle, so a service of the scope that takes a
+    ///     <see cref="ScopeHandle" /> receives this scope's, never a parent's. The scope then creates
+    ///     the activation list of every module, module by module, in order. When registration or
+    ///     activation fails, the new scope's container is disposed and the parent is left unchanged.
     /// </remarks>
     public ScopeHandle Create<TLayer>(
         ScopeHandle parent,
@@ -76,9 +81,10 @@ public sealed class ScopeFactory
         IReadOnlyList<IScopeModule<TLayer>> layerModules = [.. modules];
         var resolver = new ParentResolver(parent);
         var container = new Container(this.rules.WithUnknownServiceResolvers(resolver.Resolve));
+        var handle = new ScopeHandle(container, parent, ownsContainer: true);
         try
         {
-            Register(container, parent, layerModules, hostInstances);
+            Register(container, parent, handle, layerModules, hostInstances);
             Activate(container, layerModules);
         }
         catch
@@ -87,7 +93,6 @@ public sealed class ScopeFactory
             throw;
         }
 
-        var handle = new ScopeHandle(container, parent, ownsContainer: true);
         if (!parent.TryAttach(handle))
         {
             container.Dispose();
@@ -100,6 +105,7 @@ public sealed class ScopeFactory
     private static void Register<TLayer>(
         Container container,
         ScopeHandle parent,
+        ScopeHandle scope,
         IReadOnlyList<IScopeModule<TLayer>> modules,
         Action<IRegistrator>? hostInstances)
         where TLayer : IScopeLayer
@@ -111,6 +117,7 @@ public sealed class ScopeFactory
 
         hostInstances?.Invoke(container);
 
+        container.RegisterInstance(scope);
         var shadows = modules.SelectMany(module => module.Shadows).ToHashSet();
         var undeclared = ScopeRegistrations.FindUndeclaredShadows(container, parent, shadows);
         if (undeclared.Count > 0)
