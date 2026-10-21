@@ -13,6 +13,7 @@
 
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\testing\Oxygen.Editor.Interop.Testing.csproj" />
 
     </ItemGroup>
 </Project>

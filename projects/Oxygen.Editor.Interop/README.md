@@ -126,8 +126,10 @@ Project entry points:
 - [Native command/input tests](test/native/Oxygen.Editor.Interop.NativeTests.vcxproj).
 
 Run the built test outputs using `traverse Invoke-Tests --start projects/Oxygen.Editor.Interop --configuration Debug`.
-[NativeDllSearchPath](test/NativeDllSearchPath.cs) registers the configuration's
-engine install `bin` directory before tests touch the mixed-mode assembly.
+[NativeDllSearchPath](testing/NativeDllSearchPath.cs), in the
+[test kit](testing/README.md), registers the configuration's engine install
+`bin` directory; each test project that loads the mixed-mode assembly calls it
+from its own module initializer.
 
 [EngineTests](test/EngineTests.cs) covers the runner and surface boundary;
 [ConfigureLoggingTests](test/ConfigureLoggingTests.cs) covers log forwarding.

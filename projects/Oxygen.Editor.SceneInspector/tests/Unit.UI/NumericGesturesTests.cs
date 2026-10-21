@@ -62,14 +62,14 @@ internal sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceT
         var number = await this.LoadNumericFieldAsync(view, field).ConfigureAwait(true);
         _ = number.Should().NotBeNull();
         var before = number.NumberValue;
-        RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
+        BeginNumberSession(model, number, NumberBoxEditInteractionKind.PointerDrag);
         for (var sample = 1; sample <= 100; sample++)
         {
             number.NumberValue = before + (sample / 100f);
         }
 
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
-        RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
+        CompleteNumberSession(model, NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await PendingNumericEdits(model).ConfigureAwait(true);
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         _ = number.NumberValue.Should().Be(before + 1);
@@ -95,11 +95,11 @@ internal sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceT
         var view = ResolveNumericView(model, field);
         var number = await this.LoadNumericFieldAsync(view, field).ConfigureAwait(true);
         var before = number.NumberValue;
-        RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
+        BeginNumberSession(model, number, NumberBoxEditInteractionKind.PointerDrag);
         number.NumberValue = before + 1;
         await PendingNumericEdits(model).ConfigureAwait(true);
         _ = number.NumberValue.Should().Be(before + 1);
-        RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
+        CompleteNumberSession(model, NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Cancel);
         await PendingNumericEdits(model).ConfigureAwait(true);
         _ = number.NumberValue.Should().Be(before);
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
@@ -124,9 +124,9 @@ internal sealed class NumericGesturesTests : DroidNet.Tests.VisualUserInterfaceT
         var before = number.NumberValue;
         for (var tick = 1; tick <= 4; tick++)
         {
-            RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.MouseWheel);
+            BeginNumberSession(model, number, NumberBoxEditInteractionKind.MouseWheel);
             number.NumberValue = before + tick;
-            RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.MouseWheel, NumberBoxEditCompletionKind.Commit);
+            CompleteNumberSession(model, NumberBoxEditInteractionKind.MouseWheel, NumberBoxEditCompletionKind.Commit);
         }
 
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();

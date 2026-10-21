@@ -97,7 +97,7 @@ public sealed class LooseCookedIndexAssetCatalogTests
             "OTEX"u8.CopyTo(sidecar);
             sidecar[4] = 1;
             sidecar[8] = 1;
-            Oxygen.Testing.PakFixture.Encode(cube).CopyTo(sidecar, 12);
+            Oxygen.Managed.Assets.Testing.PakFixture.Encode(cube).CopyTo(sidecar, 12);
             await File.WriteAllBytesAsync(Path.Combine(root.FullName, "Textures", "Sky.otex"), sidecar, this.TestContext.CancellationToken).ConfigureAwait(false);
             var document = new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [],
             [

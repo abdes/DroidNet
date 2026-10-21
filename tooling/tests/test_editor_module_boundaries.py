@@ -108,32 +108,8 @@ ENGINE_EXCEPTIONS: dict[str, frozenset[str]] = {
 
 # Violations the tree still has, each with the work that removes it. An entry
 # that no longer occurs fails the test, so the lists only shrink.
-TEST_BOUNDARIES = "#69 S1.14 removes cross-module internals grants"
 PENDING_REFERENCES: dict[tuple[str, str], str] = {}
-PENDING_GRANTS: dict[tuple[str, str], str] = {
-    **{
-        ("Oxygen.Editor.World", grantee): TEST_BOUNDARIES
-        for grantee in (
-            "Oxygen.Editor.ContentPipeline.Unit.Tests",
-            "Oxygen.Editor.ContentPipeline.Integration.Tests",
-            "Oxygen.Editor.ContentPipeline.Benchmarks.Tests",
-        )
-    },
-    **{
-        ("Oxygen.Editor.ContentPipeline", grantee): TEST_BOUNDARIES
-        for grantee in (
-            "Oxygen.Editor.LivePreview.Unit.UI.Tests",
-            "Oxygen.Editor.Integration.UI.Tests",
-            "Oxygen.Editor.Benchmarks.UI.Tests",
-            "Oxygen.Editor.MaterialEditor.Tests",
-            "Oxygen.Editor.ContentExplorer.UI.Tests",
-        )
-    },
-    **{
-        ("Controls.InPlaceEdit", grantee): TEST_BOUNDARIES
-        for grantee in ("Oxygen.Editor.SceneInspector.Unit.UI.Tests",)
-    },
-}
+PENDING_GRANTS: dict[tuple[str, str], str] = {}
 
 PROJECT_REFERENCE = re.compile(r'<ProjectReference\s+Include="([^"]+)"')
 PROPERTY = re.compile(r"<(AssemblyName|RootNamespace)>([^<]+)</\1>", re.IGNORECASE)

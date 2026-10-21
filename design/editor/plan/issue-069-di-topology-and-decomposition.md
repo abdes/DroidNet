@@ -1,9 +1,10 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0 and S1.1 to S1.13 (Assets, Cook on change,
+Status: `in progress` — Phase 0 and S1.1 to S1.14 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
 Scenes, LivePreview, Asset family modules, Cook on change over checked inputs,
-Shell, Unsaved documents, Features, Dissolve the World Editor) are done; S1.14 (Test boundaries) is next; see the ledger in section 6. Phase 1 follows
+Shell, Unsaved documents, Features, Dissolve the World Editor, Test boundaries)
+are done; see the ledger in section 6. Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -540,12 +541,12 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   behavior it checks, and no test project links another module's fixtures. Gate:
   the touched test projects.
 
-  `Controls.InPlaceEdit` grants its `NumberBox` edit-session members
-  (`StartEdit`, `CancelEdit`, `OnEditSessionStarted`, `OnEditSessionCompleted`)
-  to `Oxygen.Editor.SceneInspector.Unit.UI.Tests`, whose text-entry and drag
-  tests use them (`InspectorControls.EnterTextAsync`, `InspectorBindingTests`,
-  `ResponsiveLayoutTests`). Revisit these tests and the grant when `NumberBox` is
-  refactored: they should drive an edit session through its public API.
+  `NumberBox` starts and cancels a text edit through its public API
+  (`BeginTextEdit`, `CancelEdit`), which the SceneInspector UI tests use. Tests
+  of an inspector's drag and wheel sessions call its `IInspectorEditSessionOwner`;
+  tests of how a view wires its controls (late callbacks from recycled controls,
+  vector boxes, filter changes) still raise the control's session events by
+  reflection, because `NumberBox` has no public way to drive a drag.
 
 - **S1.15 Enforcement.** `tooling/tests/test_editor_module_boundaries.py`
   checks, from the project and `AssemblyInfo` files, the layer rules of
@@ -635,9 +636,11 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 ### Phase 2: scope factory and topology test
 
 - **S2.1** `DroidNet.Composition`: `ScopeFactory`, `ScopeHandle`, module and
-  activation-list contracts, `RouterScopeModule`, with the spec 6.3 rules and
-  their own tests (chain root > session > window > panel, optional dependencies,
-  open generics, disposal).
+  activation-list contracts, with the spec 6.3 rules and their own tests (chain
+  root > session > window > panel, optional dependencies, open generics,
+  disposal). The library stays DryIoc-only and editor-agnostic;
+  `RouterScopeModule` lives with the local router registrations, in
+  `Oxygen.Editor.Routing`.
 - **S2.2** Topology test over the shared builder, with the reviewed
   `RegisterDelegate` allowlist.
 - **S2.3** Workspace and Content Explorer children move onto the factory; the
@@ -741,9 +744,9 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.11 Unsaved documents                     | `done`        | Shell `UnsavedDocuments` implements the port; Play, Cook and relocation ask before they run                                                                                                 |
 | S1.12 Features                              | `done`        | See the feature table below; the Texture Editor and History panel moved to ED-M09A                                                                                                          |
 | S1.13 Dissolve the World Editor             | `done`        | The workspace window is the composition root's; its native integration tests and benchmark are the composition root's integration suite; the initial scene lookups are Scenes' `SceneFiles` |
-| S1.14 Test boundaries                       | `not started` | Includes the SceneInspector UI tests that use `NumberBox` internals: revisit them when `NumberBox` is refactored                                                                            |
+| S1.14 Test boundaries                       | `done`        | Kits of Managed.Core, Managed.Assets and Interop; the ContentPipeline kit fakes `ICookPublicationReader`, which the Content Explorer consumes                                               |
 | S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; the shared host-equivalent builder lands with S3.1                                                                                             |
-| S2.1 to S2.3 Scope factory and topology     | `not started` |                                                                                                                                                                                             |
+| S2.1 to S2.3 Scope factory and topology     | `in progress` | S2.1 done: `DroidNet.Composition`, and `RouterScopeModule` in `Oxygen.Editor.Routing`; `ScopeRegistrations.FindUndeclaredShadows` is the shadow check the topology test reuses              |
 | S3.1 Registration modules                   | `not started` |                                                                                                                                                                                             |
 | S4.1 to S4.4 Project Session                | `not started` |                                                                                                                                                                                             |
 | S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                                                                                                                                                             |

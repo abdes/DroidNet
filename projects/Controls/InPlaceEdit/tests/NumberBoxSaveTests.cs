@@ -218,9 +218,9 @@ public sealed class NumberBoxSaveTests : VisualUserInterfaceTests
 
     private static TextBox BeginTextInput(NumberBox number)
     {
-        // Enter the same method reached by the value-label tap; validation, binding,
-        // template parts, focus and completion all run on the realized control.
-        _ = typeof(NumberBox).GetMethod("StartEdit", BindingFlags.Instance | BindingFlags.NonPublic)!.Invoke(number, parameters: null);
+        // The value-label tap starts the same edit; validation, binding, template parts,
+        // focus and completion all run on the realized control.
+        number.BeginTextEdit();
         return number.FindDescendant<TextBox>(element => string.Equals(element.Name, "PartEditBox", StringComparison.Ordinal))!;
     }
 }

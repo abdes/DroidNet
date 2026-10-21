@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <Title>Oxygen Editor Interop Testing</Title>
+        <Description>Test kit of the editor interop: the native DLL search path to the installed engine SDK, for the tests of the modules that load the interop assembly.</Description>
+        <PackageTags>oxygen;editor;interop;testing</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <RootNamespace>Oxygen.Editor.Interop.Testing</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+</Project>

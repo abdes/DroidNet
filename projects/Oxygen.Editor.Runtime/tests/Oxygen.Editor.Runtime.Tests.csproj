@@ -9,8 +9,8 @@
     <ItemGroup>
         <ProjectReference Include="..\src\Oxygen.Editor.Runtime.csproj" />
         <ProjectReference Include="..\..\Oxygen.Editor.ContentPipeline\src\Oxygen.Editor.ContentPipeline.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\testing\Oxygen.Editor.Interop.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\testing\Oxygen.Managed.Core.Testing.csproj" />
         <PackageReference Include="Moq" />
-        <Compile Include="..\..\Oxygen.Editor.Interop\test\NativeDllSearchPath.cs" Link="NativeDllSearchPath.cs" />
-        <Compile Include="..\..\Oxygen.Managed.Core\testsupport\TemporaryNativeArtifacts.cs" Link="TemporaryNativeArtifacts.cs" />
     </ItemGroup>
 </Project>

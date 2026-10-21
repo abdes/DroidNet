@@ -10,7 +10,6 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
-using Oxygen.Testing;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.Assets.Integration.Tests;
@@ -35,7 +34,7 @@ public sealed class NativeImportTests
         var source = AssetPath.Parse("/Content/SourceMedia/DCC/model.gltf");
         var projects = workspace.ActivateProject();
         using var runs = new ContentCookCoordinator(projects, NullLogger<ContentCookCoordinator>.Instance);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var scopes = new WorkspaceCookScopeProvider(workspace);
         var storage = new NativeStorageProvider(new RealFileSystem());

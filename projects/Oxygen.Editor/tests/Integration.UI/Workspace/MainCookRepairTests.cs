@@ -44,11 +44,11 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         await using var publication = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
         var uri = AssetPath.Parse("/Content/Scenes/Main.oscene");
         _ = (await services.Pipeline.CookCurrentSceneAsync(uri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
-        var originalOutput = ReadPublishedHashes(NativeSceneFixture.FileSystem, fixture.ProjectRoot);
+        var originalOutput = await ReadPublishedAsync(services, timeout.Token).ConfigureAwait(true);
         await fixture.SetSavedLegacyAerialStartAsync().ConfigureAwait(true);
         var failed = await services.Pipeline.CookCurrentSceneAsync(uri, timeout.Token).ConfigureAwait(true);
         _ = failed.Status.Should().Be(OperationStatus.Failed);
-        _ = ReadPublishedHashes(NativeSceneFixture.FileSystem, fixture.ProjectRoot).Should().BeEquivalentTo(originalOutput);
+        _ = (await ReadPublishedAsync(services, timeout.Token).ConfigureAwait(true)).Should().BeEquivalentTo(originalOutput);
         await CheckFailedRunAsync(services, failed.OperationId, timeout.Token).ConfigureAwait(true);
         await RepairAerialStartAsync(fixture).ConfigureAwait(true);
         _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();

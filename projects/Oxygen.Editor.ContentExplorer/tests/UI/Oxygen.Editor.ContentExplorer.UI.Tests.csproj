@@ -11,15 +11,14 @@
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testing/Oxygen.Editor.ContentPipeline.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentExplorer/src/Oxygen.Editor.ContentExplorer.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testing/Oxygen.Managed.Assets.Testing.csproj" />
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions.Testing" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Fixtures/LooseCookedIndexFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerControls.cs" Link="Support/ExplorerControls.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerQuerySupport.cs" Link="Support/ExplorerQuerySupport.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerRevealFixture.cs" Link="Support/ExplorerRevealFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerSelectionSupport.cs" Link="Support/ExplorerSelectionSupport.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerTestData.cs" Link="Support/ExplorerTestData.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/EngineContentPakFixture.cs" Link="Support/EngineContentPakFixture.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
         <Compile Include="$(ProjectsRoot)/UITests.Shared/testsupport/ScaledXamlHost.cs" Link="Support/ScaledXamlHost.cs" />
     </ItemGroup>

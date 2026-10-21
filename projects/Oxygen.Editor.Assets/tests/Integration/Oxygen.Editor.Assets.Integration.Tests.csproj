@@ -12,6 +12,7 @@
     <ItemGroup>
         <ProjectReference Include="../../src/Oxygen.Editor.Assets.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Core/testing/Oxygen.Managed.Core.Testing.csproj" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions" />
@@ -24,7 +25,6 @@
         <Compile Include="../TestSupport/AssetWorkspace.cs" Link="TestSupport/AssetWorkspace.cs" />
         <Compile Include="../TestSupport/Observer.cs" Link="TestSupport/Observer.cs" />
         <Compile Include="../TestSupport/WorkspaceCookScopeProvider.cs" Link="TestSupport/WorkspaceCookScopeProvider.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Core/testsupport/TemporaryNativeArtifacts.cs" Link="Support/TemporaryNativeArtifacts.cs" />
     </ItemGroup>
 
 </Project>

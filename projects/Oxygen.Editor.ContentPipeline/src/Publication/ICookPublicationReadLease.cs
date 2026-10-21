@@ -36,6 +36,9 @@ public interface ICookPublicationReadLease : IDisposable
     /// <summary>Gets the physical output folder of each project mount, by mount name.</summary>
     public ImmutableDictionary<string, FileSystemPath> ProjectRoots { get; }
 
+    /// <summary>Gets the virtual paths of the products the project output holds, including named resources.</summary>
+    public IEnumerable<string> ProjectOutputPaths { get; }
+
     /// <summary>Opens the cooked index of every available root as a catalog tied to this publication.</summary>
     /// <param name="cancellationToken">Cancels reading the indexes.</param>
     /// <returns>One catalog per available root, in native precedence order; the caller owns and disposes them.</returns>

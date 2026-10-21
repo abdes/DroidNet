@@ -66,15 +66,15 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private readonly IDirectoryInfo directory = Disk.Directory.CreateTempSubdirectory("OxygenEnvironmentField-");
     private readonly ProjectManagerService manager = new(new NativeStorageProvider(Disk));
     private readonly bool ownsEngine;
-    private readonly Oxygen.Testing.TemporaryNativeArtifacts? compatibility;
+    private readonly Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts? compatibility;
     private readonly IDisposable? sharedResults;
     private readonly IEngineService previewEngine;
     private readonly EngineProbe probe;
     private readonly IOperationResultPublisher previewResults;
     private readonly Project loadedProject;
     private readonly ContentCookCoordinator materialCookCoordinator;
-    private readonly Oxygen.Testing.NativeContentPipelineFixture materialPipeline;
-    private readonly Dictionary<FileSystemPath, (ContentCookCoordinator Coordinator, Oxygen.Testing.NativeContentPipelineFixture Pipeline)> foreignMaterialPipelines = [];
+    private readonly Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture materialPipeline;
+    private readonly Dictionary<FileSystemPath, (ContentCookCoordinator Coordinator, Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture Pipeline)> foreignMaterialPipelines = [];
     private readonly TestDocumentArea area = new();
     private readonly MaterialValidation materialValidation = new();
     private readonly MaterialDocumentKind materialKind;
@@ -113,7 +113,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         {
             var settings = new Mock<DroidNet.Config.ISettingsService<IEngineStartupSettings>>();
             _ = settings.SetupGet(value => value.Settings).Returns(engineSettings ?? new EngineStartupSettings());
-            this.compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+            this.compatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
             this.Runtime = new EngineService(this.hosting, results, loggerFactory, engineSettings: settings.Object, nativeCompatibility: this.compatibility);
         }
         else
@@ -476,7 +476,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         Disk.File.WriteAllBytes(path.FullPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData));
     }
 
-    private Oxygen.Testing.NativeContentPipelineFixture MaterialPipelineFor(FileSystemPath root)
+    private Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture MaterialPipelineFor(FileSystemPath root)
     {
         if (root == this.ProjectRoot)
         {

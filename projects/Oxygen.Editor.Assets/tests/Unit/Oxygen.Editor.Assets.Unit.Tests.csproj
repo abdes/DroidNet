@@ -12,6 +12,8 @@
     <ItemGroup>
         <ProjectReference Include="../../src/Oxygen.Editor.Assets.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\testing\Oxygen.Editor.ContentPipeline.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testing\Oxygen.Managed.Assets.Testing.csproj" />
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions" />
         <PackageReference Include="Testably.Abstractions.Testing" />
@@ -23,8 +25,6 @@
         <Compile Include="../TestSupport/AssetWorkspace.cs" Link="TestSupport/AssetWorkspace.cs" />
         <Compile Include="../TestSupport/Observer.cs" Link="TestSupport/Observer.cs" />
         <Compile Include="../TestSupport/WorkspaceCookScopeProvider.cs" Link="TestSupport/WorkspaceCookScopeProvider.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Support/LooseCookedIndexFixture.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/EngineContentPakFixture.cs" Link="Support/EngineContentPakFixture.cs" />
     </ItemGroup>
 
 </Project>

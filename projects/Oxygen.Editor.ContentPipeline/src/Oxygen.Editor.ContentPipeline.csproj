@@ -30,11 +30,6 @@
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Integration.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.Benchmarks.Tests" />
         <InternalsVisibleTo Include="Oxygen.Editor.ContentPipeline.WorkerProbe" />
-        <InternalsVisibleTo Include="Oxygen.Editor.MaterialEditor.Tests" />
-        <InternalsVisibleTo Include="Oxygen.Editor.LivePreview.Unit.UI.Tests" />
-        <InternalsVisibleTo Include="Oxygen.Editor.Integration.UI.Tests" />
-        <InternalsVisibleTo Include="Oxygen.Editor.Benchmarks.UI.Tests" />
-        <InternalsVisibleTo Include="Oxygen.Editor.ContentExplorer.UI.Tests" />
     </ItemGroup>
 
     <ItemGroup>

@@ -562,13 +562,13 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         var vector = await FindVisibleVectorAsync(scenario.View, propertyScroll, field).ConfigureAwait(true);
         var number = vector.FindDescendant<NumberBox>(element => string.Equals(element.Name, "PartNumberBoxX", StringComparison.Ordinal))!;
         var before = number.NumberValue;
-        number.OnEditSessionStarted(NumberBoxEditInteractionKind.PointerDrag);
+        RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
         for (var sample = 1; sample <= 100; sample++)
         {
             number.NumberValue = sample / 200f;
         }
 
-        number.OnEditSessionCompleted(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
+        RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await scenario.Model.PendingEdits.ConfigureAwait(true);
         _ = scenario.Fixture.Document.History.UndoStack.Should().ContainSingle();
         _ = number.NumberValue.Should().Be(0.5f);

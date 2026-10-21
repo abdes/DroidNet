@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Security.Cryptography;
-using System.Text.Json;
 using AwesomeAssertions;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
@@ -11,10 +10,9 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
-using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
@@ -50,7 +48,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         _ = await apply.Should().ThrowAsync<Exception>().ConfigureAwait(true);
         _ = fixture.Projects.ActiveProject.Should().BeSameAs(accepted);
         _ = fixture.Activations.Should().BeEmpty("a failed change publishes no context");
-        _ = fixture.Roots.Should().Equal(fixture.ProjectOutput);
+        _ = fixture.Roots.Should().Equal(fixture.BaseLibrary);
         _ = fixture.Paused.Should().BeFalse();
         _ = (await File.ReadAllBytesAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().Equal(before);
         await File.WriteAllBytesAsync(Path.Combine(fixture.Library, "Material.omat"), [8], this.TestContext.CancellationToken).ConfigureAwait(true);
@@ -95,7 +93,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         _ = fixture.Projects.ActiveProject!.LocalFolderMounts.Should().ContainSingle();
         _ = fixture.Projects.ActiveProject.DefaultSceneId.Should().Be(original!.DefaultSceneId);
         _ = ProjectInfo.FromJson(await File.ReadAllTextAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true)).DefaultSceneId.Should().Be(original.DefaultSceneId);
-        _ = fixture.Roots.Should().Equal(fixture.Library, fixture.ProjectOutput);
+        _ = fixture.Roots.Should().Equal(fixture.Library, fixture.BaseLibrary);
         _ = fixture.Paused.Should().BeFalse();
     });
 
@@ -106,25 +104,26 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         private readonly Mock<IEngineService> engine = new();
         private readonly ContentCookCoordinator coordinator;
         private readonly ProjectManagerService manager;
-        private readonly Guid sourceKey = Guid.CreateVersion7();
         private readonly CookPublicationService publication;
         private IDisposable? activations;
 
         public MountTransactionFixture(bool withDefaultScene = false)
         {
-            this.ProjectOutput = this.WriteRoot(Path.GetRelativePath(this.directory.FullName, CookPublicationPaths.Generation(this.directory.FullName, this.sourceKey)), this.sourceKey);
-            File.WriteAllBytes(Path.Combine(this.ProjectOutput, CookedGeneration.MarkerFileName), []);
+            this.BaseLibrary = this.WriteRoot("Base");
             this.Library = this.WriteRoot("Library");
+            var baseMount = new LocalFolderMount("Base", FileSystemPath.From(this.BaseLibrary));
             var project = TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
             {
                 Name = "Transaction",
                 DefaultSceneId = withDefaultScene ? SceneId.New() : null,
+                LocalFolderMounts = [baseMount],
+                CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.ProjectOutput)],
             };
             this.Projects.Activate(project);
             this.Candidate = TestProject.InfoOf(project with
             {
-                LocalFolderMounts = [new("Library", FileSystemPath.From(this.Library))],
-                CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Library"), new(CookedContentSourceKind.ProjectOutput)],
+                LocalFolderMounts = [new("Library", FileSystemPath.From(this.Library)), baseMount],
+                CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Library"), new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.ProjectOutput)],
             });
             this.coordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
             var storage = new NativeStorageProvider(new RealFileSystem());
@@ -132,7 +131,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             this.publication = new(this.coordinator, this.Projects, this.Store, this.manager, new EngineContentPakFixture());
             var catalog = new Mock<IAssetPublicationTarget>();
             _ = catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-            this.Roots = [this.ProjectOutput];
+            this.Roots = [this.BaseLibrary];
             this.ConfigureEngine();
             this.Session = new(this.engine.Object, this.publication, new CookedContentMountService(), catalog.Object, this.coordinator, this.Projects, this.manager, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
         }
@@ -151,8 +150,10 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         /// <summary>Gets or sets what runs when a context activates, before the change completes.</summary>
         public Action<ProjectContext?>? OnActivated { get; set; }
 
-        public string ProjectOutput { get; }
+        /// <summary>Gets the library the project mounts before the change; the startup publication holds it.</summary>
+        public string BaseLibrary { get; }
 
+        /// <summary>Gets the library the change mounts ahead of <see cref="BaseLibrary"/>.</summary>
         public string Library { get; }
 
         public string ManifestPath => Path.Combine(this.directory.FullName, Oxygen.Editor.Projects.Constants.ProjectFileName);
@@ -167,13 +168,8 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         {
             var context = this.Projects.ActiveProject!;
             _ = (await this.manager.SaveProjectInfoAsync(TestProject.InfoOf(context)).ConfigureAwait(true)).Should().BeTrue();
-            var index = (await CookedIndexSnapshot.ReadAsync(this.ProjectOutput, CancellationToken.None).ConfigureAwait(true)).RequireCurrent(this.ProjectOutput);
-            var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, context.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(context), [new(CookPublicationRootOwner.Project, "Content", this.sourceKey, index.Fingerprint, LibraryPath: null)], [], CookInputs: null);
-            var path = CookPublicationPaths.Document(context.ProjectRoot.FullPath, document.OperationId);
-            Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-            var version = await this.Store.WriteAsync(path, JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing).ConfigureAwait(true);
-            var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
-            _ = await this.Store.WriteAsync(CookPublicationPaths.Head(context.ProjectRoot.FullPath), JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), FileVersion.Missing).ConfigureAwait(true);
+
+            // Starting publishes the mounted library, the publication the change starts from.
             _ = (await this.Session.StartAsync(context).ConfigureAwait(true)).Should().BeTrue();
 
             // The project context replays the current context on subscription; only later activations count.
@@ -248,14 +244,14 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             this.nativeReaders.Clear();
         }
 
-        private string WriteRoot(string relative, Guid? sourceKey = null)
+        private string WriteRoot(string relative)
         {
             var root = Path.GetFullPath(Path.Combine(this.directory.FullName, relative));
             _ = Directory.CreateDirectory(root);
             byte[] bytes = [1];
             File.WriteAllBytes(Path.Combine(root, "Material.omat"), bytes);
             using var stream = File.Create(Path.Combine(root, "container.index.bin"));
-            Oxygen.Testing.LooseCookedIndexFixture.Write(stream, new Document(1, IndexFeatures.HasVirtualPaths, sourceKey ?? Guid.CreateVersion7(), [new(new AssetKey(1, 2), "Material.omat", "/Content/Material.omat", 1, 1, SHA256.HashData(bytes))], []));
+            Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(stream, new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [new(new AssetKey(1, 2), "Material.omat", "/Content/Material.omat", 1, 1, SHA256.HashData(bytes))], []));
             return root;
         }
     }

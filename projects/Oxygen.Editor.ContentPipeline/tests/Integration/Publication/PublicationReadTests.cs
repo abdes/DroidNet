@@ -10,6 +10,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
 using Oxygen.Testing;
 using Testably.Abstractions;

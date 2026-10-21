@@ -202,7 +202,7 @@ public sealed class SourceAnalysisAdapterTests
         _ = await analyze.Should().ThrowAsync<InvalidDataException>().ConfigureAwait(false);
     }
 
-    private static Oxygen.Testing.TemporaryNativeArtifacts AnalysisArtifacts(ImportAdapterWorkspace workspace, string schemaPath) => new(
+    private static Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts AnalysisArtifacts(ImportAdapterWorkspace workspace, string schemaPath) => new(
     [
         new(NativeArtifactInventory.ImportToolId, workspace.ToolPath),
         new(NativeArtifactInventory.SourceAnalysisSchemaId, schemaPath),

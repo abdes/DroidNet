@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <Title>Oxygen Managed Core Testing</Title>
+        <Description>Test kit of Oxygen.Managed.Core: a private native compatibility receipt over real or synthetic native artifacts, for the tests of the modules that check native compatibility.</Description>
+        <PackageTags>oxygen;managed;core;testing</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <RootNamespace>Oxygen.Managed.Core.Testing</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
+    </ItemGroup>
+
+</Project>

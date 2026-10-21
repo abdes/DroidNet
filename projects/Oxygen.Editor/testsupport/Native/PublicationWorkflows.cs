@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.IO.Abstractions;
 using System.Numerics;
 using System.Security.Cryptography;
 using System.Text;
@@ -36,18 +35,18 @@ namespace Oxygen.Editor.TestSupport;
 
 internal static class PublicationWorkflows
 {
-    internal static Dictionary<string, string> ReadPublishedHashes(IFileSystem fileSystem, FileSystemPath projectRoot)
+    /// <summary>Reads the project's selected publication: its identity and the hash of every file in its roots.</summary>
+    /// <param name="services">The scenario's services, whose publication reader is read.</param>
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The publication's identity and files.</returns>
+    internal static async Task<PublishedFiles> ReadPublishedAsync(CatalogWorkloadServices services, CancellationToken cancellationToken)
     {
-        var headPath = CookPublicationPaths.Head(projectRoot.FullPath);
-        if (!fileSystem.File.Exists(headPath))
-        {
-            return [with(StringComparer.OrdinalIgnoreCase)];
-        }
-
-        var head = System.Text.Json.JsonSerializer.Deserialize<CookPublicationHead>(fileSystem.File.ReadAllBytes(headPath), CookPublicationDocument.JsonOptions)!;
-        var documentPath = CookPublicationPaths.Document(projectRoot.FullPath, head.PublicationId);
-        var document = System.Text.Json.JsonSerializer.Deserialize<CookPublicationDocument>(fileSystem.File.ReadAllBytes(documentPath), CookPublicationDocument.JsonOptions)!;
-        return document.Roots.SelectMany(root => fileSystem.Directory.GetFiles(root.ResolvePath(projectRoot.FullPath), "*", SearchOption.AllDirectories)).Append(headPath).Append(documentPath).ToDictionary(static path => path, path => Convert.ToHexString(SHA256.HashData(fileSystem.File.ReadAllBytes(path))), StringComparer.OrdinalIgnoreCase);
+        using var selected = await services.Publication.AcquireReadAsync(services.Projects.ActiveProject!, cancellationToken).ConfigureAwait(true);
+        var fileSystem = NativeSceneFixture.FileSystem;
+        var hashes = selected.RootPaths
+            .SelectMany(root => fileSystem.Directory.GetFiles(root, "*", SearchOption.AllDirectories))
+            .ToDictionary(static path => path, path => Convert.ToHexString(SHA256.HashData(fileSystem.File.ReadAllBytes(path))), StringComparer.OrdinalIgnoreCase);
+        return new(selected.PublicationId, hashes);
     }
 
     internal static async Task SetPublicationMaterialColorAsync(MaterialEdits edits, Document material, Vector4 color, CancellationToken cancellationToken)
@@ -251,6 +250,11 @@ internal static class PublicationWorkflows
             _ = await held.ConfigureAwait(true);
         };
     }
+
+    /// <summary>A publication as <see cref="ReadPublishedAsync"/> read it.</summary>
+    /// <param name="PublicationId">The selected publication, or <see langword="null"/> before the first one.</param>
+    /// <param name="Hashes">The hash of each file in its roots, by path.</param>
+    internal sealed record PublishedFiles(Guid? PublicationId, IReadOnlyDictionary<string, string> Hashes);
 
     internal sealed record PublicationScenario(NativeSceneFixture Fixture, CatalogWorkloadServices Services, AssetCatalog Catalog, IAssetFeed Feed, MaterialEdits Materials, Document Material, string Key);
 }

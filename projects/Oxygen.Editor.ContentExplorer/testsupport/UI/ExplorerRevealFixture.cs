@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using System.Globalization;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
@@ -20,9 +19,9 @@ using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Shell.Desktop;
@@ -109,6 +108,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
     private readonly Container container = new();
     private readonly BehaviorSubject<IReadOnlyList<AssetEntry>> items;
     private readonly Mock<ILogger> logger = new();
+    private readonly FakeCookPublicationReader publications;
 
     public ExplorerRevealFixture(bool persisted = false, string cookedAlias = "Cooked")
     {
@@ -129,6 +129,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         }
 
         this.Projects.Activate(ProjectContext.FromProjectInfo(info, this.fileSystem));
+        this.publications = new(this.Projects.ActiveProject!.ProjectId, this.Projects.ActiveProject.ProjectRoot);
         var mountChanges = new Mock<IContentMountChanges>();
         _ = mountChanges.Setup(value => value.ChangeMountsAsync(It.IsAny<ProjectContext>(), It.IsAny<ProjectInfo>(), It.IsAny<CancellationToken>()))
             .Callback((ProjectContext _, ProjectInfo candidate, CancellationToken _) =>
@@ -140,7 +141,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         this.container.RegisterInstance<IProjectContextService>(this.Projects);
         var storage = new NativeStorageProvider(new RealFileSystem());
         this.container.RegisterInstance<IStorageProvider>(storage);
-        this.container.RegisterInstance(CreateNavigationPublication(this.Projects, storage));
+        this.container.RegisterInstance<ICookPublicationReader>(this.publications);
         this.container.RegisterInstance(mountChanges.Object);
         this.container.RegisterInstance(provider.Object);
         this.container.RegisterInstance(CreateStatusHosting());
@@ -154,7 +155,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         this.container.RegisterInstance(Mock.Of<IAutomaticCookService>());
         this.container.RegisterInstance(Mock.Of<IProjectManagerService>());
         this.container.RegisterInstance(Mock.Of<IContentPipelineService>());
-        this.container.RegisterInstance<IEngineContentPak>(new Oxygen.Editor.ContentPipeline.TestSupport.EngineContentPakFixture());
+        this.container.RegisterInstance<IEngineContentPak>(new EngineContentPakFixture());
         this.container.RegisterInstance(Mock.Of<IOperationResultPublisher>());
         this.container.RegisterInstance(Mock.Of<IStatusReducer>());
         this.container.RegisterInstance(Mock.Of<IWindowManagerService>());
@@ -187,44 +188,23 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
 
     private string? publishedOutputRoot;
 
-    public async Task SetCookedOutputsAsync(IReadOnlyList<AssetEntry> outputs, CancellationToken token)
+    /// <summary>Publishes a project output that holds <paramref name="outputs"/>, in a generation folder of its own.</summary>
+    /// <param name="outputs">The cooked products, all under <c>/Content</c>.</param>
+    /// <param name="token">Cancels the publication.</param>
+    /// <returns>A task that completes once the outputs are published and listed.</returns>
+    public Task SetCookedOutputsAsync(IReadOnlyList<AssetEntry> outputs, CancellationToken token)
     {
-        var project = this.Projects.ActiveProject!;
-        var key = Guid.CreateVersion7();
-        var root = CookPublicationPaths.Generation(project.ProjectRoot.FullPath, key);
-        Directory.CreateDirectory(root);
-        await File.WriteAllBytesAsync(Path.Combine(root, CookedGeneration.MarkerFileName), [], token).ConfigureAwait(true);
-        var digest = new string('0', 64);
-        var products = outputs.Select(item =>
+        token.ThrowIfCancellationRequested();
+        var root = Path.Combine(this.directory.FullName, ".cooked", "generations", Guid.CreateVersion7().ToString("N"));
+        foreach (var item in outputs)
         {
-            var path = item.Identity.VirtualPath;
-            var descriptor = path["/Content/".Length..];
-            Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(root, descriptor))!);
-            var kind = item.Kind == AssetKind.Geometry ? ContentCookAssetKind.Geometry : ContentCookAssetKind.Material;
-            var sourceUri = item.Identity.WithAuthoringSuffix();
-            var sourceRelativePath = path.TrimStart('/') + ".json";
-            var sourcePath = project.ProjectRoot.Combine(sourceRelativePath);
-            return new CookProvenance.Product(sourceUri, digest, [], [new(new(sourceUri, item.Identity, kind, "Content", path) { DescriptorRelativePath = descriptor }, "Content")])
-            {
-                ReuseFingerprint = digest,
-                SourceInput = new(sourceUri, kind, "Content", sourceRelativePath, sourcePath, ContentCookInputRole.Primary),
-                SourceFiles = [new(sourceUri, sourcePath, sourceRelativePath, digest)],
-                DeclaredOutputs = [new(path, kind == ContentCookAssetKind.Geometry ? "geometry" : "material", string.Empty, Required: true)],
-            };
-        }).ToImmutableArray();
-        var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(project), [new(CookPublicationRootOwner.Project, "Content", key, digest, LibraryPath: null)], products, new("logical-folder-fixture", digest, [], [], []));
-        document.Validate(project);
-        var files = new NativeAtomicFileStore(new RealFileSystem());
-        using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(true);
-        var documentPath = CookPublicationPaths.Document(project.ProjectRoot.FullPath, document.OperationId);
-        Directory.CreateDirectory(Path.GetDirectoryName(documentPath)!);
-        var version = await files.WriteAsync(documentPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(document, CookPublicationDocument.JsonOptions), FileVersion.Missing, token).ConfigureAwait(true);
-        var headPath = CookPublicationPaths.Head(project.ProjectRoot.FullPath);
-        var previous = await files.ReadAsync(headPath, token).ConfigureAwait(true);
-        var head = new CookPublicationHead(CookPublicationHead.CurrentVersion, document.OperationId, version.Sha256);
-        _ = await files.WriteAsync(headPath, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), previous.Version, token).ConfigureAwait(true);
+            _ = Directory.CreateDirectory(Path.GetDirectoryName(Path.Combine(root, item.Identity.VirtualPath["/Content/".Length..]))!);
+        }
+
+        this.publications.Publish([], new Dictionary<string, FileSystemPath>(StringComparer.Ordinal) { ["Content"] = FileSystemPath.From(root) }, outputs.Select(static item => item.Identity.VirtualPath));
         this.publishedOutputRoot = root;
         this.items.OnNext(outputs);
+        return Task.CompletedTask;
     }
 
     public AssetEntry SetLibraryOutput()

@@ -24,7 +24,7 @@ namespace Oxygen.Editor.TestSupport;
 internal static class SharedNativeEngine
 {
     private static readonly RoutedResults Results = new();
-    private static Oxygen.Testing.TemporaryNativeArtifacts? compatibility;
+    private static Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts? compatibility;
     private static EngineService? engine;
 
     /// <summary>Gets the shared engine service, creating it (not yet started) on first use.</summary>
@@ -44,7 +44,7 @@ internal static class SharedNativeEngine
                 };
                 var settings = new Mock<DroidNet.Config.ISettingsService<IEngineStartupSettings>>();
                 _ = settings.SetupGet(value => value.Settings).Returns(new EngineStartupSettings());
-                compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+                compatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
                 engine = new EngineService(hosting, Results, loggerFactory: null, engineSettings: settings.Object, nativeCompatibility: compatibility);
             }
 

@@ -23,7 +23,7 @@ namespace Oxygen.Editor.LivePreview.Tests.TestSupport.Native;
 public static class SharedEngine
 {
     private static readonly List<OperationResult> PublishedResults = [];
-    private static Oxygen.Testing.TemporaryNativeArtifacts? compatibility;
+    private static Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts? compatibility;
     private static EngineService? engine;
 
     /// <summary>Gets the engine diagnostics published since the last reset.</summary>
@@ -48,7 +48,7 @@ public static class SharedEngine
             _ = settings.SetupGet(value => value.Settings).Returns(new EngineStartupSettings());
             var results = new Mock<IOperationResultPublisher>();
             _ = results.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(PublishedResults.Add);
-            compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+            compatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
             engine = new EngineService(hosting, results.Object, loggerFactory: null, engineSettings: settings.Object, nativeCompatibility: compatibility);
         }
 

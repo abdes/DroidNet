@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Managed.Assets.Testing;
 
 namespace Oxygen.Testing;
 

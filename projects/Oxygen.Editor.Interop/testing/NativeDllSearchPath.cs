@@ -3,21 +3,21 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
-using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
-namespace Oxygen.Editor.Interop.Tests;
+namespace Oxygen.Editor.Interop.Testing;
 
 /// <summary>
-/// Configures the Windows DLL loader for the mixed-mode interop assembly under test.
+/// Configures the Windows DLL loader for the mixed-mode interop assembly in tests.
 /// </summary>
 /// <remarks>
 /// The editor interop assembly intentionally runs against the Oxygen.Engine install
 /// layout. The tests should therefore load native engine DLLs from
 /// <c>projects/Oxygen.Engine/out/install/{Configuration}/bin</c>, not copy those DLLs
-/// into the managed test project output.
+/// into the managed test project output. A test project calls <see cref="Configure"/>
+/// from its own module initializer.
 /// </remarks>
-internal static partial class NativeDllSearchPath
+public static partial class NativeDllSearchPath
 {
     private const int LoadLibrarySearchSystem32 = 0x00000800;
     private const int LoadLibrarySearchUserDirs = 0x00000400;
@@ -25,8 +25,7 @@ internal static partial class NativeDllSearchPath
     /// <summary>
     /// Registers native DLL directories before any test touches <c>DroidNet.Oxygen.Editor.Interop.dll</c>.
     /// </summary>
-    [ModuleInitializer]
-    internal static void Configure()
+    public static void Configure()
     {
         if (!OperatingSystem.IsWindows())
         {
@@ -41,7 +40,7 @@ internal static partial class NativeDllSearchPath
     /// Gets the installed engine SDK the interop assembly runs against.
     /// </summary>
     /// <returns>The SDK root, <c>projects/Oxygen.Engine/out/install/{Configuration}</c>.</returns>
-    internal static string ResolveEngineInstallDirectory()
+    public static string ResolveEngineInstallDirectory()
         => Path.Combine(FindRepositoryRoot().FullName, "projects", "Oxygen.Engine", "out", "install", ResolveConfiguration());
 
     private static void EnsureWindowsDllSearchMode()

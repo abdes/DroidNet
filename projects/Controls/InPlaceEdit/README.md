@@ -66,6 +66,11 @@ Example — VectorBox (3D)
 - Step, Minimum, Maximum — adjustment and bounds
 - Unit — optional suffix
 - Validate event — raised on commit/validation
+- EditSessionStarted, EditSessionCompleted events — an interactive edit (text,
+  drag or wheel) starts and commits or cancels
+- Methods: BeginTextEdit(), CompletePendingTextEdit(), CancelEdit() — start,
+  complete or abandon a text edit from code, as tapping the value, leaving the
+  edit box and pressing Escape do
 
 ### VectorBox
 

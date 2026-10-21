@@ -10,14 +10,15 @@ using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Assets.Persistence.Pak;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
-using Oxygen.Testing;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Mounting;
@@ -250,7 +251,7 @@ public sealed class CookedContentMountTests
             byte[] bytes = [value, value, value];
             File.WriteAllBytes(Path.Combine(root, "Materials", "Shared.omat"), bytes);
             using var index = File.Create(Path.Combine(root, "container.index.bin"));
-            Oxygen.Testing.LooseCookedIndexFixture.Write(index, new Document(1, IndexFeatures.HasVirtualPaths, sourceKey ?? Guid.CreateVersion7(), [new(new AssetKey(1, 2), "Materials/Shared.omat", "/Content/Materials/Shared.omat", 1, (ulong)bytes.Length, SHA256.HashData(bytes))], []));
+            Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(index, new Document(1, IndexFeatures.HasVirtualPaths, sourceKey ?? Guid.CreateVersion7(), [new(new AssetKey(1, 2), "Materials/Shared.omat", "/Content/Materials/Shared.omat", 1, (ulong)bytes.Length, SHA256.HashData(bytes))], []));
             return root;
         }
     }

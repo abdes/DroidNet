@@ -111,7 +111,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         var projects = new ProjectContextService();
         projects.Activate(TestProject.Create(new RealFileSystem(), root.Location).Context with { Name = "Navigation", AuthoringMounts = [new("Content", "Content") { IsExpanded = false }] });
         var state = new ContentExplorerState();
-        using var model = new ContentFoldersViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.TestSupport.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ContentFoldersViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var selected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         model.PropertyChanged += OnSelectionChanged;
         try
@@ -165,7 +165,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         var projects = new ProjectContextService();
         projects.Activate(TestProject.Create(new RealFileSystem(), root.Location).Context with { Name = "Navigation", AuthoringMounts = [new("Content", "Content") { IsExpanded = false }] });
         var state = new ContentExplorerState();
-        using var model = new ContentFoldersViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.TestSupport.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ContentFoldersViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var shown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         model.PropertyChanged += OnSelectionChanged;
         try
@@ -242,7 +242,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
             })
             .ReturnsAsync(succeeds);
         var state = new ContentExplorerState();
-        using var model = new ContentFoldersViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), mountChanges.Object, new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.TestSupport.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ContentFoldersViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), mountChanges.Object, new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         await model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!).ConfigureAwait(true);
         var tree = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
         var renamed = tree.VirtualFolderMounts.Single(mount => string.Equals(mount.MountPointName, "Library", StringComparison.Ordinal));
@@ -300,7 +300,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         };
         projects.Activate(first);
         using var changes = new System.Reactive.Subjects.Subject<Oxygen.Managed.Assets.Catalog.AssetChange>();
-        using var model = new ContentFoldersViewModel(projects, storage.Object, new ContentExplorerState(), Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(changes), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.TestSupport.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ContentFoldersViewModel(projects, storage.Object, new ContentExplorerState(), Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(changes), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var load = model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!);
         try
         {

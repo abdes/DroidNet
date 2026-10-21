@@ -8,10 +8,10 @@ using System.Security.Cryptography;
 using System.Text.Json;
 using Oxygen.Managed.Core.Compatibility;
 
-namespace Oxygen.Testing;
+namespace Oxygen.Managed.Core.Testing;
 
 /// <summary>Captures real or synthetic native inputs for isolated tests.</summary>
-internal sealed partial class TemporaryNativeArtifacts : INativeCompatibilityService, IDisposable
+public sealed partial class TemporaryNativeArtifacts : INativeCompatibilityService, IDisposable
 {
     private static readonly JsonSerializerOptions JsonOptions = new() { PropertyNamingPolicy = JsonNamingPolicy.CamelCase };
     private readonly string root = Path.Combine(Path.GetTempPath(), "OxygenArtifactFixtures", Guid.NewGuid().ToString("N"));
@@ -22,6 +22,7 @@ internal sealed partial class TemporaryNativeArtifacts : INativeCompatibilitySer
     /// <param name="locations">The real or synthetic files used by the test.</param>
     public TemporaryNativeArtifacts(IEnumerable<NativeArtifactLocation> locations)
     {
+        ArgumentNullException.ThrowIfNull(locations);
         this.locations = [.. locations];
         Directory.CreateDirectory(this.root);
         this.receiptPath = Path.Combine(this.root, "compatibility.json");

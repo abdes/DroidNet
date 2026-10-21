@@ -35,7 +35,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
     /// <summary>Gets the captured physical generations by logical project mount.</summary>
     public ImmutableDictionary<string, FileSystemPath> ProjectRoots => this.state.ProjectRoots;
 
-    /// <summary>Gets logical product paths for project-output navigation, including named resources.</summary>
+    /// <inheritdoc />
     public IEnumerable<string> ProjectOutputPaths => this.state.Products.Products
         .SelectMany(static product => product.Outputs).Select(static output => output.Asset.VirtualPath);
 

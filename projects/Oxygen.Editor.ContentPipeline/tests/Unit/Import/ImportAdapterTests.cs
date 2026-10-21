@@ -243,7 +243,7 @@ public sealed class ImportAdapterTests
             Path.Combine(cookedRoot, "materials.bin"),
             actualFileBytes ?? new byte[(int)fileSize]);
         using var stream = File.Create(Path.Combine(cookedRoot, "container.index.bin"));
-        Oxygen.Testing.LooseCookedIndexFixture.Write(
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(
             stream,
             new Document(
                 ContentVersion: 1,

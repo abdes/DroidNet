@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <Title>Oxygen Managed Assets Testing</Title>
+        <Description>Test kit of Oxygen.Managed.Assets: writers of small loose cooked indexes and paks, for the tests of the modules that read cooked content.</Description>
+        <PackageTags>oxygen;managed;assets;testing</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <RootNamespace>Oxygen.Managed.Assets.Testing</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
+    </ItemGroup>
+
+</Project>

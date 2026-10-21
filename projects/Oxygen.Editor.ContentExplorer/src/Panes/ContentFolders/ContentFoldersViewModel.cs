@@ -31,15 +31,19 @@ namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 /// <param name="projectContextService">The active project context service.</param>
 /// <param name="storage">The storage provider.</param>
 /// <param name="contentExplorerState">The state of the content explorer.</param>
+/// <param name="dialogService">Shows the pane's dialogs.</param>
+/// <param name="vmToView">Resolves the views of the pane's dialogs.</param>
 /// <param name="loggerFactory">
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition
 ///     process. If <see langword="null" />, logging is disabled.
 /// </param>
 /// <param name="mountChanges">Applies a confirmed change of the content mounts.</param>
 /// <param name="pane">Takes the assets pane's requests to show or create a folder while this pane lives.</param>
+/// <param name="publications">Reads the project's selected cook publication: its output folders and products.</param>
 /// <param name="catalog">The asset catalog, whose changes may bring new cooked folders.</param>
 /// <param name="folders">Reports the folders created, deleted or renamed under the authoring roots.</param>
 /// <param name="hostingContext">Brings catalog notifications to the UI thread.</param>
+/// <param name="engineContent">The engine content pak, shown as a cooked mount.</param>
 /// <param name="relocation">Renames, moves and copies folders with their references; without it only empty folders rename.</param>
 /// <param name="relocationService">Reports the folders the editor moved or deleted; absent where the editor cannot relocate.</param>
 public partial class ContentFoldersViewModel(
@@ -50,7 +54,7 @@ public partial class ContentFoldersViewModel(
     ViewModelToView vmToView,
     IContentMountChanges mountChanges,
     ContentFoldersPane pane,
-    Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publications,
+    Oxygen.Editor.ContentPipeline.Publication.ICookPublicationReader publications,
     IAssetCatalog catalog,
     IAssetFolderSource folders,
     HostingContext hostingContext,

@@ -7,7 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.Pak;
-using Oxygen.Testing;
+using Oxygen.Managed.Assets.Testing;
 
 namespace Oxygen.Managed.Assets.Tests;
 

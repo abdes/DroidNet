@@ -7,10 +7,10 @@ using System.Text;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.Pak;
 
-namespace Oxygen.Testing;
+namespace Oxygen.Managed.Assets.Testing;
 
 /// <summary>Small pak emitter for reader tests: header, zeroed descriptors, directory, browse index, a catalog ending with the document's digest and footer; never shipped.</summary>
-internal static class PakFixture
+public static class PakFixture
 {
     /// <summary>Writes a pak holding <paramref name="document"/>'s assets; their descriptor offsets are laid out in order.</summary>
     /// <param name="destination">The stream to replace with the pak.</param>
@@ -29,6 +29,8 @@ internal static class PakFixture
         IReadOnlyList<PakAssetEntry>? browseOnly = null,
         IReadOnlyList<TextureResourceRecord>? textureRecords = null)
     {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(document);
         textures ??= [];
         textureRecords ??= [];
         browseOnly ??= [];

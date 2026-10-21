@@ -12,13 +12,14 @@
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Input/testing/Oxygen.Editor.Input.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Scripting/testing/Oxygen.Editor.Scripting.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testing/Oxygen.Editor.ContentPipeline.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testing/Oxygen.Managed.Assets.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Core/testing/Oxygen.Managed.Core.Testing.csproj" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Moq" />
         <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/test/Assets/Models/static_scalar_triangle.*" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
         <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/test/Assets/Models/static_textured_triangle.*" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
         <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/test/Assets/Models/static_textured_checker.png" Link="Fixtures/%(Filename)%(Extension)" CopyToOutputDirectory="PreserveNewest" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/EngineContentPakFixture.cs" Link="Support/EngineContentPakFixture.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/PakFixture.cs" Link="Support/PakFixture.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CapturingEngineContentPipelineApi.cs" Link="Support/CapturingEngineContentPipelineApi.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/CapturingSceneDescriptorGenerator.cs" Link="Support/CapturingSceneDescriptorGenerator.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Controlled/ControlledSourceAnalysis.cs" Link="Support/ControlledSourceAnalysis.cs" />
@@ -46,13 +47,10 @@
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/RecordingPublicationPreview.cs" Link="Support/RecordingPublicationPreview.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/IncrementalCookScenario.cs" Link="Support/IncrementalCookScenario.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeCook.cs" Link="Support/NativeCook.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeContentPipelineFixture.cs" Link="Support/NativeContentPipelineFixture.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeSourceFactsFixture.cs" Link="Support/NativeSourceFactsFixture.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/RecordingNativeApi.cs" Link="Support/RecordingNativeApi.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/RetentionWorkspace.cs" Link="Support/RetentionWorkspace.cs" />
         <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/WorkerScope.cs" Link="Support/WorkerScope.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Core/testsupport/TemporaryNativeArtifacts.cs" Link="Support/TemporaryNativeArtifacts.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Support/LooseCookedIndexFixture.cs" />
         <Compile Include="../../testsupport/Native/SharedSourceStatusScenario.cs" Link="Support/SharedSourceStatusScenario.cs" />
     </ItemGroup>
     <ItemGroup>

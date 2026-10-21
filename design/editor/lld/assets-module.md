@@ -415,7 +415,8 @@ and no project outside Assets compiles them:
 
 The unit and integration projects are the only assemblies granted its internals;
 the benchmarks use the public API. No test writes the publication format:
-`FakeCookPublication` serves in-memory cooked indexes through the read contract,
+the ContentPipeline test kit's `FakeCookPublicationReader` serves in-memory
+cooked indexes through the read contract,
 and ContentPipeline's own integration tests cover the format and the
 stale-library diagnosis.
 

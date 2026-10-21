@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline.Publication;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.World;
@@ -50,7 +51,7 @@ internal sealed partial class CookWorkspace : IDisposable
 
     public Scene Scene { get; }
 
-    public Oxygen.Testing.TemporaryNativeArtifacts Compatibility { get; }
+    public Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts Compatibility { get; }
 
     public async Task SeedEmptyPublicationAsync(string mount, CancellationToken token)
     {

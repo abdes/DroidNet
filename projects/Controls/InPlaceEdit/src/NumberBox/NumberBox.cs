@@ -184,8 +184,13 @@ public partial class NumberBox : Control
         }
     }
 
-    /// <summary>Internal so UI test hosts can drive edit-session transitions.</summary>
-    internal void StartEdit()
+    /// <summary>Starts editing the value as text, as tapping the value does.</summary>
+    /// <remarks>
+    ///     The value leaves its indeterminate state, the edit box takes focus with the current value, and
+    ///     <see cref="EditSessionStarted"/> reports a <see cref="NumberBoxEditInteractionKind.Text"/> session. Complete
+    ///     the edit with <see cref="CompletePendingTextEdit"/> or abandon it with <see cref="CancelEdit"/>.
+    /// </remarks>
+    public void BeginTextEdit()
     {
         if (this.valueTextBlock is null || this.editTextBox is null)
         {
@@ -207,9 +212,18 @@ public partial class NumberBox : Control
         _ = this.editTextBox.Focus(FocusState.Programmatic);
     }
 
-    /// <summary>Internal so UI test hosts can drive edit-session transitions.</summary>
-    internal void CancelEdit()
+    /// <summary>Abandons the text edit, as pressing Escape does: the value is restored and the edit box closes.</summary>
+    /// <remarks>
+    ///     <see cref="EditSessionCompleted"/> reports the session as cancelled. Does nothing when no text edit is in
+    ///     progress.
+    /// </remarks>
+    public void CancelEdit()
     {
+        if (!this.isEditing)
+        {
+            return;
+        }
+
         var wasIndeterminate = this.IsIndeterminate;
         if (this.IsIndeterminate)
         {
@@ -776,7 +790,7 @@ public partial class NumberBox : Control
         this.LogPointerEvent("Tapped");
         if (this.scrub.AcceptTap())
         {
-            this.StartEdit();
+            this.BeginTextEdit();
         }
     }
 

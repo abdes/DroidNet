@@ -29,7 +29,7 @@ internal sealed partial class PreviewProject : IDisposable
 {
     private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-LivePreview-");
     private readonly ContentCookCoordinator coordinator;
-    private readonly Oxygen.Testing.NativeContentPipelineFixture native;
+    private readonly Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture native;
     private readonly ProjectManagerService manager;
 
     /// <summary>Initializes a new instance of the <see cref="PreviewProject"/> class.</summary>
@@ -39,7 +39,7 @@ internal sealed partial class PreviewProject : IDisposable
         _ = TestProject.SaveProjectFile(this.Context);
         this.Projects.Activate(this.Context);
         this.coordinator = new ContentCookCoordinator(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
-        this.native = new Oxygen.Testing.NativeContentPipelineFixture(this.Projects, this.coordinator);
+        this.native = new Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture(this.Projects, this.coordinator);
         this.manager = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: new NativeAtomicFileStore(new RealFileSystem()));
         _ = this.Catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
     }

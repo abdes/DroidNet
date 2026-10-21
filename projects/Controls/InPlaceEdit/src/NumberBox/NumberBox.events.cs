@@ -24,12 +24,12 @@ public partial class NumberBox
     /// </summary>
     public event EventHandler<ValidationEventArgs<double>>? Validate;
 
-    /// <summary>Internal so UI test hosts can drive edit-session transitions.</summary>
+    /// <summary>Raises the <see cref="EditSessionStarted" /> event.</summary>
     /// <param name="interactionKind">The kind of interaction that started the edit session.</param>
     internal void OnEditSessionStarted(NumberBoxEditInteractionKind interactionKind)
         => this.EditSessionStarted?.Invoke(this, new NumberBoxEditSessionEventArgs(interactionKind));
 
-    /// <summary>Internal so UI test hosts can drive edit-session transitions.</summary>
+    /// <summary>Raises the <see cref="EditSessionCompleted" /> event.</summary>
     /// <param name="interactionKind">The kind of interaction that started the edit session.</param>
     /// <param name="completionKind">Indicates how the edit session completed (committed or cancelled).</param>
     /// <param name="inputText">Optional input text provided during the edit session, if any.</param>

@@ -47,7 +47,7 @@ public sealed partial class NativeLoopCleanupTests
             cookedRoot,
             new ContentImportLayout("/Content"),
             [new ContentImportJob("mask", "texture-descriptor", "Meter.otex.json", [], Output: null, Name: "Meter") { VirtualPath = "/Content/Textures/Meter.otex" }]);
-        using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+        using var compatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = new ImportToolContentPipelineApi(
             new EngineContentPipelineToolLocator(),
             new ContentPipelineProcessRunner(),

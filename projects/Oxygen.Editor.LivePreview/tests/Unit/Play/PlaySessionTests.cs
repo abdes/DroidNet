@@ -9,7 +9,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
-using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;

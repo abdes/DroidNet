@@ -4,15 +4,15 @@
 
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Compatibility;
 using Testably.Abstractions;
 
-namespace Oxygen.Testing;
+namespace Oxygen.Editor.ContentPipeline.Testing;
 
 /// <summary>Composes the production native pipeline and cooking compatibility checks.</summary>
-internal sealed partial class NativeContentPipelineFixture : IDisposable
+public sealed partial class NativeContentPipelineFixture : IDisposable
 {
     private readonly EditorNativeCompatibilityService compatibility = EditorNativeCompatibilityService.ForCooking();
 
@@ -25,7 +25,7 @@ internal sealed partial class NativeContentPipelineFixture : IDisposable
         var storage = new NativeStorageProvider(new RealFileSystem());
         var files = new NativeAtomicFileStore(new RealFileSystem());
         var engineContent = EngineContentPak.Installed();
-        this.Publication = new Oxygen.Editor.ContentPipeline.Publication.CookPublicationService(
+        this.Publication = new CookPublicationService(
             coordinator,
             context,
             files,
@@ -49,7 +49,7 @@ internal sealed partial class NativeContentPipelineFixture : IDisposable
     public ContentPipelineService Pipeline { get; }
 
     /// <summary>Gets the same publication owner used by fixture cooking and runtime admission.</summary>
-    public Oxygen.Editor.ContentPipeline.Publication.CookPublicationService Publication { get; }
+    public CookPublicationService Publication { get; }
 
     /// <inheritdoc />
     public void Dispose() => this.compatibility.Dispose();

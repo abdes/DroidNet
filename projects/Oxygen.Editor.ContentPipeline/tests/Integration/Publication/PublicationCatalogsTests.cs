@@ -67,6 +67,6 @@ public sealed class PublicationCatalogsTests
         byte[] bytes = [value, value, value];
         File.WriteAllBytes(Path.Combine(root, "Materials", "Shared.omat"), bytes);
         using var index = File.Create(Path.Combine(root, "container.index.bin"));
-        Oxygen.Testing.LooseCookedIndexFixture.Write(index, new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [new(new AssetKey(1, 2), "Materials/Shared.omat", "/Library/Materials/Shared.omat", 1, (ulong)bytes.Length, SHA256.HashData(bytes))], []));
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(index, new Document(1, IndexFeatures.HasVirtualPaths, Guid.CreateVersion7(), [new(new AssetKey(1, 2), "Materials/Shared.omat", "/Library/Materials/Shared.omat", 1, (ulong)bytes.Length, SHA256.HashData(bytes))], []));
     }
 }

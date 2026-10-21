@@ -10,17 +10,18 @@ using Oxygen.Managed.Assets.Catalog.LooseCooked;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.Assets.Unit.Tests;
+namespace Oxygen.Editor.ContentPipeline.Testing;
 
 /// <summary>
-///     A controlled cook publication for asset tests: the test states which roots are published, in precedence
-///     order, and each root serves the index document it was given. It never touches the pipeline's format.
+///     An <see cref="ICookPublicationReader"/> for tests: the test states which roots are published, in precedence
+///     order, where each project mount's output is, and which products the project output holds. Each root serves the
+///     index document it was given. It never touches the pipeline's format on disk.
 /// </summary>
 /// <param name="projectId">The project the publication belongs to.</param>
 /// <param name="projectRoot">The project's root folder.</param>
-internal sealed class FakeCookPublication(Guid projectId, FileSystemPath projectRoot) : ICookPublicationReader
+public sealed class FakeCookPublicationReader(Guid projectId, FileSystemPath projectRoot) : ICookPublicationReader
 {
-    private Selection current = new(PublicationId: null, [], ImmutableDictionary<string, FileSystemPath>.Empty);
+    private Selection current = new(PublicationId: null, [], ImmutableDictionary<string, FileSystemPath>.Empty, []);
 
     /// <summary>Gets the project the publication belongs to.</summary>
     public Guid ProjectId { get; } = projectId;
@@ -38,13 +39,24 @@ internal sealed class FakeCookPublication(Guid projectId, FileSystemPath project
     /// <param name="folder">The root's physical folder.</param>
     /// <returns>A root and the index it serves.</returns>
     public static PublishedRoot Root(CookPublicationRootOwner owner, string name, Document document, FileSystemPath folder)
-        => new(new(owner, name, document.SourceGuid, new string('0', 64), owner == CookPublicationRootOwner.Library ? folder.FullPath : null), document, folder);
+    {
+        ArgumentNullException.ThrowIfNull(document);
+        return new(new(owner, name, document.SourceGuid, new string('0', 64), owner == CookPublicationRootOwner.Library ? folder.FullPath : null), document, folder);
+    }
 
     /// <summary>Selects a new publication of the given roots, in precedence order.</summary>
     /// <param name="roots">The published roots; a later root overrides an earlier one.</param>
     /// <param name="projectRoots">The physical output folder of each project mount.</param>
-    public void Publish(IReadOnlyList<PublishedRoot> roots, IReadOnlyDictionary<string, FileSystemPath>? projectRoots = null)
-        => this.current = new(Guid.NewGuid(), roots, (projectRoots ?? new Dictionary<string, FileSystemPath>()).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase));
+    /// <param name="projectOutputs">The virtual paths of the products the project output holds.</param>
+    public void Publish(IReadOnlyList<PublishedRoot> roots, IReadOnlyDictionary<string, FileSystemPath>? projectRoots = null, IEnumerable<string>? projectOutputs = null)
+    {
+        ArgumentNullException.ThrowIfNull(roots);
+        this.current = new(
+            Guid.NewGuid(),
+            roots,
+            (projectRoots ?? new Dictionary<string, FileSystemPath>()).ToImmutableDictionary(StringComparer.OrdinalIgnoreCase),
+            [.. projectOutputs ?? []]);
+    }
 
     /// <summary>Creates a lease on the current publication without going through a reader.</summary>
     /// <returns>A lease the test owns.</returns>
@@ -68,20 +80,21 @@ internal sealed class FakeCookPublication(Guid projectId, FileSystemPath project
     /// <param name="Binding">The published root.</param>
     /// <param name="Document">The root's index.</param>
     /// <param name="Folder">The root's physical folder.</param>
-    internal sealed record PublishedRoot(CookPublicationRoot Binding, Document Document, FileSystemPath Folder);
+    public sealed record PublishedRoot(CookPublicationRoot Binding, Document Document, FileSystemPath Folder);
 
     private sealed record Selection(
         Guid? PublicationId,
         IReadOnlyList<PublishedRoot> Roots,
-        ImmutableDictionary<string, FileSystemPath> ProjectRoots);
+        ImmutableDictionary<string, FileSystemPath> ProjectRoots,
+        ImmutableArray<string> ProjectOutputPaths);
 
     private sealed class ReadLease : ICookPublicationReadLease
     {
-        private readonly FakeCookPublication owner;
+        private readonly FakeCookPublicationReader owner;
         private readonly Selection selection;
         private bool disposed;
 
-        public ReadLease(FakeCookPublication owner, Selection selection)
+        public ReadLease(FakeCookPublicationReader owner, Selection selection)
         {
             this.owner = owner;
             this.selection = selection;
@@ -99,6 +112,8 @@ internal sealed class FakeCookPublication(Guid projectId, FileSystemPath project
         public ImmutableArray<CookPublicationRoot> UnavailableRoots => [];
 
         public ImmutableDictionary<string, FileSystemPath> ProjectRoots => this.selection.ProjectRoots;
+
+        public IEnumerable<string> ProjectOutputPaths => this.selection.ProjectOutputPaths;
 
         public Task<IReadOnlyList<IAssetCatalog>> CreateCatalogsAsync(CancellationToken cancellationToken)
         {

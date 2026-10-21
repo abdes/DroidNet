@@ -126,7 +126,7 @@ public sealed partial class NativeLoopCleanupTests
         var root = Directory.CreateTempSubdirectory("Oxygen.NativeSlotCatalog.");
         try
         {
-            using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+            using var compatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
             var api = new ImportToolContentPipelineApi(
                 new EngineContentPipelineToolLocator(),
                 new ContentPipelineProcessRunner(),

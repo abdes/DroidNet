@@ -58,12 +58,12 @@ public sealed class ImportedOutputOwnershipTests
         var source = await WriteRetainedModelAsync(workspace, "Model", "gltf", this.TestContext.CancellationToken).ConfigureAwait(false);
         var policy = Path.Combine(workspace.Root, "test-producer-policy");
         await File.WriteAllTextAsync(policy, "v1", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var firstCompatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine([new("test/policy", policy)]);
+        using var firstCompatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine([new("test/policy", policy)]);
         var firstApi = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, firstCompatibility);
         var first = await CreateService(workspace, firstApi, compatibility: firstCompatibility).CookAssetAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = first.IsPublished.Should().BeTrue();
         await File.WriteAllTextAsync(policy, "v2", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var changedCompatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine([new("test/policy", policy)]);
+        using var changedCompatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine([new("test/policy", policy)]);
         var changedApi = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, changedCompatibility);
         var service = CreateService(workspace, changedApi, compatibility: changedCompatibility);
         var geometry = first.CookedAssets.First(static asset => asset.Kind == ContentCookAssetKind.Geometry).CookedAssetUri;

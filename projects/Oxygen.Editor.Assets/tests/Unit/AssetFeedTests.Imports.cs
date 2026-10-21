@@ -8,6 +8,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Editor.Assets.TestSupport;
@@ -86,7 +87,7 @@ public sealed partial class AssetFeedTests
         var project = projects.ActiveProject!;
         var ownedRoot = FileSystemPath.From(workspace.SourcePath(".cooked/Content"));
         Directory.CreateDirectory(ownedRoot.FullPath);
-        var publication = new FakeCookPublication(project.ProjectId, project.ProjectRoot);
+        var publication = new FakeCookPublicationReader(project.ProjectId, project.ProjectRoot);
         publication.Publish([], new Dictionary<string, FileSystemPath> { ["Content"] = ownedRoot });
         using var selected = publication.Lease();
         var state = ModelStatus(workspace, source, verified: true) with { OutputRoots = selected.ProjectRoots };

@@ -23,5 +23,6 @@ tools.
 The native format is owned by
 [PakFormat_core.h](../../../../Oxygen.Engine/src/Oxygen/Data/PakFormat_core.h);
 loading, payload verification and the CRC are owned by native Content's
-`PakFile`. Reader tests use the separate `testsupport/PakFixture.cs` emitter; it
-is not included in the production assembly.
+`PakFile`. Reader tests use the `PakFixture` emitter of the
+[test kit](../../../testing/README.md); it is not included in the production
+assembly.

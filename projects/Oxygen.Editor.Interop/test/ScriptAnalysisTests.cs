@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Text;
 using AwesomeAssertions;
+using Oxygen.Editor.Interop.Testing;
 using Oxygen.Interop.Scripting;
 
 namespace Oxygen.Editor.Interop.Tests;

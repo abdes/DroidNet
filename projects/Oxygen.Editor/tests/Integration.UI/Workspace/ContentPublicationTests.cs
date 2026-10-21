@@ -160,13 +160,16 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         _ = await CookPublicationScopeAsync(scenario, scope, cancellationToken).ConfigureAwait(true);
         var content = scenario.Fixture.Runtime.ContentStatus;
         var fileSystem = NativeSceneFixture.FileSystem;
-        var files = ReadPublishedHashes(fileSystem, scenario.Fixture.ProjectRoot).Keys.ToDictionary(static path => path, fileSystem.File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase);
+        var before = await ReadPublishedAsync(scenario.Services, cancellationToken).ConfigureAwait(true);
+        var files = before.Hashes.Keys.ToDictionary(static path => path, fileSystem.File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase);
         var result = await CookPublicationScopeAsync(scenario, scope, cancellationToken).ConfigureAwait(true);
         _ = result.IsUpToDate.Should().BeTrue();
         _ = result.CookedAssets.Should().BeEmpty();
         _ = result.ReusedAssets.Should().NotBeEmpty();
         _ = scenario.Fixture.Runtime.ContentStatus.Should().Be(content);
-        _ = ReadPublishedHashes(fileSystem, scenario.Fixture.ProjectRoot).Keys.ToDictionary(static path => path, fileSystem.File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase).Should().BeEquivalentTo(files);
+        var after = await ReadPublishedAsync(scenario.Services, cancellationToken).ConfigureAwait(true);
+        _ = after.PublicationId.Should().Be(before.PublicationId);
+        _ = after.Hashes.Keys.ToDictionary(static path => path, fileSystem.File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase).Should().BeEquivalentTo(files);
         var state = await scenario.Fixture.ReadNodeAsync(scenario.Fixture.Source.RootNodes[0].Id, cancellationToken).ConfigureAwait(true);
         _ = state.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(1, 0, 0, 1));
     }

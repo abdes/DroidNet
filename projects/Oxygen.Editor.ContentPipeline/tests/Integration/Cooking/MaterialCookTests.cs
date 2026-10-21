@@ -247,7 +247,7 @@ internal sealed partial class MaterialCookTests
 
     private sealed partial class MaterialWorkspace : IDisposable
     {
-        private Oxygen.Testing.NativeContentPipelineFixture? nativePipeline;
+        private Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture? nativePipeline;
 
         public MaterialWorkspace(string authoringFolder = "Content")
         {
@@ -274,7 +274,7 @@ internal sealed partial class MaterialCookTests
 
         public ContentCookCoordinator CookCoordinator { get; }
 
-        public Oxygen.Testing.NativeContentPipelineFixture NativePipeline => this.nativePipeline ??= new(this.ContextService, this.CookCoordinator);
+        public Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture NativePipeline => this.nativePipeline ??= new(this.ContextService, this.CookCoordinator);
 
         public void Dispose()
         {

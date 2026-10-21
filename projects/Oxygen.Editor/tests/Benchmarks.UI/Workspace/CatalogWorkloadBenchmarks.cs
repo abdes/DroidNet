@@ -9,7 +9,9 @@ using AwesomeAssertions;
 using CommunityToolkit.WinUI;
 using DroidNet.TestHelpers;
 using DroidNet.Tests;
+using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
+using Microsoft.UI.Xaml.Media;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentExplorer;
@@ -24,7 +26,6 @@ using Oxygen.Editor.TestSupport;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
-using static Oxygen.Editor.ContentExplorer.TestSupport.ExplorerControls;
 using static Oxygen.Editor.TestSupport.CatalogWorkload;
 using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
 
@@ -101,9 +102,18 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
             {
                 ViewModel = (ListLayoutViewModel)layout,
             };
-            var browser = CreateQueryTestRoot(query, view, light: false);
-            browser.Width = 1920 / scale;
-            browser.Height = 280;
+            var browser = new Grid
+            {
+                Width = 1920 / scale,
+                Height = 280,
+                RequestedTheme = ElementTheme.Dark,
+                Background = new SolidColorBrush(Microsoft.UI.Colors.Black),
+            };
+            browser.RowDefinitions.Add(new() { Height = GridLength.Auto });
+            browser.RowDefinitions.Add(new() { Height = new(1, GridUnitType.Star) });
+            browser.Children.Add(query);
+            Grid.SetRow(view, 1);
+            browser.Children.Add(view);
             var root = new StackPanel();
             root.Children.Add(panel);
             root.Children.Add(browser);

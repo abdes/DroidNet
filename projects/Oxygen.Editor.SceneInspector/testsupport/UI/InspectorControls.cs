@@ -19,6 +19,7 @@ using Oxygen.Editor.SceneInspector.Components.Cameras;
 using Oxygen.Editor.SceneInspector.Components.Lights;
 using Oxygen.Editor.SceneInspector.Components.Rendering;
 using Oxygen.Editor.SceneInspector.Components.Transform;
+using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -123,7 +124,7 @@ internal static class InspectorControls
     internal static async Task EnterTextAsync(NumberBox number, string value)
     {
         _ = number.ApplyTemplate();
-        number.StartEdit();
+        number.BeginTextEdit();
         var input = number.FindDescendant<TextBox>(element => string.Equals(element.Name, "PartEditBox", StringComparison.Ordinal))!;
         if (string.Equals(input.Text, value, StringComparison.Ordinal))
         {
@@ -187,6 +188,29 @@ internal static class InspectorControls
         throw new InvalidOperationException($"The {description} was not realized in the inspector tree within 200 render passes.");
     }
 
+    /// <summary>Starts a numeric edit session on <paramref name="number"/>'s field, as its view does when the control starts one.</summary>
+    /// <param name="model">The inspector that owns the field.</param>
+    /// <param name="number">The field's control; its tag names the field.</param>
+    /// <param name="interaction">The interaction that starts the session.</param>
+    internal static void BeginNumberSession(InspectorSection model, NumberBox number, NumberBoxEditInteractionKind interaction)
+        => ((IInspectorEditSessionOwner)model).BeginEditSession((string)number.Tag, interaction);
+
+    /// <summary>Completes the inspector's numeric edit session, as the view does when the control completes it.</summary>
+    /// <param name="model">The inspector that owns the session.</param>
+    /// <param name="interaction">The interaction that started the session.</param>
+    /// <param name="completion">How the session ends.</param>
+    internal static void CompleteNumberSession(InspectorSection model, NumberBoxEditInteractionKind interaction, NumberBoxEditCompletionKind completion)
+        => ((IInspectorEditSessionOwner)model).CompleteEditSession(new(interaction, completion));
+
+    /// <summary>
+    ///     Raises one of <paramref name="number"/>'s edit-session events as the control does, for tests of how a view
+    ///     wires its controls: late callbacks from recycled controls, vector boxes and filter changes. A
+    ///     <see cref="NumberBox"/> has no public way to drive a drag or wheel session; tests of an inspector's own
+    ///     behavior use <see cref="BeginNumberSession"/> and <see cref="CompleteNumberSession"/>.
+    /// </summary>
+    /// <param name="number">The control.</param>
+    /// <param name="method">The control's raising method.</param>
+    /// <param name="arguments">The method's leading arguments; the others take their defaults.</param>
     internal static void RaiseNumberEvent(NumberBox number, string method, params object[] arguments)
     {
         var target = typeof(NumberBox).GetMethod(method, BindingFlags.Instance | BindingFlags.NonPublic)

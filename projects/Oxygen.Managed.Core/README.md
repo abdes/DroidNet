@@ -62,7 +62,7 @@ editor build needs no engine build.
 | `src/Compatibility/` | The native SDK and Interop verification: the artifact inventory, the verifier, the leases and the editor's compatibility service                         |
 | `src/Services/`      | `OxygenPathFinder`, the Oxygen project and state folders                                                                                                 |
 | `Generators/`        | `UnicodeTablesGenerator`, the source generator of the virtual path rules' Unicode tables, and its tests                                                  |
-| `testsupport/`       | `TemporaryNativeArtifacts`, linked into test projects that run native code against a private verification receipt                                        |
+| `testing/`           | The [test kit](testing/README.md): `TemporaryNativeArtifacts`, for test projects that run native code against a private verification receipt             |
 | `tests/`             | The unit tests                                                                                                                                           |
 
 ## Identities

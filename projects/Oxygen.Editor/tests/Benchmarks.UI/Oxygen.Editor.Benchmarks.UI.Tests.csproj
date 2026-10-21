@@ -16,11 +16,11 @@
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Input/testing/Oxygen.Editor.Input.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Shell/testing/Oxygen.Editor.Shell.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testing/Oxygen.Editor.ContentPipeline.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testing/Oxygen.Managed.Assets.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Core/testing/Oxygen.Managed.Core.Testing.csproj" />
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions.Testing" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Assets/testsupport/LooseCookedIndexFixture.cs" Link="Fixtures/LooseCookedIndexFixture.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Managed.Core/testsupport/TemporaryNativeArtifacts.cs" Link="Fixtures/TemporaryNativeArtifacts.cs" />
-        <Compile Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testsupport/Native/NativeContentPipelineFixture.cs" Link="Fixtures/NativeContentPipelineFixture.cs" />
         <Compile Include="../../testsupport/Authoring/NativeFieldCases.cs" Link="Support/NativeFieldCases.cs" />
         <Compile Include="../../testsupport/Native/CatalogWorkload.cs" Link="Support/CatalogWorkload.cs" />
         <Compile Include="../../testsupport/Native/CatalogWorkloadServices.cs" Link="Support/CatalogWorkloadServices.cs" />
@@ -30,8 +30,6 @@
         <Compile Include="../../testsupport/Native/NativeSceneFixture.cs" Link="Support/NativeSceneFixture.cs" />
         <Compile Include="../../testsupport/Native/SharedNativeEngine.cs" Link="Support/SharedNativeEngine.cs" />
         <Compile Include="../../testsupport/Native/SharedNativeEngineLifetime.cs" Link="Support/SharedNativeEngineLifetime.cs" />
-        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerControls.cs" Link="Support/ExplorerControls.cs" />
-        <Compile Include="$(MyTopLevelDirectory)projects/Oxygen.Editor.ContentExplorer/testsupport/UI/ExplorerQuerySupport.cs" Link="Support/ExplorerQuerySupport.cs" />
         <Compile Include="$(MyTopLevelDirectory)projects/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
         <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/test/Assets/Models/static_scalar_triangle.gltf" Link="Fixtures/static_scalar_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />
         <None Include="$(ProjectsRoot)/Oxygen.Engine/src/Oxygen/Cooker/test/Assets/Models/static_textured_triangle.gltf" Link="Fixtures/static_textured_triangle.gltf" CopyToOutputDirectory="PreserveNewest" />

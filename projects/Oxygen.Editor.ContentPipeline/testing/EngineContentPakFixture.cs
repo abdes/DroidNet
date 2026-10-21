@@ -5,11 +5,11 @@
 using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ContentPipeline.TestSupport;
+namespace Oxygen.Editor.ContentPipeline.Testing;
 
 /// <summary>An engine content pak for tests that run no native tool: it declares its assets instead of reading a file.</summary>
 /// <param name="assets">The assets the pak lists; none by default.</param>
-internal sealed class EngineContentPakFixture(params PakAssetEntry[] assets) : IEngineContentPak
+public sealed class EngineContentPakFixture(params PakAssetEntry[] assets) : IEngineContentPak
 {
     /// <inheritdoc />
     public FileSystemPath Path { get; } = FileSystemPath.From(System.IO.Path.Combine(System.IO.Path.GetTempPath(), "oxygen-engine-content-fixture", "engine.pak"));

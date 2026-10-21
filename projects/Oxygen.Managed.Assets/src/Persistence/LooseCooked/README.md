@@ -21,5 +21,6 @@ The native format is owned by
 [LooseCookedIndexFormat.h](../../../../Oxygen.Engine/src/Oxygen/Data/LooseCookedIndexFormat.h).
 Complete payload verification is owned by
 [native Content](../../../../Oxygen.Engine/src/Oxygen/Content/Docs/loose_cooked_content.md).
-Reader tests use the separate `testsupport/LooseCookedIndexFixture.cs` emitter;
-it is not included in the production assembly.
+Reader tests use the `LooseCookedIndexFixture` emitter of the
+[test kit](../../../testing/README.md); it is not included in the production
+assembly.

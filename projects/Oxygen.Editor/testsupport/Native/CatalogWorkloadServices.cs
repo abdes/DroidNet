@@ -15,7 +15,7 @@ namespace Oxygen.Editor.TestSupport;
 
 internal sealed partial class CatalogWorkloadServices : IDisposable
 {
-    private readonly Oxygen.Testing.TemporaryNativeArtifacts compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
+    private readonly Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts compatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
 
     public CatalogWorkloadServices(NativeSceneFixture fixture, IContentPipelineProcessRunner? processRunner = null)
     {

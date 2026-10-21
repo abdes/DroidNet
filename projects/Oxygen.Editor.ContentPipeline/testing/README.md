@@ -11,8 +11,19 @@ test projects reference it.
   operation at a time over the active project, without the cook leases the real
   coordinator takes on disk, so it serves a project on an in-memory file system.
   Requests run in arrival order; pending cooks are not coalesced.
+- `FakeCookPublicationReader` is an in-memory `ICookPublicationReader`.
+  `Publish` selects a new publication: its roots in precedence order, each
+  serving the index document it was given, the output folder of each project
+  mount and the products the project output holds. `HeldLeases` counts the
+  leases not yet released.
 - `FakeMaterialSlotProvider` is an in-memory `IGeometryMaterialSlotProvider`.
   `Publish`, `Remove` and `Fail` set what reading a geometry's inventory
   returns; `HoldReads` holds every read until the returned
   `MaterialSlotReadGate` is released, so a test can change a scene while a read
   is pending.
+- `EngineContentPakFixture` is an `IEngineContentPak` that declares its assets
+  instead of reading a pak, for tests that run no native tool.
+- `NativeContentPipelineFixture` composes the production `ContentPipelineService`
+  and `CookPublicationService` over a project and its cook coordinator, with the
+  installed import tool and cooking compatibility checks, for integration tests
+  that cook for real.

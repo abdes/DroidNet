@@ -22,7 +22,7 @@ public sealed class LooseCookedIndexTests
         var doc = CreateSampleDocument();
 
         using var ms = new MemoryStream();
-        Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
         ms.Position = 0;
 
         var read = LooseCookedIndex.Read(ms);
@@ -62,13 +62,13 @@ public sealed class LooseCookedIndexTests
 
         using (var ms = new MemoryStream())
         {
-            Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
+            Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
             a = ms.ToArray();
         }
 
         using (var ms = new MemoryStream())
         {
-            Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
+            Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
             b = ms.ToArray();
         }
 
@@ -87,7 +87,7 @@ public sealed class LooseCookedIndexTests
     public void ReadFormatVersion_ShouldReadTheDeclaredVersionOfAnyLooseIndex()
     {
         using var stream = new MemoryStream();
-        Oxygen.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
         BinaryPrimitives.WriteUInt16LittleEndian(stream.GetBuffer().AsSpan(8, 2), 4);
 
         _ = LooseCookedIndex.ReadFormatVersion(stream.ToArray()).Should().Be((ushort)4);
@@ -104,7 +104,7 @@ public sealed class LooseCookedIndexTests
     public void Read_WithUnsupportedVersion_ShouldThrow(int version)
     {
         using var stream = new MemoryStream();
-        Oxygen.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
         BinaryPrimitives.WriteUInt16LittleEndian(stream.GetBuffer().AsSpan(8, 2), checked((ushort)version));
         stream.Position = 0;
         Action read = () => _ = LooseCookedIndex.Read(stream);
@@ -117,7 +117,7 @@ public sealed class LooseCookedIndexTests
     public void Read_WithInvalidSourceIdentity_ShouldThrow(int byteOffset, int value)
     {
         using var stream = new MemoryStream();
-        Oxygen.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
         stream.GetBuffer()[16 + byteOffset] = checked((byte)value);
         stream.Position = 0;
         Action read = () => _ = LooseCookedIndex.Read(stream);
@@ -132,7 +132,7 @@ public sealed class LooseCookedIndexTests
         byte[] bytes;
         using (var ms = new MemoryStream())
         {
-            Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
+            Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
             bytes = ms.ToArray();
         }
 
@@ -151,7 +151,7 @@ public sealed class LooseCookedIndexTests
     public void Read_WithObsoleteAssetEntrySize_ShouldThrow()
     {
         using var stream = new MemoryStream();
-        Oxygen.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(stream, CreateSampleDocument());
         BinaryPrimitives.WriteUInt32LittleEndian(stream.GetBuffer().AsSpan(60, 4), 81);
         stream.Position = 0;
 
@@ -167,7 +167,7 @@ public sealed class LooseCookedIndexTests
         byte[] bytes;
         using (var ms = new MemoryStream())
         {
-            Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
+            Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
             bytes = ms.ToArray();
         }
 
@@ -196,7 +196,7 @@ public sealed class LooseCookedIndexTests
         var doc = CreateSampleDocument() with { Files = [] };
 
         using var ms = new MemoryStream();
-        Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
         var bytes = ms.ToArray();
 
         var assetEntriesOffset = BinaryPrimitives.ReadUInt64LittleEndian(bytes.AsSpan(48, 8));
@@ -220,7 +220,7 @@ public sealed class LooseCookedIndexTests
         byte[] bytes;
         using (var ms = new MemoryStream())
         {
-            Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
+            Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
             bytes = ms.ToArray();
         }
 
@@ -238,7 +238,7 @@ public sealed class LooseCookedIndexTests
         var doc = CreateSampleDocument() with { Files = [texture] };
 
         using var ms = new MemoryStream();
-        Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
         ms.Position = 0;
 
         var file = LooseCookedIndex.Read(ms).Files.Should().ContainSingle().Subject;
@@ -256,7 +256,7 @@ public sealed class LooseCookedIndexTests
         var doc = CreateSampleDocument() with { Files = [file] };
 
         using var ms = new MemoryStream();
-        Oxygen.Testing.LooseCookedIndexFixture.Write(ms, doc);
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, doc);
         ms.Position = 0;
 
         Action read = () => _ = LooseCookedIndex.Read(ms);
@@ -267,7 +267,7 @@ public sealed class LooseCookedIndexTests
     public void Read_AssetWithoutProducingSource_ShouldThrow()
     {
         using var ms = new MemoryStream();
-        Oxygen.Testing.LooseCookedIndexFixture.Write(ms, CreateSampleDocument());
+        Oxygen.Managed.Assets.Testing.LooseCookedIndexFixture.Write(ms, CreateSampleDocument());
         var assetEntries = checked((int)BinaryPrimitives.ReadUInt64LittleEndian(ms.GetBuffer().AsSpan(48, 8)));
         BinaryPrimitives.WriteUInt32LittleEndian(ms.GetBuffer().AsSpan(assetEntries + 25, 4), 0);
         ms.Position = 0;

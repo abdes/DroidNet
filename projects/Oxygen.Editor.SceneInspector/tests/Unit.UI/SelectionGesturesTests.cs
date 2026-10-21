@@ -43,9 +43,9 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
         var view = CreateNumericView(model);
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var number = view.FindDescendant<NumberBox>(element => Equals(element.Tag, field))!;
-        RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
+        BeginNumberSession(model, number, NumberBoxEditInteractionKind.PointerDrag);
         number.NumberValue = 90;
-        RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
+        CompleteNumberSession(model, NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await PendingNumericEdits(model).ConfigureAwait(true);
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         _ = ReadNumericSource(fixture.Node, kind).Should().Be(90);
@@ -75,14 +75,14 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
         var view = CreateNumericView(model);
         await LoadTestContentAsync(view).ConfigureAwait(true);
         var number = view.FindDescendant<NumberBox>(element => Equals(element.Tag, field))!;
-        RaiseNumberEvent(number, "OnEditSessionStarted", NumberBoxEditInteractionKind.PointerDrag);
+        BeginNumberSession(model, number, NumberBoxEditInteractionKind.PointerDrag);
         number.NumberValue = 90;
         fixture.Select(second);
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
         {
         }).ConfigureAwait(true);
         number.NumberValue = 100;
-        RaiseNumberEvent(number, "OnEditSessionCompleted", NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
+        CompleteNumberSession(model, NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit);
         await PendingNumericEdits(model).ConfigureAwait(true);
         _ = ReadNumericSource(fixture.Node, kind).Should().Be(60, "the original target is cancelled");
         _ = ReadNumericSource(second, kind).Should().Be(80, "the new target rejects the old callback");
@@ -159,7 +159,7 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
             CancellationToken.None).ConfigureAwait(true);
 
         await EnterTextAsync(number, "+=2").ConfigureAwait(true);
-        RaiseNumberEvent(number, "CancelEdit");
+        number.CancelEdit();
         await PendingNumericEdits(model).ConfigureAwait(true);
 
         _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalPosition.X.Should().Be(10);

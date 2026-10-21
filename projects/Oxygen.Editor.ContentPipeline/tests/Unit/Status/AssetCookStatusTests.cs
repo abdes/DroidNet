@@ -11,6 +11,7 @@ using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
@@ -222,7 +223,7 @@ internal sealed partial class AssetCookStatusTests
         await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
         var producer = Path.Combine(project.Root, "producer.bin");
         await File.WriteAllTextAsync(producer, "new producer", this.TestContext.CancellationToken).ConfigureAwait(false);
-        using var native = new Oxygen.Testing.TemporaryNativeArtifacts([new NativeArtifactLocation("producer", producer)]);
+        using var native = new Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts([new NativeArtifactLocation("producer", producer)]);
         var verifiedProducer = await native.VerifyAsync(Guid.NewGuid(), this.TestContext.CancellationToken).ConfigureAwait(false);
         var producerArtifacts = verifiedProducer.Artifacts!;
         await using var producerLifetime = producerArtifacts.ConfigureAwait(false);
@@ -237,7 +238,7 @@ internal sealed partial class AssetCookStatusTests
         public static readonly AssetPath SourceUri = AssetPath.Parse("/Content/Material.omat");
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("oxygen-status-");
         private readonly NativeAtomicFileStore files = new(new Testably.Abstractions.RealFileSystem());
-        private readonly Oxygen.Testing.TemporaryNativeArtifacts native;
+        private readonly Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts native;
         private readonly EngineContentPakFixture engineContent = new();
         private readonly CookPublicationService publication;
         private readonly Mock<IEngineContentPipelineApi> api = new();

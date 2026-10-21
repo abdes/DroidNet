@@ -6,14 +6,14 @@ using System.Security.Cryptography;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Publication;
-using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
+using Oxygen.Managed.Assets.Testing;
 using Oxygen.Managed.Core;
-using Oxygen.Testing;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.Assets.Unit.Tests;
@@ -94,9 +94,9 @@ public sealed class CookedLibraryCatalogTests
             });
             var project = this.Projects.ActiveProject!;
             this.Publication = new(project.ProjectId, project.ProjectRoot);
-            this.ProjectRoot = FakeCookPublication.Root(CookPublicationRootOwner.Project, "Content", projectIndex, this.ProjectOutput);
-            this.FirstRoot = FakeCookPublication.Root(CookPublicationRootOwner.Library, "First", firstIndex, this.First);
-            this.SecondRoot = FakeCookPublication.Root(CookPublicationRootOwner.Library, "Second", secondIndex, this.Second);
+            this.ProjectRoot = FakeCookPublicationReader.Root(CookPublicationRootOwner.Project, "Content", projectIndex, this.ProjectOutput);
+            this.FirstRoot = FakeCookPublicationReader.Root(CookPublicationRootOwner.Library, "First", firstIndex, this.First);
+            this.SecondRoot = FakeCookPublicationReader.Root(CookPublicationRootOwner.Library, "Second", secondIndex, this.Second);
         }
 
         public FileSystemPath ProjectOutput { get; }
@@ -105,17 +105,17 @@ public sealed class CookedLibraryCatalogTests
 
         public FileSystemPath Second { get; }
 
-        public FakeCookPublication.PublishedRoot ProjectRoot { get; }
+        public FakeCookPublicationReader.PublishedRoot ProjectRoot { get; }
 
-        public FakeCookPublication.PublishedRoot FirstRoot { get; }
+        public FakeCookPublicationReader.PublishedRoot FirstRoot { get; }
 
-        public FakeCookPublication.PublishedRoot SecondRoot { get; }
+        public FakeCookPublicationReader.PublishedRoot SecondRoot { get; }
 
         public ProjectContextService Projects { get; } = new();
 
-        public FakeCookPublication Publication { get; }
+        public FakeCookPublicationReader Publication { get; }
 
-        public void Publish(params FakeCookPublication.PublishedRoot[] roots)
+        public void Publish(params FakeCookPublicationReader.PublishedRoot[] roots)
             => this.Publication.Publish(roots, new Dictionary<string, FileSystemPath> { ["Content"] = this.ProjectOutput });
 
         public AssetCatalog CreateCatalog()

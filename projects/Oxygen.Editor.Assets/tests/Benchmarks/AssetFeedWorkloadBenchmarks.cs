@@ -14,7 +14,7 @@ using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Status;
-using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Compatibility;

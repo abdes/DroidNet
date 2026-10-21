@@ -10,7 +10,7 @@ using DroidNet.Storage.Native;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Publication;
-using Oxygen.Editor.ContentPipeline.TestSupport;
+using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;

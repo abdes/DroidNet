@@ -7,10 +7,10 @@ using System.Text;
 using Oxygen.Managed.Assets.Persistence;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 
-namespace Oxygen.Testing;
+namespace Oxygen.Managed.Assets.Testing;
 
 /// <summary>Small binary fixture emitter for reader and orchestration tests; never shipped.</summary>
-internal static class LooseCookedIndexFixture
+public static class LooseCookedIndexFixture
 {
     /// <summary>Makes an index on disk claim another format version, as one cooked by an older or newer cooker would.</summary>
     /// <param name="indexPath">The index file.</param>
@@ -23,8 +23,14 @@ internal static class LooseCookedIndexFixture
         await File.WriteAllBytesAsync(indexPath, bytes).ConfigureAwait(false);
     }
 
+    /// <summary>Writes a loose cooked index holding <paramref name="document"/>'s assets and files; reference tables are zeroed.</summary>
+    /// <param name="destination">The stream to replace with the index.</param>
+    /// <param name="document">The header fields, the assets and the files the index lists.</param>
     public static void Write(Stream destination, Document document)
     {
+        ArgumentNullException.ThrowIfNull(destination);
+        ArgumentNullException.ThrowIfNull(document);
+
         using var strings = new MemoryStream();
         strings.WriteByte(0);
         var offsets = new Dictionary<string, uint>(StringComparer.Ordinal) { [string.Empty] = 0 };

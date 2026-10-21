@@ -9,7 +9,7 @@
     <ItemGroup>
         <ProjectReference Include="..\..\src\Oxygen.Editor.ContentPipeline.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\testing\Oxygen.Editor.Projects.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testing\Oxygen.Managed.Assets.Testing.csproj" />
         <Compile Include="..\Controlled\NativeInventoryFixture.cs" Link="NativeInventoryFixture.cs" />
-        <Compile Include="$(ProjectsRoot)\Oxygen.Managed.Assets\testsupport\LooseCookedIndexFixture.cs" Link="LooseCookedIndexFixture.cs" />
     </ItemGroup>
 </Project>
