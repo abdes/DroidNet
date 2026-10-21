@@ -1,6 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1040" height="660" viewBox="0 0 1040 660" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="13">
   <title>Texture Editor mockup (dark theme)</title>
-  <desc>The Texture Editor document tab for Bricks_N: a header with the cook state, a preview of the cooked texture rendered by the engine with its toolbar, a banner and an info strip, and a settings pane with set values, effective values and their origins, and a reset button.</desc>
+  <desc>The Texture Editor document tab for Bricks_N: a header with the cook state, the view of the cooked texels decoded on the CPU with its toolbar, a banner and an info strip, and a settings pane with set values, effective values and their origins, and a reset button.</desc>
   <defs>
     <pattern id="checker" width="16" height="16" patternUnits="userSpaceOnUse">
       <rect width="16" height="16" fill="#2a2a2a"/><rect width="8" height="8" fill="#333"/><rect x="8" y="8" width="8" height="8" fill="#333"/>
@@ -43,7 +43,7 @@
     <rect x="96" y="82" width="24" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="104" y="98" fill="#787878">A</text>
     <text x="138" y="98" fill="#c5c5c5">Mip</text>
     <rect x="164" y="82" width="70" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="172" y="98" fill="#ffffff">Auto</text><text x="218" y="97" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
-    <text x="250" y="98" fill="#787878">Slice</text>
+    <text x="250" y="98" fill="#787878">Layer</text>
     <rect x="282" y="82" width="50" height="22" rx="4" fill="#2b2b2b" stroke="#3a3a3a"/><text x="290" y="98" fill="#787878">0</text>
     <text x="350" y="98" fill="#787878">Exposure</text>
     <line x1="406" y1="93" x2="486" y2="93" stroke="#3a3a3a" stroke-width="3"/>
@@ -57,11 +57,11 @@
   <rect x="150" y="160" width="400" height="400" fill="url(#bricks)"/>
   <rect x="0" y="111" width="700" height="32" fill="#3a3220"/>
   <text x="14" y="132" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#fce100">&#xE7BA;</text>
-  <text x="36" y="132" fill="#ffffff">Showing the last cooked texture. Save to cook your changes.</text>
+  <text x="36" y="132" fill="#ffffff">Showing the last cook. Save to cook your changes.</text>
   <text x="572" y="132" fill="#78c9e8">Save and cook</text>
   <rect x="0" y="586" width="700" height="30" fill="#202020"/>
   <text x="14" y="606" font-size="12" fill="#c5c5c5">Source 2048 × 2048 RGB8 · Cooked BC7 UNorm · 2048 × 2048 · 12 mips · 5.3 MB</text>
-  <text x="620" y="606" font-size="12" fill="#9e9e9e">Engine preview</text>
+  <text x="686" y="606" font-size="12" text-anchor="end" fill="#9e9e9e">Mip 0 · cooked texels</text>
 
   <!-- Settings pane -->
   <rect x="701" y="75" width="339" height="585" fill="#272727"/>

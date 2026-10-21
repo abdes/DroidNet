@@ -1,0 +1,150 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="740" viewBox="0 0 1040 740" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="13">
+  <title>Texture Editor mockup, cube (dark theme)</title>
+  <desc>The Texture Editor on an HDR cube imported from six files: the six cooked faces in a horizontal cross with face labels and seam lines, a toolbar with the layout picker, face, mip and exposure, an info strip, and a settings pane whose Source group shows six face slots in a cross that accept dropped files and swaps. Notes below explain the layouts and slots.</desc>
+  <defs>
+    <linearGradient id="side" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#4f86c0"/><stop offset="0.48" stop-color="#cfe2ef"/>
+      <stop offset="0.52" stop-color="#8a7a60"/><stop offset="1" stop-color="#4d4232"/>
+    </linearGradient>
+    <radialGradient id="up" cx="0.62" cy="0.38" r="0.7">
+      <stop offset="0" stop-color="#fff6d8"/><stop offset="0.12" stop-color="#9cc4e8"/><stop offset="1" stop-color="#3f78b4"/>
+    </radialGradient>
+    <linearGradient id="down" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5a4c39"/><stop offset="1" stop-color="#3e3427"/>
+    </linearGradient>
+    <pattern id="checker" width="16" height="16" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#2a2a2a"/><rect width="8" height="8" fill="#333"/><rect x="8" y="8" width="8" height="8" fill="#333"/>
+    </pattern>
+    <g id="chev"><text font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text></g>
+  </defs>
+  <rect width="1040" height="740" fill="#161616"/>
+
+  <!-- Document tabs -->
+  <rect x="0" y="0" width="1040" height="34" fill="#1c1c1c"/>
+  <rect x="12" y="4" width="150" height="30" rx="6" fill="#272727"/>
+  <text x="26" y="24" fill="#ffffff">Room.otex.json</text>
+  <text x="176" y="24" fill="#9e9e9e">Bricks_N.otex.json</text>
+
+  <!-- Header -->
+  <rect x="0" y="34" width="1040" height="40" fill="#272727"/>
+  <text x="16" y="59" font-size="15" font-weight="600" fill="#ffffff">Room</text>
+  <text x="66" y="59" fill="#c5c5c5">Cube · HDR environment</text>
+  <rect x="234" y="44" width="88" height="22" rx="11" fill="#1e3a1e"/>
+  <text x="246" y="59" font-size="12" fill="#6ccb5f">Up to date</text>
+  <text x="336" y="59" font-size="12" fill="#c5c5c5">0 problems</text>
+  <rect x="946" y="42" width="80" height="26" rx="4" fill="#373737" stroke="#454545"/>
+  <text x="986" y="60" text-anchor="middle" fill="#ffffff">Cook</text>
+  <line x1="0" y1="74" x2="1040" y2="74" stroke="#3a3a3a"/>
+
+  <!-- Toolbar -->
+  <rect x="0" y="75" width="700" height="36" fill="#202020"/>
+  <g font-size="12">
+    <rect x="12" y="82" width="24" height="22" rx="4" fill="#5a2a2a"/><text x="20" y="98" fill="#ff9a9a">R</text>
+    <rect x="40" y="82" width="24" height="22" rx="4" fill="#2a4a2a"/><text x="48" y="98" fill="#9aff9a">G</text>
+    <rect x="68" y="82" width="24" height="22" rx="4" fill="#2a2a5a"/><text x="76" y="98" fill="#9a9aff">B</text>
+    <rect x="96" y="82" width="24" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="104" y="98" fill="#787878">A</text>
+    <text x="134" y="98" fill="#c5c5c5">Layout</text>
+    <rect x="176" y="82" width="122" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="184" y="98" fill="#ffffff">Horizontal cross</text><use href="#chev" x="284" y="97"/>
+    <text x="312" y="98" fill="#c5c5c5">Face</text>
+    <rect x="342" y="82" width="56" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="350" y="98" fill="#ffffff">All</text><use href="#chev" x="384" y="97"/>
+    <text x="410" y="98" fill="#c5c5c5">Mip</text>
+    <rect x="436" y="82" width="48" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="444" y="98" fill="#ffffff">0</text><use href="#chev" x="470" y="97"/>
+    <text x="496" y="98" fill="#c5c5c5">EV</text>
+    <line x1="518" y1="93" x2="590" y2="93" stroke="#3a3a3a" stroke-width="3"/>
+    <line x1="518" y1="93" x2="546" y2="93" stroke="#78c9e8" stroke-width="3"/>
+    <circle cx="546" cy="93" r="6" fill="#78c9e8"/>
+    <text x="598" y="98" fill="#ffffff">-1.0</text>
+    <rect x="634" y="82" width="56" height="22" rx="4" fill="#1f3340"/><text x="642" y="98" fill="#78c9e8">Seams</text>
+  </g>
+
+  <!-- Cross view: face size 150, origin (50,123) -->
+  <rect x="0" y="111" width="700" height="475" fill="url(#checker)"/>
+  <g>
+    <rect x="200" y="123" width="150" height="150" fill="url(#up)"/>
+    <rect x="50" y="273" width="150" height="150" fill="url(#side)"/>
+    <rect x="200" y="273" width="150" height="150" fill="url(#side)"/>
+    <rect x="350" y="273" width="150" height="150" fill="url(#side)"/>
+    <rect x="500" y="273" width="150" height="150" fill="url(#side)"/>
+    <rect x="200" y="423" width="150" height="150" fill="url(#down)"/>
+    <!-- a window on +Z and a lamp on +X to show orientation -->
+    <rect x="252" y="300" width="46" height="40" fill="#fff6d8" opacity="0.85"/>
+    <circle cx="430" cy="318" r="9" fill="#ffe9a8"/>
+  </g>
+  <!-- Seams -->
+  <g stroke="#78c9e8" stroke-width="1.5" stroke-dasharray="5 4" fill="none" opacity="0.9">
+    <line x1="200" y1="273" x2="350" y2="273"/>
+    <line x1="200" y1="423" x2="350" y2="423"/>
+    <line x1="200" y1="273" x2="200" y2="423"/>
+    <line x1="350" y1="273" x2="350" y2="423"/>
+    <line x1="500" y1="273" x2="500" y2="423"/>
+  </g>
+  <!-- Face labels -->
+  <g font-size="11" font-weight="600">
+    <rect x="206" y="129" width="26" height="18" rx="4" fill="#000000" opacity="0.55"/><text x="211" y="142" fill="#ffffff">+Y</text>
+    <rect x="56" y="279" width="26" height="18" rx="4" fill="#000000" opacity="0.55"/><text x="62" y="292" fill="#ffffff">−X</text>
+    <rect x="206" y="279" width="26" height="18" rx="4" fill="#000000" opacity="0.55"/><text x="211" y="292" fill="#ffffff">+Z</text>
+    <rect x="356" y="279" width="26" height="18" rx="4" fill="#000000" opacity="0.55"/><text x="361" y="292" fill="#ffffff">+X</text>
+    <rect x="506" y="279" width="26" height="18" rx="4" fill="#000000" opacity="0.55"/><text x="512" y="292" fill="#ffffff">−Z</text>
+    <rect x="206" y="429" width="26" height="18" rx="4" fill="#000000" opacity="0.55"/><text x="212" y="442" fill="#ffffff">−Y</text>
+  </g>
+
+  <!-- Info strip -->
+  <rect x="0" y="586" width="700" height="30" fill="#202020"/>
+  <text x="14" y="606" font-size="12" fill="#c5c5c5">Source 6 × 512 × 512 HDR · Cooked RGBA16F · 512 × 512 × 6 · 10 mips · 16.0 MB</text>
+  <text x="686" y="606" font-size="12" text-anchor="end" fill="#9e9e9e">Mip 0 · cooked texels</text>
+
+  <!-- Settings pane -->
+  <rect x="701" y="75" width="339" height="541" fill="#272727"/>
+  <line x1="700" y1="75" x2="700" y2="616" stroke="#3a3a3a"/>
+  <use href="#chev" x="714" y="100"/>
+  <text x="732" y="101" font-weight="600" fill="#ffffff">Source</text>
+  <text x="914" y="101" font-size="12" text-anchor="end" fill="#9e9e9e">Six face files</text>
+
+  <!-- Face slots in a cross: slot 66x58, gap 4, origin x=726 -->
+  <g font-size="11">
+    <g transform="translate(796,114)"><rect width="66" height="58" rx="4" fill="url(#up)" stroke="#454545"/><rect x="3" y="3" width="22" height="15" rx="3" fill="#000" opacity="0.55"/><text x="6" y="14" font-weight="600" fill="#fff">+Y</text></g>
+    <g transform="translate(726,176)"><rect width="66" height="58" rx="4" fill="url(#side)" stroke="#454545"/><rect x="3" y="3" width="22" height="15" rx="3" fill="#000" opacity="0.55"/><text x="7" y="14" font-weight="600" fill="#fff">−X</text></g>
+    <g transform="translate(796,176)"><rect width="66" height="58" rx="4" fill="url(#side)" stroke="#78c9e8" stroke-width="2"/><rect x="22" y="14" width="22" height="18" fill="#fff6d8" opacity="0.85"/><rect x="3" y="3" width="22" height="15" rx="3" fill="#000" opacity="0.55"/><text x="6" y="14" font-weight="600" fill="#fff">+Z</text></g>
+    <g transform="translate(866,176)"><rect width="66" height="58" rx="4" fill="url(#side)" stroke="#454545"/><circle cx="34" cy="22" r="5" fill="#ffe9a8"/><rect x="3" y="3" width="22" height="15" rx="3" fill="#000" opacity="0.55"/><text x="6" y="14" font-weight="600" fill="#fff">+X</text></g>
+    <g transform="translate(936,176)"><rect width="66" height="58" rx="4" fill="url(#side)" stroke="#454545"/><rect x="3" y="3" width="22" height="15" rx="3" fill="#000" opacity="0.55"/><text x="7" y="14" font-weight="600" fill="#fff">−Z</text></g>
+    <g transform="translate(796,238)"><rect width="66" height="58" rx="4" fill="url(#down)" stroke="#454545"/><rect x="3" y="3" width="22" height="15" rx="3" fill="#000" opacity="0.55"/><text x="7" y="14" font-weight="600" fill="#fff">−Y</text></g>
+  </g>
+  <!-- Selected slot details -->
+  <text x="732" y="318" fill="#9e9e9e">+Z face</text>
+  <text x="836" y="318" fill="#ffffff">Room_front.hdr</text>
+  <rect x="836" y="326" width="70" height="24" rx="4" fill="#373737" stroke="#454545"/><text x="847" y="343" fill="#ffffff">Change…</text>
+  <rect x="912" y="326" width="90" height="24" rx="4" fill="#373737" stroke="#454545"/><text x="923" y="343" fill="#ffffff">Use naming</text>
+
+  <use href="#chev" x="714" y="378"/>
+  <text x="732" y="379" font-weight="600" fill="#ffffff">Usage</text>
+  <text x="732" y="404" fill="#9e9e9e">Preset</text>
+  <rect x="836" y="390" width="150" height="24" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="846" y="407" fill="#ffffff">HDR environment</text><use href="#chev" x="970" y="406"/>
+  <text x="732" y="432" fill="#9e9e9e">Intent</text><text x="836" y="432" fill="#9e9e9e">HDR environment · from preset</text>
+
+  <use href="#chev" x="714" y="462"/>
+  <text x="732" y="463" font-weight="600" fill="#ffffff">Shape</text>
+  <text x="732" y="488" fill="#9e9e9e">Shape</text><text x="836" y="488" fill="#ffffff">Cube · six files</text>
+  <text x="732" y="514" fill="#9e9e9e">Face size</text><text x="836" y="514" fill="#9e9e9e">512 · from the images</text>
+
+  <use href="#chev" x="714" y="544"/>
+  <text x="732" y="545" font-weight="600" fill="#ffffff">HDR</text>
+  <text x="732" y="570" fill="#9e9e9e">Handling</text><text x="836" y="570" fill="#9e9e9e">Keep float · from preset</text>
+  <text x="732" y="596" fill="#9e9e9e">Format</text><text x="836" y="596" fill="#9e9e9e">RGBA16F · from preset</text>
+
+  <!-- Notes -->
+  <line x1="0" y1="632" x2="1040" y2="632" stroke="#2e2e2e"/>
+  <g font-size="12" fill="#c5c5c5">
+    <text x="16" y="656" font-weight="600" fill="#ffffff">Layouts</text>
+    <text x="16" y="673">Horizontal or vertical cross, horizontal or vertical strip,</text>
+    <text x="16" y="689">3 × 2 grid, or one face. A viewing choice, independent of the</text>
+    <text x="16" y="705">source layout. Seams outline the edges that must match.</text>
+    <text x="400" y="656" font-weight="600" fill="#ffffff">Face slots</text>
+    <text x="400" y="673">Drop or pick a file into a slot; drag one slot onto another</text>
+    <text x="400" y="689">to swap. Either writes explicit face sources; Use naming</text>
+    <text x="400" y="705">returns to the cooker's suffix discovery.</text>
+    <text x="760" y="656" font-weight="600" fill="#ffffff">Other cube sources</text>
+    <text x="760" y="673">Strip or cross image: the image with each</text>
+    <text x="760" y="689">face region outlined. Panorama: the image.</text>
+    <text x="760" y="705">No sky preview: that is the scene's job.</text>
+  </g>
+</svg>

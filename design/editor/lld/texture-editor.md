@@ -1,29 +1,34 @@
 # Texture Editor LLD
 
-Status: `draft for review`
+Status: `approved 2026-10-21; delivered by ED-M09A`
 
 Last Updated: 2026-10-21
 
 ## 1. Purpose
 
-Let the user bring an image into a project in one step and then tune how the
-engine cooks it, seeing the result as the engine renders it. A texture is a
+Let the user bring an image into a project in one step, tune how the cooker
+cooks it, and inspect exactly what the cooker produced. A texture is a
 descriptor (`.otex.json`) that names its source images and the cooker's
 settings. Importing creates that descriptor with settings chosen from the image
-and its name, and opens it in the Texture Editor. The editor is a document tab
-with every setting the cooker accepts and a preview the embedded engine renders
-from the cooked texture.
+and its name, and opens it in the Texture Editor: a document tab with every
+setting the cooker accepts and a view of the cooked texels, mip by mip, layer
+by layer and face by face. Showing the texture in use (lit, on a material, as
+a sky) is the job of the material and scene views, not this editor.
 
-Mockup (dark theme; the implementation matches it, and where it and this text
-differ, this text wins): [mockups/texture-editor.svg](mockups/texture-editor.svg).
+Mockups (dark theme; the implementation matches them, and where a mockup and
+this text differ, this text wins):
+
+- [mockups/texture-editor.svg](mockups/texture-editor.svg): a 2D texture.
+- [mockups/texture-editor-cube.svg](mockups/texture-editor-cube.svg): a cube,
+  its face layouts and its six face sources.
 
 ## 2. PRD Traceability
 
-| ID        | Coverage                                                                                                                                                                    |
-| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `REQ-049` | New: users import an image as a texture with detected settings, edit every texture setting the cooker supports, and see the cooked texture rendered by the embedded engine. |
-| `REQ-006` | Settings change through recorded edits; Undo, Redo and dirty state work as in every document.                                                                               |
-| `REQ-022` | Invalid settings, failed inspections, cooks and previews produce visible results.                                                                                           |
+| ID        | Coverage                                                                                                                                       |
+| --------- | ---------------------------------------------------------------------------------------------------------------------------------------------- |
+| `REQ-049` | New: users import an image as a texture with detected settings, edit every texture setting the cooker supports, and inspect the cooked texels. |
+| `REQ-006` | Settings change through recorded edits; Undo, Redo and dirty state work as in every document.                                                  |
+| `REQ-022` | Invalid settings, failed inspections, cooks and texture reads produce visible results.                                                         |
 
 ## 3. Architecture Links
 
@@ -35,8 +40,6 @@ differ, this text wins): [mockups/texture-editor.svg](mockups/texture-editor.svg
   `Oxygen.Editor.TextureEditor` feature module.
 - [content-cooking-workflows.md](content-cooking-workflows.md) and
   [editor-documents.md](editor-documents.md): cook on change after a save.
-- [live-preview.md](live-preview.md): the engine surfaces and views the preview
-  uses.
 - [workspace-title-bar.md](workspace-title-bar.md): File > Import texture or
   image….
 
@@ -46,29 +49,37 @@ differ, this text wins): [mockups/texture-editor.svg](mockups/texture-editor.svg
    `Bricks_N.png` in the Content Explorer's `Textures` folder. The image is
    copied there, `Bricks_N.otex.json` is created with the Normal preset because
    of the `_N` suffix, and the Texture Editor opens on it. With cook on change
-   on, the texture cooks and the preview shows it.
+   on, the texture cooks and the view shows the cooked texels.
 2. **Change a setting.** The user sets the mip filter to Lanczos. The field
-   shows the override and a reset button; the document is dirty; the preview
-   banner says it shows the last cooked result. After Save, the texture cooks
-   and the preview updates.
+   shows the override and a reset button; the document is dirty; the view's
+   banner says it shows the last cook. After Save, the texture cooks and the
+   view updates.
 3. **See defaults.** Every setting the user has not set shows the value the
    cooker will use and where it comes from ("BC7 sRGB, from preset Albedo"),
-   because the engine resolves it.
+   because the cooker's tool reports it.
 4. **Inspect the result.** The user toggles the alpha channel, steps to mip 3,
-   zooms to 100 % and reads the cooked format, size, mip count and memory.
-5. **HDR environment.** The user imports `Sky.hdr`, a 2:1 panorama. The HDR
-   Environment preset and a 512 px cube face are chosen; the preview shows the
-   cube as a 3D sky the user can orbit, with an exposure slider, or as an
-   unfolded cross.
-6. **Invalid settings.** The user picks BC7 with quality None. The field shows
-   the cooker's error and Save still works, but the cook reports the same
-   error and the preview keeps the last good result.
-7. **Replace the source.** The user chooses Change source… and picks another
-   image; it is copied into the texture's folder, the descriptor names it, and
-   the old file stays where it was.
-8. **Authored layers and mips.** The user adds source images for array layers
-   or explicit mips in the Sources table, each with its layer, mip and slice.
-9. **Undo.** Every change above is one step in the document's history.
+   zooms to 400 % to see BC7 blocks, and reads the cooked format, size, mip
+   count and memory.
+5. **Check a cube.** The user imports `Sky.hdr`, a 2:1 panorama; the HDR
+   Environment preset and a 512 px face size are chosen. The view shows the six
+   cooked faces as a horizontal cross with their labels and seam lines; the
+   user switches to a vertical strip, then to the +Y face alone, and adjusts
+   the exposure to read the bright sun.
+6. **Fix a face.** A cube imported from six files shows its six face slots;
+   the +Z slot holds `Room_back.png` where `Room_front.png` belongs. The user
+   swaps the two slots; the descriptor now names each face's file, and after
+   Save the cooked cube is correct.
+7. **Check a source layout.** For a cross image, the Source group shows the
+   image with each detected face outlined and labelled, so a wrong layout
+   detection is visible before cooking.
+8. **Invalid settings.** The user picks BC7 with quality None. The field shows
+   the cooker's error; Save still works, the cook reports the same error, and
+   the view keeps the last good cook.
+9. **Replace the source.** Change source… picks another image; it is copied
+   into the texture's folder and the descriptor names it; the old file stays.
+10. **Authored layers and mips.** The user adds source images for array layers
+    or explicit mips in the Sources table, each with its layer, mip and slice.
+11. **Undo.** Every change above is one step in the document's history.
 
 ## 5. Integration Baseline
 
@@ -84,31 +95,29 @@ What exists today:
   (`handling`, `exposure_ev`, `bake_hdr`) and `cube` (`cubemap`,
   `equirect_to_cube`, `cube_face_size` a multiple of 256, `cube_layout`
   auto/hstrip/vstrip/hcross/vcross). Its schema is closed.
-- **Defaults are resolved in the cooker.** A preset sets intent, color space,
-  formats, mip policy and filter, BC7 quality and HDR handling; an intent
-  without a preset sets color space and format but leaves mips at none. The
-  resolution lives in the cooker only.
-- **Compression.** Only BC7 encodes; formats are RGBA8 (UNorm, sRGB), BC7
-  (UNorm, sRGB), RGBA16F and RGBA32F. The height intent and preset default to
-  R16UNorm, which the cooker cannot write.
+- **Defaults are resolved in the cooker** (`MapSettingsToTuning`): a preset sets
+  intent, color space, formats, mip policy and filter, BC7 quality and HDR
+  handling; an intent without a preset sets color space and format but leaves
+  mips at none.
+- **Formats.** Only BC7 encodes; formats are RGBA8 (UNorm, sRGB), BC7 (UNorm,
+  sRGB), RGBA16F and RGBA32F. The height intent and preset default to R16UNorm,
+  which the cooker cannot write.
+- **Six-file cubes** are found only by face-name suffixes next to `source`
+  (`DiscoverCubeFacePaths`); a descriptor cannot name a face's file.
 - **Managed model.** `TextureSource` (Managed.Assets) models `name`,
   `virtual_path`, `source`, `sources[]`, `intent`, `decode.color_space`,
-  `output.format` and `cube`; it keeps every other key on a read and write. The
-  writer validates against the engine's schema.
+  `output.format` and `cube`, and keeps every other key on a read and write.
 - **Import today.** `TextureImport` (Textures) copies the image and writes the
-  modelled keys, detecting the cube layout from the image's aspect. The Content
-  Explorer's import dialog collects name, folder, shape, layout, face size,
-  intent, color space and format.
-- **Cooked facts.** `TextureResourceRecord` reads a cooked texture's type,
-  format, width, height and layers; the record also holds mips, depth, size and
-  compression, which nothing reads.
-- **Cook.** A saved descriptor is a cook input; cook on change cooks it after
-  its quiet window when the project's setting is on.
+  modelled keys, detecting the cube layout from the image's aspect; the Content
+  Explorer's dialog collects name, folder, shape, layout, face size, intent,
+  color space and format.
+- **Cooked texels.** A cooked texture's payload in `textures.data` (loose or in
+  a pak) is a `TexturePayloadHeader` followed by one `SubresourceLayout` per
+  mip, layer and face, then the data. Managed code reads only the texture's
+  record (type, format, size, layers); nothing reads the payload, and nothing
+  in the repository decodes BC7.
 - **ImportTool.** `inspect-source` writes a JSON report about a model source
   without cooking; nothing does that for a texture.
-- **Engine views.** The editor creates engine views on surfaces it owns per
-  document; every view renders a scene, and no view renders a texture. A cube
-  texture can be shown as a scene's sky.
 
 ## 6. Decisions
 
@@ -119,169 +128,191 @@ What exists today:
    folder, writes its descriptor and opens the first in the Texture Editor.
    There is no import dialog; `TextureImportDialog` is deleted.
 2. **The preset comes from the image.** The importer writes a `preset` and
-   nothing else it can leave to the cooker:
-   - a name ending in `_N`, `_Nrm` or `_Normal` gives `normal`; `_ORM` gives
-     `orm`; `_R` or `_Roughness`, `roughness`; `_M` or `_Metallic`,
-     `metallic`; `_AO`, `ao`; `_E` or `_Emissive`, `emissive`; `_H` or
-     `_Height`, `height`; any other name, `albedo`;
+   leaves the rest to the cooker:
+   - a name ending in `_N`, `_Nrm` or `_Normal` gives `normal`; `_ORM`, `orm`;
+     `_R` or `_Roughness`, `roughness`; `_M` or `_Metallic`, `metallic`;
+     `_AO`, `ao`; `_E` or `_Emissive`, `emissive`; `_H` or `_Height`,
+     `height`; any other name, `albedo`;
    - an HDR image (`.hdr`, `.exr`) gives `hdr-env` when it is a 2:1 panorama
      (with `equirect_to_cube` and a face size of a quarter of its width,
      rounded to a multiple of 256) and `hdr-probe` otherwise;
    - a strip or cross image detected by today's aspect rules gets
-     `cube_layout`, and six face files named by the cooker's face suffixes get
-     `cubemap`.
-     The rules live in `TextureImport`, with a table in its README.
+     `cube_layout`; six face files named by the face suffixes get `cubemap`
+     and their explicit face sources (decision 15).
+     The rules live in `TextureImport`, with their table in its README.
 
-### Document and editor
+### Document and settings
 
 3. **A texture is a document.** `TextureDocumentKind` (Textures) opens a
    `.otex.json` as a document whose content is a `TextureSource`; every edit is
    recorded in the document's history and Save writes the descriptor
    atomically.
 4. **The model covers the whole descriptor.** `TextureSource` gains every key of
-   section 5 as typed properties, with null meaning "not set". The reader and
-   writer keep round-tripping keys they do not know.
-5. **The engine resolves effective settings.** The ImportTool gains
+   section 5, and the face sources of decision 15, as typed properties, null
+   meaning "not set". Unknown keys keep round-tripping.
+5. **The cooker's tool resolves effective settings.** The ImportTool gains
    `inspect-texture <descriptor> [--base-dir <folder>] --output <json>`:
-   without cooking, it reports
-   the effective value of every setting and where it comes from (set, preset,
-   intent or default), the validation errors with the setting they concern, the
-   source images' facts (size, channels, bit depth, HDR, detected layout), and
-   the predicted output (format, size, mip count, bytes). The content pipeline
-   exposes it as `IEngineContentPipelineApi.InspectTextureAsync`. The editor
-   never copies the cooker's tables.
-6. **Each field shows its effective value.** A field the descriptor sets shows
-   its value with a reset button that removes the key; a field it does not set
-   shows the effective value in secondary text with its origin. The editor
-   inspects the document's current content after each edit, debounced: it
-   writes the content to a file in the system's temporary folder and passes the
-   texture's folder as `--base-dir`, against which the tool resolves the source
-   paths, so nothing is written into the project.
+   without cooking, it reports every setting's effective value and its origin
+   (set, preset, intent or default), the validation errors with the setting
+   each concerns, the source images' facts (size, channels, bit depth, HDR, the
+   detected layout and each face's region in a strip or cross, the discovered
+   face files), and the predicted output (format, size, mip count, bytes). The
+   content pipeline exposes it as `IEngineContentPipelineApi.InspectTextureAsync`.
+   The editor never copies the cooker's tables.
+6. **Each field shows its effective value.** A set field shows its value with a
+   reset button that removes the key; an unset field shows the effective value
+   in secondary text with its origin. After each edit, debounced, the editor
+   writes the document's content to the system's temporary folder and inspects
+   it with `--base-dir` set to the texture's folder, so nothing is written into
+   the project.
 7. **Settings are grouped as the cooker groups them:** Source, Usage (preset,
-   intent), Shape (2D or cube, and the cube mode: panorama, strip or cross,
-   six files), Color (color space, flip Y, flip normal green, force RGBA), Mips
+   intent), Shape (2D or cube and the cube mode: panorama, strip or cross, six
+   files), Color (color space, flip Y, flip normal green, force RGBA), Mips
    (policy, maximum, filter, renormalize), Output (format, data format, BC7
-   quality, packing), HDR (handling, exposure, bake), and Advanced (name,
-   virtual path, content hashing). Groups that do not apply (HDR for an LDR
-   image) are collapsed, not hidden.
-8. **Sources are edited as a table.** The primary source has Change source…;
-   the Sources table lists extra files with layer, mip and slice, and Add and
-   Remove. A changed or added file is copied into the texture's folder.
-9. **The preview shows the cooked texture.** It renders the last published
-   cook of this texture. While the document is dirty, or its cook is out of
-   date, running or failed, a banner says so and offers Cook when cook on
-   change is off. Unsaved settings are never previewed by approximation.
-10. **The engine renders the preview.** The engine gains a texture preview view
-    (section 7): a view on an editor surface that draws a cooked texture by
-    virtual path, flat or, for a cube, as a sky around an orbiting camera. The
-    Texture Editor owns one surface per open texture and releases it on close.
-11. **Preview tools**, in the preview's toolbar: R, G, B and A toggles; mip (Auto
-    or a level); array slice or cube face; for a cube, 3D sky or unfolded cross;
-    exposure for HDR; zoom (Fit, 100 %, wheel) and pan; checker or solid
-    background. The info strip below shows source size, cooked format, size, mip
-    count and memory, read from the cooked record.
-12. **Problems are shown where they are.** Inspection errors appear on their
-    field and in the editor's header count; a cook's failures go to the
-    Problems panel through the cook's results, as for every asset.
-13. **The editor is a document tab** of the workspace, like the Material Editor,
-    with no limit on how many are open.
+   quality, packing), HDR (handling, exposure, bake) and Advanced (name,
+   virtual path, content hashing). A group that does not apply (HDR for an LDR
+   image) is collapsed with the reason, not hidden.
+8. **Sources.** The primary source has Change source…; the Sources table lists
+   extra files with layer, mip and slice, with Add and Remove. A cube's Source
+   group shows instead what decision 13 describes. A changed or added file is
+   copied into the texture's folder.
 
-### Engine fixes this design needs
+### Texture view
 
-14. **The height defaults are fixed in the cooker.** The height intent and
-    preset default to a format the cooker writes. The engine owner chooses
-    between adding R16UNorm output or changing the default to a supported
-    format; until then the editor shows the inspection's error for a height
-    texture without an explicit format.
+9. **The view shows the cooked texels, decoded on the CPU.** It reads the
+   texture's last published cook (the payload of section 5) through a new
+   managed payload reader in Managed.Assets, decodes the chosen subresource on
+   the CPU, and shows it in a WinUI view. BC decoding is specified bit-exactly,
+   so the view shows exactly the texels the GPU samples at that mip with point
+   filtering. The engine renders nothing for this editor; the texture in use is
+   the material and scene views' job.
+10. **Decoding uses a managed library.** A vetted MIT-licensed .NET decoder for
+    BC1 to BC7, including BC6H (BCnEncoder.NET is the candidate; its license
+    and version are checked before adoption), behind a `TextureTexels` decoder
+    in Managed.Assets, so later formats need no new decoding code. RGBA8,
+    RGBA16F and RGBA32F need no decoding.
+11. **View tools,** in the view's toolbar: R, G, B and A toggles; mip; array
+    layer or cube face; exposure (HDR textures); zoom (Fit, 100 %, wheel, with
+    nearest-neighbour magnification so texels and blocks stay visible) and pan;
+    checker or solid background. Channel masking, exposure and the HDR view
+    transform are applied in managed code to the decoded mip, once per change.
+    An info strip below shows the source size, cooked format, size, mip count
+    and memory.
+12. **The view follows the cook.** While the document is dirty, or its cook is
+    out of date, running or failed, a banner says the view shows the last cook,
+    with Save and cook or Cook. Unsaved settings are never shown by
+    approximation.
+
+### Cubes
+
+13. **A cube is edited as six faces.** For a cube the view lays the six cooked
+    faces out as a horizontal cross (default), vertical cross, horizontal strip,
+    vertical strip, a 3×2 grid, or a single face, each labelled +X to -Z, with
+    optional seam lines so a misoriented face stands out. The layout is a viewing
+    choice, independent of the source's. The Source group shows how the source
+    maps to faces: for a strip or cross image, the image with each face's region
+    outlined and labelled (from the inspection); for a panorama, the source image;
+    for six files, six labelled face slots with each file's name and thumbnail and
+    a missing face flagged.
+14. **No sky preview.** The cube is shown as faces only; seeing it as a sky is
+    the scene environment's job.
+15. **Faces can be assigned explicitly.** The cooker gains explicit face
+    sources: `sources[]` entries with a `face` (`+x`, `-x`, `+y`, `-y`, `+z`,
+    `-z`) for a cube, used instead of name discovery when present; name
+    discovery stays the default. In the six face slots the user drops, picks or
+    swaps files, which writes face sources (owner's decision, 2026-10-21).
+
+### Placement and problems
+
+16. **Problems are shown where they are.** Inspection errors appear on their
+    field and in the header's count; a cook's failures go to the Problems panel
+    through the cook's results.
+17. **The editor is a document tab,** like the Material Editor, with no limit on
+    how many are open.
 
 ## 7. Engine And Tool Changes
 
-- **ImportTool `inspect-texture`** (decision 5), with the report's JSON schema in
-  the ImportTool README and native tests over every preset, intent and error.
-- **Cooked record.** The managed `TextureResourceRecord` reads mips, depth,
-  size and compression as well.
-- **Texture preview view.** `IEngineService.CreateTexturePreviewAsync(surface,
-TexturePreviewConfig)` and `UpdateTexturePreviewAsync`, where
-  `TexturePreviewConfig` holds the virtual path, the mode (flat, cube sky, cube
-  cross), the channel mask, mip, slice or face, exposure EV, background, zoom
-  and pan. Natively, the editor module creates a view that loads the texture
-  through the content loader from the mounted cooked roots, reloads it when a
-  publication replaces it, and draws it with a preview pass (flat and cross)
-  or a private scene with the texture as its sky (cube sky). Its design is
-  written with the Vortex rules in `design/oxygen` before its code.
-- **Height default** (decision 14).
+- **ImportTool `inspect-texture`** (decision 5), its report's JSON schema in the
+  ImportTool README, and native tests over every preset, intent, error and
+  source kind.
+- **Explicit cube face sources** (decision 15): schema, request builder and cube
+  job, with native tests that explicit faces win over discovery and that a
+  missing or duplicated face is an error.
+- **R16UNorm output.** The height intent and preset default to R16UNorm; the
+  cooker gains R16UNorm output (the first channel of the source) and the
+  descriptor's format list gains `r16`, so height maps keep 16-bit precision
+  (owner's decision, 2026-10-21). Native tests of the conversion.
+
+No engine runtime or renderer change: the editor reads the cooked payload. BC4, BC5 and BC6H, a maximum size, alpha handling and channel packing are cooker features of their own, tracked by [#87](https://github.com/abdes/DroidNet/issues/87); the editor shows them through `inspect-texture` when they land.
 
 ## 8. Modules And Types
 
 | Type                       | Module          | Role                                                                     |
 | -------------------------- | --------------- | ------------------------------------------------------------------------ |
-| `TextureSource` (extended) | Managed.Assets  | The whole descriptor (decision 4).                                       |
-| `TextureImport` (reworked) | Textures        | Copy and write with the detected preset (decision 2); no dialog request. |
+| `TextureSource` (extended) | Managed.Assets  | The whole descriptor, face sources included (decision 4).                |
+| `TexturePayloadReader`     | Managed.Assets  | Reads a cooked texture's payload header, layouts and subresource bytes.  |
+| `TextureTexels`            | Managed.Assets  | Decodes a subresource to RGBA (decision 10).                             |
+| `TextureImport` (reworked) | Textures        | Copy and write with the detected preset (decision 2); no dialog.         |
 | `TextureDocumentKind`      | Textures        | The texture document (decision 3).                                       |
 | `TextureInspection`        | ContentPipeline | The `inspect-texture` report as typed data, through the pipeline API.    |
 | `TextureEditorModule`      | TextureEditor   | Registers the editor provider and view for the texture kind.             |
-| `TextureEditorViewModel`   | TextureEditor   | Groups, fields, effective values, sources, inspection and banner.        |
-| `TexturePreviewViewModel`  | TextureEditor   | The preview's tools, its surface and view, and the info strip.           |
-| `TextureEditorView`        | TextureEditor   | The layout of the mockup.                                                |
+| `TextureEditorViewModel`   | TextureEditor   | Groups, fields, effective values, sources, faces, inspection and banner. |
+| `TextureViewViewModel`     | TextureEditor   | The view's tools, the decoded image, cube layouts and the info strip.    |
+| `TextureEditorView`        | TextureEditor   | The layout of the mockups.                                               |
 
-The Content Explorer's import command calls `TextureImport` and opens the
-result through the document service.
+The Content Explorer's import command calls `TextureImport` and opens the result
+through the document service.
 
 ## 9. Operation Results And Diagnostics
 
-- Import: the existing texture import codes, plus the detected preset in the
+- Import: the existing texture import codes, with the detected preset in the
   result's message.
 - Inspection failure (the tool did not run or its report is unreadable): a
   failed result, kind `Texture.Inspect`, code `OXE.TEXTURE.INSPECT_FAILED`,
   domain `AssetImport`; the fields keep their last effective values.
-- Preview failure (no surface, the texture does not load): the preview shows the
-  reason and publishes a failed result, kind `Texture.Preview`, code
-  `OXE.TEXTURE.PREVIEW_FAILED`, domain `RuntimeView`.
+- Texel read failure (no published cook, unreadable payload, unsupported
+  format): the view shows the reason and publishes a failed result, kind
+  `Texture.ReadTexels`, code `OXE.TEXTURE.TEXELS_UNREADABLE`, domain `AssetCook`.
 - Cook failures report through the cook, unchanged.
 
 ## 10. UI Design
 
-- **Layout.** The preview fills the left of the tab; the settings pane is on the
-  right (320 px default, resizable). A header row above both shows the texture's
-  name, its cook state chip (Up to date, Out of date, Cooking, Failed), the
-  problem count and Cook.
-- **Preview.** A toolbar above it with the tools of decision 11; the banner of
-  decision 9 across its top when it applies; the info strip below it.
-- **Settings pane.** Collapsible groups of label and editor rows, in the
-  editor's property style. A set value shows normally with a reset button; an
-  effective value shows in secondary text with its origin; a field with an
-  error shows the error under it.
-- **Sources table.** File, layer, mip and slice columns, with Add, Remove and
-  Change source….
+- **Layout.** The texture view fills the left of the tab; the settings pane is
+  on the right (320 px default, resizable). A header row shows the texture's
+  name, kind and preset, its cook state chip (Up to date, Out of date, Cooking,
+  Failed), the problem count and Cook.
+- **Texture view.** The toolbar of decision 11, with the cube layout picker for
+  a cube; the banner of decision 12 across its top when it applies; the info
+  strip below.
+- **Settings pane.** Collapsible groups of label and editor rows in the editor's
+  property style. A set value shows normally with a reset button; an effective
+  value shows in secondary text with its origin; a field with an error shows it
+  under the field.
+- **Cube sources.** Six labelled face slots in a cross, each with a thumbnail
+  and file name, accepting a dropped or picked file, with swap by dragging one
+  slot onto another.
 
 ## 11. Dependency Rules
 
 - Textures owns import and the document kind and references no editor UI.
-- TextureEditor is a feature: it references Shell, Textures, ContentPipeline (the
-  inspection and the cook state) and LivePreview or Runtime for its preview, as
-  the architecture allows a feature that shows engine views.
+- Managed.Assets owns reading and decoding cooked texels.
+- TextureEditor is a feature: it references Shell, Textures, Managed.Assets and
+  ContentPipeline (the inspection and the cook state); it does not reference
+  Runtime, LivePreview or Interop.
 - Only the ImportTool knows the cooker's defaults.
 
 ## 12. Test Strategy
 
-- Native tests: `inspect-texture` over every preset and intent, overrides,
-  every validation error and source facts; the preview view's load, reload on
-  publication and parameters.
-- Managed.Assets tests: every descriptor key round-trips, unknown keys survive.
-- Textures tests: the preset detection table, HDR and cube detection, the copy.
+- Native tests: `inspect-texture`, explicit face sources and R16UNorm, as in
+  section 7.
+- Managed.Assets tests: every descriptor key round-trips and unknown keys
+  survive; the payload reader over cooked fixtures (2D with mips, array, cube,
+  loose and pak); decoding against reference texels for each format.
+- Textures tests: the preset detection table, HDR and cube detection, face
+  sources for six files, the copy.
 - ContentPipeline tests: the inspection report parsed from recorded JSON.
-- TextureEditor tests: fields show set and effective values with origins;
-  reset removes a key; edits are recorded and undone; the banner follows dirty
-  and cook state; sources are added, removed and copied.
-- The editor in the running app (scenarios 1 to 9) waits for the owner's
-  acceptance.
-
-## 13. Open Questions For The Owner
-
-1. **Engine scope.** The preview needs a new engine view (section 7), and the
-   effective settings need a new ImportTool command. Both are engine and tool
-   work inside this editor feature. Approve them, or choose a preview without
-   the engine (decoding the source image in WinUI), which would not show the
-   cooked result.
-2. **Height default** (decision 14): add R16UNorm output to the cooker, or
-   change the height default to a supported format?
+- TextureEditor tests: set and effective values with origins; reset removes a
+  key; edits are recorded and undone; the banner follows dirty and cook state;
+  sources and faces are assigned and swapped; channel masks, mips, faces and
+  layouts select the right texels; exposure transforms HDR texels.
+- All of it runs without a GPU. The editor in the running app (scenarios 1 to 11) waits for the owner's acceptance.

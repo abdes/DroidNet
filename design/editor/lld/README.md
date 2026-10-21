@@ -57,6 +57,7 @@ implementation and review, and must trace to [PRD.md](../PRD.md),
 | [script-authoring.md](./script-authoring.md)                               | Script assets and analysis, node Scripting component and parameters, script cooking, Play and Problems.                                     |
 | [input-authoring.md](./input-authoring.md)                                 | Input action and mapping context assets, their editors, key capture, triggers, retargeting and cooking.                                     |
 | [workspace-title-bar.md](./workspace-title-bar.md)                         | Workspace title bar: logo, collapsible menu bar of contributed commands, panel reopen, project switcher and Project information.            |
+| [texture-editor.md](./texture-editor.md)                                   | Texture Editor: import with detected settings, every cooker setting with its effective value, cooked texels view, cube faces.               |
 | [history-panel.md](./history-panel.md)                                     | History panel over the active document's and the project's histories: replay to a step, saved state.                                        |
 | [application-density.md](./application-density.md)                         | Application-wide Comfortable/Compact density, the `DroidNet.Density` package, runtime switching and the shared-control contract.            |
 
