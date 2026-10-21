@@ -68,7 +68,7 @@ DOMAIN_RANK: dict[str, int] = {
 EDITOR_LAYERS: dict[str, Layer] = {
     "Oxygen.Editor.App": Layer.ROOT,
     "Oxygen.Editor.Shell": Layer.SHELL,
-    "Oxygen.Editor.ContentBrowser": Layer.FEATURE,
+    "Oxygen.Editor.ContentExplorer": Layer.FEATURE,
     "Oxygen.Editor.CookedInspector": Layer.FEATURE,
     "Oxygen.Editor.Cooking": Layer.FEATURE,
     "Oxygen.Editor.MaterialEditor": Layer.FEATURE,
@@ -114,7 +114,7 @@ TEST_BOUNDARIES = "#69 S1.14 removes cross-module internals grants"
 PENDING_REFERENCES: dict[tuple[str, str], str] = {
     (
         "Oxygen.Editor.WorldEditor",
-        "Oxygen.Editor.ContentBrowser",
+        "Oxygen.Editor.ContentExplorer",
     ): DISSOLVE_WORLD_EDITOR,
     ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Runtime"): DISSOLVE_WORLD_EDITOR,
     ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Interop"): DISSOLVE_WORLD_EDITOR,
@@ -139,7 +139,7 @@ PENDING_GRANTS: dict[tuple[str, str], str] = {
             "Oxygen.Editor.WorldEditor.Integration.UI.Tests",
             "Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests",
             "Oxygen.Editor.MaterialEditor.Tests",
-            "Oxygen.Editor.ContentBrowser.UI.Tests",
+            "Oxygen.Editor.ContentExplorer.UI.Tests",
         )
     },
     **{

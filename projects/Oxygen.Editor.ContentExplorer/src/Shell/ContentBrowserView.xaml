@@ -16,7 +16,7 @@
     <UserControl.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
-                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.ContentBrowser/Styles/GridSplitterStyles.xaml" />
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.ContentExplorer/Styles/GridSplitterStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </UserControl.Resources>

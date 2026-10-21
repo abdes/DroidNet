@@ -4,5 +4,5 @@
 
 using System.Runtime.CompilerServices;
 
-[assembly: InternalsVisibleTo("DroidNet.Oxygen.Editor.ContentBrowser.Tests")]
-[assembly: InternalsVisibleTo("Oxygen.Editor.ContentBrowser.UI.Tests")]
+[assembly: InternalsVisibleTo("DroidNet.Oxygen.Editor.ContentExplorer.Tests")]
+[assembly: InternalsVisibleTo("Oxygen.Editor.ContentExplorer.UI.Tests")]

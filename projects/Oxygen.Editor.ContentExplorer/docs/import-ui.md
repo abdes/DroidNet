@@ -1,4 +1,3 @@
-
 # Content Browser — Import Dialog (UI Sketch)
 
 This document sketches the Content Browser (CB) **Import** dialog UI, inspired by UE’s asset import experience, but adapted to the current Oxygen pipeline MVP and WinUI 3 best practices.
@@ -8,7 +7,7 @@ Primary goals:
 - Make **Import** easy (single action) while still exposing a small set of useful options.
 - During import, provide **clear progress + live diagnostics**.
 - Be resilient: common import failures must not crash the editor.
-- Keep the UI state machine unambiguous (what can the user do *right now*?).
+- Keep the UI state machine unambiguous (what can the user do _right now_?).
 
 Non-goals (for MVP):
 
@@ -38,9 +37,9 @@ Rationale:
 
 The dialog has three conceptual regions:
 
-1) **Header** (what you are importing + where it will land)
-2) **Body** (either import settings *or* diagnostics while importing)
-3) **Footer** (Import/Cancel)
+1. **Header** (what you are importing + where it will land)
+2. **Body** (either import settings _or_ diagnostics while importing)
+3. **Footer** (Import/Cancel)
 
 This preserves the “pipeline configuration” feeling without overbuilding.
 
@@ -54,7 +53,7 @@ This preserves the “pipeline configuration” feeling without overbuilding.
   - Example: `C:\Users\...\Box.glb`
   - Include a small `Copy` button (icon) to copy the full path to clipboard.
 - `Destination:`
-  - A folder picker / destination selector representing *the target virtual folder* in the project (default: current folder in CB).
+  - A folder picker / destination selector representing _the target virtual folder_ in the project (default: current folder in CB).
   - A read-only derived label showing the mount point (MVP default: `Content`).
     - Example: `Mount point: Content`
 
@@ -92,8 +91,8 @@ Notes:
 
 When the user clicks **Import**:
 
-1) Disable **everything** except `Cancel`.
-2) Replace the entire settings body with a diagnostics/progress view.
+1. Disable **everything** except `Cancel`.
+2. Replace the entire settings body with a diagnostics/progress view.
 
 ### Header
 

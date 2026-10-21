@@ -44,7 +44,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Routing\src\Oxygen.Editor.Routing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Schemas\src\Oxygen.Editor.Schemas.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Assets\src\Oxygen.Editor.Assets.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentBrowser\src\Oxygen.Editor.ContentBrowser.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentExplorer\src\Oxygen.Editor.ContentExplorer.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\src\Oxygen.Editor.ContentPipeline.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Textures\src\Oxygen.Editor.Textures.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Input\src\Oxygen.Editor.Input.csproj" />
