@@ -18,6 +18,7 @@ Design: [editor-shell.md](../../design/editor/review/editor-shell.md),
 | `Windows`       | Placement of documents and panels                                                      |
 | `Layout`        | The docking workspace: its routed layout, dock views and the Docking placement adapter |
 | `Desktop`       | Clipboard, File Explorer, Recycle Bin and the external code editor                     |
+| `Scopes`        | The window and panel layers of the editor's scope chain                                |
 
 ## Documents
 

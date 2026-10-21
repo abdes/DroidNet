@@ -76,11 +76,7 @@ Oxygen.Editor is organized as a modular system with clear separation of concerns
 Oxygen.Editor/
 ├── src/                              # Main application
 │   ├── App.xaml                      # Application UI shell
-│   ├── Program.cs                    # Entry point with host configuration
-│   ├── Workspace/                    # The scene workspace window
-│   ├── Services/                     # Application services
-│   │   ├── IActivationService.cs
-│   │   └── ActivationService.cs
+│   ├── Program.cs                    # Entry point: builds the host, registers the editor module, runs
 │   ├── Styles/                       # XAML resource dictionaries
 │   │   ├── FontSizes.xaml
 │   │   ├── TextBlock.xaml
@@ -95,6 +91,8 @@ Oxygen.Editor/
 
 **Related Modules** (referenced from `projects/Oxygen.Editor.*` and used by the app):
 
+- `Oxygen.Editor.Composition` - The composition root: the editor scope's
+  registrations (`EditorModule`), the windows and the scene workspace window
 - `Oxygen.Managed.Core` - Core services and utilities
 - `Oxygen.Editor.Data` - Data layer with Entity Framework Core
 - `Oxygen.Editor.ProjectExplorer` - Project browsing UI
@@ -191,18 +189,22 @@ The `Mvvm.Generators` package automatically generates initialization code.
 
 #### Dependency Injection
 
-Services are registered using the standard .NET hosting pattern. See `Program.cs` for configuration examples:
+`Program.cs` builds the host, then registers the editor scope's services
+through `Oxygen.Editor.Composition`'s `EditorModule`:
 
 ```csharp
 bootstrap
     .Configure(options => options.WithOutputConsole())
     .WithMvvm()
-    .WithRouting(MakeRoutes())
+    .WithRouting(EditorModule.CreateRoutes())
     .WithWinUI<App>()
     .Build();
+
+EditorModule.Register(bootstrap.Container);
 ```
 
-Services can be registered in the DryIoc container via the Hosting module.
+Each workspace window registers its own services in a scope of its own; see
+the [Oxygen.Editor.Composition README](../Oxygen.Editor.Composition/README.md).
 
 #### Data Access with Entity Framework Core
 
@@ -210,7 +212,7 @@ The `Oxygen.Editor.Data` module uses EF Core with SQLite for persistence:
 
 ```csharp
 // Entity models are defined in the data layer
-// DbContext is configured in ConfigurePersistentStateDatabase()
+// DbContext is configured by EditorModule
 ```
 
 ### Code Organization & Standards

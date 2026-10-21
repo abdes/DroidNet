@@ -16,7 +16,7 @@ namespace Oxygen.Editor.Services;
 /// <summary>
 /// Host-owned coordinator for project open/create and workspace activation.
 /// </summary>
-[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated through the singleton DryIoc registration in Program.")]
+[SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated through the singleton registration of the editor module.")]
 internal sealed partial class ProjectActivationCoordinator(
     IRouter router,
     IProjectValidationService validation,

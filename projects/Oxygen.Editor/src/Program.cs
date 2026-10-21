@@ -5,55 +5,15 @@
 using System.Diagnostics;
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
-using DroidNet.Aura;
-using DroidNet.Aura.Windowing;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Controls;
-using DroidNet.Coordinates;
-using DroidNet.Docking.Controls;
-using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
-using DroidNet.Routing;
-using DroidNet.Storage;
-using DroidNet.Storage.Native;
 using DryIoc;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Caching.Memory;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.Extensions.Logging;
-using Microsoft.UI.Xaml;
-using Oxygen.Editor.ContentExplorer;
-using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.CookedInspector;
-using Oxygen.Editor.Cooking;
 using Oxygen.Editor.Data;
-using Oxygen.Editor.Data.Services;
-using Oxygen.Editor.Diagnostics;
-using Oxygen.Editor.MaterialEditor;
-using Oxygen.Editor.Materials.Documents;
-using Oxygen.Editor.Output;
-using Oxygen.Editor.Problems;
-using Oxygen.Editor.ProjectExplorer.Activation;
-using Oxygen.Editor.ProjectExplorer.Projects;
-using Oxygen.Editor.ProjectExplorer.Templates;
-using Oxygen.Editor.ProjectExplorer.ViewModels;
-using Oxygen.Editor.ProjectExplorer.Views;
-using Oxygen.Editor.Projects;
-using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.SceneEditor;
-using Oxygen.Editor.SceneEditor.Settings;
-using Oxygen.Editor.SceneExplorer;
-using Oxygen.Editor.SceneInspector;
-using Oxygen.Editor.Scenes.Interaction;
-using Oxygen.Editor.Services;
-using Oxygen.Editor.Shell.Contributions;
-using Oxygen.Editor.Shell.Desktop;
-using Oxygen.Editor.Shell.Documents;
-using Oxygen.Editor.Workspace;
-using Oxygen.Managed.Core.Compatibility;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core.Services;
 using Serilog;
 
@@ -111,16 +71,15 @@ public static partial class Program
             _ = bootstrap
                 .Configure(options => options.WithOutputConsole())
                 .WithMvvm()
-                .WithRouting(MakeRoutes())
+                .WithRouting(EditorModule.CreateRoutes())
                 .WithWinUI<App>()
                 .Build();
 
             // Final container is now available.
             // A failure here aborts startup: the editor never runs with a half-configured container.
             var container = bootstrap.Container;
+            EditorModule.Register(container);
             InitializeSettings(container);
-            ConfigureApplicationServices(container);
-            ConfigurePersistentStateDatabase(container);
 
             var dbPath = container.Resolve<IOxygenPathFinder>().StateDatabasePath;
             Log.Information("DB path: {DbPath}", dbPath);
@@ -146,66 +105,9 @@ public static partial class Program
         }
     }
 
-    private static Routes MakeRoutes() => new(
-    [
-        new Route
-        {
-            Path = string.Empty,
-            MatchMethod = PathMatch.Prefix,
-            ViewModelType = typeof(MainShellViewModel),
-            Children = new Routes(
-            [
-                new Route
-                {
-                    Path = "we",
-                    MatchMethod = PathMatch.Prefix,
-                    ViewModelType = typeof(WorkspaceViewModel),
-                },
-                new Route
-                {
-                    Path = "pe",
-                    MatchMethod = PathMatch.Prefix,
-                    ViewModelType = typeof(MainViewModel),
-                    Children = new Routes(
-                    [
-                        new Route
-                        {
-                            Path = "home",
-                            MatchMethod = PathMatch.Prefix,
-                            ViewModelType = typeof(HomeViewModel),
-                        },
-                        new Route
-                        {
-                            Path = "new",
-                            MatchMethod = PathMatch.Prefix,
-                            ViewModelType = typeof(NewProjectViewModel),
-                        },
-                        new Route
-                        {
-                            Path = "open",
-                            MatchMethod = PathMatch.Prefix,
-                            ViewModelType = typeof(OpenProjectViewModel),
-                        },
-                        /* TODO: uncomment after settings page is refactored
-                        new Route()
-                        {
-                            Path = "settings",
-                            MatchMethod = PathMatch.Prefix,
-                            ViewModelType = typeof(SettingsViewModel),
-                        },
-                        */
-                    ]),
-                },
-            ]),
-        },
-    ]);
-
     private static void InitializeSettings(IContainer container)
     {
-        // Register Config module
-        _ = container.WithConfig();
-
-        // If the bootstrapper included `Config` module, it will have added a EditorSettingsManager.
+        // The editor module registered the `Config` module, which added a SettingsManager.
         // Configure settings source, and initialize it now so sources are loaded and
         // services receive their initial values.
         var manager = container.Resolve<SettingsManager>();
@@ -224,280 +126,5 @@ public static partial class Program
 
         manager.InitializeAsync().GetAwaiter().GetResult();
         _ = manager.AutoSave = true;
-    }
-
-    // Register PersistentState to be created lazily so IOxygenPathFinder is resolved later
-    private static void ConfigurePersistentStateDatabase(IContainer container)
-        => container.RegisterDelegate(
-            resolver =>
-            {
-                var path = resolver.Resolve<IOxygenPathFinder>().StateDatabasePath;
-                Log.Information("Configuring PersistentState database at path: {DbPath}", path);
-                return new PersistentState(
-                    new DbContextOptionsBuilder<PersistentState>()
-                        .UseLoggerFactory(resolver.Resolve<ILoggerFactory>())
-                        .EnableDetailedErrors()
-                        .EnableSensitiveDataLogging()
-                        .UseSqlite($"Data Source={resolver.Resolve<IOxygenPathFinder>().StateDatabasePath}; Mode=ReadWriteCreate")
-                    .Options);
-            },
-            Reuse.Transient);
-
-    private static void ConfigureApplicationServices(this IContainer container)
-    {
-        // Register Aura window management with all required services
-        _ = container
-            .WithAura(options => options
-                .WithAppearanceSettings()
-                .WithDecorationSettings()
-                .WithBackdropService()
-                .WithChromeService()
-                .WithThemeModeService()
-                .WithDrag())
-            .WithSpatialMapping();
-
-        // Core services
-        _ = container.WithSettings<IEngineStartupSettings, EngineStartupSettingsService>();
-        container.Register<IOxygenPathFinder, OxygenPathFinder>(Reuse.Singleton);
-        container.Register<NativeStorageProvider>(Reuse.Singleton);
-        container.Register<IActivationService, ActivationService>(Reuse.Singleton);
-
-        // Window placement service
-        container.Register<WindowPlacementService, WindowPlacementService>(Reuse.Singleton);
-
-        RegisterEditorDataServices(container);
-        RegisterDiagnosticsServices(container);
-        RegisterAssetServices(container);
-        container.Register<IEngineService, EngineService>(Reuse.Singleton);
-
-        // A dedicated manager owns a separate DbContext; preview I/O is serialized by its service.
-        container.Register<IEditorSettingsManager, EditorSettingsManager>(Reuse.Singleton, serviceKey: nameof(PreviewSettingsService));
-        container.RegisterDelegate(
-            resolver => new PreviewSettingsService(
-                resolver.Resolve<IEngineService>(),
-                resolver.Resolve<IEditorSettingsManager>(serviceKey: nameof(PreviewSettingsService)),
-                resolver.Resolve<IProjectContextService>(),
-                resolver.Resolve<IOperationResultPublisher>(),
-                resolver.Resolve<IStatusReducer>(),
-                resolver.Resolve<ILoggerFactory>()),
-            Reuse.Singleton);
-
-        // Editor hide / lock workspace state: one owner, project-scoped typed settings, serialized writes.
-        container.RegisterDelegate(
-            resolver => new SceneNodeInteraction(
-                resolver.Resolve<IEditorSettingsManager>(),
-                resolver.Resolve<IOperationResultPublisher>(),
-                resolver.Resolve<IStatusReducer>(),
-                resolver.Resolve<ILoggerFactory>()),
-            Reuse.Singleton);
-
-        // Scene commands obey the same hide / lock state through the Scenes interface.
-        container.RegisterMapping<Oxygen.Editor.Scenes.Authoring.ISceneNodeInteraction, SceneNodeInteraction>();
-
-        // Scene viewport layout and pane cameras: user-local workspace state, serialized writes.
-        container.RegisterDelegate(
-            resolver => new ViewportStateService(
-                resolver.Resolve<IEditorSettingsManager>(),
-                resolver.Resolve<IOperationResultPublisher>(),
-                resolver.Resolve<IStatusReducer>(),
-                resolver.Resolve<ILoggerFactory>()),
-            Reuse.Singleton);
-        // Transform gizmo snapping and space: per-user preferences kept across projects, serialized writes.
-        container.RegisterDelegate(
-            resolver => new TransformToolSettingsService(
-                resolver.Resolve<IEditorSettingsManager>(),
-                resolver.Resolve<ILoggerFactory>()),
-            Reuse.Singleton);
-        container.Register<EngineShutdownService>(Reuse.Singleton);
-        container.RegisterDelegate<IHostedService>(resolver => resolver.Resolve<EngineShutdownService>(), Reuse.Singleton);
-
-        container.Register<DockPanelViewModel>(Reuse.Transient);
-        container.Register<DockPanel>(Reuse.Transient);
-
-        ConfigureWindows(container);
-        RegisterViewsAndViewModels(container);
-    }
-
-    private static void RegisterEditorDataServices(IContainer container)
-    {
-        container.RegisterDelegate<IMemoryCache>(_ => new MemoryCache(new MemoryCacheOptions()), Reuse.Singleton, setup: Setup.With(preventDisposal: true));
-
-        container.Register<IEditorSettingsManager, EditorSettingsManager>(Reuse.Singleton);
-        container.Register<IProjectUsageService, ProjectUsageService>(Reuse.Singleton);
-        container.Register<ITemplateUsageService, TemplateUsageService>(Reuse.Singleton);
-
-        // TODO: use keyed registration and parameter name to key mappings
-        // https://github.com/dadhi/DryIoc/blob/master/docs/DryIoc.Docs/SpecifyDependencyAndPrimitiveValues.md#complete-example-of-matching-the-parameter-name-to-the-service-key
-        container.Register<IStorageProvider, NativeStorageProvider>(Reuse.Singleton);
-        container.RegisterDelegate(context => context.Resolve<IStorageProvider>().AtomicFiles, Reuse.Singleton);
-
-        // Register the universal template source with NO key, so it gets selected when injected an
-        // instance of ITemplateSource. Register specific template source implementations KEYED.
-        // They are injected only as a collection of implementation instances, only by the universal
-        // source.
-        container.Register<ITemplatesSource, UniversalTemplatesSource>(Reuse.Singleton);
-        container.Register<ITemplatesSource, LocalTemplatesSource>(Reuse.Singleton, serviceKey: Uri.UriSchemeFile);
-        container.Register<ITemplatesService, TemplatesService>(Reuse.Transient);
-
-        container.Register<IProjectExplorerService, ProjectExplorerService>(Reuse.Singleton);
-        container.Register<IProjectActivationCoordinator, ProjectActivationCoordinator>(Reuse.Singleton);
-        container.Register<IProjectValidationService, ProjectValidationService>(Reuse.Singleton);
-        container.Register<IProjectContextService, ProjectContextService>(Reuse.Singleton);
-        container.Register<IProjectCookScopeProvider, ProjectCookScopeProvider>(Reuse.Singleton);
-        container.Register<IAuthoringTargetResolver, AuthoringTargetResolver>(Reuse.Singleton);
-        container.Register<IProjectCreationService, ProjectCreationService>(Reuse.Singleton);
-        container.Register<IRecentProjectAdapter, RecentProjectAdapter>(Reuse.Singleton);
-        container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
-        container.Register<IProjectFolder, ActiveProjectFolder>(Reuse.Singleton);
-
-        // The tabs of every window, which Aura draws; each window's document service makes its close decisions.
-        container.Register<DocumentTabs>(Reuse.Singleton);
-        container.RegisterMapping<IDocumentTabSource, DocumentTabs>();
-        container.RegisterMapping<IDocumentTabs, DocumentTabs>();
-    }
-
-    private static void RegisterDiagnosticsServices(IContainer container)
-    {
-        container.Register<IStatusReducer, OperationStatusReducer>(Reuse.Singleton);
-        container.Register<IExceptionDiagnosticAdapter, ExceptionDiagnosticAdapter>(Reuse.Singleton);
-        container.Register<OperationResultStore>(Reuse.Singleton);
-        container.RegisterDelegate<IOperationResultStore>(
-            resolverContext => resolverContext.Resolve<OperationResultStore>(),
-            Reuse.Singleton);
-        container.RegisterDelegate<IOperationResultPublisher>(
-            resolverContext => resolverContext.Resolve<OperationResultStore>(),
-            Reuse.Singleton);
-        container.Register<OperationResultOutputLogAdapter>(Reuse.Singleton);
-        _ = container.Resolve<OperationResultOutputLogAdapter>();
-    }
-
-    private static void ConfigureWindows(IContainer container)
-    {
-        /*
-         * Configure the Application's Windows. Each window represents a target in which to open the
-         * requested url. Now we create the instances via the registered IWindowFactory and annotate
-         * them with the window category that matches the target Name. This enables the Aura window
-         * manager to apply category-specific decoration.
-         */
-
-        // In Oxygen Editor, we don't really have a "Main" window - all windows are created equally.
-        container.Register<RoutedWindow>(Reuse.Transient);
-
-        // Workspace window
-        container.RegisterDelegate<Window>(
-            resolverContext =>
-            {
-                var windowFactory = resolverContext.Resolve<IWindowFactory>();
-                var category = new WindowCategory("wnd-we");
-                return windowFactory.CreateDecoratedWindow<RoutedWindow>(category).GetAwaiter().GetResult();
-            },
-            Reuse.Transient,
-            serviceKey: new Target { Name = "wnd-we" });
-
-        // Project Explorer window
-        container.RegisterDelegate<Window>(
-            resolverContext =>
-            {
-                var windowFactory = resolverContext.Resolve<IWindowFactory>();
-                var category = new WindowCategory("wnd-pe");
-                return windowFactory.CreateDecoratedWindow<RoutedWindow>(category).GetAwaiter().GetResult();
-            },
-            Reuse.Transient,
-            serviceKey: new Target { Name = "wnd-pe" });
-    }
-
-    private static void RegisterViewsAndViewModels(IContainer container)
-    {
-        container.Register<MainShellViewModel>(Reuse.Transient);
-        container.Register<MainShellView>(Reuse.Transient);
-
-        container.Register<MainViewModel>(Reuse.Transient);
-        container.Register<MainView>(Reuse.Transient);
-        container.Register<HomeViewModel>(Reuse.Transient);
-        container.Register<HomeView>(Reuse.Transient);
-        container.Register<NewProjectViewModel>(Reuse.Transient);
-        container.Register<NewProjectView>(Reuse.Transient);
-        container.Register<OpenProjectViewModel>(Reuse.Transient);
-        container.Register<OpenProjectView>(Reuse.Transient);
-
-        container.Register<WorkspaceViewModel>(Reuse.Transient);
-        container.Register<WorkspaceView>(Reuse.Transient);
-
-        // The features of the workspace windows: each window registers their services in its own container.
-        container.Register<IFeatureModule, ContentExplorerModule>(Reuse.Singleton);
-        container.Register<IFeatureModule, CookedInspectorModule>(Reuse.Singleton);
-        container.Register<IFeatureModule, CookingModule>(Reuse.Singleton);
-        container.Register<IFeatureModule, MaterialEditorModule>(Reuse.Singleton);
-        container.Register<IFeatureModule, OutputModule>(Reuse.Singleton);
-        container.Register<IFeatureModule, ProblemsModule>(Reuse.Singleton);
-        container.Register<IFeatureModule, SceneEditorModule>(Reuse.Singleton);
-        container.Register<IFeatureModule, SceneExplorerModule>(Reuse.Singleton);
-        container.Register<IFeatureModule, SceneInspectorModule>(Reuse.Singleton);
-    }
-
-    private static void RegisterAssetServices(IContainer container)
-    {
-        // The SDK's engine content pak: the /Engine assets every project references, read from the installation.
-        container.RegisterDelegate<IEngineContentPak>(
-            _ => EngineContentPak.Installed(),
-            Reuse.Singleton);
-        container.Register<ISceneDescriptorGenerator, SceneDescriptorGenerator>(Reuse.Singleton);
-        container.Register<IContentImportManifestBuilder, ContentImportManifestBuilder>(Reuse.Singleton);
-        container.Register<IContentImportManifestValidator, ContentImportManifestValidator>(Reuse.Singleton);
-        container.Register<IEngineContentPipelineToolLocator, EngineContentPipelineToolLocator>(Reuse.Singleton);
-        container.Register<IContentPipelineProcessRunner, ContentPipelineProcessRunner>(Reuse.Singleton);
-        container.RegisterDelegate<INativeCompatibilityService>(
-            _ => EditorNativeCompatibilityService.ForCooking(),
-            Reuse.Singleton,
-            serviceKey: EditorNativeCompatibilityService.CookingServiceKey);
-        container.RegisterDelegate<ImportToolContentPipelineApi>(
-            resolver => new(
-            resolver.Resolve<IEngineContentPipelineToolLocator>(),
-            resolver.Resolve<IContentPipelineProcessRunner>(),
-            resolver.Resolve<ILogger<ImportToolContentPipelineApi>>(),
-            resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey)),
-            Reuse.Singleton);
-        container.RegisterMapping<IEngineContentPipelineApi, ImportToolContentPipelineApi>();
-        container.Register<ContentCookCoordinator>(Reuse.Singleton);
-        container.RegisterMapping<IContentCookCoordinator, ContentCookCoordinator>();
-        container.RegisterMapping<ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();
-        container.RegisterDelegate<IContentPipelineService>(
-            resolver => new ContentPipelineService(
-            resolver.Resolve<IProjectContextService>(),
-            resolver.Resolve<IContentCookCoordinator>(),
-            resolver.Resolve<IProjectCookScopeProvider>(),
-            resolver.Resolve<ISceneDescriptorGenerator>(),
-            resolver.Resolve<IContentImportManifestBuilder>(),
-            resolver.Resolve<IContentImportManifestValidator>(),
-            resolver.Resolve<IEngineContentPipelineApi>(),
-            resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey),
-            resolver.Resolve<IAtomicFileStore>(),
-            resolver.Resolve<ContentPipeline.Publication.CookPublicationService>(),
-            resolver.Resolve<IEngineContentPak>()),
-            Reuse.Singleton);
-        container.RegisterDelegate(
-            resolver => (ContentPipeline.Inspection.IGeometryMaterialSlotProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
-        container.RegisterDelegate(
-            resolver => (Scripting.IScriptLibrary)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
-
-        // Scripting: the engine's analyzer, which the script facts of every workspace use.
-        container.Register<Scripting.IScriptAnalyzer, LivePreview.Scripting.NativeScriptAnalyzer>(Reuse.Singleton);
-        container.Register<ContentPipeline.Publication.CookPublicationService>(Reuse.Singleton);
-        container.RegisterMapping<ContentPipeline.Publication.ICookPublicationReader, ContentPipeline.Publication.CookPublicationService>();
-        container.Register<ContentPipeline.Mounting.CookedContentMountService>(Reuse.Singleton);
-        container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
-        // Materials: one document kind and one set of edits for every workspace window.
-        container.Register<MaterialValidation>(Reuse.Singleton);
-        container.Register<MaterialDocumentKind>(Reuse.Singleton);
-        container.Register<MaterialEdits>(Reuse.Singleton);
-
-        // Textures: image import for every window.
-        container.Register<Textures.TextureImport>(Reuse.Singleton);
-
-        // The session's asset relocations, resolved by undo, redo and paste in every open document. Created here, so
-        // a workspace child container never creates a second instance that the root's services would not see.
-        container.Register<ContentPipeline.Relocation.AssetRedirects>(Reuse.Singleton);
-        container.RegisterMapping<ContentPipeline.Relocation.IAssetRedirects, ContentPipeline.Relocation.AssetRedirects>();
-        _ = container.Resolve<ContentPipeline.Relocation.AssetRedirects>();
     }
 }

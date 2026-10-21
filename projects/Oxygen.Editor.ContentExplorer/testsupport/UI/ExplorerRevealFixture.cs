@@ -5,6 +5,7 @@
 using System.Globalization;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
+using DroidNet.Composition;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
 using DroidNet.Routing;
@@ -165,7 +166,8 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         // explorer renames folders itself.
         this.container.RegisterInstance(Mock.Of<IAssetAuthoring>());
         this.container.RegisterInstance(Mock.Of<ICodeEditorService>());
-        this.Explorer = new(this.container, Mock.Of<IRouter>(), this.Projects, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
+        // The fixture's container stands in for the explorer's window.
+        this.Explorer = new(new ScopeFactory(), ScopeFactory.CreateRoot(this.container), Mock.Of<IRouter>(), this.Projects, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
     }
 
     public ProjectContextService Projects { get; } = new();

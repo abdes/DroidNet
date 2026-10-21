@@ -29,26 +29,31 @@ public sealed class SceneInspectorModule : IFeatureModule
     public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
 
     /// <inheritdoc />
-    public void RegisterWindowServices(IContainer window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
-        window.Register<SceneInspectorViewModel>(Reuse.Transient);
-        window.Register<SceneInspectorView>(Reuse.Transient);
-
-        // The views the panel's view locator resolves for its editors; the panel creates the editors themselves.
-        window.Register<TransformView>(Reuse.Transient);
-        window.Register<PerspectiveCameraView>(Reuse.Transient);
-        window.Register<DirectionalLightView>(Reuse.Transient);
-        window.Register<OrthographicCameraView>(Reuse.Transient);
-        window.Register<PointLightView>(Reuse.Transient);
-        window.Register<SpotLightView>(Reuse.Transient);
-        window.Register<LocalFogVolumeView>(Reuse.Transient);
-        window.Register<ScriptingView>(Reuse.Transient);
-        window.Register<NodeRenderingView>(Reuse.Transient);
-        window.Register<SceneSettingsView>(Reuse.Transient);
-        window.Register<GeometryView>(Reuse.Transient);
-    }
+    public IReadOnlyCollection<Type> Shadows => [];
 
     /// <inheritdoc />
-    public void ActivateWindowServices(IResolver window) => ArgumentNullException.ThrowIfNull(window);
+    public IReadOnlyList<Type> Activation => [];
+
+    /// <inheritdoc />
+    public void Register(IRegistrator scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        // The view model's editors end with the window, which disposes it.
+        scope.Register<SceneInspectorViewModel>(Reuse.Transient, setup: Setup.With(trackDisposableTransient: true));
+        scope.Register<SceneInspectorView>(Reuse.Transient);
+
+        // The views the panel's view locator resolves for its editors; the panel creates the editors themselves.
+        scope.Register<TransformView>(Reuse.Transient);
+        scope.Register<PerspectiveCameraView>(Reuse.Transient);
+        scope.Register<DirectionalLightView>(Reuse.Transient);
+        scope.Register<OrthographicCameraView>(Reuse.Transient);
+        scope.Register<PointLightView>(Reuse.Transient);
+        scope.Register<SpotLightView>(Reuse.Transient);
+        scope.Register<LocalFogVolumeView>(Reuse.Transient);
+        scope.Register<ScriptingView>(Reuse.Transient);
+        scope.Register<NodeRenderingView>(Reuse.Transient);
+        scope.Register<SceneSettingsView>(Reuse.Transient);
+        scope.Register<GeometryView>(Reuse.Transient);
+    }
 }

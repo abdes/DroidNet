@@ -1,0 +1,15 @@
+<Project Sdk="MSTest.Sdk">
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+        <RootNamespace>Oxygen.Editor.Composition.UI.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+        <DroidNetTestTier>Unit</DroidNetTestTier>
+    </PropertyGroup>
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Composition/src/Oxygen.Editor.Composition.csproj" />
+        <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
+    </ItemGroup>
+    <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
+</Project>

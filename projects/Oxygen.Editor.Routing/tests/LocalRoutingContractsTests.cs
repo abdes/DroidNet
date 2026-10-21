@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using DroidNet.Composition;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 using DryIoc;
@@ -36,32 +37,6 @@ public sealed class LocalRoutingContractsTests
     }
 
     [TestMethod]
-    public async Task WithLocalRouting_ShouldAssignLocalRouterOnContext()
-    {
-        // Arrange
-        var rootContainer = new TestOutletContainer();
-        var localContext = new LocalRouterContext(target: new object())
-        {
-            RootViewModel = rootContainer,
-        };
-
-        var container = CreateLocalContainer(localContext);
-        try
-        {
-            // Act
-            var router = localContext.LocalRouter;
-
-            // Assert
-            _ = router.Should().NotBeNull();
-            _ = router.Should().BeSameAs(container.Resolve<IRouter>());
-        }
-        finally
-        {
-            await container.DisposeAsync().ConfigureAwait(true);
-        }
-    }
-
-    [TestMethod]
     public async Task LocalContextProvider_ShouldReturnSameContext_ForAnyTarget()
     {
         // Arrange
@@ -71,10 +46,10 @@ public sealed class LocalRoutingContractsTests
             RootViewModel = rootContainer,
         };
 
-        var container = CreateLocalContainer(localContext);
+        var scope = CreateLocalScope(localContext);
         try
         {
-            var provider = container.Resolve<IContextProvider<NavigationContext>>();
+            var provider = scope.Resolver.Resolve<IContextProvider<NavigationContext>>();
 
             // Act
             var c1 = provider.ContextForTarget(RoutingTarget.Main);
@@ -86,7 +61,7 @@ public sealed class LocalRoutingContractsTests
         }
         finally
         {
-            await container.DisposeAsync().ConfigureAwait(true);
+            await scope.DisposeAsync().ConfigureAwait(true);
         }
     }
 
@@ -100,10 +75,10 @@ public sealed class LocalRoutingContractsTests
             RootViewModel = rootContainer,
         };
 
-        var container = CreateLocalContainer(localContext);
+        var scope = CreateLocalScope(localContext);
         try
         {
-            var provider = container.Resolve<IContextProvider<NavigationContext>>();
+            var provider = scope.Resolver.Resolve<IContextProvider<NavigationContext>>();
 
             INavigationContext? created = null;
             provider.ContextCreated += (_, args) => created = args.Context;
@@ -118,7 +93,7 @@ public sealed class LocalRoutingContractsTests
         }
         finally
         {
-            await container.DisposeAsync().ConfigureAwait(true);
+            await scope.DisposeAsync().ConfigureAwait(true);
         }
     }
 
@@ -132,10 +107,10 @@ public sealed class LocalRoutingContractsTests
             RootViewModel = rootContainer,
         };
 
-        var container = CreateLocalContainer(localContext);
+        var scope = CreateLocalScope(localContext);
         try
         {
-            var provider = container.Resolve<IContextProvider<NavigationContext>>();
+            var provider = scope.Resolver.Resolve<IContextProvider<NavigationContext>>();
 
             INavigationContext? destroyed = null;
             provider.ContextDestroyed += (_, args) => destroyed = args.Context;
@@ -149,7 +124,7 @@ public sealed class LocalRoutingContractsTests
         }
         finally
         {
-            await container.DisposeAsync().ConfigureAwait(true);
+            await scope.DisposeAsync().ConfigureAwait(true);
         }
     }
 
@@ -163,10 +138,10 @@ public sealed class LocalRoutingContractsTests
             RootViewModel = rootContainer,
         };
 
-        var container = CreateLocalContainer(localContext);
+        var scope = CreateLocalScope(localContext);
         try
         {
-            var activator = container.Resolve<IRouteActivator>();
+            var activator = scope.Resolver.Resolve<IRouteActivator>();
 
             var viewModel = new object();
             var outlet = new OutletName { Name = "primary" };
@@ -195,7 +170,7 @@ public sealed class LocalRoutingContractsTests
         }
         finally
         {
-            await container.DisposeAsync().ConfigureAwait(true);
+            await scope.DisposeAsync().ConfigureAwait(true);
         }
     }
 
@@ -210,10 +185,10 @@ public sealed class LocalRoutingContractsTests
             RootViewModel = rootContainer,
         };
 
-        var container = CreateLocalContainer(localContext);
+        var scope = CreateLocalScope(localContext);
         try
         {
-            var activator = container.Resolve<IRouteActivator>();
+            var activator = scope.Resolver.Resolve<IRouteActivator>();
 
             var viewModel = new object();
             var outlet = new OutletName { Name = "side" };
@@ -248,7 +223,7 @@ public sealed class LocalRoutingContractsTests
         }
         finally
         {
-            await container.DisposeAsync().ConfigureAwait(true);
+            await scope.DisposeAsync().ConfigureAwait(true);
         }
     }
 
@@ -262,10 +237,10 @@ public sealed class LocalRoutingContractsTests
             RootViewModel = rootContainer,
         };
 
-        var container = CreateLocalContainer(localContext);
+        var scope = CreateLocalScope(localContext);
         try
         {
-            var activator = container.Resolve<IRouteActivator>();
+            var activator = scope.Resolver.Resolve<IRouteActivator>();
 
             var route = new TestActiveRoute(
                 config: new Route { Path = "leaf", ViewModelType = null, Outlet = OutletName.Primary },
@@ -282,7 +257,7 @@ public sealed class LocalRoutingContractsTests
         }
         finally
         {
-            await container.DisposeAsync().ConfigureAwait(true);
+            await scope.DisposeAsync().ConfigureAwait(true);
         }
     }
 
@@ -296,10 +271,10 @@ public sealed class LocalRoutingContractsTests
             RootViewModel = rootContainer,
         };
 
-        var container = CreateLocalContainer(localContext);
+        var scope = CreateLocalScope(localContext);
         try
         {
-            var activator = container.Resolve<IRouteActivator>();
+            var activator = scope.Resolver.Resolve<IRouteActivator>();
 
             var route = new TestActiveRoute(
                 config: new Route { Path = "leaf", ViewModelType = typeof(object), Outlet = OutletName.Primary },
@@ -315,20 +290,18 @@ public sealed class LocalRoutingContractsTests
         }
         finally
         {
-            await container.DisposeAsync().ConfigureAwait(true);
+            await scope.DisposeAsync().ConfigureAwait(true);
         }
     }
 
-    private static Container CreateLocalContainer(LocalRouterContext localContext)
+    // A routed scope over a host that provides only logging; the scope owns the host.
+    private static ScopeHandle CreateLocalScope(LocalRouterContext localContext)
     {
-        var container = new Container();
-        container.RegisterInstance<ILoggerFactory>(NullLoggerFactory.Instance);
-
-        _ = container.WithLocalRouting(
-            routesConfig: new Routes([]),
-            localRouterContext: localContext);
-
-        return container;
+        var host = new Container();
+        host.RegisterInstance<ILoggerFactory>(NullLoggerFactory.Instance);
+        var scope = new ScopeFactory().Create<IScopeLayer>(ScopeFactory.CreateRoot(host), [new RouterScopeModule(new Routes([]), localContext)]);
+        scope.Own(host);
+        return scope;
     }
 
     private sealed record OutletLoadCall(object ViewModel, OutletName? Outlet);

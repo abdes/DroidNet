@@ -26,19 +26,22 @@ public sealed class ContentExplorerModule : IFeatureModule
     public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
 
     /// <inheritdoc />
-    public void RegisterWindowServices(IContainer window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
-        window.Register<ContentExplorerViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
-        window.Register<ContentExplorerView>(Reuse.Transient);
-
-        // The window's explorer shows the assets that parts ask to reveal, and creates the scripts they ask for.
-        window.Register<ContentExplorerAssetReveal>(Reuse.Singleton);
-        window.RegisterMapping<IAssetReveal, ContentExplorerAssetReveal>();
-        window.Register<ContentExplorerScriptCreation>(Reuse.Singleton);
-        window.RegisterMapping<IScriptCreation, ContentExplorerScriptCreation>();
-    }
+    public IReadOnlyCollection<Type> Shadows => [];
 
     /// <inheritdoc />
-    public void ActivateWindowServices(IResolver window) => ArgumentNullException.ThrowIfNull(window);
+    public IReadOnlyList<Type> Activation => [];
+
+    /// <inheritdoc />
+    public void Register(IRegistrator scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        scope.Register<ContentExplorerViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
+        scope.Register<ContentExplorerView>(Reuse.Transient);
+
+        // The window's explorer shows the assets that parts ask to reveal, and creates the scripts they ask for.
+        scope.Register<ContentExplorerAssetReveal>(Reuse.Singleton);
+        scope.RegisterMapping<IAssetReveal, ContentExplorerAssetReveal>();
+        scope.Register<ContentExplorerScriptCreation>(Reuse.Singleton);
+        scope.RegisterMapping<IScriptCreation, ContentExplorerScriptCreation>();
+    }
 }

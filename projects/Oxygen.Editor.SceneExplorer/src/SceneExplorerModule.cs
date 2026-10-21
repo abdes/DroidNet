@@ -21,13 +21,18 @@ public sealed class SceneExplorerModule : IFeatureModule
     public IReadOnlyList<CommandDescriptor> Commands => SceneExplorerCommands.All;
 
     /// <inheritdoc />
-    public void RegisterWindowServices(IContainer window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
-        window.Register<SceneExplorerViewModel>(Reuse.Transient);
-        window.Register<SceneExplorerView>(Reuse.Transient);
-    }
+    public IReadOnlyCollection<Type> Shadows => [];
 
     /// <inheritdoc />
-    public void ActivateWindowServices(IResolver window) => ArgumentNullException.ThrowIfNull(window);
+    public IReadOnlyList<Type> Activation => [];
+
+    /// <inheritdoc />
+    public void Register(IRegistrator scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+
+        // The view model's tree subscriptions end with the window, which disposes it.
+        scope.Register<SceneExplorerViewModel>(Reuse.Transient, setup: Setup.With(trackDisposableTransient: true));
+        scope.Register<SceneExplorerView>(Reuse.Transient);
+    }
 }

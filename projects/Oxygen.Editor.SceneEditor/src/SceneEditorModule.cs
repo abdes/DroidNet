@@ -25,36 +25,34 @@ public sealed class SceneEditorModule : IFeatureModule
     public IReadOnlyList<CommandDescriptor> Commands => SceneEditorCommands.All;
 
     /// <inheritdoc />
-    public void RegisterWindowServices(IContainer window)
+    public IReadOnlyCollection<Type> Shadows => [];
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The window's scenes are followed from the start: the last scene reopens when one becomes unavailable, and the
+    /// hidden nodes' notice and the preview settings end with the window.
+    /// </remarks>
+    public IReadOnlyList<Type> Activation { get; } = [typeof(SceneDocumentLifetime), typeof(EditingViewMaskService), typeof(PreviewSettingsLifetime)];
+
+    /// <inheritdoc />
+    public void Register(IRegistrator scope)
     {
-        ArgumentNullException.ThrowIfNull(window);
-        window.Register<IDocumentEditorProvider, SceneEditorProvider>(Reuse.Singleton);
-        window.Register<SceneEditorView>(Reuse.Transient);
-        window.Register<SceneEditorViews>(Reuse.Singleton);
-        window.RegisterMapping<ISceneViews, SceneEditorViews>();
-        window.Register<SceneDocumentLifetime>(Reuse.Singleton);
-        window.RegisterMapping<ISceneAvailability, SceneDocumentLifetime>();
-        window.Register<PreviewSettingsLifetime>(Reuse.Singleton);
+        ArgumentNullException.ThrowIfNull(scope);
+        scope.Register<IDocumentEditorProvider, SceneEditorProvider>(Reuse.Singleton);
+        scope.Register<SceneEditorView>(Reuse.Transient);
+        scope.Register<SceneEditorViews>(Reuse.Singleton);
+        scope.RegisterMapping<ISceneViews, SceneEditorViews>();
+        scope.Register<SceneDocumentLifetime>(Reuse.Singleton);
+        scope.RegisterMapping<ISceneAvailability, SceneDocumentLifetime>();
+        scope.Register<PreviewSettingsLifetime>(Reuse.Singleton);
 
         // Per window on purpose: it observes this window's hidden nodes and ends with the window, so a second window
         // cannot inherit a stale notice.
-        window.RegisterDelegate(
+        scope.RegisterDelegate(
             resolver => new EditingViewMaskService(
                 resolver.Resolve<SceneNodeInteraction>(),
                 resolver.Resolve<IOperationResultPublisher>(),
                 resolver.Resolve<IStatusReducer>()).Start(),
             Reuse.Singleton);
-    }
-
-    /// <inheritdoc />
-    public void ActivateWindowServices(IResolver window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
-
-        // The window's scenes are followed from the start: the last scene reopens when one becomes unavailable, and
-        // the hidden nodes' notice and the preview settings end with the window.
-        _ = window.Resolve<SceneDocumentLifetime>();
-        _ = window.Resolve<EditingViewMaskService>();
-        _ = window.Resolve<PreviewSettingsLifetime>();
     }
 }

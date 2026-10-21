@@ -91,7 +91,8 @@ several features show alike (the asset picker); it references domain modules,
 the UI kit and foundation, never the Shell or a feature. A domain module references other domain modules below it
 and foundation, never the Shell or a feature. The Shell references foundation
 only. The composition root references everything and is the only project that
-does.
+does: `Oxygen.Editor.Composition` holds its registrations, so that tests can
+compose them, and only the application host, `Oxygen.Editor`, references it.
 
 `Oxygen.Editor.Routing` is foundation: it is the local routing over DroidNet
 Routing that the Shell's layout and the panels' own navigation both use, and it

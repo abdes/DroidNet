@@ -49,7 +49,7 @@ public sealed partial class ContentExplorerViewModel : ICommandHandler
 
     private ICommand? CommandOf(string commandId)
     {
-        if (this.childContainer?.Resolve<AssetsViewModel>(IfUnresolved.ReturnDefault) is not { } assets)
+        if (this.scope?.Resolver.Resolve<AssetsViewModel>(IfUnresolved.ReturnDefault) is not { } assets)
         {
             return null;
         }

@@ -3,11 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Composition;
 using DroidNet.Controls.OutputConsole.Model;
+using DroidNet.TestHelpers;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Oxygen.Editor.LivePreview.Play;
+using Oxygen.Editor.Shell.Scopes;
 
 namespace Oxygen.Editor.Output.Unit.Tests;
 
@@ -31,13 +34,17 @@ public sealed class OutputModuleTests
     {
         var log = new Mock<IPlayerLog>();
         var buffer = new OutputLogBuffer();
-        using var window = new Container();
-        window.RegisterInstance(log.Object);
-        window.RegisterInstance(buffer);
-        var module = new OutputModule();
+        using var host = HostContainer.Create();
+        var root = ScopeFactory.CreateRoot(host);
 
-        module.RegisterWindowServices(window);
-        module.ActivateWindowServices(window);
+        _ = new ScopeFactory().Create<IWindowLayer>(
+            root,
+            [new OutputModule()],
+            window =>
+            {
+                window.RegisterInstance(log.Object);
+                window.RegisterInstance(buffer);
+            });
         log.Raise(player => player.LogReceived += null, new PlayerLogEventArgs(DateTimeOffset.Now, LogLevel.Information, channel: null, "started"));
 
         _ = buffer.Should().ContainSingle().Which.Source.Should().Be(PlayerLogOutput.PlayerSource);

@@ -22,22 +22,22 @@ public sealed class ProblemsModule : IFeatureModule
     public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
 
     /// <inheritdoc />
-    public void RegisterWindowServices(IContainer window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
-        window.Register<IRuntimeProblemNodes, RuntimeProblemNodes>(Reuse.Singleton);
-        window.Register<ProblemsViewModel>(Reuse.Singleton);
-        window.Register<ProblemsView>(Reuse.Transient);
-        window.Register<ProblemsPresenter>(Reuse.Singleton);
-        window.RegisterMapping<IProblemReveal, ProblemsPresenter>();
-    }
+    public IReadOnlyCollection<Type> Shadows => [];
 
     /// <inheritdoc />
-    public void ActivateWindowServices(IResolver window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
+    /// <remarks>
+    /// The problems are collected, and the panel follows them, before it is ever shown.
+    /// </remarks>
+    public IReadOnlyList<Type> Activation { get; } = [typeof(ProblemsPresenter)];
 
-        // The problems are collected, and the panel follows them, before it is ever shown.
-        _ = window.Resolve<ProblemsPresenter>();
+    /// <inheritdoc />
+    public void Register(IRegistrator scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        scope.Register<IRuntimeProblemNodes, RuntimeProblemNodes>(Reuse.Singleton);
+        scope.Register<ProblemsViewModel>(Reuse.Singleton);
+        scope.Register<ProblemsView>(Reuse.Transient);
+        scope.Register<ProblemsPresenter>(Reuse.Singleton);
+        scope.RegisterMapping<IProblemReveal, ProblemsPresenter>();
     }
 }

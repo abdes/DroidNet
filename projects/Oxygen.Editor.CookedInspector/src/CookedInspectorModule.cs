@@ -25,28 +25,28 @@ public sealed class CookedInspectorModule : IFeatureModule
     public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
 
     /// <inheritdoc />
-    public void RegisterWindowServices(IContainer window)
+    public IReadOnlyCollection<Type> Shadows => [];
+
+    /// <inheritdoc />
+    /// <remarks>
+    /// The panel takes inspection requests before it is ever shown.
+    /// </remarks>
+    public IReadOnlyList<Type> Activation { get; } = [typeof(CookedInspectionViewModel)];
+
+    /// <inheritdoc />
+    public void Register(IRegistrator scope)
     {
-        ArgumentNullException.ThrowIfNull(window);
+        ArgumentNullException.ThrowIfNull(scope);
 
         // The inspector shows its asset links in the window's Content Explorer, through the port that browser implements.
-        window.RegisterDelegate(
+        scope.RegisterDelegate(
             resolver => new CookedInspectionViewModel(
                 resolver.Resolve<IContentPipelineService>(),
                 resolver.Resolve<IAssetFeed>(),
                 resolver.Resolve<IProjectContextService>(),
                 asset => resolver.Resolve<IAssetReveal>().RevealAsync([asset])),
             Reuse.Singleton);
-        window.Register<CookedInspectionView>(Reuse.Transient);
-        window.Register<ICookedInspections, CookedInspections>(Reuse.Singleton);
-    }
-
-    /// <inheritdoc />
-    public void ActivateWindowServices(IResolver window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
-
-        // The panel takes inspection requests before it is ever shown.
-        _ = window.Resolve<CookedInspectionViewModel>();
+        scope.Register<CookedInspectionView>(Reuse.Transient);
+        scope.Register<ICookedInspections, CookedInspections>(Reuse.Singleton);
     }
 }

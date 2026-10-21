@@ -90,8 +90,9 @@ For all Oxygen code and design work (`projects/Oxygen.*`, their examples/tools,
 and Oxygen documents under `design/`), read and follow the shared
 [Oxygen engineering rules](design/oxygen/RULES.md).
 
-- The editor's actual startup/DI/routing wiring is
-  `projects/Oxygen.Editor/src/Program.cs`, not the default WinUI XAML entry point.
+- The editor's actual startup is `projects/Oxygen.Editor/src/Program.cs`, not the
+  default WinUI XAML entry point; its DI and routing wiring is
+  `projects/Oxygen.Editor.Composition/src/EditorModule.cs`.
 - Editor/interop builds consume an already-installed native SDK at
   `projects/Oxygen.Engine/out/install/<Configuration>`; they do not build the
   CMake engine. Editor-only work does not authorize an engine build.

@@ -6,9 +6,8 @@ using System.Diagnostics;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
+using DroidNet.Composition;
 using DroidNet.Docking;
-using DroidNet.Docking.Layouts;
-using DroidNet.Docking.Workspace;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using DroidNet.Routing.WinUI;
@@ -19,13 +18,15 @@ using Microsoft.UI.Xaml;
 using Oxygen.Editor.Routing;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
+using Oxygen.Editor.Shell.Scopes;
 
 namespace Oxygen.Editor.Shell.Layout;
 
 /// <summary>
 ///     Base ViewModel for managing the docking workspace.
 /// </summary>
-/// <param name="container">The parent IoC container to be used to create a child container for this workspace.</param>
+/// <param name="scopes">The factory of the workspace window's scope.</param>
+/// <param name="parent">The scope the workspace window's scope is created under.</param>
 /// <param name="router">
 ///     The parent router, will only be used for navigation out of the workspace. A local router will be created and used for local navigation inside the workspace.
 /// </param>
@@ -33,16 +34,17 @@ namespace Oxygen.Editor.Shell.Layout;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition process. If <see langword="null"/>, logging is disabled.
 /// </param>
 public abstract partial class DockingWorkspaceViewModel(
-    IContainer container,
+    ScopeFactory scopes,
+    ScopeHandle parent,
     IRouter router,
     ILoggerFactory? loggerFactory = null)
     : ObservableObject, IRoutingAware, IOutletContainer, IDisposable
 {
     private readonly ILogger logger = loggerFactory?.CreateLogger("WorkSpace") ?? NullLoggerFactory.Instance.CreateLogger("WorkSpace");
 
-    private readonly IContainer childContainer = container.CreateChild();
     private readonly List<RoutedDockable> deferredDockables = [];
 
+    private ScopeHandle? scope;
     private CompositeDisposable? localRouterEventsSub;
     private bool disposed;
 
@@ -82,33 +84,25 @@ public abstract partial class DockingWorkspaceViewModel(
     /// <inheritdoc/>
     public virtual async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
-        if (navigationContext.NavigationTarget is Window window)
+        // The window's id is known only when the workspace is the content of a window.
+        var window = navigationContext.NavigationTarget as Window;
+        var context = new LocalRouterContext(navigationContext.NavigationTarget)
         {
-            // Register the world editor's window id in the local container so
-            // that other components can easily find it.
-            this.childContainer.RegisterInstance(window.AppWindow.Id);
-        }
+            ParentRouter = router,
+            RootViewModel = this.ThisViewModel,
+        };
+        this.scope = scopes.Create<IWindowLayer>(
+            parent,
+            [new RouterScopeModule(this.RoutesConfig, context), new DockingWindowModule(), .. this.CreateWindowModules()],
+            window is null ? null : registrations => registrations.RegisterInstance(window.AppWindow.Id));
 
-        _ = this.childContainer
-            .WithMvvm()
-            .WithLocalRouting(
-                this.RoutesConfig,
-                new LocalRouterContext(navigationContext.NavigationTarget)
-                {
-                    ParentRouter = router,
-                    RootViewModel = this.ThisViewModel,
-                });
-        this.childContainer.Register<IDocker, Docker>(Reuse.Singleton);
-        this.childContainer.Register<IDockViewFactory, DockViewFactory>(Reuse.Singleton);
-        this.childContainer.Register<DockingWorkspaceLayout>(Reuse.Singleton);
+        var resolver = this.scope.Resolver;
+        this.Docker = resolver.Resolve<IDocker>();
+        this.Layout = resolver.Resolve<DockingWorkspaceLayout>();
+        this.Commands = resolver.Resolve<ICommandService>(IfUnresolved.ReturnDefault);
+        this.OnWindowScopeOpened(resolver);
 
-        this.OnSetupChildContainer(this.childContainer);
-
-        this.Docker = this.childContainer.Resolve<IDocker>();
-        this.Layout = this.childContainer.Resolve<DockingWorkspaceLayout>();
-        this.Commands = this.childContainer.Resolve<ICommandService>(IfUnresolved.ReturnDefault);
-
-        var localRouter = this.childContainer.Resolve<IRouter>();
+        var localRouter = resolver.Resolve<IRouter>();
         this.localRouterEventsSub = new CompositeDisposable(
             localRouter.Events.OfType<ActivationComplete>()
                 .Subscribe(
@@ -122,7 +116,7 @@ public abstract partial class DockingWorkspaceViewModel(
                         this.Layout.ActiveRoute = this.activeRoute;
                     }));
 
-        await this.OnInitialNavigationAsync(this.childContainer.Resolve<ILocalRouterContext>()).ConfigureAwait(true);
+        await this.OnInitialNavigationAsync(context).ConfigureAwait(true);
     }
 
     /// <inheritdoc/>
@@ -182,8 +176,11 @@ public abstract partial class DockingWorkspaceViewModel(
             }
 
             this.deferredDockables.Clear();
-            this.childContainer.Dispose();
             this.localRouterEventsSub?.Dispose();
+
+            // The window's scope has no async disposables to await: it completes before this returns.
+            _ = this.scope?.DisposeAsync().AsTask();
+            this.scope = null;
         }
 
         this.disposed = true;
@@ -197,10 +194,16 @@ public abstract partial class DockingWorkspaceViewModel(
     protected abstract Task OnInitialNavigationAsync(ILocalRouterContext context);
 
     /// <summary>
-    /// Called to set up the child container with additional registrations.
+    /// Creates the modules of the workspace window's scope, which register after its router and its docking.
     /// </summary>
-    /// <param name="childContainer">The child container to set up.</param>
-    protected abstract void OnSetupChildContainer(IContainer childContainer);
+    /// <returns>The window's modules, in registration and activation order.</returns>
+    protected abstract IEnumerable<IScopeModule<IWindowLayer>> CreateWindowModules();
+
+    /// <summary>
+    /// Called once the workspace window's scope is open, with every module registered and activated.
+    /// </summary>
+    /// <param name="window">The resolver of the window's scope.</param>
+    protected abstract void OnWindowScopeOpened(IResolver window);
 
     private void LoadCenterDock(object viewModel)
     {
@@ -247,7 +250,7 @@ public abstract partial class DockingWorkspaceViewModel(
         {
             var dockableActiveRoute = this.activeRoute!.Children.First(c => c.Outlet == dockableId);
             var dockable = RoutedDockable.New(dockableId, dockableActiveRoute);
-            if (this.childContainer.Resolve<ContributionRegistry>(IfUnresolved.ReturnDefault)?.TitleOf(dockableId) is { } title)
+            if (this.scope?.Resolver.Resolve<ContributionRegistry>(IfUnresolved.ReturnDefault)?.TitleOf(dockableId) is { } title)
             {
                 dockable.Title = title;
             }

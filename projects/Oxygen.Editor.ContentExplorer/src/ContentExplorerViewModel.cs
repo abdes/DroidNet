@@ -7,6 +7,7 @@ using System.ComponentModel;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Composition;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
@@ -23,10 +24,9 @@ using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
-using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Scopes;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using IContainer = DryIoc.IContainer;
 
 namespace Oxygen.Editor.ContentExplorer;
 
@@ -39,7 +39,8 @@ namespace Oxygen.Editor.ContentExplorer;
 ///     the right pane.
 /// </remarks>
 public sealed partial class ContentExplorerViewModel(
-    IContainer container,
+    ScopeFactory scopes,
+    ScopeHandle window,
     IRouter parentRouter,
     IProjectContextService projectContextService,
     IProjectUsageService projectUsage,
@@ -96,7 +97,7 @@ public sealed partial class ContentExplorerViewModel(
     private ContentExplorerAssetReveal? assetReveal;
     private ContentExplorerScriptCreation? scriptCreation;
     private Authoring.AuthoredAssetCreation? creation;
-    private IContainer? childContainer;
+    private ScopeHandle? scope;
     private string currentAssetsViewPath = "assets/tiles"; // tracks whether we show list or tiles
     private int currentHistoryIndex = -1;
     private DispatcherQueue? dispatcher;
@@ -175,7 +176,7 @@ public sealed partial class ContentExplorerViewModel(
     /// <inheritdoc />
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
-        this.assetReveal = container.Resolve<ContentExplorerAssetReveal>(IfUnresolved.ReturnDefault);
+        this.assetReveal = window.Resolver.Resolve<ContentExplorerAssetReveal>(IfUnresolved.ReturnDefault);
         this.assetReveal?.Attach(this);
 
         // One-time initialization for singleton
@@ -184,20 +185,29 @@ public sealed partial class ContentExplorerViewModel(
             this.Outlets.Add("left", (nameof(this.LeftPaneViewModel), null));
             this.Outlets.Add("right", (nameof(this.RightPaneViewModel), null));
 
-            InitializeChildContainer();
+            this.scope = scopes.Create<IPanelLayer>(
+                window,
+                [
+                    new RouterScopeModule(
+                        RoutesConfig,
+                        new LocalRouterContext(navigationContext.NavigationTarget) { ParentRouter = parentRouter, RootViewModel = this }),
+                    new ContentExplorerPanelModule(),
+                ],
+                registrations => registrations.RegisterInstance(new ContentExplorerState { Query = this.Query, Presentation = this.Presentation }));
+            var panel = this.scope.Resolver;
 
             // Make sure to use our own ViewModel to View converter
-            this.VmToViewConverter = this.childContainer.Resolve<ViewModelToView>();
+            this.VmToViewConverter = panel.Resolve<ViewModelToView>();
 
             // The window's New Script requests are answered by this browser's creation.
-            this.creation = this.childContainer.Resolve<Authoring.AuthoredAssetCreation>();
-            this.scriptCreation = container.Resolve<ContentExplorerScriptCreation>(IfUnresolved.ReturnDefault);
+            this.creation = panel.Resolve<Authoring.AuthoredAssetCreation>();
+            this.scriptCreation = window.Resolver.Resolve<ContentExplorerScriptCreation>(IfUnresolved.ReturnDefault);
             this.scriptCreation?.Attach(this.creation);
 
-            this.localRouter = this.childContainer.Resolve<IRouter>();
+            this.localRouter = panel.Resolve<IRouter>();
 
             // Capture the UI Dispatcher from the hosting context to marshal UI-bound updates
-            var hostingContext = this.childContainer.Resolve<HostingContext>();
+            var hostingContext = panel.Resolve<HostingContext>();
             this.dispatcher = hostingContext.Dispatcher;
 
             // Subscribe to router events to track navigation history
@@ -206,10 +216,10 @@ public sealed partial class ContentExplorerViewModel(
                 .Subscribe(this.OnNavigationEnd);
 
             // Subscribe to ContentExplorerState changes to update the navigation stack
-            var contentExplorerState = this.childContainer.Resolve<ContentExplorerState>();
+            var contentExplorerState = panel.Resolve<ContentExplorerState>();
             this.browserState = contentExplorerState;
             contentExplorerState.PropertyChanged += this.OnContentExplorerStateChanged;
-            this.Details = this.childContainer.Resolve<AssetDetailsViewModel>();
+            this.Details = panel.Resolve<AssetDetailsViewModel>();
 
             var initialUrl = await this.GetInitialContentExplorerUrlAsync().ConfigureAwait(true);
             await this.localRouter.NavigateAsync(initialUrl).ConfigureAwait(true);
@@ -218,40 +228,6 @@ public sealed partial class ContentExplorerViewModel(
 
             this.UpdateUpButtonState();
             this.UpdateBreadcrumbs();
-        }
-
-        void InitializeChildContainer()
-        {
-            this.childContainer = container.CreateChild();
-            _ = this.childContainer.WithMvvm()
-                .WithLocalRouting(
-                    RoutesConfig,
-                    new LocalRouterContext(navigationContext.NavigationTarget)
-                    {
-                        ParentRouter = parentRouter,
-                        RootViewModel = this,
-                    });
-
-            this.childContainer.RegisterDelegate<ContentExplorerState>(
-                _ => new() { Query = this.Query, Presentation = this.Presentation }, Reuse.Singleton);
-            this.childContainer.Register<IDesktopIntegration, WindowsDesktopIntegration>(Reuse.Singleton);
-            this.childContainer.Register<Relocation.IAssetRelocationWorkflow, Relocation.AssetRelocationWorkflow>(Reuse.Singleton);
-            this.childContainer.Register<AssetDetailsViewModel>(Reuse.Singleton);
-            this.childContainer.Register<Authoring.AuthoredAssetCreation>(Reuse.Singleton);
-
-            this.childContainer.Register<ContentFoldersPane>(Reuse.Singleton);
-            this.childContainer.RegisterMapping<IContentFoldersPane, ContentFoldersPane>();
-            this.childContainer.Register<ContentFoldersViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
-            this.childContainer.Register<ContentFoldersView>(Reuse.Transient);
-
-            // Dialog views used via Aura's IDialogService + VmToViewConverter.
-            this.childContainer.Register<LocalFolderMountDialogViewModel>(Reuse.Transient);
-            this.childContainer.Register<LocalFolderMountDialogView>(Reuse.Transient);
-            this.childContainer.Register<Importing.SceneImportDialogView>(Reuse.Transient);
-
-            this.childContainer.Register<AssetsViewModel>(Reuse.Singleton);
-            this.childContainer.Register<AssetsView>(Reuse.Singleton);
-            RegisterAssetLayouts(this.childContainer);
         }
     }
 
@@ -270,18 +246,6 @@ public sealed partial class ContentExplorerViewModel(
 
         var target = this.Breadcrumbs[index];
         await this.localRouter.NavigateAsync(this.BuildUrl(target.Folder)).ConfigureAwait(true);
-    }
-
-    /// <summary>Registers layouts owned and disposed by their router outlet; session state is shared separately.</summary>
-    /// <param name="scope">The browser's local service container.</param>
-    internal static void RegisterAssetLayouts(IContainer scope)
-    {
-        scope.Register<ListLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
-        scope.Register<ListLayoutView>(Reuse.Transient);
-        scope.Register<TilesLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
-        scope.Register<TilesLayoutView>(Reuse.Transient);
-        scope.Register<DetailsLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
-        scope.Register<DetailsLayoutView>(Reuse.Transient);
     }
 
     /// <summary>Describes whether a location holds authored content or read-only derived and mounted content.</summary>
@@ -336,7 +300,8 @@ public sealed partial class ContentExplorerViewModel(
             this.browserState?.PropertyChanged -= this.OnContentExplorerStateChanged;
             this.Details?.Dispose();
 
-            this.childContainer?.Dispose();
+            // The explorer's scope has no async disposables to await: it completes before this returns.
+            _ = this.scope?.DisposeAsync().AsTask();
         }
 
         base.Dispose(disposing);
@@ -559,7 +524,7 @@ public sealed partial class ContentExplorerViewModel(
 
     private string BuildCurrentUrl()
         => "/(left:folders//right:" + this.currentAssetsViewPath + ")"
-            + RouteStateMapping.BuildSelectedQuery(this.childContainer?.Resolve<ContentExplorerState>()?.SelectedFolders ?? (IEnumerable<AssetPath>)[]);
+            + RouteStateMapping.BuildSelectedQuery(this.scope?.Resolver.Resolve<ContentExplorerState>()?.SelectedFolders ?? (IEnumerable<AssetPath>)[]);
 
     // A URL that shows one folder, or the whole project when there is none.
     private string BuildUrl(AssetPath? folder)
@@ -590,7 +555,7 @@ public sealed partial class ContentExplorerViewModel(
         this.isApplyingRouteState = true;
         try
         {
-            if (this.childContainer?.Resolve<ContentExplorerState>() is { } state)
+            if (this.scope?.Resolver.Resolve<ContentExplorerState>() is { } state)
             {
                 RouteStateMapping.ApplyNavigationScope(state, url);
             }
@@ -731,7 +696,7 @@ public sealed partial class ContentExplorerViewModel(
         }
 
         // The whole project has no parent; a mount's parent is the whole project.
-        if (GetPrimarySelectedFolder(this.childContainer?.Resolve<ContentExplorerState>()) is not { } current)
+        if (GetPrimarySelectedFolder(this.scope?.Resolver.Resolve<ContentExplorerState>()) is not { } current)
         {
             return;
         }
@@ -743,7 +708,7 @@ public sealed partial class ContentExplorerViewModel(
 
     private void UpdateUpButtonState()
     {
-        var current = GetPrimarySelectedFolder(this.childContainer?.Resolve<ContentExplorerState>());
+        var current = GetPrimarySelectedFolder(this.scope?.Resolver.Resolve<ContentExplorerState>());
 
         var old = this.CanGoUp;
         this.CanGoUp = current is not null;
@@ -765,7 +730,7 @@ public sealed partial class ContentExplorerViewModel(
             var primary = pathOverride;
             if (primary is null)
             {
-                var state = this.childContainer?.Resolve<ContentExplorerState>();
+                var state = this.scope?.Resolver.Resolve<ContentExplorerState>();
                 primary = GetPrimarySelectedFolder(state);
             }
 
@@ -773,7 +738,7 @@ public sealed partial class ContentExplorerViewModel(
             var rootLabel = "Project";
             try
             {
-                var projectContext = this.childContainer?.Resolve<IProjectContextService>();
+                var projectContext = this.scope?.Resolver.Resolve<IProjectContextService>();
                 var pn = projectContext?.ActiveProject?.Name;
                 if (!string.IsNullOrEmpty(pn))
                 {
@@ -846,7 +811,7 @@ public sealed partial class ContentExplorerViewModel(
     [RelayCommand(CanExecute = nameof(CanExecuteRefresh))]
     private async Task RefreshAsync()
     {
-        if (this.childContainer is null)
+        if (this.scope is null)
         {
             return;
         }
@@ -867,7 +832,7 @@ public sealed partial class ContentExplorerViewModel(
                 await projectLayout.RefreshTreeAsync().ConfigureAwait(true);
             }
 
-            await this.childContainer.Resolve<IAssetFeed>().RefreshAsync().ConfigureAwait(true);
+            await this.scope.Resolver.Resolve<IAssetFeed>().RefreshAsync().ConfigureAwait(true);
         }
         finally
         {

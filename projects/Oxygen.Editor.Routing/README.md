@@ -23,8 +23,6 @@ In other words:
 - `RouterScopeModule`
   - The `DroidNet.Composition` module that gives a window or panel scope its own local router and view location (`IViewLocator`, `ViewModelToView`).
   - Declares the services it shadows: the router and view location over the application root, and the local router context over an enclosing routed scope (a panel inside a window). It binds the scope's `LocalRouterContext.LocalRouter` to the scope's router when the scope opens.
-- `LocalRoutingExtensions`
-  - `WithMvvm(...)` and `WithLocalRouting(...)` helpers to wire up a local router in a DryIoc container.
 
 ## How local route activation works
 
@@ -57,40 +55,37 @@ Local routing intentionally does **not** model multi-window / multi-target navig
 
 If you need to navigate to a different target (e.g., open/activate a different window), use the parent/global router.
 
-## Using it (DryIoc)
+## Using it (scopes)
 
-The intended usage is to create a _dedicated child container_ for the local router, register the local context and routes, then resolve the local `IRouter`.
+A local router lives in its own `DroidNet.Composition` scope. Create the scope
+with `RouterScopeModule`, then use the local router.
 
 ```csharp
-using DroidNet.Routing;
-using DryIoc;
+using DroidNet.Composition;
 using Oxygen.Editor.Routing;
 
-// 1) Prepare the local context
-var localContext = new LocalRouterContext(target: /* any host-specific token */ new object())
+var localContext = new LocalRouterContext(target: navigationTarget)
 {
-    RootViewModel = /* your outlet container VM (must implement IOutletContainer) */ rootViewModel,
+    // Must implement IOutletContainer.
+    RootViewModel = rootViewModel,
+
+    // Lets local view models navigate globally when needed.
+    ParentRouter = globalRouter,
 };
 
-// Optional but recommended: allow local view models to navigate globally when needed
-localContext.ParentRouter = globalRouter;
+var scope = scopes.Create<IWindowLayer>(
+    parent,
+    [new RouterScopeModule(localRoutes, localContext), .. windowModules]);
 
-// 2) Build a child container (recommended so local registrations don’t pollute the global container)
-var localContainer = new Container();
-
-// 3) Register MVVM + local routing services
-localContainer
-    .WithMvvm()
-    .WithLocalRouting(routesConfig: localRoutes, localRouterContext: localContext);
-
-// 4) Use the local router
 await localContext.LocalRouter.NavigateAsync("/some/local/path");
 ```
 
 Notes:
 
-- `WithLocalRouting(...)` assigns `localRouterContext.LocalRouter` after registering `IRouter`.
-- Your host/root view model (and any parent route view models that host children) must implement `IOutletContainer` so that routes can load content into outlets.
+- The scope binds `localContext.LocalRouter` to its router when it opens.
+- Your host/root view model (and any parent route view models that host
+  children) must implement `IOutletContainer` so that routes can load content
+  into outlets.
 
 ## Relationship to Routing.WinUI
 

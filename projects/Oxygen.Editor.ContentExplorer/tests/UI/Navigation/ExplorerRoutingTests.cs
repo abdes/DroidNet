@@ -4,17 +4,18 @@
 
 using System.Reactive.Subjects;
 using AwesomeAssertions;
+using DroidNet.Composition;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
+using DroidNet.TestHelpers;
 using DryIoc;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
+using Oxygen.Editor.Shell.Scopes;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentExplorer.TestSupport.ExplorerTestData;
 
@@ -35,18 +36,18 @@ public sealed partial class ExplorerRoutingTests : DroidNet.Tests.VisualUserInte
         var provider = CreateQueryProvider(updates);
         var projects = CreateQueryProject();
         var state = new ContentExplorerState();
-        var container = new Container();
-        await using var containerLifetime = container.ConfigureAwait(true);
-        container.RegisterInstance<IProjectContextService>(projects);
-        container.RegisterInstance(provider.Object);
-        container.RegisterInstance(state);
-        container.RegisterInstance(CreateStatusHosting());
-        container.RegisterInstance<ILoggerFactory>(NullLoggerFactory.Instance);
-        ContentExplorerViewModel.RegisterAssetLayouts(container);
+        using var host = HostContainer.Create();
+        host.RegisterInstance<IProjectContextService>(projects);
+        host.RegisterInstance(provider.Object);
+        host.RegisterInstance(state);
+        host.RegisterInstance(CreateStatusHosting());
+        await using var root = ScopeFactory.CreateRoot(host);
         using var outlet = new ExplorerLayoutOutlet();
         var routes = new Routes([new Route { Path = string.Empty, Children = new Routes([new Route { Outlet = "right", Path = "assets/tiles", ViewModelType = typeof(TilesLayoutViewModel) }, new Route { Outlet = "right", Path = "assets/list", ViewModelType = typeof(ListLayoutViewModel) },]), },]);
-        _ = container.WithLocalRouting(routes, new LocalRouterContext(new object()) { RootViewModel = outlet, ParentRouter = Mock.Of<IRouter>() });
-        var router = container.Resolve<IRouter>();
+        var panel = new ScopeFactory().Create<IPanelLayer>(
+            root,
+            [new RouterScopeModule(routes, new LocalRouterContext(new object()) { RootViewModel = outlet, ParentRouter = Mock.Of<IRouter>() }), new AssetLayoutsModule()]);
+        var router = panel.Resolver.Resolve<IRouter>();
         await router.NavigateAsync("/(right:assets/tiles)").ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         var first = outlet.Layout.Should().BeOfType<TilesLayoutViewModel>().Subject;
@@ -62,7 +63,7 @@ public sealed partial class ExplorerRoutingTests : DroidNet.Tests.VisualUserInte
             _ = current.Should().NotBeSameAs(previous).And.NotBeSameAs(first);
             _ = current.SelectedAsset!.Identity.Should().Be(asset.Identity);
             _ = current.Query.SearchText.Should().Be("Blue");
-            UserControl view = tiles ? container.Resolve<TilesLayoutView>() : container.Resolve<ListLayoutView>();
+            UserControl view = tiles ? panel.Resolver.Resolve<TilesLayoutView>() : panel.Resolver.Resolve<ListLayoutView>();
             ((DroidNet.Mvvm.IViewFor)view).ViewModel = current;
             await LoadTestContentAsync(view).ConfigureAwait(true);
             await WaitForRenderAsync().ConfigureAwait(true);
@@ -73,6 +74,16 @@ public sealed partial class ExplorerRoutingTests : DroidNet.Tests.VisualUserInte
         _ = await disposed.Should().ThrowAsync<ObjectDisposedException>().ConfigureAwait(true);
         provider.Verify(value => value.RefreshAsync(It.IsAny<CancellationToken>()), Times.Once);
     });
+
+    // The explorer's layouts alone, in a panel scope of their own.
+    private sealed class AssetLayoutsModule : IScopeModule<IPanelLayer>
+    {
+        public IReadOnlyCollection<Type> Shadows => [];
+
+        public IReadOnlyList<Type> Activation => [];
+
+        public void Register(IRegistrator scope) => ContentExplorerPanelModule.RegisterAssetLayouts(scope);
+    }
 
     private sealed partial class ExplorerLayoutOutlet : AbstractOutletContainer
     {

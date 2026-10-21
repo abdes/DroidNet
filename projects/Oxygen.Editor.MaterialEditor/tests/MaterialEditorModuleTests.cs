@@ -25,7 +25,7 @@ public sealed class MaterialEditorModuleTests
     {
         using var window = new Container();
 
-        new MaterialEditorModule().RegisterWindowServices(window);
+        new MaterialEditorModule().Register(window);
 
         var registrations = window.GetServiceRegistrations().ToArray();
         _ = registrations.Should().Contain(registration => registration.ServiceType == typeof(IDocumentEditorProvider) && registration.ImplementationType == typeof(MaterialEditorProvider));

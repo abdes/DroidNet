@@ -21,20 +21,20 @@ public sealed class OutputModule : IFeatureModule
     public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
 
     /// <inheritdoc />
-    public void RegisterWindowServices(IContainer window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
-        window.Register<OutputViewModel>(Reuse.Singleton);
-        window.Register<OutputView>(Reuse.Transient);
-        window.Register<PlayerLogOutput>(Reuse.Singleton);
-    }
+    public IReadOnlyCollection<Type> Shadows => [];
 
     /// <inheritdoc />
-    public void ActivateWindowServices(IResolver window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
+    /// <remarks>
+    /// The player's log reaches the buffer whether or not the panel shows.
+    /// </remarks>
+    public IReadOnlyList<Type> Activation { get; } = [typeof(PlayerLogOutput)];
 
-        // The player's log reaches the buffer whether or not the panel shows.
-        _ = window.Resolve<PlayerLogOutput>();
+    /// <inheritdoc />
+    public void Register(IRegistrator scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        scope.Register<OutputViewModel>(Reuse.Singleton);
+        scope.Register<OutputView>(Reuse.Transient);
+        scope.Register<PlayerLogOutput>(Reuse.Singleton);
     }
 }

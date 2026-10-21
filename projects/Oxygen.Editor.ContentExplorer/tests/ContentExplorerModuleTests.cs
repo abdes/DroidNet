@@ -34,7 +34,7 @@ public sealed class ContentExplorerModuleTests
         using var window = new Container();
         window.RegisterInstance(Mock.Of<IPlacementService>());
 
-        new ContentExplorerModule().RegisterWindowServices(window);
+        new ContentExplorerModule().Register(window);
 
         var registrations = window.GetServiceRegistrations().ToArray();
         _ = registrations.Should().Contain(registration => registration.ServiceType == typeof(ContentExplorerViewModel));

@@ -21,21 +21,21 @@ public sealed class CookingModule : IFeatureModule
     public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
 
     /// <inheritdoc />
-    public void RegisterWindowServices(IContainer window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
-        window.Register<ICookRecovery, CookRecovery>(Reuse.Singleton);
-        window.Register<CookingPanelViewModel>(Reuse.Singleton);
-        window.Register<CookingPanelView>(Reuse.Transient);
-        window.Register<CookingPresenter>(Reuse.Singleton);
-    }
+    public IReadOnlyCollection<Type> Shadows => [];
 
     /// <inheritdoc />
-    public void ActivateWindowServices(IResolver window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
+    /// <remarks>
+    /// The panel follows the cook runs, and answers explicit requests to come forward, before it is ever shown.
+    /// </remarks>
+    public IReadOnlyList<Type> Activation { get; } = [typeof(CookingPresenter)];
 
-        // The panel follows the cook runs, and answers explicit requests to come forward, before it is ever shown.
-        _ = window.Resolve<CookingPresenter>();
+    /// <inheritdoc />
+    public void Register(IRegistrator scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        scope.Register<ICookRecovery, CookRecovery>(Reuse.Singleton);
+        scope.Register<CookingPanelViewModel>(Reuse.Singleton);
+        scope.Register<CookingPanelView>(Reuse.Transient);
+        scope.Register<CookingPresenter>(Reuse.Singleton);
     }
 }

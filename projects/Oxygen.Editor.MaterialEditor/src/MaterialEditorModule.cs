@@ -18,13 +18,16 @@ public sealed class MaterialEditorModule : IFeatureModule
     public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
 
     /// <inheritdoc />
-    public void RegisterWindowServices(IContainer window)
-    {
-        ArgumentNullException.ThrowIfNull(window);
-        window.Register<IDocumentEditorProvider, MaterialEditorProvider>(Reuse.Singleton);
-        window.Register<MaterialEditorView>(Reuse.Transient);
-    }
+    public IReadOnlyCollection<Type> Shadows => [];
 
     /// <inheritdoc />
-    public void ActivateWindowServices(IResolver window) => ArgumentNullException.ThrowIfNull(window);
+    public IReadOnlyList<Type> Activation => [];
+
+    /// <inheritdoc />
+    public void Register(IRegistrator scope)
+    {
+        ArgumentNullException.ThrowIfNull(scope);
+        scope.Register<IDocumentEditorProvider, MaterialEditorProvider>(Reuse.Singleton);
+        scope.Register<MaterialEditorView>(Reuse.Transient);
+    }
 }

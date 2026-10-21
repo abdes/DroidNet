@@ -67,6 +67,7 @@ DOMAIN_RANK: dict[str, int] = {
 # Every Oxygen production project has a layer; DroidNet libraries are foundation.
 EDITOR_LAYERS: dict[str, Layer] = {
     "Oxygen.Editor.App": Layer.ROOT,
+    "Oxygen.Editor.Composition": Layer.ROOT,
     "Oxygen.Editor.Shell": Layer.SHELL,
     "Oxygen.Editor.ContentExplorer": Layer.FEATURE,
     "Oxygen.Editor.CookedInspector": Layer.FEATURE,
@@ -98,7 +99,16 @@ EDITOR_LAYERS: dict[str, Layer] = {
 # The engine's managed side. LivePreview is the only module that references it
 # (sections 5.4 and 11); the composition root references everything.
 ENGINE = frozenset({"Oxygen.Editor.Runtime", "Oxygen.Editor.Interop"})
-ENGINE_USERS = frozenset({"Oxygen.Editor.LivePreview", "Oxygen.Editor.App"}) | ENGINE
+ENGINE_USERS = (
+    frozenset(
+        {"Oxygen.Editor.LivePreview", "Oxygen.Editor.App", "Oxygen.Editor.Composition"}
+    )
+    | ENGINE
+)
+
+# The composition root's registrations live in a library so that tests can compose
+# them; the application host is the only project that references it.
+ROOT_REFERENCES = frozenset({("Oxygen.Editor.App", "Oxygen.Editor.Composition")})
 
 # The one exception: the scene editor's viewports draw through Runtime's
 # surfaces, views and input, and never reach Interop (section 11).
@@ -215,8 +225,8 @@ def layer_of(name: str) -> Layer:
 def reference_violation(source: str, target: str) -> str | None:
     """Why source may not reference target, or None."""
     source_layer, target_layer = layer_of(source), layer_of(target)
-    if target_layer is Layer.ROOT:
-        return "nothing references the composition root"
+    if target_layer is Layer.ROOT and (source, target) not in ROOT_REFERENCES:
+        return "only the application host references the composition root"
     if (
         target in ENGINE
         and source not in ENGINE_USERS
@@ -352,7 +362,21 @@ class EditorModuleBoundaries(unittest.TestCase):
         )
         self.assertEqual(
             reference_violation("Oxygen.Editor.Shell", "Oxygen.Editor.App"),
-            "nothing references the composition root",
+            "only the application host references the composition root",
+        )
+        self.assertEqual(
+            reference_violation("Oxygen.Editor.Shell", "Oxygen.Editor.Composition"),
+            "only the application host references the composition root",
+        )
+        self.assertEqual(
+            reference_violation("Oxygen.Editor.Composition", "Oxygen.Editor.App"),
+            "only the application host references the composition root",
+        )
+        self.assertIsNone(
+            reference_violation("Oxygen.Editor.App", "Oxygen.Editor.Composition")
+        )
+        self.assertIsNone(
+            reference_violation("Oxygen.Editor.Composition", "Oxygen.Editor.Interop")
         )
         self.assertIsNone(
             reference_violation("Oxygen.Editor.MaterialEditor", "Oxygen.Editor.Pickers")

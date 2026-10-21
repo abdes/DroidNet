@@ -1,10 +1,10 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0 and S1.1 to S1.14 (Assets, Cook on change,
+Status: `in progress` — Phase 0, S1.1 to S1.14 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
 Scenes, LivePreview, Asset family modules, Cook on change over checked inputs,
 Shell, Unsaved documents, Features, Dissolve the World Editor, Test boundaries)
-are done; see the ledger in section 6. Phase 1 follows
+and Phase 2 (scope factory and topology) are done; see the ledger in section 6. Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -642,7 +642,15 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   `RouterScopeModule` lives with the local router registrations, in
   `Oxygen.Editor.Routing`.
 - **S2.2** Topology test over the shared builder, with the reviewed
-  `RegisterDelegate` allowlist.
+  `RegisterDelegate` allowlist. The composition root's registrations move out of
+  the application, unchanged, into `Oxygen.Editor.Composition` (spec 6.7's home
+  of `EditorModule` and `WorkspaceWindowModule`), a library because an
+  executable cannot be tested; `Program.cs` keeps startup only. `TestHelpers`
+  gets the host-rules builder of spec 6.11 (`HostContainer`). The checks read
+  the constructors of each scope's reflection registrations: a scope resolves
+  its parent's services through a delegate factory, which
+  `GenerateResolutionExpressions` cannot see into. Every scope registers its own
+  `ScopeHandle`, and only the view models that create child scopes take one.
 - **S2.3** Workspace and Content Explorer children move onto the factory; the
   three project-bound preference services and the keyed settings manager move to
   the window module; `DockPanelViewModel`/`DockPanel` move to the window module;
@@ -651,10 +659,13 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 
 ### Phase 3: registration modules
 
-- **S3.1** Split `Program.cs` into the Editor modules of spec 6.7, one subsystem
-  per commit, including the Assets registration; eager resolves become
-  activation lists. Hand-built test containers move to a shared
-  host-equivalent builder in `TestHelpers` that composes these modules (the
+- **S3.1** Split `EditorModule` (in `Oxygen.Editor.Composition` since S2.2) into
+  the Editor modules of spec 6.7, one subsystem per commit, including the Assets
+  registration; eager resolves become activation lists. A registration whose
+  spec home is another module (Shell, ContentPipeline, Assets and so on) moves
+  from `Oxygen.Editor.Composition` to that module, and so do the registrations
+  of `WorkspaceWindowModule` that belong to one. Hand-built test containers move
+  to `TestHelpers`' host-equivalent builder, which composes these modules (the
   rest of S1.15). Gate: topology test, reviewer's editor build.
 
 ### Phase 4: Project Session
@@ -745,8 +756,8 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.12 Features                              | `done`        | See the feature table below; the Texture Editor and History panel moved to ED-M09A                                                                                                          |
 | S1.13 Dissolve the World Editor             | `done`        | The workspace window is the composition root's; its native integration tests and benchmark are the composition root's integration suite; the initial scene lookups are Scenes' `SceneFiles` |
 | S1.14 Test boundaries                       | `done`        | Kits of Managed.Core, Managed.Assets and Interop; the ContentPipeline kit fakes `ICookPublicationReader`, which the Content Explorer consumes                                               |
-| S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; the shared host-equivalent builder lands with S3.1                                                                                             |
-| S2.1 to S2.3 Scope factory and topology     | `in progress` | S2.1 done: `DroidNet.Composition`, and `RouterScopeModule` in `Oxygen.Editor.Routing`; `ScopeRegistrations.FindUndeclaredShadows` is the shadow check the topology test reuses              |
+| S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; `HostContainer` (S2.2) gives the host's rules; composing the registration modules and moving the hand-built containers onto it land with S3.1  |
+| S2.1 to S2.3 Scope factory and topology     | `done`        | `DroidNet.Composition`; the composition root in `Oxygen.Editor.Composition` with its topology and project-switch tests; workspace and Content Explorer scopes on the factory                |
 | S3.1 Registration modules                   | `not started` |                                                                                                                                                                                             |
 | S4.1 to S4.4 Project Session                | `not started` |                                                                                                                                                                                             |
 | S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                                                                                                                                                             |

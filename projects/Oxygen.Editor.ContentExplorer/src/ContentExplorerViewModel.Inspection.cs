@@ -23,13 +23,13 @@ public sealed partial class ContentExplorerViewModel
     public async Task<bool> ShowAssetAsync(AssetPath asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        if (this.isDisposed || this.childContainer is null || this.localRouter is null || this.browserState is null)
+        if (this.isDisposed || this.scope is null || this.localRouter is null || this.browserState is null)
         {
             return false;
         }
 
         var project = projectContextService.ActiveProject;
-        var item = await this.childContainer.Resolve<IAssetFeed>().ResolveAsync(asset).ConfigureAwait(true);
+        var item = await this.scope.Resolver.Resolve<IAssetFeed>().ResolveAsync(asset).ConfigureAwait(true);
         return item is not null && item.PrimaryState != AssetState.Missing && ReferenceEquals(project, projectContextService.ActiveProject)
             && !this.isDisposed && project is not null && await this.RevealAssetsAsync(project, [item]).ConfigureAwait(true);
     }
@@ -40,13 +40,13 @@ public sealed partial class ContentExplorerViewModel
     public async Task<bool> ShowAssetsAsync(IReadOnlyCollection<AssetPath> assets)
     {
         ArgumentNullException.ThrowIfNull(assets);
-        if (assets.Count == 0 || this.isDisposed || this.childContainer is null || this.localRouter is null || this.browserState is null
+        if (assets.Count == 0 || this.isDisposed || this.scope is null || this.localRouter is null || this.browserState is null
             || projectContextService.ActiveProject is not { } project)
         {
             return false;
         }
 
-        var provider = this.childContainer.Resolve<IAssetFeed>();
+        var provider = this.scope.Resolver.Resolve<IAssetFeed>();
         await provider.RefreshAsync().ConfigureAwait(true);
         var items = await provider.Items.FirstAsync().ToTask().ConfigureAwait(true);
         var requested = assets.ToHashSet();

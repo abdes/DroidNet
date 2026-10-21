@@ -7,7 +7,7 @@
     ],
     "boundaries": [
       "Managed/WinUI libraries and editor modules live under projects/. Oxygen.Engine is a separate Conan/CMake/C++ project, excluded from managed solution generation.",
-      "The editor's startup, DI and routing wiring is in projects/Oxygen.Editor/src/Program.cs. It uses Bootstrap, Hosting, DryIoc and the MVVM generators.",
+      "The editor's startup is projects/Oxygen.Editor/src/Program.cs; its DI and routing wiring is projects/Oxygen.Editor.Composition/src/EditorModule.cs. It uses Bootstrap, Hosting, DryIoc and the MVVM generators.",
       "Editor/interop builds consume projects/Oxygen.Engine/out/install/<Configuration>; editor-only work does not authorize an engine build."
     ],
     "workflow": [

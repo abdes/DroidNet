@@ -63,6 +63,7 @@
         <ProjectReference Include="$(ProjectsRoot)\Controls\DynamicTree\src\Controls.DynamicTree.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Aura\src\Aura.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Bootstrap\src\Bootstrap.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Composition\src\Oxygen.Editor.Composition.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Config\src\Config.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Hosting\src\Hosting.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Controls\OutputConsole\src\Controls.OutputConsole.csproj" />

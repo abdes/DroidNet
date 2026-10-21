@@ -9,7 +9,7 @@ namespace Oxygen.Editor.Diagnostics;
 /// <summary>
 /// Host-level in-memory operation result store.
 /// </summary>
-[System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated through the singleton DryIoc registration in Program.")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated through the singleton registration of the editor module.")]
 internal sealed partial class OperationResultStore : IOperationResultStore
 {
     private readonly Lock syncLock = new();
