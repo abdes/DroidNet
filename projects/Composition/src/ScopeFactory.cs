@@ -49,6 +49,37 @@ public sealed class ScopeFactory
     }
 
     /// <summary>
+    ///     Creates the handle of the root scope over the host's container, after registering the root's
+    ///     modules into that container, and creates their activation lists.
+    /// </summary>
+    /// <typeparam name="TLayer">The layer of the root scope.</typeparam>
+    /// <param name="host">The container the host built. The handle never disposes it.</param>
+    /// <param name="modules">The modules that register what the root scope owns, in registration order.</param>
+    /// <returns>The root scope's handle.</returns>
+    /// <exception cref="ContainerException">The host already has a root scope.</exception>
+    /// <remarks>
+    ///     The root has no parent, so its modules declare no shadows. The root registers its handle after
+    ///     its modules, then creates the activation list of every module, module by module, in order. The
+    ///     host's container belongs to the caller: when activation fails, the caller disposes it.
+    /// </remarks>
+    public static ScopeHandle CreateRoot<TLayer>(IContainer host, IEnumerable<IScopeModule<TLayer>> modules)
+        where TLayer : IScopeLayer
+    {
+        ArgumentNullException.ThrowIfNull(host);
+        ArgumentNullException.ThrowIfNull(modules);
+
+        IReadOnlyList<IScopeModule<TLayer>> rootModules = [.. modules];
+        foreach (var module in rootModules)
+        {
+            module.Register(host);
+        }
+
+        var handle = CreateRoot(host);
+        Activate(host, rootModules);
+        return handle;
+    }
+
+    /// <summary>
     ///     Creates a scope of the layer <typeparamref name="TLayer" /> under <paramref name="parent" />.
     /// </summary>
     /// <typeparam name="TLayer">The layer of the new scope.</typeparam>
@@ -126,7 +157,7 @@ public sealed class ScopeFactory
         }
     }
 
-    private static void Activate<TLayer>(Container container, IReadOnlyList<IScopeModule<TLayer>> modules)
+    private static void Activate<TLayer>(IResolver container, IReadOnlyList<IScopeModule<TLayer>> modules)
         where TLayer : IScopeLayer
     {
         foreach (var serviceType in modules.SelectMany(module => module.Activation))

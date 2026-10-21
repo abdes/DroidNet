@@ -12,7 +12,13 @@ namespace DroidNet.Composition.Tests.TestSupport;
 /// </summary>
 internal static class Fixtures
 {
-    /// <summary>The session layer of the test chain root &gt; session &gt; window &gt; panel.</summary>
+    /// <summary>The root layer of the test chain root &gt; session &gt; window &gt; panel.</summary>
+    [SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "a layer is a compile-time marker")]
+    public interface IRootLayer : IScopeLayer
+    {
+    }
+
+    /// <summary>The session layer of the test chain.</summary>
     [SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "a layer is a compile-time marker")]
     public interface ISessionLayer : IScopeLayer
     {

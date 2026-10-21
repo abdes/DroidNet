@@ -93,6 +93,12 @@ var window = factory.Create<IWindowLayer>(
 When registration or activation fails, the new container is disposed and the
 parent is unchanged.
 
+The root scope is the host's own container. `ScopeFactory.CreateRoot(host,
+rootModules)` registers the root's modules into it, registers the root handle
+and then creates their activation lists. The root has no parent, so its modules
+declare no shadows, and the host container stays the caller's when activation
+fails.
+
 ## Disposal
 
 `ScopeHandle.DisposeAsync` disposes, in order:

@@ -49,6 +49,27 @@ public sealed class ScopeActivationTests
     }
 
     [TestMethod]
+    public async Task CreateRoot_Modules_RegisterIntoTheHostThenActivateInModuleThenListOrder()
+    {
+        // Arrange
+        var log = new EventLog();
+        using var host = TestScopes.CreateHost(scope => scope.RegisterInstance(log));
+        IScopeModule<IRootLayer>[] modules =
+        [
+            new TestModule<IRootLayer>(scope => scope.Register<SecondRecorder>(Reuse.Singleton)) { Activation = [typeof(SecondRecorder)] },
+            new TestModule<IRootLayer>(scope => scope.Register<FirstRecorder>(Reuse.Singleton)) { Activation = [typeof(FirstRecorder)] },
+        ];
+
+        // Act
+        await using var root = ScopeFactory.CreateRoot(host, modules);
+
+        // Assert
+        _ = log.Events.Should().Equal("created second", "created first");
+        _ = host.Resolve<ScopeHandle>().Should().BeSameAs(root);
+        _ = root.Resolver.Resolve<FirstRecorder>().Should().BeSameAs(host.Resolve<FirstRecorder>());
+    }
+
+    [TestMethod]
     public async Task Create_ActivationOfAnotherModuleRegistration_CreatesIt()
     {
         // Arrange
