@@ -39,8 +39,8 @@ public sealed class SceneInspectorModule : IFeatureModule
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        // The view model's editors end with the window, which disposes it.
-        scope.Register<SceneInspectorViewModel>(Reuse.Transient, setup: Setup.With(trackDisposableTransient: true));
+        // One view model per window, which its views share and the window disposes.
+        scope.Register<SceneInspectorViewModel>(Reuse.Singleton);
         scope.Register<SceneInspectorView>(Reuse.Transient);
 
         // The views the panel's view locator resolves for its editors; the panel creates the editors themselves.

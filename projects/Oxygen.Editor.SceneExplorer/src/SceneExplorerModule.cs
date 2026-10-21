@@ -31,8 +31,8 @@ public sealed class SceneExplorerModule : IFeatureModule
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        // The view model's tree subscriptions end with the window, which disposes it.
-        scope.Register<SceneExplorerViewModel>(Reuse.Transient, setup: Setup.With(trackDisposableTransient: true));
+        // One view model per window, which its views share and the window disposes.
+        scope.Register<SceneExplorerViewModel>(Reuse.Singleton);
         scope.Register<SceneExplorerView>(Reuse.Transient);
     }
 }
