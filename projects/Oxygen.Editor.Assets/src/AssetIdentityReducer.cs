@@ -120,9 +120,9 @@ internal sealed class AssetIdentityReducer
            || string.Equals(mountPoint, "Imported", StringComparison.Ordinal)
            || string.Equals(mountPoint, "Build", StringComparison.Ordinal);
 
-    // Only the files of authoring mounts are project sources.
-    private static FileSystemPath? TryResolveSourcePath(ProjectContext project, AssetPath path)
-        => project.Find(path) is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location ? location.File : null;
+    // Any file of the project opens from its row; only the files of authoring mounts cook.
+    private static ProjectAssetLocation? FindProjectFile(ProjectContext project, AssetPath path)
+        => project.Find(path) is { IsProjectFile: true, IsMountRoot: false } location ? location : null;
 
     private static string GetDisplayPath(AssetRecord selected, ProjectContext project)
     {
@@ -155,9 +155,13 @@ internal sealed class AssetIdentityReducer
             return CreatePackagedItem(identity, cooked);
         }
 
-        var sourcePath = source is null ? null : TryResolveSourcePath(project, source.Identity);
-        var descriptorPath = descriptor is null ? null : TryResolveSourcePath(project, descriptor.Identity);
-        var cooks = cooked is not null || descriptor is not null || (source is not null && AssetFileTypes.Is(source.Identity.Name, AssetFileCategory.Script));
+        var sourceFile = source is null ? null : FindProjectFile(project, source.Identity);
+        var descriptorFile = descriptor is null ? null : FindProjectFile(project, descriptor.Identity);
+        var sourcePath = sourceFile?.File;
+        var descriptorPath = descriptorFile?.File;
+        var cooks = cooked is not null
+            || descriptorFile is { MountKind: ProjectMountKind.Authoring }
+            || (sourceFile is { MountKind: ProjectMountKind.Authoring } && AssetFileTypes.Is(sourceFile.Path.Name, AssetFileCategory.Script));
         var cookedPath = cooked?.Cooked is { } metadata ? TryResolveIndexedDescriptorPath(metadata) : null;
         var diagnostics = new List<string>();
 

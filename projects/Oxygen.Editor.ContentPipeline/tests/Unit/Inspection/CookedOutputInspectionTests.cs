@@ -94,7 +94,7 @@ public sealed class CookedOutputInspectionTests
         var pipeline = CreateService(workspace, api.Object, new CapturingSceneDescriptorGenerator([]));
         var inspection = pipeline.InspectCookedOutputAsync(scopeUri: null, this.TestContext.CancellationToken);
         await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        workspace.ContextService.Close();
+        workspace.Session.End();
         var wait = () => inspection;
         _ = await wait.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         await File.WriteAllTextAsync(index, "reader released", this.TestContext.CancellationToken).ConfigureAwait(false);

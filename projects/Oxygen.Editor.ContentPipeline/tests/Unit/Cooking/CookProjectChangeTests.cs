@@ -18,7 +18,7 @@ public sealed class CookProjectChangeTests
     [TestMethod]
     public async Task ProjectChangeOwnsTheWriterThroughContextReplacementAndResume()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var replaced = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var resume = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -27,7 +27,7 @@ public sealed class CookProjectChangeTests
             {
                 coordinator.VerifyWriter(operation);
                 token.ThrowIfCancellationRequested();
-                context.Activate(operation.Project with { Thumbnail = "updated.png" });
+                context.ChangeContext(operation.Project with { Thumbnail = "updated.png" });
                 replaced.SetResult();
                 await resume.Task.ConfigureAwait(false);
             },

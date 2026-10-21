@@ -30,7 +30,8 @@ public sealed class AssetsViewModelCommandTests
     [TestMethod]
     public async Task SelectionDecidesCommandAvailability()
     {
-        var (browser, state, _) = await CreateExplorerAsync().ConfigureAwait(false);
+        var (browser, state, _, session) = await CreateExplorerAsync().ConfigureAwait(false);
+        using (session)
         using (browser)
         {
             _ = browser.CopyPathCommand.CanExecute(parameter: null).Should().BeFalse();
@@ -67,9 +68,10 @@ public sealed class AssetsViewModelCommandTests
         await File.WriteAllTextAsync(clayPath, "{}").ConfigureAwait(false);
         var workflow = new Mock<IAssetRelocationWorkflow>();
         _ = workflow.Setup(value => value.PromptNameAsync("Rename", "Clay")).ReturnsAsync("Brick");
-        var (browser, state, _) = await CreateExplorerAsync(root, workflow.Object).ConfigureAwait(false);
+        var (browser, state, _, session) = await CreateExplorerAsync(root, workflow.Object).ConfigureAwait(false);
         try
         {
+            using (session)
             using (browser)
             {
                 var clay = CreateAsset("/Content/Materials/Clay.omat", AssetKind.Material, descriptor: FileSystemPath.From(clayPath));
@@ -122,9 +124,10 @@ public sealed class AssetsViewModelCommandTests
         _ = Directory.CreateDirectory(Path.Combine(root, "Content", "Props"));
         await File.WriteAllTextAsync(clayPath, "{}").ConfigureAwait(false);
         var workflow = new Mock<IAssetRelocationWorkflow>();
-        var (browser, state, _) = await CreateExplorerAsync(root, workflow.Object).ConfigureAwait(false);
+        var (browser, state, _, session) = await CreateExplorerAsync(root, workflow.Object).ConfigureAwait(false);
         try
         {
+            using (session)
             using (browser)
             {
                 state.PublishSelection([CreateAsset("/Content/Materials/Clay.omat", AssetKind.Material, descriptor: FileSystemPath.From(clayPath))]);
@@ -154,7 +157,8 @@ public sealed class AssetsViewModelCommandTests
     [TestMethod]
     public async Task NewFolderTargetsWritableFoldersOnly()
     {
-        var (browser, state, folders) = await CreateExplorerAsync().ConfigureAwait(false);
+        var (browser, state, folders, session) = await CreateExplorerAsync().ConfigureAwait(false);
+        using (session)
         using (browser)
         {
             state.SetSelectedFolders([AssetPath.Parse("/Content/Materials")]);
@@ -168,11 +172,29 @@ public sealed class AssetsViewModelCommandTests
         }
     }
 
-    private static async Task<(AssetsViewModel browser, ContentExplorerState state, Mock<IContentFoldersPane> folders)> CreateExplorerAsync(string? root = null, IAssetRelocationWorkflow? relocation = null)
+    /// <summary>Only content cooks, so the cooked output commands are offered for content and not for the project's own files.</summary>
+    /// <returns>The asynchronous availability check.</returns>
+    [TestMethod]
+    public async Task CookedOutputCommandsTargetContentOnly()
     {
-        var projects = new ProjectContextService();
+        var (browser, state, _, session) = await CreateExplorerAsync().ConfigureAwait(false);
+        using (session)
+        using (browser)
+        {
+            state.SetSelectedFolders([AssetPath.Parse("/Content/Materials")]);
+            _ = browser.InspectCookedOutputCommand.CanExecute(parameter: null).Should().BeTrue();
+            _ = browser.ValidateCookedOutputCommand.CanExecute(parameter: null).Should().BeTrue();
+
+            state.SetSelectedFolders([AssetPath.Parse("/project/Media")]);
+            _ = browser.InspectCookedOutputCommand.CanExecute(parameter: null).Should().BeFalse();
+            _ = browser.ValidateCookedOutputCommand.CanExecute(parameter: null).Should().BeFalse();
+        }
+    }
+
+    private static async Task<(AssetsViewModel browser, ContentExplorerState state, Mock<IContentFoldersPane> folders, TestSession session)> CreateExplorerAsync(string? root = null, IAssetRelocationWorkflow? relocation = null)
+    {
         // A test that names a folder works on the disk; the others in memory.
-        projects.Activate(TestProject.Create(root is null ? new MockFileSystem() : new RealFileSystem(), root).Context with
+        var session = new TestSession(TestProject.Create(root is null ? new MockFileSystem() : new RealFileSystem(), root).Context with
         {
             Name = "Commands",
             AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
@@ -183,7 +205,7 @@ public sealed class AssetsViewModelCommandTests
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new DroidNet.Mvvm.Converters.ViewModelToView(Mock.Of<DroidNet.Mvvm.IViewLocator>()),
             state,
-            projects,
+            session,
             Mock.Of<IContentPipelineService>(),
             Mock.Of<IAssetFeed>(),
             Mock.Of<IOperationResultPublisher>(),
@@ -196,7 +218,7 @@ public sealed class AssetsViewModelCommandTests
             new TextureImport(new MockFileSystem()),
             relocation);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(false);
-        return (browser, state, folders);
+        return (browser, state, folders, session);
     }
 
     private static AssetEntry CreateAsset(string path, AssetKind kind, FileSystemPath? descriptor)

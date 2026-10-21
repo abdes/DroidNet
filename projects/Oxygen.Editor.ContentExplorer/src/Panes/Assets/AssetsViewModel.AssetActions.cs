@@ -169,10 +169,7 @@ public partial class AssetsViewModel
 
     private AssetTarget Describe(AssetEntry asset)
     {
-        if (projectContextService.ActiveProject is not { } project)
-        {
-            return default;
-        }
+        var project = session.Context;
 
         var path = asset.Kind == AssetKind.Folder
             ? RelocationPaths.ToPhysical(project, asset.Identity)

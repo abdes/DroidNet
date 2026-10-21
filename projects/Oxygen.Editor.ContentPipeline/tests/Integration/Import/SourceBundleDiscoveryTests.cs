@@ -197,7 +197,7 @@ public sealed class SourceBundleDiscoveryTests
         {
             if (closeProject)
             {
-                workspace.Projects.Close();
+                workspace.Session.End();
             }
             else
             {

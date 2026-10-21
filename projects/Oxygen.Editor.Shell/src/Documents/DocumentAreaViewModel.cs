@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Mvvm;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI;
 
 namespace Oxygen.Editor.Shell.Documents;
 
@@ -23,6 +24,7 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
     private readonly IDocumentService documents;
     private readonly IDocumentArea area;
     private readonly IDocumentConfirmations confirmations;
+    private readonly WindowId window;
     private readonly IViewLocator viewLocator;
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "A view switch in flight releases the gate after Dispose; the gate holds no wait handle.")]
@@ -36,13 +38,15 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
     /// </summary>
     /// <param name="documents">The document service of the area.</param>
     /// <param name="area">The document area of the window.</param>
-    /// <param name="confirmations">The window's confirmations, which the banner's actions ask.</param>
+    /// <param name="confirmations">The confirmations, which the banner's actions ask.</param>
+    /// <param name="window">The window of the area, which asks the banner's confirmations.</param>
     /// <param name="viewLocator">Finds the view of an editor.</param>
     /// <param name="loggerFactory">The logger factory, if any.</param>
     public DocumentAreaViewModel(
         IDocumentService documents,
         IDocumentArea area,
         IDocumentConfirmations confirmations,
+        WindowId window,
         IViewLocator viewLocator,
         ILoggerFactory? loggerFactory = null)
     {
@@ -54,6 +58,7 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
         this.documents = documents;
         this.area = area;
         this.confirmations = confirmations;
+        this.window = window;
         this.viewLocator = viewLocator;
 
         this.documents.ActiveEditorChanged += this.OnServiceActiveEditorChanged;

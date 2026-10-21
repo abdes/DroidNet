@@ -2,10 +2,12 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using DroidNet.Aura.Windowing;
 using DroidNet.Composition;
 using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.LivePreview.Session;
@@ -13,6 +15,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scripting;
+using Oxygen.Editor.Sessions;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Layout;
@@ -25,17 +28,19 @@ namespace Oxygen.Editor.Workspace;
 ///     The ViewModel of the world editor docking workspace.
 /// </summary>
 /// <remarks>
-///     The workspace window has its own scope, created under the editor's scope, and its own local router. Routes and
+///     The workspace window has its own scope, created under the open project session's scope, and its own local router. Routes and
 ///     resolutions are isolated from the rest of the application: the view model resolves only through the window's
 ///     scope, and navigations, even the absolute ones, are relative to the workspace.
 /// </remarks>
 public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 {
     private readonly IReadOnlyList<IFeatureModule> modules;
-    private readonly IProjectContextService projectContextService;
+    private readonly ProjectSessionHost sessions;
+    private readonly IWindowManagerService windows;
     private readonly IProjectManagerService projectManager;
     private readonly IProjectUsageService projectUsage;
     private readonly ILogger logger;
+    private IProjectSession? session;
     private IDocumentService? documentService;
     private IPlacementService? placement;
     private IAssetCatalog? assetCatalog;
@@ -45,29 +50,28 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     /// <summary>
     ///     Initializes a new instance of the <see cref="WorkspaceViewModel"/> class.
     /// </summary>
-    /// <param name="scopes">The factory of the workspace window's scope.</param>
-    /// <param name="parent">The scope the workspace window's scope is created under.</param>
+    /// <param name="sessions">The project session, which creates the workspace window's scope and owns it.</param>
+    /// <param name="windows">The window manager, which records the workspace window's session.</param>
     /// <param name="router">The router for navigation within the workspace.</param>
-    /// <param name="projectContextService">The active project context service.</param>
     /// <param name="projectManager">The project authoring service.</param>
     /// <param name="projectUsage">The per-project usage store (last-opened scene).</param>
     /// <param name="modules">The features whose panels and services each workspace window has.</param>
     /// <param name="loggerFactory">Optional logger factory for logging.</param>
     public WorkspaceViewModel(
-        ScopeFactory scopes,
-        ScopeHandle parent,
+        ProjectSessionHost sessions,
+        IWindowManagerService windows,
         IRouter router,
-        IProjectContextService projectContextService,
         IProjectManagerService projectManager,
         IProjectUsageService projectUsage,
         IEnumerable<IFeatureModule> modules,
         ILoggerFactory? loggerFactory = null)
-        : base(scopes, parent, router, loggerFactory)
+        : base(router, loggerFactory)
     {
         ArgumentNullException.ThrowIfNull(modules);
         this.modules = [.. modules];
+        this.sessions = sessions;
+        this.windows = windows;
         this.RoutesConfig = CreateRoutes(this.modules);
-        this.projectContextService = projectContextService;
         this.projectManager = projectManager;
         this.projectUsage = projectUsage;
         this.logger = loggerFactory?.CreateLogger<WorkspaceViewModel>() ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceViewModel>.Instance;
@@ -90,13 +94,17 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 
         // The preview starts the engine and mounts the project's content; the start scene opens even when it fails, so
         // authoring still works and the workspace shows why the preview is unavailable.
-        if (this.previewSession is { } session && this.projectContextService.ActiveProject is { } project)
+        if (this.previewSession is { } preview && this.session is { } session)
         {
-            _ = await session.StartAsync(project).ConfigureAwait(true);
+            _ = await preview.StartAsync(session.Context).ConfigureAwait(true);
         }
 
         await this.OpenInitialSceneAsync().ConfigureAwait(true);
     }
+
+    /// <inheritdoc />
+    protected override ScopeHandle CreateWindowScope(IReadOnlyList<IScopeModule<IWindowLayer>> modules, Action<IRegistrator>? hostInstances)
+        => this.sessions.CreateWindowScope(modules, hostInstances);
 
     /// <inheritdoc />
     protected override IEnumerable<IScopeModule<IWindowLayer>> CreateWindowModules()
@@ -106,6 +114,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     protected override void OnWindowScopeOpened(IResolver window)
     {
         ArgumentNullException.ThrowIfNull(window);
+
+        // The window is one of the session's: closing the session's last window returns to the Start window and closes
+        // the session.
+        this.session = window.Resolve<IProjectSession>();
+        this.windows.SetMetadata(window.Resolve<WindowId>(), EditorWindows.SessionMetadataKey, this.session);
         this.assetCatalog = window.Resolve<IAssetCatalog>();
         this.documentService = window.Resolve<IDocumentService>();
         this.placement = window.Resolve<IPlacementService>();
@@ -135,6 +148,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             this.documentService = null;
             this.placement = null;
             this.assetCatalog = null;
+            this.session = null;
         }
 
         base.Dispose(disposing);
@@ -160,21 +174,23 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 
     private async Task OpenInitialSceneAsync()
     {
-        if (this.projectManager.CurrentProject is not { } project
-            || this.projectContextService.ActiveProject is not { } context
+        if (this.session is not { } session
             || this.assetCatalog is not { } catalog
-            || !context.OpenInitialScene
-            || ReferenceEquals(project, this.initialSceneProject))
+            || !session.Context.OpenInitialScene
+            || ReferenceEquals(session.Project, this.initialSceneProject))
         {
             return;
         }
+
+        var project = session.Project;
+        var context = session.Context;
 
         this.initialSceneProject = project;
 
         // Seed the default scene for projects that predate DefaultSceneId before resolving it.
         await this.MigrateDefaultSceneAsync(catalog, project, context).ConfigureAwait(true);
 
-        var scene = await SceneFiles.FindInitialAsync(catalog, this.projectContextService.ActiveProject ?? context).ConfigureAwait(true);
+        var scene = await SceneFiles.FindInitialAsync(catalog, session.Context).ConfigureAwait(true);
         if (scene is null)
         {
             return;

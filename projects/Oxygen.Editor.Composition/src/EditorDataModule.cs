@@ -5,6 +5,7 @@
 using DroidNet.Composition;
 using DryIoc;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
@@ -17,6 +18,10 @@ namespace Oxygen.Editor;
 ///     The editor's persistent state in the editor scope: its database, the editor settings stored in it and the usage
 ///     of projects and templates.
 /// </summary>
+/// <remarks>
+///     The database's contexts come from one pool, configured once. A context resolved here is short-lived: its owner
+///     disposes it, which returns it to the pool, so repeated reads and writes create no new context.
+/// </remarks>
 internal sealed class EditorDataModule : IScopeModule<IApplicationLayer>
 {
     /// <inheritdoc />
@@ -36,20 +41,29 @@ internal sealed class EditorDataModule : IScopeModule<IApplicationLayer>
         RegisterPersistentState(scope);
     }
 
-    // Register PersistentState to be created lazily so IOxygenPathFinder is resolved later
+    /// <summary>Rents a context over the editor's state database from the editor's pool.</summary>
+    /// <param name="resolver">Resolves the editor's pool of contexts.</param>
+    /// <returns>A context, which its owner disposes to return it to the pool.</returns>
+    internal static PersistentState CreatePersistentState(IResolverContext resolver)
+        => resolver.Resolve<IDbContextFactory<PersistentState>>().CreateDbContext();
+
+    // The pool is configured once, when the database is first used, so IOxygenPathFinder is resolved late.
     private static void RegisterPersistentState(IRegistrator scope)
-        => scope.RegisterDelegate(
-            resolver =>
-            {
-                var path = resolver.Resolve<IOxygenPathFinder>().StateDatabasePath;
-                Log.Information("Configuring PersistentState database at path: {DbPath}", path);
-                return new PersistentState(
-                    new DbContextOptionsBuilder<PersistentState>()
-                        .UseLoggerFactory(resolver.Resolve<ILoggerFactory>())
-                        .EnableDetailedErrors()
-                        .EnableSensitiveDataLogging()
-                        .UseSqlite($"Data Source={resolver.Resolve<IOxygenPathFinder>().StateDatabasePath}; Mode=ReadWriteCreate")
-                    .Options);
-            },
-            Reuse.Transient);
+    {
+        scope.RegisterDelegate<IDbContextFactory<PersistentState>>(CreatePool, Reuse.Singleton);
+        scope.RegisterDelegate<PersistentState>(CreatePersistentState, Reuse.Transient);
+    }
+
+    private static PooledDbContextFactory<PersistentState> CreatePool(IResolverContext resolver)
+    {
+        var path = resolver.Resolve<IOxygenPathFinder>().StateDatabasePath;
+        Log.Information("Configuring PersistentState database at path: {DbPath}", path);
+        return new PooledDbContextFactory<PersistentState>(
+            new DbContextOptionsBuilder<PersistentState>()
+                .UseLoggerFactory(resolver.Resolve<ILoggerFactory>())
+                .EnableDetailedErrors()
+                .EnableSensitiveDataLogging()
+                .UseSqlite($"Data Source={path}; Mode=ReadWriteCreate")
+            .Options);
+    }
 }

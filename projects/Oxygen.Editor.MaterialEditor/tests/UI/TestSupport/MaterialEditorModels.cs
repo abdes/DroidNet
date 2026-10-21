@@ -12,9 +12,10 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Materials;
 using Oxygen.Editor.Materials.Documents;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.MaterialEditor.TestSupport;
@@ -32,6 +33,7 @@ internal static partial class MaterialEditorModels
         var kind = new MaterialDocumentKind(validation);
         var files = new MemoryFiles(Encoding.UTF8.GetBytes(MaterialTemplates.New("UI")));
         var documents = new OpenDocuments([kind], files);
+        var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
         try
         {
             var opening = documents.OpenAsync(new DocumentFile(FileSystemPath.From("C:/UI/Content/Materials/UI.omat.json"), AssetPath.Parse("/Content/Materials/UI.omat")));
@@ -40,10 +42,11 @@ internal static partial class MaterialEditorModels
                 throw new InvalidOperationException("An in-memory material opens at once.");
             }
 
-            return new MaterialEditorModel(documents, new DocumentTab(document, new DocumentEditorDescriptor(kind, static _ => new object())), validation, assetProvider);
+            return new MaterialEditorModel(documents, new DocumentTab(document, new DocumentEditorDescriptor(kind, static _ => new object())), validation, session, assetProvider);
         }
         catch
         {
+            session.Dispose();
             documents.Dispose();
             throw;
         }
@@ -53,8 +56,9 @@ internal static partial class MaterialEditorModels
     /// <param name="documents">The open documents that hold the material.</param>
     /// <param name="tab">The material's tab.</param>
     /// <param name="validation">The material rules the edits check.</param>
+    /// <param name="session">The project session the editor lives in.</param>
     /// <param name="assetProvider">The asset feed the editor reads, or one that never changes.</param>
-    internal sealed partial class MaterialEditorModel(OpenDocuments documents, DocumentTab tab, MaterialValidation validation, IAssetFeed? assetProvider) : IDisposable
+    internal sealed partial class MaterialEditorModel(OpenDocuments documents, DocumentTab tab, MaterialValidation validation, TestSession session, IAssetFeed? assetProvider) : IDisposable
     {
         /// <summary>Gets the material editor.</summary>
         public MaterialEditorViewModel Editor { get; } = new(
@@ -63,7 +67,7 @@ internal static partial class MaterialEditorModels
             assetProvider ?? Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             CreateStatusHosting().DispatcherScheduler,
             Mock.Of<IMaterialCookService>(),
-            Mock.Of<IProjectContextService>());
+            session);
 
         /// <inheritdoc/>
         public void Dispose()
@@ -71,6 +75,7 @@ internal static partial class MaterialEditorModels
             this.Editor.Dispose();
             tab.Dispose();
             documents.Dispose();
+            session.Dispose();
         }
     }
 

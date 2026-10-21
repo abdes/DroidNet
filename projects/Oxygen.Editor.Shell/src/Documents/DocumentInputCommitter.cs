@@ -5,6 +5,7 @@
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Windowing;
 using DroidNet.Controls;
+using DroidNet.Documents;
 using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Input;
@@ -13,19 +14,23 @@ using Microsoft.UI.Xaml.Media;
 namespace Oxygen.Editor.Shell.Documents;
 
 /// <summary>
-/// Commits the pending text of the focused <see cref="NumberBox"/> in one window, the way leaving the box would.
+/// Commits the pending text of the focused <see cref="NumberBox"/> in a window, the way leaving the box would.
 /// </summary>
 /// <param name="windows">The window manager, which finds the window.</param>
-/// <param name="windowId">The window whose focused control is committed.</param>
-public sealed class DocumentInputCommitter(IWindowManagerService windows, WindowId windowId) : IDocumentInputCommitter
+/// <param name="tabs">The tabs of every window, which find the window that shows a document.</param>
+public sealed class DocumentInputCommitter(IWindowManagerService windows, IDocumentTabs tabs) : IDocumentInputCommitter
 {
     /// <inheritdoc/>
-    public Task CommitAsync()
+    public Task CommitAsync(DocumentId document)
+        => tabs.FindWindow(document) is { } window ? this.CommitAsync(window) : Task.CompletedTask;
+
+    /// <inheritdoc/>
+    public Task CommitAsync(WindowId window)
     {
-        var window = windows.GetWindow(windowId) ?? throw new InvalidOperationException("The document window is unavailable.");
-        return window.DispatcherQueue.EnqueueAsync(() =>
+        var owner = windows.GetWindow(window) ?? throw new InvalidOperationException("The document window is unavailable.");
+        return owner.DispatcherQueue.EnqueueAsync(() =>
         {
-            if (window.Window.Content?.XamlRoot is not { } root)
+            if (owner.Window.Content?.XamlRoot is not { } root)
             {
                 return;
             }

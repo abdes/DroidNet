@@ -46,10 +46,10 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         var source = TestAssetEntries.ImportedModel(imported: false);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([source]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
-        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
-        using var details = new AssetDetailsViewModel(state, projects, Mock.Of<IDesktopIntegration>());
+        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
+        using var details = new AssetDetailsViewModel(state, session, Mock.Of<IDesktopIntegration>());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {
@@ -95,7 +95,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         var output = TestAssetEntries.ImportedOutputs(source).Single(static row => row.Kind == AssetKind.Geometry);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([source, output]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
         var reveal = new Mock<IAssetReveal>();
         AssetPath? inspected = null;
@@ -104,14 +104,14 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
             .Callback((CookedInspectionRequest request) => inspected = request.Asset)
             .ReturnsAsync(true);
         var pipeline = new Mock<IContentPipelineService>();
-        _ = pipeline.Setup(value => value.ReimportSourceAsync(source.Identity, projects.ActiveProject!, It.IsAny<CancellationToken>())).ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
-        using var layout = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        _ = pipeline.Setup(value => value.ReimportSourceAsync(source.Identity, session.Context, It.IsAny<CancellationToken>())).ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.Asset, OperationStatus.Succeeded, [], [], Inspection: null, Validation: null));
+        using var layout = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         var layoutView = new TilesLayoutView
         {
             ViewModel = layout,
         };
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
-        using var browser = CreateAssetsModel(provider.Object, projects, state, layout, layoutView, pipeline.Object, assetReveal: reveal.Object, cookedInspections: inspections.Object);
+        using var browser = CreateAssetsModel(provider.Object, session, state, layout, layoutView, pipeline.Object, assetReveal: reveal.Object, cookedInspections: inspections.Object);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         browser.LoadContent(layout, "right");
         var view = new AssetsView
@@ -123,7 +123,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         layout.SelectedAsset = source;
         await WaitForRenderAsync().ConfigureAwait(true);
         await InvokeImportMenuActionAsync(view, "Reimport", () => browser.ReimportSelectedSourceCommand.ExecutionTask).ConfigureAwait(true);
-        pipeline.Verify(value => value.ReimportSourceAsync(source.Identity, projects.ActiveProject!, It.IsAny<CancellationToken>()), Times.Once);
+        pipeline.Verify(value => value.ReimportSourceAsync(source.Identity, session.Context, It.IsAny<CancellationToken>()), Times.Once);
         await browser.InspectCookedOutputCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         _ = inspected.Should().Be(source.Identity);
         reveal.Verify(value => value.RevealAsync(It.IsAny<IReadOnlyList<AssetPath>>()), Times.Never);

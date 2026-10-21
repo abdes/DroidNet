@@ -21,7 +21,7 @@ public sealed class CookPriorityTests
     [TestMethod]
     public async Task PreviewAndExplicitCooksRunBeforeWaitingSaves()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var active = coordinator.RunAsync((_, _) => release.Task, this.TestContext.CancellationToken);
@@ -51,7 +51,7 @@ public sealed class CookPriorityTests
     [TestMethod]
     public async Task RequestedCookStopsARunningCookOnChange()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var automatic = coordinator.RunCookAsync(
@@ -81,7 +81,7 @@ public sealed class CookPriorityTests
     [TestMethod]
     public async Task PreviewAndCookOnChangeAreNotStoppedByEachOther()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var started = new TaskCompletionSource<CancellationToken>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -109,7 +109,7 @@ public sealed class CookPriorityTests
     [TestMethod]
     public async Task WriterIsIdleOnlyWhenNothingHoldsOrWaitsForIt()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         await coordinator.WhenWriterIdleAsync(this.TestContext.CancellationToken).WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
@@ -130,7 +130,7 @@ public sealed class CookPriorityTests
     [TestMethod]
     public async Task CancelledDemandDoesNotConsumeWriterOrBlockQueuedSave()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         using var cancelled = new CancellationTokenSource();
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -157,17 +157,17 @@ public sealed class CookPriorityTests
         _ = entered.Should().BeFalse();
     }
 
-    /// <summary>Closing a project cancels its queued requests, which cannot strand a new project's requests.</summary>
+    /// <summary>A mount change cancels the queued requests, which cannot strand the requests made after it.</summary>
     /// <returns>The asynchronous project-lifetime regression.</returns>
     [TestMethod]
-    public async Task SwitchingProjectCancelsQueuedRequests()
+    public async Task MountChangeCancelsQueuedRequests()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var hold = WriterHold.Take(coordinator, this.TestContext.CancellationToken);
         var request = new CookRunRequest(CookTargetKind.Asset, AssetPath.Parse("/Content/Preview.omat.json"), IsAutomatic: true) { IsDemand = true };
         var old = coordinator.RunCookAsync(request, (_, _) => Task.FromResult(1), this.TestContext.CancellationToken);
-        context.Activate(CreateContext());
+        context.ChangeContext(context.Context with { });
         Func<Task> completion = async () => await old.ConfigureAwait(false);
         _ = await completion.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         Func<Task> held = async () => await hold.Held.ConfigureAwait(false);

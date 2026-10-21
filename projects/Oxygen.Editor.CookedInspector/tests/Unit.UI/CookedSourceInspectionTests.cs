@@ -34,7 +34,7 @@ internal sealed class CookedSourceInspectionTests : DroidNet.Tests.VisualUserInt
         var directory = Directory.CreateTempSubdirectory("Oxygen-LibraryInspection-");
         try
         {
-            var projects = CreateQueryProject();
+            using var session = CreateQueryProject();
             var asset = AssetPath.Parse("/Content/Shared.omat");
             await File.WriteAllBytesAsync(Path.Combine(directory.FullName, "Shared.omat"), [1], this.TestContext.CancellationToken).ConfigureAwait(true);
             var low = new CookedAssetMetadata(FileSystemPath.From(directory.FullName), "Shared.omat", Guid.CreateVersion7(), new(1, 2), 1, 1, new string('0', 64))
@@ -43,7 +43,7 @@ internal sealed class CookedSourceInspectionTests : DroidNet.Tests.VisualUserInt
             };
             var high = low with
             {
-                ContainerPath = projects.ActiveProject!.ProjectRoot.Combine(".cooked").Combine("Content"),
+                ContainerPath = session.Context.ProjectRoot.Combine(".cooked").Combine("Content"),
                 AssetKey = new(3, 4),
             };
             var effective = new AssetEntry(asset, "Shared", AssetKind.Material, AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.Mounted, asset.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: high.ContainerPath.Combine("Shared.omat"), AssetGuid: null, [], IsSelectable: true)
@@ -53,16 +53,16 @@ internal sealed class CookedSourceInspectionTests : DroidNet.Tests.VisualUserInt
             };
             var provider = new Mock<IAssetFeed>();
             _ = provider.Setup(value => value.ResolveAsync(asset, It.IsAny<CancellationToken>())).ReturnsAsync(effective);
-            var scope = new CookedInspectionScope(projects.ActiveProject!, AssetPath.Parse("/Library/Shared.omat"), Validate: false)
+            var scope = new CookedInspectionScope(session.Context, AssetPath.Parse("/Library/Shared.omat"), Validate: false)
             {
                 Asset = asset,
                 CookedSource = low,
             };
             var inspection = new CookInspectionResult(directory.FullName, Succeeded: true, low.SourceIdentity, [new(asset.VirtualPath, ContentCookAssetKind.Material)], [], []);
-            var report = new CookedOutputReport(projects.ActiveProject!.ProjectId, scope.Scope, DateTimeOffset.UtcNow, [new("Library", IsPresent: true, inspection, Validation: null, [])]);
+            var report = new CookedOutputReport(session.Context.ProjectId, scope.Scope, DateTimeOffset.UtcNow, [new("Library", IsPresent: true, inspection, Validation: null, [])]);
             var pipeline = new Mock<IContentPipelineService>();
-            _ = pipeline.Setup(value => value.InspectCookedOutputAsync(scope.Scope, It.IsAny<CancellationToken>(), validate: false, projects.ActiveProject)).ReturnsAsync(report);
-            using var model = new CookedInspectionViewModel(pipeline.Object, provider.Object, projects, _ => Task.FromResult(true));
+            _ = pipeline.Setup(value => value.InspectCookedOutputAsync(scope.Scope, It.IsAny<CancellationToken>(), validate: false, session.Context)).ReturnsAsync(report);
+            using var model = new CookedInspectionViewModel(pipeline.Object, provider.Object, session, _ => Task.FromResult(true));
             var view = new CookedInspectionView
             {
                 ViewModel = model,
@@ -96,7 +96,7 @@ internal sealed class CookedSourceInspectionTests : DroidNet.Tests.VisualUserInt
     [DataRow(true)]
     public Task PackagedEngineAssetInspectionShowsEngineInformation(bool geometry) => EnqueueAsync(async () =>
     {
-        var projects = CreateQueryProject();
+        using var session = CreateQueryProject();
         var uri = geometry ? EngineAssets.BasicShape("Cube") : EngineAssets.DefaultMaterial;
         var item = new AssetEntry(uri, geometry ? "Cube" : "Default", geometry ? AssetKind.Geometry : AssetKind.Material, AssetState.Packaged, DerivedState: null, AssetRuntimeAvailability.Mounted, uri.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
         using var items = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
@@ -104,11 +104,11 @@ internal sealed class CookedSourceInspectionTests : DroidNet.Tests.VisualUserInt
         _ = provider.SetupGet(value => value.Items).Returns(items);
         _ = provider.Setup(value => value.ResolveAsync(uri, It.IsAny<CancellationToken>())).ReturnsAsync(item);
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
-        var scope = new CookedInspectionScope(projects.ActiveProject!, uri, Validate: false)
+        var scope = new CookedInspectionScope(session.Context, uri, Validate: false)
         {
             Asset = uri,
         };
-        using var model = new CookedInspectionViewModel(pipeline.Object, provider.Object, projects, _ => Task.FromResult(true));
+        using var model = new CookedInspectionViewModel(pipeline.Object, provider.Object, session, _ => Task.FromResult(true));
         var view = new CookedInspectionView
         {
             ViewModel = model,

@@ -206,7 +206,7 @@ public sealed partial class SceneExplorerReplacementTests
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
 
-        fixture.Contexts.Activate(fixture.Context with { DefaultSceneId = SceneId.New() });
+        fixture.Session.ChangeContext(fixture.Context with { DefaultSceneId = SceneId.New() });
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Cut);
@@ -216,31 +216,20 @@ public sealed partial class SceneExplorerReplacementTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task ProjectReplacement_CancelKeepsClipboardAndSuccessfulActivationClearsItWithoutLoadingDefault(bool cut)
+    public async Task ProjectReplacement_CloseCancelled_KeepsTheSceneAndClipboard(bool cut)
     {
+        // Arrange
         using var fixture = await LifetimeFixture.CreateAsync(cut).ConfigureAwait(false);
         fixture.Participant.PendingEdit = true;
         fixture.PromptDecision = CloseDecision.Cancel;
-        using (var cancelled = await fixture.Documents.PrepareCloseAllWindowsAsync().ConfigureAwait(false))
-        {
-            _ = cancelled.Should().BeNull();
-        }
 
+        // Act
+        using var cancelled = await fixture.Documents.PrepareCloseAllWindowsAsync().ConfigureAwait(false);
+
+        // Assert: the clipboard ends with the session, which a cancelled replacement keeps.
+        _ = cancelled.Should().BeNull();
+        _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.PasteCommand.CanExecute(parameter: null).Should().BeTrue();
-        _ = fixture.Contexts.ActiveProject!.ProjectId.Should().Be(fixture.Context.ProjectId);
-        fixture.PromptDecision = CloseDecision.Discard;
-        using (var approved = await fixture.Documents.PrepareCloseAllWindowsAsync().ConfigureAwait(false))
-        {
-            _ = approved.Should().NotBeNull();
-            _ = (await approved!.CommitAsync().ConfigureAwait(false)).Should().BeTrue();
-        }
-
-        fixture.Contexts.Activate(fixture.Context with { ProjectId = Guid.NewGuid(), Name = "Next" });
-
-        _ = fixture.Explorer.Scene.Should().BeNull();
-        _ = fixture.Explorer.ShownItems.Should().BeEmpty();
-        _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Empty);
-        _ = fixture.Explorer.PasteCommand.CanExecute(parameter: null).Should().BeFalse();
     }
 
     /// <summary>
@@ -255,13 +244,9 @@ public sealed partial class SceneExplorerReplacementTests
             this.Documents = new DocumentTabs();
             var selection = new SceneSelectionService();
             this.Scenes = new TestSceneDocuments(TestProject.Create(new MockFileSystem()), otherKinds: [new MaterialDocumentKind(new MaterialValidation())]);
-            this.Contexts.Activate(this.Context);
+            this.Session = new TestSession(this.Context);
             this.WriteScene("First", "Node");
             this.WriteScene("Second", "Destination");
-            var current = new Mock<IProject>();
-            _ = current.SetupGet(value => value.ProjectInfo).Returns(TestProject.InfoOf(this.Context));
-            var projects = new Mock<IProjectManagerService>();
-            _ = projects.SetupGet(value => value.CurrentProject).Returns(current.Object);
             this.Area = new DocumentArea(
                 this.Documents,
                 this.Scenes.Open,
@@ -269,23 +254,22 @@ public sealed partial class SceneExplorerReplacementTests
                 this.Window,
                 static _ => { });
             var input = new Mock<IDocumentInputCommitter>();
-            _ = input.Setup(value => value.CommitAsync()).Returns(Task.CompletedTask);
+            _ = input.Setup(value => value.CommitAsync(It.IsAny<WindowId>())).Returns(Task.CompletedTask);
             this.Service = new DocumentService(
                 this.Area,
                 this.Documents,
                 this.Scenes.Open,
-                new ContentPipeline.Relocation.ProjectDocumentFiles(this.Contexts),
+                new ContentPipeline.Relocation.ProjectDocumentFiles(this.Scenes.Session),
                 this.CreateClosePrompt(),
                 Mock.Of<IDocumentConfirmations>(),
                 input.Object,
                 Mock.Of<IOperationResultPublisher>());
             this.Explorer = new SceneExplorerViewModel(
-                projects.Object,
                 Mock.Of<IRouter>(),
                 this.Area,
                 this.Scenes.Open,
                 selection,
-                projectContexts: this.Contexts);
+                session: this.Session);
             this.Participant = new SceneParticipant(this);
         }
 
@@ -301,7 +285,7 @@ public sealed partial class SceneExplorerReplacementTests
 
         public Scene First => ((SceneContent)this.FirstDocument.Content).Scene;
 
-        public ProjectContextService Contexts { get; } = new();
+        public TestSession Session { get; }
 
         public DocumentTabs Documents { get; }
 
@@ -374,6 +358,7 @@ public sealed partial class SceneExplorerReplacementTests
             this.Service.Dispose();
             this.Explorer.Dispose();
             this.Area.Dispose();
+            this.Session.Dispose();
             this.Scenes.Dispose();
         }
 
@@ -385,8 +370,8 @@ public sealed partial class SceneExplorerReplacementTests
         private IDocumentClosePrompt CreateClosePrompt()
         {
             var prompt = new Mock<IDocumentClosePrompt>();
-            _ = prompt.Setup(value => value.ConfirmAsync(It.IsAny<IReadOnlyList<DocumentCloseItem>>()))
-                .Returns(async (IReadOnlyList<DocumentCloseItem> items) =>
+            _ = prompt.Setup(value => value.ConfirmAsync(It.IsAny<WindowId>(), It.IsAny<IReadOnlyList<DocumentCloseItem>>()))
+                .Returns(async (WindowId window, IReadOnlyList<DocumentCloseItem> items) =>
                 {
                     if (this.PromptDecision == CloseDecision.Cancel)
                     {

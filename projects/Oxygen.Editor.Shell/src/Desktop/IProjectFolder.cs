@@ -6,10 +6,10 @@ namespace Oxygen.Editor.Shell.Desktop;
 
 /// <summary>
 /// The folder of the project the editor works on, which desktop tools open as their workspace. The composition root
-/// implements it over the active project.
+/// implements it in each project session.
 /// </summary>
 public interface IProjectFolder
 {
-    /// <summary>Gets the full path of the project's folder, or <see langword="null"/> when no project is open.</summary>
-    public string? Path { get; }
+    /// <summary>Gets the full path of the project's folder.</summary>
+    public string Path { get; }
 }

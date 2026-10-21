@@ -78,68 +78,6 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void ProjectContextService_ShouldReplayCurrentValueToNewSubscribers()
-    {
-        var service = new ProjectContextService();
-        var context = new ProjectContext
-        {
-            ProjectId = Guid.NewGuid(),
-            Name = "Project",
-            Category = Category.Games,
-            ProjectRoot = FileSystemPath.From(@"C:\Project"),
-            AuthoringMounts = [new ProjectMountPoint("Content", "Content")],
-            FileSystem = new MockFileSystem(),
-            LocalFolderMounts = [],
-        };
-
-        service.Activate(context);
-
-        var observer = new RecordingObserver<ProjectContext?>();
-        using var subscription = service.ProjectChanged.Subscribe(observer);
-
-        _ = observer.Values.Should().ContainSingle().Which.Should().Be(context);
-    }
-
-    [TestMethod]
-    public void ProjectContextService_ShouldPublishReplacementAndClose()
-    {
-        var service = new ProjectContextService();
-        var first = CreateContext("First");
-        var second = CreateContext("Second");
-        var observer = new RecordingObserver<ProjectContext?>();
-        using var subscription = service.ProjectChanged.Subscribe(observer);
-
-        service.Activate(first);
-        service.Activate(second);
-        service.Close();
-
-        _ = observer.Values.Should().Equal(null, first, second, null);
-        _ = service.ActiveProject.Should().BeNull();
-    }
-
-    [TestMethod]
-    public void ProjectContextService_ShouldUpdateSettingsWithoutActivatingTheProjectAgain()
-    {
-        var service = new ProjectContextService();
-        var context = CreateContext("Settings");
-        service.Activate(context);
-        var projects = new RecordingObserver<ProjectContext?>();
-        var settings = new RecordingObserver<ProjectSettings>();
-        using var projectSubscription = service.ProjectChanged.Subscribe(projects);
-        using var settingsSubscription = service.SettingsChanged.Subscribe(settings);
-        var updated = new ProjectSettings { CookOnChange = false };
-
-        service.UpdateSettings(updated);
-
-        _ = service.Settings.Should().Be(updated);
-        _ = service.ActiveProject.Should().BeSameAs(context);
-        _ = projects.Values.Should().ContainSingle().Which.Should().BeSameAs(context);
-        _ = settings.Values.Should().Equal(updated);
-        service.Activate(context with { });
-        _ = service.Settings.Should().Be(context.Settings, "activating a project uses the settings its context was read with");
-    }
-
-    [TestMethod]
     public void ProjectCookScopeProvider_ShouldUseProjectCookedOutputRoot()
     {
         var storage = new Mock<IStorageProvider>();
@@ -750,19 +688,4 @@ public sealed class ProjectValidationAndContextTests : TestSuiteWithAssertions
             FileSystem = new MockFileSystem(),
             LocalFolderMounts = [],
         };
-
-    private sealed class RecordingObserver<T> : IObserver<T>
-    {
-        public List<T> Values { get; } = [];
-
-        public void OnCompleted()
-        {
-        }
-
-        public void OnError(Exception error)
-        {
-        }
-
-        public void OnNext(T value) => this.Values.Add(value);
-    }
 }

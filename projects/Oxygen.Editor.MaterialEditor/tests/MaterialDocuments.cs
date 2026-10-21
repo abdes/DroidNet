@@ -11,7 +11,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Materials;
 using Oxygen.Editor.Materials.Documents;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
@@ -22,6 +22,7 @@ namespace Oxygen.Editor.MaterialEditor.Tests;
 internal sealed partial class MaterialDocuments : IDisposable
 {
     private readonly List<DocumentTab> tabs = [];
+    private readonly List<TestSession> sessions = [];
 
     public MaterialDocuments()
     {
@@ -87,20 +88,29 @@ internal sealed partial class MaterialDocuments : IDisposable
     /// <param name="inputCommitter">Commits the focused control's input before a save, if any.</param>
     /// <returns>The editor.</returns>
     public MaterialEditorViewModel EditorOf(Document document, IAssetFeed? feed = null, IDocumentInputCommitter? inputCommitter = null)
-        => new(
+    {
+        var session = new TestSession(TestProject.Create(this.FileSystem).Context);
+        this.sessions.Add(session);
+        return new(
             this.TabOf(document),
             this.Edits,
             feed ?? new FakeAssetFeed(),
             System.Reactive.Concurrency.ImmediateScheduler.Instance,
             Mock.Of<IMaterialCookService>(),
-            Mock.Of<IProjectContextService>(),
+            session,
             inputCommitter: inputCommitter);
+    }
 
     public void Dispose()
     {
         foreach (var tab in this.tabs)
         {
             tab.Dispose();
+        }
+
+        foreach (var session in this.sessions)
+        {
+            session.Dispose();
         }
 
         this.Documents.Dispose();

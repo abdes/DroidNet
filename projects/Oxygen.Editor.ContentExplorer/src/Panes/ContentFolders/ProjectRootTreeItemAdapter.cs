@@ -112,7 +112,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
     /// <inheritdoc />
     public override bool ValidateItemName(string name)
     {
-        if (VirtualPath.ValidateMountName(name, VirtualPathRuleSet.Authored) is not null)
+        if (ProjectAssetFiles.ValidateDeclaredMountName(name) is not null)
         {
             return false;
         }

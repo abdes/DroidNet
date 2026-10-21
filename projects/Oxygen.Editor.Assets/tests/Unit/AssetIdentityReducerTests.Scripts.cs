@@ -29,6 +29,28 @@ public sealed partial class AssetIdentityReducerTests
         _ = row.Identity.Should().Be(AssetPath.Parse("/Content/Player/move.oscript"));
         _ = row.SourcePath.Should().Be(FileSystemPath.From(source));
         _ = row.DiagnosticCodes.Should().BeEmpty();
+        _ = row.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.NotMounted, "a content script cooks");
+    }
+
+    /// <summary>A file among the project's own files opens from its row, but only content cooks into the runtime.</summary>
+    /// <param name="relativePath">The file, under the project root and outside its content mounts.</param>
+    /// <param name="kind">The file's asset kind.</param>
+    [TestMethod]
+    [DataRow("Types/oxygen.d.lua", AssetKind.Script, DisplayName = "A script")]
+    [DataRow("Media/logo.png", AssetKind.Image, DisplayName = "An image")]
+    public void ReduceProjectFileHasItsFileAndDoesNotCook(string relativePath, AssetKind kind)
+    {
+        using var workspace = new TempWorkspace();
+        var file = workspace.SourcePath(relativePath);
+        Directory.CreateDirectory(Path.GetDirectoryName(file)!);
+        File.WriteAllText(file, "x");
+
+        var row = Reduce(workspace, [new AssetRecord(AssetPath.Parse("/project/" + relativePath))]).Single();
+
+        _ = row.Kind.Should().Be(kind);
+        _ = row.SourcePath.Should().Be(FileSystemPath.From(file));
+        _ = row.IsCookedOnly.Should().BeFalse();
+        _ = row.RuntimeAvailability.Should().Be(AssetRuntimeAvailability.NotApplicable);
     }
 
     /// <summary>Two sources with the same name in one folder are one asset identity; script analysis reports the collision.</summary>

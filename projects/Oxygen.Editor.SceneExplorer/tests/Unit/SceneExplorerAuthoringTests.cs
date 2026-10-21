@@ -9,6 +9,7 @@ using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
@@ -76,9 +77,8 @@ public sealed partial class SceneExplorerAuthoringTests
         var histories = new Mock<Shell.Documents.IHistoryService>();
         var global = new HistoryKeeper(this);
         _ = histories.SetupGet(value => value.GlobalHistory).Returns(global);
-        var contexts = new ProjectContextService();
-        contexts.Activate(harness.Project);
-        using var explorer = harness.Build(relocation.Object, histories.Object, contexts);
+        using var session = new TestSession(harness.Project);
+        using var explorer = harness.Build(relocation.Object, histories.Object, session);
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var root = explorer.Scene!;
         explorer.SelectDisplayedItem(root, [.. explorer.ShownItems], isControlDown: false, isShiftDown: false);
@@ -146,14 +146,9 @@ public sealed partial class SceneExplorerAuthoringTests
 
         public AuthoringHarness(out Scene scene, out SceneNode node)
         {
-            var project = new Project(new ProjectInfo("Authoring", Category.Games, "H:/AuthoringTreeTests", "preview.png"));
             var built = new Scene { Name = "Scene" };
             var builtNode = new SceneNode(built) { Name = "Node" };
             built.RootNodes.Add(builtNode);
-
-            var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-            _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
-            this.Manager = manager;
 
             var documents = new TestDocumentArea();
             var metadata = TestScenes.Open(built);
@@ -164,8 +159,6 @@ public sealed partial class SceneExplorerAuthoringTests
             documents.Activate(metadata.Document);
             this.Documents = documents;
         }
-
-        public Mock<IProjectManagerService> Manager { get; }
 
         public TestDocumentArea Documents { get; }
 
@@ -202,14 +195,13 @@ public sealed partial class SceneExplorerAuthoringTests
         public SceneExplorerViewModel Build(
             IAssetRelocationService? relocation = null,
             Shell.Documents.IHistoryService? histories = null,
-            IProjectContextService? contexts = null)
+            IProjectSession? session = null)
             => new(
-                this.Manager.Object,
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.OpenDocuments,
                 new SceneSelectionService(),
-                projectContexts: contexts,
+                session: session,
                 relocation: relocation,
                 histories: histories);
     }

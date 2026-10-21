@@ -29,7 +29,7 @@ public partial class ProjectManagerService
                 var saved = ProjectInfo.FromJson(Encoding.UTF8.GetString(snapshot.Content.AsSpan()).TrimStart('﻿'));
                 saved.Settings = settings;
                 _ = await this.AtomicFiles.WriteAsync(path, Encoding.UTF8.GetBytes(ProjectInfo.ToJson(saved)), snapshot.Version, cancellationToken).ConfigureAwait(true);
-                if (this.CurrentProject?.ProjectInfo is { Location: { } location } current
+                if (this.loaded?.ProjectInfo is { Location: { } location } current
                     && FileSystemPath.From(location) == FileSystemPath.From(projectRoot))
                 {
                     current.Settings = settings;

@@ -37,7 +37,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 {
     private readonly IAssetFeed assetProvider;
     private readonly IGeometryMaterialSlotProvider materialSlots;
-    private readonly IProjectContextService projectContexts;
+    private readonly IProjectSession session;
     private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly PropertyBinding<AssetPath?> geometryUriBinding = new(SceneProperties.Geometry.GeometryUriDescriptor);
     private readonly DispatcherQueue dispatcherQueue;
@@ -56,21 +56,21 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <param name="hosting">The WinUI hosting context used for UI-thread dispatch.</param>
     /// <param name="assetProvider">The shared asset identity, cook status and runtime availability feed.</param>
     /// <param name="materialSlots">The native geometry slot inventory reader.</param>
-    /// <param name="projectContexts">The active project lifetime.</param>
+    /// <param name="session">The project session this panel belongs to.</param>
     /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     /// <param name="loggerFactory">Creates the logger that reports asset feed failures.</param>
     public GeometryViewModel(
         HostingContext hosting,
         IAssetFeed assetProvider,
         IGeometryMaterialSlotProvider materialSlots,
-        IProjectContextService projectContexts,
+        IProjectSession session,
         Func<SceneAuthoring?>? authoringProvider = null,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<GeometryViewModel>();
         this.assetProvider = assetProvider;
         this.materialSlots = materialSlots;
-        this.projectContexts = projectContexts;
+        this.session = session;
         this.authoringProvider = authoringProvider;
         this.dispatcherQueue = hosting.Dispatcher;
 
@@ -233,12 +233,12 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.materialEdit = null;
         if (!this.IsInputEnabled || choice is not { IsEnabled: true } || picker is null
             || !this.IsCurrentSelection(picker.Nodes)
-            || !ReferenceEquals(this.authoringProvider?.Invoke(), picker.Authoring)
-            || this.projectContexts.ActiveProject is not { } project)
+            || !ReferenceEquals(this.authoringProvider?.Invoke(), picker.Authoring))
         {
             return;
         }
 
+        var project = this.session.Context;
         var nodeIds = picker.Nodes.ConvertAll(static node => node.Id);
         var built = await MaterialSlotEdits.SetAsync(this.materialSlots, project, nodeIds, picker.Target, choice.Asset).ConfigureAwait(true);
         var succeeded = built.Edit is { } edit && (await picker.Authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded;

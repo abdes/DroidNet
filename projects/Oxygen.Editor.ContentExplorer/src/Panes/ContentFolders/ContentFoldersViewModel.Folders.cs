@@ -350,10 +350,12 @@ public partial class ContentFoldersViewModel
     private async Task FollowChangedFilesAsync(AssetFilesChangedEventArgs message)
     {
         // The tree shows folders only: a file move, rename or delete leaves it as it is.
-        if (projectContextService.ActiveProject is not { } project || !message.FoldersChanged)
+        if (!message.FoldersChanged)
         {
             return;
         }
+
+        var project = session.Context;
 
         var moves = message.Moves.Where(static move => move.IsDirectory)
             .Select(move => (From: RelocationPaths.ToVirtual(project, move.Source), To: RelocationPaths.ToVirtual(project, move.Target)))

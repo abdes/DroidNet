@@ -6,7 +6,6 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor.Settings;
@@ -23,17 +22,15 @@ internal sealed partial class SceneEditorConflictTests
     [TestMethod]
     public async Task CloseWaitsForPreviewEditCommittedByTheFocusedControl()
     {
-        var projects = new ProjectContextService();
-        var project = TestProject.Create(new MockFileSystem(), Path.GetTempPath()).Context;
-        projects.Activate(project);
+        using var session = new TestSession(TestProject.Create(new MockFileSystem(), Path.GetTempPath()).Context);
         var engine = new Mock<IEngineService>();
         _ = engine.SetupGet(value => value.MaxTargetFps).Returns(1000);
         var store = new Mock<IEditorSettingsManager>();
         var saved = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = store.Setup(value => value.SaveSettingAsync(PreviewSettingsService.Key, It.IsAny<PreviewSettingsService.Preferences>(), It.IsAny<SettingContext>(), It.IsAny<IProgress<SettingsProgress>>(), It.IsAny<CancellationToken>()))
             .Returns(saved.Task);
-        var preferences = new PreviewSettingsService(engine.Object, store.Object, projects, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
-        await preferences.RestoreAsync(project).ConfigureAwait(false);
+        var preferences = new PreviewSettingsService(engine.Object, store.Object, session, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
+        await preferences.EnsureRestoredAsync().ConfigureAwait(false);
         using var fixture = await Fixture.CreateAsync(this.TestContext, active: true, preferences, () => preferences.FrameRateCap = 45).ConfigureAwait(false);
 
         var close = fixture.Editor.PrepareForCloseAsync();

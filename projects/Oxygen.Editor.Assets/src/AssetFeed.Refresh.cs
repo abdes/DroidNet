@@ -39,7 +39,7 @@ public sealed partial class AssetFeed
             if (this.refreshCompletion is null)
             {
                 if (this.publishedRevision == this.catalogRevision
-                    && ReferenceEquals(this.publishedProject, this.projectContextService.ActiveProject))
+                    && ReferenceEquals(this.publishedProject, this.SessionProject))
                 {
                     return Task.CompletedTask;
                 }
@@ -65,7 +65,11 @@ public sealed partial class AssetFeed
         }
     }
 
-    private void OnProjectChanged()
+    // A change of the session's content mounts lists the project's assets again.
+    private void OnContextChanged(object? sender, EventArgs args) => this.ResetProject();
+
+    // The rows of the earlier mounts, or of an ended session, are dropped before the project is listed again.
+    private void ResetProject()
     {
         lock (this.refreshSync)
         {
@@ -96,7 +100,7 @@ public sealed partial class AssetFeed
                     this.scanCancellation = cancellation;
                 }
 
-                var project = this.projectContextService.ActiveProject;
+                var project = this.SessionProject;
                 IReadOnlyList<AssetEntry> snapshot = [];
                 try
                 {
@@ -152,7 +156,7 @@ public sealed partial class AssetFeed
                 return true;
             }
 
-            if (revision != this.catalogRevision || !ReferenceEquals(project, this.projectContextService.ActiveProject))
+            if (revision != this.catalogRevision || !ReferenceEquals(project, this.SessionProject))
             {
                 return false;
             }

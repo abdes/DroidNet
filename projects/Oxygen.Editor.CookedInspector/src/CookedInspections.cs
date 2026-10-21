@@ -9,9 +9,9 @@ namespace Oxygen.Editor.CookedInspector;
 
 /// <summary>Sets what the window's Cooked Inspector inspects and brings it forward.</summary>
 /// <param name="inspector">The window's Cooked Inspector.</param>
-/// <param name="projects">The active project, which the inspection reads.</param>
+/// <param name="session">The project session the window lives in, whose project the inspection reads.</param>
 /// <param name="placement">Where panels show.</param>
-public sealed class CookedInspections(CookedInspectionViewModel inspector, IProjectContextService projects, IPlacementService placement) : ICookedInspections
+public sealed class CookedInspections(CookedInspectionViewModel inspector, IProjectSession session, IPlacementService placement) : ICookedInspections
 {
     /// <summary>The Cooked Inspector panel's identity.</summary>
     public const string PanelId = "inspect";
@@ -20,12 +20,7 @@ public sealed class CookedInspections(CookedInspectionViewModel inspector, IProj
     public async Task<bool> InspectAsync(CookedInspectionRequest request)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (projects.ActiveProject is not { } project)
-        {
-            return false;
-        }
-
-        _ = inspector.InspectAsync(new CookedInspectionScope(project, request.Scope, request.Validate)
+        _ = inspector.InspectAsync(new CookedInspectionScope(session.Context,request.Scope, request.Validate)
         {
             Asset = request.Asset,
             CookedSource = request.CookedSource,

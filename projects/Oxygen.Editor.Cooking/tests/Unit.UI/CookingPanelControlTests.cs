@@ -18,7 +18,6 @@ using Microsoft.UI.Xaml.Media;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Cooking;
 using Oxygen.Managed.Core;
@@ -503,9 +502,8 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
 
     private static CookingPanelViewModel CreateModel(ICookRecovery? actions = null, Mock<ICookRunService>? runService = null, Func<CookRunSnapshot, CookRunSnapshot>? configure = null)
     {
-        var projects = new ProjectContextService();
         var projectId = Guid.NewGuid();
-        projects.Activate(TestProject.Create(new MockFileSystem(), Path.GetTempPath()).Context with { ProjectId = projectId, Name = "Vortex", AuthoringMounts = [] });
+        var session = new TestSession(TestProject.Create(new MockFileSystem(), Path.GetTempPath()).Context with { ProjectId = projectId, Name = "Vortex", AuthoringMounts = [] });
         var operationId = Guid.NewGuid();
         DiagnosticRecord Issue(string name, string message) => new()
         {
@@ -541,6 +539,6 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         _ = runs.SetupGet(service => service.Runs).Returns(new[] { run });
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
-        return new(runs.Object, Mock.Of<IContentPipelineService>(), projects, actions ?? Mock.Of<ICookRecovery>(), hosting);
+        return new(runs.Object, Mock.Of<IContentPipelineService>(), session, actions ?? Mock.Of<ICookRecovery>(), hosting);
     }
 }

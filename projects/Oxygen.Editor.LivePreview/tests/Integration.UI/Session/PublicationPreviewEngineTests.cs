@@ -73,14 +73,14 @@ public sealed partial class PublicationPreviewEngineTests : DroidNet.Tests.Visua
             var cook = project.Pipeline.CookAssetAsync(material, token);
             await gate.Entered.WaitAsync(token).ConfigureAwait(true);
 
-            project.Projects.Close();
+            project.CloseSession();
             gate.Release();
 
             _ = (await OutcomeAsync(cook).ConfigureAwait(true)).Should().Be(OperationStatus.Cancelled);
         }
 
         // Reopening the project mounts the prior publication, and the next cook publishes and mounts the change.
-        project.Projects.Activate(project.Context);
+        project.OpenSession();
         _ = (await project.ReadPublishedContentRootAsync(token).ConfigureAwait(true)).Should().Be(published, "the prior publication stays selected");
         var reopened = project.CreateSession(engine);
         await using var reopenedLifetime = reopened.ConfigureAwait(true);
@@ -165,7 +165,7 @@ public sealed partial class PublicationPreviewEngineTests : DroidNet.Tests.Visua
             {
                 _ = this.entered.TrySetResult();
                 await this.released.Task.ConfigureAwait(false);
-                return new PublicationPreview(context, engine, owner, project.Catalog.Object, () => ReferenceEquals(context, project.Projects.ActiveProject), static () => { });
+                return new PublicationPreview(context, engine, owner, project.Catalog.Object, () => ReferenceEquals(context, project.Sessions.Session?.Context), static () => { });
             });
         }
 

@@ -112,11 +112,8 @@ public partial class ContentFoldersViewModel
     [RelayCommand(CanExecute = nameof(CanChangeMounts))]
     private async Task ManageMountsAsync()
     {
-        if (projectContextService.ActiveProject is not { } expected || this.GetActiveProjectInfo() is not { } candidate)
-        {
-            return;
-        }
-
+        var expected = session.Context;
+        var candidate = this.GetActiveProjectInfo();
         var model = new ContentMountsViewModel(expected, dialogService, engineContent);
         var spec = new DialogSpec("Content mounts", new ContentMountsView { ViewModel = model })
         {
@@ -143,10 +140,9 @@ public partial class ContentFoldersViewModel
 
         // Show what was just mounted.
         if (model.Mounts.LastOrDefault(static row => row.IsNew) is { } added
-            && projectContextService.ActiveProject is { } applied
-            && (applied.AuthoringMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))
-                || applied.LocalFolderMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))
-                || applied.PakFileMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))))
+            && (session.Context.AuthoringMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))
+                || session.Context.LocalFolderMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))
+                || session.Context.PakFileMounts.Any(mount => string.Equals(mount.Name, added.Name, StringComparison.Ordinal))))
         {
             contentExplorerState.SetSelectedFolders([AssetPath.Create(added.Name)]);
         }
@@ -155,11 +151,8 @@ public partial class ContentFoldersViewModel
     [RelayCommand(CanExecute = nameof(CanChangeMounts))]
     private async Task ContentPriorityAsync()
     {
-        if (projectContextService.ActiveProject is not { } expected || this.GetActiveProjectInfo() is not { } candidate)
-        {
-            return;
-        }
-
+        var expected = session.Context;
+        var candidate = this.GetActiveProjectInfo();
         var model = new ContentPriorityViewModel(expected);
         var spec = new DialogSpec("Content priority", new ContentPriorityView { ViewModel = model })
         {
@@ -198,7 +191,7 @@ public partial class ContentFoldersViewModel
         catch (Exception exception)
         {
             this.LogMountChangeFailed(exception);
-            if (projectContextService.ActiveProject?.ProjectId == expected.ProjectId)
+            if (session.Context.ProjectId == expected.ProjectId)
             {
                 var spec = new DialogSpec("Content mount update", new TextBlock { Text = exception.Message, TextWrapping = TextWrapping.Wrap, MaxWidth = 520, IsTextSelectionEnabled = true })
                 {
@@ -214,7 +207,7 @@ public partial class ContentFoldersViewModel
         {
             try
             {
-                if (projectContextService.ActiveProject?.ProjectId == expected.ProjectId)
+                if (session.Context.ProjectId == expected.ProjectId)
                 {
                     await this.ReloadMountTreeAsync().ConfigureAwait(true);
                     this.HasUnsavedChanges = false;
@@ -254,12 +247,13 @@ public partial class ContentFoldersViewModel
     {
         try
         {
-            while (!this.selectionDisposed && projectContextService.ActiveProject is { } context)
+            while (!this.selectionDisposed)
             {
+                var context = session.Context;
                 var version = this.treeReloadVersion;
                 try
                 {
-                    var projectInfo = this.GetActiveProjectInfo()!;
+                    var projectInfo = this.GetActiveProjectInfo();
                     var folder = await storage.GetFolderFromPathAsync(projectInfo.Location!).ConfigureAwait(true);
                     if (!this.IsTreeBuildCurrent(context, version))
                     {
@@ -330,7 +324,7 @@ public partial class ContentFoldersViewModel
     }
 
     private bool IsTreeBuildCurrent(ProjectContext context, long version)
-        => !this.selectionDisposed && version == this.treeReloadVersion && ReferenceEquals(context, projectContextService.ActiveProject);
+        => !this.selectionDisposed && version == this.treeReloadVersion && ReferenceEquals(context, session.Context);
 
     private async Task PrepareExpandedFoldersAsync(ITreeItem item, ProjectContext context, long version)
     {

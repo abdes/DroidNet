@@ -7,7 +7,6 @@ using AwesomeAssertions;
 using DroidNet.Storage.Native;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Persistence;
@@ -87,12 +86,12 @@ public sealed class CookedLibraryCatalogTests
             (this.ProjectOutput, var projectIndex) = this.WriteRoot(".cooked/Content", 1);
             (this.First, var firstIndex) = this.WriteRoot("Libraries/First", 2);
             (this.Second, var secondIndex) = this.WriteRoot("Libraries/Second", 3);
-            this.Projects.Activate(TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
+            this.Session = new TestSession(TestProject.Create(new RealFileSystem(), this.directory.FullName).Context with
             {
                 Name = "Libraries",
                 LocalFolderMounts = [new("First", this.First), new("Second", this.Second)],
             });
-            var project = this.Projects.ActiveProject!;
+            var project = this.Session.Context;
             this.Publication = new(project.ProjectId, project.ProjectRoot);
             this.ProjectRoot = FakeCookPublicationReader.Root(CookPublicationRootOwner.Project, "Content", projectIndex, this.ProjectOutput);
             this.FirstRoot = FakeCookPublicationReader.Root(CookPublicationRootOwner.Library, "First", firstIndex, this.First);
@@ -111,7 +110,7 @@ public sealed class CookedLibraryCatalogTests
 
         public FakeCookPublicationReader.PublishedRoot SecondRoot { get; }
 
-        public ProjectContextService Projects { get; } = new();
+        public TestSession Session { get; }
 
         public FakeCookPublicationReader Publication { get; }
 
@@ -120,11 +119,11 @@ public sealed class CookedLibraryCatalogTests
 
         public AssetCatalog CreateCatalog()
         {
-            return new(this.Projects, this.storage, new EngineContentPakFixture(), this.Publication);
+            return new(this.Session, this.storage, new EngineContentPakFixture(), this.Publication);
         }
 
         public IReadOnlyList<AssetEntry> Reduce(IReadOnlyList<AssetRecord> records)
-            => new AssetIdentityReducer().Reduce(records, this.Projects.ActiveProject!, new(this.Projects.ActiveProject!.ProjectId, FileSystemPath.From(this.directory.FullName), Path.Combine(this.directory.FullName, ".cooked")));
+            => new AssetIdentityReducer().Reduce(records, this.Session.Context, new(this.Session.Context.ProjectId, FileSystemPath.From(this.directory.FullName), Path.Combine(this.directory.FullName, ".cooked")));
 
         /// <summary>Describes the copy of an asset that one library provides.</summary>
         /// <param name="effective">The asset as ordinary resolution selected it.</param>
@@ -133,10 +132,14 @@ public sealed class CookedLibraryCatalogTests
         public AssetEntry LibraryCopy(AssetEntry effective, FileSystemPath library)
         {
             var source = effective.OverriddenCookedSources.Prepend(effective.CookedMetadata!).Single(metadata => metadata.ContainerPath == library);
-            return AssetIdentity.FromCookedSource(effective, source, this.Projects.ActiveProject!);
+            return AssetIdentity.FromCookedSource(effective, source, this.Session.Context);
         }
 
-        public void Dispose() => this.directory.Delete(recursive: true);
+        public void Dispose()
+        {
+            this.Session.Dispose();
+            this.directory.Delete(recursive: true);
+        }
 
         private (FileSystemPath Folder, Document Index) WriteRoot(string relative, byte value)
         {

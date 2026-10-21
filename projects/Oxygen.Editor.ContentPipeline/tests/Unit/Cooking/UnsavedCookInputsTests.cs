@@ -105,7 +105,7 @@ public sealed class UnsavedCookInputsTests
         _ = found.Should().BeEmpty();
     }
 
-    private static UnsavedCookInputs CreateInputs(RelocationWorkspace workspace) => new(workspace.Context, workspace.UnsavedDocuments.Object);
+    private static UnsavedCookInputs CreateInputs(RelocationWorkspace workspace) => new(workspace.Session, workspace.UnsavedDocuments.Object);
 
     // The documents answer Find as the open documents do: those whose file is one of the paths or inside one.
     private static (UnsavedDocument A, UnsavedDocument B) MarkUnsaved(RelocationWorkspace workspace, FileSystemPath fileA, string assetA, FileSystemPath fileB, string assetB)

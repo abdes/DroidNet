@@ -34,9 +34,9 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         var items = Enumerable.Range(0, 1000).Select(index => CreateNavigationAsset(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"/Content/Materials/M{index}.omat"), AssetKind.Material)).ToArray();
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>(items);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
-        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         // Navigation completes after the first snapshot; with no view loaded yet there is no frame to wait for.
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         model.SelectedAsset = items[^1];
@@ -85,10 +85,10 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         var red = CreateNavigationAsset("/Content/Materials/Red.omat", AssetKind.Material);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([blue, red]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
-        using var list = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
-        using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        using var list = new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
+        using var tiles = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var listView = new ListLayoutView
         {
@@ -141,10 +141,10 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         var red = CreateNavigationAsset("/Content/Materials/Red.omat", AssetKind.Material);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([blue, cube, red]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
-        using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
-        using var table = new DetailsLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        using var tiles = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
+        using var table = new DetailsLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var tileView = new TilesLayoutView { ViewModel = tiles };
         await LoadTestContentAsync(tileView).ConfigureAwait(true);
@@ -185,10 +185,10 @@ public sealed partial class ExplorerSelectionTests : DroidNet.Tests.VisualUserIn
         var cube = CreateNavigationAsset("/Content/Geometry/Cube.ogeo", AssetKind.Geometry);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([blue, cube]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
-        using var list = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
-        using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        using var list = new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
+        using var tiles = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var listView = new ListLayoutView
         {

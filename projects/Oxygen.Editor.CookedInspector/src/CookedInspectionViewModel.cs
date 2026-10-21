@@ -22,9 +22,9 @@ namespace Oxygen.Editor.CookedInspector;
 /// </summary>
 /// <param name="pipeline">The shared read-only pipeline boundary.</param>
 /// <param name="assetProvider">Current shared catalog facts for a specifically opened asset.</param>
-/// <param name="projects">The active project lifetime.</param>
+/// <param name="session">The project session the panel lives in.</param>
 /// <param name="showAsset">Explicit navigation in the owning workspace.</param>
-public sealed partial class CookedInspectionViewModel(IContentPipelineService pipeline, IAssetFeed assetProvider, IProjectContextService projects, Func<AssetPath, Task<bool>> showAsset) : ObservableObject, IDisposable
+public sealed partial class CookedInspectionViewModel(IContentPipelineService pipeline, IAssetFeed assetProvider, IProjectSession session, Func<AssetPath, Task<bool>> showAsset) : ObservableObject, IDisposable
 {
     private Func<Task>? cancelInspection;
     private Task currentWork = Task.CompletedTask;
@@ -313,7 +313,7 @@ public sealed partial class CookedInspectionViewModel(IContentPipelineService pi
                 ? new CookedOutputReport(request.Project.ProjectId, request.Scope, DateTimeOffset.UtcNow, [])
                 : await pipeline.InspectCookedOutputAsync(request.Scope, cancellation.Token, validate, project).ConfigureAwait(true);
             cancellation.Token.ThrowIfCancellationRequested();
-            if (!ReferenceEquals(project, projects.ActiveProject))
+            if (!ReferenceEquals(project, session.Context))
             {
                 throw new OperationCanceledException("The project configuration changed during inspection.");
             }
@@ -337,9 +337,11 @@ public sealed partial class CookedInspectionViewModel(IContentPipelineService pi
     }
 
     private ProjectContext GetCurrentProject(CookedInspectionScope request)
-        => projects.ActiveProject is { } project && project.ProjectId == request.Project.ProjectId
-            && project.ProjectRoot == request.Project.ProjectRoot
+    {
+        var project = session.Context;
+        return project.ProjectId == request.Project.ProjectId && project.ProjectRoot == request.Project.ProjectRoot
             ? project : throw new OperationCanceledException("The inspection's project was closed or replaced.");
+    }
 
     private async Task<AssetEntry?> ResolveInspectedAssetAsync(AssetPath identity, ProjectContext project, CookedInspectionScope request, CancellationToken cancellationToken)
     {

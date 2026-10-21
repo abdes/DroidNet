@@ -20,13 +20,13 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 
 /// <summary>Runs reference-aware relocation, copy and delete as the project's content writer.</summary>
 /// <param name="coordinator">Serializes project content changes with cooking and import.</param>
-/// <param name="projects">The active project.</param>
+/// <param name="session">The project session, whose current content mounts relocations rewrite.</param>
 /// <param name="documents">The open documents with unsaved changes, which a relocation refuses to run over.</param>
 /// <param name="files">The atomic file store.</param>
 /// <param name="catalog">The asset catalog; its changes make the cached references stale.</param>
 /// <param name="logger">Records every move, rewrite, copy, delete, rejection and restore.</param>
 /// <param name="redirects">The session's relocation record for undo, redo and paste; optional.</param>
-public sealed partial class AssetRelocationService(IContentCookCoordinator coordinator, IProjectContextService projects, IUnsavedDocuments documents, IAtomicFileStore files,
+public sealed partial class AssetRelocationService(IContentCookCoordinator coordinator, IProjectSession session, IUnsavedDocuments documents, IAtomicFileStore files,
     IAssetCatalog catalog, ILogger<AssetRelocationService>? logger = null, AssetRedirects? redirects = null)
     : IAssetRelocationService, IDisposable
 {
@@ -110,12 +110,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     /// <inheritdoc/>
     public async Task<IReadOnlyList<AssetPath>> FindReferrersAsync(AssetPath virtualPath, CancellationToken cancellationToken)
     {
-        var project = projects.ActiveProject;
-        if (project is null)
-        {
-            return [];
-        }
-
+        var project = session.Context;
         Task<AuthoredReferenceIndex> index;
         lock (this.sync)
         {
@@ -150,7 +145,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
 
     /// <inheritdoc/>
     public IReadOnlyList<UnsavedDocument> FindUnsavedDocuments()
-        => projects.ActiveProject is { } project ? documents.Find([project.ProjectRoot]) : [];
+        => documents.Find([session.Context.ProjectRoot]);
 
     /// <inheritdoc/>
     public async Task<IReadOnlyList<AssetPath>> CopyAsync(IReadOnlyList<AssetPath> sources, AssetPath targetFolder, CancellationToken cancellationToken)

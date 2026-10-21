@@ -26,7 +26,7 @@ internal static class CookScenario
     /// <param name="compatibility">Checks the native tools; the workspace's own when none is given.</param>
     /// <param name="publication">Publishes the cooked roots; the workspace's own when none is given.</param>
     /// <returns>The service.</returns>
-    internal static ContentPipelineService CreateService(CookWorkspace workspace, IEngineContentPipelineApi api, ISceneDescriptorGenerator? generator = null, Managed.Core.Compatibility.INativeCompatibilityService? compatibility = null, CookPublicationService? publication = null) => new(workspace.ContextService, workspace.CookCoordinator, new FixedCookScopeProvider(workspace.Root), generator ?? new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, compatibility ?? workspace.Compatibility, workspace.Files, publication ?? workspace.Publication, workspace.EngineContent);
+    internal static ContentPipelineService CreateService(CookWorkspace workspace, IEngineContentPipelineApi api, ISceneDescriptorGenerator? generator = null, Managed.Core.Compatibility.INativeCompatibilityService? compatibility = null, CookPublicationService? publication = null) => new(workspace.Session, workspace.CookCoordinator, new FixedCookScopeProvider(workspace.Root), generator ?? new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, compatibility ?? workspace.Compatibility, workspace.Files, publication ?? workspace.Publication, workspace.EngineContent);
 
     internal static CookInspectionResult SucceededInspection(CookWorkspace workspace) => new(workspace.Root, Succeeded: true, SourceIdentity: null, Assets: [], Files: [], Diagnostics: []);
 

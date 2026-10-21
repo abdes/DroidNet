@@ -41,7 +41,7 @@ public sealed partial class ContentExplorerViewModel(
     ScopeFactory scopes,
     ScopeHandle window,
     IRouter parentRouter,
-    IProjectContextService projectContextService,
+    IProjectSession session,
     IProjectUsageService projectUsage,
     IOperationResultPublisher operationResults,
     IStatusReducer statusReducer,
@@ -413,11 +413,7 @@ public sealed partial class ContentExplorerViewModel(
 
     private async Task PersistContentExplorerStateAsync(string currentUrl)
     {
-        var project = projectContextService.ActiveProject;
-        if (project is null)
-        {
-            return;
-        }
+        var project = session.Context;
 
         try
         {
@@ -431,13 +427,9 @@ public sealed partial class ContentExplorerViewModel(
 
     private async Task<string> GetInitialContentExplorerUrlAsync()
     {
-        var project = projectContextService.ActiveProject;
-        var scenes = RouteStateMapping.BuildSelectedQuery(project is not null && HasScenesFolder(project) ? [ScenesFolder] : []);
+        var project = session.Context;
+        var scenes = RouteStateMapping.BuildSelectedQuery(HasScenesFolder(project) ? [ScenesFolder] : []);
         var defaultUrl = DefaultLocalUrl + scenes;
-        if (project is null)
-        {
-            return defaultUrl;
-        }
 
         try
         {
@@ -477,7 +469,7 @@ public sealed partial class ContentExplorerViewModel(
         Exception? exception = null)
     {
         var operationId = Guid.NewGuid();
-        var project = projectContextService.ActiveProject;
+        var project = session.Context;
         var diagnostics = new List<DiagnosticRecord>
         {
             new()
@@ -505,9 +497,9 @@ public sealed partial class ContentExplorerViewModel(
             CompletedAt = DateTimeOffset.Now,
             AffectedScope = new AffectedScope
             {
-                ProjectId = project?.ProjectId,
-                ProjectName = project?.Name,
-                ProjectPath = project?.ProjectRoot.FullPath,
+                ProjectId = project.ProjectId,
+                ProjectName = project.Name,
+                ProjectPath = project.ProjectRoot.FullPath,
             },
             Diagnostics = diagnostics,
             PrimaryAction = new PrimaryAction
@@ -737,8 +729,7 @@ public sealed partial class ContentExplorerViewModel(
             var rootLabel = "Project";
             try
             {
-                var projectContext = this.scope?.Resolver.Resolve<IProjectContextService>();
-                var pn = projectContext?.ActiveProject?.Name;
+                var pn = this.scope?.Resolver.Resolve<IProjectSession>().Context.Name;
                 if (!string.IsNullOrEmpty(pn))
                 {
                     rootLabel = pn!;
@@ -754,7 +745,7 @@ public sealed partial class ContentExplorerViewModel(
 
             // Always include root breadcrumb
             entries.Add(new BreadcrumbEntry(rootLabel, Folder: null));
-            this.SourceDescription = DescribeSource(projectContextService.ActiveProject, primary);
+            this.SourceDescription = DescribeSource(session.Context, primary);
 
             // The folder's mount, then each folder down to it.
             var crumbs = new Stack<AssetPath>();

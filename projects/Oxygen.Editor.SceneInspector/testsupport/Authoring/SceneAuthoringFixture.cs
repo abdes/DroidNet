@@ -6,7 +6,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Scenes;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
@@ -48,7 +48,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun" });
         scene.RootNodes.Add(node);
         this.TestScene = TestScenes.Open(scene, interaction);
-        this.Projects.Activate(this.TestScene.Project);
+        this.Session = new TestSession(this.TestScene.Project);
         this.Scene = this.TestScene.Scene;
         this.Node = this.TestScene.NodeOf(node);
         this.Camera = this.Node.Components.OfType<PerspectiveCamera>().Single();
@@ -67,7 +67,8 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     /// <summary>Gets what edits the document's scene.</summary>
     public SceneAuthoring Authoring => this.TestScene.Authoring;
 
-    public ProjectContextService Projects { get; } = new();
+    /// <summary>Gets the project session of the scene's project, which the views under test belong to.</summary>
+    public TestSession Session { get; }
 
     /// <summary>Gets the shared selection authority wired into the Explorer and Inspector.</summary>
     public SceneSelectionService Selection { get; } = new();
@@ -98,6 +99,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
 
     public void Dispose()
     {
+        this.Session.Dispose();
         this.Slots.Dispose();
         this.TestScene.Dispose();
     }

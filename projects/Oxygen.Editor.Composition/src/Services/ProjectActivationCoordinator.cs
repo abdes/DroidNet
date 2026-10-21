@@ -14,16 +14,22 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.Services;
 
 /// <summary>
-/// Host-owned coordinator for project open/create and workspace activation.
+///     Host-owned coordinator for project open/create and workspace activation.
 /// </summary>
+/// <remarks>
+///     Staging, publication recovery and the close of every window's documents happen before the project's session
+///     opens. When the user cancels that close, the open session and its clipboard are kept. Once committed, the
+///     previous session closes, the new one opens and the workspace window navigates into it; a navigation that reports
+///     a failure closes the half-open session again.
+/// </remarks>
 [SuppressMessage("Performance", "CA1812:Avoid uninstantiated internal classes", Justification = "Instantiated through the singleton registration of the editor module.")]
 internal sealed partial class ProjectActivationCoordinator(
     IRouter router,
     IProjectValidationService validation,
     IProjectCreationService creation,
     IProjectManagerService projectManager,
-    Oxygen.Editor.ContentPipeline.Publication.CookPublicationService publication,
-    IProjectContextService projectContextService,
+    Oxygen.Editor.ContentPipeline.Publication.CookPublicationRecovery recovery,
+    IProjectSessionHost sessions,
     IRecentProjectAdapter recentProjects,
     ITemplateUsageService templateUsage,
     IProjectExplorerService projectExplorer,
@@ -93,6 +99,7 @@ internal sealed partial class ProjectActivationCoordinator(
         var primaryGoalCompleted = false;
         var wasCancelled = false;
         ProjectContext? context = null;
+        IProjectSession? opened = null;
         var affectedScope = AffectedScope.Empty;
         var title = request.Mode == ProjectActivationMode.CreateFromTemplate
             ? "Project creation failed"
@@ -166,36 +173,27 @@ internal sealed partial class ProjectActivationCoordinator(
                 return PublishSuperseded();
             }
 
-            _ = projectManager.AcceptProjectLoad(this.stagedProject);
-            projectContextService.Activate(activationContext.ProjectContext);
+            var project = projectManager.AcceptProjectLoad(this.stagedProject);
+            await sessions.CloseAsync().ConfigureAwait(true);
+            opened = await sessions.OpenAsync(activationContext.ProjectContext, project).ConfigureAwait(true);
             await this.UpdateRecentProjectsAsync(context, operationId, diagnostics, CancellationToken.None)
                 .ConfigureAwait(true);
             await this.UpdateCreationUsageAsync(request, operationId, diagnostics, CancellationToken.None)
                 .ConfigureAwait(true);
 
-            try
+            if (!await this.NavigateToWorkspaceAsync().ConfigureAwait(true))
             {
-                await router.NavigateAsync(
-                        "/we",
-                        new FullNavigation
-                        {
-                            Target = new Target { Name = "wnd-we" },
-                            ReplaceTarget = true,
-                        })
-                    .ConfigureAwait(true);
-            }
-            catch (Exception ex)
-            {
-                projectContextService.Close();
-                diagnostics.Add(
-                    exceptionAdapter.ToDiagnostic(
-                        ex,
-                        operationId,
-                        FailureDomain.WorkspaceActivation,
-                        NavigationFailedCode,
-                        "Workspace activation failed.",
-                        context.ProjectRoot.FullPath,
-                        affectedScope));
+                await this.CloseIfCurrentAsync(opened).ConfigureAwait(true);
+                diagnostics.Add(this.CreateDiagnostic(
+                    operationId,
+                    FailureDomain.WorkspaceActivation,
+                    NavigationFailedCode,
+                    DiagnosticSeverity.Error,
+                    "Workspace activation failed.",
+                    context.ProjectRoot.FullPath) with
+                {
+                    AffectedEntity = affectedScope,
+                });
                 return PublishResult(completed: false);
             }
 
@@ -221,7 +219,7 @@ internal sealed partial class ProjectActivationCoordinator(
         }
         catch (Exception ex)
         {
-            projectContextService.Close();
+            await this.CloseIfCurrentAsync(opened).ConfigureAwait(true);
             diagnostics.Add(
                 exceptionAdapter.ToDiagnostic(
                     ex,
@@ -284,6 +282,26 @@ internal sealed partial class ProjectActivationCoordinator(
         }
     }
 
+    // The workspace window replaces the Project Explorer's.
+    private Task<bool> NavigateToWorkspaceAsync()
+        => EditorWindows.NavigateAsync(
+            router,
+            EditorWindows.WorkspacePage,
+            new FullNavigation
+            {
+                Target = new Target { Name = EditorWindows.WorkspaceTarget },
+                ReplaceTarget = true,
+            });
+
+    // Closes the session this activation opened, never one another activation opened since.
+    private async Task CloseIfCurrentAsync(IProjectSession? opened)
+    {
+        if (opened is not null && ReferenceEquals(sessions.Current, opened))
+        {
+            await sessions.CloseAsync().ConfigureAwait(true);
+        }
+    }
+
     private async Task<ProjectContext?> OpenExistingProjectAsync(
         ProjectActivationRequest request,
         Guid operationId,
@@ -306,7 +324,7 @@ internal sealed partial class ProjectActivationCoordinator(
         {
             try
             {
-                await publication.RecoverAsync(ProjectContext.FromProjectInfo(saved, fileSystem), cancellationToken).ConfigureAwait(true);
+                await recovery.RecoverAsync(ProjectContext.FromProjectInfo(saved, fileSystem), cancellationToken).ConfigureAwait(true);
             }
             catch (Exception failure) when (failure is IOException or InvalidDataException or UnauthorizedAccessException or InvalidOperationException or System.Text.Json.JsonException)
             {

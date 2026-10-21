@@ -16,10 +16,10 @@ namespace Oxygen.Editor.ContentExplorer.TestSupport;
 
 internal static class ExplorerTestData
 {
-    internal static Oxygen.Editor.ContentPipeline.Publication.CookPublicationService CreateNavigationPublication(ProjectContextService projects, IStorageProvider storage)
+    internal static Oxygen.Editor.ContentPipeline.Publication.CookPublicationService CreateNavigationPublication(IProjectSession session, IStorageProvider storage)
     {
         var files = new DroidNet.Storage.Native.NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
-        return new(Mock.Of<Oxygen.Editor.ContentPipeline.IContentCookCoordinator>(), projects, files, new ProjectManagerService(storage, atomicFiles: files), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture());
+        return new(Mock.Of<Oxygen.Editor.ContentPipeline.IContentCookCoordinator>(), session, files, new ProjectManagerService(storage, atomicFiles: files), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture());
     }
 
     /// <summary>Creates an asset catalog whose only behavior is the record changes a test announces.</summary>
@@ -56,16 +56,12 @@ internal static class ExplorerTestData
         return provider;
     }
 
-    internal static ProjectContextService CreateQueryProject(bool cookedMount = false)
-    {
-        var projects = new ProjectContextService();
-        projects.Activate(TestProject.Create(new MockFileSystem(), "C:/Query").Context with
+    internal static TestSession CreateQuerySession(bool cookedMount = false)
+        => new(TestProject.Create(new MockFileSystem(), "C:/Query").Context with
         {
             Name = "Query",
             AuthoringMounts = cookedMount ? [new("Content", "Content"), new("Cooked", ".cooked")] : [new("Content", "Content")],
         });
-        return projects;
-    }
 
     internal static AssetEntry CreateQueryAsset(string name, AssetKind kind, AssetCookFreshness freshness)
     {

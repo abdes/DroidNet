@@ -179,7 +179,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <inheritdoc/>
     public async Task PrepareForCloseAsync()
     {
-        await this.inputCommitter.CommitAsync().ConfigureAwait(true);
+        await this.inputCommitter.CommitAsync(this.Document.Id).ConfigureAwait(true);
         await this.SaveViewportStateForCloseAsync().ConfigureAwait(true);
         await this.PreviewSettings.FlushAsync().ConfigureAwait(true);
         if (this.Authoring is { } authoring)
@@ -284,7 +284,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
     private async Task<bool> SaveCoreAsync()
     {
-        await this.inputCommitter.CommitAsync().ConfigureAwait(true);
+        await this.inputCommitter.CommitAsync(this.Document.Id).ConfigureAwait(true);
         await this.PreviewSettings.FlushAsync().ConfigureAwait(true);
         if (this.scene is null)
         {

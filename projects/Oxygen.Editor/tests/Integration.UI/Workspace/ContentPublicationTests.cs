@@ -37,7 +37,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             var oldName = fixture.Source.Name;
             var oldUri = AssetPath.Create("Content", $"Scenes/{oldName}.oscene");
             _ = (await scenario.Services.Pipeline.CookCurrentSceneAsync(oldUri, token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
-            using (var relocation = new AssetRelocationService(scenario.Services.Runs, scenario.Services.Projects, scenario.Services.Documents, new NativeAtomicFileStore(NativeSceneFixture.FileSystem), scenario.Catalog))
+            using (var relocation = new AssetRelocationService(scenario.Services.Runs, scenario.Services.Session, scenario.Services.Documents, new NativeAtomicFileStore(NativeSceneFixture.FileSystem), scenario.Catalog))
             using (fixture.FollowRelocations(relocation))
             {
                 var move = new AssetRelocationMove(AssetPath.Create("Content", $"Scenes/{oldName}.oscene.json"), AssetPath.Parse("/Content/Scenes/Small Scene.oscene.json"));
@@ -49,7 +49,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
             _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
             _ = result.IsMounted.Should().BeTrue();
             _ = fixture.Runtime.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);
-            using (var publication = await scenario.Services.Publication.AcquireForMountAsync(scenario.Services.Projects.ActiveProject!, token).ConfigureAwait(true))
+            using (var publication = await scenario.Services.Publication.AcquireForMountAsync(scenario.Services.Session.Context, token).ConfigureAwait(true))
             {
                 _ = publication.ProjectOutputPaths.Should().Contain("/Content/Scenes/Small Scene.oscene")
                     .And.NotContain($"/Content/Scenes/{oldName}.oscene");

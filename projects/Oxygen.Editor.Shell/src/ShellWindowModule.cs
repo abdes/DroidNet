@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
 using DroidNet.Composition;
 using DryIoc;
@@ -19,9 +18,8 @@ using Oxygen.Editor.Shell.Windows;
 namespace Oxygen.Editor.Shell;
 
 /// <summary>
-///     The Shell's services in a workspace window's scope: the window's document area and its document service, the
-///     prompts and confirmations that act on the window, its commands, the placement of documents and panels, the
-///     project's global history and the external code editor.
+///     The Shell's services in a workspace window's scope: the window's document area and its document service, its
+///     commands, the placement of documents and panels, and the external code editor.
 /// </summary>
 /// <remarks>
 ///     The window's open documents come from the window's composition, with the document kinds it opens; each kind's
@@ -29,14 +27,14 @@ namespace Oxygen.Editor.Shell;
 /// </remarks>
 public sealed class ShellWindowModule : IScopeModule<IWindowLayer>
 {
-    // The document service follows the window's tabs, and the window's close asks about its documents.
+    // The document service follows the window's tabs, and the window's documents take part in its close.
     private static readonly Type[] Activated =
     [
         typeof(IDocumentService),
         typeof(IDocumentArea),
         typeof(IPlacementService),
         typeof(DocumentAreaViewModel),
-        typeof(WindowCloseCoordinator),
+        typeof(WindowDocumentsClose),
     ];
 
     /// <inheritdoc />
@@ -51,12 +49,9 @@ public sealed class ShellWindowModule : IScopeModule<IWindowLayer>
         ArgumentNullException.ThrowIfNull(scope);
 
         RegisterDocuments(scope);
-        RegisterWindowDocumentServices(scope);
+        scope.Register<WindowDocumentsClose>(Reuse.Singleton);
         scope.Register<ICommandService, CommandService>(Reuse.Singleton);
         scope.Register<IPlacementService, DockingPlacementService>(Reuse.Singleton);
-
-        // The project's global history, which ends with the workspace.
-        scope.Register<IHistoryService, HistoryService>(Reuse.Singleton);
         scope.Register<ICodeEditorService, CodeEditorService>(Reuse.Singleton);
     }
 
@@ -77,25 +72,5 @@ public sealed class ShellWindowModule : IScopeModule<IWindowLayer>
         scope.RegisterMapping<IDocumentService, DocumentService>();
         scope.Register<DocumentAreaViewModel>(Reuse.Singleton);
         scope.Register<DocumentAreaView>(Reuse.Singleton);
-
-        // The cook, Play, relocations and the asset feed ask which documents are unsaved.
-        scope.Register<IUnsavedDocuments, UnsavedDocuments>(Reuse.Singleton);
-    }
-
-    // The prompts, confirmations and input of the window, which act on it without features naming it.
-    private static void RegisterWindowDocumentServices(IRegistrator scope)
-    {
-        scope.RegisterDelegate<IDocumentClosePrompt>(
-            resolver => new DocumentClosePrompt(resolver.Resolve<IDialogService>(), resolver.Resolve<IWindowManagerService>(), resolver.Resolve<WindowId>()),
-            Reuse.Singleton);
-        scope.RegisterDelegate<IDocumentConfirmations>(
-            resolver => new DocumentConfirmations(resolver.Resolve<IDialogService>(), resolver.Resolve<IWindowManagerService>(), resolver.Resolve<WindowId>()),
-            Reuse.Singleton);
-        scope.RegisterDelegate<IDocumentInputCommitter>(
-            resolver => new DocumentInputCommitter(resolver.Resolve<IWindowManagerService>(), resolver.Resolve<WindowId>()),
-            Reuse.Singleton);
-        scope.RegisterDelegate(
-            resolver => new WindowCloseCoordinator(resolver.Resolve<IWindowManagerService>(), resolver.Resolve<IDocumentTabs>(), resolver.Resolve<WindowId>()),
-            Reuse.Singleton);
     }
 }

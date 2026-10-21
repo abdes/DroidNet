@@ -16,11 +16,6 @@ namespace Oxygen.Editor.Projects;
 public interface IProjectManagerService
 {
     /// <summary>
-    /// Gets the project currently loaded in the editor, or <see langword="null"/> if no project is loaded.
-    /// </summary>
-    public IProject? CurrentProject { get; }
-
-    /// <summary>
     /// Loads the project information asynchronously based on the provided project folder path.
     /// </summary>
     /// <param name="projectFolderPath">The path to the project folder.</param>

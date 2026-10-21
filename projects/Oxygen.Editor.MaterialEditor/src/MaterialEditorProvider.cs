@@ -20,7 +20,7 @@ namespace Oxygen.Editor.MaterialEditor;
 /// <param name="assets">The asset feed the editor's pickers and status read.</param>
 /// <param name="hosting">The UI thread, where the editor shows the feed's changes.</param>
 /// <param name="cook">Cooks a material on request.</param>
-/// <param name="projects">The active project.</param>
+/// <param name="session">The project session the window lives in.</param>
 /// <param name="inputCommitter">Commits the focused control's input before a save.</param>
 /// <param name="documents">
 /// The window's document service, which saves the documents a cook reads after asking. It creates the editors, so it is
@@ -34,7 +34,7 @@ public sealed class MaterialEditorProvider(
     IAssetFeed assets,
     HostingContext hosting,
     IMaterialCookService cook,
-    IProjectContextService projects,
+    IProjectSession session,
     IDocumentInputCommitter inputCommitter,
     Lazy<IDocumentService> documents,
     IUnsavedCookInputs unsavedInputs,
@@ -43,5 +43,5 @@ public sealed class MaterialEditorProvider(
     /// <inheritdoc/>
     public DocumentEditorDescriptor Editor { get; } = new(
         kind,
-        tab => new MaterialEditorViewModel(tab, edits, assets, hosting.DispatcherScheduler, cook, projects, loggerFactory, inputCommitter, documents.Value, unsavedInputs));
+        tab => new MaterialEditorViewModel(tab, edits, assets, hosting.DispatcherScheduler, cook, session, loggerFactory, inputCommitter, documents.Value, unsavedInputs));
 }

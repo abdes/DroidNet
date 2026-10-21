@@ -17,9 +17,9 @@ public sealed partial class NativeContentPipelineFixture : IDisposable
     private readonly EditorNativeCompatibilityService compatibility = EditorNativeCompatibilityService.ForCooking();
 
     /// <summary>Initializes a new instance of the <see cref="NativeContentPipelineFixture"/> class.</summary>
-    /// <param name="context">The active fixture project.</param>
+    /// <param name="session">The fixture project's session.</param>
     /// <param name="coordinator">Its shared cook writer.</param>
-    public NativeContentPipelineFixture(IProjectContextService context, IContentCookCoordinator coordinator)
+    public NativeContentPipelineFixture(IProjectSession session, IContentCookCoordinator coordinator)
     {
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
         var storage = new NativeStorageProvider(new RealFileSystem());
@@ -27,12 +27,12 @@ public sealed partial class NativeContentPipelineFixture : IDisposable
         var engineContent = EngineContentPak.Installed();
         this.Publication = new CookPublicationService(
             coordinator,
-            context,
+            session,
             files,
             new ProjectManagerService(storage, atomicFiles: files),
             engineContent);
         this.Pipeline = new ContentPipelineService(
-            context,
+            session,
             coordinator,
             new ProjectCookScopeProvider(storage),
             new SceneDescriptorGenerator(),

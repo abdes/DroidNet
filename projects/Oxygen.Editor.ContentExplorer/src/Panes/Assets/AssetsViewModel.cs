@@ -39,7 +39,7 @@ namespace Oxygen.Editor.ContentExplorer;
 /// <param name="automaticCooking">Cooks changed sources and holds the project's Cook on change setting.</param>
 /// <param name="vmToViewConverter">The converter for converting view models to views.</param>
 /// <param name="contentExplorerState">The content explorer state to track selection changes.</param>
-/// <param name="projectContextService">The active project context service.</param>
+/// <param name="session">The project session.</param>
 /// <param name="contentPipelineService">The explicit editor content-pipeline service.</param>
 /// <param name="assetProvider">The shared content-explorer asset provider.</param>
 /// <param name="operationResults">The operation-result publisher.</param>
@@ -62,7 +62,7 @@ public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ViewModelToView vmToViewConverter,
     ContentExplorerState contentExplorerState,
-    IProjectContextService projectContextService,
+    IProjectSession session,
     IContentPipelineService contentPipelineService,
     IAssetFeed assetProvider,
     IOperationResultPublisher operationResults,
@@ -173,7 +173,7 @@ public partial class AssetsViewModel(
     {
         try
         {
-            if (!ReferenceEquals(projectContextService.ActiveProject, project))
+            if (!ReferenceEquals(session.Context, project))
             {
                 await dialogService.ShowMessageAsync("Import model", "The project changed. Select the source again in the current project.").ConfigureAwait(true);
                 return;
@@ -252,12 +252,16 @@ public partial class AssetsViewModel(
                 ? diagnostic
                 : diagnostic with { OperationId = operationId })];
 
+    // A library's copy is inspected where the library shows it.
+    private static AssetPath GetInspectionScope(AssetEntry asset)
+        => asset.CookedMetadata is not null && AssetPath.TryParse(asset.DisplayPath, out var shown) ? shown : asset.Identity;
+
     private static string DescribeScope(AssetPath? scopeUri)
         => scopeUri?.ToString() ?? "the active project";
 
     private async Task ImportImageSourceAsync(ProjectContext project, string sourcePath)
     {
-        if (!ReferenceEquals(projectContextService.ActiveProject, project))
+        if (!ReferenceEquals(session.Context, project))
         {
             await dialogService.ShowMessageAsync("Import texture", "The project changed. Select the image again in the current project.").ConfigureAwait(true);
             return;
@@ -363,8 +367,9 @@ public partial class AssetsViewModel(
             Debug.WriteLine($"[AssetsViewModel] Navigating to folder: {args.InvokedItem.DisplayPath}");
             await this.NavigateToFolder(args.InvokedItem.DisplayPath).ConfigureAwait(false);
         }
-        else if (args.InvokedItem is { Kind: AssetKind.ForeignSource, SourcePath: { } sourcePath } && projectContextService.ActiveProject is { } project)
+        else if (args.InvokedItem is { Kind: AssetKind.ForeignSource, SourcePath: { } sourcePath })
         {
+            var project = session.Context;
             if (project.FileSystem.File.Exists(sourcePath.FullPath + NativeSceneImportSettings.SidecarSuffix))
             {
                 await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(args.InvokedItem.Identity, project, CancellationToken.None)).ConfigureAwait(true);
@@ -491,11 +496,12 @@ public partial class AssetsViewModel(
 
     private bool IsSelectedFolderWritable()
     {
-        if (this.disposed || !this.isInitialized || projectContextService.ActiveProject is not { } project)
+        if (this.disposed || !this.isInitialized)
         {
             return false;
         }
 
+        var project = session.Context;
         var folder = this.GetSelectedFolder();
         return project.AuthoringMounts.Any(mount => !ContentFoldersViewModel.IsPersistedProjectRelativeVirtualMount(mount)
             && string.Equals(folder.Mount, mount.Name, StringComparison.Ordinal));
@@ -516,6 +522,8 @@ public partial class AssetsViewModel(
         this.CookSelectedAssetCommand.NotifyCanExecuteChanged();
         this.CookSelectedFolderCommand.NotifyCanExecuteChanged();
         this.CreateFolderCommand.NotifyCanExecuteChanged();
+        this.InspectCookedOutputCommand.NotifyCanExecuteChanged();
+        this.ValidateCookedOutputCommand.NotifyCanExecuteChanged();
         this.NotifyAssetActions();
     }
 
@@ -599,28 +607,29 @@ public partial class AssetsViewModel(
         }
     }
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanInspectCookedOutput))]
     private Task InspectCookedOutputAsync() => this.OpenSelectedInspectionAsync(validate: false);
 
-    [RelayCommand]
+    [RelayCommand(CanExecute = nameof(CanInspectCookedOutput))]
     private Task ValidateCookedOutputAsync() => this.OpenSelectedInspectionAsync(validate: true);
 
+    // Only content cooks: the project's own files have no cooked output.
+    private bool CanInspectCookedOutput()
+        => !this.disposed && this.isInitialized && session.Context.Find(this.GetSelectedAsset() is { } asset ? GetInspectionScope(asset) : this.GetSelectedFolder())
+            is not { MountKind: ProjectMountKind.ProjectFiles };
+
+    private AssetEntry? GetSelectedAsset()
+        => this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { Kind: not AssetKind.Folder } asset } ? asset : null;
+
     private Task OpenSelectedInspectionAsync(bool validate)
-        => this.isInitialized && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset: { Kind: not AssetKind.Folder } asset }
-            ? this.OpenInspectionAsync(validate, asset.Identity, asset) : this.OpenInspectionAsync(validate);
+        => this.GetSelectedAsset() is { } asset ? this.OpenInspectionAsync(validate, asset.Identity, asset) : this.OpenInspectionAsync(validate);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI reports a document-opening failure at its operation boundary.")]
     private async Task OpenInspectionAsync(bool validate, AssetPath? identity = null, AssetEntry? asset = null)
     {
-        // A library's copy is inspected where the library shows it.
-        var scope = asset?.CookedMetadata is not null && AssetPath.TryParse(asset.DisplayPath, out var shown) ? shown : identity ?? this.GetSelectedFolder();
+        var scope = asset is not null ? GetInspectionScope(asset) : identity ?? this.GetSelectedFolder();
         try
         {
-            if (projectContextService.ActiveProject is null)
-            {
-                return;
-            }
-
             var inspection = new CookedInspectionRequest(scope, validate)
             {
                 Asset = identity,
@@ -771,12 +780,12 @@ public partial class AssetsViewModel(
 
     private AffectedScope CreateAffectedScope(AssetPath? scopeUri)
     {
-        var project = projectContextService.ActiveProject;
+        var project = session.Context;
         return new AffectedScope
         {
-            ProjectId = project?.ProjectId,
-            ProjectName = project?.Name,
-            ProjectPath = project?.ProjectRoot.FullPath,
+            ProjectId = project.ProjectId,
+            ProjectName = project.Name,
+            ProjectPath = project.ProjectRoot.FullPath,
             AssetId = scopeUri?.ToUriString(),
             AssetVirtualPath = scopeUri?.VirtualPath,
         };
@@ -799,9 +808,9 @@ public partial class AssetsViewModel(
     {
         try
         {
-            var project = projectContextService.ActiveProject;
+            var project = session.Context;
             var window = windowManagerService.ActiveWindow?.Window;
-            if (project is null || window is null)
+            if (window is null)
             {
                 return;
             }
@@ -862,7 +871,7 @@ public partial class AssetsViewModel(
     {
         try
         {
-            if (projectContextService.ActiveProject is not null && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSource: { } source })
+            if (this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSource: { } source })
             {
                 if (assetReveal is null || !await assetReveal.RevealAsync([source]).ConfigureAwait(true))
                 {
@@ -883,8 +892,9 @@ public partial class AssetsViewModel(
     [RelayCommand(CanExecute = nameof(CanReimportSelectedSource))]
     private async Task ReimportSelectedSourceAsync()
     {
-        if (projectContextService.ActiveProject is { } project && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSource: { } source })
+        if (this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSource: { } source })
         {
+            var project = session.Context;
             await this.RunSourceImportAsync(project, () => contentPipelineService.ReimportSourceAsync(source, project, CancellationToken.None)).ConfigureAwait(true);
         }
     }
@@ -896,7 +906,7 @@ public partial class AssetsViewModel(
         try
         {
             var result = await import().ConfigureAwait(true);
-            if (ReferenceEquals(projectContextService.ActiveProject, project))
+            if (ReferenceEquals(session.Context, project))
             {
                 await assetProvider.RefreshAsync().ConfigureAwait(true);
                 this.NotifyCookSelection();

@@ -22,14 +22,14 @@ internal sealed partial class RetentionWorkspace : IDisposable
     public RetentionWorkspace()
     {
         Directory.CreateDirectory(this.ProjectRoot);
-        this.Projects.Activate(TestProject.Create(new RealFileSystem(), this.ProjectRoot).Context with { Name = "Retention" });
-        this.Coordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
+        this.Session = new(TestProject.Create(new RealFileSystem(), this.ProjectRoot).Context with { Name = "Retention" });
+        this.Coordinator = new(this.Session, NullLogger<ContentCookCoordinator>.Instance);
         this.Retention = new(this.Coordinator);
     }
 
     public string ProjectRoot => Path.Combine(this.root, "Project");
 
-    public ProjectContextService Projects { get; } = new();
+    public TestSession Session { get; }
 
     public ContentCookCoordinator Coordinator { get; }
 
@@ -48,8 +48,9 @@ internal sealed partial class RetentionWorkspace : IDisposable
 
     public void Dispose()
     {
-        this.Projects.Close();
+        this.Session.End();
         this.Coordinator.Dispose();
+        this.Session.Dispose();
         Directory.Delete(this.root, recursive: true);
     }
 }

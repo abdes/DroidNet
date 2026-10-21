@@ -15,14 +15,20 @@ Design: [editor-shell.md](../../design/editor/review/editor-shell.md),
 | `Contributions` | Feature modules, panel descriptors, editor providers and the registry that checks them |
 | `Documents`     | The document service, each window's document area and tabs, closing, prompts, banners  |
 | `Commands`      | Command descriptors, the window's command service and its key bindings                 |
-| `Windows`       | Placement of documents and panels                                                      |
+| `Windows`       | Placement of documents and panels, and the close of windows and the editor's exit      |
 | `Layout`        | The docking workspace: its routed layout, dock views and the Docking placement adapter |
 | `Desktop`       | Clipboard, File Explorer, Recycle Bin and the external code editor                     |
 
-`ShellModule` registers the tabs of every window in the editor scope.
+`ShellModule` registers the tabs of every window, the close of every window,
+and the prompts, confirmations and input commits of documents in the editor
+scope. Each takes the window it acts on with every call; an editor commits the
+input of the window that shows its document.
+`ShellSessionModule` registers the project session's global history and its
+unsaved documents.
 `ShellWindowModule` registers each window's document area and document service,
-its prompts and confirmations, commands, placement, the global history and the
-external code editor, and creates the document service when the window opens.
+commands, placement and the external code editor, and creates the document
+service when the window opens. The Shell knows no
+project: the composition root opens the session.
 `DockingWindowModule` registers the window's docking.
 
 ## Documents
@@ -48,8 +54,9 @@ shows, how it closes and how it follows its file.
 - `DocumentAreaView` shows the active document's editor under two banners: the
   file is missing on disk (Save, Close), or it changed on disk while the
   document has unsaved changes (Reload, Keep Mine, Save a Copy).
-- `IHistoryService` holds the session's global history; each document has its
-  own.
+- `IHistoryService` holds the session's global history, which every window of
+  the session undoes and redoes and which ends with the session; each document
+  has its own.
 
 ### Tabs
 
@@ -71,13 +78,13 @@ A close is a transaction: it is prepared, then committed or dropped.
 
 - `PrepareCloseDocumentsAsync` prepares closing some tabs of a window,
   `PrepareCloseAllAsync` a window's close, and `PrepareCloseAllWindowsAsync` the
-  replacement of the project. `WindowCloseCoordinator` prepares the window's
-  documents when Aura closes the window.
+  replacement of the project. `WindowDocumentsClose` prepares the window's
+  documents when the window closes (see [Closing windows](#closing-windows)).
 - Preparing raises `DocumentClosing`, whose handlers may veto, then hands the
   tabs to the window's `DocumentCloseCoordinator`, which the window's document
   service registers with the tabs. Each editor takes part in the close as an
   `IDocumentCloseParticipant`.
-- The coordinator asks the window's `IDocumentClosePrompt`: _Save changes to 2
+- The coordinator asks `IDocumentClosePrompt`, in the window that closes them: _Save changes to 2
   documents?_ with Save, Don't Save and Cancel, each document listed with its
   asset and, when there are several, a check box. A document whose file changed
   on disk offers Reload and Save a Copy in the prompt. When a document is still
@@ -107,6 +114,27 @@ window, such as a list's row, the views around it still name the part. Undo and 
 document's history, or to the global history when no document is active. A
 control that handles a key itself keeps it, text entry keeps its own Undo, and a
 menu or flyout with the focus keeps the keys while it is open.
+
+## Closing windows
+
+`CloseAndExit` is the only handler of Aura's `WindowClosing`. It runs every
+`IWindowCloseParticipant` in its `WindowCloseLevel` order: the documents, the
+window, the session, then the editor.
+
+1. Prepare: each participant asks what must be asked and returns its
+   `WindowCloseStep`, or refuses, which keeps the window open.
+2. Commit: once the close is approved, each step commits its part; a step that
+   refuses keeps the window open.
+3. Finalize: once every step committed, each finalizes, before the window is
+   destroyed.
+
+`WindowClose.IsLastWindow` tells the participants that no other window is open.
+The participants of the editor scope are registered by the composition root:
+window placement, the project session (closing its last workspace window opens
+the Start window, then closes the session) and the editor's exit (closing the
+last window otherwise closes any session, then shuts the engine down). A
+window's participants, such as `WindowDocumentsClose`, join while the window
+lives.
 
 ## Placement and contributions
 

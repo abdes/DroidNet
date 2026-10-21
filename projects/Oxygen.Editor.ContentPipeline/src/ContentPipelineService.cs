@@ -19,7 +19,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <summary>
 /// Default explicit editor content-pipeline workflow service.
 /// </summary>
-/// <param name="projectContextService">The active project context service.</param>
+/// <param name="session">The project session the pipeline cooks for; its lifetime cancels the session's reads.</param>
 /// <param name="cookCoordinator">The shared project writer and lifetime coordinator.</param>
 /// <param name="cookScopeProvider">The project cook scope provider.</param>
 /// <param name="sceneDescriptorGenerator">The scene descriptor generator.</param>
@@ -30,7 +30,7 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="files">Atomic storage for retained source settings.</param>
 /// <param name="publication">The shared journal and runtime-publication owner.</param>
 public sealed partial class ContentPipelineService(
-    IProjectContextService projectContextService,
+    IProjectSession session,
     IContentCookCoordinator cookCoordinator,
     IProjectCookScopeProvider cookScopeProvider,
     ISceneDescriptorGenerator sceneDescriptorGenerator,
@@ -52,7 +52,7 @@ public sealed partial class ContentPipelineService(
     private readonly Publication.CookPublicationService publication = publication ?? throw new ArgumentNullException(nameof(publication));
     private readonly IEngineContentPak engineContent = engineContent ?? throw new ArgumentNullException(nameof(engineContent));
 
-    private readonly IProjectContextService projectContextService = projectContextService ?? throw new ArgumentNullException(nameof(projectContextService));
+    private readonly IProjectSession session = session ?? throw new ArgumentNullException(nameof(session));
     private readonly IContentCookCoordinator cookCoordinator = cookCoordinator ?? throw new ArgumentNullException(nameof(cookCoordinator));
     private readonly IProjectCookScopeProvider cookScopeProvider = cookScopeProvider ?? throw new ArgumentNullException(nameof(cookScopeProvider));
     private readonly ISceneDescriptorGenerator sceneDescriptorGenerator = sceneDescriptorGenerator ?? throw new ArgumentNullException(nameof(sceneDescriptorGenerator));
@@ -68,7 +68,7 @@ public sealed partial class ContentPipelineService(
         // A request may name a source file; the cook, its run and its results name the asset the file stands for.
         sceneAssetUri = AssetFileTypes.ToIdentity(sceneAssetUri);
         return this.cookCoordinator.RunCookAsync(
-            new(CookTargetKind.CurrentScene, sceneAssetUri) { CoalescePending = true, OriginContext = this.projectContextService.ActiveProject },
+            new(CookTargetKind.CurrentScene, sceneAssetUri) { CoalescePending = true, OriginContext = this.session.Context },
             (operation, token) => this.CookCurrentSceneCoreAsync(operation, sceneAssetUri, token),
             cancellationToken);
     }
@@ -81,7 +81,7 @@ public sealed partial class ContentPipelineService(
         // A request may name a source file; the cook, its run and its results name the asset the file stands for.
         assetUri = AssetFileTypes.ToIdentity(assetUri);
         return this.cookCoordinator.RunCookAsync(
-            new(CookTargetKind.Asset, assetUri) { CoalescePending = true, OriginContext = expectedProject ?? this.projectContextService.ActiveProject },
+            new(CookTargetKind.Asset, assetUri) { CoalescePending = true, OriginContext = expectedProject ?? this.session.Context },
             (operation, token) => expectedProject is not null && (operation.Project.ProjectId != expectedProject.ProjectId
                 || operation.Project.ProjectRoot != expectedProject.ProjectRoot)
                 ? Task.FromResult(CreateFailedCook(operation, CookTargetKind.Asset, new InvalidOperationException("The originating project is no longer active.")))
@@ -101,7 +101,7 @@ public sealed partial class ContentPipelineService(
             [] => throw new ArgumentException("Cooking assets together needs at least one asset.", nameof(assetUris)),
             [var only] => this.CookAssetAsync(only, cancellationToken),
             _ => this.cookCoordinator.RunCookAsync(
-                new(CookTargetKind.Changes, ScopeUri: null) { Assets = assets, OriginContext = this.projectContextService.ActiveProject },
+                new(CookTargetKind.Changes, ScopeUri: null) { Assets = assets, OriginContext = this.session.Context },
                 (operation, token) => this.CookAssetsCoreAsync(operation, assets, isAutomatic: false, token),
                 cancellationToken),
         };
@@ -112,14 +112,14 @@ public sealed partial class ContentPipelineService(
     {
         ArgumentNullException.ThrowIfNull(folderUri);
         return this.cookCoordinator.RunCookAsync(
-            new(CookTargetKind.Folder, folderUri) { CoalescePending = true, OriginContext = this.projectContextService.ActiveProject },
+            new(CookTargetKind.Folder, folderUri) { CoalescePending = true, OriginContext = this.session.Context },
             (operation, token) => this.CookFolderCoreAsync(operation, folderUri, token),
             cancellationToken);
     }
 
     /// <inheritdoc />
     public Task<ContentCookResult> CookProjectAsync(CancellationToken cancellationToken)
-        => this.cookCoordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null) { CoalescePending = true, OriginContext = this.projectContextService.ActiveProject }, this.CookProjectCoreAsync, cancellationToken);
+        => this.cookCoordinator.RunCookAsync(new(CookTargetKind.Project, ScopeUri: null) { CoalescePending = true, OriginContext = this.session.Context }, this.CookProjectCoreAsync, cancellationToken);
 
     internal static bool IsCookableDescriptorFile(ProjectContext project, string path)
         => ContentCookAssetKinds.Of(path) switch
@@ -422,10 +422,6 @@ public sealed partial class ContentPipelineService(
             CookRunContext.Report(new(Asset: new(input.AssetUri, input.Kind, CookAssetState.Preparing)));
         }
     }
-
-    private ProjectContext RequireActiveProject()
-        => this.projectContextService.ActiveProject
-           ?? throw new InvalidOperationException("Content pipeline requires an active project.");
 
     private Task<ContentCookResult> CookMixedInputsAsync(Guid operationId, ContentCookScope scope, CancellationToken cancellationToken)
         => scope.Inputs.Any(static input => input.Kind == ContentCookAssetKind.ForeignSource)

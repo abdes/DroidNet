@@ -29,7 +29,7 @@ namespace Oxygen.Editor.Assets;
 public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposable
 {
     private readonly IAssetCatalogReader catalog;
-    private readonly IProjectContextService projectContextService;
+    private readonly IProjectSession session;
     private readonly IProjectCookScopeProvider projectCookScopeProvider;
     private readonly AssetIdentityReducer reducer = new();
     private readonly IAssetCookStatusReader cookStatus;
@@ -41,11 +41,12 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     private readonly BehaviorSubject<IReadOnlyList<AssetEntry>> items = new([]);
     private readonly ILogger<AssetFeed> logger;
     private readonly CancellationTokenSource lifetime = new();
+    private readonly CancellationTokenRegistration sessionEnd;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="AssetFeed"/> class.</summary>
     /// <param name="catalog">The asset catalog.</param>
-    /// <param name="projectContextService">The active project lifetime.</param>
+    /// <param name="session">The project session, whose content mount changes refresh the feed.</param>
     /// <param name="projectCookScopeProvider">The published mount paths.</param>
     /// <param name="cookStatus">The cook-owned freshness reader.</param>
     /// <param name="documents">The open documents with unsaved changes.</param>
@@ -56,7 +57,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     /// <param name="logger">Background refresh diagnostics.</param>
     public AssetFeed(
         AssetCatalog catalog,
-        IProjectContextService projectContextService,
+        IProjectSession session,
         IProjectCookScopeProvider projectCookScopeProvider,
         IAssetCookStatusReader cookStatus,
         IUnsavedDocuments documents,
@@ -65,13 +66,13 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         IAssetRelocationService relocation,
         IAssetAuthoring authoring,
         ILogger<AssetFeed>? logger = null)
-        : this((IAssetCatalogReader)catalog, projectContextService, projectCookScopeProvider, cookStatus, documents, cooks, runtimeStatus, relocation, authoring, logger)
+        : this((IAssetCatalogReader)catalog, session, projectCookScopeProvider, cookStatus, documents, cooks, runtimeStatus, relocation, authoring, logger)
     {
     }
 
     /// <summary>Initializes a new instance of the <see cref="AssetFeed"/> class over any reader of catalog records.</summary>
     /// <param name="catalog">The catalog records and their publication.</param>
-    /// <param name="projectContextService">The active project lifetime.</param>
+    /// <param name="session">The project session, whose content mount changes refresh the feed.</param>
     /// <param name="projectCookScopeProvider">The published mount paths.</param>
     /// <param name="cookStatus">The cook-owned freshness reader.</param>
     /// <param name="documents">The open documents with unsaved changes.</param>
@@ -82,7 +83,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     /// <param name="logger">Background refresh diagnostics.</param>
     internal AssetFeed(
         IAssetCatalogReader catalog,
-        IProjectContextService projectContextService,
+        IProjectSession session,
         IProjectCookScopeProvider projectCookScopeProvider,
         IAssetCookStatusReader cookStatus,
         IUnsavedDocuments documents,
@@ -93,7 +94,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         ILogger<AssetFeed>? logger = null)
     {
         this.catalog = catalog;
-        this.projectContextService = projectContextService;
+        this.session = session;
         this.projectCookScopeProvider = projectCookScopeProvider;
         this.cookStatus = cookStatus;
         this.documents = documents;
@@ -103,7 +104,8 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         this.authoring = authoring;
         this.logger = logger ?? NullLogger<AssetFeed>.Instance;
         this.catalog.Changes.Subscribe(_ => this.OnCatalogChanged(), this.lifetime.Token);
-        this.projectContextService.ProjectChanged.Skip(1).Subscribe(_ => this.OnProjectChanged(), this.lifetime.Token);
+        this.session.ContextChanged += this.OnContextChanged;
+        this.sessionEnd = session.Lifetime.Register(this.ResetProject);
         this.documents.Changed += this.OnUnsavedDocumentsChanged;
         this.cooks.RunChanged += this.OnCookRunChanged;
         this.cookStatus.Changed += this.OnFreshnessChanged;
@@ -114,6 +116,9 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
 
     /// <inheritdoc />
     public IObservable<IReadOnlyList<AssetEntry>> Items => this.items.AsObservable();
+
+    // The session's project in its current content mounts, until the session ends.
+    private ProjectContext? SessionProject => this.session.Lifetime.IsCancellationRequested ? null : this.session.Context;
 
     /// <inheritdoc />
     public Task RefreshAsync(CancellationToken cancellationToken = default)
@@ -139,7 +144,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         lock (this.refreshSync)
         {
             ObjectDisposedException.ThrowIf(this.disposed, this);
-            if (this.projectContextService.ActiveProject is not { } active)
+            if (this.SessionProject is not { } active)
             {
                 return AssetEntry.Missing(identity);
             }
@@ -153,7 +158,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             }
         }
 
-        if (project.FindSource(identity) is not { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } source)
+        if (project.FindSource(identity) is not { IsProjectFile: true, IsMountRoot: false } source)
         {
             return AssetEntry.Missing(identity);
         }
@@ -164,7 +169,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         var enriched = await this.ApplyCookStatusAsync(project, reduced, cancellation.Token).ConfigureAwait(false);
         lock (this.refreshSync)
         {
-            return !this.disposed && ReferenceEquals(project, this.projectContextService.ActiveProject) && enriched.Count != 0 ? this.ApplyLiveState(enriched)[0] : null;
+            return !this.disposed && ReferenceEquals(project, this.SessionProject) && enriched.Count != 0 ? this.ApplyLiveState(enriched)[0] : null;
         }
     }
 
@@ -212,11 +217,11 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             IsSelectable = state.Freshness == AssetCookFreshness.Unknown ? item.IsSelectable : state.Freshness is not (AssetCookFreshness.InvalidSource or AssetCookFreshness.MissingSource),
         };
 
-    // Only the files of authoring mounts are project sources.
+    // Any file of the project is a source a row can open, whether or not it cooks.
     private static FileSystemPath? TryResolveSourcePath(ProjectContext project, AssetPath path)
-        => project.Find(path) is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location ? location.File : null;
+        => project.Find(path) is { IsProjectFile: true, IsMountRoot: false } location ? location.File : null;
 
-    // Cancelling the lifetime also ends the catalog and project subscriptions.
+    // Cancelling the lifetime also ends the catalog subscription.
     private void Close()
     {
         lock (this.refreshSync)
@@ -240,6 +245,8 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         this.runtimeStatus.Changed -= this.OnRuntimeStatusChanged;
         this.relocation.FilesChanged -= this.OnEditorFilesChanged;
         this.authoring.FilesChanged -= this.OnEditorFilesChanged;
+        this.session.ContextChanged -= this.OnContextChanged;
+        this.sessionEnd.Dispose();
     }
 
     private async Task<IReadOnlyList<AssetEntry>> ApplyCookStatusAsync(

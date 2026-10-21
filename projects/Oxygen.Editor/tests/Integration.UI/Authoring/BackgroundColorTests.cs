@@ -64,7 +64,8 @@ internal sealed class BackgroundColorTests : DroidNet.Tests.VisualUserInterfaceT
         var data = new SceneData { Id = SceneId.New(), Name = "Background", Environment = new SceneEnvironmentData { AtmosphereEnabled = true } };
         await File.WriteAllBytesAsync(path, System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(data, SceneJsonContext.Default.SceneData), cancellationToken).ConfigureAwait(true);
         var file = new DocumentFile(FileSystemPath.From(path), AssetPath.Parse("/Content/Scenes/Background.oscene"));
-        using var scenes = new OpenDocuments([new SceneDocumentKind(project)], new NativeAtomicFileStore(new RealFileSystem()));
+        using var session = new TestSession(project);
+        using var scenes = new OpenDocuments([new SceneDocumentKind(session)], new NativeAtomicFileStore(new RealFileSystem()));
         var (previewEngine, probe) = EngineProbe.Of(engine);
         var preview = ScenePreviews.Create(previewEngine, scenes, operationResults: results);
         using var previewLifetime = (IDisposable)preview;

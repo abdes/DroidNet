@@ -4,7 +4,6 @@
 
 using System.Numerics;
 using System.Text.Json;
-using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 using Oxygen.Editor.Assets;
@@ -28,27 +27,24 @@ namespace Oxygen.Editor.LivePreview.Tests.TestSupport.Native;
 internal sealed partial class PreviewProject : IDisposable
 {
     private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-LivePreview-");
-    private readonly ContentCookCoordinator coordinator;
-    private readonly Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture native;
-    private readonly ProjectManagerService manager;
+    private ContentCookCoordinator coordinator;
+    private Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture native;
 
     /// <summary>Initializes a new instance of the <see cref="PreviewProject"/> class.</summary>
     public PreviewProject()
     {
         this.Context = TestProject.Create(new RealFileSystem(), this.directory.FullName).Context;
         _ = TestProject.SaveProjectFile(this.Context);
-        this.Projects.Activate(this.Context);
-        this.coordinator = new ContentCookCoordinator(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
-        this.native = new Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture(this.Projects, this.coordinator);
-        this.manager = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: new NativeAtomicFileStore(new RealFileSystem()));
+        this.Sessions = new TestSessionHost();
+        (this.coordinator, this.native) = this.OpenPipeline();
         _ = this.Catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
     }
 
     /// <summary>Gets the project's context, as the workspace activated it.</summary>
     public ProjectContext Context { get; }
 
-    /// <summary>Gets the active project.</summary>
-    public ProjectContextService Projects { get; } = new();
+    /// <summary>Gets the project's session host, whose session the project's cook serves.</summary>
+    public TestSessionHost Sessions { get; }
 
     /// <summary>Gets the asset catalog the preview hands each publication to.</summary>
     public Mock<IAssetPublicationTarget> Catalog { get; } = new();
@@ -85,6 +81,20 @@ internal sealed partial class PreviewProject : IDisposable
         return publication.FindProjectRoot("Content");
     }
 
+    /// <summary>Closes the project's session, which ends the cooks it started.</summary>
+    public void CloseSession() => this.Sessions.CloseAsync().GetAwaiter().GetResult();
+
+    /// <summary>
+    /// Opens a new session of the project, with a cook pipeline of its own, as reopening the project does. The prior
+    /// session's pipeline is disposed, so its preview sessions must be disposed first.
+    /// </summary>
+    public void OpenSession()
+    {
+        this.native.Dispose();
+        this.coordinator.Dispose();
+        (this.coordinator, this.native) = this.OpenPipeline();
+    }
+
     /// <summary>Creates the project's preview session on an engine, as the workspace does.</summary>
     /// <param name="engine">The engine.</param>
     /// <returns>The session, not started.</returns>
@@ -92,7 +102,7 @@ internal sealed partial class PreviewProject : IDisposable
     {
         var results = new Mock<IOperationResultPublisher>();
         _ = results.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Add);
-        return new PreviewSession(engine, this.Publication, new CookedContentMountService(), this.Catalog.Object, this.coordinator, this.Projects, this.manager, results.Object, new OperationStatusReducer());
+        return new PreviewSession(engine, this.Publication, new CookedContentMountService(), this.Catalog.Object, this.coordinator, this.Sessions.Session!, this.Sessions, results.Object, new OperationStatusReducer());
     }
 
     /// <inheritdoc/>
@@ -100,6 +110,7 @@ internal sealed partial class PreviewProject : IDisposable
     {
         this.native.Dispose();
         this.coordinator.Dispose();
+        this.Sessions.Dispose();
         try
         {
             this.directory.Delete(recursive: true);
@@ -108,5 +119,13 @@ internal sealed partial class PreviewProject : IDisposable
         {
             // A reader the engine still holds keeps a file; the temporary folder is left behind.
         }
+    }
+
+    // The cook pipeline belongs to a project session, as the session scope's services do.
+    private (ContentCookCoordinator Coordinator, Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture Native) OpenPipeline()
+    {
+        var session = this.Sessions.Open(this.Context);
+        var coordinator = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);
+        return (coordinator, new Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture(session, coordinator));
     }
 }

@@ -8,7 +8,6 @@ using DroidNet.Controls;
 using DroidNet.Documents;
 using DroidNet.Routing;
 using Moq;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Layout;
@@ -381,7 +380,6 @@ public sealed partial class SceneExplorerSelectionTests
 
         public SelectionHarness(out Scene scene, out SceneNode freeNode, out FolderId folderId)
         {
-            var project = new Project(new ProjectInfo("Selection", Category.Games, "H:/SelectionTests", "preview.png"));
             scene = new Scene { Name = "Scene A" };
             this.sceneA = scene;
 
@@ -404,10 +402,6 @@ public sealed partial class SceneExplorerSelectionTests
                 new ExplorerEntryData { Type = "Node", NodeId = freeNode.Id },
             ];
 
-            var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-            _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
-            this.Manager = manager;
-
             var documents = new TestDocumentArea();
             var metadata = TestScenes.Open(scene, layout: layout);
             scene = metadata.Scene;
@@ -421,8 +415,6 @@ public sealed partial class SceneExplorerSelectionTests
             this.SelectionService.SelectionChanged += (_, args) => this.Received.Add(args);
             _ = this.Views.Setup(views => views.FrameAsync(It.IsAny<DocumentId>(), It.IsAny<IReadOnlyList<NodeId>>())).ReturnsAsync(true);
         }
-
-        public Mock<IProjectManagerService> Manager { get; }
 
         public TestDocumentArea Documents { get; }
 
@@ -456,7 +448,6 @@ public sealed partial class SceneExplorerSelectionTests
 
         public SceneExplorerViewModel Build(ICommandService? commands = null)
             => new(
-                this.Manager.Object,
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.OpenDocuments,

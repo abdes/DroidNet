@@ -14,12 +14,12 @@ namespace Oxygen.Editor.ContentPipeline.Publication;
 
 /// <summary>Owns immutable project publication, recovery and current-workspace preview admission.</summary>
 /// <param name="coordinator">Serializes publication with cooking and other project writers.</param>
-/// <param name="projects">The active project.</param>
+/// <param name="session">The project session, whose workspace preview the publication admits.</param>
 /// <param name="files">The atomic file store.</param>
 /// <param name="projectManager">Reads the saved project configuration.</param>
 /// <param name="engineContent">The engine content pak, the lowest library beneath the declared ones.</param>
 /// <param name="logger">Records recovery of interrupted project changes.</param>
-public sealed partial class CookPublicationService(IContentCookCoordinator coordinator, IProjectContextService projects,
+public sealed partial class CookPublicationService(IContentCookCoordinator coordinator, IProjectSession session,
     IAtomicFileStore files, IProjectManagerService projectManager, IEngineContentPak engineContent,
     Microsoft.Extensions.Logging.ILogger<CookPublicationService>? logger = null)
     : ICookPublicationReader
@@ -349,12 +349,12 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
             ],
         };
 
-    private Task<ICookPublicationPreview?> CapturePreviewAsync(ProjectContext project)
+    private Task<ICookPublicationPreview?> CapturePreviewAsync(ProjectContext published)
     {
         Func<Task<ICookPublicationPreview?>>? create;
         lock (this.sync)
         {
-            create = ReferenceEquals(project, projects.ActiveProject) && this.registration is { } current && ReferenceEquals(current.Project, project)
+            create = ReferenceEquals(published, session.Context) && this.registration is { } current && ReferenceEquals(current.Project, published)
                 ? current.CreatePreview : null;
         }
 

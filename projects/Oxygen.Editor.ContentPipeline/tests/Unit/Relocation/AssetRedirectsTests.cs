@@ -21,7 +21,7 @@ public sealed class AssetRedirectsTests
     public async Task CapturedReferencesFollowRenamesInOrder()
     {
         using var workspace = new RelocationWorkspace();
-        using var redirects = new AssetRedirects(workspace.Context);
+        var redirects = new AssetRedirects(workspace.Session);
         var service = workspace.CreateService(redirects);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
 
@@ -41,7 +41,7 @@ public sealed class AssetRedirectsTests
     public async Task ExistingAssetIsNotRedirected()
     {
         using var workspace = new RelocationWorkspace();
-        using var redirects = new AssetRedirects(workspace.Context);
+        var redirects = new AssetRedirects(workspace.Session);
         var service = workspace.CreateService(redirects);
         _ = workspace.Write("Content/Materials/A.omat.json", "{}");
         _ = await service.RelocateAsync(Move("/Content/Materials/A.omat.json", "/Content/Materials/B.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -56,7 +56,7 @@ public sealed class AssetRedirectsTests
     public async Task DeletedAssetsAreReported()
     {
         using var workspace = new RelocationWorkspace();
-        using var redirects = new AssetRedirects(workspace.Context);
+        var redirects = new AssetRedirects(workspace.Session);
         var service = workspace.CreateService(redirects);
         var path = workspace.Write("Content/Materials/A.omat.json", "{}");
 

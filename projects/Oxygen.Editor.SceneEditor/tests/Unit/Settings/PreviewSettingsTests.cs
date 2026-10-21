@@ -30,7 +30,7 @@ internal sealed class PreviewSettingsTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
         _ = fixture.Engine.Object.TargetFps.Should().Be(0);
         fixture.Engine.Verify(value => value.SetVSyncEnabled(enabled: true), Times.Once());
         fixture.Engine.Verify(value => value.SetAlwaysRenderPanes(alwaysRender: false), Times.Once());
@@ -46,7 +46,7 @@ internal sealed class PreviewSettingsTests
         fixture.Engine.Verify(value => value.SetAlwaysRenderPanes(alwaysRender: true), Times.Once());
 
         var reopened = fixture.CreateService();
-        await reopened.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await reopened.EnsureRestoredAsync().ConfigureAwait(false);
         _ = reopened.FrameRateCapEnabled.Should().BeTrue();
         _ = reopened.FrameRateCap.Should().Be(45);
         _ = reopened.VSyncEnabled.Should().BeFalse();
@@ -62,7 +62,7 @@ internal sealed class PreviewSettingsTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
         service.FrameRateCapEnabled = true;
         service.FrameRateCap = 90;
 
@@ -91,7 +91,7 @@ internal sealed class PreviewSettingsTests
 
         // A later session reads the stored row, not the writer's typed cache.
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
 
         _ = service.FrameRateCapEnabled.Should().BeFalse();
         _ = service.VSyncEnabled.Should().BeTrue();
@@ -99,7 +99,7 @@ internal sealed class PreviewSettingsTests
         _ = fixture.Results.Should().BeEmpty();
     }
 
-    /// <summary>Switching projects restores each project's own preferences on the same running engine.</summary>
+    /// <summary>Each project's session restores the project's own preferences on the same running engine.</summary>
     /// <returns>The verification task.</returns>
     [TestMethod]
     public async Task ProjectSwitchKeepsPreferencesSeparate()
@@ -107,19 +107,22 @@ internal sealed class PreviewSettingsTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        var first = fixture.Project;
-        await service.RestoreAsync(first).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
         service.FrameRateCapEnabled = true;
         service.FrameRateCap = 30;
-        var second = Fixture.ProjectAt("Second");
-        fixture.Projects.Activate(second);
-        await service.RestoreAsync(second).ConfigureAwait(false);
-        _ = service.FrameRateCapEnabled.Should().BeFalse();
+        await service.FlushAsync().ConfigureAwait(false);
+
+        using var second = new TestSession(Fixture.ProjectAt("Second"));
+        var secondService = fixture.CreateService(session: second);
+        await secondService.EnsureRestoredAsync().ConfigureAwait(false);
+        _ = secondService.FrameRateCapEnabled.Should().BeFalse();
         _ = fixture.Engine.Object.TargetFps.Should().Be(0);
-        service.FrameRateCap = 50;
-        fixture.Projects.Activate(first);
-        await service.RestoreAsync(first).ConfigureAwait(false);
-        _ = service.FrameRateCap.Should().Be(30);
+        secondService.FrameRateCap = 50;
+        await secondService.FlushAsync().ConfigureAwait(false);
+
+        var firstAgain = fixture.CreateService();
+        await firstAgain.EnsureRestoredAsync().ConfigureAwait(false);
+        _ = firstAgain.FrameRateCap.Should().Be(30);
         _ = fixture.Engine.Object.TargetFps.Should().Be(30);
     }
 
@@ -131,21 +134,21 @@ internal sealed class PreviewSettingsTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
         service.FrameRateCapEnabled = true;
         service.FrameRateCap = 15;
         await service.FlushAsync().ConfigureAwait(false);
-        var replacement = Fixture.ProjectAt("First");
-        fixture.Projects.Activate(replacement);
-        await service.RestoreAsync(replacement).ConfigureAwait(false);
-        _ = service.FrameRateCapEnabled.Should().BeFalse();
-        _ = service.FrameRateCap.Should().Be(EngineConstants.DefaultFrameRateCap);
+        using var replacement = new TestSession(Fixture.ProjectAt("First"));
+        var replaced = fixture.CreateService(session: replacement);
+        await replaced.EnsureRestoredAsync().ConfigureAwait(false);
+        _ = replaced.FrameRateCapEnabled.Should().BeFalse();
+        _ = replaced.FrameRateCap.Should().Be(EngineConstants.DefaultFrameRateCap);
     }
 
-    /// <summary>A late settings load cannot reactivate a retired workspace.</summary>
+    /// <summary>A late settings load does not change the engine once the session's lifetime ended.</summary>
     /// <returns>The verification task.</returns>
     [TestMethod]
-    public async Task RetiredWorkspaceDoesNotApplyDelayedLoad()
+    public async Task EndedSessionDoesNotApplyDelayedLoad()
     {
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
@@ -153,8 +156,8 @@ internal sealed class PreviewSettingsTests
         var loaded = new TaskCompletionSource<PreviewSettingsService.Preferences?>(TaskCreationOptions.RunContinuationsAsynchronously);
         _ = store.Setup(value => value.LoadSettingAsync(PreviewSettingsService.Key, It.IsAny<SettingContext>(), It.IsAny<IProgress<SettingsProgress>>(), It.IsAny<CancellationToken>())).Returns(loaded.Task);
         var service = fixture.CreateService(store.Object);
-        var restoration = service.RestoreAsync(fixture.Project);
-        service.Deactivate(fixture.Project);
+        var restoration = service.EnsureRestoredAsync();
+        fixture.Session.End();
         loaded.SetResult(new() { ProjectId = fixture.Project.ProjectId, FrameRateCapEnabled = true, FrameRateCap = 15 });
         await restoration.ConfigureAwait(false);
         fixture.Engine.VerifySet(value => value.TargetFps = It.IsAny<uint>(), Times.Never());
@@ -172,7 +175,7 @@ internal sealed class PreviewSettingsTests
         _ = store.Setup(value => value.SaveSettingAsync(PreviewSettingsService.Key, It.IsAny<PreviewSettingsService.Preferences>(), It.IsAny<SettingContext>(), It.IsAny<IProgress<SettingsProgress>>(), It.IsAny<CancellationToken>()))
             .ThrowsAsync(new IOException("Preferences database is unavailable."));
         var service = fixture.CreateService(store.Object);
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
         service.FrameRateCapEnabled = true;
         await service.FlushAsync().ConfigureAwait(false);
         _ = fixture.Engine.Object.TargetFps.Should().Be((uint)EngineConstants.DefaultFrameRateCap);
@@ -194,7 +197,7 @@ internal sealed class PreviewSettingsTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
         for (var fps = 20; fps <= 40; ++fps)
         {
             service.FrameRateCap = fps;
@@ -202,7 +205,7 @@ internal sealed class PreviewSettingsTests
 
         await service.FlushAsync().ConfigureAwait(false);
         var reopened = fixture.CreateService();
-        await reopened.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await reopened.EnsureRestoredAsync().ConfigureAwait(false);
         _ = reopened.FrameRateCap.Should().Be(40);
         _ = fixture.Results.Should().BeEmpty();
     }
@@ -222,7 +225,7 @@ internal sealed class PreviewSettingsTests
                 (_, value, _, _, _) => writes.Add(value.FrameRateCap))
             .Returns(() => writes.Count == 1 ? release.Task : Task.CompletedTask);
         var service = fixture.CreateService(store.Object);
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
         for (var fps = 20; fps <= 50; ++fps)
         {
             service.FrameRateCap = fps;
@@ -247,16 +250,16 @@ internal sealed class PreviewSettingsTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
         service.FrameRateCap = 45;
         await service.FlushAsync().ConfigureAwait(false);
-        var sameProject = fixture.Project with
+        using var sameProject = new TestSession(fixture.Project with
         {
             ProjectRoot = FileSystemPath.From(fixture.Project.ProjectRoot.FullPath.ToUpperInvariant() + Path.DirectorySeparatorChar),
-        };
-        fixture.Projects.Activate(sameProject);
-        await service.RestoreAsync(sameProject).ConfigureAwait(false);
-        _ = service.FrameRateCap.Should().Be(45);
+        });
+        var reopened = fixture.CreateService(session: sameProject);
+        await reopened.EnsureRestoredAsync().ConfigureAwait(false);
+        _ = reopened.FrameRateCap.Should().Be(45);
     }
 
     /// <summary>
@@ -270,7 +273,7 @@ internal sealed class PreviewSettingsTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
         fixture.Engine.Verify(value => value.SetGroundGrid(new GroundGridSettings()), Times.Once());
 
         service.GroundGrid.Spacing = 2.5f;
@@ -287,10 +290,9 @@ internal sealed class PreviewSettingsTests
         };
         fixture.Engine.Verify(value => value.SetGroundGrid(edited), Times.Once());
 
-        var second = Fixture.ProjectAt("Second");
-        fixture.Projects.Activate(second);
-        var reopened = fixture.CreateService();
-        await reopened.RestoreAsync(second).ConfigureAwait(false);
+        using var second = new TestSession(Fixture.ProjectAt("Second"));
+        var reopened = fixture.CreateService(session: second);
+        await reopened.EnsureRestoredAsync().ConfigureAwait(false);
         _ = reopened.GroundGrid.Spacing.Should().Be(2.5f);
         _ = reopened.GroundGrid.MajorEvery.Should().Be(4);
         _ = reopened.GroundGrid.SmoothMotion.Should().BeFalse();
@@ -311,7 +313,7 @@ internal sealed class PreviewSettingsTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
 
         service.GroundGrid.Spacing = -3f;
         service.GroundGrid.MajorEvery = 0;
@@ -341,7 +343,7 @@ internal sealed class PreviewSettingsTests
             ct: this.TestContext.CancellationToken).ConfigureAwait(false);
 
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
 
         var restored = new GroundGridSettings { HorizonBoost = 0.8f };
         fixture.Engine.Verify(value => value.SetGroundGrid(restored), Times.Once());
@@ -361,14 +363,14 @@ internal sealed class PreviewSettingsTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
 
         service.GroundGrid.MinorColor = service.GroundGrid.MinorColor;
         await service.FlushAsync().ConfigureAwait(false);
 
         fixture.Engine.Verify(value => value.SetGroundGrid(It.IsAny<GroundGridSettings>()), Times.Once());
         var reopened = fixture.CreateService();
-        await reopened.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await reopened.EnsureRestoredAsync().ConfigureAwait(false);
         fixture.Engine.Verify(value => value.SetGroundGrid(new GroundGridSettings()), Times.Exactly(2));
     }
 
@@ -381,7 +383,7 @@ internal sealed class PreviewSettingsTests
         await using var lifetime = fixture.ConfigureAwait(false);
         fixture.EngineState = EngineServiceState.NoEngine;
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
         service.FrameRateCapEnabled = true;
         service.FrameRateCap = 45;
         service.GroundGrid.Spacing = 2f;
@@ -407,7 +409,7 @@ internal sealed class PreviewSettingsTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        await service.RestoreAsync(fixture.Project).ConfigureAwait(false);
+        await service.EnsureRestoredAsync().ConfigureAwait(false);
         service.VSyncEnabled = false;
         fixture.ChangeState(EngineServiceState.NoEngine);
         fixture.Engine.Invocations.Clear();
@@ -433,9 +435,9 @@ internal sealed class PreviewSettingsTests
 
         public PersistentState Database { get; } = new(new DbContextOptionsBuilder<PersistentState>().UseSqlite("Data Source=:memory:").Options);
 
-        public ProjectContextService Projects { get; } = new();
+        public TestSession Session { get; } = new(ProjectAt("First"));
 
-        public ProjectContext Project { get; } = ProjectAt("First");
+        public ProjectContext Project => this.Session.Context;
 
         public List<OperationResult> Results { get; } = [];
 
@@ -444,7 +446,6 @@ internal sealed class PreviewSettingsTests
             var fixture = new Fixture();
             await fixture.Database.Database.OpenConnectionAsync().ConfigureAwait(false);
             _ = await fixture.Database.Database.EnsureCreatedAsync().ConfigureAwait(false);
-            fixture.Projects.Activate(fixture.Project);
             _ = fixture.Engine.SetupProperty(value => value.TargetFps, 0u);
             _ = fixture.Engine.SetupGet(value => value.MaxTargetFps).Returns(1000);
             _ = fixture.Engine.SetupGet(value => value.State).Returns(() => fixture.EngineState);
@@ -455,8 +456,8 @@ internal sealed class PreviewSettingsTests
         public static ProjectContext ProjectAt(string name)
             => TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), "Oxygen.PreviewPreferences", name)).Context with { Name = name };
 
-        public PreviewSettingsService CreateService(IEditorSettingsManager? store = null)
-            => new(this.Engine.Object, store ?? new EditorSettingsManager(this.Database), this.Projects, this.publisher.Object, new OperationStatusReducer());
+        public PreviewSettingsService CreateService(IEditorSettingsManager? store = null, TestSession? session = null)
+            => new(this.Engine.Object, store ?? new EditorSettingsManager(this.Database), session ?? this.Session, this.publisher.Object, new OperationStatusReducer());
 
         /// <summary>Moves the engine to another state, as the engine service reports it.</summary>
         /// <param name="state">The new state.</param>
@@ -467,6 +468,10 @@ internal sealed class PreviewSettingsTests
             this.Engine.Raise(value => value.StateChanged += null, this.Engine.Object, new EngineStateChangedEventArgs(Guid.NewGuid(), previous, state));
         }
 
-        public ValueTask DisposeAsync() => this.Database.DisposeAsync();
+        public ValueTask DisposeAsync()
+        {
+            this.Session.Dispose();
+            return this.Database.DisposeAsync();
+        }
     }
 }

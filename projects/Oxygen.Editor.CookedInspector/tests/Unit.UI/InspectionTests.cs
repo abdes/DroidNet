@@ -31,13 +31,13 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
     [DataRow(560d, true)]
     public Task InspectionShowsScopedAssetsFilesAndSourceLinks(double width, bool light) => EnqueueAsync(async () =>
     {
-        var projects = CreateQueryProject();
-        var project = projects.ActiveProject!;
+        using var session = CreateQueryProject();
+        var project = session.Context;
         var scope = new CookedInspectionScope(project, AssetPath.Content, Validate: false);
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
         _ = pipeline.Setup(value => value.InspectCookedOutputAsync(scope.Scope, It.IsAny<CancellationToken>(), It.IsAny<bool>(), project)).Returns((AssetPath? _, CancellationToken _, bool validate, ProjectContext? _) => Task.FromResult(CreateInspectionReport(project, validate)));
         AssetPath? navigated = null;
-        using var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), projects, asset =>
+        using var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), session, asset =>
         {
             navigated = asset;
             return Task.FromResult(true);
@@ -84,7 +84,8 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
     [TestMethod]
     public void RowsNameTheirOwnProductAndType()
     {
-        var root = CreateInspectionReport(CreateQueryProject().ActiveProject!, validate: false).Roots[0];
+        using var session = CreateQueryProject();
+        var root = CreateInspectionReport(session.Context, validate: false).Roots[0];
         var model = AssetPath.Parse("/Content/Models/Lantern.glb");
         var input = AssetPath.Parse("/Content/Input/Player.input");
 
@@ -102,15 +103,15 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
     [TestMethod]
     public Task InspectionDrainsSupersededAndDisposedRequests() => EnqueueAsync(async () =>
     {
-        var projects = CreateQueryProject();
-        var project = projects.ActiveProject!;
+        using var session = CreateQueryProject();
+        var project = session.Context;
         var scope = new CookedInspectionScope(project, Scope: null, Validate: false);
         var first = new TaskCompletionSource<CookedOutputReport>(TaskCreationOptions.RunContinuationsAsynchronously);
         var second = new TaskCompletionSource<CookedOutputReport>(TaskCreationOptions.RunContinuationsAsynchronously);
         var calls = 0;
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.InspectCookedOutputAsync(It.Is<AssetPath?>(asset => asset == null), It.IsAny<CancellationToken>(), It.IsAny<bool>(), project)).Returns(() => ++calls == 1 ? first.Task : second.Task);
-        var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), projects, _ => Task.FromResult(false));
+        var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), session, _ => Task.FromResult(false));
         var original = model.InspectAsync(scope);
         var refresh = model.InspectAsync(scope with { Validate = true });
         _ = calls.Should().Be(1);
@@ -134,8 +135,9 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
     [TestMethod]
     public Task InspectionStartsEmpty() => EnqueueAsync(() =>
     {
+        using var session = CreateQueryProject();
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
-        using var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), CreateQueryProject(), _ => Task.FromResult(false));
+        using var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), session, _ => Task.FromResult(false));
 
         _ = model.Scope.Should().Be("Nothing inspected");
         _ = model.Report.Should().BeNull();
@@ -151,13 +153,13 @@ internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests
     [TestMethod]
     public Task InspectionTakesAScopeAndRefreshesOnARepeatedRequest() => EnqueueAsync(async () =>
     {
-        var projects = CreateQueryProject();
-        var project = projects.ActiveProject!;
+        using var session = CreateQueryProject();
+        var project = session.Context;
         var materials = new CookedInspectionScope(project, AssetPath.Parse("/Content/Materials"), Validate: false);
         var scenes = new CookedInspectionScope(project, AssetPath.Parse("/Content/Scenes"), Validate: false);
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.InspectCookedOutputAsync(It.IsAny<AssetPath?>(), It.IsAny<CancellationToken>(), It.IsAny<bool>(), project)).Returns((AssetPath? _, CancellationToken _, bool validate, ProjectContext? _) => Task.FromResult(CreateInspectionReport(project, validate)));
-        using var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), projects, _ => Task.FromResult(false));
+        using var model = new CookedInspectionViewModel(pipeline.Object, NoAssets(), session, _ => Task.FromResult(false));
 
         await model.InspectAsync(materials).ConfigureAwait(true);
         _ = model.Scope.Should().EndWith("/Content/Materials");

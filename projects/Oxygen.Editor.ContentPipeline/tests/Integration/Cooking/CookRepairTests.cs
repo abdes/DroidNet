@@ -190,7 +190,7 @@ public sealed class CookRepairTests
             new() { RootFolderPath = FileSystemPath.From(Path.Combine(workspace.Root, "Content")), MountPoint = "Content" });
         _ = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var automatic = new AutomaticCookService(
-            workspace.ContextService, workspace.Manager, catalog, pipeline, pipeline, workspace.CookCoordinator, new FakeScripts(), new FakeInputSources(), NullLogger<AutomaticCookService>.Instance);
+            workspace.Session, workspace.Manager, catalog, pipeline, pipeline, workspace.CookCoordinator, new FakeScripts(), new FakeInputSources(), NullLogger<AutomaticCookService>.Instance);
 
         Directory.Delete(Path.Combine(workspace.Root, "Content", "New folder"), recursive: true);
 
@@ -233,7 +233,7 @@ public sealed class CookRepairTests
             new() { RootFolderPath = FileSystemPath.From(Path.Combine(workspace.Root, "Content")), MountPoint = "Content" });
         _ = await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false);
         using var automatic = new AutomaticCookService(
-            workspace.ContextService, workspace.Manager, catalog, pipeline, pipeline, workspace.CookCoordinator, new FakeScripts(), new FakeInputSources(), NullLogger<AutomaticCookService>.Instance);
+            workspace.Session, workspace.Manager, catalog, pipeline, pipeline, workspace.CookCoordinator, new FakeScripts(), new FakeInputSources(), NullLogger<AutomaticCookService>.Instance);
         _ = Directory.CreateDirectory(Path.Combine(workspace.Root, "Content", "New folder"));
         await Task.Delay(500, this.TestContext.CancellationToken).ConfigureAwait(false);
 

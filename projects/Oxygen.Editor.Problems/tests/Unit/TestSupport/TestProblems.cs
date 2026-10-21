@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Moq;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Assets.Diagnostics;
@@ -21,8 +19,7 @@ internal static class TestProblems
     /// <returns>The view model.</returns>
     internal static ProblemsViewModel CreateModel(IEnumerable<IAssetProblemSource> sources, ICodeEditorService codeEditor, IRuntimeProblemNodes nodes)
     {
-        var projects = new Mock<IProjectContextService>();
-        _ = projects.SetupGet(static service => service.ActiveProject).Returns(TestProject.Create(new MockFileSystem()).Context with { ProjectId = Guid.Empty, Name = "Test", AuthoringMounts = [] });
-        return new ProblemsViewModel(sources, codeEditor, projects.Object, nodes);
+        var session = new TestSession(TestProject.Create(new MockFileSystem()).Context with { ProjectId = Guid.Empty, Name = "Test", AuthoringMounts = [] });
+        return new ProblemsViewModel(new AssetProblemSources(sources), codeEditor, session, nodes);
     }
 }

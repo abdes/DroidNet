@@ -31,11 +31,7 @@ public partial class ContentFoldersViewModel
     // otherwise, or null when no mount shows it.
     private async Task<IReadOnlyList<AssetPath>?> ResolveFolderNavigationAsync(ProjectRootTreeItemAdapter root, IFolder folder)
     {
-        if (projectContextService.ActiveProject is not { } project)
-        {
-            return null;
-        }
-
+        var project = session.Context;
         var location = FileSystemPath.From(folder.Location);
         if (location == project.ProjectRoot)
         {

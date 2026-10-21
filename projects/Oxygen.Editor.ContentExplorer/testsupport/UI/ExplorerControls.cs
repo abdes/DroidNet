@@ -33,7 +33,7 @@ internal sealed class ExplorerControls : DroidNet.Tests.VisualUserInterfaceTests
 {
     /// <summary>Creates the assets pane over a layout whose view the pane shows.</summary>
     /// <param name="provider">The asset feed.</param>
-    /// <param name="projects">The active project.</param>
+    /// <param name="session">The project session.</param>
     /// <param name="state">The explorer state.</param>
     /// <param name="layout">The layout view model.</param>
     /// <param name="layoutView">The view the layout resolves to.</param>
@@ -42,7 +42,7 @@ internal sealed class ExplorerControls : DroidNet.Tests.VisualUserInterfaceTests
     /// <param name="assetReveal">Shows assets for the pane, if any.</param>
     /// <param name="cookedInspections">Inspects cooked output for the pane, if any.</param>
     /// <returns>The pane, which the caller disposes.</returns>
-    internal static AssetsViewModel CreateAssetsModel(IAssetFeed provider, IProjectContextService projects, ContentExplorerState state, object layout, object layoutView, IContentPipelineService? pipeline = null, IPlacementService? placement = null, IAssetReveal? assetReveal = null, ICookedInspections? cookedInspections = null)
+    internal static AssetsViewModel CreateAssetsModel(IAssetFeed provider, IProjectSession session, ContentExplorerState state, object layout, object layoutView, IContentPipelineService? pipeline = null, IPlacementService? placement = null, IAssetReveal? assetReveal = null, ICookedInspections? cookedInspections = null)
     {
         var locator = new Mock<IViewLocator>();
         _ = locator.Setup(value => value.ResolveView(layout)).Returns(layoutView);
@@ -50,7 +50,7 @@ internal sealed class ExplorerControls : DroidNet.Tests.VisualUserInterfaceTests
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new ViewModelToView(locator.Object),
             state,
-            projects,
+            session,
             pipeline ?? Mock.Of<IContentPipelineService>(),
             provider,
             Mock.Of<IOperationResultPublisher>(),

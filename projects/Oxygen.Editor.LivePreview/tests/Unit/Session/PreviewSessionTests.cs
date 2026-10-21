@@ -110,7 +110,7 @@ internal sealed partial class PreviewSessionTests
     private sealed partial class SessionFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-PreviewSession-");
-        private readonly ProjectContextService projects = new();
+        private readonly TestSessionHost sessions;
         private readonly ContentCookCoordinator coordinator;
 
         public SessionFixture(EngineServiceState state)
@@ -118,18 +118,19 @@ internal sealed partial class PreviewSessionTests
             this.Engine = new FakeEngine(state);
             var project = TestProject.Create(new Testably.Abstractions.RealFileSystem(), this.directory.FullName).Context;
             var info = TestProject.InfoOf(project);
-            this.projects.Activate(project);
-            this.Project = this.projects.ActiveProject!;
-            this.coordinator = new ContentCookCoordinator(this.projects, NullLogger<ContentCookCoordinator>.Instance);
+            this.sessions = new TestSessionHost();
+            var session = this.sessions.Open(project);
+            this.Project = session.Context;
+            this.coordinator = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);
             var files = new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
             var manager = new Mock<IProjectManagerService>();
             _ = manager.Setup(value => value.LoadProjectInfoAsync(this.directory.FullName)).ReturnsAsync((IProjectInfo?)info);
-            var publication = new CookPublicationService(this.coordinator, this.projects, files, manager.Object, new EngineContentPakFixture());
+            var publication = new CookPublicationService(this.coordinator, session, files, manager.Object, new EngineContentPakFixture());
             _ = this.Catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>()))
                 .Returns(() => this.FailCatalog ? Task.FromException(new IOException("The catalog could not read the publication.")) : Task.CompletedTask);
             var publisher = new Mock<IOperationResultPublisher>();
             _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Add);
-            this.Session = new PreviewSession(this.Engine, publication, new CookedContentMountService(), this.Catalog.Object, this.coordinator, this.projects, manager.Object, publisher.Object, new OperationStatusReducer());
+            this.Session = new PreviewSession(this.Engine, publication, new CookedContentMountService(), this.Catalog.Object, this.coordinator, session, this.sessions, publisher.Object, new OperationStatusReducer());
         }
 
         public FakeEngine Engine { get; }
@@ -148,6 +149,7 @@ internal sealed partial class PreviewSessionTests
         {
             _ = this.Session.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
             this.coordinator.Dispose();
+            this.sessions.Dispose();
             try
             {
                 this.directory.Delete(recursive: true);

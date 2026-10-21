@@ -14,18 +14,15 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// Finds the unsaved documents a cook reads from the references its saved descriptors make: a cook of an asset or a
 /// folder reads the assets in it and everything they reference, and a cook of the project reads every asset.
 /// </summary>
-/// <param name="projects">The active project.</param>
+/// <param name="session">The project session, whose project root holds the documents a cook may read.</param>
 /// <param name="documents">The open documents with unsaved changes.</param>
-public sealed class UnsavedCookInputs(IProjectContextService projects, IUnsavedDocuments documents) : IUnsavedCookInputs
+public sealed class UnsavedCookInputs(IProjectSession session, IUnsavedDocuments documents) : IUnsavedCookInputs
 {
     /// <inheritdoc/>
     public async Task<IReadOnlyList<UnsavedDocument>> FindAsync(CookRunRequest request, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(request);
-        if (projects.ActiveProject is not { } project)
-        {
-            return [];
-        }
+        var project = session.Context;
 
         // Most cooks meet no unsaved document, and need not read the references.
         var unsaved = documents.Find([project.ProjectRoot]);

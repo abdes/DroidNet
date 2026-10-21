@@ -219,7 +219,7 @@ internal sealed partial class MaterialCookTests
     }
 
     private static MaterialCookService CreateService(MaterialWorkspace workspace)
-        => new(workspace.NativePipeline.Pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
+        => new(workspace.NativePipeline.Pipeline, workspace.Session, NullLogger<MaterialCookService>.Instance);
 
     private static async Task WriteMaterialAsync(string path, MaterialSource material)
     {
@@ -254,8 +254,8 @@ internal sealed partial class MaterialCookTests
             this.Root = Path.Combine(Path.GetTempPath(), "oxygen-content-pipeline-tests", Guid.NewGuid().ToString("N"));
             var project = TestProject.Create(new RealFileSystem(), this.Root, [new ProjectMountPoint(TestProject.ContentMount, authoringFolder)]).Context;
             _ = TestProject.SaveProjectFile(project);
-            this.ContextService.Activate(project);
-            this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
+            this.Session = new TestSession(project);
+            this.CookCoordinator = new ContentCookCoordinator(this.Session, NullLogger<ContentCookCoordinator>.Instance);
         }
 
         public string Root { get; }
@@ -270,16 +270,17 @@ internal sealed partial class MaterialCookTests
             }
         }
 
-        public ProjectContextService ContextService { get; } = new();
+        public TestSession Session { get; }
 
         public ContentCookCoordinator CookCoordinator { get; }
 
-        public Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture NativePipeline => this.nativePipeline ??= new(this.ContextService, this.CookCoordinator);
+        public Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture NativePipeline => this.nativePipeline ??= new(this.Session, this.CookCoordinator);
 
         public void Dispose()
         {
-            this.ContextService.Close();
+            this.Session.End();
             this.CookCoordinator.Dispose();
+            this.Session.Dispose();
             this.nativePipeline?.Dispose();
             if (Directory.Exists(this.Root))
             {

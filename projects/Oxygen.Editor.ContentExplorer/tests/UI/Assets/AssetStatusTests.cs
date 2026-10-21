@@ -38,10 +38,10 @@ public sealed partial class AssetStatusTests : DroidNet.Tests.VisualUserInterfac
         var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
         var hosting = CreateStatusHosting();
-        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, hosting) : new ListLayoutViewModel(provider.Object, projects, state, hosting);
+        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, session, state, hosting) : new ListLayoutViewModel(provider.Object, session, state, hosting);
         FrameworkElement view = tiles ? new TilesLayoutView
         {
             ViewModel = (TilesLayoutViewModel)model,

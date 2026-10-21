@@ -37,7 +37,7 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(60));
         using var services = new CatalogWorkloadServices(fixture);
-        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
+        await using var catalog = new AssetCatalog(services.Session, services.Storage, services.EngineContent, services.Publication);
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         await using var publication = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
 
@@ -53,7 +53,7 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
 
         var path = fixture.ProjectRoot.Combine("Incoming").Combine("Triangle." + format).FullPath;
         await File.WriteAllTextAsync(path, Recolor(await File.ReadAllTextAsync(path, timeout.Token).ConfigureAwait(true), format), timeout.Token).ConfigureAwait(true);
-        var project = services.Projects.ActiveProject!;
+        var project = services.Session.Context;
         var review = await SceneImportReplacement.ReviewAsync(project, AssetPath.Parse("/Content/Models"), "Triangle", timeout.Token).ConfigureAwait(true);
         var replaced = await services.Pipeline.ImportSourceAsync(new(project, path, "Triangle", AssetPath.Parse("/Content/Models")) { Replacement = review }, timeout.Token).ConfigureAwait(true);
         _ = replaced.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, replaced.Diagnostics.Select(static issue => issue.Message)));

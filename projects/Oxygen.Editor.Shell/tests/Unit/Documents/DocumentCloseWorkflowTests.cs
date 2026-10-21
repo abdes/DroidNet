@@ -300,7 +300,7 @@ public sealed partial class DocumentCloseWorkflowTests
 
     private sealed class Prompt(Func<IReadOnlyList<DocumentCloseItem>, Task<bool>> show) : IDocumentClosePrompt
     {
-        public Task<bool> ConfirmAsync(IReadOnlyList<DocumentCloseItem> documents) => show(documents);
+        public Task<bool> ConfirmAsync(WindowId window, IReadOnlyList<DocumentCloseItem> documents) => show(documents);
     }
 
     /// <summary>Stands in for a document's editor at close: it saves the document, or discards its edits.</summary>

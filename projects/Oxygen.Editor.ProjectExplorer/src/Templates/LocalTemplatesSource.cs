@@ -253,7 +253,7 @@ public class LocalTemplatesSource(IFileSystem filesystem) : ITemplatesSource
             throw new TemplateLoadingException("Template descriptor AuthoringMounts must include Content -> Content.");
         }
 
-        if (templateInfo.AuthoringMounts.FirstOrDefault(static mount => VirtualPath.ValidateMountName(mount.Name, VirtualPathRuleSet.Authored) is not null) is { } invalid)
+        if (templateInfo.AuthoringMounts.FirstOrDefault(static mount => ProjectAssetFiles.ValidateDeclaredMountName(mount.Name) is not null) is { } invalid)
         {
             throw new TemplateLoadingException($"Template descriptor AuthoringMounts name `{invalid.Name}` is not a mount name.");
         }

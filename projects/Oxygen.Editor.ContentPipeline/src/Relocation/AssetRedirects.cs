@@ -14,26 +14,24 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// The in-memory record of the session's committed relocations. A captured reference replays every later
 /// relocation in order, so A to B then B to C resolves A to C, and an Undo maps back. A reference whose asset
 /// still exists is never redirected, so an asset created later at an old path keeps its own references. The
-/// record resets when the project changes, together with every document's history.
+/// record is the project session's: it ends with the session, together with every document's history.
 /// </summary>
-public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
+public sealed partial class AssetRedirects : IAssetRedirects
 {
     private readonly Lock sync = new();
     private readonly List<RelocationMap> relocations = [];
     private readonly HashSet<AssetPath> deleted = [];
-    private readonly IProjectContextService projects;
+    private readonly IProjectSession session;
     private readonly ILogger logger;
-    private readonly IDisposable projectChanges;
 
     /// <summary>Initializes a new instance of the <see cref="AssetRedirects"/> class.</summary>
-    /// <param name="projects">The active project; a project change clears the record.</param>
+    /// <param name="session">The project session, whose relocations the record keeps.</param>
     /// <param name="logger">Records each resolved redirect.</param>
-    public AssetRedirects(IProjectContextService projects, ILogger<AssetRedirects>? logger = null)
+    public AssetRedirects(IProjectSession session, ILogger<AssetRedirects>? logger = null)
     {
-        ArgumentNullException.ThrowIfNull(projects);
-        this.projects = projects;
+        ArgumentNullException.ThrowIfNull(session);
+        this.session = session;
         this.logger = (ILogger?)logger ?? NullLogger.Instance;
-        this.projectChanges = projects.ProjectChanged.Subscribe(_ => this.Clear());
     }
 
     /// <inheritdoc/>
@@ -75,7 +73,6 @@ public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
     }
 
     /// <inheritdoc/>
-    public void Dispose() => this.projectChanges.Dispose();
 
     /// <summary>Records a committed relocation.</summary>
     /// <param name="map">The relocation's identity mapping.</param>
@@ -115,8 +112,11 @@ public sealed partial class AssetRedirects : IAssetRedirects, IDisposable
 
     // An asset exists while its source does; a folder while it is on disk.
     private bool Exists(AssetPath identity)
-        => this.projects.ActiveProject is { } project && RelocationPaths.FindWritableMount(project, identity) is not null
+    {
+        var project = this.session.Context;
+        return RelocationPaths.FindWritableMount(project, identity) is not null
             && (project.FindSource(identity) is not null || (RelocationPaths.ToPhysical(project, identity) is { } folder && project.FileSystem.Directory.Exists(folder.FullPath)));
+    }
 
     private void Clear()
     {

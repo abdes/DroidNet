@@ -14,13 +14,13 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal sealed partial class CaptureWorkspace : IDisposable
 {
-    private readonly ProjectContextService context = new();
+    private readonly TestSession session;
 
     public CaptureWorkspace()
     {
         Directory.CreateDirectory(this.Root);
-        this.context.Activate(TestProject.Create(new RealFileSystem(), this.Root).Context with { Name = "Capture tests" });
-        this.Coordinator = new(this.context, NullLogger<ContentCookCoordinator>.Instance);
+        this.session = new(TestProject.Create(new RealFileSystem(), this.Root).Context with { Name = "Capture tests" });
+        this.Coordinator = new(this.session, NullLogger<ContentCookCoordinator>.Instance);
         this.Capture = new(this.Coordinator);
     }
 
@@ -47,8 +47,9 @@ internal sealed partial class CaptureWorkspace : IDisposable
 
     public void Dispose()
     {
-        this.context.Close();
+        this.session.End();
         this.Coordinator.Dispose();
+        this.session.Dispose();
         Directory.Delete(this.Root, recursive: true);
     }
 }

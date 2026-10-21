@@ -30,7 +30,7 @@ public partial class AssetsViewModel
     {
         ArgumentNullException.ThrowIfNull(asset);
         return asset is { Kind: AssetKind.Script or AssetKind.InputFile, SourcePath: { } source }
-            && projectContextService.ActiveProject is { } project && project.FileSystem.File.Exists(source.FullPath)
+            && session.Context.FileSystem.File.Exists(source.FullPath)
             ? source.FullPath
             : null;
     }

@@ -27,7 +27,7 @@ public sealed class PublicationMaintenanceTests
         using var project = new ProjectDirectory();
         var context = PublicationContext(project.Root);
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        var service = MaintenanceService(files);
+        var service = MaintenanceService(files, context);
         CookPublicationReadLease old;
         string currentPath;
         using (var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false))
@@ -58,7 +58,7 @@ public sealed class PublicationMaintenanceTests
         using var project = new ProjectDirectory();
         var context = PublicationContext(project.Root);
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        var service = MaintenanceService(files);
+        var service = MaintenanceService(files, context);
         string oldPath;
         using (var gate = await CookOutputLease.AcquireWriteAsync(FileSystemPath.From(project.Root), this.TestContext.CancellationToken).ConfigureAwait(false))
         {
@@ -87,7 +87,7 @@ public sealed class PublicationMaintenanceTests
         using var project = new ProjectDirectory();
         var context = PublicationContext(project.Root);
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        var service = MaintenanceService(files);
+        var service = MaintenanceService(files, context);
         var operation = new ContentCookOperation(Guid.NewGuid(), context, 1);
         using var owner = CookOutputLease.AcquireOperation(FileSystemPath.From(project.Root), operation.OperationId);
         using var baseline = await service.AcquireReadAsync(context, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -113,7 +113,7 @@ public sealed class PublicationMaintenanceTests
         using var project = new ProjectDirectory();
         var context = PublicationContext(project.Root);
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        var service = MaintenanceService(files);
+        var service = MaintenanceService(files, context);
         var id = Guid.NewGuid();
         using var operation = CookOutputLease.AcquireOperation(FileSystemPath.From(project.Root), id);
         var directory = Path.Combine(project.Root, ".build", "cook", id.ToString("N"));
@@ -127,7 +127,7 @@ public sealed class PublicationMaintenanceTests
         _ = Directory.Exists(directory).Should().BeFalse();
     }
 
-    private static CookPublicationService MaintenanceService(IAtomicFileStore files)
-        => new(Mock.Of<IContentCookCoordinator>(), Mock.Of<IProjectContextService>(), files,
+    private static CookPublicationService MaintenanceService(IAtomicFileStore files, ProjectContext context)
+        => new(Mock.Of<IContentCookCoordinator>(), new Oxygen.Editor.Projects.Testing.TestSession(context), files,
             new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: files), new EngineContentPakFixture());
 }

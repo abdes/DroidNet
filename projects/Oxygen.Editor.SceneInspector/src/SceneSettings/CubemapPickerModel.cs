@@ -71,12 +71,12 @@ public sealed partial class CubemapPickerModel : ObservableObject, IDisposable
     /// inspector: the descriptors are read once per catalog update and the last list is replayed.
     /// </summary>
     /// <param name="assetProvider">The shared content catalog.</param>
-    /// <param name="projects">The active project, whose files hold its texture descriptors.</param>
+    /// <param name="session">The project session, whose files hold its texture descriptors.</param>
     /// <returns>The shared feed.</returns>
-    internal static IObservable<IReadOnlyList<CubeTextureAsset>> CubeTextures(IAssetFeed assetProvider, IProjectContextService projects)
+    internal static IObservable<IReadOnlyList<CubeTextureAsset>> CubeTextures(IAssetFeed assetProvider, IProjectSession session)
         => assetProvider.Items
             .Select(assets => (IReadOnlyList<CubeTextureAsset>)AssetRule.For(AssetKind.Texture).Apply(assets)
-                .Select(asset => (Asset: asset, Cube: DescribeCube(projects.ActiveProject?.FileSystem, asset)))
+                .Select(asset => (Asset: asset, Cube: DescribeCube(session.Context.FileSystem, asset)))
                 .Where(static entry => entry.Cube is not null)
                 .Select(static entry => new CubeTextureAsset(entry.Asset, entry.Cube!.Value))
                 .ToArray())

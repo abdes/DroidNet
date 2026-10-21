@@ -324,9 +324,9 @@ public sealed class ProjectCreationService(
     private static void ValidateMount(ProjectMountPoint mount)
     {
         RequireDescriptorText(mount.Name, "AuthoringMounts.Name");
-        if (VirtualPath.ValidateMountName(mount.Name, VirtualPathRuleSet.Authored) is { } error)
+        if (ProjectAssetFiles.ValidateDeclaredMountName(mount.Name) is { } refusal)
         {
-            throw new InvalidDataException($"Project template AuthoringMounts.Name '{mount.Name}' is not a mount name ({error.ToCode()}).");
+            throw new InvalidDataException($"Project template AuthoringMounts.Name '{mount.Name}' is not a mount name the project may declare: {refusal}");
         }
 
         RequireDescriptorText(mount.RelativePath, "AuthoringMounts.RelativePath");

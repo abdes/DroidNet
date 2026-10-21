@@ -184,7 +184,7 @@ internal sealed class SceneInspectorViewModelTests
             scenePreview,
             selectionService,
             slots,
-            Mock.Of<IProjectContextService>(),
+            Mock.Of<IProjectSession>(session => session.Context == testScene.Project),
             new FakeInputSources(),
             interaction: interaction);
     }

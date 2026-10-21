@@ -256,7 +256,7 @@ internal sealed partial class AssetCookStatusTests
             _ = this.api.Setup(value => value.ReadInventoryAsync(It.IsAny<string>(), It.IsAny<NativeArtifactLease?>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((string root, NativeArtifactLease? _, CancellationToken _) => Oxygen.Testing.NativeInventoryFixture.Read(root));
             _ = TestProject.SaveProjectFile(this.Project);
-            this.publication = new(Mock.Of<IContentCookCoordinator>(), Mock.Of<IProjectContextService>(), this.files, this.manager, this.engineContent);
+            this.publication = new(Mock.Of<IContentCookCoordinator>(), new TestSession(this.Project), this.files, this.manager, this.engineContent);
         }
 
         public static string MaterialJson => CreateMaterialJson(0.5f);

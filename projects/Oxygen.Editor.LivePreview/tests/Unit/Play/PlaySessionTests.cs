@@ -71,15 +71,15 @@ public sealed partial class PlaySessionTests
     private sealed partial class PlayFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-PlaySession-");
+        private readonly TestSession session;
         private readonly ContentCookCoordinator coordinator;
 
         public PlayFixture(bool installedPlayer)
         {
-            var projects = new ProjectContextService();
-            projects.Activate(this.Documents.Project.Context);
-            this.coordinator = new ContentCookCoordinator(projects, NullLogger<ContentCookCoordinator>.Instance);
+            this.session = new TestSession(this.Documents.Project.Context);
+            this.coordinator = new ContentCookCoordinator(this.session, NullLogger<ContentCookCoordinator>.Instance);
             var files = new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
-            var publication = new CookPublicationService(this.coordinator, projects, files, Mock.Of<IProjectManagerService>(), new EngineContentPakFixture());
+            var publication = new CookPublicationService(this.coordinator, this.session, files, Mock.Of<IProjectManagerService>(), new EngineContentPakFixture());
             var publisher = new Mock<IOperationResultPublisher>();
             _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Add);
             var player = Path.Combine(this.directory.FullName, "Oxygen.Player.exe");
@@ -88,7 +88,7 @@ public sealed partial class PlaySessionTests
                 File.WriteAllBytes(player, []);
             }
 
-            this.Session = new PlaySession(projects, this.Pipeline.Object, publication, new CookedContentMountService(), new PlaySettings(settings: null), this.Documents.Open, publisher.Object, playerExecutable: player);
+            this.Session = new PlaySession(this.session, this.Pipeline.Object, publication, new CookedContentMountService(), new PlaySettings(settings: null), this.Documents.Open, publisher.Object, playerExecutable: player);
         }
 
         public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
@@ -104,6 +104,7 @@ public sealed partial class PlaySessionTests
             this.Session.Dispose();
             this.Documents.Dispose();
             this.coordinator.Dispose();
+            this.session.Dispose();
             this.directory.Delete(recursive: true);
         }
     }

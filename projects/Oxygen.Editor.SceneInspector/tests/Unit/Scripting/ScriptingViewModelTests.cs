@@ -4,7 +4,6 @@
 
 using System.Numerics;
 using AwesomeAssertions;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.SceneInspector.Components.Scripting;
 using Oxygen.Editor.Scenes.Testing;
@@ -48,6 +47,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
     private readonly Scene scene = new() { Name = "Main" };
     private SceneNode player;
     private TestScene? testScene;
+    private TestSession? session;
     private ScriptingComponent scripting = new() { Name = ScriptingComponent.DefaultName, Slots = [new ScriptSlot { Script = MoveScript }] };
 
     public ScriptingViewModelTests()
@@ -58,7 +58,11 @@ public sealed partial class ScriptingViewModelTests : IDisposable
     }
 
     /// <inheritdoc />
-    public void Dispose() => this.testScene?.Dispose();
+    public void Dispose()
+    {
+        this.session?.Dispose();
+        this.testScene?.Dispose();
+    }
 
     [TestMethod]
     public void OneCardPerSlotWithOneFieldPerDeclaredParameter()
@@ -249,8 +253,8 @@ public sealed partial class ScriptingViewModelTests : IDisposable
             this.testScene.Authoring.Changed += (_, _) => onEdit();
         }
 
-        var projects = new ProjectContextService();
-        projects.Activate(TestProject.Create(new MockFileSystem()).Context with { Name = "Project" });
-        return new ScriptingViewModel(() => this.testScene.Authoring, scripts: this.scripts, projects: projects);
+        this.session?.Dispose();
+        this.session = new TestSession(TestProject.Create(new MockFileSystem()).Context with { Name = "Project" });
+        return new ScriptingViewModel(() => this.testScene.Authoring, scripts: this.scripts, session: this.session);
     }
 }

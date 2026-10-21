@@ -44,10 +44,10 @@ public sealed partial class AssetInformationTests : DroidNet.Tests.VisualUserInt
         };
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([asset]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
-        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
-        using var details = new AssetDetailsViewModel(state, projects, Mock.Of<IDesktopIntegration>());
+        using AssetsLayoutViewModel model = tiles ? new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting()) : new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
+        using var details = new AssetDetailsViewModel(state, session, Mock.Of<IDesktopIntegration>());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
         {

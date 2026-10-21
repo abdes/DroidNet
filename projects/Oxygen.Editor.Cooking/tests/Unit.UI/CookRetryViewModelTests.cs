@@ -10,7 +10,6 @@ using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Cooking;
 using Oxygen.Managed.Core;
@@ -30,9 +29,8 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
     [DataRow(false)]
     public Task CookingRetryPreservesImportScope(bool retained) => EnqueueAsync(async () =>
     {
-        var projects = new ProjectContextService();
         var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Import" };
-        projects.Activate(project);
+        using var session = new TestSession(project);
         var source = AssetPath.Parse("/Content/Models/Crate/Crate.gltf");
         var request = new SceneImportRequest(project, Path.Combine(Path.GetTempPath(), "Crate.gltf"), "Crate", AssetPath.Parse("/Content/Models"));
         var snapshot = new CookRunSnapshot
@@ -53,7 +51,7 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
         _ = pipeline.Setup(value => value.ReimportSourceAsync(source, project, It.IsAny<CancellationToken>())).ReturnsAsync(result);
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
-        using var model = new CookingPanelViewModel(runs.Object, pipeline.Object, projects, Mock.Of<ICookRecovery>(), hosting);
+        using var model = new CookingPanelViewModel(runs.Object, pipeline.Object, session, Mock.Of<ICookRecovery>(), hosting);
         _ = model.SelectedRun!.Kind.Should().Be("Source");
         await model.RetryCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         _ = model.ActionError.Should().BeEmpty();
@@ -113,9 +111,8 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
 
     private static CookingPanelViewModel CreateModel(string displayName, CookRunRequest request, ICookRecovery actions, IContentPipelineService pipeline)
     {
-        var projects = new ProjectContextService();
         var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Retry" };
-        projects.Activate(project);
+        var session = new TestSession(project);
         var snapshot = new CookRunSnapshot
         {
             OperationId = Guid.NewGuid(),
@@ -130,6 +127,6 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
         _ = runs.SetupGet(value => value.Runs).Returns([snapshot]);
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
-        return new(runs.Object, pipeline, projects, actions, hosting);
+        return new(runs.Object, pipeline, session, actions, hosting);
     }
 }

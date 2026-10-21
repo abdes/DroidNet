@@ -31,7 +31,6 @@ public sealed class CookRecoveryTests
     private const string SceneName = "Main";
     private const string ProjectFolder = @"C:\CookingTests";
 
-    private readonly ProjectContextService projects = new();
     private readonly Mock<IAssetCatalog> catalog = new();
     private readonly Mock<IDocumentService> documents = new();
     private readonly Mock<IUnsavedCookInputs> unsaved = new();
@@ -39,6 +38,12 @@ public sealed class CookRecoveryTests
     private readonly SceneSelectionService selection = new();
     private readonly Mock<IAssetReveal> reveal = new();
     private readonly Mock<ICookedInspections> inspections = new();
+
+    private TestSession? session;
+
+    /// <summary>Closes the test session of the project the test activated.</summary>
+    [TestCleanup]
+    public void CloseSession() => this.session?.Dispose();
 
     /// <summary>Saving asks the document service before a cook and returns its answer.</summary>
     /// <param name="saved">Whether the document service lets the cook run.</param>
@@ -291,7 +296,8 @@ public sealed class CookRecoveryTests
     private ProjectContext ActivateProject(TestSceneDocuments? scenes = null)
     {
         var context = scenes?.Project.Context ?? TestProject.Create(new MockFileSystem(), ProjectFolder).Context;
-        this.projects.Activate(context);
+        this.session?.Dispose();
+        this.session = new TestSession(context);
         return context;
     }
 
@@ -311,6 +317,7 @@ public sealed class CookRecoveryTests
     private CookRecovery CreateRecovery()
     {
         _ = this.inspections.Setup(service => service.InspectAsync(It.IsAny<CookedInspectionRequest>())).ReturnsAsync(value: true);
-        return new(this.projects, this.catalog.Object, this.documents.Object, this.unsaved.Object, this.placement.Object, this.selection, this.reveal.Object, this.inspections.Object);
+        this.session ??= new TestSession(TestProject.Create(new MockFileSystem(), ProjectFolder).Context);
+        return new(this.session, this.catalog.Object, this.documents.Object, this.unsaved.Object, this.placement.Object, this.selection, this.reveal.Object, this.inspections.Object);
     }
 }

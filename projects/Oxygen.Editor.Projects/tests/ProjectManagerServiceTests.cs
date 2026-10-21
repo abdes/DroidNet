@@ -176,14 +176,14 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
     {
         // Arrange: a project's scenes are its scene files, which loading the project does not read.
         var projectInfo = new ProjectInfo("name", Category.Games, "valid/path", "Media/Preview.png");
+        var earlier = await this.projectManagerService.StageProjectLoadAsync(projectInfo).ConfigureAwait(false);
 
         // Act
         var result = await this.projectManagerService.LoadProjectAsync(projectInfo).ConfigureAwait(false);
 
-        // Assert
+        // Assert: the loaded project is the manager's own, so a load staged before it is no longer current.
         _ = result.Should().BeTrue();
-        _ = this.projectManagerService.CurrentProject.Should().NotBeNull();
-        _ = this.projectManagerService.CurrentProject!.ProjectInfo.Should().BeSameAs(projectInfo);
+        _ = this.projectManagerService.IsProjectLoadCurrent(earlier!).Should().BeFalse();
     }
 
     [TestMethod]

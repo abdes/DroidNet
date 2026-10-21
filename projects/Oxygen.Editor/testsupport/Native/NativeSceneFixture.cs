@@ -71,7 +71,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private readonly IEngineService previewEngine;
     private readonly EngineProbe probe;
     private readonly IOperationResultPublisher previewResults;
-    private readonly Project loadedProject;
     private readonly ContentCookCoordinator materialCookCoordinator;
     private readonly Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture materialPipeline;
     private readonly Dictionary<FileSystemPath, (ContentCookCoordinator Coordinator, Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture Pipeline)> foreignMaterialPipelines = [];
@@ -125,10 +124,10 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         (this.previewEngine, this.probe) = EngineProbe.Of(this.Runtime);
         var project = TestProject.Create(Disk, this.directory.FullName).Context with { Name = "Environment fields", Thumbnail = "preview.png" };
         _ = TestProject.SaveProjectFile(project);
-        this.loadedProject = new Project(TestProject.InfoOf(project));
-        this.Projects.Activate(project);
-        this.materialCookCoordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
-        this.materialPipeline = new(this.Projects, this.materialCookCoordinator);
+        this.Sessions = new TestSessionHost();
+        var session = this.Sessions.Open(project);
+        this.materialCookCoordinator = new(session, NullLogger<ContentCookCoordinator>.Instance);
+        this.materialPipeline = new(session, this.materialCookCoordinator);
         var mode = automatic ? ExposureMode.Auto : ExposureMode.Manual;
         this.Source = Scene.CreateAndHydrate(new SceneData { Id = SceneId.New(), Name = "Environment", Environment = new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = mode } }, });
         seed?.Invoke(this.Source);
@@ -136,7 +135,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         _ = this.AssetCatalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         // The scene is a document of the project, saved where the editor saves scenes.
-        this.sceneKind = new SceneDocumentKind(this.Projects.ActiveProject!);
+        this.sceneKind = new SceneDocumentKind(session);
         this.materialKind = new MaterialDocumentKind(this.materialValidation);
         this.OpenDocuments = new OpenDocuments([this.sceneKind, this.materialKind], new ImmediateReadFileStore(new NativeAtomicFileStore(Disk)));
         this.UnsavedDocuments = new UnsavedDocuments(this.OpenDocuments);
@@ -178,13 +177,17 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     public FileSystemPath ProjectRoot => FileSystemPath.From(this.directory.FullName);
 
-    public ProjectContextService Projects { get; } = new();
+    /// <summary>Gets the session host of the fixture's project, whose session its cook and preview serve.</summary>
+    public TestSessionHost Sessions { get; }
+
+    /// <summary>Gets the session of the fixture's project.</summary>
+    public TestSession Session => this.Session;
 
     public EngineService Runtime { get; }
 
     private IScenePreview Preview => this.preview ?? throw new InvalidOperationException("The fixture shows its scene once it initializes.");
 
-    public CookingPanelViewModel CreateTimingCookingPanel(CatalogWorkloadServices services) => new(services.Runs, services.Pipeline, services.Projects, Mock.Of<ICookRecovery>(), this.hosting);
+    public CookingPanelViewModel CreateTimingCookingPanel(CatalogWorkloadServices services) => new(services.Runs, services.Pipeline, services.Session, Mock.Of<ICookRecovery>(), this.hosting);
 
     /// <summary>Has the open scene follow the relocations a service commits, as its scene editor would.</summary>
     /// <param name="relocation">The relocation service.</param>
@@ -256,11 +259,11 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         {
             var catalog = new Mock<IAssetPublicationTarget>();
             _ = catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-            this.contentSession = this.CreatePreviewSession(this.materialPipeline.Publication, this.materialCookCoordinator, this.Projects, catalog.Object);
-            _ = (await this.contentSession.StartAsync(this.Projects.ActiveProject!, cancellationToken).ConfigureAwait(true)).Should().BeTrue("{0}", this.contentSession.Failure);
+            this.contentSession = this.CreatePreviewSession(this.materialPipeline.Publication, this.materialCookCoordinator, this.Session, catalog.Object);
+            _ = (await this.contentSession.StartAsync(this.Session.Context, cancellationToken).ConfigureAwait(true)).Should().BeTrue("{0}", this.contentSession.Failure);
         }
 
-        _ = (await this.contentSession.ChangeMountsAsync(this.Projects.ActiveProject!, desired, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
+        _ = (await this.contentSession.ChangeMountsAsync(this.Session.Context, desired, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
     }
 
     public DocumentAreaViewModel CreateDocumentTransitionHost(IContainer container, DocumentTabs documents, CatalogWorkloadServices services, WindowId windowId)
@@ -274,16 +277,16 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         container.RegisterInstance(this.Preview);
         container.RegisterInstance(Mock.Of<IDocumentInputCommitter>());
         container.RegisterInstance<IContentPipelineService>(services.Pipeline);
-        container.RegisterInstance<IProjectContextService>(services.Projects);
+        container.RegisterInstance<IProjectSession>(services.Session);
         container.RegisterInstance<IAssetFeed>(this.AssetCatalog.Object);
-        var preferences = new PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), services.Projects, publisher.Object, new OperationStatusReducer());
+        var preferences = new PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.Session, publisher.Object, new OperationStatusReducer());
         container.RegisterInstance(preferences);
         var materials = new MaterialEdits(this.materialValidation, publisher.Object);
-        var cook = new MaterialCookService(services.Pipeline, services.Projects, NullLogger<MaterialCookService>.Instance);
+        var cook = new MaterialCookService(services.Pipeline, this.Session, NullLogger<MaterialCookService>.Instance);
         DocumentEditorDescriptor[] editors =
         [
             new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, Mock.Of<IAssetReveal>(), preferences)) { IsClosable = false, IsOnePerArea = true },
-            new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Projects)),
+            new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Session)),
         ];
         this.TransitionArea = new DocumentArea(documents, this.OpenDocuments, editors, windowId, static _ => { });
         container.RegisterInstance<IDocumentArea>(this.TransitionArea);
@@ -291,7 +294,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             this.TransitionArea,
             documents,
             this.OpenDocuments,
-            new ProjectDocumentFiles(services.Projects),
+            new ProjectDocumentFiles(this.Session),
             Mock.Of<IDocumentClosePrompt>(),
             Mock.Of<IDocumentConfirmations>(),
             Mock.Of<IDocumentInputCommitter>(),
@@ -299,7 +302,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         container.RegisterInstance<IDocumentService>(this.TransitionDocuments);
         var views = new Mock<IViewLocator>();
         _ = views.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is SceneEditorViewModel ? new SceneEditorView() : new MaterialEditorView());
-        return new DocumentAreaViewModel(this.TransitionDocuments, this.TransitionArea, Mock.Of<IDocumentConfirmations>(), views.Object);
+        return new DocumentAreaViewModel(this.TransitionDocuments, this.TransitionArea, Mock.Of<IDocumentConfirmations>(), windowId, views.Object);
     }
 
     /// <summary>Waits until the engine shows the transition's scene document, which builds its editor's panes.</summary>
@@ -312,13 +315,13 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     /// <param name="provider">The asset feed the demand resolves references with.</param>
     /// <returns>The demand; disposing it cancels its cooks.</returns>
     public IDisposable CreateImportedAssetDemand(CatalogWorkloadServices services, AssetFeed provider)
-        => ContentDemands.Start(this.OpenDocuments, provider, services.Pipeline, services.Projects);
+        => ContentDemands.Start(this.OpenDocuments, provider, services.Pipeline, services.Session);
 
     public async Task<MaterialSlotTarget> ReadSingleMaterialSlotAsync(NodeId nodeId, CancellationToken cancellationToken)
     {
         var node = this.Source.RootNodes.Select(root => SceneTraversal.FindNodeById(root, nodeId)).OfType<SceneNode>().Single();
         var uri = node.Components.OfType<GeometryComponent>().Single().Geometry;
-        var inventory = await this.materialPipeline.Pipeline.ReadAsync(this.Projects.ActiveProject!, uri, cancellationToken).ConfigureAwait(true);
+        var inventory = await this.materialPipeline.Pipeline.ReadAsync(this.Session.Context, uri, cancellationToken).ConfigureAwait(true);
         _ = inventory.Should().NotBeNull("the native fixture geometry must have a current slot inventory");
         var slot = inventory!.Slots.Should().ContainSingle().Which;
         return new(uri, slot.SlotId, inventory.LayoutRevision);
@@ -333,7 +336,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     public async Task RefreshCookedRootsAsync(bool mountPublished = true)
     {
-        using var selected = await this.materialPipeline.Publication.AcquireReadAsync(this.Projects.ActiveProject!, CancellationToken.None).ConfigureAwait(true);
+        using var selected = await this.materialPipeline.Publication.AcquireReadAsync(this.Session.Context, CancellationToken.None).ConfigureAwait(true);
         var bindings = mountPublished ? selected.Roots.Zip(selected.RootPaths).Select(static entry => new RuntimeCookedRoot(entry.Second, RuntimeCookedRootKind.LooseFolder)).ToArray() : [];
         await this.Runtime.RefreshProjectCookedRootsAsync(bindings, selected.Retain()).ConfigureAwait(true);
     }
@@ -422,8 +425,8 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     {
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
-        var preferences = new PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.Projects, publisher.Object, new OperationStatusReducer());
-        await preferences.RestoreAsync(this.Projects.ActiveProject!).ConfigureAwait(true);
+        var preferences = new PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.Session, publisher.Object, new OperationStatusReducer());
+        await preferences.EnsureRestoredAsync().ConfigureAwait(true);
         return new(this.Tab, this.area, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), Mock.Of<IContentPipelineService>(), container, Mock.Of<IAssetReveal>(), preferences);
     }
 
@@ -433,8 +436,8 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     /// <returns>The started session; disposing it releases the project's cooked content.</returns>
     public async Task<PreviewSession> StartWorkspacePreviewAsync(CatalogWorkloadServices services, IAssetPublicationTarget catalog)
     {
-        var session = this.CreatePreviewSession(services.Publication, services.Runs, services.Projects, catalog);
-        _ = (await session.StartAsync(services.Projects.ActiveProject!).ConfigureAwait(true)).Should().BeTrue("{0}", session.Failure);
+        var session = this.CreatePreviewSession(services.Publication, services.Runs, services.Session, catalog);
+        _ = (await session.StartAsync(services.Session.Context).ConfigureAwait(true)).Should().BeTrue("{0}", session.Failure);
         return session;
     }
 
@@ -465,6 +468,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         {
             this.materialPipeline.Dispose();
             this.materialCookCoordinator.Dispose();
+            this.Sessions.Dispose();
             foreach (var (coordinator, pipeline) in this.foreignMaterialPipelines.Values)
             {
                 pipeline.Dispose();
@@ -491,12 +495,11 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
         if (!this.foreignMaterialPipelines.TryGetValue(root, out var value))
         {
-            var contexts = new ProjectContextService();
             var project = TestProject.Create(Disk, root.FullPath).Context with { Name = "Foreign material fixture" };
             _ = TestProject.SaveProjectFile(project);
-            contexts.Activate(project);
-            var coordinator = new ContentCookCoordinator(contexts, NullLogger<ContentCookCoordinator>.Instance);
-            value = (coordinator, new(contexts, coordinator));
+            var session = new TestSession(project);
+            var coordinator = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);
+            value = (coordinator, new(session, coordinator));
             this.foreignMaterialPipelines.Add(root, value);
         }
 
@@ -573,21 +576,18 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     private async Task FollowRelocationAsync(Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationChange change)
     {
-        if (DocumentRelocations.Map(this.Document, change, this.Projects.ActiveProject!, out _) is { } relocation)
+        if (DocumentRelocations.Map(this.Document, change, this.Session.Context, out _) is { } relocation)
         {
             await this.Document.FollowRelocationAsync(relocation).ConfigureAwait(true);
         }
     }
 
     // The session follows the fixture's scene project, whose loaded mounts an accepted mount change updates.
-    private PreviewSession CreatePreviewSession(CookPublicationService publication, IContentCookCoordinator coordinator, IProjectContextService projects, IAssetPublicationTarget catalog)
+    private PreviewSession CreatePreviewSession(CookPublicationService publication, IContentCookCoordinator coordinator, IProjectSession session, IAssetPublicationTarget catalog)
     {
-        var projectManager = new Mock<IProjectManagerService>();
-        _ = projectManager.SetupGet(value => value.CurrentProject).Returns(this.loadedProject);
-        _ = projectManager.Setup(value => value.LoadProjectInfoAsync(It.IsAny<string>())).Returns((string root) => this.manager.LoadProjectInfoAsync(root));
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
-        return new PreviewSession(this.previewEngine, publication, new CookedContentMountService(), catalog, coordinator, projects, projectManager.Object, publisher.Object, new OperationStatusReducer());
+        return new PreviewSession(this.previewEngine, publication, new CookedContentMountService(), catalog, coordinator, session, this.Sessions, publisher.Object, new OperationStatusReducer());
     }
 
     /// <summary>Follows relocations on the fixture's UI thread; the relocation calls participants from a worker.</summary>

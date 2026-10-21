@@ -25,7 +25,7 @@ internal static class InspectorEditorFactory
     /// <param name="hosting">The existing WinUI hosting context.</param>
     /// <param name="assets">The shared asset catalog.</param>
     /// <param name="slots">The geometry slot inventory.</param>
-    /// <param name="projects">The active project lifetime.</param>
+    /// <param name="session">The project session the inspector belongs to.</param>
     /// <param name="logger">The scoped logging factory.</param>
     /// <param name="authoring">The authoring of the scene being inspected.</param>
     /// <param name="scripts">The scripting services, when the host provides them.</param>
@@ -34,20 +34,20 @@ internal static class InspectorEditorFactory
         HostingContext hosting,
         IAssetFeed assets,
         IGeometryMaterialSlotProvider slots,
-        IProjectContextService projects,
+        IProjectSession session,
         ILoggerFactory? logger,
         Func<SceneAuthoring?> authoring,
         InspectorScriptServices? scripts = null)
         => new()
         {
             [typeof(TransformComponent)] = () => new TransformViewModel(logger, authoring),
-            [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, slots, projects, authoring, logger),
+            [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, slots, session, authoring, logger),
             [typeof(PerspectiveCamera)] = () => new PerspectiveCameraViewModel(authoring),
             [typeof(OrthographicCamera)] = () => new OrthographicCameraViewModel(authoring),
             [typeof(DirectionalLightComponent)] = () => new DirectionalLightViewModel(authoring),
             [typeof(PointLightComponent)] = () => new PointLightViewModel(authoring),
             [typeof(SpotLightComponent)] = () => new SpotLightViewModel(authoring),
             [typeof(LocalFogVolumeComponent)] = () => new LocalFogVolumeViewModel(authoring),
-            [typeof(ScriptingComponent)] = () => new ScriptingViewModel(authoring, assets, scripts?.Scripts, scripts?.CodeEditor, scripts?.Creation, scripts?.Problems, projects, hosting.DispatcherScheduler),
+            [typeof(ScriptingComponent)] = () => new ScriptingViewModel(authoring, assets, scripts?.Scripts, scripts?.CodeEditor, scripts?.Creation, scripts?.Problems, session, hosting.DispatcherScheduler),
         };
 }

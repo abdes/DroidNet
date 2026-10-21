@@ -37,9 +37,8 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
     [DataRow(false, false)]
     public Task ImportReviewUsesSharedCookingAndHonorsCancel(bool selectSource, bool accept) => EnqueueAsync(async () =>
     {
-        var projects = new ProjectContextService();
         var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Import" };
-        projects.Activate(project);
+        using var session = new TestSession(project);
         SceneImportRequest? submitted = null;
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.ImportSourceAsync(It.IsAny<SceneImportRequest>(), It.IsAny<CancellationToken>()))
@@ -60,7 +59,7 @@ public sealed class ImportReviewCommandTests : DroidNet.Tests.VisualUserInterfac
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new ViewModelToView(locator.Object),
             CreateSceneFolderImportState(),
-            projects,
+            session,
             pipeline.Object,
             provider.Object,
             Mock.Of<IOperationResultPublisher>(),

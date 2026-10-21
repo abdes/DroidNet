@@ -33,8 +33,8 @@ namespace Oxygen.Editor.LivePreview.Session;
 /// <param name="mounts">Prepares a publication for mounting.</param>
 /// <param name="catalog">The asset catalog that shows the mounted publication.</param>
 /// <param name="coordinator">Serializes project changes with cooking.</param>
-/// <param name="projects">The active project.</param>
-/// <param name="projectManager">The loaded project, whose mounts follow an accepted mount change.</param>
+/// <param name="session">The project session: the project the preview shows, as its content mounts are now.</param>
+/// <param name="sessions">The session host, through which the session follows an accepted mount change.</param>
 /// <param name="results">Publishes the session's failures.</param>
 /// <param name="status">Reduces the published failures.</param>
 /// <param name="loggerFactory">The optional logger factory.</param>
@@ -44,8 +44,8 @@ public sealed partial class PreviewSession(
     CookedContentMountService mounts,
     IAssetPublicationTarget catalog,
     IContentCookCoordinator coordinator,
-    IProjectContextService projects,
-    IProjectManagerService projectManager,
+    IProjectSession session,
+    IProjectSessionHost sessions,
     IOperationResultPublisher results,
     IStatusReducer status,
     ILoggerFactory? loggerFactory = null) : ObservableObject, IContentMountChanges, IAsyncDisposable
@@ -123,7 +123,8 @@ public sealed partial class PreviewSession(
     }
 
     private bool IsCurrent(ProjectContext candidate)
-        => !this.disposed && this.publicationRegistration is not null && ReferenceEquals(candidate, projects.ActiveProject);
+        => !this.disposed && this.publicationRegistration is not null && !session.Lifetime.IsCancellationRequested
+            && ReferenceEquals(candidate, session.Context);
 
     private Task<ICookPublicationPreview?> CreatePublicationPreviewAsync(ProjectContext candidate)
         => this.owner.InvokeAsync(() => this.IsCurrent(candidate)
@@ -155,14 +156,14 @@ public sealed partial class PreviewSession(
 
     private async Task<bool> ChangeMountsCoreAsync(ProjectContext expected, ProjectInfo candidate, ContentCookOperation operation, CancellationToken token)
     {
-        if (!ReferenceEquals(expected, operation.Project) || !ReferenceEquals(expected, projects.ActiveProject))
+        if (!ReferenceEquals(expected, operation.Project) || !ReferenceEquals(expected, session.Context) || session.Lifetime.IsCancellationRequested)
         {
             throw new OperationCanceledException("The project configuration changed before this mount operation started.");
         }
 
         var next = MountChange.CandidateContext(expected, candidate);
-        using var accepted = await publication.ChangeMountsAsync(operation, next, MountChange.ProjectInfoOf(expected, projects.Settings), candidate, token).ConfigureAwait(true);
-        if (!ReferenceEquals(expected, projects.ActiveProject))
+        using var accepted = await publication.ChangeMountsAsync(operation, next, MountChange.ProjectInfoOf(expected, session.Settings), candidate, token).ConfigureAwait(true);
+        if (!ReferenceEquals(expected, session.Context) || session.Lifetime.IsCancellationRequested)
         {
             this.LogMountsChangeSuperseded(expected.ProjectRoot.FullPath);
             return false;
@@ -171,13 +172,10 @@ public sealed partial class PreviewSession(
         // Publication has committed both saved intent and native admission; the session follows the new context.
         this.publicationRegistration?.Dispose();
         this.publicationRegistration = publication.RegisterPreview(next, () => this.CreatePublicationPreviewAsync(next));
-        if (projectManager.CurrentProject?.ProjectInfo is { } loaded)
-        {
-            MountChange.UpdateLoadedMounts(loaded, candidate);
-        }
+        MountChange.UpdateLoadedMounts(session.Project.ProjectInfo, candidate);
 
         this.project = next;
-        projects.Activate(next);
+        sessions.ChangeContext(next);
         this.LogMountsChanged(next.ProjectRoot.FullPath, next.LocalFolderMounts.Count, next.CookedContentOrder.Count);
         await catalog.UsePublicationAsync(accepted, CancellationToken.None).ConfigureAwait(true);
         return true;

@@ -8,7 +8,7 @@ using DroidNet.TestHelpers;
 using DryIoc;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Testing;
@@ -17,6 +17,7 @@ using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
@@ -70,7 +71,7 @@ public sealed partial class SceneEditorQuickAddMenuTests
             this.Metadata = TestScenes.Open(new Scene { Name = "Quick Add" });
             this.Tab = new DocumentTab(this.Metadata.Document, new DocumentEditorDescriptor(this.Metadata.Document.Kind, static _ => new object()) { IsClosable = false });
             var input = new Mock<IDocumentInputCommitter>();
-            _ = input.Setup(value => value.CommitAsync()).Returns(Task.CompletedTask);
+            _ = input.Setup(value => value.CommitAsync(It.IsAny<DroidNet.Documents.DocumentId>())).Returns(Task.CompletedTask);
             this.Editor = new(
                 this.Tab,
                 new TestDocumentArea(this.Metadata.Document),
@@ -85,7 +86,7 @@ public sealed partial class SceneEditorQuickAddMenuTests
                 new PreviewSettingsService(
                     Mock.Of<IEngineService>(),
                     Mock.Of<Data.Services.IEditorSettingsManager>(),
-                    Mock.Of<IProjectContextService>(),
+                    new TestSession(TestProject.Create(new MockFileSystem()).Context),
                     Mock.Of<IOperationResultPublisher>(),
                     new OperationStatusReducer()));
         }

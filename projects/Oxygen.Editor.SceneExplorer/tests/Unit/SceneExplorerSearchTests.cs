@@ -24,7 +24,6 @@ public sealed partial class SceneExplorerSearchTests
     [TestMethod]
     public async Task SearchAsync_RevealsCollapsedDescendantAndRestoresExpansion()
     {
-        var project = new Project(new ProjectInfo("Search", Category.Games, "H:/SearchTests", "preview.png"));
         var scene = new Scene { Name = "Scene" };
         var parent = new SceneNode(scene) { Name = "Parent" };
         var child = new SceneNode(scene) { Name = "FindMe" };
@@ -34,11 +33,9 @@ public sealed partial class SceneExplorerSearchTests
         scene = metadata.Scene;
         parent = metadata.NodeOf(parent);
         child = metadata.NodeOf(child);
-        var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-        _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        using var explorer = new SceneExplorerViewModel(manager.Object, Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
 
@@ -321,10 +318,6 @@ public sealed partial class SceneExplorerSearchTests
             this.Metadata = TestScenes.Open(scene);
             this.Scene = this.Metadata.Scene;
 
-            var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-            _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
-            this.Manager = manager;
-
             var documents = new TestDocumentArea();
             documents.Activate(this.Metadata.Document);
             this.Documents = documents;
@@ -336,8 +329,6 @@ public sealed partial class SceneExplorerSearchTests
 
         public TestScene Metadata { get; }
 
-        public Mock<IProjectManagerService> Manager { get; }
-
         public TestDocumentArea Documents { get; }
 
         /// <summary>Gets the open documents that hold the harness's first scene.</summary>
@@ -346,7 +337,6 @@ public sealed partial class SceneExplorerSearchTests
 
         public SceneExplorerViewModel Build()
             => new(
-                this.Manager.Object,
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.OpenDocuments,

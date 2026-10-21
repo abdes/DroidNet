@@ -41,8 +41,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
     [DataRow(true)]
     public Task ReusedLayoutDropsOldFolderRowsAndActionTargets(bool tiles) => EnqueueAsync(async () =>
     {
-        var projects = new ProjectContextService();
-        projects.Activate(TestProject.Create(new MockFileSystem(), "C:/Navigation").Context with { Name = "Navigation", AuthoringMounts = [] });
+        using var session = new TestSession(TestProject.Create(new MockFileSystem(), "C:/Navigation").Context with { Name = "Navigation", AuthoringMounts = [] });
         var state = new ContentExplorerState();
         var geometry = CreateNavigationAsset("/Content/Geometry/Cube.ogeo", AssetKind.Geometry);
         var material = CreateNavigationAsset("/Content/Materials/Blue.omat", AssetKind.Material);
@@ -51,7 +50,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         _ = provider.SetupGet(value => value.Items).Returns(items);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         var hosting = CreateStatusHosting();
-        using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider.Object, projects, state, hosting) : new ListLayoutViewModel(provider.Object, projects, state, hosting);
+        using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider.Object, session, state, hosting) : new ListLayoutViewModel(provider.Object, session, state, hosting);
         RouteStateMapping.ApplyNavigationScope(state, "/(left:folders//right:assets/list)?selected=%2FContent%2FGeometry");
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         UserControl view = tiles ? new TilesLayoutView
@@ -108,10 +107,9 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         _ = storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string parent, string child) => parent.TrimEnd('/') + "/" + child);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(content.Location, It.IsAny<CancellationToken>())).ReturnsAsync(content);
-        var projects = new ProjectContextService();
-        projects.Activate(TestProject.Create(new RealFileSystem(), root.Location).Context with { Name = "Navigation", AuthoringMounts = [new("Content", "Content") { IsExpanded = false }] });
+        using var session = new TestSession(TestProject.Create(new RealFileSystem(), root.Location).Context with { Name = "Navigation", AuthoringMounts = [new("Content", "Content") { IsExpanded = false }] });
         var state = new ContentExplorerState();
-        using var model = new ContentFoldersViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ContentFoldersViewModel(session, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(session, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var selected = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         model.PropertyChanged += OnSelectionChanged;
         try
@@ -162,10 +160,9 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         _ = storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string parent, string child) => parent.TrimEnd('/') + "/" + child);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
         _ = storage.Setup(value => value.GetFolderFromPathAsync(content.Location, It.IsAny<CancellationToken>())).ReturnsAsync(content);
-        var projects = new ProjectContextService();
-        projects.Activate(TestProject.Create(new RealFileSystem(), root.Location).Context with { Name = "Navigation", AuthoringMounts = [new("Content", "Content") { IsExpanded = false }] });
+        using var session = new TestSession(TestProject.Create(new RealFileSystem(), root.Location).Context with { Name = "Navigation", AuthoringMounts = [new("Content", "Content") { IsExpanded = false }] });
         var state = new ContentExplorerState();
-        using var model = new ContentFoldersViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ContentFoldersViewModel(session, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(session, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var shown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         model.PropertyChanged += OnSelectionChanged;
         try
@@ -184,6 +181,65 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         void OnSelectionChanged(object? sender, PropertyChangedEventArgs args)
         {
             if (args.PropertyName == nameof(ContentFoldersViewModel.SelectedItem) && model.SelectedItem?.Label == "Props")
+            {
+                _ = shown.TrySetResult();
+            }
+        }
+    });
+
+    /// <summary>
+    /// A folder at the project's root, outside its mounts, stays selected while it is on disk; one that is not falls
+    /// back to the whole project.
+    /// </summary>
+    /// <param name="exists">Whether the selected folder exists at the project's root.</param>
+    /// <returns>The asynchronous project-root folder regression.</returns>
+    [TestMethod]
+    [DataRow(true)]
+    [DataRow(false)]
+    public Task SelectedProjectRootFolderIsShownWhenItExists(bool exists) => EnqueueAsync(async () =>
+    {
+        using var directory = new NavigationDirectory();
+        if (exists)
+        {
+            _ = Directory.CreateDirectory(Path.Combine(directory.Path, "Config"));
+        }
+
+        var config = CreateNavigationFolder("Config", directory.Path + "/Config", []);
+        var content = CreateNavigationFolder("Content", directory.Path + "/Content", []);
+        var root = CreateNavigationFolder("Navigation", directory.Path, [content, config]);
+        var storage = new Mock<IStorageProvider>();
+        _ = storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>())).Returns((string parent, string child) => parent.TrimEnd('/') + "/" + child);
+        _ = storage.Setup(value => value.GetFolderFromPathAsync(root.Location, It.IsAny<CancellationToken>())).ReturnsAsync(root);
+        _ = storage.Setup(value => value.GetFolderFromPathAsync(content.Location, It.IsAny<CancellationToken>())).ReturnsAsync(content);
+        using var session = new TestSession(TestProject.Create(new RealFileSystem(), root.Location).Context with { Name = "Navigation", AuthoringMounts = [new("Content", "Content") { IsExpanded = false }] });
+        var state = new ContentExplorerState();
+        using var model = new ContentFoldersViewModel(session, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(session, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        var folder = AssetPath.Parse(exists ? "/project/Config" : "/project/Missing");
+        AssetPath[] expected = exists ? [folder] : [];
+        var shown = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var requested = false;
+        model.PropertyChanged += OnChanged;
+        state.PropertyChanged += OnChanged;
+        try
+        {
+            await model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!).ConfigureAwait(true);
+            requested = true;
+            state.SetSelectedFolders([folder]);
+            await shown.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(true);
+
+            _ = state.SelectedFolders.Should().Equal(expected);
+            _ = model.SelectedItem!.Label.Should().Be(exists ? "Config" : "Navigation");
+        }
+        finally
+        {
+            model.PropertyChanged -= OnChanged;
+            state.PropertyChanged -= OnChanged;
+        }
+
+        // The tree shows the folder once the state holds what the explorer settled on.
+        void OnChanged(object? sender, PropertyChangedEventArgs args)
+        {
+            if (requested && state.SelectedFolders.SetEquals(expected) && model.SelectedItem?.Label == (exists ? "Config" : "Navigation"))
             {
                 _ = shown.TrySetResult();
             }
@@ -219,7 +275,6 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
             _ = storage.Setup(value => value.GetFolderFromPathAsync(folder.Location, It.IsAny<CancellationToken>())).ReturnsAsync(folder);
         }
 
-        var projects = new ProjectContextService();
         var fileSystem = new RealFileSystem();
         var project = TestProject.Create(fileSystem, root.Location).Context with
         {
@@ -228,7 +283,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
             LocalFolderMounts = [new("Library", libraryRoot)],
             DefaultSceneId = SceneId.New(),
         };
-        projects.Activate(project);
+        using var session = new TestSession(project);
         ProjectInfo? saved = null;
         var mountChanges = new Mock<IContentMountChanges>();
         _ = mountChanges.Setup(value => value.ChangeMountsAsync(It.IsAny<ProjectContext>(), It.IsAny<ProjectInfo>(), It.IsAny<CancellationToken>()))
@@ -237,12 +292,12 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
                 saved = candidate;
                 if (succeeds)
                 {
-                    projects.Activate(ProjectContext.FromProjectInfo(candidate, fileSystem));
+                    session.ChangeContext(ProjectContext.FromProjectInfo(candidate, fileSystem));
                 }
             })
             .ReturnsAsync(succeeds);
         var state = new ContentExplorerState();
-        using var model = new ContentFoldersViewModel(projects, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), mountChanges.Object, new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ContentFoldersViewModel(session, storage.Object, state, Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), mountChanges.Object, new ContentFoldersPane(), CreateNavigationPublication(session, storage.Object), CreateNavigationCatalog(), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         await model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!).ConfigureAwait(true);
         var tree = model.ShownItems.OfType<ProjectRootTreeItemAdapter>().Single();
         var renamed = tree.VirtualFolderMounts.Single(mount => string.Equals(mount.MountPointName, "Library", StringComparison.Ordinal));
@@ -260,7 +315,7 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
         _ = restored.VirtualFolderMounts.Should().Contain(mount => mount.MountPointName == (succeeds ? "LibraryRenamed" : "Library"));
         if (!succeeds)
         {
-            _ = projects.ActiveProject.Should().BeSameAs(project);
+            _ = session.Context.Should().BeSameAs(project);
         }
     });
 
@@ -292,15 +347,14 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
 
             return CreateNavigationFolder(Path.GetFileName(path), path, []);
         });
-        var projects = new ProjectContextService();
         var first = TestProject.Create(new RealFileSystem(), firstDirectory.Path).Context with
         {
             Name = "First",
             AuthoringMounts = [new("Cooked", ".cooked")],
         };
-        projects.Activate(first);
+        using var session = new TestSession(first);
         using var changes = new System.Reactive.Subjects.Subject<Oxygen.Managed.Assets.Catalog.AssetChange>();
-        using var model = new ContentFoldersViewModel(projects, storage.Object, new ContentExplorerState(), Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(projects, storage.Object), CreateNavigationCatalog(changes), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
+        using var model = new ContentFoldersViewModel(session, storage.Object, new ContentExplorerState(), Mock.Of<IDialogService>(), new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IContentMountChanges>(), new ContentFoldersPane(), CreateNavigationPublication(session, storage.Object), CreateNavigationCatalog(changes), CreateNavigationFolders(), CreateStatusHosting(), new Oxygen.Editor.ContentPipeline.Testing.EngineContentPakFixture(), NullLoggerFactory.Instance, relocationService: Mock.Of<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService>());
         var load = model.OnNavigatedToAsync(Mock.Of<IActiveRoute>(), null!);
         try
         {
@@ -308,12 +362,12 @@ public sealed partial class ExplorerNavigationTests : DroidNet.Tests.VisualUserI
             changes.OnNext(new(Oxygen.Managed.Assets.Catalog.AssetChangeKind.Added, AssetPath.Parse("/Cooked/Published.omat")));
             if (close)
             {
-                projects.Close();
+                session.End();
                 model.Dispose();
             }
             else
             {
-                projects.Activate(first with { ProjectId = Guid.NewGuid(), Name = "Next", ProjectRoot = FileSystemPath.From(nextDirectory.Path) });
+                session.ChangeContext(first with { ProjectId = Guid.NewGuid(), Name = "Next", ProjectRoot = FileSystemPath.From(nextDirectory.Path) });
                 changes.OnNext(new(Oxygen.Managed.Assets.Catalog.AssetChangeKind.Added, AssetPath.Parse("/Cooked/Published.omat")));
             }
         }

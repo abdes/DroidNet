@@ -8,16 +8,16 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
-/// <summary>The files documents edit, in the content folders of the active project.</summary>
-/// <param name="projects">The active project.</param>
-public sealed class ProjectDocumentFiles(IProjectContextService projects) : IDocumentFiles
+/// <summary>The files documents edit, in the content folders of a project session's project.</summary>
+/// <param name="session">The project session, whose content mounts are read at each call.</param>
+public sealed class ProjectDocumentFiles(IProjectSession session) : IDocumentFiles
 {
     /// <inheritdoc/>
     /// <remarks>Only assets authored in the project's own content folders have a document file.</remarks>
     public DocumentFile? Find(AssetPath asset)
     {
         ArgumentNullException.ThrowIfNull(asset);
-        return projects.ActiveProject?.LocateSource(asset) is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location
+        return session.Context.LocateSource(asset) is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location
             ? new DocumentFile(location.File, location.Identity)
             : null;
     }
@@ -26,7 +26,7 @@ public sealed class ProjectDocumentFiles(IProjectContextService projects) : IDoc
     public DocumentFile? Find(FileSystemPath path)
     {
         ArgumentNullException.ThrowIfNull(path);
-        return projects.ActiveProject?.FindByFilePath(path) is { IsMountRoot: false } location
+        return session.Context.FindByFilePath(path) is { IsMountRoot: false } location
             ? new DocumentFile(location.File, location.Identity)
             : null;
     }

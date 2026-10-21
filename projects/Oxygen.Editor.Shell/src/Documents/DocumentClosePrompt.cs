@@ -21,16 +21,15 @@ namespace Oxygen.Editor.Shell.Documents;
 /// </summary>
 /// <param name="dialogs">The dialog service.</param>
 /// <param name="windows">The window manager, which finds the window.</param>
-/// <param name="windowId">The window the dialog belongs to.</param>
-public sealed class DocumentClosePrompt(IDialogService dialogs, IWindowManagerService windows, WindowId windowId) : IDocumentClosePrompt
+public sealed class DocumentClosePrompt(IDialogService dialogs, IWindowManagerService windows) : IDocumentClosePrompt
 {
     /// <inheritdoc/>
-    public Task<bool> ConfirmAsync(IReadOnlyList<DocumentCloseItem> documents)
+    public Task<bool> ConfirmAsync(WindowId window, IReadOnlyList<DocumentCloseItem> documents)
     {
         ArgumentNullException.ThrowIfNull(documents);
-        var window = windows.GetWindow(windowId)
+        var owner = windows.GetWindow(window)
             ?? throw new InvalidOperationException("The document's window is no longer available.");
-        return window.DispatcherQueue.EnqueueAsync(() => this.ShowAsync(documents));
+        return owner.DispatcherQueue.EnqueueAsync(() => this.ShowAsync(window, documents));
     }
 
     private static string QuestionOf(IReadOnlyList<DocumentCloseItem> documents)
@@ -117,7 +116,7 @@ public sealed class DocumentClosePrompt(IDialogService dialogs, IWindowManagerSe
         }
     }
 
-    private async Task<bool> ShowAsync(IReadOnlyList<DocumentCloseItem> documents)
+    private async Task<bool> ShowAsync(WindowId window, IReadOnlyList<DocumentCloseItem> documents)
     {
         var rows = documents.Select(item => CreateRow(item, canChoose: documents.Count > 1)).ToArray();
         var spec = new DialogSpec(QuestionOf(documents), CreateContent(rows))
@@ -131,7 +130,7 @@ public sealed class DocumentClosePrompt(IDialogService dialogs, IWindowManagerSe
         DialogButton result;
         try
         {
-            result = await dialogs.ShowAsync(spec, windowId).ConfigureAwait(true);
+            result = await dialogs.ShowAsync(spec, window).ConfigureAwait(true);
         }
         finally
         {

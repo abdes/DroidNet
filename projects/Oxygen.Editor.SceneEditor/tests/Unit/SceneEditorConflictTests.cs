@@ -148,9 +148,7 @@ internal sealed partial class SceneEditorConflictTests
 
         private void CreateEditor(bool active, PreviewSettingsService? previewSettings, Action? commitInput, bool synchronized)
         {
-            var projects = new ProjectContextService();
-            projects.Activate(this.Scenes.Project.Context);
-            this.container.RegisterInstance<IProjectContextService>(projects);
+            this.container.RegisterInstance<IProjectSession>(new TestSession(this.Scenes.Project.Context));
             _ = this.Preview.Setup(value => value.IsReady(this.Tab.DocumentId)).Returns(synchronized);
             var documents = new TestDocumentArea(this.Tab.Document);
             if (!active)
@@ -159,11 +157,11 @@ internal sealed partial class SceneEditorConflictTests
             }
 
             var input = new Mock<IDocumentInputCommitter>();
-            _ = input.Setup(value => value.CommitAsync()).Callback(() => commitInput?.Invoke()).Returns(Task.CompletedTask);
+            _ = input.Setup(value => value.CommitAsync(It.IsAny<DroidNet.Documents.DocumentId>())).Callback(() => commitInput?.Invoke()).Returns(Task.CompletedTask);
             var previewSettingsService = previewSettings ?? new PreviewSettingsService(
                     Mock.Of<IEngineService>(),
                     Mock.Of<Data.Services.IEditorSettingsManager>(),
-                    Mock.Of<IProjectContextService>(),
+                    new TestSession(this.Scenes.Project.Context),
                     Mock.Of<IOperationResultPublisher>(),
                     new OperationStatusReducer());
             this.Editor = new(

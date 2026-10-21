@@ -116,22 +116,6 @@ public sealed class AssetCatalogTests
         _ = await initialize.Should().ThrowAsync<ObjectDisposedException>().ConfigureAwait(false);
     }
 
-    /// <summary>Querying before project activation does not prevent later initialization.</summary>
-    /// <returns>The asynchronous activation regression.</returns>
-    [TestMethod]
-    public async Task InitializationWithoutAProjectCanRunAfterActivation()
-    {
-        using var fixture = new Fixture();
-        fixture.SetProjectAvailable(available: false);
-        await using var catalog = fixture.CreateCatalog();
-        await catalog.InitializeAsync().ConfigureAwait(false);
-        _ = (await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeEmpty();
-        fixture.SetProjectAvailable(available: true);
-        fixture.RootRelease.SetResult();
-        fixture.ContentRelease.SetResult();
-        AssertComplete(await catalog.QueryAsync(new(AssetQueryScope.All), this.TestContext.CancellationToken).ConfigureAwait(false));
-    }
-
     /// <summary>Concurrent consumers of one accepted publication share its initial scan.</summary>
     [TestMethod]
     public async Task ConcurrentRefreshesOfTheSamePublicationShareInitialization()
@@ -301,8 +285,8 @@ public sealed class AssetCatalogTests
     private sealed class Fixture : IDisposable
     {
         private readonly Mock<IStorageProvider> storage = new();
-        private readonly Mock<IProjectContextService> context = new();
         private readonly ProjectContext project;
+        private readonly TestSession session;
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-Catalog-");
         private int rootEnumerations;
 
@@ -315,9 +299,9 @@ public sealed class AssetCatalogTests
             var observedFiles = new Mock<IAtomicFileStore>();
             _ = observedFiles.Setup(value => value.ReadAsync(It.IsAny<string>(), It.IsAny<CancellationToken>()))
                 .Returns((string path, CancellationToken token) => this.ReadOverride?.Invoke(path, token) ?? files.ReadAsync(path, token));
-            this.Publication = new(Mock.Of<IContentCookCoordinator>(), this.context.Object, observedFiles.Object,
+            this.session = new TestSession(this.project);
+            this.Publication = new(Mock.Of<IContentCookCoordinator>(), this.session, observedFiles.Object,
                 new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: files), new EngineContentPakFixture());
-            this.SetProjectAvailable(available: true);
             _ = this.storage.Setup(value => value.Normalize(It.IsAny<string>())).Returns(string.Empty);
             _ = this.storage.Setup(value => value.NormalizeRelativeTo(It.IsAny<string>(), It.IsAny<string>()))
                 .Returns((string parent, string relative) => Path.Combine(parent, relative.Replace('/', Path.DirectorySeparatorChar)));
@@ -345,17 +329,18 @@ public sealed class AssetCatalogTests
 
         public AssetCatalog CreateCatalog()
         {
-            return new(this.context.Object, this.storage.Object, new EngineContentPakFixture(), this.Publication);
+            return new(this.session, this.storage.Object, new EngineContentPakFixture(), this.Publication);
         }
-
-        public void SetProjectAvailable(bool available)
-            => _ = this.context.SetupGet(static value => value.ActiveProject).Returns(available ? this.project : null);
 
         public ProjectContext Project => this.project;
 
         public CookPublicationService Publication { get; }
 
-        public void Dispose() => this.directory.Delete(recursive: true);
+        public void Dispose()
+        {
+            this.session.Dispose();
+            this.directory.Delete(recursive: true);
+        }
 
         private static IFolder MakeFolder(string path, Func<string, CancellationToken, IAsyncEnumerable<IDocument>> documents, params IFolder[] children)
         {

@@ -237,12 +237,13 @@ Rules:
 - The application registers `EngineShutdownService` after the UI hosted service
   so ordinary host shutdown awaits runtime teardown before stopping the
   dispatcher. Hosted-service construction does not resolve UI-dependent
-  services. The `App` constructor connects window tracking once the dispatcher
-  exists, using the same shutdown singleton registered with the host.
-  Final-window shutdown also runs in Aura's finalization phase, after every
-  close guard and document commit succeeds and before native window destruction.
-  Canceled document close does not shut down the runtime. Overlapping approved
-  window closes count toward the final-window decision.
+  services. Exiting the editor also shuts the runtime down: the editor's exit
+  takes part in the Shell's close of its last window outside a project session,
+  and shuts the runtime down in the close's finalization phase, after every
+  close guard and document commit succeeds, after any session closed, and
+  before native window destruction. A cancelled document close does not shut
+  down the runtime, and closing a session's last workspace window returns to the
+  Start window with the runtime still running.
 - The application caller catches shutdown failures and publishes
   `Runtime.Shutdown` operation results and logs. Existing exit behavior is
   retained; this fix does not introduce retry dialogs or forced termination.

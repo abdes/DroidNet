@@ -146,13 +146,11 @@ public sealed partial class SceneContentDemandTests
     {
         private readonly Mock<IAssetFeed> assets = new();
         private readonly Mock<IContentPipelineService> pipeline = new();
-        private readonly ProjectContextService projects = new();
         private readonly List<TaskCompletionSource<ContentCookResult>> cooks = [];
         private readonly SceneContentDemand demand;
 
         public DemandFixture()
         {
-            this.projects.Activate(this.Documents.Project.Context);
             _ = this.assets.SetupGet(value => value.Items).Returns(Observable.Return<IReadOnlyList<AssetEntry>>([]));
             _ = this.assets.Setup(value => value.ResolveAsync(It.IsAny<AssetPath>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync((AssetPath asset, CancellationToken _) => Entry(asset, this.Freshness));
@@ -164,7 +162,7 @@ public sealed partial class SceneContentDemandTests
                     this.cooks.Add(cook);
                     return cook.Task.WaitAsync(token);
                 });
-            this.demand = new SceneContentDemand(this.Documents.Open, this.assets.Object, this.pipeline.Object, this.projects);
+            this.demand = new SceneContentDemand(this.Documents.Open, this.assets.Object, this.pipeline.Object, this.Documents.Session);
         }
 
         public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));

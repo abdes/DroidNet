@@ -131,10 +131,6 @@ public sealed partial class SceneExplorerDropTests
             this.Metadata = TestScenes.Open(scene);
             this.Scene = this.Metadata.Scene;
 
-            var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-            _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
-            this.Manager = manager;
-
             var documents = new TestDocumentArea();
             documents.Activate(this.Metadata.Document);
             this.Documents = documents;
@@ -148,8 +144,6 @@ public sealed partial class SceneExplorerDropTests
 
         public TestScene Metadata { get; }
 
-        public Mock<IProjectManagerService> Manager { get; }
-
         public TestDocumentArea Documents { get; }
 
         /// <summary>Gets the open documents that hold the harness's first scene.</summary>
@@ -161,7 +155,6 @@ public sealed partial class SceneExplorerDropTests
         public SceneExplorerViewModel Build()
         {
             var explorer = new SceneExplorerViewModel(
-                this.Manager.Object,
                 Mock.Of<IRouter>(),
                 this.Documents,
                 this.OpenDocuments,

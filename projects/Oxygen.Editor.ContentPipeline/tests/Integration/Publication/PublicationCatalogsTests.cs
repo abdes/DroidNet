@@ -30,7 +30,7 @@ public sealed class PublicationCatalogsTests
         {
             WriteLibrary(library.FullName, 1);
             consumer.Activate(consumer.ProjectContext with { LocalFolderMounts = [new("Library", FileSystemPath.From(library.FullName))] });
-            var project = consumer.ContextService.ActiveProject!;
+            var project = consumer.Session.Context;
             using var published = await consumer.Publication.AcquireForMountAsync(project, this.TestContext.CancellationToken).ConfigureAwait(false);
             var recorded = published.Roots.Single(static root => root.Name == "Library");
 

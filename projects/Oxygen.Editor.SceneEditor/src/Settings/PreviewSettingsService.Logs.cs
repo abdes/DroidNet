@@ -15,15 +15,16 @@ public sealed partial class PreviewSettingsService
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
         Message = "Preview preferences failed ({Code}) for project {ProjectRoot}.")]
-    private static partial void LogPreferenceFailure(ILogger logger, Exception exception, string code, FileSystemPath? projectRoot);
+    private static partial void LogPreferenceFailure(ILogger logger, Exception exception, string code, FileSystemPath projectRoot);
 
-    private void LogPreferenceFailure(Exception exception, string code, ProjectContext? project)
+    private void LogPreferenceFailure(Exception exception, string code, ProjectContext project)
     {
         if (!this.logger.IsEnabled(LogLevel.Error))
         {
             return;
         }
 
-        LogPreferenceFailure(this.logger, exception, code, project?.ProjectRoot);
+        var root = project.ProjectRoot;
+        LogPreferenceFailure(this.logger, exception, code, root);
     }
 }

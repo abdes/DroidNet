@@ -64,7 +64,7 @@ public sealed class SourceRetentionTests
     public async Task RetentionUsesDeclaredContentMountRoot()
     {
         using var workspace = new RetentionWorkspace();
-        workspace.Projects.Activate(workspace.Projects.ActiveProject! with { AuthoringMounts = [new("Content", "Authoring")] });
+        workspace.Session.ChangeContext(workspace.Session.Context with { AuthoringMounts = [new("Content", "Authoring")] });
         var input = workspace.Write("model.glb", "source");
         var result = await workspace.RetainAsync("Model", [input], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.DirectoryRelativePath.Should().Be("Authoring/Models/Model");
@@ -111,7 +111,7 @@ public sealed class SourceRetentionTests
                 "Model",
                 _ =>
                 {
-                    workspace.Projects.Close();
+                    workspace.Session.End();
                     return Task.FromResult(new ImportSourceBundle(input.RelativePath, [input]));
                 },
                 token),

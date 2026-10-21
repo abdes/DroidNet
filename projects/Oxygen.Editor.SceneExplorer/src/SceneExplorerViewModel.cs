@@ -52,14 +52,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
     private readonly ILogger<SceneExplorerViewModel> logger;
     private readonly IRouter router;
-    private readonly IProjectManagerService projectManager;
     private readonly IDocumentArea documentArea;
     private readonly OpenDocuments openDocuments;
     private readonly ISceneSelectionService selectionService;
     private readonly IOperationResultPublisher? operationResults;
     private readonly IStatusReducer? statusReducer;
     private readonly SceneNodeInteraction? interaction;
-    private readonly IProjectContextService? projectContexts;
+    private readonly IProjectSession? session;
     private readonly Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation;
     private readonly Oxygen.Editor.Shell.Documents.IHistoryService? histories;
     private readonly Oxygen.Editor.Shell.Windows.IPlacementService? placement;
@@ -71,22 +70,13 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly SemaphoreSlim searchGate = new(1, 1);
     private readonly System.Threading.Lock searchLifetimeLock = new();
 
-    // Node-clipboard state: copied node identities plus whether they were cut (moved) rather than copied.
-    private readonly List<NodeId> clipboardNodeIds = [];
+    // The session's clipboard of scene nodes; the tree keeps only its rows' clipboard marks.
+    private readonly ISceneNodeClipboard clipboard;
 
     // Transient search expansions recorded by identity: folders/nodes expanded for a match,
     // restored when search clears, and re-applied as transient across a projection rebuild.
     private readonly HashSet<FolderId> searchExpandedFolderIds = [];
     private readonly HashSet<NodeId> searchExpandedNodeIds = [];
-
-    private bool clipboardIsCut;
-
-    // Ratified clipboard lifetime (D7): a payload is stamped with the project and scene that
-    // produced it, so a stale payload can never be pasted into another project's scene.
-    private Guid? clipboardProjectId;
-    private FileSystemPath? clipboardProjectRoot;
-    private SceneId? clipboardSceneId;
-    private WeakReference<Scene>? clipboardSceneLifetime;
 
     private int nextEntityIndex;
     private int searchGeneration;
@@ -130,7 +120,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <summary>
     ///     Initializes a new instance of the <see cref="SceneExplorerViewModel" /> class.
     /// </summary>
-    /// <param name="projectManager">The project manager service.</param>
     /// <param name="router">The router service used for navigation events.</param>
     /// <param name="documentArea">The window's document area, whose active scene document the explorer shows.</param>
     /// <param name="openDocuments">The open documents: the explorer shows the scene document opened last, and follows its reloads.</param>
@@ -149,7 +138,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     ///     eye and lock actions report that the workspace service is unavailable rather than
     ///     silently doing nothing.
     /// </param>
-    /// <param name="projectContexts">Optional project context used to scope project-owned Explorer state.</param>
+    /// <param name="session">Optional project session used to scope project-owned Explorer state.</param>
     /// <param name="relocation">Optional relocation service that renames the scene's file.</param>
     /// <param name="histories">Optional history service whose global history records a scene file rename.</param>
     /// <param name="placement">Optional placement, which shows a scene document that becomes active in the window's place for its scene.</param>
@@ -157,8 +146,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="views">Optional scene views, which frame nodes and run camera commands in the scene's editor.</param>
     /// <param name="availability">Optional scene availability, which reports a scene that failed to load and reloads the previous one.</param>
     /// <param name="commands">Optional command service, with which the explorer registers as a command handler.</param>
+    /// <param name="clipboard">
+    ///     Optional clipboard of the session's scene nodes, which copies and cuts stage and pastes read. Without it the
+    ///     explorer keeps a clipboard of its own.
+    /// </param>
     public SceneExplorerViewModel(
-        IProjectManagerService projectManager,
         IRouter router,
         IDocumentArea documentArea,
         OpenDocuments openDocuments,
@@ -167,16 +159,18 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         IOperationResultPublisher? operationResults = null,
         IStatusReducer? statusReducer = null,
         SceneNodeInteraction? interaction = null,
-        IProjectContextService? projectContexts = null,
+        IProjectSession? session = null,
         Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation = null,
         Oxygen.Editor.Shell.Documents.IHistoryService? histories = null,
         Oxygen.Editor.Shell.Windows.IPlacementService? placement = null,
         Oxygen.Editor.Shell.Documents.IDocumentService? documents = null,
         ISceneViews? views = null,
         ISceneAvailability? availability = null,
-        ICommandService? commands = null)
+        ICommandService? commands = null,
+        ISceneNodeClipboard? clipboard = null)
         : base(loggerFactory)
     {
+        this.clipboard = clipboard ?? new SceneNodeClipboard();
         this.documents = documents;
         this.views = views;
         this.availability = availability;
@@ -186,7 +180,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.interaction = interaction;
-        this.projectContexts = projectContexts;
+        this.session = session;
         if (interaction is { } service)
         {
             this.ApplyCategoryFilters(service.Categories);
@@ -195,7 +189,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
 
         this.logger = loggerFactory?.CreateLogger<SceneExplorerViewModel>() ??
                       NullLoggerFactory.Instance.CreateLogger<SceneExplorerViewModel>();
-        this.projectManager = projectManager;
         this.router = router;
         this.documentArea = documentArea;
         this.openDocuments = openDocuments;
@@ -496,10 +489,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         _ = insertIndex;
         if (!this.ClipboardLifetimeIsCurrent())
         {
-            this.InvalidateClipboard(
-                this.clipboardIsCut
-                    ? "The cut was cleared because its source scene is no longer loaded."
-                    : "The clipboard was cleared because the project changed.");
+            this.InvalidateClipboard("The cut was cleared because its source scene is no longer loaded.");
             return;
         }
 
@@ -627,7 +617,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
                 shown.ContentReplaced -= this.OnShownContentReplaced;
             }
 
-            this.projectClipboardSubscription?.Dispose();
             if (this.interaction is { } service)
             {
                 service.StateChanged -= this.OnInteractionStateChanged;
@@ -697,17 +686,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     }
 
     /// <inheritdoc />
-    protected override void OnClipboardCleared()
-    {
-        this.clipboardGeneration++;
-        this.explorerClipboard = null;
-        this.clipboardNodeIds.Clear();
-        this.clipboardIsCut = false;
-        this.clipboardProjectId = null;
-        this.clipboardProjectRoot = null;
-        this.clipboardSceneId = null;
-        this.clipboardSceneLifetime = null;
-    }
+    protected override void OnClipboardCleared() => this.clipboard.Clear();
 
     /// <summary>
     /// The scene root row is exclusive: selecting it alone is the scene context, and it can never
@@ -795,7 +774,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private async Task<TreeItemRenameResult> RenameSceneAssetAsync(string name)
     {
         if (this.relocation is null || this.histories is null || this.sceneDocument is not { } document
-            || this.projectContexts?.ActiveProject?.FindByFilePath(document.File.Path) is not { } location)
+            || this.session?.Context.FindByFilePath(document.File.Path) is not { } location)
         {
             return TreeItemRenameResult.Rejected("The scene's file cannot be renamed here.");
         }
@@ -978,48 +957,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         => this.GetContextDisabledReason(SceneExplorerCommandKind.Paste, this.CaptureExplorerContext(anchor: null, background: false)) is null;
 
     /// <summary>
-    /// Records which project and scene produced the staged payload.
+    /// Tests the staged payload against the clipboard's lifetime without changing anything: a copy can be pasted into
+    /// any scene of the session, a cut only into the scene that staged it.
     /// </summary>
-    private FileSystemPath? CurrentProjectRoot()
-        => this.projectManager.CurrentProject?.ProjectInfo.Location is { } location ? FileSystemPath.From(location) : null;
-
-    private void StampClipboardOrigin()
-    {
-        this.clipboardGeneration++;
-        this.clipboardProjectId = this.projectManager.CurrentProject?.ProjectInfo.Id;
-        this.clipboardProjectRoot = this.CurrentProjectRoot();
-        this.clipboardSceneId = this.Scene?.AttachedObject.Id;
-        this.clipboardSceneLifetime = this.Scene is { } root ? new(root.AttachedObject) : null;
-    }
-
-    /// <summary>
-    /// Tests the staged payload against the ratified clipboard lifetime without changing anything.
-    /// </summary>
-    /// <remarks>
-    ///     The ratified rule (D7) is that a snapshot Copy survives a scene switch inside one
-    ///     project, a Cut is bound to the scene that staged it, and nothing survives a project
-    ///     switch. An unstamped payload is treated as current, so a test double or a project-less
-    ///     session is not falsely invalidated.
-    /// </remarks>
     /// <returns><see langword="true"/> when the payload may still be pasted.</returns>
-    private bool ClipboardLifetimeIsCurrent()
-    {
-        var currentProjectId = this.projectManager.CurrentProject?.ProjectInfo.Id;
-        if (this.clipboardProjectId is { } stagedProject && stagedProject != currentProjectId)
-        {
-            return false;
-        }
-
-        if (this.clipboardProjectRoot is { } stagedRoot && stagedRoot != this.CurrentProjectRoot())
-        {
-            return false;
-        }
-
-        return !this.clipboardIsCut
-            || (this.Scene is { } current && this.clipboardSceneId == current.AttachedObject.Id
-                && this.clipboardSceneLifetime is { } lifetime && lifetime.TryGetTarget(out var original)
-                && ReferenceEquals(original, current.AttachedObject));
-    }
+    private bool ClipboardLifetimeIsCurrent() => this.clipboard.IsCurrentFor(this.Scene?.AttachedObject);
 
     /// <summary>
     /// Drops a payload that outlived its ratified lifetime and tells the user why.
@@ -1177,7 +1119,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.searchExpandedNodeIds.Clear();
     }
 
-    // Another scene's rows lose their cut marks; a clipboard from another project or a closed scene is dropped.
+    // Another scene's rows lose their cut marks; a cut from a closed scene is dropped.
     private void ReleaseStaleClipboard(Scene? previousScene, Scene loadedScene)
     {
         if (!ReferenceEquals(previousScene, loadedScene))
@@ -1186,11 +1128,9 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             this.ClipboardItemStore = [];
         }
 
-        if (this.explorerClipboard is not null && !this.ClipboardLifetimeIsCurrent())
+        if (this.clipboard.Payload is not null && !this.ClipboardLifetimeIsCurrent())
         {
-            this.InvalidateClipboard(this.clipboardIsCut
-                ? "The staged Cut was cancelled because its scene lifetime ended."
-                : "The clipboard was cleared because the project changed.");
+            this.InvalidateClipboard("The staged Cut was cancelled because its scene lifetime ended.");
         }
     }
 
@@ -2221,8 +2161,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <returns>The task completing once the restored state is visible on the rows.</returns>
     /// <remarks>
     /// Without this the persistence is write-only: state saved by a previous session would never
-    /// come back. A project-less explorer (no <see cref="IProjectContextService"/> composed, or no
-    /// active project) simply starts clean, and in-session toggles still work.
+    /// come back. A project-less explorer (no <see cref="IProjectSession"/> composed) simply starts clean, and in-session toggles still work.
     /// </remarks>
     private async Task RestoreWorkspaceInteractionAsync(Scene loadedScene)
     {
@@ -2231,7 +2170,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        if (this.projectContexts?.ActiveProject is not { } project)
+        if (this.session?.Context is not { } project)
         {
             return;
         }

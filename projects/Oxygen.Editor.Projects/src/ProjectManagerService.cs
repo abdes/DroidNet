@@ -29,8 +29,9 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     // Writes of one project file run one at a time, each against the version the one before it wrote.
     private readonly DocumentWriteCoordinator manifestWrites = new();
 
-    /// <inheritdoc />
-    public IProject? CurrentProject { get; private set; }
+    // The last accepted project, which a staged load must still follow to be accepted. The project session holds the
+    // loaded project its services read.
+    private IProject? loaded;
 
     private IAtomicFileStore AtomicFiles => atomicFiles ?? storage.AtomicFiles;
 
@@ -117,7 +118,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
             return Task.FromResult<ProjectLoadSnapshot?>(null);
         }
 
-        var previousProject = this.CurrentProject;
+        var previousProject = this.loaded;
         var project = new Project(projectInfo);
         return Task.FromResult<ProjectLoadSnapshot?>(new(this, project, previousProject));
     }
@@ -127,7 +128,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     {
         ArgumentNullException.ThrowIfNull(snapshot);
         return ReferenceEquals(snapshot.Owner, this) && !snapshot.Accepted
-            && ReferenceEquals(snapshot.PreviousProject, this.CurrentProject);
+            && ReferenceEquals(snapshot.PreviousProject, this.loaded);
     }
 
     /// <inheritdoc/>
@@ -140,7 +141,7 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
         }
 
         snapshot.Accepted = true;
-        return this.CurrentProject = snapshot.Project;
+        return this.loaded = snapshot.Project;
     }
 
 }

@@ -76,7 +76,7 @@ public sealed record ProjectContext
 
     /// <summary>
     ///     Gets the project's settings as its manifest held them when this context was created. A settings change does
-    ///     not activate the project again, so <see cref="IProjectContextService.Settings"/> holds the current ones.
+    ///     not replace the context, so <see cref="IProjectSession.Settings"/> holds the current ones.
     /// </summary>
     public ProjectSettings Settings { get; init; } = new();
 

@@ -18,7 +18,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
 {
     private readonly ICookRunService runs;
     private readonly IContentPipelineService pipeline;
-    private readonly IProjectContextService projects;
+    private readonly IProjectSession session;
     private readonly ICookRecovery recovery;
     private readonly HostingContext hosting;
     private readonly Dictionary<Guid, CookingRunViewModel> items = [];
@@ -31,19 +31,19 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     /// <summary>Initializes a new instance of the <see cref="CookingPanelViewModel"/> class.</summary>
     /// <param name="runs">The coordinator's run history and controls.</param>
     /// <param name="pipeline">The shared cook entry points for every scope.</param>
-    /// <param name="projects">The active project identity.</param>
+    /// <param name="session">The project session the panel lives in.</param>
     /// <param name="recovery">Document/property recovery navigation.</param>
     /// <param name="hosting">The authoring dispatcher.</param>
     public CookingPanelViewModel(
         ICookRunService runs,
         IContentPipelineService pipeline,
-        IProjectContextService projects,
+        IProjectSession session,
         ICookRecovery recovery,
         HostingContext hosting)
     {
         this.runs = runs;
         this.pipeline = pipeline;
-        this.projects = projects;
+        this.session = session;
         this.recovery = recovery;
         this.hosting = hosting;
         this.runs.RunChanged += this.OnRunChanged;
@@ -154,7 +154,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
 
     private void ApplyRun(CookRunChangedEventArgs args)
     {
-        if (this.disposed || args.Run.ProjectId != this.projects.ActiveProject?.ProjectId)
+        if (this.disposed || args.Run.ProjectId != this.session.Context.ProjectId)
         {
             return;
         }
@@ -225,7 +225,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     [RelayCommand]
     private Task RetryAsync()
         => this.SelectedRun is { RetryVisibility: Microsoft.UI.Xaml.Visibility.Visible } selected
-            && selected.Snapshot.ProjectId == this.projects.ActiveProject?.ProjectId
+            && selected.Snapshot.ProjectId == this.session.Context.ProjectId
             ? this.ExecuteCookAsync(selected.Snapshot.Request with { IsAutomatic = false }) : Task.CompletedTask;
 
     [RelayCommand]
@@ -233,7 +233,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     private async Task InspectAsync()
     {
         if (this.SelectedRun is not { InspectVisibility: Microsoft.UI.Xaml.Visibility.Visible } selected
-            || selected.Snapshot.ProjectId != this.projects.ActiveProject?.ProjectId)
+            || selected.Snapshot.ProjectId != this.session.Context.ProjectId)
         {
             return;
         }
@@ -260,7 +260,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     private async Task ShowImportedAssetsAsync()
     {
         if (this.SelectedRun is not { ShowImportedAssetsVisibility: Microsoft.UI.Xaml.Visibility.Visible } selected
-            || selected.Snapshot.ProjectId != this.projects.ActiveProject?.ProjectId)
+            || selected.Snapshot.ProjectId != this.session.Context.ProjectId)
         {
             return;
         }
@@ -314,9 +314,9 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
                 return;
             }
 
-            if (request.IsReimport && this.projects.ActiveProject is { } project)
+            if (request.IsReimport)
             {
-                _ = await this.pipeline.ReimportSourceAsync(request.ScopeUri!, project, CancellationToken.None).ConfigureAwait(true);
+                _ = await this.pipeline.ReimportSourceAsync(request.ScopeUri!, this.session.Context,CancellationToken.None).ConfigureAwait(true);
                 return;
             }
 

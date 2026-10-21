@@ -39,7 +39,7 @@ public partial class SceneEditorViewModel
         => this.container.Resolve<ViewportStateService>(IfUnresolved.ReturnDefault);
 
     private ProjectContext? ActiveProject
-        => this.container.Resolve<IProjectContextService>(IfUnresolved.ReturnDefault)?.ActiveProject;
+        => this.container.Resolve<IProjectSession>(IfUnresolved.ReturnDefault)?.Context;
 
     /// <summary>
     /// Marks the given viewport as focused and clears focus from all other viewports.

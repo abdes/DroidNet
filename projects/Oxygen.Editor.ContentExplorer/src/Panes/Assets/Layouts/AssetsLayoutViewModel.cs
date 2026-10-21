@@ -23,13 +23,13 @@ namespace Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 /// </summary>
 public abstract partial class AssetsLayoutViewModel(
     IAssetFeed assetProvider,
-    IProjectContextService projectContextService,
+    IProjectSession session,
     ContentExplorerState contentExplorerState,
     HostingContext hostingContext,
     IScripts? scripts = null) : ObservableObject, IRoutingAware, IDisposable
 {
     private readonly IAssetFeed assetProvider = assetProvider;
-    private readonly IProjectContextService projectContextService = projectContextService;
+    private readonly IProjectSession session = session;
     private readonly ContentExplorerState contentExplorerState = contentExplorerState;
     private readonly HostingContext hostingContext = hostingContext;
 
@@ -201,7 +201,6 @@ public abstract partial class AssetsLayoutViewModel(
     /// <param name="displayPath">The row's display location.</param>
     /// <param name="identity">The asset's identity.</param>
     /// <param name="selectedFolders">The selected folders; none selected is the whole project.</param>
-    /// <param name="hasActiveProject">Whether the browser owns a project.</param>
     /// <param name="hasCookedProjection">Whether a cooked projection exists.</param>
     /// <param name="cookedFolders">The mounts exposing project output.</param>
     /// <returns>Whether the asset belongs to this scope.</returns>
@@ -209,11 +208,10 @@ public abstract partial class AssetsLayoutViewModel(
         string displayPath,
         AssetPath identity,
         IReadOnlyCollection<AssetPath> selectedFolders,
-        bool hasActiveProject,
         bool hasCookedProjection = false,
         IReadOnlyCollection<AssetPath>? cookedFolders = null)
     {
-        if (selectedFolders.Count == 0 || !hasActiveProject)
+        if (selectedFolders.Count == 0)
         {
             return true;
         }
@@ -374,7 +372,7 @@ public abstract partial class AssetsLayoutViewModel(
 
     private void ReplaceItems(IReadOnlyList<AssetEntry> items)
     {
-        this.projectCookedFolders = ProjectCookedFolders.Roots(this.projectContextService.ActiveProject);
+        this.projectCookedFolders = ProjectCookedFolders.Roots(this.session.Context);
         if (this.disposed)
         {
             return;
@@ -385,19 +383,19 @@ public abstract partial class AssetsLayoutViewModel(
         var selectedIdentities = this.IsActiveLayout
             ? this.contentExplorerState.SelectedIdentities : [.. this.selectedAssets.Select(static asset => asset.Identity)];
         var existing = this.Assets.ToDictionary(static row => row.Item.Identity);
-        // Rows show the active project's assets and read its files; without a project there are none.
-        var project = this.projectContextService.ActiveProject;
-        var scopedItems = project is null ? [] : CookedLibraryFolders.ForFolders(items, project, this.contentExplorerState.SelectedFolders);
+        // Rows show the session project's assets and read its files.
+        var project = this.session.Context;
+        var scopedItems = CookedLibraryFolders.ForFolders(items, project, this.contentExplorerState.SelectedFolders);
         // A container is one asset, its source file: its products (a model's materials, an input source's
         // actions) are not listed, and pickers and references reach them by identity.
         var inScope = scopedItems.Where(static item => AssetFileTypes.ContainerOf(item.Identity) is null)
             .Where(this.IsInSelectedFolders).ToArray();
         this.scopeCount = inScope.Length;
-        var visible = project is null ? [] : this.Presentation.Sort(inScope.Where(this.Query.Matches), project);
+        var visible = this.Presentation.Sort(inScope.Where(this.Query.Matches), project);
         this.isReplacingRows = true;
         try
         {
-            for (var index = 0; project is not null && index < visible.Count; index++)
+            for (var index = 0; index < visible.Count; index++)
             {
                 var item = visible[index];
                 if (existing.TryGetValue(item.Identity, out var row))
@@ -464,9 +462,9 @@ public abstract partial class AssetsLayoutViewModel(
         if (sourceFolders.Any(static folder => folder is null))
         {
             // All of the output browses the sources of every authoring folder.
-            this.contentExplorerState.SetSelectedFolders(this.projectContextService.ActiveProject?.AuthoringMounts
+            this.contentExplorerState.SetSelectedFolders(this.session.Context.AuthoringMounts
                 .Where(static mount => !ContentFoldersViewModel.IsPersistedProjectRelativeVirtualMount(mount))
-                .Select(static mount => AssetPath.Create(mount.Name)) ?? []);
+                .Select(static mount => AssetPath.Create(mount.Name)));
         }
         else
         {
@@ -495,7 +493,6 @@ public abstract partial class AssetsLayoutViewModel(
             asset.DisplayPath,
             asset.Identity,
             this.contentExplorerState.SelectedFolders,
-            this.projectContextService.ActiveProject is not null,
             HasCookedProjection(asset),
             this.projectCookedFolders);
 

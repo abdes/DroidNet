@@ -21,15 +21,6 @@ public partial class ContentFoldersViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "The project manager service does not have a currently loaded project.")]
-    private static partial void LogNoCurrentProject(ILogger logger);
-
-    private void LogNoCurrentProject()
-        => LogNoCurrentProject(this.logger);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
         Message = "Failed to preload project folders during ViewModel activation.")]
     private static partial void LogPreloadingProjectFoldersError(ILogger logger, Exception ex);
 

@@ -25,7 +25,7 @@ namespace Oxygen.Editor.ContentExplorer.Authoring;
 /// in the scene editor, a material in the material editor.
 /// </summary>
 /// <param name="dialogs">The dialog service.</param>
-/// <param name="projects">The active project.</param>
+/// <param name="session">The project session.</param>
 /// <param name="browserState">The Content Explorer state, whose selected folder is the default destination.</param>
 /// <param name="authoring">Proposes and checks the name and folder, and writes the file.</param>
 /// <param name="codeEditor">The code editor service.</param>
@@ -34,7 +34,7 @@ namespace Oxygen.Editor.ContentExplorer.Authoring;
 /// <param name="assetReveal">Shows and selects the new asset; without it the asset is not shown.</param>
 public sealed class AuthoredAssetCreation(
     IDialogService dialogs,
-    IProjectContextService projects,
+    IProjectSession session,
     ContentExplorerState browserState,
     IAssetAuthoring authoring,
     ICodeEditorService codeEditor,
@@ -66,11 +66,7 @@ public sealed class AuthoredAssetCreation(
 
     private async Task<FileSystemPath?> CreateAsync(CreationKind kind, Func<ProjectContext, FileSystemPath, Task> open)
     {
-        if (projects.ActiveProject is not { } project)
-        {
-            return null;
-        }
-
+        var project = session.Context;
         var proposal = await authoring.ProposeAsync(project, kind.Template, browserState.SelectedFolders.Order().FirstOrDefault(), CancellationToken.None).ConfigureAwait(true);
         var nameBox = new TextBox { Header = "Name", Text = proposal.Name, MinWidth = 320 };
         nameBox.Loaded += (_, _) =>

@@ -33,10 +33,10 @@ public sealed partial class ExplorerRoutingTests : DroidNet.Tests.VisualUserInte
         var asset = CreateNavigationAsset("/Content/Materials/Blue.omat", AssetKind.Material);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([asset]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
         using var host = HostContainer.Create();
-        host.RegisterInstance<IProjectContextService>(projects);
+        host.RegisterInstance<IProjectSession>(session);
         host.RegisterInstance(provider.Object);
         host.RegisterInstance(state);
         host.RegisterInstance(CreateStatusHosting());

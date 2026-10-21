@@ -23,9 +23,10 @@ internal sealed partial class CookWorkspace : IDisposable
         this.ProjectContext = (authoringMounts is null ? TestProject.Create(disk, this.Root) : TestProject.Create(disk, this.Root, authoringMounts)).Context;
         Directory.CreateDirectory(Path.Combine(this.Root, "Content", "Scenes"));
         Directory.CreateDirectory(Path.Combine(this.Root, "Content", "Materials"));
+        this.Session = new TestSession(this.ProjectContext);
         this.Activate(this.ProjectContext);
-        this.CookCoordinator = new ContentCookCoordinator(this.ContextService, NullLogger<ContentCookCoordinator>.Instance);
-        this.Publication = new(this.CookCoordinator, this.ContextService, this.Files, this.Manager, this.EngineContent);
+        this.CookCoordinator = new ContentCookCoordinator(this.Session, NullLogger<ContentCookCoordinator>.Instance);
+        this.Publication = new(this.CookCoordinator, this.Session, this.Files, this.Manager, this.EngineContent);
         this.Scene = new Scene { Name = "Main" };
         var producer = Path.Combine(this.Root, "producer.bin");
         File.WriteAllText(producer, "fixed test producer");
@@ -45,7 +46,8 @@ internal sealed partial class CookWorkspace : IDisposable
 
     public ProjectContext ProjectContext { get; }
 
-    public ProjectContextService ContextService { get; } = new();
+    /// <summary>Gets the workspace project's session, which the session's services receive.</summary>
+    public TestSession Session { get; }
 
     public ContentCookCoordinator CookCoordinator { get; }
 
@@ -78,10 +80,15 @@ internal sealed partial class CookWorkspace : IDisposable
         _ = await this.Files.WriteAsync(CookPublicationPaths.Head(this.Root), System.Text.Json.JsonSerializer.SerializeToUtf8Bytes(head, CookPublicationDocument.JsonOptions), DroidNet.Storage.FileVersion.Missing, token).ConfigureAwait(false);
     }
 
+    /// <summary>Saves the project with a changed configuration and gives it to the session, as a mount change does.</summary>
+    /// <param name="context">The same project, changed.</param>
     public void Activate(ProjectContext context)
     {
         _ = TestProject.SaveProjectFile(context);
-        this.ContextService.Activate(context);
+        if (!ReferenceEquals(context, this.Session.Context))
+        {
+            this.Session.ChangeContext(context);
+        }
     }
 
     public string CookedRoot(string mount)
@@ -167,8 +174,9 @@ internal sealed partial class CookWorkspace : IDisposable
 
     public void Dispose()
     {
-        this.ContextService.Close();
+        this.Session.End();
         this.CookCoordinator.Dispose();
+        this.Session.Dispose();
         this.Compatibility.Dispose();
         if (Directory.Exists(this.Root))
         {

@@ -224,7 +224,7 @@ public sealed class CookOrchestrationTests
             SourceAnalysis = ControlledSourceAnalysis.AnalyzeAsync,
         };
         var service = new ContentPipelineService(
-            workspace.ContextService,
+            workspace.Session,
             workspace.CookCoordinator,
             new FixedCookScopeProvider(workspace.Root),
             new CapturingSceneDescriptorGenerator(diagnostics: []),

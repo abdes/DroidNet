@@ -9,7 +9,9 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.MaterialEditor/src/Oxygen.Editor.MaterialEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Assets/testing/Oxygen.Editor.Assets.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
         <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
         <Compile Include="$(ProjectsRoot)/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
         <Compile Include="$(ProjectsRoot)/UITests.Shared/testsupport/ScaledXamlHost.cs" Link="Support/ScaledXamlHost.cs" />
         <Compile Include="$(ProjectsRoot)/UITests.Shared/tests/TestHostLifecycleTests.cs" Link="TestHostLifecycleTests.cs" />

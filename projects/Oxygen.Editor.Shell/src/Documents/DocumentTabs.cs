@@ -275,7 +275,7 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
 
             if (this.coordinators.TryGetValue(windowId, out var coordinator))
             {
-                authoring = await coordinator.PrepareAsync(documents, force).ConfigureAwait(true);
+                authoring = await coordinator.PrepareAsync(windowId, documents, force).ConfigureAwait(true);
                 if (authoring is null)
                 {
                     return null;

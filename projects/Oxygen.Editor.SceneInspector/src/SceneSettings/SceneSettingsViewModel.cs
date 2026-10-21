@@ -34,7 +34,7 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
     /// <param name="observeEnvironment">Reads the runtime environment that renders a scene.</param>
     /// <param name="inputContextSource">Reads what the project says about a mapping context.</param>
     /// <param name="revealAsset">Shows an asset in the Content Explorer.</param>
-    /// <param name="projects">The active project, whose files hold its texture descriptors; with the catalog, it lists
+    /// <param name="session">The project session, whose files hold its texture descriptors; with the catalog, it lists
     /// the cube textures.</param>
     /// <param name="inputSources">The project's input sources, whose changes the Play section follows.</param>
     /// <param name="loggerFactory">Creates the loggers that report catalog failures.</param>
@@ -46,7 +46,7 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
         Func<Scene, CancellationToken, Task<SkyLightObservation?>>? observeEnvironment = null,
         Func<AssetPath, InputContextSource>? inputContextSource = null,
         Func<AssetPath, Task>? revealAsset = null,
-        IProjectContextService? projects = null,
+        IProjectSession? session = null,
         IInputSources? inputSources = null,
         ILoggerFactory? loggerFactory = null)
     {
@@ -54,7 +54,7 @@ public sealed partial class SceneSettingsViewModel : InspectorSection, IDisposab
         this.observeEnvironment = observeEnvironment;
         this.EditOwner = new(authoringProvider, this.RefreshFromScene, this.ValidationFeedback);
         var scheduler = observerScheduler ?? ImmediateScheduler.Instance;
-        var cubeTextures = assetProvider is not null && projects is not null ? CubemapPickerModel.CubeTextures(assetProvider, projects) : null;
+        var cubeTextures = assetProvider is not null && session is not null ? CubemapPickerModel.CubeTextures(assetProvider, session) : null;
         this.Backdrop = new(this.EditOwner, cubeTextures, scheduler);
         this.SkyLight = new(this.EditOwner, cubeTextures, scheduler);
         this.SkyAtmosphere = new(this.EditOwner);

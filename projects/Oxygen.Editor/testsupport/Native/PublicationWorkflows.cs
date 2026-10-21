@@ -41,7 +41,7 @@ internal static class PublicationWorkflows
     /// <returns>The publication's identity and files.</returns>
     internal static async Task<PublishedFiles> ReadPublishedAsync(CatalogWorkloadServices services, CancellationToken cancellationToken)
     {
-        using var selected = await services.Publication.AcquireReadAsync(services.Projects.ActiveProject!, cancellationToken).ConfigureAwait(true);
+        using var selected = await services.Publication.AcquireReadAsync(services.Session.Context, cancellationToken).ConfigureAwait(true);
         var fileSystem = NativeSceneFixture.FileSystem;
         var hashes = selected.RootPaths
             .SelectMany(root => fileSystem.Directory.GetFiles(root, "*", SearchOption.AllDirectories))
@@ -176,11 +176,11 @@ internal static class PublicationWorkflows
         timeout.CancelAfter(TimeSpan.FromSeconds(120));
         using var services = new CatalogWorkloadServices(fixture);
         SetCookOnChange(services, enabled: false);
-        var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
+        var catalog = new AssetCatalog(services.Session, services.Storage, services.EngineContent, services.Publication);
         await using var catalogLifetime = catalog.ConfigureAwait(true);
-        using var automatic = new AutomaticCookService(services.Projects, Mock.Of<IProjectManagerService>(), catalog, services.Pipeline, services.Pipeline, services.Runs, new FakeScripts(), new FakeInputSources(), NullLogger<AutomaticCookService>.Instance);
+        using var automatic = new AutomaticCookService(services.Session, Mock.Of<IProjectManagerService>(), catalog, services.Pipeline, services.Pipeline, services.Runs, new FakeScripts(), new FakeInputSources(), NullLogger<AutomaticCookService>.Instance);
         using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
-        var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
+        var provider = new AssetFeed(catalog, services.Session, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
         await using var providerLifetime = provider.ConfigureAwait(true);
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         var publication = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
@@ -227,7 +227,7 @@ internal static class PublicationWorkflows
     /// <param name="services">The scenario's services.</param>
     /// <param name="enabled">Whether changed sources cook without being asked.</param>
     internal static void SetCookOnChange(CatalogWorkloadServices services, bool enabled)
-        => services.Projects.UpdateSettings(services.Projects.Settings with { CookOnChange = enabled });
+        => services.Session.UpdateSettings(services.Session.Settings with { CookOnChange = enabled });
 
     /// <summary>Turns Cook on change on and holds the cook writer, so the automatic cook of the next change stays queued.</summary>
     /// <param name="services">The scenario's services.</param>

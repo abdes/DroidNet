@@ -9,6 +9,7 @@ using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Testably.Abstractions;
 
 namespace Oxygen.Editor.TestSupport;
@@ -19,19 +20,24 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
 
     public CatalogWorkloadServices(NativeSceneFixture fixture, IContentPipelineProcessRunner? processRunner = null)
     {
-        this.Projects = fixture.Projects;
+        this.Sessions = fixture.Sessions;
         this.Documents = fixture.UnsavedDocuments;
-        this.Projects.Activate(fixture.Projects.ActiveProject! with { AuthoringMounts = [new("Content", "Content")] });
+        this.Sessions.ChangeContext(fixture.Session.Context with { AuthoringMounts = [new("Content", "Content")] });
+        var session = this.Sessions.Session!;
         var files = new NativeAtomicFileStore(new RealFileSystem());
-        this.Runs = new ContentCookCoordinator(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
+        this.Runs = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), processRunner ?? new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
         this.Scopes = new ProjectCookScopeProvider(this.Storage);
-        this.Publication = new(this.Runs, this.Projects, files, new ProjectManagerService(this.Storage, atomicFiles: files), this.EngineContent);
+        this.Publication = new(this.Runs, session, files, new ProjectManagerService(this.Storage, atomicFiles: files), this.EngineContent);
         this.Mounts = new();
-        this.Pipeline = new ContentPipelineService(this.Projects, this.Runs, this.Scopes, new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, this.compatibility, files, this.Publication, this.EngineContent);
+        this.Pipeline = new ContentPipelineService(session, this.Runs, this.Scopes, new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, this.compatibility, files, this.Publication, this.EngineContent);
     }
 
-    public ProjectContextService Projects { get; }
+    /// <summary>Gets the session host of the fixture's project, whose content mounts a scenario changes.</summary>
+    public TestSessionHost Sessions { get; }
+
+    /// <summary>Gets the session of the fixture's project, which the catalog, the feed and the relocations serve.</summary>
+    public TestSession Session => this.Sessions.Session!;
 
     public NativeStorageProvider Storage { get; } = new(new RealFileSystem());
 

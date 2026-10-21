@@ -85,7 +85,7 @@ public sealed class MaterialKeyPriorityTests
         var folder = AssetPath.Parse("/Content/Scenes");
         var uris = new[] { AssetPath.Parse("/Content/Scenes/Main.oscene"), AssetPath.Parse("/Content/Scenes/Project.oscene") };
         _ = (await service.CookFolderAsync(folder, this.TestContext.CancellationToken).ConfigureAwait(false)).IsPublished.Should().BeTrue();
-        var project = consumer.ContextService.ActiveProject!;
+        var project = consumer.Session.Context;
         var states = await service.ReadAsync(project, uris, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = states.Should().OnlyContain(state => state.Freshness == AssetCookFreshness.Current);
         WriteMaterialRoughness(consumer, "Art/Materials/Shared.omat.json", 0.77);

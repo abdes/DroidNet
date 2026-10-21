@@ -9,8 +9,8 @@ using Oxygen.Editor.Materials.Documents;
 namespace Oxygen.Editor.Materials;
 
 /// <summary>
-///     Materials in the editor scope: one document kind, its validation and one set of edits for every workspace
-///     window.
+///     Materials in the editor scope: one document kind and its validation. The edits of a project's materials are its
+///     session's (<see cref="MaterialsSessionModule" />).
 /// </summary>
 public sealed class MaterialsModule : IScopeModule<IApplicationLayer>
 {
@@ -26,6 +26,5 @@ public sealed class MaterialsModule : IScopeModule<IApplicationLayer>
         ArgumentNullException.ThrowIfNull(scope);
         scope.Register<MaterialValidation>(Reuse.Singleton);
         scope.Register<MaterialDocumentKind>(Reuse.Singleton);
-        scope.Register<MaterialEdits>(Reuse.Singleton);
     }
 }

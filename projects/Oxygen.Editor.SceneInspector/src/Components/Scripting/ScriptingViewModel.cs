@@ -37,7 +37,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     private readonly ICodeEditorService? codeEditor;
     private readonly IScriptCreation? scriptCreation;
     private readonly IProblemReveal? problems;
-    private readonly IProjectContextService? projects;
+    private readonly IProjectSession? session;
 
     // The library scripts read, or being read when the read is null.
     private readonly Dictionary<AssetPath, ScriptRead?> libraryScripts = [];
@@ -58,7 +58,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <param name="codeEditor">The code editor, for Edit.</param>
     /// <param name="scriptCreation">What creates a script, for New Script.</param>
     /// <param name="problems">What shows a script's problem in the Problems panel.</param>
-    /// <param name="projects">The active project.</param>
+    /// <param name="session">The project session, when the host provides one.</param>
     /// <param name="scheduler">The UI scheduler that catalog and script updates are observed on.</param>
     public ScriptingViewModel(
         Func<SceneAuthoring?>? authoringProvider = null,
@@ -67,7 +67,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         ICodeEditorService? codeEditor = null,
         IScriptCreation? scriptCreation = null,
         IProblemReveal? problems = null,
-        IProjectContextService? projects = null,
+        IProjectSession? session = null,
         IScheduler? scheduler = null)
     {
         this.authoringProvider = authoringProvider;
@@ -76,7 +76,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         this.codeEditor = codeEditor;
         this.scriptCreation = scriptCreation;
         this.problems = problems;
-        this.projects = projects;
+        this.session = session;
         var observer = scheduler ?? ImmediateScheduler.Instance;
 
         // The facts raise a change on the context that subscribed; the scheduler brings it to the UI thread wherever
@@ -186,7 +186,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <returns>The completion of the creation and the edit.</returns>
     internal async Task CreateScriptForAsync(Guid slotId)
     {
-        if (this.projects?.ActiveProject is not { } project)
+        if (this.session?.Context is not { } project)
         {
             return;
         }

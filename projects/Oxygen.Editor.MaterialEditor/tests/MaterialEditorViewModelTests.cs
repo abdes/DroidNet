@@ -96,7 +96,7 @@ public sealed partial class MaterialEditorViewModelTests
         var document = await materials.CreateAsync("Wood", this.TestContext.CancellationToken).ConfigureAwait(false);
         MaterialEditorViewModel? editor = null;
         var committer = new Mock<IDocumentInputCommitter>();
-        _ = committer.Setup(value => value.CommitAsync())
+        _ = committer.Setup(value => value.CommitAsync(It.IsAny<DroidNet.Documents.DocumentId>()))
             .Returns(() =>
             {
                 editor!.MetallicFactor = 0.4;

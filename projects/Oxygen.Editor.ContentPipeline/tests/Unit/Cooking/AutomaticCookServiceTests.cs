@@ -203,9 +203,9 @@ public sealed class AutomaticCookServiceTests
         fixture.Change(AssetChangeKind.Updated, Main);
         fixture.Time.Advance(AutomaticCookService.QuietWindow);
 
-        fixture.Manager.Verify(value => value.SaveProjectSettingsAsync(fixture.Projects.ActiveProject!.ProjectRoot.FullPath, new ProjectSettings { CookOnChange = false }, It.IsAny<CancellationToken>()), Times.Once);
+        fixture.Manager.Verify(value => value.SaveProjectSettingsAsync(fixture.Session.Context.ProjectRoot.FullPath, new ProjectSettings { CookOnChange = false }, It.IsAny<CancellationToken>()), Times.Once);
         _ = service.CookOnChange.Should().BeFalse();
-        _ = fixture.Projects.Settings.CookOnChange.Should().BeFalse();
+        _ = fixture.Session.Settings.CookOnChange.Should().BeFalse();
         _ = notified.Should().Contain(nameof(IAutomaticCookService.CookOnChange));
         await service.SetCookOnChangeAsync(enabled: true, this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.Change(AssetChangeKind.Updated, Wood);
@@ -531,7 +531,7 @@ public sealed class AutomaticCookServiceTests
 
         public Fixture()
         {
-            this.Projects.Activate(TestProject.Create(new MockFileSystem()).Context with
+            this.Session = new TestSession(TestProject.Create(new MockFileSystem()).Context with
             {
                 Name = "Cook on change",
                 AuthoringMounts = [new("Content", "Content"), new("Cooked", ".cooked")],
@@ -563,7 +563,7 @@ public sealed class AutomaticCookServiceTests
                 .Returns(Task.CompletedTask);
         }
 
-        public ProjectContextService Projects { get; } = new();
+        public TestSession Session { get; }
 
         public Mock<ICookRunService> Runs { get; } = new();
 
@@ -607,7 +607,7 @@ public sealed class AutomaticCookServiceTests
 
         public AutomaticCookService CreateService()
             => new(
-                this.Projects,
+                this.Session,
                 this.Manager.Object,
                 Mock.Of<IAssetCatalog>(catalog => catalog.Changes == this.changes),
                 this.pipeline.Object,
@@ -621,7 +621,7 @@ public sealed class AutomaticCookServiceTests
         public void Change(AssetChangeKind kind, AssetPath uri, AssetPath? previous = null) => this.changes.OnNext(new(kind, uri, previous));
 
         public FileSystemPath SourcePath(AssetPath asset)
-            => this.Projects.ActiveProject!.ProjectRoot.Combine(asset.VirtualPath.TrimStart('/'));
+            => this.Session.Context.ProjectRoot.Combine(asset.VirtualPath.TrimStart('/'));
 
         public async Task<CookCall> NextCallAsync(TestContext context)
             => await this.Calls.Reader.ReadAsync(context.CancellationToken).AsTask().WaitAsync(TimeSpan.FromSeconds(5), context.CancellationToken).ConfigureAwait(false);
@@ -644,7 +644,11 @@ public sealed class AutomaticCookServiceTests
             _ = call.Changes.Skipped.Should().BeEmpty();
         }
 
-        public void Dispose() => this.changes.Dispose();
+        public void Dispose()
+        {
+            this.changes.Dispose();
+            this.Session.Dispose();
+        }
 
         private static TaskCompletionSource IdleWriter()
         {

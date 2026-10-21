@@ -19,21 +19,18 @@ public sealed class AssetsLayoutViewModelTests
             "/Content/Materials/Red.omat",
             AssetPath.Parse("/Content/Materials/Red.omat"),
             [AssetPath.Parse("/Published/Content/Materials")],
-            hasActiveProject: true,
             hasCookedProjection: true,
             cookedFolders: [AssetPath.Parse("/Published")]).Should().BeTrue();
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Materials/Red.omat",
             AssetPath.Parse("/Content/Materials/Red.omat"),
             [AssetPath.Parse("/Published/Content/Materials")],
-            hasActiveProject: true,
             hasCookedProjection: false,
             cookedFolders: [AssetPath.Parse("/Published")]).Should().BeFalse();
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Cooked/Red.omat",
             AssetPath.Parse("/Cooked/Red.omat"),
             [AssetPath.Parse("/Cooked")],
-            hasActiveProject: true,
             cookedFolders: [AssetPath.Parse("/Published")]).Should().BeTrue();
     }
 
@@ -43,8 +40,7 @@ public sealed class AssetsLayoutViewModelTests
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Scenes/Default.oscene",
             AssetPath.Parse("/Content/Scenes/Default.oscene"),
-            [],
-            hasActiveProject: true).Should().BeTrue();
+            []).Should().BeTrue();
     }
 
     [TestMethod]
@@ -55,13 +51,11 @@ public sealed class AssetsLayoutViewModelTests
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Materials/Red.omat",
             AssetPath.Parse("/Content/Materials/Red.omat"),
-            folders,
-            hasActiveProject: true).Should().BeTrue();
+            folders).Should().BeTrue();
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Scenes/Default.oscene",
             AssetPath.Parse("/Content/Scenes/Default.oscene"),
-            folders,
-            hasActiveProject: true).Should().BeFalse();
+            folders).Should().BeFalse();
     }
 
     [TestMethod]
@@ -73,14 +67,12 @@ public sealed class AssetsLayoutViewModelTests
             "/Content/Materials/Red.omat",
             AssetPath.Parse("/Content/Materials/Red.omat"),
             folders,
-            hasActiveProject: true,
             hasCookedProjection: true,
             cookedFolders: [AssetPath.Parse("/Cooked")]).Should().BeTrue();
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Materials/Uncooked.omat",
             AssetPath.Parse("/Content/Materials/Uncooked.omat"),
             folders,
-            hasActiveProject: true,
             hasCookedProjection: false,
             cookedFolders: [AssetPath.Parse("/Cooked")]).Should().BeFalse();
     }
@@ -94,14 +86,12 @@ public sealed class AssetsLayoutViewModelTests
             "/Content/Materials/Red.omat",
             AssetPath.Parse("/Content/Materials/Red.omat"),
             folders,
-            hasActiveProject: true,
             hasCookedProjection: true,
             cookedFolders: [AssetPath.Parse("/Cooked")]).Should().BeTrue();
         _ = AssetsLayoutViewModel.IsInSelectedFolders(
             "/Content/Scenes/Main.oscene",
             AssetPath.Parse("/Content/Scenes/Main.oscene"),
             folders,
-            hasActiveProject: true,
             hasCookedProjection: true,
             cookedFolders: [AssetPath.Parse("/Cooked")]).Should().BeFalse();
     }

@@ -128,14 +128,18 @@ public sealed partial class ContentMountsViewModel : ObservableObject
         var trimmed = name.Trim();
         if (kind is not (ContentMountKind.LocalLibrary or ContentMountKind.PakLibrary))
         {
-            if (VirtualPath.ValidateMountName(trimmed, VirtualPathRuleSet.Authored) is { } invalid)
+            if (ProjectAssetFiles.ValidateDeclaredMountName(trimmed) is { } refusal)
             {
-                return invalid.ToMessage();
+                return refusal;
             }
         }
         else if (trimmed.Length == 0 || trimmed.IndexOfAny(['/', '\\', ':']) >= 0)
         {
             return "Enter a library name without slashes or a colon.";
+        }
+        else if (ProjectAssetFiles.IsReservedMountName(trimmed))
+        {
+            return ProjectAssetFiles.ValidateDeclaredMountName(trimmed);
         }
 
         return this.Mounts.Any(row => !ReferenceEquals(row, except) && VirtualPathComparer.CaseFolded.Equals(row.Name, trimmed))

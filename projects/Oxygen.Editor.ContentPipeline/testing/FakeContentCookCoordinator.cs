@@ -8,16 +8,17 @@ using Oxygen.Editor.Projects;
 namespace Oxygen.Editor.ContentPipeline.Testing;
 
 /// <summary>
-/// An <see cref="IContentCookCoordinator"/> for tests: one writer at a time over the active project, without the
+/// An <see cref="IContentCookCoordinator"/> for tests: one writer at a time over the session's project, without the
 /// cross-process cook leases <see cref="ContentCookCoordinator"/> takes on disk, so it serves a project on any file
 /// system.
 /// </summary>
 /// <remarks>
 /// Each request runs on its own, in the order it arrives; pending cooks are not coalesced. An operation is current
-/// while its project is the active one, and owns the writer while its work runs.
+/// while its project is the session's project and the session's lifetime goes on, and owns the writer while its work
+/// runs.
 /// </remarks>
-/// <param name="projects">The active project.</param>
-public sealed class FakeContentCookCoordinator(IProjectContextService projects) : IContentCookCoordinator, IDisposable
+/// <param name="session">The project session.</param>
+public sealed class FakeContentCookCoordinator(IProjectSession session) : IContentCookCoordinator, IDisposable
 {
     private readonly SemaphoreSlim writer = new(1, 1);
     private readonly Lock gate = new();
@@ -52,7 +53,7 @@ public sealed class FakeContentCookCoordinator(IProjectContextService projects) 
     public void VerifyCurrent(ContentCookOperation operation)
     {
         ArgumentNullException.ThrowIfNull(operation);
-        if (!ReferenceEquals(operation.Project, projects.ActiveProject))
+        if (session.Lifetime.IsCancellationRequested || !ReferenceEquals(operation.Project, session.Context))
         {
             throw new OperationCanceledException("The cook request's project was closed or replaced.", new CancellationToken(canceled: true));
         }
@@ -80,8 +81,8 @@ public sealed class FakeContentCookCoordinator(IProjectContextService projects) 
         await this.writer.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            var project = projects.ActiveProject ?? throw new InvalidOperationException("Cooking requires an active project.");
-            var operation = new ContentCookOperation(Guid.NewGuid(), project, ProjectLifetime: 0);
+            session.Lifetime.ThrowIfCancellationRequested();
+            var operation = new ContentCookOperation(Guid.NewGuid(), session.Context, ProjectLifetime: 0);
             lock (this.gate)
             {
                 this.active = operation;

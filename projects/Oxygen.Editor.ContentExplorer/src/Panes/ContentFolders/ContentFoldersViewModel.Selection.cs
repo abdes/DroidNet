@@ -4,6 +4,7 @@
 
 using DroidNet.Controls;
 using DroidNet.Controls.Selection;
+using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
@@ -87,13 +88,19 @@ public partial class ContentFoldersViewModel
     }
 
     // A folder deleted since it was selected, or reached again through Back or Forward, is not shown: its nearest
-    // folder that still exists is.
-    // When not even the folder's mount is shown, the whole project is.
+    // folder that still exists is. A folder exists when the tree shows it or the disk holds it; the project's own files
+    // mount is no folder, so when nothing below it exists, the whole project is shown.
     private async Task<(AssetPath? Existing, ITreeItem? Target)> FindNearestExistingFolderAsync(TreeItemAdapter root, AssetPath path)
     {
         for (var existing = path; existing is not null; existing = existing.Parent)
         {
-            if (await this.FindAdapterByVirtualPathAsync(existing).ConfigureAwait(true) is { } target)
+            if (existing.IsMount && string.Equals(existing.Mount, ProjectAssetFiles.ProjectFilesMount, StringComparison.Ordinal))
+            {
+                break;
+            }
+
+            var target = await this.FindAdapterByVirtualPathAsync(existing).ConfigureAwait(true);
+            if (target is not null || this.IsFolderOnDisk(existing))
             {
                 return (existing, target);
             }
@@ -101,6 +108,9 @@ public partial class ContentFoldersViewModel
 
         return (null, root);
     }
+
+    private bool IsFolderOnDisk(AssetPath path)
+        => session.Context.Find(path) is { } location && session.Context.FileSystem.Directory.Exists(location.File.FullPath);
 
     // Selects the shown rows of the selected folders without the selection writing back to the state.
     private void SelectInTree(TreeItemAdapter root, HashSet<TreeItemAdapter> selected)

@@ -48,7 +48,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromMinutes(5));
         using var services = new CatalogWorkloadServices(fixture);
-        await SeedCatalogWorkloadAsync(fixture, services.Projects.ActiveProject!, services.Pipeline, timeout.Token).ConfigureAwait(true);
+        await SeedCatalogWorkloadAsync(fixture, services.Session.Context, services.Pipeline, timeout.Token).ConfigureAwait(true);
         await fixture.InitializeAsync(timeout.Token, mountPublished: true).ConfigureAwait(true);
         await fixture.RefreshCookedRootsAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
         _ = fixture.Runtime.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);
@@ -85,10 +85,10 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
             };
             var state = new ContentExplorerState();
             state.SetSelectedFolders([AssetPath.Content]);
-            await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
+            await using var catalog = new AssetCatalog(services.Session, services.Storage, services.EngineContent, services.Publication);
             using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
-            using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
-            using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider, services.Projects, state, CreateStatusHosting()) : new ListLayoutViewModel(provider, services.Projects, state, CreateStatusHosting());
+            using var provider = new AssetFeed(catalog, services.Session, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
+            using AssetsLayoutViewModel layout = tiles ? new TilesLayoutViewModel(provider, services.Session, state, CreateStatusHosting()) : new ListLayoutViewModel(provider, services.Session, state, CreateStatusHosting());
             var query = new AssetQueryView
             {
                 ViewModel = state.Query,

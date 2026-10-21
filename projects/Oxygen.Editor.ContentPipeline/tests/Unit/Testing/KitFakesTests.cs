@@ -56,9 +56,8 @@ public sealed class KitFakesTests
     [TestMethod]
     public async Task CookCoordinator_LetsOneOperationWriteAtATime()
     {
-        var projects = new ProjectContextService();
-        projects.Activate(TestProject.Create(new MockFileSystem()).Context);
-        using var coordinator = new FakeContentCookCoordinator(projects);
+        using var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
+        using var coordinator = new FakeContentCookCoordinator(session);
         var firstRunning = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var releaseFirst = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         ContentCookOperation? first = null;

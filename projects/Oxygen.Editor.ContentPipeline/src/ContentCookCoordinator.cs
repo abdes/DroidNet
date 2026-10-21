@@ -10,28 +10,33 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
-/// <summary>Serializes cook writers and drains cancelled project lifetimes before releasing ownership.</summary>
-public sealed partial class ContentCookCoordinator : IContentCookCoordinator, ICookRunService, IObserver<ProjectContext?>, IDisposable
+/// <summary>Serializes the cook writers of a project session and drains them when the session closes, before releasing ownership.</summary>
+/// <remarks>
+///     The coordinator cooks the session's project. A change of the project's content mounts ends the requests made for
+///     the earlier mounts, as closing the session ends every request; disposing the coordinator refuses new ones.
+/// </remarks>
+public sealed partial class ContentCookCoordinator : IContentCookCoordinator, ICookRunService, IDisposable
 {
     private readonly Lock stateLock = new();
-    private readonly IProjectContextService projectContextService;
+    private readonly IProjectSession session;
     private readonly ILogger<ContentCookCoordinator> logger;
-    private readonly IDisposable subscription;
-    private CancellationTokenSource lifetimeCancellation = new();
+    private CancellationTokenSource lifetimeCancellation;
     private ProjectContext? project;
     private ContentCookOperation? activeOperation;
     private long lifetime;
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="ContentCookCoordinator"/> class.</summary>
-    /// <param name="projectContextService">The active project and activation stream.</param>
+    /// <param name="session">The project session whose cooks the coordinator serializes.</param>
     /// <param name="logger">The coordinator logger.</param>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "MA0040:Use a cancellation token", Justification = "The subscription spans project lifetimes and is disposed by this coordinator, not by a single project's cancellation token.")]
-    public ContentCookCoordinator(IProjectContextService projectContextService, ILogger<ContentCookCoordinator> logger)
+    public ContentCookCoordinator(IProjectSession session, ILogger<ContentCookCoordinator> logger)
     {
-        this.projectContextService = projectContextService;
+        ArgumentNullException.ThrowIfNull(session);
+        this.session = session;
+        this.project = session.Context;
+        this.lifetimeCancellation = CancellationTokenSource.CreateLinkedTokenSource(session.Lifetime);
         this.logger = logger;
-        this.subscription = projectContextService.ProjectChanged.Subscribe(this);
+        session.ContextChanged += this.OnContextChanged;
     }
 
     /// <inheritdoc />
@@ -66,8 +71,8 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         lock (this.stateLock)
         {
             if (this.disposed || operation.ProjectLifetime != this.lifetime
-                || !ReferenceEquals(operation.Project, this.project)
-                || !ReferenceEquals(operation.Project, this.projectContextService.ActiveProject))
+                || this.lifetimeCancellation.IsCancellationRequested
+                || !ReferenceEquals(operation.Project, this.project))
             {
                 throw new OperationCanceledException("The cook request's project was closed or replaced.", new CancellationToken(canceled: true));
             }
@@ -105,13 +110,20 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             this.DispatchNextWriter();
         }
 
-        this.subscription.Dispose();
+        this.session.ContextChanged -= this.OnContextChanged;
         _ = this.CancelLifetimeAsync(cancellation);
         this.ReleaseRetryInputsIfClosed();
     }
 
-    /// <inheritdoc />
-    void IObserver<ProjectContext?>.OnNext(ProjectContext? value)
+    private static bool IsInOperationFolder(string path, ContentCookOperation operation)
+    {
+        var folder = operation.Project.ProjectRoot.Combine(Path.Combine(".build", "cook", operation.OperationId.ToString("N")));
+        var file = FileSystemPath.From(path);
+        return file != folder && file.IsSameOrInside(folder);
+    }
+
+    // The requests made for the earlier mounts end; the next ones cook the project as its mounts now are.
+    private void OnContextChanged(object? sender, EventArgs args)
     {
         CancellationTokenSource previous;
         lock (this.stateLock)
@@ -122,31 +134,14 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
             }
 
             previous = this.lifetimeCancellation;
-            this.lifetimeCancellation = new();
-            this.project = value;
+            this.lifetimeCancellation = CancellationTokenSource.CreateLinkedTokenSource(this.session.Lifetime);
+            this.project = this.session.Context;
             this.lifetime++;
             this.DispatchNextWriter();
         }
 
         _ = this.CancelLifetimeAsync(previous);
         this.ReleaseRetryInputsIfClosed();
-    }
-
-    /// <inheritdoc />
-    void IObserver<ProjectContext?>.OnCompleted() => ((IObserver<ProjectContext?>)this).OnNext(value: null);
-
-    /// <inheritdoc />
-    void IObserver<ProjectContext?>.OnError(Exception error)
-    {
-        this.LogLifetimeFailure(error);
-        ((IObserver<ProjectContext?>)this).OnNext(value: null);
-    }
-
-    private static bool IsInOperationFolder(string path, ContentCookOperation operation)
-    {
-        var folder = operation.Project.ProjectRoot.Combine(Path.Combine(".build", "cook", operation.OperationId.ToString("N")));
-        var file = FileSystemPath.From(path);
-        return file != folder && file.IsSameOrInside(folder);
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Ensure tasks using 'IDisposable' instances complete before the instances are disposed", Justification = "ReleaseAfterDrain takes ownership of the request cancellation and the operation lease and disposes them when the drain ends; this method no longer uses or disposes them.")]

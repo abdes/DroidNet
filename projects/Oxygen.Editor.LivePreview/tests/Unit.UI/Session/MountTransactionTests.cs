@@ -43,10 +43,10 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         var before = await File.ReadAllBytesAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true);
         fixture.Store.Fail = saveFailure;
         fixture.FailNative = !saveFailure;
-        var accepted = fixture.Projects.ActiveProject;
-        Func<Task> apply = () => fixture.Session.ChangeMountsAsync(accepted!, fixture.Candidate, this.TestContext.CancellationToken);
+        var accepted = fixture.ProjectSession.Context;
+        Func<Task> apply = () => fixture.Session.ChangeMountsAsync(accepted, fixture.Candidate, this.TestContext.CancellationToken);
         _ = await apply.Should().ThrowAsync<Exception>().ConfigureAwait(true);
-        _ = fixture.Projects.ActiveProject.Should().BeSameAs(accepted);
+        _ = fixture.ProjectSession.Context.Should().BeSameAs(accepted);
         _ = fixture.Activations.Should().BeEmpty("a failed change publishes no context");
         _ = fixture.Roots.Should().Equal(fixture.BaseLibrary);
         _ = fixture.Paused.Should().BeFalse();
@@ -62,11 +62,11 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         using var fixture = new MountTransactionFixture();
         await fixture.InitializeAsync().ConfigureAwait(true);
         var original = await File.ReadAllBytesAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true);
-        fixture.Store.AfterCommit = fixture.Projects.Close;
-        Func<Task> apply = () => fixture.Session.ChangeMountsAsync(fixture.Projects.ActiveProject!, fixture.Candidate, this.TestContext.CancellationToken);
+        fixture.Store.AfterCommit = () => _ = fixture.Sessions.CloseAsync();
+        Func<Task> apply = () => fixture.Session.ChangeMountsAsync(fixture.ProjectSession.Context, fixture.Candidate, this.TestContext.CancellationToken);
         _ = await apply.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(true);
-        _ = fixture.Projects.ActiveProject.Should().BeNull();
-        _ = fixture.Activations.Should().OnlyContain(static context => context == null, "closing publishes no project, and the change publishes none");
+        _ = fixture.Sessions.Current.Should().BeNull();
+        _ = fixture.Activations.Should().BeEmpty("closing changes no mounts, and the change publishes none");
         _ = fixture.Paused.Should().BeTrue();
         _ = (await File.ReadAllBytesAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().Equal(original);
     });
@@ -81,17 +81,17 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
     {
         using var fixture = new MountTransactionFixture(withDefaultScene);
         await fixture.InitializeAsync().ConfigureAwait(true);
-        var original = fixture.Projects.ActiveProject;
+        var original = fixture.ProjectSession.Context;
         fixture.OnActivated = activated =>
         {
             _ = activated.Should().NotBeNull();
             _ = File.ReadAllText(fixture.ManifestPath).Should().Contain("Library");
             _ = fixture.Paused.Should().BeFalse();
         };
-        _ = (await fixture.Session.ChangeMountsAsync(original!, fixture.Candidate, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
-        _ = fixture.Activations.Should().ContainSingle().Which.Should().BeSameAs(fixture.Projects.ActiveProject);
-        _ = fixture.Projects.ActiveProject!.LocalFolderMounts.Should().ContainSingle();
-        _ = fixture.Projects.ActiveProject.DefaultSceneId.Should().Be(original!.DefaultSceneId);
+        _ = (await fixture.Session.ChangeMountsAsync(original, fixture.Candidate, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
+        _ = fixture.Activations.Should().ContainSingle().Which.Should().BeSameAs(fixture.ProjectSession.Context, "the session follows the new mounts");
+        _ = fixture.ProjectSession.Context.LocalFolderMounts.Should().ContainSingle();
+        _ = fixture.ProjectSession.Context.DefaultSceneId.Should().Be(original.DefaultSceneId);
         _ = ProjectInfo.FromJson(await File.ReadAllTextAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true)).DefaultSceneId.Should().Be(original.DefaultSceneId);
         _ = fixture.Roots.Should().Equal(fixture.Library, fixture.BaseLibrary);
         _ = fixture.Paused.Should().BeFalse();
@@ -105,7 +105,6 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         private readonly ContentCookCoordinator coordinator;
         private readonly ProjectManagerService manager;
         private readonly CookPublicationService publication;
-        private IDisposable? activations;
 
         public MountTransactionFixture(bool withDefaultScene = false)
         {
@@ -119,36 +118,41 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
                 LocalFolderMounts = [baseMount],
                 CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.ProjectOutput)],
             };
-            this.Projects.Activate(project);
+            this.Sessions = new TestSessionHost();
+            var session = this.Sessions.Open(project);
+            this.ProjectSession = session;
             this.Candidate = TestProject.InfoOf(project with
             {
                 LocalFolderMounts = [new("Library", FileSystemPath.From(this.Library)), baseMount],
                 CookedContentOrder = [new(CookedContentSourceKind.LocalFolder, "Library"), new(CookedContentSourceKind.LocalFolder, "Base"), new(CookedContentSourceKind.ProjectOutput)],
             });
-            this.coordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
+            this.coordinator = new(session, NullLogger<ContentCookCoordinator>.Instance);
             var storage = new NativeStorageProvider(new RealFileSystem());
             this.manager = new(storage, atomicFiles: this.Store);
-            this.publication = new(this.coordinator, this.Projects, this.Store, this.manager, new EngineContentPakFixture());
+            this.publication = new(this.coordinator, session, this.Store, this.manager, new EngineContentPakFixture());
             var catalog = new Mock<IAssetPublicationTarget>();
             _ = catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             this.Roots = [this.BaseLibrary];
             this.ConfigureEngine();
-            this.Session = new(this.engine.Object, this.publication, new CookedContentMountService(), catalog.Object, this.coordinator, this.Projects, this.manager, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
+            this.Session = new(this.engine.Object, this.publication, new CookedContentMountService(), catalog.Object, this.coordinator, session, this.Sessions, Mock.Of<IOperationResultPublisher>(), new OperationStatusReducer());
         }
 
         public MountAtomicStore Store { get; } = new();
 
-        public ProjectContextService Projects { get; } = new();
+        public TestSessionHost Sessions { get; }
+
+        /// <summary>Gets the project's session, whose context a mount change replaces.</summary>
+        public TestSession ProjectSession { get; }
 
         public ProjectInfo Candidate { get; }
 
         public PreviewSession Session { get; }
 
-        /// <summary>Gets the contexts the project activated after the preview started, in order.</summary>
-        public List<ProjectContext?> Activations { get; } = [];
+        /// <summary>Gets the contexts the session changed to after the preview started, in order.</summary>
+        public List<ProjectContext> Activations { get; } = [];
 
-        /// <summary>Gets or sets what runs when a context activates, before the change completes.</summary>
-        public Action<ProjectContext?>? OnActivated { get; set; }
+        /// <summary>Gets or sets what runs when the session changes its context, before the change completes.</summary>
+        public Action<ProjectContext>? OnActivated { get; set; }
 
         /// <summary>Gets the library the project mounts before the change; the startup publication holds it.</summary>
         public string BaseLibrary { get; }
@@ -166,34 +170,30 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
 
         public async Task InitializeAsync()
         {
-            var context = this.Projects.ActiveProject!;
+            var context = this.ProjectSession.Context;
             _ = (await this.manager.SaveProjectInfoAsync(TestProject.InfoOf(context)).ConfigureAwait(true)).Should().BeTrue();
 
             // Starting publishes the mounted library, the publication the change starts from.
             _ = (await this.Session.StartAsync(context).ConfigureAwait(true)).Should().BeTrue();
 
-            // The project context replays the current context on subscription; only later activations count.
-            var replayed = false;
-            this.activations = this.Projects.ProjectChanged.Subscribe(next =>
-            {
-                if (!replayed)
-                {
-                    replayed = true;
-                    return;
-                }
-
-                this.Activations.Add(next);
-                this.OnActivated?.Invoke(next);
-            });
+            // Only the changes after the preview started count.
+            this.ProjectSession.ContextChanged += this.OnContextChanged;
         }
 
         public void Dispose()
         {
-            this.activations?.Dispose();
+            this.ProjectSession.ContextChanged -= this.OnContextChanged;
             _ = this.Session.DisposeAsync().AsTask().Wait(TimeSpan.FromSeconds(5));
             this.coordinator.Dispose();
+            this.Sessions.Dispose();
             this.ReleaseReaders();
             this.directory.Delete(recursive: true);
+        }
+
+        private void OnContextChanged(object? sender, EventArgs args)
+        {
+            this.Activations.Add(this.ProjectSession.Context);
+            this.OnActivated?.Invoke(this.ProjectSession.Context);
         }
 
         private void ConfigureEngine()

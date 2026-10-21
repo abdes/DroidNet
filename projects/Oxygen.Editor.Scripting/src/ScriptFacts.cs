@@ -40,15 +40,15 @@ public sealed partial class ScriptFacts : IScripts, IDisposable
     private readonly Lock gate = new();
     private readonly Lazy<string?> definitions;
     private readonly IDisposable catalogChanges;
-    private readonly IDisposable projectChanges;
+    private readonly IProjectSession session;
     private ProjectScriptFacts? current;
     private ScriptSnapshot snapshot = ScriptSnapshot.Empty;
     private int unavailableReported;
     private bool disposed;
 
-    /// <summary>Initializes a new instance of the <see cref="ScriptFacts"/> class and starts analyzing the active
+    /// <summary>Initializes a new instance of the <see cref="ScriptFacts"/> class and starts analyzing the session
     /// project's scripts.</summary>
-    /// <param name="projects">The active project.</param>
+    /// <param name="session">The project session, whose content mounts hold the scripts.</param>
     /// <param name="catalog">The project catalog, whose file changes analyze a script again.</param>
     /// <param name="fileSystem">The file system that holds the SDK's API definitions; the project's scripts are read
     /// through the project's own file system.</param>
@@ -58,7 +58,7 @@ public sealed partial class ScriptFacts : IScripts, IDisposable
     /// <param name="paths">The SDK scripting files.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     public ScriptFacts(
-        IProjectContextService projects,
+        IProjectSession session,
         IAssetCatalog catalog,
         IFileSystem fileSystem,
         IScriptAnalyzer analyzer,
@@ -67,13 +67,14 @@ public sealed partial class ScriptFacts : IScripts, IDisposable
         ScriptToolingPaths paths,
         ILoggerFactory? loggerFactory = null)
     {
-        ArgumentNullException.ThrowIfNull(projects);
+        ArgumentNullException.ThrowIfNull(session);
         ArgumentNullException.ThrowIfNull(catalog);
         ArgumentNullException.ThrowIfNull(fileSystem);
         ArgumentNullException.ThrowIfNull(analyzer);
         ArgumentNullException.ThrowIfNull(library);
         ArgumentNullException.ThrowIfNull(operationResults);
         ArgumentNullException.ThrowIfNull(paths);
+        this.session = session;
         this.fileSystem = fileSystem;
         this.analyzer = analyzer;
         this.library = library;
@@ -84,8 +85,9 @@ public sealed partial class ScriptFacts : IScripts, IDisposable
         this.definitions = new(this.ReadDefinitions);
         this.catalogChanges = catalog.Changes.Subscribe(this.OnCatalogChange);
 
-        // The stream replays the current project, so an open one is analyzed at once.
-        this.projectChanges = projects.ProjectChanged.Subscribe(this.OnProjectChanged);
+        // The session's project is analyzed at once, and again in its new content mounts after each change.
+        this.Follow(session.Context);
+        session.ContextChanged += this.OnContextChanged;
     }
 
     /// <inheritdoc />
@@ -186,7 +188,7 @@ public sealed partial class ScriptFacts : IScripts, IDisposable
             this.current = null;
         }
 
-        this.projectChanges.Dispose();
+        this.session.ContextChanged -= this.OnContextChanged;
         this.catalogChanges.Dispose();
     }
 
@@ -203,29 +205,26 @@ public sealed partial class ScriptFacts : IScripts, IDisposable
         }
     }
 
-    private void OnProjectChanged(ProjectContext? project)
+    private void OnContextChanged(object? sender, EventArgs args) => this.Follow(this.session.Context);
+
+    private void Follow(ProjectContext project)
     {
-        ProjectScriptFacts? started;
+        ProjectScriptFacts started;
         lock (this.gate)
         {
-            if (this.disposed || (project is not null && ReferenceEquals(project, this.current?.Project)))
+            if (this.disposed || ReferenceEquals(project, this.current?.Project))
             {
                 return;
             }
 
-            // Disposing cancels the analyses in progress, so the closed project publishes nothing after this.
+            // Disposing cancels the analyses in progress, so the earlier mounts publish nothing after this.
             this.current?.Dispose();
-            this.current = project is null
-                ? null
-                : new ProjectScriptFacts(project, this.analyzer, () => this.definitions.Value, this.Publish, this.ReportUnavailable, this.loggerFactory);
+            this.current = new ProjectScriptFacts(project, this.analyzer, () => this.definitions.Value, this.Publish, this.ReportUnavailable, this.loggerFactory);
             this.Publish(ScriptSnapshot.Empty, script: null);
             started = this.current;
         }
 
-        if (started is not null)
-        {
-            _ = Task.Run(() => this.ScanAsync(started, force: false, CancellationToken.None));
-        }
+        _ = Task.Run(() => this.ScanAsync(started, force: false, CancellationToken.None));
     }
 
     // The scan of an opened project and Check Scripts both end here: a failure is logged, never thrown at the caller.

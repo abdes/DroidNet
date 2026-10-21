@@ -28,7 +28,7 @@ namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 ///     The Content Folders pane of the Content Explorer: the tree of the project's content folders and mounts.
 ///     Acts as a mediator between the DynamicTree control and ContentExplorerState.
 /// </summary>
-/// <param name="projectContextService">The active project context service.</param>
+/// <param name="session">The project session.</param>
 /// <param name="storage">The storage provider.</param>
 /// <param name="contentExplorerState">The state of the content explorer.</param>
 /// <param name="dialogService">Shows the pane's dialogs.</param>
@@ -47,7 +47,7 @@ namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 /// <param name="relocation">Renames, moves and copies folders with their references; without it only empty folders rename.</param>
 /// <param name="relocationService">Reports the folders the editor moved or deleted; absent where the editor cannot relocate.</param>
 public partial class ContentFoldersViewModel(
-    IProjectContextService projectContextService,
+    IProjectSession session,
     IStorageProvider storage,
     ContentExplorerState contentExplorerState,
     IDialogService dialogService,
@@ -286,11 +286,8 @@ public partial class ContentFoldersViewModel(
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
     private async Task MountKnownLocationAsync(KnownVirtualFolderMount kind)
     {
-        if (projectContextService.ActiveProject is not { } expected || this.GetActiveProjectInfo() is not { } candidate)
-        {
-            return;
-        }
-
+        var expected = session.Context;
+        var candidate = this.GetActiveProjectInfo();
         var (name, path) = kind switch
         {
             KnownVirtualFolderMount.Cooked => ("Cooked", ".cooked"),
@@ -308,7 +305,7 @@ public partial class ContentFoldersViewModel(
 
         candidate.AuthoringMounts.Add(new(name, path));
         await this.ApplyMountCandidateAsync(expected, candidate).ConfigureAwait(true);
-        if (projectContextService.ActiveProject?.AuthoringMounts.Any(mount => string.Equals(mount.Name, name, StringComparison.Ordinal) && string.Equals(mount.RelativePath, path, StringComparison.Ordinal)) == true)
+        if (session.Context.AuthoringMounts.Any(mount => string.Equals(mount.Name, name, StringComparison.Ordinal) && string.Equals(mount.RelativePath, path, StringComparison.Ordinal)))
         {
             contentExplorerState.SetSelectedFolders([AssetPath.Create(name)]);
         }
@@ -318,11 +315,8 @@ public partial class ContentFoldersViewModel(
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The UI operation boundary reports failures while keeping the browser and other mounted content usable.")]
     private async Task MountLocalFolderAsync()
     {
-        if (projectContextService.ActiveProject is not { } expected || this.GetActiveProjectInfo() is not { } candidate)
-        {
-            return;
-        }
-
+        var expected = session.Context;
+        var candidate = this.GetActiveProjectInfo();
         var names = await this.GetExistingMountPointNamesAsync().ConfigureAwait(true);
         var model = new LocalFolderMountDialogViewModel(dialogService, names);
         if (!await this.ShowLocalMountDialogAsync(model).ConfigureAwait(true) || model.Result is not { } definition)
@@ -376,9 +370,9 @@ public partial class ContentFoldersViewModel(
     [RelayCommand(CanExecute = nameof(HasUnsavedChanges))]
     private async Task SaveProjectMountsAsync()
     {
-        var activeProject = projectContextService.ActiveProject;
+        var activeProject = session.Context;
         var projectInfo = this.GetActiveProjectInfo();
-        if (activeProject is null || projectInfo is null || this.projectRoot is null)
+        if (this.projectRoot is null)
         {
             return;
         }
@@ -416,15 +410,9 @@ public partial class ContentFoldersViewModel(
     [RelayCommand]
     private Task LoadProjectAsync() => this.ReloadMountTreeAsync();
 
-    private ProjectInfo? GetActiveProjectInfo()
+    private ProjectInfo GetActiveProjectInfo()
     {
-        var context = projectContextService.ActiveProject;
-
-        if (context is null)
-        {
-            this.LogNoCurrentProject();
-            return null;
-        }
+        var context = session.Context;
 
         var projectInfo = new ProjectInfo(
             context.ProjectId,
@@ -434,7 +422,7 @@ public partial class ContentFoldersViewModel(
             context.Thumbnail)
         {
             DefaultSceneId = context.DefaultSceneId,
-            Settings = projectContextService.Settings,
+            Settings = session.Settings,
         };
         foreach (var mount in context.AuthoringMounts)
         {
@@ -546,7 +534,12 @@ public partial class ContentFoldersViewModel(
         var mountName = virtualPath.Mount;
         var children = await this.projectRoot.Children.ConfigureAwait(true);
 
-        TreeItemAdapter? mount = children.OfType<AuthoringMountPointTreeItemAdapter>()
+        // A folder of the project outside its other mounts is under the project's own files mount, shown as the project's
+        // row; that row itself is no folder: it stands for the whole project.
+        TreeItemAdapter? mount = !virtualPath.IsMount && string.Equals(mountName, ProjectAssetFiles.ProjectFilesMount, StringComparison.Ordinal)
+            ? this.projectRoot
+            : null;
+        mount ??= children.OfType<AuthoringMountPointTreeItemAdapter>()
             .FirstOrDefault(m => string.Equals(m.MountPoint.Name, mountName, StringComparison.Ordinal));
         mount ??= children.OfType<VirtualFolderMountTreeItemAdapter>()
             .FirstOrDefault(m => string.Equals(m.MountPointName, mountName, StringComparison.Ordinal));

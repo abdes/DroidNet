@@ -197,7 +197,7 @@ public sealed class ImportWorkflowTests
             var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
             var files = new FailSettingsStore();
             var service = new ContentPipelineService(
-                workspace.ContextService,
+                workspace.Session,
                 workspace.CookCoordinator,
                 new FixedCookScopeProvider(workspace.Root),
                 new SceneDescriptorGenerator(),

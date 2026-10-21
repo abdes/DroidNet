@@ -22,7 +22,7 @@ namespace Oxygen.Editor.Cooking;
 /// Saves what a cook reads, after asking, and shows where a cook's issues and outputs are: the scene property or script
 /// slot an issue names, the cooked inspection of a run's scope, and a run's imported assets in the Content Explorer.
 /// </summary>
-/// <param name="projects">The active project.</param>
+/// <param name="session">The project session the window lives in.</param>
 /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
 /// <param name="documents">The window's document service, which asks before it saves.</param>
 /// <param name="unsaved">What finds the unsaved documents a cook reads.</param>
@@ -31,7 +31,7 @@ namespace Oxygen.Editor.Cooking;
 /// <param name="reveal">What shows assets in the Content Explorer.</param>
 /// <param name="inspections">What opens the cooked inspection.</param>
 public sealed class CookRecovery(
-    IProjectContextService projects,
+    IProjectSession session,
     IAssetCatalog catalog,
     IDocumentService documents,
     IUnsavedCookInputs unsaved,
@@ -58,12 +58,12 @@ public sealed class CookRecovery(
     {
         ArgumentNullException.ThrowIfNull(run);
         ArgumentNullException.ThrowIfNull(issue);
-        if (run.ProjectId != projects.ActiveProject?.ProjectId
+        var project = session.Context;
+        if (run.ProjectId != project.ProjectId
             || issue.AffectedEntity?.SceneId is not { } sceneId
             || issue.SuggestedAction?.Payload.TryGetValue("PropertyPath", out var property) != true
             || property is null
             || (FindScriptSlotNode(issue, property) is null && !IsSceneProperty(property))
-            || projects.ActiveProject is not { } project
             || await SceneFiles.FindByIdAsync(catalog, project, sceneId).ConfigureAwait(true) is not { } scene
             || issue.AffectedPath is not { } sourcePath || !project.FileSystem.File.Exists(sourcePath))
         {
@@ -130,5 +130,8 @@ public sealed class CookRecovery(
                 ? NodeId.FromValue(node) : null;
 
     private bool IsActiveProject(CookRunSnapshot run)
-        => projects.ActiveProject is { } project && project.ProjectId == run.ProjectId && project.ProjectRoot == run.ProjectRoot;
+    {
+        var project = session.Context;
+        return project.ProjectId == run.ProjectId && project.ProjectRoot == run.ProjectRoot;
+    }
 }

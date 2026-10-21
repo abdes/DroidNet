@@ -5,7 +5,7 @@
 using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Textures;
 using Oxygen.Managed.Core.Diagnostics;
@@ -26,12 +26,12 @@ public sealed partial class ContentExplorerCookFeedbackTests
         var pending = new TaskCompletionSource<ContentCookResult>(TaskCreationOptions.RunContinuationsAsynchronously);
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.CookProjectAsync(It.IsAny<CancellationToken>())).Returns(pending.Task);
-        var projects = new ProjectContextService();
+        using var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
         using var browser = new AssetsViewModel(
             Mock.Of<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>(),
             new DroidNet.Mvvm.Converters.ViewModelToView(Mock.Of<DroidNet.Mvvm.IViewLocator>()),
             new ContentExplorerState(),
-            projects,
+            session,
             pipeline.Object,
             Mock.Of<Oxygen.Editor.Assets.IAssetFeed>(),
             Mock.Of<IOperationResultPublisher>(),

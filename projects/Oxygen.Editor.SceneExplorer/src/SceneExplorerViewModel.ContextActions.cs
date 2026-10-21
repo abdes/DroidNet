@@ -31,8 +31,6 @@ public partial class SceneExplorerViewModel
     private readonly Dictionary<MenuItemData, SceneExplorerCommandKind> openMenuActions = [];
     private CapturedExplorerContext? openMenuContext;
     private IMenuSource? openMenuSource;
-    private SceneClipboard? explorerClipboard;
-    private int clipboardGeneration;
 
     /// <summary>Raised when the open menu's immutable targets are no longer current.</summary>
     public event EventHandler? ContextMenuInvalidated;
@@ -202,11 +200,7 @@ public partial class SceneExplorerViewModel
             return Task.CompletedTask;
         }
 
-        this.explorerClipboard = payload;
-        this.clipboardNodeIds.Clear();
-        this.clipboardNodeIds.AddRange(payload.Nodes.Select(static data => data.Id));
-        this.clipboardIsCut = cut;
-        this.StampClipboardOrigin();
+        this.clipboard.Stage(payload, cut, authoring.Scene);
         this.ClearCutMarks();
         this.ClipboardItemStore = [.. items];
         this.ClipboardStateStore = cut ? ClipboardState.Cut : ClipboardState.Copied;
@@ -260,10 +254,10 @@ public partial class SceneExplorerViewModel
         var destination = background || anchor is SceneAdapter || targets.Length == 0
             ? this.Scene
             : targets.Length == 1 ? targets[0] : this.ResolveSharedPasteTarget(targets);
-        return new(authoring, this.projectManager.CurrentProject, selection, Array.AsReadOnly(selected),
+        return new(authoring, this.session?.Project, selection, Array.AsReadOnly(selected),
             Array.AsReadOnly(targets), anchor, destination, background,
             selected.Select(static row => (Row: row, Parent: row.Parent,
-                SceneParent: (row as SceneNodeAdapter)?.AttachedObject.Parent)).ToArray(), this.projectContexts?.ActiveProject);
+                SceneParent: (row as SceneNodeAdapter)?.AttachedObject.Parent)).ToArray(), this.session?.Context);
     }
 
     private ITreeItem? ResolveSharedPasteTarget(IReadOnlyList<ITreeItem> targets)
@@ -280,8 +274,8 @@ public partial class SceneExplorerViewModel
     private bool IsContextCurrent(CapturedExplorerContext context)
     {
         return !this.isDisposed
-            && ReferenceEquals(this.projectManager.CurrentProject, context.Project)
-            && ReferenceEquals(this.projectContexts?.ActiveProject, context.ProjectActivation)
+            && ReferenceEquals(this.session?.Project, context.Project)
+            && ReferenceEquals(this.session?.Context, context.ProjectActivation)
             && ReferenceEquals(this.CurrentAuthoring(), context.Authoring)
             && this.openDocuments.Find(context.Authoring.Document) is { Content: SceneContent { Scene: var scene } } && ReferenceEquals(scene, context.Authoring.Scene)
             && SameSelection(this.selectionService.GetContext(context.Authoring.Document), context.Selection)
@@ -517,7 +511,7 @@ public partial class SceneExplorerViewModel
                 return "The selection has no unambiguous paste destination.";
             }
 
-            if (this.explorerClipboard is null || !this.ClipboardLifetimeIsCurrent())
+            if (this.clipboard.Payload is null || !this.ClipboardLifetimeIsCurrent())
             {
                 return "The clipboard has no payload for this scene.";
             }
@@ -527,13 +521,13 @@ public partial class SceneExplorerViewModel
                 return $"Locked by {locked.Label}.";
             }
 
-            if (this.explorerClipboard is not { } payload)
+            if (this.clipboard.Payload is not { } payload)
             {
                 return "The clipboard has no payload for this scene.";
             }
 
             var asChild = kind == SceneExplorerCommandKind.PasteAsChild;
-            if (!payload.TryPaste(context.Authoring.Scene, context.Authoring.Layout, this.PasteTargetOf(context, asChild), this.clipboardIsCut, preserveWorld: asChild, out _, out var refused))
+            if (!payload.TryPaste(context.Authoring.Scene, context.Authoring.Layout, this.PasteTargetOf(context, asChild), this.clipboard.IsCut, preserveWorld: asChild, out _, out var refused))
             {
                 return refused.Message;
             }
@@ -786,9 +780,9 @@ public partial class SceneExplorerViewModel
 
     private async Task<SceneEditResult?> PasteCapturedAsync(CapturedExplorerContext context, bool asChild)
     {
-        var isCut = this.clipboardIsCut;
-        var clipboardVersion = this.clipboardGeneration;
-        if (this.explorerClipboard is not { } payload
+        var isCut = this.clipboard.IsCut;
+        var clipboardVersion = this.clipboard.Generation;
+        if (this.clipboard.Payload is not { } payload
             || !payload.TryPaste(context.Authoring.Scene, context.Authoring.Layout, this.PasteTargetOf(context, asChild), isCut, preserveWorld: asChild, out var paste, out var refused))
         {
             return null;
@@ -796,8 +790,8 @@ public partial class SceneExplorerViewModel
 
         _ = refused;
         var result = await context.Authoring.ExecuteAsync(paste).ConfigureAwait(true);
-        if (result.Succeeded && isCut && this.clipboardIsCut && clipboardVersion == this.clipboardGeneration
-            && ReferenceEquals(payload, this.explorerClipboard) && ReferenceEquals(this.CurrentAuthoring(), context.Authoring))
+        if (result.Succeeded && isCut && this.clipboard.IsCut && clipboardVersion == this.clipboard.Generation
+            && ReferenceEquals(payload, this.clipboard.Payload) && ReferenceEquals(this.CurrentAuthoring(), context.Authoring))
         {
             this.OnClipboardCleared();
             this.ClipboardStateStore = ClipboardState.Empty;

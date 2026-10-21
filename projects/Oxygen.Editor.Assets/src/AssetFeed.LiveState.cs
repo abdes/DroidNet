@@ -49,7 +49,7 @@ public sealed partial class AssetFeed
     {
         lock (this.refreshSync)
         {
-            if (this.disposed || this.projectContextService.ActiveProject is not { } project
+            if (this.disposed || this.SessionProject is not { } project
                 || args.Run.ProjectId != project.ProjectId || args.Run.ProjectRoot != project.ProjectRoot)
             {
                 return;
@@ -75,7 +75,7 @@ public sealed partial class AssetFeed
 
     private AssetEntry[] ApplyLiveState(IReadOnlyList<AssetEntry> source)
     {
-        var project = this.projectContextService.ActiveProject;
+        var project = this.SessionProject;
         var runs = this.cooks.Runs.Where(run => run.ProjectId == project?.ProjectId && run.ProjectRoot == project.ProjectRoot)
             .OrderByDescending(ActivityPriority).ThenByDescending(static run => run.StartedAt).ToArray();
         var authored = source.Select(item =>

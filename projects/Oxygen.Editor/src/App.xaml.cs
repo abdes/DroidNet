@@ -8,17 +8,17 @@ using System.Reactive.Linq;
 using System.Runtime.ExceptionServices;
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Theming;
-using DroidNet.Aura.Windowing;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
-using DroidNet.Routing.Events;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 using Microsoft.Windows.AppLifecycle;
-using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
+using Oxygen.Editor.Shell.Windows;
 
 namespace Oxygen.Editor;
 
@@ -33,6 +33,7 @@ public partial class App
     private readonly IHostApplicationLifetime lifetime;
     private readonly HostingContext hostingContext;
     private readonly IActivationService activationService;
+    private readonly ILogger logger;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="App"/> class.
@@ -42,12 +43,12 @@ public partial class App
     /// <param name="lifetime">The host application lifetime, used to imperatively exit the application when needed.</param>
     /// <param name="router">The application router.</param>
     /// <param name="converter">The ViewModel to View converter to be used to set the content inside the content control.</param>
-    /// <param name="windowManager">The window manager service for multi-window support.</param>
-    /// <param name="runtimeShutdown">Tracks shutdown once the UI dispatcher is available.</param>
-    /// <param name="themeModeService">The theme mode service used to apply the requested theme to application windows.</param>
-    /// <param name="backdropService">The backdrop service for automatic backdrop application.</param>
-    /// <param name="chromeService">The chrome service for automatic chrome application.</param>
-    /// <param name="placementService">The window placement service for restoring and saving window positions.</param>
+    /// <param name="closeAndExit">Closes the editor's windows and exits the editor.</param>
+    /// <param name="themeModeService">Applies the requested theme to the application's windows.</param>
+    /// <param name="backdropService">Applies the windows' backdrops.</param>
+    /// <param name="chromeService">Applies the windows' chrome.</param>
+    /// <param name="placementService">Restores and saves the windows' placements.</param>
+    /// <param name="loggerFactory">Optional factory of the application's logger, which records how the editor ends.</param>
     /// <remarks>
     ///     In this project architecture, the single instance of the application is created by the User Interface hosted
     ///     service
@@ -55,6 +56,12 @@ public partial class App
     ///     The <paramref name="converter" /> must be available in the XAML as a static resource. Because it has dependencies
     ///     injected via the Dependency Injector, it is created in the code behind and programmatically added as a static
     ///     resource after the application is <see cref="OnLaunched" /> launched.
+    ///     <para>
+    ///     The services that need the UI thread cannot be created by the editor scope's activation, which runs before the
+    ///     UI thread starts; they are created when the application is: <paramref name="closeAndExit" />,
+    ///     <paramref name="themeModeService" />, <paramref name="backdropService" />, <paramref name="chromeService" /> and
+    ///     <paramref name="placementService" />.
+    ///     </para>
     /// </remarks>
     public App(
         HostingContext hostingContext,
@@ -63,19 +70,19 @@ public partial class App
         IRouter router,
         [FromKeyedServices("VmToView")]
         IValueConverter converter,
-        IWindowManagerService windowManager,
-        EngineShutdownService runtimeShutdown,
+        CloseAndExit closeAndExit,
         IAppThemeModeService themeModeService,
         WindowBackdropService backdropService,
         WindowChromeService chromeService,
-        WindowPlacementService placementService)
+        WindowPlacementService placementService,
+        ILoggerFactory? loggerFactory = null)
     {
-        runtimeShutdown.ObserveWindows(windowManager);
-        _ = backdropService; // Unused; injected only for early initialization
-        _ = themeModeService; // Unused; injected only to instantiate it early
-        _ = chromeService; // Unused; injected only to instantiate it early
-
-        _ = placementService; // autonomous service
+        // The services that need the UI thread, created with the application (see remarks).
+        _ = closeAndExit;
+        _ = themeModeService;
+        _ = backdropService;
+        _ = chromeService;
+        _ = placementService;
 
         // Create the DispatcherScheduler for the UI thread
         this.hostingContext = hostingContext;
@@ -83,6 +90,9 @@ public partial class App
         this.lifetime = lifetime;
         this.router = router;
         this.vmToViewConverter = converter;
+        this.logger = loggerFactory?.CreateLogger<App>() ?? NullLogger<App>.Instance;
+        _ = lifetime.ApplicationStopping.Register(this.LogApplicationStopping);
+        _ = lifetime.ApplicationStopped.Register(this.LogApplicationStopped);
         this.InitializeComponent();
     }
 
@@ -98,12 +108,9 @@ public partial class App
 
         Current.Resources["VmToViewConverter"] = this.vmToViewConverter;
 
-        this.UnhandledException += OnAppUnhandledException;
-        AppDomain.CurrentDomain.UnhandledException += OnCurrentDomainUnhandledException;
+        this.UnhandledException += (_, e) => this.Terminate(e.Exception);
+        AppDomain.CurrentDomain.UnhandledException += (_, e) => this.Terminate((Exception)e.ExceptionObject);
         AppDomain.CurrentDomain.FirstChanceException += OnFirstChanceException;
-
-        // We just want to exit if navigation fails for some reason
-        _ = this.router.Events.OfType<NavigationError>().Subscribe(_ => this.lifetime.StopApplication());
 
         _ = this.activationService
             .ObserveOn(this.hostingContext.DispatcherScheduler)
@@ -113,7 +120,15 @@ public partial class App
                     async () =>
                     {
                         Debug.WriteLine("Launch activation ==> navigate to project explorer");
-                        await this.router.NavigateAsync("/pe/home", new FullNavigation() { Target = new Target { Name = "wnd-pe" } }).ConfigureAwait(true);
+
+                        // The editor cannot start without its Project Explorer. A later navigation that fails is its
+                        // caller's to report: a project's activation closes the session it opened.
+                        var startup = new FullNavigation() { Target = new Target { Name = EditorWindows.StartTarget } };
+                        if (!await EditorWindows.NavigateAsync(this.router, EditorWindows.StartPage, startup).ConfigureAwait(true))
+                        {
+                            this.LogStartupNavigationFailed();
+                            this.lifetime.StopApplication();
+                        }
                     }))
             .Concat()
             .Subscribe();
@@ -143,12 +158,6 @@ public partial class App
         // Activate the application.
         this.activationService.ActivateAsync(activationData).GetAwaiter().GetResult();
     }
-
-    private static void OnAppUnhandledException(object sender, Microsoft.UI.Xaml.UnhandledExceptionEventArgs e)
-        => OnUnhandledException(e.Exception);
-
-    private static void OnCurrentDomainUnhandledException(object sender, System.UnhandledExceptionEventArgs e)
-        => OnUnhandledException((Exception)e.ExceptionObject);
 
     private static void OnFirstChanceException(object? sender, FirstChanceExceptionEventArgs e)
     {
@@ -311,5 +320,12 @@ public partial class App
 
         Process.GetCurrentProcess()
             .Kill();
+    }
+
+    // The unhandled exception is logged before the process ends, so a run's log shows why the editor ended.
+    private void Terminate(Exception exception)
+    {
+        this.LogUnhandledException(exception);
+        OnUnhandledException(exception);
     }
 }

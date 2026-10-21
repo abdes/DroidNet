@@ -11,14 +11,9 @@ namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal static class CookCoordinatorScenario
 {
-    internal static ContentCookCoordinator CreateCoordinator(ProjectContextService context) => new(context, NullLogger<ContentCookCoordinator>.Instance);
+    internal static ContentCookCoordinator CreateCoordinator(TestSession session) => new(session, NullLogger<ContentCookCoordinator>.Instance);
 
-    internal static ProjectContextService CreateContextService()
-    {
-        var service = new ProjectContextService();
-        service.Activate(CreateContext());
-        return service;
-    }
+    internal static TestSession CreateSession() => new(CreateContext());
 
     // The coordinator takes cross-process cook ownership with native file handles under the project root, so the
     // project is on the disk.

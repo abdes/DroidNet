@@ -19,6 +19,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Layout;
@@ -454,6 +455,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer());
         TestScene? testScene = null;
+        TestSession? session = null;
         SceneExplorerViewModel? viewModel = null;
         try
         {
@@ -464,16 +466,14 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             var childNode = new SceneNode(scene) { Name = "Nested child" };
             scene.RootNodes.Add(secondaryNode);
             node.AddChild(childNode);
-            var projects = new ProjectContextService();
-            projects.Activate(testScene.Project);
+            session = new TestSession(testScene.Project);
             viewModel = new SceneExplorerViewModel(
-                Mock.Of<IProjectManagerService>(),
                 Mock.Of<IRouter>(),
                 new TestDocumentArea(testScene.Document),
                 testScene.Documents,
                 new SceneSelectionService(),
                 interaction: interaction,
-                projectContexts: projects);
+                session: session);
             await viewModel.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
             var adapter = (SceneNodeAdapter)(await viewModel.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(true))!;
             await viewModel.ExpandItemAsync(adapter).ConfigureAwait(true);
@@ -492,6 +492,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         finally
         {
             viewModel?.Dispose();
+            session?.Dispose();
             testScene?.Dispose();
         }
     }

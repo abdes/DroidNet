@@ -2,29 +2,26 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Aura.Windowing;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Microsoft.UI;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Runtime.Engine;
 
-/// <summary>Observes engine shutdown before final window and host UI teardown.</summary>
+/// <summary>Shuts the engine down on the UI thread when the editor exits, before the host stops its UI.</summary>
+/// <remarks>
+///     The editor's exit shuts the engine down before its last window is destroyed; the host's stop does it again, which
+///     does nothing once the engine is gone.
+/// </remarks>
 public sealed partial class EngineShutdownService : IHostedService
 {
     private readonly IEngineService engine;
-    private readonly Lock windowTrackingLock = new();
     private readonly IOperationResultPublisher results;
     private readonly Func<Func<Task>, Task> dispatch;
     private readonly ILogger logger;
-    private readonly ConcurrentDictionary<WindowId, byte> closingWindows = new();
-    private IWindowManagerService? windows;
-    private bool stopping;
 
     /// <summary>Initializes a new instance of the <see cref="EngineShutdownService"/> class.</summary>
     /// <param name="engine">The shared runtime service.</param>
@@ -49,72 +46,17 @@ public sealed partial class EngineShutdownService : IHostedService
         this.logger = loggerFactory?.CreateLogger<EngineShutdownService>() ?? NullLogger<EngineShutdownService>.Instance;
     }
 
-    /// <summary>Connects window lifecycle tracking after the application creates its UI dispatcher.</summary>
-    /// <param name="windows">The initialized application window manager.</param>
-    public void ObserveWindows(IWindowManagerService windows)
-    {
-        ArgumentNullException.ThrowIfNull(windows);
-        lock (this.windowTrackingLock)
-        {
-            if (this.stopping || ReferenceEquals(this.windows, windows))
-            {
-                return;
-            }
-
-            if (this.windows is not null)
-            {
-                throw new InvalidOperationException("The runtime shutdown service already observes another window manager.");
-            }
-
-            this.windows = windows;
-            windows.WindowClosing += this.OnWindowClosingAsync;
-            windows.WindowClosed += this.OnWindowClosedAsync;
-        }
-    }
-
     /// <inheritdoc/>
     public Task StartAsync(CancellationToken cancellationToken) => Task.CompletedTask;
 
     /// <inheritdoc/>
-    public async Task StopAsync(CancellationToken cancellationToken)
-    {
-        lock (this.windowTrackingLock)
-        {
-            this.stopping = true;
-        }
+    /// <remarks>Registered after the UI hosted service, so the host stops it before its dispatcher.</remarks>
+    public Task StopAsync(CancellationToken cancellationToken) => this.ShutdownAsync();
 
-        // Registered after the UI hosted service, so the host stops us before its dispatcher.
-        await this.ShutdownAsync().ConfigureAwait(false);
-        lock (this.windowTrackingLock)
-        {
-            if (this.windows is not null)
-            {
-                this.windows.WindowClosing -= this.OnWindowClosingAsync;
-                this.windows.WindowClosed -= this.OnWindowClosedAsync;
-            }
-        }
-    }
-
-    private Task OnWindowClosingAsync(object? sender, WindowClosingEventArgs args)
-    {
-        args.AddFinalizationTask(() =>
-        {
-            _ = this.closingWindows.TryAdd(args.WindowId, 0);
-            return this.windows!.OpenWindows.All(window => this.closingWindows.ContainsKey(window.Id))
-                ? this.ShutdownAsync()
-                : Task.CompletedTask;
-        });
-        return Task.CompletedTask;
-    }
-
-    private Task OnWindowClosedAsync(object? sender, WindowClosedEventArgs args)
-    {
-        _ = this.closingWindows.TryRemove(args.WindowId, out _);
-        return Task.CompletedTask;
-    }
-
+    /// <summary>Shuts the engine down on the UI thread; a failure is published, not thrown.</summary>
+    /// <returns>A task that completes when the engine is shut down, or immediately when there is no engine.</returns>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The application shutdown boundary records runtime failure without interrupting other service cleanup.")]
-    private async Task ShutdownAsync()
+    public async Task ShutdownAsync()
     {
         if (this.engine.State is EngineServiceState.NoEngine)
         {

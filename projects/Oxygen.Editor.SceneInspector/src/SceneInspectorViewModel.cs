@@ -92,7 +92,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// <param name="scenePreview">The engine preview, which reports the fields still waiting for the engine.</param>
     /// <param name="selectionService">The authoritative document selection owner, used to hydrate the typed context at startup.</param>
     /// <param name="materialSlots">The current native geometry slot inventories.</param>
-    /// <param name="projectContexts">The active project lifetime.</param>
+    /// <param name="session">The project session the inspector belongs to.</param>
     /// <param name="inputSources">The project's input sources, which declare the scene's starting input contexts.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
@@ -112,7 +112,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         IScenePreview scenePreview,
         ISceneSelectionService selectionService,
         IGeometryMaterialSlotProvider materialSlots,
-        IProjectContextService projectContexts,
+        IProjectSession session,
         IInputSources inputSources,
         ILoggerFactory? loggerFactory = null,
         SceneNodeInteraction? interaction = null,
@@ -140,7 +140,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             hosting,
             assetProvider,
             materialSlots,
-            projectContexts,
+            session,
             loggerFactory,
             this.AuthoringOf,
             new InspectorScriptServices(scripts, codeEditor, scriptCreation, problems));
@@ -150,9 +150,9 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             this.InspectAtmosphereSource,
             hosting.DispatcherScheduler,
             this.ObserveSkyLightAsync,
-            context => StartingContextRules.Describe(projectContexts.ActiveProject, context, inputSources.Find),
-            asset => this.RevealAssetAsync(projectContexts, asset),
-            projectContexts,
+            context => StartingContextRules.Describe(session.Context, context, inputSources.Find),
+            asset => this.RevealAssetAsync(asset),
+            session,
             inputSources,
             loggerFactory);
         this.renderingEditor = new NodeRenderingViewModel(this.AuthoringOf);
@@ -563,13 +563,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         => this.PropertyEditors.Contains(editor) && this.CanEditSelectedNodes;
 
     // Ctrl+B's navigation: the Content Explorer shows and selects the asset.
-    private async Task RevealAssetAsync(IProjectContextService projectContexts, AssetPath asset)
+    private async Task RevealAssetAsync(AssetPath asset)
     {
-        if (projectContexts.ActiveProject is null)
-        {
-            return;
-        }
-
         _ = await this.assetReveal.RevealAsync([asset]).ConfigureAwait(true);
     }
 

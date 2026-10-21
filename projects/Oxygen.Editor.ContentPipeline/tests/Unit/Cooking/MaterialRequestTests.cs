@@ -32,7 +32,7 @@ public sealed class MaterialRequestTests
         var result = await service.CookMaterialAsync(
             new MaterialCookRequest(
                 AssetPath.Parse("/Content/Materials/Wood.omat"),
-                ProjectRoot: projects.ActiveProject!.ProjectRoot,
+                ProjectRoot: projects.Context.ProjectRoot,
                 MountName: string.Empty,
                 SourceRelativePath: "Content/Materials/Wood.omat.json"),
             CancellationToken.None).ConfigureAwait(false);
@@ -53,10 +53,10 @@ public sealed class MaterialRequestTests
     {
         var projects = CreateProjectContext();
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
-        var request = new MaterialCookRequest(AssetPath.Parse("/Content/Materials/Wood.omat"), projects.ActiveProject!.ProjectRoot, "Content", "Content/Materials/Wood.omat.json");
+        var request = new MaterialCookRequest(AssetPath.Parse("/Content/Materials/Wood.omat"), projects.Context.ProjectRoot, "Content", "Content/Materials/Wood.omat.json");
         request = mismatch switch
         {
-            "project" => request with { ProjectRoot = FileSystemPath.From(projects.ActiveProject!.ProjectRoot.FullPath + "-other") },
+            "project" => request with { ProjectRoot = FileSystemPath.From(projects.Context.ProjectRoot.FullPath + "-other") },
             "mount" => request with { MountName = "Other" },
             "source" => request with { SourceRelativePath = "Content/Materials/Other.omat.json" },
             _ => request with { Material = AssetPath.Parse("/Content/Geometry/Cube.ogeo") },
@@ -86,7 +86,7 @@ public sealed class MaterialRequestTests
     {
         var projects = CreateProjectContext();
         var uri = AssetPath.Parse("/Content/Material.omat");
-        var source = projects.ActiveProject!.ProjectRoot.Combine("Content/Material.omat.json");
+        var source = projects.Context.ProjectRoot.Combine("Content/Material.omat.json");
         var state = new AssetCookStatus(
             uri,
             freshness,
@@ -98,7 +98,7 @@ public sealed class MaterialRequestTests
             UnsavedDocuments = dirty ? [new UnsavedDocument(DocumentId.New(), new DocumentFile(source, uri), "Material")] : [],
         };
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
-        _ = pipeline.Setup(service => service.ReadAsync(projects.ActiveProject!, It.Is<IReadOnlyList<AssetPath>>(uris => uris.Count == 1 && uris[0] == uri), It.IsAny<CancellationToken>()))
+        _ = pipeline.Setup(service => service.ReadAsync(projects.Context, It.Is<IReadOnlyList<AssetPath>>(uris => uris.Count == 1 && uris[0] == uri), It.IsAny<CancellationToken>()))
             .ReturnsAsync([state]);
         var service = new MaterialCookService(pipeline.Object, projects, NullLogger<MaterialCookService>.Instance);
         var result = await service.GetMaterialCookStateAsync(uri, CancellationToken.None).ConfigureAwait(false);
@@ -106,10 +106,6 @@ public sealed class MaterialRequestTests
         pipeline.VerifyAll();
     }
 
-    private static ProjectContextService CreateProjectContext()
-    {
-        var projects = new ProjectContextService();
-        projects.Activate(TestProject.Create(new MockFileSystem()).Context with { Name = "Materials" });
-        return projects;
-    }
+    private static TestSession CreateProjectContext()
+        => new(TestProject.Create(new MockFileSystem()).Context with { Name = "Materials" });
 }

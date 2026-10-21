@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Documents;
+using Microsoft.UI;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Shell.Documents;
@@ -38,11 +39,12 @@ public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOpera
     }
 
     /// <summary>Prepares authoring owners and collects decisions without destroying documents.</summary>
+    /// <param name="window">The window whose tabs close, which asks about their unsaved changes.</param>
     /// <param name="tabs">The tabs being closed.</param>
     /// <param name="force">Whether the caller explicitly requested a forced discard.</param>
     /// <returns>The prepared transaction, or null on cancellation or failure.</returns>
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The close boundary must preserve documents and publish failures from authoring and dialog providers.")]
-    internal async Task<DocumentCloseTransaction?> PrepareAsync(IReadOnlyList<IDocumentMetadata> tabs, bool force)
+    internal async Task<DocumentCloseTransaction?> PrepareAsync(WindowId window, IReadOnlyList<IDocumentMetadata> tabs, bool force)
     {
         var prepared = new List<ParticipantEntry>();
         var retained = false;
@@ -53,7 +55,7 @@ public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOpera
                 .Select(entry => new DocumentCloseItem(entry.Tab, () => this.SaveAsync(entry), documents))
                 .ToArray();
             if (!force && dirty.Length > 0
-                && !await prompt.ConfirmAsync(dirty).ConfigureAwait(true))
+                && !await prompt.ConfirmAsync(window, dirty).ConfigureAwait(true))
             {
                 return null;
             }

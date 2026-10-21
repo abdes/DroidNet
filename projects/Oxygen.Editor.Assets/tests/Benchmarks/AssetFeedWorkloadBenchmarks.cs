@@ -16,6 +16,7 @@ using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Oxygen.Managed.Core.Compatibility;
 using Testably.Abstractions;
@@ -42,19 +43,19 @@ public sealed class AssetFeedWorkloadBenchmarks
             WriteMaterial(workspace.SourcePath(string.Create(System.Globalization.CultureInfo.InvariantCulture, $"Content/Materials/Group{index % 10}/M{index:D4}.omat.json")));
         }
 
-        var projects = workspace.ActivateProject();
+        var session = workspace.OpenSession();
         var documents = Mock.Of<Oxygen.Editor.Documents.IUnsavedDocuments>();
-        using var runs = new ContentCookCoordinator(projects, NullLogger<ContentCookCoordinator>.Instance);
+        using var runs = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);
         var files = new NativeAtomicFileStore(new RealFileSystem());
         var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
         var content = new Mock<IEngineContentPipelineApi>(MockBehavior.Strict);
         var storage = new NativeStorageProvider(new RealFileSystem());
         var engineContent = new EngineContentPakFixture();
-        var publication = new CookPublicationService(runs, projects, files, new ProjectManagerService(storage, atomicFiles: files), engineContent);
+        var publication = new CookPublicationService(runs, session, files, new ProjectManagerService(storage, atomicFiles: files), engineContent);
         var statuses = new AssetCookStatusReader(publication, native.Object, engineContent);
-        await using var catalog = new AssetCatalog(projects, storage, engineContent, publication);
+        await using var catalog = new AssetCatalog(session, storage, engineContent, publication);
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
-        using var provider = new AssetFeed(catalog, projects, new WorkspaceCookScopeProvider(workspace), statuses, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
+        using var provider = new AssetFeed(catalog, session, new WorkspaceCookScopeProvider(workspace), statuses, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value.Where(static row => row.Kind == AssetKind.Material).ToArray()), this.TestContext.CancellationToken);
         var watch = Stopwatch.StartNew();

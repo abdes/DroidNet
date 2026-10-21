@@ -90,12 +90,7 @@ public sealed partial class PreviewSession
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Content that cannot be mounted leaves authoring working; the failure is published and can be retried.")]
     private async Task<bool> MountContentAsync()
     {
-        if (projects.ActiveProject is not { } active)
-        {
-            this.LogNoActiveProject();
-            return false;
-        }
-
+        var active = session.Context;
         var stage = "reading the cooked content";
         var mounted = false;
         try
@@ -225,14 +220,12 @@ public sealed partial class PreviewSession
     }
 
     private AffectedScope ProjectScope()
-        => projects.ActiveProject is { } active
-            ? new AffectedScope
-            {
-                ProjectId = active.ProjectId,
-                ProjectName = active.Name,
-                ProjectPath = active.ProjectRoot.FullPath,
-            }
-            : AffectedScope.Empty;
+        => new()
+        {
+            ProjectId = session.Context.ProjectId,
+            ProjectName = session.Context.Name,
+            ProjectPath = session.Context.ProjectRoot.FullPath,
+        };
 
     private void PublishCleanupWarning(string message, string affectedPath, Exception? exception = null)
         => RuntimeOperationResults.PublishWarning(

@@ -16,7 +16,7 @@ public partial class WorkspaceViewModel
 
     private void OnScriptingNavigated()
     {
-        if (this.projectContextService.ActiveProject is { } project && this.scriptTooling is { } tooling)
+        if (this.session?.Context is { } project && this.scriptTooling is { } tooling)
         {
             _ = Task.Run(() => tooling.Ensure(project));
         }

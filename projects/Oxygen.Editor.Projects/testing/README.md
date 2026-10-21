@@ -19,5 +19,10 @@ reference it.
   project manager or a mount change.
 - `Open(info, fileSystem)` opens a saved project, as the editor opens it, for a
   test that loads its project through the project manager.
+- `TestSession(context)` is a project session for one project, which services
+  of the session receive; `ChangeContext(next)` gives it new mounts, as a mount
+  change does, and `End()` cancels its lifetime, as closing the session does.
+- `TestSessionHost` opens test sessions one at a time and changes the open
+  one's mounts as the editor's host does, refusing another project.
 
 A change to `ProjectContext` is made here once, not in each test.

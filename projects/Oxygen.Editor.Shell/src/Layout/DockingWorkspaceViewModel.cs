@@ -24,8 +24,6 @@ namespace Oxygen.Editor.Shell.Layout;
 /// <summary>
 ///     Base ViewModel for managing the docking workspace.
 /// </summary>
-/// <param name="scopes">The factory of the workspace window's scope.</param>
-/// <param name="parent">The scope the workspace window's scope is created under.</param>
 /// <param name="router">
 ///     The parent router, will only be used for navigation out of the workspace. A local router will be created and used for local navigation inside the workspace.
 /// </param>
@@ -33,8 +31,6 @@ namespace Oxygen.Editor.Shell.Layout;
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the recognition process. If <see langword="null"/>, logging is disabled.
 /// </param>
 public abstract partial class DockingWorkspaceViewModel(
-    ScopeFactory scopes,
-    ScopeHandle parent,
     IRouter router,
     ILoggerFactory? loggerFactory = null)
     : ObservableObject, IRoutingAware, IOutletContainer, IDisposable
@@ -90,8 +86,7 @@ public abstract partial class DockingWorkspaceViewModel(
             ParentRouter = router,
             RootViewModel = this.ThisViewModel,
         };
-        this.scope = scopes.Create<IWindowLayer>(
-            parent,
+        this.scope = this.CreateWindowScope(
             [new RouterScopeModule(this.RoutesConfig, context), new DockingWindowModule(), .. this.CreateWindowModules()],
             window is null ? null : registrations => registrations.RegisterInstance(window.AppWindow.Id));
 
@@ -177,8 +172,7 @@ public abstract partial class DockingWorkspaceViewModel(
             this.deferredDockables.Clear();
             this.localRouterEventsSub?.Dispose();
 
-            // The window's scope has no async disposables to await: it completes before this returns.
-            _ = this.scope?.DisposeAsync().AsTask();
+            // The window's scope belongs to its owner, which disposes it, awaited, when the window's session closes.
             this.scope = null;
         }
 
@@ -191,6 +185,15 @@ public abstract partial class DockingWorkspaceViewModel(
     /// <param name="context">The local router context.</param>
     /// <returns>A task representing the asynchronous operation.</returns>
     protected abstract Task OnInitialNavigationAsync(ILocalRouterContext context);
+
+    /// <summary>
+    /// Creates the workspace window's scope from its modules, under the scope that owns the window and disposes its
+    /// scope.
+    /// </summary>
+    /// <param name="modules">The window's modules, in registration and activation order.</param>
+    /// <param name="hostInstances">Registers the window's own instances, such as its id.</param>
+    /// <returns>The window's scope.</returns>
+    protected abstract ScopeHandle CreateWindowScope(IReadOnlyList<IScopeModule<IWindowLayer>> modules, Action<IRegistrator>? hostInstances);
 
     /// <summary>
     /// Creates the modules of the workspace window's scope, which register after its router and its docking.

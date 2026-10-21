@@ -71,19 +71,19 @@ public sealed class ScenePlayToolbarViewModelTests
     private sealed class ToolbarFixture : IDisposable
     {
         private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-PlayToolbar-");
+        private readonly TestSession session;
         private readonly ContentCookCoordinator coordinator;
 
         public ToolbarFixture()
         {
-            var projects = new ProjectContextService();
-            projects.Activate(this.Documents.Project.Context);
-            this.coordinator = new ContentCookCoordinator(projects, NullLogger<ContentCookCoordinator>.Instance);
-            var publication = new CookPublicationService(this.coordinator, projects, Mock.Of<IAtomicFileStore>(), Mock.Of<IProjectManagerService>(), Mock.Of<IEngineContentPak>());
+            this.session = new TestSession(this.Documents.Project.Context);
+            this.coordinator = new ContentCookCoordinator(this.session, NullLogger<ContentCookCoordinator>.Instance);
+            var publication = new CookPublicationService(this.coordinator, this.session, Mock.Of<IAtomicFileStore>(), Mock.Of<IProjectManagerService>(), Mock.Of<IEngineContentPak>());
             var player = Path.Combine(this.directory.FullName, "Oxygen.Player.exe");
             File.WriteAllBytes(player, []);
             _ = this.Pipeline.Setup(value => value.CookCurrentSceneAsync(It.IsAny<AssetPath>(), It.IsAny<CancellationToken>()))
                 .ReturnsAsync(new ContentCookResult(Guid.NewGuid(), CookTargetKind.CurrentScene, OperationStatus.Failed, [], [], Inspection: null, Validation: null));
-            this.Session = new PlaySession(projects, this.Pipeline.Object, publication, new CookedContentMountService(), new PlaySettings(settings: null), this.Documents.Open, Mock.Of<IOperationResultPublisher>(), playerExecutable: player);
+            this.Session = new PlaySession(this.session, this.Pipeline.Object, publication, new CookedContentMountService(), new PlaySettings(settings: null), this.Documents.Open, Mock.Of<IOperationResultPublisher>(), playerExecutable: player);
         }
 
         public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\PlayToolbarTests"));
@@ -117,6 +117,7 @@ public sealed class ScenePlayToolbarViewModelTests
             this.Session.Dispose();
             this.Documents.Dispose();
             this.coordinator.Dispose();
+            this.session.Dispose();
             this.directory.Delete(recursive: true);
         }
     }

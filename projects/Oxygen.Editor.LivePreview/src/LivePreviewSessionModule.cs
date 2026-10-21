@@ -20,16 +20,16 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.LivePreview;
 
 /// <summary>
-///     The engine in a workspace window's scope: the preview of the window's open scene documents, the project's
+///     The engine in a project session's scope: the preview of the session's open scene documents, the project's
 ///     preview session, the runtime status of its assets, and Play.
 /// </summary>
 /// <remarks>
 ///     The project's preview also applies the content-mount changes the Content Explorer confirms. The player runs the
-///     scenes of the window's project and ends with the workspace; its problems and log reach Problems and Output.
+///     scenes of the session's project and ends with the session; its problems and log reach Problems and Output.
 /// </remarks>
-public sealed class LivePreviewWindowModule : IScopeModule<IWindowLayer>
+public sealed class LivePreviewSessionModule : IScopeModule<ISessionLayer>
 {
-    // The preview follows the open scene documents; the preview and Play sessions follow the workspace.
+    // The preview follows the open scene documents; the preview and Play sessions follow the project session.
     private static readonly Type[] Activated =
     [
         typeof(IScenePreview),

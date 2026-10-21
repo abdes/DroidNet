@@ -34,10 +34,10 @@ public sealed partial class ExplorerContainerTests : DroidNet.Tests.VisualUserIn
         var packed = CreateNavigationAsset("/Kit/Models/Ship.glb/Hull.ogeo", AssetKind.Geometry);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([model, material, input, action, packed]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
-        using var list = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
-        using var tiles = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        using var list = new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
+        using var tiles = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
 
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         await tiles.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);

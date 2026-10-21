@@ -19,7 +19,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task QueuedWorkCapturesAfterPreviousWriterCompletes()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var first = coordinator.RunAsync(
@@ -51,7 +51,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task CancelledQueuedWorkNeverStarts()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         using var cancellation = new CancellationTokenSource();
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -72,12 +72,12 @@ public sealed class CookQueueTests
         _ = await first.ConfigureAwait(false);
     }
 
-    /// <summary>Rejects old project completions and prevents old queued work from crossing activation.</summary>
+    /// <summary>Rejects completions made for the earlier mounts and prevents queued work from crossing a mount change.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
-    public async Task ProjectSwitchCancelsActiveAndQueuedWork()
+    public async Task MountChangeCancelsActiveAndQueuedWork()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var cancellationSeen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -97,10 +97,10 @@ public sealed class CookQueueTests
                 return Task.FromResult(2);
             },
             CancellationToken.None);
-        var nextProject = CreateContext();
-        context.Activate(nextProject);
+        var remounted = context.Context with { };
+        context.ChangeContext(remounted);
         await cancellationSeen.Task.WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None).ConfigureAwait(false);
-        var next = coordinator.RunAsync((operation, _) => Task.FromResult(operation.Project.ProjectId), CancellationToken.None);
+        var next = coordinator.RunAsync((operation, _) => Task.FromResult(operation.Project), CancellationToken.None);
         _ = next.IsCompleted.Should().BeFalse();
         release.SetResult(1);
 
@@ -109,7 +109,43 @@ public sealed class CookQueueTests
         _ = await firstCompletion.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         _ = await oldCompletion.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
         _ = oldQueuedEntered.Should().BeFalse();
-        _ = (await next.ConfigureAwait(false)).Should().Be(nextProject.ProjectId);
+        _ = (await next.ConfigureAwait(false)).Should().BeSameAs(remounted);
+    }
+
+    /// <summary>Closing the session cancels its active and queued work before anything is disposed.</summary>
+    /// <returns>The asynchronous test operation.</returns>
+    [TestMethod]
+    public async Task SessionEndCancelsActiveAndQueuedWork()
+    {
+        var context = CreateSession();
+        using var coordinator = CreateCoordinator(context);
+        var cancellationSeen = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
+        var active = coordinator.RunAsync(
+            async (_, token) =>
+            {
+                var registration = token.Register(() => cancellationSeen.TrySetResult());
+                await using var lifetime = registration.ConfigureAwait(false);
+                await Task.Delay(Timeout.Infinite, token).ConfigureAwait(false);
+                return 1;
+            },
+            CancellationToken.None);
+        var queuedEntered = false;
+        var queued = coordinator.RunAsync(
+            (_, _) =>
+            {
+                queuedEntered = true;
+                return Task.FromResult(2);
+            },
+            CancellationToken.None);
+
+        context.End();
+
+        await cancellationSeen.Task.WaitAsync(TimeSpan.FromSeconds(5), CancellationToken.None).ConfigureAwait(false);
+        var activeCompletion = async () => await active.ConfigureAwait(false);
+        var queuedCompletion = async () => await queued.ConfigureAwait(false);
+        _ = await activeCompletion.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
+        _ = await queuedCompletion.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
+        _ = queuedEntered.Should().BeFalse();
     }
 
     /// <summary>Retains the writer after a termination failure until the worker drain really finishes.</summary>
@@ -117,7 +153,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task TerminationFailureRetainsWriterUntilDrain()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var drain = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var failure = new ContentPipelineTerminationException(new Win32Exception(5), drain.Task);
@@ -143,7 +179,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task OrdinaryFailureReleasesWriter()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var first = coordinator.RunAsync((_, _) => Task.FromException<int>(new IOException("input missing")), CancellationToken.None);
         var failed = async () => await first.ConfigureAwait(false);
@@ -156,7 +192,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task CancelledActiveWorkCannotReturnSuccess()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         using var cancellation = new CancellationTokenSource();
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -169,16 +205,15 @@ public sealed class CookQueueTests
         _ = (await coordinator.RunAsync((_, _) => Task.FromResult(2), CancellationToken.None).ConfigureAwait(false)).Should().Be(2);
     }
 
-    /// <summary>Treats reopening the same project context as a different lifetime.</summary>
+    /// <summary>Treats the project after a mount change as a different lifetime, even with the same configuration.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
-    public async Task ReopeningSameProjectInvalidatesOldOperation()
+    public async Task MountChangeInvalidatesOldOperation()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var operation = await coordinator.RunAsync((current, _) => Task.FromResult(current), CancellationToken.None).ConfigureAwait(false);
-        context.Close();
-        context.Activate(operation.Project);
+        context.ChangeContext(operation.Project with { });
         Action staleCallback = () => coordinator.VerifyCurrent(operation);
         _ = staleCallback.Should().Throw<OperationCanceledException>();
     }
@@ -188,7 +223,7 @@ public sealed class CookQueueTests
     [TestMethod]
     public async Task DisposalCancelsAndDrainsActiveOwnership()
     {
-        var context = CreateContextService();
+        var context = CreateSession();
         using var coordinator = CreateCoordinator(context);
         var release = new TaskCompletionSource<int>(TaskCreationOptions.RunContinuationsAsynchronously);
         var active = coordinator.RunAsync((_, _) => release.Task, CancellationToken.None);

@@ -16,27 +16,28 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.SceneEditor.Settings;
 
 /// <summary>
-///     Owns the active project's embedded-engine preferences, the user's ground grid preferences and their user-local
-///     persistence.
+///     Owns the session's project's embedded-engine preferences, the user's ground grid preferences and their
+///     user-local persistence.
 /// </summary>
 /// <remarks>
 ///     The scene editor restores the preferences when it opens. The engine takes them only while it is ready or running:
 ///     the service applies them then, and again whenever the engine enters either state, so a start after a failed one
-///     shows them too. A change while the engine is down is kept and saved, and reaches the engine when it starts.
+///     shows them too. A change while the engine is down is kept and saved, and reaches the engine when it starts. Once
+///     the session's lifetime ends, a restoration still in flight no longer changes the shared engine.
 /// </remarks>
 /// <param name="engine">The shared embedded runtime.</param>
 /// <param name="settings">A dedicated settings manager, accessed serially by this service.</param>
-/// <param name="projects">The current project lifetime.</param>
+/// <param name="session">The project session the preferences belong to.</param>
 /// <param name="results">The visible diagnostic publisher.</param>
 /// <param name="status">The workspace diagnostic status.</param>
 /// <param name="loggerFactory">The optional logger factory.</param>
 public sealed partial class PreviewSettingsService(
     IEngineService engine,
     IEditorSettingsManager settings,
-    IProjectContextService projects,
+    IProjectSession session,
     IOperationResultPublisher results,
     IStatusReducer status,
-    ILoggerFactory? loggerFactory = null) : ObservableObject
+    ILoggerFactory? loggerFactory = null) : ObservableObject, IDisposable
 {
     /// <summary>The project-scoped preference identity in the editor database.</summary>
     internal static readonly SettingKey<Preferences> Key = new("WorldEditor", "Preview");
@@ -48,14 +49,13 @@ public sealed partial class PreviewSettingsService(
     // Serializes database access across project switches and toolbar writes.
     private Task persistence = Task.CompletedTask;
     private Task savePump = Task.CompletedTask;
-    private PendingWrite? pendingWrite;
+    private Preferences? pendingWrite;
     private GroundGridSettings? pendingGroundGridWrite;
     private bool saveFailed;
     private bool groundGridSaveFailed;
     private GroundGridPreferences? groundGrid;
-    private ProjectContext? activeProject;
-    private ProjectContext? requestedProject;
-    private long activation;
+    private Task? restoration;
+    private bool restored;
     private Preferences accepted = new();
     private int maxFrameRateCap = EngineConstants.DefaultFrameRateCap;
     private SynchronizationContext? owner;
@@ -99,24 +99,22 @@ public sealed partial class PreviewSettingsService(
     /// <summary>Gets the user's ground grid preferences, applied to every viewport pane.</summary>
     public GroundGridPreferences GroundGrid => this.groundGrid ??= new(this);
 
-    /// <summary>Restores the active project's preferences, unless they already are; the scene editor calls it when it opens.</summary>
+    private ProjectContext Project => session.Context;
+
+    /// <summary>Restores the project's preferences once; the scene editor calls it when it opens.</summary>
     /// <returns>The restoration task.</returns>
     public Task EnsureRestoredAsync()
-        => projects.ActiveProject is { } project && !ReferenceEquals(project, this.requestedProject)
-            ? this.RestoreAsync(project)
-            : this.persistence;
-
-    /// <summary>Restores a project's preferences.</summary>
-    /// <param name="project">The workspace's project.</param>
-    /// <returns>The restoration task.</returns>
-    public Task RestoreAsync(ProjectContext project)
     {
-        this.WatchEngine();
-        this.activeProject = null;
-        this.requestedProject = project;
-        var restoration = this.RestoreAfterAsync(this.persistence, project, ++this.activation);
+        if (this.restoration is { } started)
+        {
+            return started;
+        }
 
-        // Startup observes restoration failures; the persistence queue must remain usable for the next project.
+        this.WatchEngine();
+        var restoration = this.RestoreAfterAsync(this.persistence);
+        this.restoration = restoration;
+
+        // Startup observes restoration failures; the persistence queue must remain usable for later writes.
         this.persistence = restoration.ContinueWith(
             static completed => { _ = completed.Exception; },
             CancellationToken.None,
@@ -125,21 +123,19 @@ public sealed partial class PreviewSettingsService(
         return restoration;
     }
 
-    /// <summary>Prevents a closing workspace's delayed restoration from changing the shared runtime.</summary>
-    /// <param name="project">The workspace being retired.</param>
-    public void Deactivate(ProjectContext project)
-    {
-        if (ReferenceEquals(project, this.requestedProject))
-        {
-            ++this.activation;
-            this.requestedProject = null;
-            this.activeProject = null;
-        }
-    }
-
     /// <summary>Waits for accepted preference writes before closing the workspace.</summary>
     /// <returns>The pending persistence task.</returns>
     public Task FlushAsync() => this.persistence;
+
+    /// <inheritdoc/>
+    public void Dispose()
+    {
+        if (this.watchingEngine)
+        {
+            engine.StateChanged -= this.OnEngineStateChanged;
+            this.watchingEngine = false;
+        }
+    }
 
     /// <summary>Applies an edited ground grid to every pane and saves it for the user.</summary>
     /// <param name="requested">The edited grid; values outside the engine's ranges are clamped.</param>
@@ -167,7 +163,6 @@ public sealed partial class PreviewSettingsService(
         {
             this.GroundGrid.Refresh();
             this.ReportFailure(
-                projects.ActiveProject,
                 "GROUND_GRID_REJECTED",
                 "Ground grid setting was not applied",
                 "The runtime rejected the ground grid setting.",
@@ -196,9 +191,10 @@ public sealed partial class PreviewSettingsService(
     };
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A preference-store failure is reported and uses visible defaults without preventing project authoring.")]
-    private async Task RestoreAfterAsync(Task previous, ProjectContext project, long activation)
+    private async Task RestoreAfterAsync(Task previous)
     {
         await previous.ConfigureAwait(true);
+        var project = this.Project;
         var maxCap = IsLive(engine.State) ? (int)engine.MaxTargetFps : int.MaxValue;
         var value = new Preferences { ProjectId = project.ProjectId };
         try
@@ -217,15 +213,14 @@ public sealed partial class PreviewSettingsService(
         catch (Exception failure)
         {
             this.ReportFailure(
-                project,
                 "LOAD_FAILED",
                 "Preview preferences could not be restored",
                 "Using vsync and no frame-rate cap. See Details for the storage error.",
                 failure);
         }
 
-        var grid = await this.LoadGroundGridAsync(project).ConfigureAwait(true);
-        if (activation != this.activation || !ReferenceEquals(project, projects.ActiveProject))
+        var grid = await this.LoadGroundGridAsync().ConfigureAwait(true);
+        if (session.Lifetime.IsCancellationRequested)
         {
             return;
         }
@@ -241,11 +236,11 @@ public sealed partial class PreviewSettingsService(
             catch (InvalidOperationException failure)
             {
                 // The preferences stay accepted; the engine takes them again when it next starts running.
-                this.ReportFailure(project, "APPLY_FAILED", "Preview settings were not applied", "The runtime rejected the restored preview settings.", failure);
+                this.ReportFailure("APPLY_FAILED", "Preview settings were not applied", "The runtime rejected the restored preview settings.", failure);
             }
         }
 
-        this.activeProject = project;
+        this.restored = true;
         this.saveFailed = false;
         this.groundGridSaveFailed = false;
         this.SetAccepted(value);
@@ -253,7 +248,7 @@ public sealed partial class PreviewSettingsService(
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A preference-store failure is reported and uses the default grid without preventing project authoring.")]
-    private async Task<GroundGridSettings> LoadGroundGridAsync(ProjectContext project)
+    private async Task<GroundGridSettings> LoadGroundGridAsync()
     {
         try
         {
@@ -263,7 +258,6 @@ public sealed partial class PreviewSettingsService(
         catch (Exception failure)
         {
             this.ReportFailure(
-                project,
                 "GROUND_GRID_LOAD_FAILED",
                 "Ground grid preferences could not be restored",
                 "Using the default ground grid. See Details for the storage error.",
@@ -274,17 +268,16 @@ public sealed partial class PreviewSettingsService(
 
     private void Apply(Preferences requested, string property)
     {
-        var project = this.activeProject;
         try
         {
-            if (project is null || !ReferenceEquals(project, projects.ActiveProject))
+            if (!this.restored || session.Lifetime.IsCancellationRequested)
             {
                 throw new InvalidOperationException("The project's preview preferences are not active.");
             }
 
             var next = requested with
             {
-                ProjectId = project.ProjectId,
+                ProjectId = this.Project.ProjectId,
                 FrameRateCap = Math.Clamp(requested.FrameRateCap, 1, this.MaxFrameRateCap),
             };
             if (next == this.accepted && !this.saveFailed)
@@ -298,7 +291,7 @@ public sealed partial class PreviewSettingsService(
             }
 
             this.SetAccepted(next);
-            this.pendingWrite = new(project, next);
+            this.pendingWrite = next;
             if (this.savePump.IsCompleted)
             {
                 this.persistence = this.savePump = this.SavePendingAfterAsync(this.persistence);
@@ -308,7 +301,6 @@ public sealed partial class PreviewSettingsService(
         {
             this.OnPropertyChanged(property);
             this.ReportFailure(
-                project ?? projects.ActiveProject,
                 RejectionCode(property),
                 "Preview setting was not applied",
                 "The runtime rejected the preview setting.",
@@ -366,7 +358,7 @@ public sealed partial class PreviewSettingsService(
 
     private void ReapplyToEngine()
     {
-        if (this.activeProject is not { } project || !ReferenceEquals(project, projects.ActiveProject) || !IsLive(engine.State))
+        if (!this.restored || session.Lifetime.IsCancellationRequested || !IsLive(engine.State))
         {
             return;
         }
@@ -381,7 +373,7 @@ public sealed partial class PreviewSettingsService(
         }
         catch (InvalidOperationException failure)
         {
-            this.ReportFailure(project, "APPLY_FAILED", "Preview settings were not applied", "The runtime rejected the preview settings when it started.", failure);
+            this.ReportFailure("APPLY_FAILED", "Preview settings were not applied", "The runtime rejected the preview settings when it started.", failure);
         }
     }
 
@@ -396,14 +388,13 @@ public sealed partial class PreviewSettingsService(
                 this.pendingWrite = null;
                 try
                 {
-                    await settings.SaveSettingAsync(Key, write.Value, Context(write.Project)).ConfigureAwait(true);
+                    await settings.SaveSettingAsync(Key, write, Context(this.Project)).ConfigureAwait(true);
                     this.saveFailed = false;
                 }
                 catch (Exception failure)
                 {
                     this.saveFailed = true;
                     this.ReportFailure(
-                        write.Project,
                         "SAVE_FAILED",
                         "Preview preferences were not saved",
                         "Applied for this session, but could not save. Change the setting again to retry.",
@@ -423,7 +414,6 @@ public sealed partial class PreviewSettingsService(
                 {
                     this.groundGridSaveFailed = true;
                     this.ReportFailure(
-                        projects.ActiveProject,
                         "GROUND_GRID_SAVE_FAILED",
                         "Ground grid preferences were not saved",
                         "Applied for this session, but could not save. Change the setting again to retry.",
@@ -458,8 +448,9 @@ public sealed partial class PreviewSettingsService(
         }
     }
 
-    private void ReportFailure(ProjectContext? project, string code, string title, string message, Exception exception)
+    private void ReportFailure(string code, string title, string message, Exception exception)
     {
+        var project = this.Project;
         this.LogPreferenceFailure(exception, code, project);
         RuntimeOperationResults.PublishFailure(
             results,
@@ -469,7 +460,7 @@ public sealed partial class PreviewSettingsService(
             DiagnosticCodes.SettingsPrefix + code,
             title,
             message,
-            project is null ? AffectedScope.Empty : new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot.FullPath },
+            new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot.FullPath },
             exception: exception);
     }
 
@@ -496,6 +487,4 @@ public sealed partial class PreviewSettingsService(
         /// <summary>Gets a value indicating whether every visible viewport pane renders each frame.</summary>
         public bool AlwaysRenderPanes { get; init; }
     }
-
-    private sealed record PendingWrite(ProjectContext Project, Preferences Value);
 }

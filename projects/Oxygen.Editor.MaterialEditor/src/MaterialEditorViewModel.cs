@@ -40,7 +40,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private readonly Document document;
     private readonly MaterialEdits edits;
     private readonly IMaterialCookService cookService;
-    private readonly IProjectContextService projects;
+    private readonly IProjectSession session;
     private readonly ILogger logger;
     private readonly IAssetFeed assets;
     private readonly IDocumentInputCommitter? inputCommitter;
@@ -66,7 +66,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// <param name="assetProvider">The shared source, publication and cooking status feed.</param>
     /// <param name="uiScheduler">Marshals status updates to the document's UI thread.</param>
     /// <param name="cookService">Cooks the material on request.</param>
-    /// <param name="projects">The active project, which locates the material's file for a cook or a copy and holds the
+    /// <param name="session">The project session the editor lives in, whose project locates the material's file for a cook or a copy and holds the
     /// textures, read to offer only those with their images.</param>
     /// <param name="loggerFactory">Optional logger factory.</param>
     /// <param name="inputCommitter">Completes the focused numeric control before snapshot capture.</param>
@@ -78,7 +78,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         IAssetFeed assetProvider,
         IScheduler uiScheduler,
         IMaterialCookService cookService,
-        IProjectContextService projects,
+        IProjectSession session,
         ILoggerFactory? loggerFactory = null,
         IDocumentInputCommitter? inputCommitter = null,
         IDocumentService? documents = null,
@@ -92,7 +92,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             : throw new ArgumentException($"'{tab.Title}' is not a material document.", nameof(tab));
         this.edits = edits ?? throw new ArgumentNullException(nameof(edits));
         this.cookService = cookService ?? throw new ArgumentNullException(nameof(cookService));
-        this.projects = projects ?? throw new ArgumentNullException(nameof(projects));
+        this.session = session ?? throw new ArgumentNullException(nameof(session));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<MaterialEditorViewModel>();
         this.assets = assetProvider ?? throw new ArgumentNullException(nameof(assetProvider));
         this.inputCommitter = inputCommitter;
@@ -279,7 +279,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     {
         if (this.inputCommitter is not null)
         {
-            await this.inputCommitter.CommitAsync().ConfigureAwait(true);
+            await this.inputCommitter.CommitAsync(this.tab.DocumentId).ConfigureAwait(true);
         }
 
         this.EndEditSession(NumberBoxEditCompletionKind.Commit);
@@ -440,7 +440,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     {
         if (this.inputCommitter is not null)
         {
-            await this.inputCommitter.CommitAsync().ConfigureAwait(true);
+            await this.inputCommitter.CommitAsync(this.tab.DocumentId).ConfigureAwait(true);
         }
 
         this.EndEditSession(NumberBoxEditCompletionKind.Commit);
@@ -472,8 +472,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     [RelayCommand]
     private async Task CookAsync()
     {
-        if (this.projects.ActiveProject is not { } project
-            || project.FindSource(this.document.File.Asset) is not { IsMountRoot: false } location)
+        var project = this.session.Context;
+        if (project.FindSource(this.document.File.Asset) is not { IsMountRoot: false } location)
         {
             this.StatusText = "The material is not in the active project and cannot be cooked.";
             return;

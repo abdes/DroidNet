@@ -171,7 +171,7 @@ public sealed class CapturedInputCookTests
             SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var pipeline = CreateService(workspace, api, new CapturingSceneDescriptorGenerator([]));
-        var service = new MaterialCookService(pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
+        var service = new MaterialCookService(pipeline, workspace.Session, NullLogger<MaterialCookService>.Instance);
 
         var result = await service.CookMaterialAsync(new(AssetPath.Parse("/" + source[..^5]), workspace.ProjectContext.ProjectRoot, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -213,7 +213,7 @@ public sealed class CapturedInputCookTests
             SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
         };
         var pipeline = CreateService(workspace, api, new CapturingSceneDescriptorGenerator([]));
-        var service = new MaterialCookService(pipeline, workspace.ContextService, NullLogger<MaterialCookService>.Instance);
+        var service = new MaterialCookService(pipeline, workspace.Session, NullLogger<MaterialCookService>.Instance);
 
         var result = await service.CookMaterialAsync(new(AssetPath.Parse("/" + source[..^5]), workspace.ProjectContext.ProjectRoot, "Content", source), this.TestContext.CancellationToken).ConfigureAwait(false);
 

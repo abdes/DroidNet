@@ -32,7 +32,7 @@ namespace Oxygen.Editor.LivePreview.Play;
 /// </remarks>
 public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSource, IPlayerLog, IDisposable
 {
-    private readonly IProjectContextService projects;
+    private readonly IProjectSession session;
     private readonly IContentPipelineService pipeline;
     private readonly CookPublicationService publication;
     private readonly CookedContentMountService mountService;
@@ -50,7 +50,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="PlaySession"/> class.</summary>
-    /// <param name="projects">The active project.</param>
+    /// <param name="session">The project session, whose scenes Play runs.</param>
     /// <param name="pipeline">The content pipeline that cooks the scene.</param>
     /// <param name="publication">The cooked content publication the player mounts.</param>
     /// <param name="mountService">Validates and holds the cooked roots while the player reads them.</param>
@@ -60,7 +60,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="playerExecutable">The player to launch; by default the installed SDK's.</param>
     public PlaySession(
-        IProjectContextService projects,
+        IProjectSession session,
         IContentPipelineService pipeline,
         CookPublicationService publication,
         CookedContentMountService mountService,
@@ -70,7 +70,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
         ILoggerFactory? loggerFactory = null,
         string? playerExecutable = null)
     {
-        this.projects = projects;
+        this.session = session;
         this.pipeline = pipeline;
         this.publication = publication;
         this.mountService = mountService;
@@ -123,10 +123,12 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     /// <returns>A task that completes when the session began or Play stopped; failures are published.</returns>
     public async Task PlayAsync(DocumentId scene)
     {
-        if (this.disposed || this.Status.IsBusy || this.projects.ActiveProject is not { } project)
+        if (this.disposed || this.Status.IsBusy)
         {
             return;
         }
+
+        var project = this.session.Context;
 
         if (this.documents.Find(scene) is not { Content: SceneContent content } document)
         {
@@ -403,7 +405,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
             Title = title,
             Message = message,
             CompletedAt = DateTimeOffset.UtcNow,
-            AffectedScope = new AffectedScope { ProjectId = this.projects.ActiveProject?.ProjectId },
+            AffectedScope = new AffectedScope { ProjectId = this.session.Context.ProjectId },
             Diagnostics = diagnostics is { Count: > 0 }
                 ? diagnostics
                 :

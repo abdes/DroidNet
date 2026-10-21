@@ -9,7 +9,6 @@ using DroidNet.Documents;
 using DroidNet.Routing;
 using Microsoft.UI;
 using Moq;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
@@ -292,13 +291,10 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
 
         public AuthoringHarness(out Scene scene, out SceneNode node, Action<Scene, SceneNode>? build = null, Func<SceneNode, IList<ExplorerEntryData>>? layout = null)
         {
-            var project = new Project(new ProjectInfo("Authoring", Category.Games, @"H:\AuthoringTreeTests", "preview.png"));
             var built = new Scene { Name = "Scene" };
             var builtNode = new SceneNode(built) { Name = "Node" };
             built.RootNodes.Add(builtNode);
             build?.Invoke(built, builtNode);
-            this.Manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-            _ = this.Manager.SetupGet(value => value.CurrentProject).Returns(project);
             this.Documents = new TestDocumentArea();
             var metadata = TestScenes.Open(built, layout: layout?.Invoke(builtNode));
             scene = metadata.Scene;
@@ -307,8 +303,6 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
             this.openDocuments.Add(metadata);
             this.Documents.Activate(metadata.Document);
         }
-
-        public Mock<IProjectManagerService> Manager { get; }
 
         public TestDocumentArea Documents { get; }
 
@@ -342,7 +336,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         }
 
         public SceneExplorerViewModel Build(ISceneViews? views = null)
-            => new(this.Manager.Object, Mock.Of<IRouter>(), this.Documents,
+            => new(Mock.Of<IRouter>(), this.Documents,
                 this.OpenDocuments,
                 new SceneSelectionService(),
                 views: views);

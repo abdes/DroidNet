@@ -26,6 +26,7 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -94,7 +95,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
             return (Path.GetRelativePath(this.directory.FullName, Path.Combine(this.publishedOutputRoot!, "Materials")), "Published/Content/Materials");
         }
 
-        this.Projects.Activate(this.Projects.ActiveProject! with { AuthoringMounts = [new("Game", "Content")] });
+        this.Session.ChangeContext(this.Session.Context with { AuthoringMounts = [new("Game", "Content")] });
         return ("Content/Materials", "Game/Materials");
     }
 
@@ -130,17 +131,17 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
             info.AuthoringMounts.Add(new(cookedAlias, ".cooked"));
         }
 
-        this.Projects.Activate(ProjectContext.FromProjectInfo(info, this.fileSystem));
-        this.publications = new(this.Projects.ActiveProject!.ProjectId, this.Projects.ActiveProject.ProjectRoot);
+        this.Session = new(ProjectContext.FromProjectInfo(info, this.fileSystem));
+        this.publications = new(this.Session.Context.ProjectId, this.Session.Context.ProjectRoot);
         var mountChanges = new Mock<IContentMountChanges>();
         _ = mountChanges.Setup(value => value.ChangeMountsAsync(It.IsAny<ProjectContext>(), It.IsAny<ProjectInfo>(), It.IsAny<CancellationToken>()))
             .Callback((ProjectContext _, ProjectInfo candidate, CancellationToken _) =>
             {
                 this.MountChanges++;
-                this.Projects.Activate(ProjectContext.FromProjectInfo(candidate, this.fileSystem));
+                this.Session.ChangeContext(ProjectContext.FromProjectInfo(candidate, this.fileSystem));
             })
             .ReturnsAsync(true);
-        this.container.RegisterInstance<IProjectContextService>(this.Projects);
+        this.container.RegisterInstance<IProjectSession>(this.Session);
         var storage = new NativeStorageProvider(new RealFileSystem());
         this.container.RegisterInstance<IStorageProvider>(storage);
         this.container.RegisterInstance<ICookPublicationReader>(this.publications);
@@ -168,10 +169,10 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         this.container.RegisterInstance(Mock.Of<IAssetAuthoring>());
         this.container.RegisterInstance(Mock.Of<ICodeEditorService>());
         // The fixture's container stands in for the explorer's window.
-        this.Explorer = new(new ScopeFactory(), ScopeFactory.CreateRoot(this.container), Mock.Of<IRouter>(), this.Projects, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
+        this.Explorer = new(new ScopeFactory(), ScopeFactory.CreateRoot(this.container), Mock.Of<IRouter>(), this.Session, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
     }
 
-    public ProjectContextService Projects { get; } = new();
+    public TestSession Session { get; }
 
     public AssetEntry Material { get; }
 
@@ -226,7 +227,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
                 VirtualPath = AssetPath.Parse("/Art/Shared.omat"),
             },
         };
-        this.Projects.Activate(this.Projects.ActiveProject! with { LocalFolderMounts = [new("Library", FileSystemPath.From(root))] });
+        this.Session.ChangeContext(this.Session.Context with { LocalFolderMounts = [new("Library", FileSystemPath.From(root))] });
         _ = this.Provider.Setup(provider => provider.ResolveAsync(item.Identity, It.IsAny<CancellationToken>())).ReturnsAsync(item);
         this.items.OnNext([item]);
         return item;
@@ -242,6 +243,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
     {
         this.Explorer.Dispose();
         this.container.Dispose();
+        this.Session.Dispose();
         this.items.Dispose();
         this.directory.Delete(recursive: true);
     }

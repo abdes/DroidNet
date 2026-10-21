@@ -21,15 +21,8 @@ public sealed partial class ContentPipelineService
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Reliability", "CA2025:Ensure tasks using IDisposable instances complete before the instances are disposed", Justification = "The gate owns the lease: this method clears its own reference before handing the lease over, so only the gate disposes it, after the drain.")]
     public async Task<CookedOutputReport> InspectCookedOutputAsync(AssetPath? scopeUri, CancellationToken cancellationToken, bool validate = false, ProjectContext? expectedProject = null)
     {
-        var project = expectedProject ?? this.RequireActiveProject();
-        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        using var projectChanges = this.projectContextService.ProjectChanged.Subscribe(current =>
-        {
-            if (!ReferenceEquals(current, project))
-            {
-                cancellation.Cancel();
-            }
-        });
+        var project = expectedProject ?? this.session.Context;
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.session.Lifetime);
         var token = cancellation.Token;
         token.ThrowIfCancellationRequested();
         var publicationRead = await this.publication.AcquireReadAsync(project, token).ConfigureAwait(false);

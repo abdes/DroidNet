@@ -75,6 +75,8 @@ public sealed class ContentMountsViewModelTests
         _ = model.ValidateName(".published", ContentMountKind.Derived).Should().Be(VirtualPathError.InvalidMountName.ToMessage());
         _ = model.ValidateName("Published", ContentMountKind.Derived).Should().BeNull();
         _ = model.ValidateName("Prop library", ContentMountKind.LocalLibrary).Should().BeNull();
+        _ = model.ValidateName("project", ContentMountKind.Derived).Should().NotBeNull("the project's own files have that mount");
+        _ = model.ValidateName("Project", ContentMountKind.LocalLibrary).Should().NotBeNull("a library's name is its mount's");
     }
 
     /// <summary>A rename is checked when it is accepted, and an unfinished one blocks Apply until it is valid.</summary>

@@ -93,7 +93,7 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
             _ = fixture.Folders.SelectedItem.Should().NotBeNull("the mounted folder must become the tree selection");
             _ = fixture.Folders.SelectedItem!.Label.Should().Be("Cooked");
         }
-        _ = fixture.Projects.ActiveProject!.AuthoringMounts.Should().ContainSingle(mount => mount.RelativePath == ".cooked");
+        _ = fixture.Session.Context.AuthoringMounts.Should().ContainSingle(mount => mount.RelativePath == ".cooked");
         _ = fixture.MountChanges.Should().Be(persisted ? 0 : 1);
     });
 
@@ -107,7 +107,7 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
     {
         using var fixture = new ExplorerRevealFixture();
         await fixture.OpenAsync().ConfigureAwait(true);
-        var library = Path.Combine(fixture.Projects.ActiveProject!.ProjectRoot.FullPath, ".cooked", "main");
+        var library = Path.Combine(fixture.Session.Context.ProjectRoot.FullPath, ".cooked", "main");
         _ = Directory.CreateDirectory(library);
         await File.WriteAllBytesAsync(Path.Combine(library, "container.index.bin"), [], this.TestContext.CancellationToken).ConfigureAwait(true);
         _ = fixture.Dialogs.Setup(value => value.ShowAsync(It.IsAny<DialogSpec>(), It.IsAny<CancellationToken>()))
@@ -139,12 +139,12 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
         _ = view.ViewModel.Should().BeSameAs(fixture.Folders);
         await fixture.Folders.MountLocalFolderCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
-        _ = fixture.Projects.ActiveProject!.LocalFolderMounts.Should().ContainSingle(mount => mount.Name == "Examples");
+        _ = fixture.Session.Context.LocalFolderMounts.Should().ContainSingle(mount => mount.Name == "Examples");
         _ = fixture.Folders.ShownItems.Should().Contain(item => item is VirtualFolderMountTreeItemAdapter && item.Label == "Examples", fixture.Diagnostics);
         var displayed = view.FindDescendant<DynamicTree>()!.DisplayedItems.Should().BeAssignableTo<IEnumerable<ITreeItem>>().Subject;
         _ = displayed.Should().Contain(item => item.Label == "Examples");
         _ = view.FindDescendant<TextBlock>(text => text.Text == "Examples").Should().NotBeNull();
-        _ = Directory.CreateDirectory(Path.Combine(fixture.Projects.ActiveProject.ProjectRoot.FullPath, "Refreshed"));
+        _ = Directory.CreateDirectory(Path.Combine(fixture.Session.Context.ProjectRoot.FullPath, "Refreshed"));
         await fixture.Explorer.RefreshCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Folders.ShownItems.Should().Contain(item => item is VirtualFolderMountTreeItemAdapter && item.Label == "Examples", fixture.Diagnostics);
@@ -196,6 +196,6 @@ public sealed partial class ExplorerRevealTests : DroidNet.Tests.VisualUserInter
         _ = fixture.Layout.SelectedAsset!.Identity.Should().Be(item.Identity);
         _ = fixture.Layout.SelectedAsset.DisplayPath.Should().Be("/Library/Materials/Shared.omat");
         _ = fixture.Explorer.Query.SearchText.Should().BeEmpty();
-        _ = fixture.Projects.ActiveProject!.AuthoringMounts.Should().NotContain(mount => mount.RelativePath == ".cooked");
+        _ = fixture.Session.Context.AuthoringMounts.Should().NotContain(mount => mount.RelativePath == ".cooked");
     });
 }

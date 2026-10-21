@@ -51,8 +51,13 @@ public partial class ContentFoldersViewModel
     // ordinary source changes leave the tree alone.
     private async Task RefreshPublishedFoldersAsync()
     {
-        if (this.selectionDisposed || projectContextService.ActiveProject is not { } project
-            || !project.AuthoringMounts.Any(static mount => string.Equals(mount.RelativePath.Replace('\\', '/').Trim('/'), ".cooked", StringComparison.OrdinalIgnoreCase)))
+        if (this.selectionDisposed)
+        {
+            return;
+        }
+
+        var project = session.Context;
+        if (!project.AuthoringMounts.Any(static mount => string.Equals(mount.RelativePath.Replace('\\', '/').Trim('/'), ".cooked", StringComparison.OrdinalIgnoreCase)))
         {
             return;
         }
@@ -90,7 +95,7 @@ public partial class ContentFoldersViewModel
         }
 
         using var selected = await publications.AcquireReadAsync(project, CancellationToken.None).ConfigureAwait(true);
-        return ReferenceEquals(project, projectContextService.ActiveProject)
+        return ReferenceEquals(project, session.Context)
             && selected.ProjectOutputPaths.Distinct(StringComparer.Ordinal).SequenceEqual(cooked.CookedVirtualPaths!, StringComparer.Ordinal);
     }
 
@@ -141,7 +146,7 @@ public partial class ContentFoldersViewModel
         }
 
         var folder = FileSystemPath.From(path);
-        var wasLocal = projectContextService.ActiveProject?.LocalFolderMounts.Any(mount => mount.Root == folder) == true;
+        var wasLocal = session.Context.LocalFolderMounts.Any(mount => mount.Root == folder);
         if (!wasLocal)
         {
             relative ??= GetRelativeMountPath(FileSystemPath.From(this.projectRoot!.ProjectRootFolder.Location), folder);
@@ -164,7 +169,7 @@ public partial class ContentFoldersViewModel
         {
             var location = isProjectRelative ? storage.NormalizeRelativeTo(root.ProjectRootFolder.Location, backingPath) : backingPath;
             var folder = await storage.GetFolderFromPathAsync(location).ConfigureAwait(true);
-            if (this.selectionDisposed || !ReferenceEquals(context, projectContextService.ActiveProject))
+            if (this.selectionDisposed || !ReferenceEquals(context, session.Context))
             {
                 return;
             }

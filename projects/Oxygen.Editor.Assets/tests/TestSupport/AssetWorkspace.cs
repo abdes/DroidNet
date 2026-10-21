@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
 using Testably.Abstractions;
@@ -12,6 +11,8 @@ namespace Oxygen.Editor.Assets.TestSupport;
 /// <summary>A temporary project folder with one <c>Content</c> authoring mount, deleted on disposal.</summary>
 internal sealed partial class AssetWorkspace : IDisposable
 {
+    private readonly List<TestSession> sessions = [];
+
     /// <summary>Initializes a new instance of the <see cref="AssetWorkspace"/> class.</summary>
     public AssetWorkspace()
     {
@@ -28,20 +29,24 @@ internal sealed partial class AssetWorkspace : IDisposable
     public string SourcePath(string relative)
         => Path.Combine(this.Root.FullPath, relative.Replace('/', Path.DirectorySeparatorChar));
 
-    /// <summary>Saves a project file for this folder and activates it.</summary>
-    /// <returns>A project context service whose active project is this workspace.</returns>
-    public ProjectContextService ActivateProject()
+    /// <summary>Saves a project file for this folder and opens a session of it, which the workspace disposes.</summary>
+    /// <returns>The session of the project in this workspace.</returns>
+    public TestSession OpenSession()
     {
-        var service = new ProjectContextService();
-        service.Activate(
-            TestProject.Create(new RealFileSystem(), this.Root.FullPath).Context with { Name = "Test" });
-        _ = TestProject.SaveProjectFile(service.ActiveProject!);
-        return service;
+        var session = new TestSession(TestProject.Create(new RealFileSystem(), this.Root.FullPath).Context with { Name = "Test" });
+        this.sessions.Add(session);
+        _ = TestProject.SaveProjectFile(session.Context);
+        return session;
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
+        foreach (var session in this.sessions)
+        {
+            session.Dispose();
+        }
+
         if (Directory.Exists(this.Root.FullPath))
         {
             Directory.Delete(this.Root.FullPath, recursive: true);

@@ -61,12 +61,13 @@ public sealed partial class GeometryViewModel
     [RelayCommand]
     public async Task ClearUnresolvedMaterialSlotsAsync()
     {
-        if (this.disposed || !this.IsInputEnabled || this.projectContexts.ActiveProject is not { } project
+        if (this.disposed || !this.IsInputEnabled
             || this.selectedItems is not { Count: > 0 } selected || this.authoringProvider?.Invoke() is not { } authoring)
         {
             return;
         }
 
+        var project = this.session.Context;
         var nodes = selected.ToList();
         var built = await MaterialSlotEdits.ClearUnresolvedAsync(this.materialSlots, project, authoring.Scene, nodes.ConvertAll(static node => node.Id)).ConfigureAwait(true);
         if (built.Edit is { } edit)
@@ -94,13 +95,13 @@ public sealed partial class GeometryViewModel
         this.slotRefresh = request;
         var nodes = this.selectedItems?.ToList() ?? [];
         var geometryUri = nodes.FirstOrDefault()?.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry;
-        var project = this.projectContexts.ActiveProject;
+        var project = this.session.Context;
         this.IsMaterialSlotLoading = true;
         try
         {
-            if (nodes.Count == 0 || geometryUri is null || project is null)
+            if (nodes.Count == 0 || geometryUri is null)
             {
-                this.SetMaterialSlotsUnavailable("Select geometry in an active project to view its material slots.");
+                this.SetMaterialSlotsUnavailable("Select geometry to view its material slots.");
                 return;
             }
 
@@ -119,7 +120,7 @@ public sealed partial class GeometryViewModel
 
             var inventory = await this.materialSlots.ReadAsync(project, geometryUri, request.Token).ConfigureAwait(true);
             if (request.IsCancellationRequested || !this.IsCurrentSelection(nodes)
-                || !ReferenceEquals(project, this.projectContexts.ActiveProject)
+                || !ReferenceEquals(project, this.session.Context)
                 || nodes.Exists(node => node.Components.OfType<GeometryComponent>().FirstOrDefault()?.Geometry != geometryUri))
             {
                 return;

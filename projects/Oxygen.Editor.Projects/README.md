@@ -141,6 +141,19 @@ stateDiagram-v2
     end note
 ```
 
+### Project Session
+
+`IProjectSession` is an open project: its `ProjectContext`, the loaded
+`IProject`, the project's `Settings` and the `Lifetime` token, cancelled when
+the session starts to close. Every service, window and panel of the project
+receives its session, reads `Context` when it acts, and runs long work under
+that token. A content mount change replaces `Context` and raises
+`ContextChanged`; `UpdateSettings` replaces the settings and raises
+`SettingsChanged`. `IProjectSessionHost` opens and closes the one session the
+editor has at a time; the composition root implements it, because it composes
+the session's scope. `IProjectManagerService` loads, stages, accepts and saves
+projects; it exposes no current project.
+
 ### ProjectManagerService Responsibilities
 
 1. **Project Creation**
@@ -225,9 +238,9 @@ var projectInfo = await service.LoadProjectInfoAsync(
   projectFolderPath: @"C:\Projects\MyGame",
   cancellationToken: ct);
 
-// 2) Load the project and discover scene files
-var ok = await service.LoadProjectAsync(projectInfo!);
-var project = service.CurrentProject;
+// 2) Stage the project, then accept it; the editor opens its session with it
+var staged = await service.StageProjectLoadAsync(projectInfo!);
+var project = service.AcceptProjectLoad(staged!);
 ```
 
 ### Loading Scenes

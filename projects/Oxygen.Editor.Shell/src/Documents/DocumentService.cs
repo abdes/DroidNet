@@ -151,7 +151,7 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
         }
         else
         {
-            await this.inputCommitter.CommitAsync().ConfigureAwait(true);
+            await this.inputCommitter.CommitAsync(this.area.Window).ConfigureAwait(true);
             _ = await document.SaveAsync().ConfigureAwait(true);
         }
 
@@ -194,7 +194,7 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
         ArgumentNullException.ThrowIfNull(document);
         try
         {
-            await this.inputCommitter.CommitAsync().ConfigureAwait(true);
+            await this.inputCommitter.CommitAsync(this.area.Window).ConfigureAwait(true);
             var result = await document.ReloadAsync().ConfigureAwait(true);
             return result.Succeeded
                 ? new(Succeeded: true, "Reloaded from disk. Unsaved changes and Undo/Redo history were discarded.")
@@ -233,7 +233,7 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
 
         try
         {
-            await this.inputCommitter.CommitAsync().ConfigureAwait(true);
+            await this.inputCommitter.CommitAsync(this.area.Window).ConfigureAwait(true);
             var saved = await document.SaveCopyAsync(copy).ConfigureAwait(true);
             var message = saved.Succeeded
                 ? $"Saved “{typed}” as a separate asset. The original is still unsaved; keep it open or explicitly discard its changes."

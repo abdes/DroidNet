@@ -30,7 +30,7 @@ internal sealed partial class SceneContentDemand : IDisposable
     private readonly OpenDocuments documents;
     private readonly IAssetFeed assets;
     private readonly IContentPipelineService pipeline;
-    private readonly IProjectContextService projects;
+    private readonly IProjectSession session;
     private readonly ILogger logger;
     private readonly List<FollowedDocument> followed = [];
     private bool disposed;
@@ -39,14 +39,14 @@ internal sealed partial class SceneContentDemand : IDisposable
     /// <param name="documents">The workspace's open documents.</param>
     /// <param name="assets">Resolves each asset's identity and cook state.</param>
     /// <param name="pipeline">Cooks an asset for preview.</param>
-    /// <param name="projects">The active project.</param>
+    /// <param name="session">The project session, whose current content mounts a demand cooks in.</param>
     /// <param name="loggerFactory">The optional logger factory.</param>
-    public SceneContentDemand(OpenDocuments documents, IAssetFeed assets, IContentPipelineService pipeline, IProjectContextService projects, ILoggerFactory? loggerFactory = null)
+    public SceneContentDemand(OpenDocuments documents, IAssetFeed assets, IContentPipelineService pipeline, IProjectSession session, ILoggerFactory? loggerFactory = null)
     {
         this.documents = documents ?? throw new ArgumentNullException(nameof(documents));
         this.assets = assets ?? throw new ArgumentNullException(nameof(assets));
         this.pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
-        this.projects = projects ?? throw new ArgumentNullException(nameof(projects));
+        this.session = session ?? throw new ArgumentNullException(nameof(session));
         this.logger = loggerFactory?.CreateLogger<SceneContentDemand>() ?? NullLogger<SceneContentDemand>.Instance;
         this.documents.Opened += this.OnDocumentOpened;
         this.documents.Closed += this.OnDocumentClosed;
@@ -172,7 +172,8 @@ internal sealed partial class SceneContentDemand : IDisposable
     // A demand still cooking is kept; one cancelled while its cook unwinds, as by an undo then a redo, is replaced.
     private void StartDemand(FollowedDocument entry, AssetPath reference)
     {
-        if ((entry.Demands.TryGetValue(reference, out var existing) && !existing.IsCancelled) || this.projects.ActiveProject is not { } project
+        var project = this.session.Context;
+        if ((entry.Demands.TryGetValue(reference, out var existing) && !existing.IsCancelled)
             || entry.Content?.Project.ProjectId != project.ProjectId)
         {
             return;
@@ -191,7 +192,7 @@ internal sealed partial class SceneContentDemand : IDisposable
         {
             var asset = await this.assets.ResolveAsync(demand.Asset, demand.Cancellation.Token).ConfigureAwait(true);
             demand.Cancellation.Token.ThrowIfCancellationRequested();
-            if (asset?.CanCook != true || !asset.IsSelectable || !ReferenceEquals(this.projects.ActiveProject, demand.Project)
+            if (asset?.CanCook != true || !asset.IsSelectable || !ReferenceEquals(this.session.Context, demand.Project)
                 || asset.CookStatus?.Freshness is not (AssetCookFreshness.NeedsCooking or AssetCookFreshness.OutOfDate))
             {
                 return;

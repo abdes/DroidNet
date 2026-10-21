@@ -18,9 +18,14 @@ using Testably.Abstractions.Testing;
 namespace Oxygen.Editor.Scripting.Tests;
 
 /// <summary>
-/// The script facts hold the open project's scripts as their analyzer reads them, follow each change of a source, keep
-/// a broken declaration's last valid parameters, and read library scripts through the library port.
+/// The script facts hold the session project's scripts as their analyzer reads them, follow each change of a source and
+/// of the content mounts, keep a broken declaration's last valid parameters, and read library scripts through the
+/// library port.
 /// </summary>
+/// <remarks>
+/// The session starts with the project mounting no content; a test opens the project's scripts by giving it its
+/// <c>Content</c> mount, as a mount change does, after it has subscribed to what the facts raise.
+/// </remarks>
 [TestClass]
 public sealed partial class ScriptFactsTests : IDisposable
 {
@@ -39,7 +44,7 @@ public sealed partial class ScriptFactsTests : IDisposable
     private static readonly ScriptParameter Speed = new() { Name = "speed", Kind = ScriptParameterKind.FloatParameter, Default = ScriptValue.FromFloat(1f) };
 
     private readonly TestProject project = TestProject.Create(new MockFileSystem());
-    private readonly ProjectContextService projects = new();
+    private readonly TestSession session;
     private readonly Subject<AssetChange> changes = new();
     private readonly FakeScriptAnalyzer analyzer = new();
     private readonly FakeScriptLibrary library = new();
@@ -58,8 +63,9 @@ public sealed partial class ScriptFactsTests : IDisposable
             Problems = [new ScriptProblem(DiagnosticSeverity.Error, "S0101", "unexpected symbol", "rendered") { Line = 1, Column = 43 }],
         });
         this.results = new RecordingResults(this.published);
+        this.session = new TestSession(this.project.Context with { AuthoringMounts = [] });
         this.facts = new ScriptFacts(
-            this.projects,
+            this.session,
             new Catalog(this.changes),
             this.project.Context.FileSystem,
             this.analyzer,
@@ -73,6 +79,7 @@ public sealed partial class ScriptFactsTests : IDisposable
     public void Dispose()
     {
         this.facts.Dispose();
+        this.session.Dispose();
         this.changes.Dispose();
     }
 
@@ -160,7 +167,7 @@ public sealed partial class ScriptFactsTests : IDisposable
     {
         _ = this.project.WriteFile(MoveFile, MoveSource);
         this.analyzer.MakeUnavailable();
-        this.projects.Activate(this.project.Context);
+        this.session.ChangeContext(this.project.Context);
         _ = this.facts.All.Should().BeEmpty();
 
         await this.UntilAsync(() => this.facts.All.Count == 1, this.analyzer.MakeAvailable).ConfigureAwait(false);
@@ -177,7 +184,7 @@ public sealed partial class ScriptFactsTests : IDisposable
         this.analyzer.Set("second", ScriptAnalysis.Unavailable("missing native library"));
 
         // The scan of the opened project reports on its own thread; a forced analysis afterwards reports nothing more.
-        this.projects.Activate(this.project.Context);
+        this.session.ChangeContext(this.project.Context);
         await this.results.FirstPublished.WaitAsync(Patience, this.TestContext.CancellationToken).ConfigureAwait(false);
         await this.facts.RefreshAsync(force: true, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -186,12 +193,12 @@ public sealed partial class ScriptFactsTests : IDisposable
     }
 
     [TestMethod]
-    public async Task ClosingTheProjectForgetsItsScripts()
+    public async Task UnmountingTheContentForgetsItsScripts()
     {
         _ = this.project.WriteFile(MoveFile, MoveSource);
         await this.OpenAsync().ConfigureAwait(false);
 
-        this.projects.Close();
+        this.session.ChangeContext(this.project.Context with { AuthoringMounts = [] });
 
         _ = this.facts.All.Should().BeEmpty();
         _ = this.facts.Problems.Should().BeEmpty();
@@ -204,7 +211,7 @@ public sealed partial class ScriptFactsTests : IDisposable
         var broken = AssetPath.Parse("/Engine/Scripts/broken.oscript");
         this.library.Add(rotate);
         this.library.Fail(broken, new InvalidDataException("the report does not match its schema"));
-        this.projects.Activate(this.project.Context);
+        this.session.ChangeContext(this.project.Context);
 
         var found = await this.facts.ReadLibraryAsync(rotate.Identity, this.TestContext.CancellationToken).ConfigureAwait(false);
         var failed = await this.facts.ReadLibraryAsync(broken, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -238,24 +245,25 @@ public sealed partial class ScriptFactsTests : IDisposable
             SynchronizationContext.SetSynchronizationContext(previous);
         }
 
-        this.projects.Activate(this.project.Context);
+        this.session.ChangeContext(this.project.Context);
 
         _ = (await raised.Task.WaitAsync(Patience, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeSameAs(context);
     }
 
     [TestMethod]
-    public async Task SwitchingProjectsReplacesTheScriptsWithTheNewProjectsOwn()
+    public async Task MovingTheContentMountReplacesTheScriptsWithThoseOfTheNewFolder()
     {
         _ = this.project.WriteFile(MoveFile, MoveSource);
         await this.OpenAsync().ConfigureAwait(false);
-        var other = TestProject.Create(this.project.Context.FileSystem, @"C:\Other");
-        var file = other.WriteFile(RunFile, MoveSource);
+        var moved = this.project.Context with { AuthoringMounts = [new ProjectMountPoint(TestProject.ContentMount, "Other")] };
+        var file = this.project.Root.Combine("Other").Combine("Player").Combine("run.lua");
+        WriteRaw(this.project, file);
 
-        await this.UntilAsync(() => this.facts.Find(Run) is not null, () => this.projects.Activate(other.Context)).ConfigureAwait(false);
+        await this.UntilAsync(() => this.facts.Find(Run) is not null, () => this.session.ChangeContext(moved)).ConfigureAwait(false);
 
         _ = this.facts.Find(Move).Should().BeNull();
         _ = this.facts.All.Should().ContainSingle().Which.SourcePath.Should().Be(file);
-        _ = this.analyzer.Analyzed.Should().Equal("Content/Player/move.lua", "Content/Player/run.lua");
+        _ = this.analyzer.Analyzed.Should().Equal("Content/Player/move.lua", "Other/Player/run.lua");
     }
 
     [TestMethod]
@@ -311,12 +319,13 @@ public sealed partial class ScriptFactsTests : IDisposable
     [TestMethod]
     public async Task TheScanSkipsDotFoldersOutputFoldersAndFilesThatAreNotScripts()
     {
-        var other = TestProject.Create(this.project.Context.FileSystem, @"C:\Outputs", [TestProject.ContentMount, ".cooked"]);
-        _ = other.WriteFile(MoveFile, MoveSource);
-        _ = other.WriteFile("/Content/readme.txt", MoveSource);
-        WriteRaw(other, other.Root.Combine(TestProject.ContentMount).Combine(".hidden").Combine("a.lua"));
-        WriteRaw(other, other.Root.Combine(".cooked").Combine("a.lua"));
-        await this.UntilAsync(() => this.facts.All.Count > 0, () => this.projects.Activate(other.Context)).ConfigureAwait(false);
+        var outputs = TestProject.Create(this.project.Context.FileSystem, this.project.Root.FullPath, [TestProject.ContentMount, ".cooked"]);
+        _ = outputs.WriteFile(MoveFile, MoveSource);
+        _ = outputs.WriteFile("/Content/readme.txt", MoveSource);
+        WriteRaw(outputs, outputs.Root.Combine(TestProject.ContentMount).Combine(".hidden").Combine("a.lua"));
+        WriteRaw(outputs, outputs.Root.Combine(".cooked").Combine("a.lua"));
+        var mounted = this.project.Context with { AuthoringMounts = outputs.Context.AuthoringMounts };
+        await this.UntilAsync(() => this.facts.All.Count > 0, () => this.session.ChangeContext(mounted)).ConfigureAwait(false);
 
         // A scan the test awaits analyzes every file it lists, so a file the scan should skip would show by now.
         await this.facts.RefreshAsync(force: false, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -400,7 +409,7 @@ public sealed partial class ScriptFactsTests : IDisposable
     {
         var rotate = AssetPath.Parse("/Engine/Scripts/rotate.oscript");
         this.library.Fail(rotate, new InvalidOperationException("the library is not mounted"));
-        this.projects.Activate(this.project.Context);
+        this.session.ChangeContext(this.project.Context);
 
         var read = await this.facts.ReadLibraryAsync(rotate, this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -414,7 +423,7 @@ public sealed partial class ScriptFactsTests : IDisposable
         var raised = new TaskCompletionSource<ScriptChangedEventArgs>(TaskCreationOptions.RunContinuationsAsynchronously);
         this.facts.Changed += (_, args) => _ = raised.TrySetResult(args);
 
-        this.projects.Activate(this.project.Context);
+        this.session.ChangeContext(this.project.Context);
 
         var args = await raised.Task.WaitAsync(Patience, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = args.Script.Should().BeNull();
@@ -427,7 +436,7 @@ public sealed partial class ScriptFactsTests : IDisposable
     }
 
     private Task OpenAsync()
-        => this.UntilAsync(() => this.facts.All.Count > 0, () => this.projects.Activate(this.project.Context));
+        => this.UntilAsync(() => this.facts.All.Count > 0, () => this.session.ChangeContext(this.project.Context));
 
     private Task ChangeAsync(AssetChange change, Func<bool> done) => this.UntilAsync(done, () => this.changes.OnNext(change));
 

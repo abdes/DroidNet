@@ -5,6 +5,7 @@
 using System.Diagnostics;
 using System.Reactive.Linq;
 using DroidNet.Aura.Windowing;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
 using Microsoft.EntityFrameworkCore;
@@ -14,6 +15,7 @@ using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
+using Oxygen.Editor.Shell.Windows;
 
 namespace Oxygen.Editor.Services;
 
@@ -34,11 +36,12 @@ namespace Oxygen.Editor.Services;
 ///     </para>
 /// </remarks>
 [System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "injected into public Application class")]
-public sealed partial class WindowPlacementService : IDisposable
+public sealed partial class WindowPlacementService : IWindowCloseParticipant, IDisposable
 {
     private readonly ILogger logger;
     private readonly IWindowManagerService windowManager;
     private readonly IRouter router;
+    private readonly HostingContext hosting;
     private readonly IDisposable wmSubscription;
     private readonly IDisposable routerSubscription;
     private readonly Func<PersistentState> contextFactory;
@@ -52,17 +55,18 @@ public sealed partial class WindowPlacementService : IDisposable
     /// <param name="windowManager">The window manager service used to manage window lifecycles and placement.</param>
     /// <param name="router">The router used for navigation context and events.</param>
     /// <param name="contextFactory">A factory function to create instances of <see cref="PersistentState"/> for data persistence.</param>
+    /// <param name="hosting">The UI thread, where a closing window's placement is read.</param>
     /// <param name="loggerFactory">An optional logger factory for logging.</param>
-    public WindowPlacementService(IWindowManagerService windowManager, IRouter router, Func<PersistentState> contextFactory, ILoggerFactory? loggerFactory = null)
+    public WindowPlacementService(IWindowManagerService windowManager, IRouter router, Func<PersistentState> contextFactory, HostingContext hosting, ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<WindowPlacementService>() ?? NullLoggerFactory.Instance.CreateLogger<WindowPlacementService>();
 
         this.windowManager = windowManager;
         this.router = router;
         this.contextFactory = contextFactory;
+        this.hosting = hosting;
 
         this.windowManager.WindowClosed += this.StopTrackingWindow;
-        this.windowManager.WindowClosing += this.TrySavePlacement;
         this.wmSubscription = this.windowManager.WindowEvents
             .Where(e => e.EventType == WindowLifecycleEventType.Created)
             .Subscribe(e => this.TryRestorePlacementForNewWindow(e.Context));
@@ -82,6 +86,19 @@ public sealed partial class WindowPlacementService : IDisposable
             });
 
         this.LogCreated();
+    }
+
+    /// <inheritdoc/>
+    public WindowCloseLevel Level => WindowCloseLevel.Window;
+
+    /// <inheritdoc/>
+    public Task<WindowCloseStep?> PrepareAsync(WindowClose close)
+    {
+        ArgumentNullException.ThrowIfNull(close);
+
+        // A window's placement is saved once its close is certain, before it is destroyed.
+        var window = close.Window;
+        return Task.FromResult<WindowCloseStep?>(new WindowCloseStep(finalize: () => this.TrySavePlacement(window)));
     }
 
     /// <inheritdoc/>
@@ -113,7 +130,6 @@ public sealed partial class WindowPlacementService : IDisposable
         }
 
         this.windowManager.WindowClosed -= this.StopTrackingWindow;
-        this.windowManager.WindowClosing -= this.TrySavePlacement;
 
         this.wmSubscription.Dispose();
         this.routerSubscription.Dispose();
@@ -121,17 +137,17 @@ public sealed partial class WindowPlacementService : IDisposable
         this.isDisposed = true;
     }
 
-    private async Task TrySavePlacement(object? sender, WindowClosingEventArgs args)
+    private async Task TrySavePlacement(WindowId windowId)
     {
         // Check if we are tracking placement for such window (we should be).
-        _ = this.windows.TryGetValue(args.WindowId, out var placementInfo);
-        Debug.Assert(placementInfo is not null, message: $"WindowPlacementService: unexpected window (Id={args.WindowId.Value}) being closed that is not tracked.");
+        _ = this.windows.TryGetValue(windowId, out var placementInfo);
+        Debug.Assert(placementInfo is not null, message: $"WindowPlacementService: unexpected window (Id={windowId.Value}) being closed that is not tracked.");
 
-        // Get the current placement information for the window being closed, and save it.
-        var placement = this.windowManager.GetWindowPlacementString(args.WindowId);
+        // The placement is read from the window on the UI thread: a close finalizes on whichever thread it reached.
+        var placement = await this.hosting.Dispatcher.DispatchAsync(() => this.windowManager.GetWindowPlacementString(windowId)).ConfigureAwait(false);
         if (placement is not null)
         {
-            Debug.Assert(placementInfo.Key is not null, message: $"WindowPlacementService: unexpected null placement key for window (Id={args.WindowId.Value}).");
+            Debug.Assert(placementInfo.Key is not null, message: $"WindowPlacementService: unexpected null placement key for window (Id={windowId.Value}).");
             await this.TrySavePlacementAsync(placementInfo.Key, placement).ConfigureAwait(false);
         }
     }

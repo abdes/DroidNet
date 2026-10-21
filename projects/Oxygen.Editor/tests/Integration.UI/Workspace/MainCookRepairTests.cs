@@ -40,7 +40,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
         using var services = new CatalogWorkloadServices(fixture);
-        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
+        await using var catalog = new AssetCatalog(services.Session, services.Storage, services.EngineContent, services.Publication);
         await using var publication = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
         var uri = AssetPath.Parse("/Content/Scenes/Main.oscene");
         _ = (await services.Pipeline.CookCurrentSceneAsync(uri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
@@ -56,7 +56,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         var retried = services.Runs.Runs.OrderByDescending(static run => run.StartedAt).First();
         _ = retried.OperationId.Should().NotBe(failed.OperationId);
         _ = retried.State.Should().BeOneOf(CookRunState.Succeeded, CookRunState.SucceededWithWarnings);
-        _ = (await services.Pipeline.ReadAsync(services.Projects.ActiveProject!, [uri], timeout.Token).ConfigureAwait(true)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
+        _ = (await services.Pipeline.ReadAsync(services.Session.Context, [uri], timeout.Token).ConfigureAwait(true)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         _ = fixture.Source.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters.Should().Be(100);
         _ = (await fixture.ReadNativeAsync(timeout.Token).ConfigureAwait(true)).AerialPerspectiveStartDepthMeters.Should().Be(100);

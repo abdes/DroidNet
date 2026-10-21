@@ -25,8 +25,8 @@ public sealed partial class AssetFeedTests
         var identity = AssetPath.Parse("/Content/Materials/Red.omat");
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         var catalog = new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
-        var projects = workspace.ActivateProject();
-        projects.Activate(projects.ActiveProject! with { LocalFolderMounts = [new("Library", workspace.Root)] });
+        var projects = workspace.OpenSession();
+        projects.ChangeContext(projects.Context with { LocalFolderMounts = [new("Library", workspace.Root)] });
         var updated = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var known = false;
         var statuses = new Mock<IAssetCookStatusReader>();

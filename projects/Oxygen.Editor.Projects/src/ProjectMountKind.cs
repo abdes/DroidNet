@@ -12,4 +12,10 @@ public enum ProjectMountKind
 
     /// <summary>A local folder mount: a folder outside the project that it lists.</summary>
     LocalFolder = 1,
+
+    /// <summary>
+    /// The project's own files: the project's root folder, which holds what no other mount does, such as its
+    /// configuration and media.
+    /// </summary>
+    ProjectFiles = 2,
 }

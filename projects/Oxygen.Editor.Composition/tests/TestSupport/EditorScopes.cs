@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.IO.Abstractions;
+using DroidNet.Aura.Windowing;
 using DroidNet.Composition;
 using DroidNet.Config;
 using DroidNet.Controls.OutputConsole.Model;
@@ -15,8 +16,12 @@ using DroidNet.TestHelpers;
 using DryIoc;
 using Microsoft.UI;
 using Microsoft.UI.Xaml.Data;
+using Moq;
 using Oxygen.Editor.ContentExplorer;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Routing;
+using Oxygen.Editor.Sessions;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Layout;
 using Oxygen.Editor.Workspace;
@@ -25,8 +30,8 @@ using Testably.Abstractions.Testing;
 namespace Oxygen.Editor.Composition.UI.Tests.TestSupport;
 
 /// <summary>
-///     The editor's scopes as the application builds them: the editor scope over a host-equivalent container, a workspace
-///     window's scope and the Content Explorer's scope under it.
+///     The editor's scopes as the application builds them: the editor scope over a host-equivalent container, a project
+///     session's scope, a workspace window's scope under the session and the Content Explorer's scope under the window.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -35,10 +40,10 @@ namespace Oxygen.Editor.Composition.UI.Tests.TestSupport;
 ///     <c>Program</c> composes them.
 ///     </para>
 ///     <para>
-///     The window and panel scopes are created through the editor's <see cref="ScopeFactory" />, with the modules their
-///     view models use and in the same order, so the factory's undeclared-shadow check runs on them. Their activation is
-///     left out: it starts the preview, the engine and the window's document area, which need a running window. The
-///     topology checks that every activated service is provided by its scope.
+///     The session, window and panel scopes are created through the editor's <see cref="ScopeFactory" />, with the
+///     modules their owners use and in the same order, so the factory's undeclared-shadow check runs on them. Their
+///     activation is left out: it starts the preview, the engine and the window's document area, which need a running
+///     window. The topology checks that every activated service is provided by its scope.
 ///     </para>
 /// </remarks>
 internal sealed class EditorScopes : IAsyncDisposable
@@ -67,6 +72,9 @@ internal sealed class EditorScopes : IAsyncDisposable
     /// <summary>Gets the features of the workspace windows.</summary>
     public IReadOnlyList<IFeatureModule> Features { get; }
 
+    /// <summary>Gets the editor scope's window manager, a fake that <see cref="EditorWindowsFake.ShowWindows" /> configures.</summary>
+    public Mock<IWindowManagerService> Windows { get; } = new();
+
     /// <summary>Creates the editor scope.</summary>
     /// <returns>The editor's scopes.</returns>
     public static async Task<EditorScopes> CreateAsync()
@@ -88,13 +96,22 @@ internal sealed class EditorScopes : IAsyncDisposable
 
         // The host initializes the settings before anything resolves them; here without the user's settings files.
         await host.Resolve<SettingsManager>().InitializeAsync().ConfigureAwait(false);
-        return new EditorScopes(host, hostFactories);
+
+        // Aura's window manager needs a running UI thread: the scopes have a fake one, with no windows open.
+        var scopes = new EditorScopes(host, hostFactories);
+        host.RegisterInstance(scopes.Windows.Object, IfAlreadyRegistered.Replace);
+        _ = scopes.ShowWindows();
+        return scopes;
     }
 
     /// <summary>Gets the registrations of the editor scope that the editor makes, without the bootstrapper's.</summary>
     /// <returns>The editor's registrations in the editor scope.</returns>
     public IReadOnlyList<ServiceRegistrationInfo> EditorRegistrations()
         => [.. ScopeTopology.Owned(this.Root).Where(registration => !this.HostFactories.Contains(registration.Factory.FactoryID))];
+
+    /// <summary>Gets the modules of a project session's scope, as its host creates them.</summary>
+    /// <returns>The session's modules, in registration and activation order.</returns>
+    public static IReadOnlyList<IScopeModule<ISessionLayer>> SessionModules() => ProjectSessionModule.Compose();
 
     /// <summary>Gets the modules of a workspace window's scope, as the workspace view model creates them.</summary>
     /// <returns>The window's modules, in registration and activation order.</returns>
@@ -106,11 +123,30 @@ internal sealed class EditorScopes : IAsyncDisposable
     public static IReadOnlyList<IScopeModule<IPanelLayer>> ExplorerModules()
         => [new RouterScopeModule(new Routes([]), new LocalRouterContext(new object())), new ContentExplorerPanelModule()];
 
-    /// <summary>Creates a workspace window's scope under the editor scope.</summary>
-    /// <returns>The window's scope.</returns>
-    public ScopeHandle CreateWindow()
-        => this.Factory.Create<IWindowLayer>(
+    /// <summary>
+    ///     Creates a project session's scope under the editor scope, with the instances its host registers, for a project
+    ///     on a file system of its own.
+    /// </summary>
+    /// <returns>The session's scope.</returns>
+    public ScopeHandle CreateSession()
+    {
+        var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
+        return this.Factory.Create<ISessionLayer>(
             this.Root,
+            SessionModules().Select(static module => new RegistrationsOf<ISessionLayer>(module)),
+            registrations =>
+            {
+                registrations.RegisterInstance(session.Project);
+                registrations.RegisterInstance<IProjectSession>(session);
+            });
+    }
+
+    /// <summary>Creates a workspace window's scope under a project session's scope.</summary>
+    /// <param name="session">The session's scope.</param>
+    /// <returns>The window's scope.</returns>
+    public ScopeHandle CreateWindow(ScopeHandle session)
+        => this.Factory.Create<IWindowLayer>(
+            session,
             this.WindowModules().Select(static module => new RegistrationsOf<IWindowLayer>(module)),
             window => window.RegisterInstance(new WindowId(1)));
 

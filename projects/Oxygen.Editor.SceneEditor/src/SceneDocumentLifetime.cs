@@ -28,7 +28,7 @@ public sealed partial class SceneDocumentLifetime : ISceneAvailability, IDisposa
     private readonly ILogger logger;
     private readonly IDocumentService documents;
     private readonly IDocumentArea area;
-    private readonly IProjectContextService projectContextService;
+    private readonly IProjectSession session;
     private readonly IProjectUsageService projectUsage;
     private (Guid ProjectId, FileSystemPath ProjectRoot, AssetPath Scene)? previousScene;
     private DocumentId? lastActivated;
@@ -37,20 +37,20 @@ public sealed partial class SceneDocumentLifetime : ISceneAvailability, IDisposa
     /// <summary>Initializes a new instance of the <see cref="SceneDocumentLifetime"/> class.</summary>
     /// <param name="documents">The window's document service.</param>
     /// <param name="area">The window's document area.</param>
-    /// <param name="projectContextService">The active project.</param>
+    /// <param name="session">The project session the window belongs to.</param>
     /// <param name="projectUsage">The project's usage record, which keeps its last scene.</param>
     /// <param name="loggerFactory">The logger factory, if any.</param>
     public SceneDocumentLifetime(
         IDocumentService documents,
         IDocumentArea area,
-        IProjectContextService projectContextService,
+        IProjectSession session,
         IProjectUsageService projectUsage,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<SceneDocumentLifetime>() ?? NullLoggerFactory.Instance.CreateLogger<SceneDocumentLifetime>();
         this.documents = documents;
         this.area = area;
-        this.projectContextService = projectContextService;
+        this.session = session;
         this.projectUsage = projectUsage;
 
         this.documents.Placed += this.OnPlaced;
@@ -63,9 +63,8 @@ public sealed partial class SceneDocumentLifetime : ISceneAvailability, IDisposa
     /// <inheritdoc/>
     public async Task<bool> ReloadPreviousAsync()
         => this.previousScene is { } previous
-            && this.projectContextService.ActiveProject is { } project
-            && project.ProjectId == previous.ProjectId
-            && project.ProjectRoot == previous.ProjectRoot
+            && this.session.Context.ProjectId == previous.ProjectId
+            && this.session.Context.ProjectRoot == previous.ProjectRoot
             && (await this.documents.OpenAsync(previous.Scene).ConfigureAwait(true)).Succeeded;
 
     /// <inheritdoc/>
@@ -85,11 +84,12 @@ public sealed partial class SceneDocumentLifetime : ISceneAvailability, IDisposa
     private void OnPlaced(object? sender, DocumentPlacedEventArgs args)
     {
         var placement = args.Placement;
-        if (placement.Replaced.Count == 0 || this.projectContextService.ActiveProject is not { } project)
+        if (placement.Replaced.Count == 0)
         {
             return;
         }
 
+        var project = this.session.Context;
         this.previousScene = (project.ProjectId, project.ProjectRoot, placement.Replaced[^1]);
         if (!placement.Succeeded)
         {
@@ -110,8 +110,8 @@ public sealed partial class SceneDocumentLifetime : ISceneAvailability, IDisposa
     // identity. The workspace still finds scenes remembered by name before.
     private async Task MarkSceneActivatedAsync(SceneContent content)
     {
-        if (this.projectContextService.ActiveProject is not { } project
-            || content.Project.ProjectId != project.ProjectId
+        var project = this.session.Context;
+        if (content.Project.ProjectId != project.ProjectId
             || content.Project.ProjectRoot != project.ProjectRoot)
         {
             return;

@@ -39,12 +39,16 @@ public sealed partial class TestSceneDocuments : IDisposable
         ArgumentNullException.ThrowIfNull(project);
         this.Project = project;
         this.Files = new GatedFileStore(new NativeAtomicFileStore(project.Context.FileSystem), this);
-        this.Kind = new SceneDocumentKind(project.Context, interaction, redirects);
+        this.Session = new TestSession(project.Context);
+        this.Kind = new SceneDocumentKind(this.Session, interaction, redirects);
         this.Open = new OpenDocuments([this.Kind, .. otherKinds ?? []], this.Files);
     }
 
     /// <summary>Gets the project the scenes belong to.</summary>
     public TestProject Project { get; }
+
+    /// <summary>Gets the project session the scenes open in.</summary>
+    public TestSession Session { get; }
 
     /// <summary>Gets the scene kind every document opens with.</summary>
     public SceneDocumentKind Kind { get; }
@@ -117,7 +121,11 @@ public sealed partial class TestSceneDocuments : IDisposable
     }
 
     /// <inheritdoc/>
-    public void Dispose() => this.Open.Dispose();
+    public void Dispose()
+    {
+        this.Open.Dispose();
+        this.Session.Dispose();
+    }
 
     // The real store, whose reads first wait for what the test set.
     private sealed class GatedFileStore(IAtomicFileStore inner, TestSceneDocuments documents) : IAtomicFileStore

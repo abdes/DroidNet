@@ -195,7 +195,7 @@ public sealed partial class DocumentAreaTests
 
     private sealed class ApprovingPrompt : IDocumentClosePrompt
     {
-        public Task<bool> ConfirmAsync(IReadOnlyList<DocumentCloseItem> documents) => Task.FromResult(true);
+        public Task<bool> ConfirmAsync(WindowId window, IReadOnlyList<DocumentCloseItem> documents) => Task.FromResult(true);
     }
 
     private sealed partial class IgnoredResults : IOperationResultPublisher

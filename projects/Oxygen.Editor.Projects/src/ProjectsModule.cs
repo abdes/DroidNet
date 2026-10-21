@@ -8,7 +8,7 @@ using DryIoc;
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
-///     The project services of the editor scope: the active project, its creation, validation and persistence, the
+///     The project services of the editor scope: the project's creation, validation and persistence, the
 ///     recent projects, and the resolution of authoring targets and cook scopes.
 /// </summary>
 public sealed class ProjectsModule : IScopeModule<IApplicationLayer>
@@ -24,7 +24,6 @@ public sealed class ProjectsModule : IScopeModule<IApplicationLayer>
     {
         ArgumentNullException.ThrowIfNull(scope);
         scope.Register<IProjectValidationService, ProjectValidationService>(Reuse.Singleton);
-        scope.Register<IProjectContextService, ProjectContextService>(Reuse.Singleton);
         scope.Register<IProjectCookScopeProvider, ProjectCookScopeProvider>(Reuse.Singleton);
         scope.Register<IAuthoringTargetResolver, AuthoringTargetResolver>(Reuse.Singleton);
         scope.Register<IProjectCreationService, ProjectCreationService>(Reuse.Singleton);

@@ -21,17 +21,10 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(geometryUri);
-        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        using var projectChanges = this.projectContextService.ProjectChanged.Subscribe(current =>
-        {
-            if (!ReferenceEquals(current, project))
-            {
-                cancellation.Cancel();
-            }
-        });
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.session.Lifetime);
         var token = cancellation.Token;
         cancellationToken.ThrowIfCancellationRequested();
-        if (!ReferenceEquals(this.projectContextService.ActiveProject, project))
+        if (!ReferenceEquals(this.session.Context, project))
         {
             return null;
         }

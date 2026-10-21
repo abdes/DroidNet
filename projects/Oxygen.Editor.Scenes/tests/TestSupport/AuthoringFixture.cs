@@ -188,7 +188,8 @@ public sealed partial class AuthoringFixture : IDisposable
 
     private static async Task<SceneContent> DecodeAsync(TestProject project, SceneData data, DocumentId document, FakeNodeInteraction? interaction, FakeAssetRedirects redirects, HistoryKeeper history)
     {
-        var kind = new SceneDocumentKind(project.Context, interaction, redirects);
+        using var session = new TestSession(project.Context);
+        var kind = new SceneDocumentKind(session, interaction, redirects);
         var file = new DocumentFile(
             project.PathOf($"/Content/{data.Name}{AssetFileTypes.SceneDescriptor}"),
             AssetPath.Parse($"/Content/{data.Name}{AssetFileTypes.Scene}"));

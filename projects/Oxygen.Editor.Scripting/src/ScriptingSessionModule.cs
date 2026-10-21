@@ -9,14 +9,13 @@ using Oxygen.Managed.Assets.Diagnostics;
 namespace Oxygen.Editor.Scripting;
 
 /// <summary>
-///     Script authoring in a workspace window's scope: the script facts and their problems, and the project's script
+///     Script authoring in a project session's scope: the script facts and their problems, and the project's script
 ///     tooling.
 /// </summary>
 /// <remarks>
-///     The script facts follow the window's asset catalog, so they live as long as it does. The project session owns
-///     these services once it exists.
+///     The script facts follow the session's asset catalog and its content mounts, and end with the session.
 /// </remarks>
-public sealed class ScriptingWindowModule : IScopeModule<IWindowLayer>
+public sealed class ScriptingSessionModule : IScopeModule<ISessionLayer>
 {
     /// <inheritdoc />
     public IReadOnlyCollection<Type> Shadows => [];

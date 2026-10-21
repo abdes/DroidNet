@@ -9,14 +9,14 @@ using Oxygen.Managed.Assets.Catalog;
 namespace Oxygen.Editor.Assets;
 
 /// <summary>
-///     The project's assets in a workspace window's scope: the asset catalog, its folders and publication, and the
-///     asset feed over it.
+///     The project's assets in a project session's scope: the asset catalog, its folders and publication, and the asset
+///     feed over it.
 /// </summary>
 /// <remarks>
-///     The Content Explorer's scope reaches the same instances, created by the window's scope whichever scope asks
-///     first. The project session owns these services once it exists.
+///     Every window of the session lists the same assets. A change of the session's content mounts lists them again,
+///     and closing the session disposes them.
 /// </remarks>
-public sealed class AssetsWindowModule : IScopeModule<IWindowLayer>
+public sealed class AssetsSessionModule : IScopeModule<ISessionLayer>
 {
     /// <inheritdoc />
     public IReadOnlyCollection<Type> Shadows => [];

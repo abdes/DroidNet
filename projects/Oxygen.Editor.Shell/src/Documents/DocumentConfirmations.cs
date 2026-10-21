@@ -14,17 +14,16 @@ using Oxygen.Editor.Documents;
 
 namespace Oxygen.Editor.Shell.Documents;
 
-/// <summary>The confirmations of one window, asked as dialogs of that window.</summary>
+/// <summary>The confirmations of the editor's windows, each asked as a dialog of the window that asks it.</summary>
 /// <param name="dialogs">The dialog service.</param>
 /// <param name="windows">The window manager, which finds the window.</param>
-/// <param name="windowId">The window the dialogs belong to.</param>
-public sealed class DocumentConfirmations(IDialogService dialogs, IWindowManagerService windows, WindowId windowId) : IDocumentConfirmations
+public sealed class DocumentConfirmations(IDialogService dialogs, IWindowManagerService windows) : IDocumentConfirmations
 {
     /// <inheritdoc/>
-    public Task<bool> ConfirmReloadAsync(Document document)
+    public Task<bool> ConfirmReloadAsync(WindowId window, Document document)
     {
         ArgumentNullException.ThrowIfNull(document);
-        return this.AskAsync(() => new DialogSpec(
+        return this.AskAsync(window, () => new DialogSpec(
             $"Discard your changes to {document.Title} and reload?",
             new TextBlock { Text = "Its Undo/Redo history is discarded too.", TextWrapping = TextWrapping.Wrap })
         {
@@ -35,7 +34,7 @@ public sealed class DocumentConfirmations(IDialogService dialogs, IWindowManager
     }
 
     /// <inheritdoc/>
-    public Task<bool> ConfirmSaveBeforeAsync(IReadOnlyList<UnsavedDocument> documents, SaveBeforeOperation operation)
+    public Task<bool> ConfirmSaveBeforeAsync(WindowId window, IReadOnlyList<UnsavedDocument> documents, SaveBeforeOperation operation)
     {
         ArgumentNullException.ThrowIfNull(documents);
         var (button, verb, why) = operation switch
@@ -47,7 +46,7 @@ public sealed class DocumentConfirmations(IDialogService dialogs, IWindowManager
             _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, message: null),
         };
         var count = documents.Count == 1 ? "1 document" : string.Create(CultureInfo.CurrentCulture, $"{documents.Count} documents");
-        return this.AskAsync(() => new DialogSpec($"Save {count} and {verb}?", CreateDocumentList(why, documents))
+        return this.AskAsync(window, () => new DialogSpec($"Save {count} and {verb}?", CreateDocumentList(why, documents))
         {
             PrimaryButtonText = $"Save and {button}",
             CloseButtonText = "Cancel",
@@ -56,10 +55,10 @@ public sealed class DocumentConfirmations(IDialogService dialogs, IWindowManager
     }
 
     /// <inheritdoc/>
-    public Task<string?> AskCopyNameAsync(Document document)
+    public Task<string?> AskCopyNameAsync(WindowId window, Document document)
     {
         ArgumentNullException.ThrowIfNull(document);
-        return this.OnWindowAsync(async () =>
+        return this.OnWindowAsync(window, async () =>
         {
             var name = new TextBox { Header = "Name", Text = document.Title + " Copy" };
             AutomationProperties.SetName(name, $"Name of the copy of {document.Title}");
@@ -77,7 +76,7 @@ public sealed class DocumentConfirmations(IDialogService dialogs, IWindowManager
                     CloseButtonText = "Cancel",
                     DefaultButton = DialogButton.Primary,
                 },
-                windowId).ConfigureAwait(true);
+                window).ConfigureAwait(true);
             return result == DialogButton.Primary && !string.IsNullOrWhiteSpace(name.Text) ? name.Text : null;
         });
     }
@@ -104,12 +103,12 @@ public sealed class DocumentConfirmations(IDialogService dialogs, IWindowManager
     }
 
     // The dialog's content is built on the window's thread, which owns it.
-    private Task<bool> AskAsync(Func<DialogSpec> spec)
-        => this.OnWindowAsync(async () => await dialogs.ShowAsync(spec(), windowId).ConfigureAwait(true) == DialogButton.Primary);
+    private Task<bool> AskAsync(WindowId window, Func<DialogSpec> spec)
+        => this.OnWindowAsync(window, async () => await dialogs.ShowAsync(spec(), window).ConfigureAwait(true) == DialogButton.Primary);
 
-    private Task<T> OnWindowAsync<T>(Func<Task<T>> show)
+    private Task<T> OnWindowAsync<T>(WindowId window, Func<Task<T>> show)
     {
-        var window = windows.GetWindow(windowId) ?? throw new InvalidOperationException("The document's window is no longer available.");
-        return window.DispatcherQueue.EnqueueAsync(show);
+        var owner = windows.GetWindow(window) ?? throw new InvalidOperationException("The document's window is no longer available.");
+        return owner.DispatcherQueue.EnqueueAsync(show);
     }
 }

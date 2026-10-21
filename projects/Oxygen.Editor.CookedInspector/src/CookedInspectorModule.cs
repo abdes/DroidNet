@@ -43,7 +43,7 @@ public sealed class CookedInspectorModule : IFeatureModule
             resolver => new CookedInspectionViewModel(
                 resolver.Resolve<IContentPipelineService>(),
                 resolver.Resolve<IAssetFeed>(),
-                resolver.Resolve<IProjectContextService>(),
+                resolver.Resolve<IProjectSession>(),
                 asset => resolver.Resolve<IAssetReveal>().RevealAsync([asset])),
             Reuse.Singleton);
         scope.Register<CookedInspectionView>(Reuse.Transient);

@@ -98,7 +98,7 @@ public sealed partial class DocumentAreaViewModel
     [RelayCommand]
     private async Task ReloadActiveDocument()
     {
-        if (this.area.ActiveDocument is { } active && await this.confirmations.ConfirmReloadAsync(active).ConfigureAwait(true))
+        if (this.area.ActiveDocument is { } active && await this.confirmations.ConfirmReloadAsync(this.window, active).ConfigureAwait(true))
         {
             var result = await this.documents.ReloadAsync(active).ConfigureAwait(true);
             this.ShowOutcome(active, result.Message);
@@ -117,7 +117,7 @@ public sealed partial class DocumentAreaViewModel
     [RelayCommand]
     private async Task SaveActiveDocumentCopy()
     {
-        if (this.area.ActiveDocument is { } active && await this.confirmations.AskCopyNameAsync(active).ConfigureAwait(true) is { } name)
+        if (this.area.ActiveDocument is { } active && await this.confirmations.AskCopyNameAsync(this.window, active).ConfigureAwait(true) is { } name)
         {
             var result = await this.documents.SaveCopyAsync(active, name).ConfigureAwait(true);
             this.ShowOutcome(active, result.Message);

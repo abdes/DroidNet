@@ -6,16 +6,10 @@ using DroidNet.Composition;
 using DryIoc;
 using Oxygen.Managed.Assets.Diagnostics;
 
-namespace Oxygen.Editor.Input;
+namespace Oxygen.Editor.Problems;
 
-/// <summary>
-///     Input authoring in a workspace window's scope: the input facts and their problems.
-/// </summary>
-/// <remarks>
-///     The input facts follow the window's asset catalog, so they live as long as it does. The project session owns
-///     them once it exists.
-/// </remarks>
-public sealed class InputWindowModule : IScopeModule<IWindowLayer>
+/// <summary>The problems in a project session's scope: the list of the session's problem sources.</summary>
+public sealed class ProblemsSessionModule : IScopeModule<ISessionLayer>
 {
     /// <inheritdoc />
     public IReadOnlyCollection<Type> Shadows => [];
@@ -27,6 +21,9 @@ public sealed class InputWindowModule : IScopeModule<IWindowLayer>
     public void Register(IRegistrator scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        scope.RegisterMany([typeof(IInputSources), typeof(IAssetProblemSource)], typeof(InputFacts), Reuse.Singleton);
+        // The session's own sources, in registration order: a collection resolved here sees only the session's.
+        scope.RegisterDelegate<IAssetProblemSources>(
+            resolver => new AssetProblemSources(resolver.ResolveMany<IAssetProblemSource>()),
+            Reuse.Singleton);
     }
 }

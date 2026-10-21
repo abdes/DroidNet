@@ -7,21 +7,21 @@ using Oxygen.Editor.Projects;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
 
-/// <summary>The relocations of the active project's assets, as open documents follow them.</summary>
+/// <summary>The relocations of the session project's assets, as open documents follow them.</summary>
 public sealed class DocumentRelocationFeed : IDocumentRelocations, IDisposable
 {
     private readonly IAssetRelocationService relocation;
-    private readonly IProjectContextService projects;
+    private readonly IProjectSession session;
 
     /// <summary>Initializes a new instance of the <see cref="DocumentRelocationFeed"/> class.</summary>
     /// <param name="relocation">The service that relocates the project's assets.</param>
-    /// <param name="projects">The active project, whose content folders hold the documents' files.</param>
-    public DocumentRelocationFeed(IAssetRelocationService relocation, IProjectContextService projects)
+    /// <param name="session">The project session, whose current content mounts hold the documents' files.</param>
+    public DocumentRelocationFeed(IAssetRelocationService relocation, IProjectSession session)
     {
         ArgumentNullException.ThrowIfNull(relocation);
-        ArgumentNullException.ThrowIfNull(projects);
+        ArgumentNullException.ThrowIfNull(session);
         this.relocation = relocation;
-        this.projects = projects;
+        this.session = session;
         this.relocation.FilesChanged += this.OnFilesChanged;
     }
 
@@ -32,7 +32,7 @@ public sealed class DocumentRelocationFeed : IDocumentRelocations, IDisposable
     public IDisposable Follow(Func<Func<Document, DocumentRelocation?>, Task> follow)
     {
         ArgumentNullException.ThrowIfNull(follow);
-        return this.relocation.AddParticipant(new Follower(this.projects, follow));
+        return this.relocation.AddParticipant(new Follower(this.session, follow));
     }
 
     /// <inheritdoc/>
@@ -46,12 +46,10 @@ public sealed class DocumentRelocationFeed : IDocumentRelocations, IDisposable
         }
     }
 
-    private sealed class Follower(IProjectContextService projects, Func<Func<Document, DocumentRelocation?>, Task> follow)
+    private sealed class Follower(IProjectSession session, Func<Func<Document, DocumentRelocation?>, Task> follow)
         : IAssetRelocationParticipant
     {
         public Task FollowAsync(AssetRelocationChange change)
-            => projects.ActiveProject is { } project
-                ? follow(document => DocumentRelocations.Map(document, change, project, out _))
-                : Task.CompletedTask;
+            => follow(document => DocumentRelocations.Map(document, change, session.Context, out _));
     }
 }

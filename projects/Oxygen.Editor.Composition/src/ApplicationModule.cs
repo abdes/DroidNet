@@ -12,15 +12,18 @@ using DryIoc;
 using Microsoft.Extensions.Caching.Memory;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.ProjectExplorer.Activation;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Services;
-using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Sessions;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core.Services;
 
 namespace Oxygen.Editor;
 
 /// <summary>
-///     The application's own services in the editor scope: its paths and storage, its activation and the activation of
-///     projects, the placement of its windows, the windows themselves and the scope factory every scope is created by.
+///     The application's own services in the editor scope: its paths and storage, its activation, the activation of
+///     projects and their sessions, the placement of its windows, the windows themselves, what closing them returns to
+///     or ends, and the scope factory every scope is created by.
 /// </summary>
 internal sealed class ApplicationModule : IScopeModule<IApplicationLayer>
 {
@@ -39,12 +42,19 @@ internal sealed class ApplicationModule : IScopeModule<IApplicationLayer>
         scope.Register<NativeStorageProvider>(Reuse.Singleton);
         scope.Register<IActivationService, ActivationService>(Reuse.Singleton);
 
-        // Window placement service
+        // Window placement service, which saves a window's placement when it closes.
         scope.Register<WindowPlacementService, WindowPlacementService>(Reuse.Singleton);
+        scope.RegisterMapping<IWindowCloseParticipant, WindowPlacementService>();
 
         RegisterStorage(scope);
         scope.Register<IProjectActivationCoordinator, ProjectActivationCoordinator>(Reuse.Singleton);
-        scope.Register<IProjectFolder, ActiveProjectFolder>(Reuse.Singleton);
+
+        // The open project's session, under which its windows open. Closing its last window returns to the Start
+        // window; closing the editor's last window otherwise exits it.
+        scope.Register<ProjectSessionHost>(Reuse.Singleton);
+        scope.RegisterMapping<IProjectSessionHost, ProjectSessionHost>();
+        scope.Register<IWindowCloseParticipant, SessionWindowClose>(Reuse.Singleton);
+        scope.Register<IWindowCloseParticipant, EditorExit>(Reuse.Singleton);
 
         RegisterWindows(scope);
         scope.Register<MainShellViewModel>(Reuse.Transient);
@@ -81,21 +91,19 @@ internal sealed class ApplicationModule : IScopeModule<IApplicationLayer>
             resolverContext =>
             {
                 var windowFactory = resolverContext.Resolve<IWindowFactory>();
-                var category = new WindowCategory("wnd-we");
-                return windowFactory.CreateDecoratedWindow<RoutedWindow>(category).GetAwaiter().GetResult();
+                return windowFactory.CreateDecoratedWindow<RoutedWindow>(EditorWindows.WorkspaceCategory).GetAwaiter().GetResult();
             },
             Reuse.Transient,
-            serviceKey: new Target { Name = "wnd-we" });
+            serviceKey: new Target { Name = EditorWindows.WorkspaceTarget });
 
         // Project Explorer window
         scope.RegisterDelegate<Window>(
             resolverContext =>
             {
                 var windowFactory = resolverContext.Resolve<IWindowFactory>();
-                var category = new WindowCategory("wnd-pe");
-                return windowFactory.CreateDecoratedWindow<RoutedWindow>(category).GetAwaiter().GetResult();
+                return windowFactory.CreateDecoratedWindow<RoutedWindow>(EditorWindows.StartCategory).GetAwaiter().GetResult();
             },
             Reuse.Transient,
-            serviceKey: new Target { Name = "wnd-pe" });
+            serviceKey: new Target { Name = EditorWindows.StartTarget });
     }
 }

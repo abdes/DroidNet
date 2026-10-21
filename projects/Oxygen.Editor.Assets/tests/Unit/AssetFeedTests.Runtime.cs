@@ -23,8 +23,8 @@ public sealed partial class AssetFeedTests
         using var workspace = new AssetWorkspace();
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         var identity = AssetPath.Parse("/Content/Materials/Red.omat");
-        var context = workspace.ActivateProject();
-        var projectId = context.ActiveProject!.ProjectId;
+        var context = workspace.OpenSession();
+        var projectId = context.Context.ProjectId;
         var preview = new ControlledRuntimeStatus(new(AssetRuntimeContentState.Unmounted, [], []));
         var reads = 0;
         var reader = new DelegateStatusReader((_, _, _) =>

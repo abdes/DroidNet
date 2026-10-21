@@ -27,7 +27,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     private const char PathBreak = '​';
 
     private readonly ContentExplorerState state;
-    private readonly IProjectContextService projects;
+    private readonly IProjectSession session;
     private readonly IDesktopIntegration shell;
     private readonly Relocation.IAssetRelocationWorkflow? relocation;
     private readonly IScripts? scripts;
@@ -37,7 +37,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
 
     /// <summary>Initializes a new instance of the <see cref="AssetDetailsViewModel"/> class.</summary>
     /// <param name="state">The browser state that publishes the selection.</param>
-    /// <param name="projects">The active project, which holds the selected assets' files.</param>
+    /// <param name="session">The project session, whose project holds the selected assets' files.</param>
     /// <param name="shell">The clipboard and File Explorer actions.</param>
     /// <param name="relocation">Finds the content that uses the selected asset; without it no referrers are shown.</param>
     /// <param name="scripts">The scripts, which supply a script's parameters and problems.</param>
@@ -45,14 +45,14 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
     /// thread that raises them.</param>
     public AssetDetailsViewModel(
         ContentExplorerState state,
-        IProjectContextService projects,
+        IProjectSession session,
         IDesktopIntegration shell,
         Relocation.IAssetRelocationWorkflow? relocation = null,
         IScripts? scripts = null,
         HostingContext? hosting = null)
     {
         this.state = state;
-        this.projects = projects;
+        this.session = session;
         this.shell = shell;
         this.relocation = relocation;
         this.scripts = scripts;
@@ -208,10 +208,10 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
 
     private void Refresh()
     {
-        // The details read the selected assets' files from the active project; without one nothing is selected.
-        var project = this.projects.ActiveProject;
-        var assets = project is null ? [] : this.state.SelectedAssets;
-        if (project is not null && assets is [var asset])
+        // The details read the selected assets' files from the session's project.
+        var project = this.session.Context;
+        var assets = this.state.SelectedAssets;
+        if (assets is [var asset])
         {
             var row = new AssetBrowserRow(asset, project);
             this.Asset = asset;
@@ -228,7 +228,7 @@ public sealed partial class AssetDetailsViewModel : ObservableObject, IDisposabl
             this.Title = assets.Count == 0 ? "No selection" : string.Create(CultureInfo.CurrentCulture, $"{assets.Count} assets selected");
             this.Description = assets.Count == 0 ? "Select an asset to see its details." : string.Empty;
             this.Facts = assets.Count == 0 ? [] : BuildSummaryFacts(assets);
-            this.SelectedItems = project is null ? [] : [.. assets.Select(asset => new AssetInformationFact(
+            this.SelectedItems = [.. assets.Select(asset => new AssetInformationFact(
                 asset.DisplayName,
                 string.Join(" · ", new[] { asset.TypeDisplayName, AssetFileFacts.Read(project, asset).SizeText }.Where(static part => part.Length > 0))))];
         }

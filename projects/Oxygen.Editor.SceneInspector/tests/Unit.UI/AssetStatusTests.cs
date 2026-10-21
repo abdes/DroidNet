@@ -13,7 +13,9 @@ using Oxygen.Editor.Assets.Testing;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Pickers;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.SceneInspector.Components.Geometry;
+using Testably.Abstractions.Testing;
 using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
@@ -35,7 +37,8 @@ internal sealed class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
         _ = catalog.SetupGet(value => value.Items).Returns(updates);
         _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         using var slots = new FakeMaterialSlotProvider();
-        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, slots, Mock.Of<Oxygen.Editor.Projects.IProjectContextService>())
+        using var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
+        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, slots, session)
         {
             IsExpanded = true,
         };

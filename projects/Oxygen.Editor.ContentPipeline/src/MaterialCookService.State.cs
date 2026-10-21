@@ -17,11 +17,7 @@ public sealed partial class MaterialCookService
     {
         ArgumentNullException.ThrowIfNull(materialSourceUri);
         cancellationToken.ThrowIfCancellationRequested();
-        if (this.projectContextService.ActiveProject is not { } project)
-        {
-            return MaterialCookState.NotCooked;
-        }
-
+        var project = this.session.Context;
         try
         {
             var states = await this.pipeline.ReadAsync(project, [materialSourceUri], cancellationToken).ConfigureAwait(false);

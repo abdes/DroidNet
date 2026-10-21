@@ -8,7 +8,9 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Testing;
 using Oxygen.Editor.ContentPipeline.Testing;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.SceneInspector.Components.Geometry;
+using Testably.Abstractions.Testing;
 using static DroidNet.Tests.UiTestHosting;
 
 namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
@@ -27,7 +29,8 @@ internal sealed class GeometryImportedOutputsTests : DroidNet.Tests.VisualUserIn
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
         using var slots = new FakeMaterialSlotProvider();
-        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, slots, Mock.Of<Oxygen.Editor.Projects.IProjectContextService>());
+        using var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
+        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, slots, session);
         var view = new GeometryView
         {
             ViewModel = geometry,

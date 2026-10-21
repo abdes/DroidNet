@@ -8,7 +8,6 @@ using DroidNet.Documents;
 using DroidNet.Routing;
 using DroidNet.TimeMachine;
 using Moq;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
@@ -28,18 +27,15 @@ public sealed class SceneExplorerOpenDocumentTests
     [TestMethod]
     public async Task CommitRenameAsync_RenamesTheNodeInOneUndoStep()
     {
-        var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png"));
         var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
         using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
-        var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-        _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        using var explorer = new SceneExplorerViewModel(manager.Object, Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -54,18 +50,15 @@ public sealed class SceneExplorerOpenDocumentTests
     [TestMethod]
     public async Task CommitRenameAsync_EmptyNameFailsAndChangesNothing()
     {
-        var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png"));
         var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
         using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
-        var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-        _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        using var explorer = new SceneExplorerViewModel(manager.Object, Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -80,18 +73,15 @@ public sealed class SceneExplorerOpenDocumentTests
     [TestMethod]
     public async Task CommitRenameAsync_UnchangedNameRecordsNothing()
     {
-        var project = new Project(new ProjectInfo("Rename", Category.Games, "H:/RenameTreeTests", "preview.png"));
         var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
         using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
-        var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-        _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        using var explorer = new SceneExplorerViewModel(manager.Object, Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
 
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
         var adapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
@@ -106,7 +96,6 @@ public sealed class SceneExplorerOpenDocumentTests
     [TestMethod]
     public async Task ReloadReplacesTreeAdaptersWithoutRequiringRuntime()
     {
-        var project = new Project(new ProjectInfo("Reload", Category.Games, "H:/ReloadTreeTests", "preview.png"));
         var original = new Scene { Name = "Scene" };
         var originalNode = new SceneNode(original) { Name = "Original node" };
         original.RootNodes.Add(originalNode);
@@ -116,11 +105,9 @@ public sealed class SceneExplorerOpenDocumentTests
         metadata.WriteFile(replacement);
         original = metadata.Scene;
         originalNode = metadata.NodeOf(originalNode);
-        var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-        _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea();
         documents.Activate(metadata.Document);
-        using var explorer = new SceneExplorerViewModel(manager.Object, Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
+        using var explorer = new SceneExplorerViewModel(Mock.Of<IRouter>(), documents, metadata.Documents, new SceneSelectionService());
         await explorer.HandleDocumentOpenedAsync(original).ConfigureAwait(false);
         var previousAdapter = await explorer.FindAdapterByNodeIdAsync(originalNode.Id).ConfigureAwait(false);
 
@@ -145,7 +132,6 @@ public sealed class SceneExplorerOpenDocumentTests
     [TestMethod]
     public async Task SwitchingBackToAnOpenScenePreservesUnsavedModelAndAvoidsDiskReload()
     {
-        var project = new Project(new ProjectInfo("Open scenes", Category.Games, "H:/OpenSceneTests", "preview.png"));
         var first = new Scene { Name = "First" };
         var second = new Scene { Name = "Second" };
         var node = new SceneNode(first) { Name = "Unsaved node" };
@@ -157,11 +143,8 @@ public sealed class SceneExplorerOpenDocumentTests
         firstMetadata.Document.History.AddChange("Unsaved edit", static () => { });
         using var secondMetadata = TestScenes.Open(second);
         second = secondMetadata.Scene;
-        var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
-        _ = manager.SetupGet(value => value.CurrentProject).Returns(project);
         var documents = new TestDocumentArea(firstMetadata.Document, secondMetadata.Document);
         using var explorer = new SceneExplorerViewModel(
-            manager.Object,
             Mock.Of<IRouter>(),
             documents,
             firstMetadata.Documents,

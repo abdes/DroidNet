@@ -22,19 +22,12 @@ public sealed partial class ContentPipelineService : IScriptLibrary
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(script);
-        if (!ReferenceEquals(this.projectContextService.ActiveProject, project) || this.engineContentPipelineApi is not ICookedScriptInspector inspector)
+        if (!ReferenceEquals(this.session.Context, project) || this.engineContentPipelineApi is not ICookedScriptInspector inspector)
         {
             return null;
         }
 
-        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
-        using var projectChanges = this.projectContextService.ProjectChanged.Subscribe(current =>
-        {
-            if (!ReferenceEquals(current, project))
-            {
-                cancellation.Cancel();
-            }
-        });
+        using var cancellation = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, this.session.Lifetime);
         var token = cancellation.Token;
         using var publicationRead = await this.publication.AcquireReadAsync(project, token).ConfigureAwait(false);
         using var libraries = await CookedLibraryReadSet.AcquireAsync(project, this.engineContent, token, uri => ImportedOutputs.ResolveOutput(project, uri, ContentCookInputRole.Dependency), [.. publicationRead.ProductState.ProducedAssets]).ConfigureAwait(false);

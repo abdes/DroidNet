@@ -2,9 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.Workspace;
+namespace Oxygen.Editor.Sessions;
 
-/// <summary>Holds the workspace's preview content demand for the lifetime of its container, which disposes it.</summary>
+/// <summary>Holds the session's preview content demand for the lifetime of its scope, which disposes it.</summary>
 /// <param name="demand">The started demand.</param>
 internal sealed class PreviewContentDemand(IDisposable demand) : IDisposable
 {

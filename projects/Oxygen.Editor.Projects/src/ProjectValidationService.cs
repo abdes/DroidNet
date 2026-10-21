@@ -140,7 +140,7 @@ public sealed class ProjectValidationService(IStorageProvider storage) : IProjec
                 continue;
             }
 
-            if (VirtualPath.ValidateMountName(mount.Name, VirtualPathRuleSet.Authored) is not null || string.IsNullOrWhiteSpace(mount.RelativePath))
+            if (ProjectAssetFiles.ValidateDeclaredMountName(mount.Name) is not null || string.IsNullOrWhiteSpace(mount.RelativePath))
             {
                 return ProjectValidationResult.Failure(
                     ProjectValidationState.InvalidContentRoots,

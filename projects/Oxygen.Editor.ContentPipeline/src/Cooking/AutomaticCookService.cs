@@ -43,7 +43,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     /// <summary>How long after its first change a window closes, even while changes keep coming.</summary>
     public static readonly TimeSpan QuietWindowLimit = TimeSpan.FromSeconds(5);
 
-    private readonly IProjectContextService projects;
+    private readonly IProjectSession session;
     private readonly IProjectManagerService projectManager;
     private readonly IContentPipelineService pipeline;
     private readonly IAssetCookStatusReader statuses;
@@ -57,8 +57,6 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     private readonly HashSet<AssetPath> waiting = [];
     private readonly Dictionary<AssetPath, AssetPath[]> skipped = [];
     private readonly ITimer window;
-    private readonly IDisposable projectSubscription;
-    private readonly IDisposable settingsSubscription;
     private readonly IDisposable catalogSubscription;
     private ProjectContext? project;
     private CancellationTokenSource projectLifetime = new();
@@ -68,7 +66,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="AutomaticCookService"/> class.</summary>
-    /// <param name="projects">The active project, its settings and their changes.</param>
+    /// <param name="session">The project session: its project as its content mounts are now, its settings and their changes.</param>
     /// <param name="projectManager">Saves the project's settings.</param>
     /// <param name="catalog">The asset catalog, whose changes are the changed sources.</param>
     /// <param name="pipeline">The same saved-input pipeline used by explicit cooks.</param>
@@ -79,7 +77,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     /// <param name="logger">Reports scheduling failures and sources left uncooked.</param>
     /// <param name="time">The clock of the quiet window; the system clock when omitted.</param>
     public AutomaticCookService(
-        IProjectContextService projects,
+        IProjectSession session,
         IProjectManagerService projectManager,
         IAssetCatalog catalog,
         IContentPipelineService pipeline,
@@ -91,7 +89,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         TimeProvider? time = null)
     {
         ArgumentNullException.ThrowIfNull(catalog);
-        this.projects = projects;
+        this.session = session;
         this.projectManager = projectManager;
         this.pipeline = pipeline;
         this.statuses = statuses;
@@ -101,8 +99,9 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         this.logger = logger;
         this.time = time ?? TimeProvider.System;
         this.window = this.time.CreateTimer(_ => this.CloseWindow(), state: null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
-        this.projectSubscription = projects.ProjectChanged.Subscribe(this.OnProjectChanged);
-        this.settingsSubscription = projects.SettingsChanged.Subscribe(this.OnSettingsChanged);
+        this.OnContextChanged(this, EventArgs.Empty);
+        session.ContextChanged += this.OnContextChanged;
+        session.SettingsChanged += this.OnSettingsChanged;
         this.catalogSubscription = catalog.Changes.Subscribe(this.OnCatalogChange);
         scripts.ProblemsChanged += this.OnProblemsChanged;
         inputs.ProblemsChanged += this.OnProblemsChanged;
@@ -112,23 +111,20 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     public event PropertyChangedEventHandler? PropertyChanged;
 
     /// <inheritdoc />
-    public bool CookOnChange => this.projects.Settings.CookOnChange;
+    public bool CookOnChange => this.session.Settings.CookOnChange;
 
     /// <inheritdoc />
     public async Task SetCookOnChangeAsync(bool enabled, CancellationToken cancellationToken = default)
     {
-        var current = this.projects.ActiveProject ?? throw new InvalidOperationException("Cook on change is a setting of the active project.");
-        var settings = this.projects.Settings with { CookOnChange = enabled };
-        if (settings == this.projects.Settings)
+        var current = this.session.Context;
+        var settings = this.session.Settings with { CookOnChange = enabled };
+        if (settings == this.session.Settings)
         {
             return;
         }
 
         await this.projectManager.SaveProjectSettingsAsync(current.ProjectRoot.FullPath, settings, cancellationToken).ConfigureAwait(true);
-        if (ReferenceEquals(current, this.projects.ActiveProject))
-        {
-            this.projects.UpdateSettings(settings);
-        }
+        this.session.UpdateSettings(settings);
     }
 
     /// <inheritdoc />
@@ -151,8 +147,8 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         this.inputs.ProblemsChanged -= this.OnProblemsChanged;
         this.scripts.ProblemsChanged -= this.OnProblemsChanged;
         this.catalogSubscription.Dispose();
-        this.settingsSubscription.Dispose();
-        this.projectSubscription.Dispose();
+        this.session.SettingsChanged -= this.OnSettingsChanged;
+        this.session.ContextChanged -= this.OnContextChanged;
         this.window.Dispose();
         this.projectLifetime.Dispose();
     }
@@ -168,7 +164,8 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     private static AssetPath[] UsedSources(ProjectContext project, AssetPath source, AssetCookStatus status)
         => [.. status.SourcePaths.Select(path => project.FindByFilePath(path)?.Path).OfType<AssetPath>().Where(used => used != source).Distinct()];
 
-    private void OnProjectChanged(ProjectContext? value)
+    // The cook follows the session's project in its current content mounts; the runs of the earlier mounts stop.
+    private void OnContextChanged(object? sender, EventArgs args)
     {
         CancellationTokenSource ended;
         lock (this.sync)
@@ -180,7 +177,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
 
             ended = this.projectLifetime;
             this.projectLifetime = new();
-            this.project = value;
+            this.project = this.session.Context;
             this.changed.Clear();
             this.waiting.Clear();
             this.skipped.Clear();
@@ -194,8 +191,10 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         this.PropertyChanged?.Invoke(this, new(nameof(this.CookOnChange)));
     }
 
-    private void OnSettingsChanged(ProjectSettings settings)
+    private void OnSettingsChanged(object? sender, EventArgs args)
     {
+        var settings = this.session.Settings;
+
         // A running cook finishes; the sources waiting for the next run are not cooked while the setting is off.
         this.LogCookOnChangeSet(settings.CookOnChange);
         this.PropertyChanged?.Invoke(this, new(nameof(this.CookOnChange)));

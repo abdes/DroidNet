@@ -6,7 +6,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Documents;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.World;
@@ -15,8 +14,6 @@ namespace Oxygen.Editor.SceneExplorer;
 
 public partial class SceneExplorerViewModel
 {
-    private IDisposable? projectClipboardSubscription;
-
     /// <summary>Gets whether the accepted scene was retired and no replacement graph could be installed.</summary>
     [ObservableProperty]
     public partial bool HasUnavailableScene { get; private set; }
@@ -30,7 +27,6 @@ public partial class SceneExplorerViewModel
     {
         this.openDocuments.Opened += this.OnSceneDocumentOpened;
         this.openDocuments.Closed += this.OnSceneDocumentClosed;
-        this.projectClipboardSubscription = this.projectContexts?.ProjectChanged.Subscribe(new ClipboardProjectObserver(this));
         if (this.availability is { } source)
         {
             source.SceneUnavailable += this.OnSceneUnavailable;
@@ -61,7 +57,7 @@ public partial class SceneExplorerViewModel
     {
         var content = SceneContent.Of(document);
         var scene = content.Scene;
-        if (this.projectContexts is { } projects && projects.ActiveProject?.ProjectId != content.Project.ProjectId)
+        if (this.session is { } session && session.Context.ProjectId != content.Project.ProjectId)
         {
             return false;
         }
@@ -209,26 +205,6 @@ public partial class SceneExplorerViewModel
         if (this.availability is { } source)
         {
             _ = await source.ReloadPreviousAsync().ConfigureAwait(true);
-        }
-    }
-
-    private sealed class ClipboardProjectObserver(SceneExplorerViewModel owner) : IObserver<ProjectContext?>
-    {
-        public void OnCompleted()
-        {
-        }
-
-        public void OnError(Exception error)
-        {
-        }
-
-        public void OnNext(ProjectContext? value)
-        {
-            if (owner.clipboardProjectId is { } origin && (origin != value?.ProjectId
-                || owner.clipboardProjectRoot != value?.ProjectRoot))
-            {
-                owner.InvalidateClipboard("The clipboard was cleared because the project changed.");
-            }
         }
     }
 }

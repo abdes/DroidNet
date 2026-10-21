@@ -29,26 +29,28 @@ public sealed partial class InputFacts : IInputSources, IDisposable
     private readonly SubscriberEvent<EventHandler> problemsChanged = new();
     private readonly Lock gate = new();
     private readonly IDisposable catalogChanges;
-    private readonly IDisposable projectChanges;
+    private readonly IProjectSession session;
     private ProjectInputFacts? current;
     private InputSnapshot snapshot = InputSnapshot.Empty;
     private bool disposed;
 
-    /// <summary>Initializes a new instance of the <see cref="InputFacts"/> class and starts reading the active
+    /// <summary>Initializes a new instance of the <see cref="InputFacts"/> class and starts reading the session
     /// project's input sources.</summary>
-    /// <param name="projects">The active project.</param>
+    /// <param name="session">The project session, whose content mounts hold the input sources.</param>
     /// <param name="catalog">The project catalog, whose file changes read a source again.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    public InputFacts(IProjectContextService projects, IAssetCatalog catalog, ILoggerFactory? loggerFactory = null)
+    public InputFacts(IProjectSession session, IAssetCatalog catalog, ILoggerFactory? loggerFactory = null)
     {
-        ArgumentNullException.ThrowIfNull(projects);
+        ArgumentNullException.ThrowIfNull(session);
+        this.session = session;
         ArgumentNullException.ThrowIfNull(catalog);
         this.loggerFactory = loggerFactory;
         this.logger = loggerFactory?.CreateLogger<InputFacts>() ?? NullLogger<InputFacts>.Instance;
         this.catalogChanges = catalog.Changes.Subscribe(this.OnCatalogChange);
 
-        // The stream replays the current project, so an open one is read at once.
-        this.projectChanges = projects.ProjectChanged.Subscribe(this.OnProjectChanged);
+        // The session's project is read at once, and again in its new content mounts after each change.
+        this.Follow(session.Context);
+        session.ContextChanged += this.OnContextChanged;
     }
 
     /// <inheritdoc />
@@ -100,13 +102,15 @@ public sealed partial class InputFacts : IInputSources, IDisposable
             this.current = null;
         }
 
-        this.projectChanges.Dispose();
+        this.session.ContextChanged -= this.OnContextChanged;
         this.catalogChanges.Dispose();
     }
 
-    private void OnProjectChanged(ProjectContext? project)
+    private void OnContextChanged(object? sender, EventArgs args) => this.Follow(this.session.Context);
+
+    private void Follow(ProjectContext project)
     {
-        ProjectInputFacts? started;
+        ProjectInputFacts started;
         lock (this.gate)
         {
             if (this.disposed)
@@ -114,17 +118,14 @@ public sealed partial class InputFacts : IInputSources, IDisposable
                 return;
             }
 
-            // Disposing waits for a read in progress, so the closed project publishes nothing after this.
+            // Disposing waits for a read in progress, so the earlier mounts publish nothing after this.
             this.current?.Dispose();
-            this.current = project is null ? null : new ProjectInputFacts(project, this.Publish, this.loggerFactory);
+            this.current = new ProjectInputFacts(project, this.Publish, this.loggerFactory);
             this.Publish(InputSnapshot.Empty, container: null);
             started = this.current;
         }
 
-        if (started is not null)
-        {
-            _ = Task.Run(() => this.Scan(started));
-        }
+        _ = Task.Run(() => this.Scan(started));
     }
 
     private void Scan(ProjectInputFacts facts)

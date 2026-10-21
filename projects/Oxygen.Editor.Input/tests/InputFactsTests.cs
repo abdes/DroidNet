@@ -16,9 +16,13 @@ using Testably.Abstractions.Testing;
 namespace Oxygen.Editor.Input.Tests;
 
 /// <summary>
-/// The input facts hold the open project's saved input sources and every problem their cook would reject, and follow
-/// each change of a source's file.
+/// The input facts hold the session project's saved input sources and every problem their cook would reject, and follow
+/// each change of a source's file and of the content mounts.
 /// </summary>
+/// <remarks>
+/// The session starts with the project mounting no content; a test opens the project's sources by giving it its
+/// <c>Content</c> mount, as a mount change does, after it has subscribed to what the facts raise.
+/// </remarks>
 [TestClass]
 public sealed partial class InputFactsTests : IDisposable
 {
@@ -29,13 +33,14 @@ public sealed partial class InputFactsTests : IDisposable
     private static readonly TimeSpan Patience = TimeSpan.FromSeconds(10);
 
     private readonly TestProject project = TestProject.Create(new MockFileSystem());
-    private readonly ProjectContextService projects = new();
+    private readonly TestSession session;
     private readonly Subject<AssetChange> changes = new();
     private readonly InputFacts facts;
 
     public InputFactsTests()
     {
-        this.facts = new InputFacts(this.projects, new Catalog(this.changes));
+        this.session = new TestSession(this.project.Context with { AuthoringMounts = [] });
+        this.facts = new InputFacts(this.session, new Catalog(this.changes));
     }
 
     public TestContext TestContext { get; set; }
@@ -43,6 +48,7 @@ public sealed partial class InputFactsTests : IDisposable
     public void Dispose()
     {
         this.facts.Dispose();
+        this.session.Dispose();
         this.changes.Dispose();
     }
 
@@ -161,12 +167,12 @@ public sealed partial class InputFactsTests : IDisposable
     }
 
     [TestMethod]
-    public async Task ClosingTheProjectForgetsItsSources()
+    public async Task UnmountingTheContentForgetsItsSources()
     {
         _ = this.project.WriteFile(PlayerFile, InputTemplates.New("Player"));
         await this.OpenAsync().ConfigureAwait(false);
 
-        this.projects.Close();
+        this.session.ChangeContext(this.project.Context with { AuthoringMounts = [] });
 
         _ = this.facts.All.Should().BeEmpty();
         _ = this.facts.Problems.Should().BeEmpty();
@@ -189,7 +195,7 @@ public sealed partial class InputFactsTests : IDisposable
             SynchronizationContext.SetSynchronizationContext(previous);
         }
 
-        this.projects.Activate(this.project.Context);
+        this.session.ChangeContext(this.project.Context);
 
         _ = (await raised.Task.WaitAsync(Patience, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeSameAs(context);
     }
@@ -213,7 +219,7 @@ public sealed partial class InputFactsTests : IDisposable
     }
 
     private Task OpenAsync()
-        => this.UntilAsync(() => this.facts.All.Count > 0 || this.facts.Problems.Count > 0, () => this.projects.Activate(this.project.Context));
+        => this.UntilAsync(() => this.facts.All.Count > 0 || this.facts.Problems.Count > 0, () => this.session.ChangeContext(this.project.Context));
 
     private Task ChangeAsync(AssetChange change, Func<bool> done) => this.UntilAsync(done, () => this.changes.OnNext(change));
 

@@ -34,24 +34,24 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
 
     private readonly IReadOnlyList<IAssetProblemSource> sources;
     private readonly ICodeEditorService codeEditor;
-    private readonly IProjectContextService projects;
+    private readonly IProjectSession session;
     private readonly IScripts? scripts;
     private readonly IRuntimeProblemSource? runtime;
     private readonly IRuntimeProblemNodes nodes;
 
     /// <summary>Initializes a new instance of the <see cref="ProblemsViewModel"/> class.</summary>
-    /// <param name="sources">The problem sources: the family facts, and the running scene's problems.</param>
+    /// <param name="sources">The session's problem sources: the family facts, and the running scene's problems.</param>
     /// <param name="codeEditor">The code editor that opens a problem's location.</param>
-    /// <param name="projects">The active project, for project-relative file names.</param>
+    /// <param name="session">The project session the panel lives in, for project-relative file names.</param>
     /// <param name="nodes">What shows the node a runtime problem names.</param>
-    public ProblemsViewModel(IEnumerable<IAssetProblemSource> sources, ICodeEditorService codeEditor, IProjectContextService projects, IRuntimeProblemNodes nodes)
+    public ProblemsViewModel(IAssetProblemSources sources, ICodeEditorService codeEditor, IProjectSession session, IRuntimeProblemNodes nodes)
     {
         ArgumentNullException.ThrowIfNull(sources);
         ArgumentNullException.ThrowIfNull(nodes);
         this.nodes = nodes;
-        this.sources = [.. sources.Distinct()];
+        this.sources = sources.Sources;
         this.codeEditor = codeEditor;
-        this.projects = projects;
+        this.session = session;
         this.scripts = this.sources.OfType<IScripts>().FirstOrDefault();
         this.runtime = this.sources.OfType<IRuntimeProblemSource>().FirstOrDefault();
         foreach (var source in this.sources)
@@ -188,14 +188,14 @@ public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
     private void Rebuild()
     {
         var selected = this.Selected?.Problem;
-        var root = this.projects.ActiveProject?.ProjectRoot;
+        var root = this.session.Context.ProjectRoot;
         var groups = this.sources
             .SelectMany(static source => source.Problems)
             .GroupBy(static problem => problem.File ?? string.Empty, StringComparer.OrdinalIgnoreCase)
             .Select(file =>
             {
                 var displayPath = file.Key.Length == 0 ? PlaySessionGroup
-                    : root is not null && Path.IsPathFullyQualified(file.Key) && FileSystemPath.From(file.Key) is var path && path.IsSameOrInside(root) ? path.GetPathBelow(root)
+                    : Path.IsPathFullyQualified(file.Key) && FileSystemPath.From(file.Key) is var path && path.IsSameOrInside(root) ? path.GetPathBelow(root)
                     : file.Key;
                 var entries = file.OrderBy(static problem => problem.Line ?? 0).ThenBy(static problem => problem.Column ?? 0).Select(static problem => new ProblemEntry(problem));
                 return new ProblemFileGroup(file.Key, displayPath, [.. entries]);

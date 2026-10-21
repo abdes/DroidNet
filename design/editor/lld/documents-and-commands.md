@@ -380,9 +380,10 @@ saves; Cancel preserves all open documents, unsaved authoring state, history,
 selection, and active context. Successful saves are not rolled back by Cancel.
 No unchecked document is discarded while any selected save is failing.
 
-The Shell's `WindowCloseCoordinator` prepares all documents during Aura's
-cancelable `WindowClosing` event. Aura awaits every handler before running
-completion callbacks: approval commits the document transaction; a veto
+The Shell's `WindowDocumentsClose` prepares all documents of its window as the
+first participant of the window's close, which the Shell's `CloseAndExit` runs
+during Aura's cancelable `WindowClosing` event. Aura awaits the handler before
+running completion callbacks: approval commits the document transaction; a veto
 disposes preparation without closing documents. Duplicate close requests cannot
 bypass a pending decision. Document opening, detaching, and activation are
 rejected while the window's close transaction is pending. Edits detected during

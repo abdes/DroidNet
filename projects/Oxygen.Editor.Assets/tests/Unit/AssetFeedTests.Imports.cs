@@ -26,7 +26,7 @@ public sealed partial class AssetFeedTests
         using var workspace = new AssetWorkspace();
         var source = await WriteModelSourceAsync(workspace, configured: false, this.TestContext.CancellationToken).ConfigureAwait(false);
         var reader = new DelegateStatusReader((_, _, _) => throw new InvalidOperationException("Unimported source has no cooking status to inspect."));
-        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
+        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), workspace.OpenSession(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
         IReadOnlyList<AssetEntry> choices = [];
         provider.Assets(AssetRule.For(AssetKind.Material)).Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => choices = value), this.TestContext.CancellationToken);
         var row = await provider.ResolveAsync(source, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -54,7 +54,7 @@ public sealed partial class AssetFeedTests
             _ = uris.Should().Contain(source);
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]);
         });
-        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
+        using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new(source)]), workspace.OpenSession(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
@@ -83,8 +83,8 @@ public sealed partial class AssetFeedTests
     {
         using var workspace = new AssetWorkspace();
         var source = await WriteModelSourceAsync(workspace, configured: true, this.TestContext.CancellationToken).ConfigureAwait(false);
-        var projects = workspace.ActivateProject();
-        var project = projects.ActiveProject!;
+        var projects = workspace.OpenSession();
+        var project = projects.Context;
         var ownedRoot = FileSystemPath.From(workspace.SourcePath(".cooked/Content"));
         Directory.CreateDirectory(ownedRoot.FullPath);
         var publication = new FakeCookPublicationReader(project.ProjectId, project.ProjectRoot);
@@ -128,7 +128,7 @@ public sealed partial class AssetFeedTests
             _ = Interlocked.Increment(ref reads);
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]);
         });
-        var projects = workspace.ActivateProject();
+        var projects = workspace.OpenSession();
         var runs = new Mock<ICookRunService>();
         IReadOnlyList<CookRunSnapshot> snapshots = [];
         _ = runs.SetupGet(value => value.Runs).Returns(() => snapshots);
@@ -136,7 +136,7 @@ public sealed partial class AssetFeedTests
         IReadOnlyList<AssetEntry> rows = [];
         provider.Items.Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => rows = value), this.TestContext.CancellationToken);
         await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var run = new CookRunSnapshot { OperationId = Guid.NewGuid(), ProjectId = projects.ActiveProject!.ProjectId, ProjectRoot = workspace.Root, DisplayName = "Crate", Request = new(CookTargetKind.Asset, source), State = CookRunState.Cooking };
+        var run = new CookRunSnapshot { OperationId = Guid.NewGuid(), ProjectId = projects.Context.ProjectId, ProjectRoot = workspace.Root, DisplayName = "Crate", Request = new(CookTargetKind.Asset, source), State = CookRunState.Cooking };
         snapshots = [run];
         runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(run));
         _ = rows.Should().HaveCount(4).And.OnlyContain(static row => row.PrimaryBadge == "Cooking");

@@ -44,9 +44,9 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         var item = new AssetEntry(uri, "Main", kind, engine ? AssetState.Packaged : AssetState.Cooked, DerivedState: null, AssetRuntimeAvailability.NotMounted, uri.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: null, AssetGuid: null, [], IsSelectable: true);
         using var items = new BehaviorSubject<IReadOnlyList<AssetEntry>>([item]);
         var provider = CreateQueryProvider(items);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
-        using var layout = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        using var layout = new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var layoutView = new ListLayoutView
         {
@@ -58,7 +58,7 @@ internal sealed class CookedOpeningTests : DroidNet.Tests.VisualUserInterfaceTes
         _ = inspections.Setup(value => value.InspectAsync(It.IsAny<CookedInspectionRequest>()))
             .Callback((CookedInspectionRequest request) => requested = request)
             .ReturnsAsync(true);
-        using var browser = CreateAssetsModel(provider.Object, projects, state, layout, layoutView, placement: placement.Object, cookedInspections: inspections.Object);
+        using var browser = CreateAssetsModel(provider.Object, session, state, layout, layoutView, placement: placement.Object, cookedInspections: inspections.Object);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         browser.LoadContent(layout, "right");
         await LoadTestContentAsync(layoutView).ConfigureAwait(true);

@@ -3,13 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using DroidNet.Aura.Windowing;
 using DroidNet.Hosting.WinUI;
 using DroidNet.TestHelpers;
 using DryIoc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
-using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core.Diagnostics;
@@ -22,7 +20,7 @@ public sealed class EngineShutdownServiceTests
     public TestContext TestContext { get; set; }
 
     [TestMethod]
-    public async Task HostedServiceResolution_DoesNotRequireTheUiDispatcherOrWindowManager()
+    public async Task HostedServiceResolution_DoesNotRequireTheUiDispatcher()
     {
         var container = HostContainer.Create();
         await using var lifetime = container.ConfigureAwait(false);
@@ -31,7 +29,6 @@ public sealed class EngineShutdownServiceTests
         container.RegisterInstance(Mock.Of<IEngineService>());
         container.RegisterInstance(Mock.Of<IOperationResultPublisher>());
         container.RegisterInstance(Mock.Of<IHostedService>());
-        container.RegisterDelegate<IWindowManagerService>(_ => throw new InvalidOperationException("UI dispatcher has not started"), Reuse.Singleton);
         container.Register<EngineShutdownService>(Reuse.Singleton);
         container.RegisterDelegate<IHostedService>(resolver => resolver.Resolve<EngineShutdownService>(), Reuse.Singleton);
 
@@ -81,66 +78,21 @@ public sealed class EngineShutdownServiceTests
     }
 
     [TestMethod]
-    public async Task OverlappingFinalWindows_ShutDownBeforeBothDisappear()
+    public async Task Shutdown_RunningEngine_ShutsItDownOnTheUiThreadOnce()
     {
         var engine = new Mock<IEngineService>();
         _ = engine.SetupGet(value => value.State).Returns(EngineServiceState.Running);
-        var windows = new Mock<IWindowManagerService>();
-        _ = windows.SetupGet(value => value.OpenWindows).Returns([Mock.Of<IManagedWindow>(window => window.Id == new WindowId(1)), Mock.Of<IManagedWindow>(window => window.Id == new WindowId(2))]);
-        var service = new EngineShutdownService(engine.Object, Mock.Of<IOperationResultPublisher>(), action => action());
-        service.ObserveWindows(windows.Object);
-        await service.StartAsync(CancellationToken.None).ConfigureAwait(false);
-        foreach (var id in (ulong[])[1, 2])
+        var dispatched = 0;
+        var service = new EngineShutdownService(engine.Object, Mock.Of<IOperationResultPublisher>(), action =>
         {
-            var args = new WindowClosingEventArgs { WindowId = new WindowId(id) };
-            await windows.RaiseAsync(value => value.WindowClosing += null, windows.Object, args).ConfigureAwait(false);
-            await args.CompleteAsync(approved: true).ConfigureAwait(false);
-        }
-
-        engine.Verify(value => value.ShutdownAsync(), Times.Once());
-    }
-
-    [TestMethod]
-    [DataRow(true, false)]
-    [DataRow(false, true)]
-    [DataRow(false, false)]
-    public async Task FinalWindow_ShutsDownOnlyAfterApprovedDocumentCommit(bool guardCanceled, bool commitCanceled)
-    {
-        var engine = new Mock<IEngineService>();
-        _ = engine.SetupGet(value => value.State).Returns(EngineServiceState.Running);
-        var windows = new Mock<IWindowManagerService>();
-        _ = windows.SetupGet(value => value.OpenWindows).Returns([Mock.Of<IManagedWindow>(window => window.Id == new WindowId(1))]);
-        var committed = false;
-        _ = engine.Setup(value => value.ShutdownAsync()).Callback(() => _ = committed.Should().BeTrue()).Returns(ValueTask.CompletedTask);
-        var service = new EngineShutdownService(engine.Object, Mock.Of<IOperationResultPublisher>(), action => action());
-        service.ObserveWindows(windows.Object);
-        await service.StartAsync(CancellationToken.None).ConfigureAwait(false);
-        var args = new WindowClosingEventArgs { WindowId = new WindowId(1), Cancel = guardCanceled };
-        await windows.RaiseAsync(value => value.WindowClosing += null, windows.Object, args).ConfigureAwait(false);
-        args.AddCompletionTask(approved =>
-        {
-            args.Cancel |= commitCanceled;
-            committed = approved && !args.Cancel;
-            return Task.CompletedTask;
+            dispatched++;
+            return action();
         });
 
-        await args.CompleteAsync(approved: !guardCanceled).ConfigureAwait(false);
-        engine.Verify(value => value.ShutdownAsync(), !guardCanceled && !commitCanceled ? Times.Once() : Times.Never());
-    }
+        await service.ShutdownAsync().ConfigureAwait(false);
 
-    [TestMethod]
-    public async Task ClosingOneOfSeveralWindows_KeepsSharedEngineAlive()
-    {
-        var engine = new Mock<IEngineService>();
-        var windows = new Mock<IWindowManagerService>();
-        _ = windows.SetupGet(value => value.OpenWindows).Returns([Mock.Of<IManagedWindow>(window => window.Id == new WindowId(1)), Mock.Of<IManagedWindow>(window => window.Id == new WindowId(2))]);
-        var service = new EngineShutdownService(engine.Object, Mock.Of<IOperationResultPublisher>(), action => action());
-        service.ObserveWindows(windows.Object);
-        await service.StartAsync(CancellationToken.None).ConfigureAwait(false);
-        var args = new WindowClosingEventArgs { WindowId = new WindowId(1) };
-        await windows.RaiseAsync(value => value.WindowClosing += null, windows.Object, args).ConfigureAwait(false);
-        await args.CompleteAsync(approved: true).ConfigureAwait(false);
-        engine.Verify(value => value.ShutdownAsync(), Times.Never());
+        _ = dispatched.Should().Be(1);
+        engine.Verify(value => value.ShutdownAsync(), Times.Once());
     }
 
     [TestMethod]

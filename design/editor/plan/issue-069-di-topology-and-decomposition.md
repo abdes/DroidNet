@@ -103,6 +103,42 @@ slices do not reopen them.
    a later slice has to rewrite or remove; code a later slice only moves (a port
    adapter written in the World Editor before LivePreview exists) is allowed.
    Each slice is checked against this rule before it starts.
+10. **The session's contracts live in Projects.** The spec puts
+    `IProjectSessionHost` and `IProjectSession` in the Shell, but the layer rule
+    of the architecture (section 5.2) came after it: the Shell references
+    foundation only, and domain modules never reference the Shell. The domain
+    services of the session need its lifetime and its project's settings, and
+    the host takes a `ProjectContext`. So `Oxygen.Editor.Projects` declares both
+    contracts, and `IProjectSession` takes over the live settings of
+    `IProjectContextService`. The host is implemented by the composition root,
+    which composes the session's modules. The Shell knows no project: its
+    session services (the histories, the open documents) register through its
+    session module, and its close and exit defines the participants that the
+    composition root implements for the session.
+11. **No session bus.** S1.10 and S1.12 replaced every broadcast with an event
+    of its owner, and no messenger remains in the editor, so `ISessionEvents`
+    (spec 6.2 and 6.11) is not added.
+12. **A mount change keeps the session.** Spec 6.10 assumes a session's project
+    never changes, but a content mount change (local folders, libraries, cooked
+    content order) gives the open project a new `ProjectContext`. Its session
+    stays open: `IProjectSession.Context` is the session's current project, an
+    immutable value that only a mount change replaces, through the host's
+    `ChangeContext`, which accepts only the same project id and root.
+    `ContextChanged` fires once per change, after `Context` is updated, on the
+    thread of the change. Only the services whose state comes from the mounts
+    follow it: the cook coordinator, the catalog and feed, the automatic cook
+    and the preview's remount. The session registers no `ProjectContext`, and a
+    topology rule refuses a Session-, Window- or Panel-layer constructor that
+    takes one, so nothing keeps a context a mount change replaced. Everything
+    else (relocation redirects, histories, the clipboard, preferences,
+    documents) survives a mount change, where before it reset as for a new
+    project.
+13. **Aura's window manager is the window registry.** A window's kind is its
+    Aura category, and a window of a project session carries the session in
+    its metadata. The session host creates a window's scope under the session's
+    and owns it; nothing else holds the session's handle. Closing the session
+    closes its open windows through the window manager first, then disposes its
+    scope, awaited.
 
 ## 3. Placement of what the spec does not place
 
@@ -678,13 +714,17 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 
 ### Phase 4: Project Session
 
-- **S4.1** `IProjectSessionHost`, `IProjectSession`, `ISessionEvents`,
-  `CookPublicationRecovery` split, the Shell's histories bound to the session,
-  session clipboard, and the reworked `ProjectActivationCoordinator` with its
-  cancel, replace and navigation-failure contract. The topology test gains the
-  Session layer's checks.
-- **S4.2** Clusters, one commit each: preferences, assets, content pipeline and
-  cooking, scene stack, script tooling, Play. Each injects `ProjectContext`,
+- **S4.1** `IProjectSessionHost` and `IProjectSession` (decisions 10 and 11),
+  `CookPublicationRecovery` split, the Shell's global history bound to the
+  session, and the reworked `ProjectActivationCoordinator` with its cancel,
+  replace and navigation-failure contract. The topology test gains the Session
+  layer's checks. The session clipboard moves with the scene stack (S4.2): it is
+  the Scene Explorer's state, which that cluster rewrites.
+- **S4.2** Clusters, one commit each, in dependency order, because a session
+  service can depend only on the session and the editor scope: preferences, the
+  content pipeline's core, the scene stack with the open documents and the
+  session clipboard, assets with relocation, script tooling, the automatic cook,
+  Play with the preview. Each injects `ProjectContext`,
   deletes its `ProjectChanged` reset and uses the session lifetime token. The
   preferences cluster also ends the window keyed settings manager's use of a
   root-tracked `PersistentState`, which today leaves one `DbContext` held by the
@@ -692,7 +732,9 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   layer modules (for example `ContentPipelineModule` and
   `ContentPipelineWindowModule`) into its Session module.
 - **S4.3** Remove `CurrentProject` and delete `IProjectContextService`.
-- **S4.4** Close and exit (shell design section 6): the Shell's close and exit
+- **S4.4** Close and exit (shell design section 6), before S4.2, so that the
+  session's services are disposed when its window closes once Play and the
+  preview move into it: the Shell's close and exit
   becomes the only subscriber to Aura's `WindowClosing`. Window participants
   (the window's documents, today's `WindowCloseCoordinator`, and the saving of
   window placement, today's `WindowPlacementService` subscription) and
@@ -766,8 +808,10 @@ docking state.
   their window through the window manager instead of being broadcast and
   filtered; dialogs and focus find their window at call time. Closing a document window closes its documents with the usual
   unsaved prompt, and Cancel keeps it open (owner's decision).
-  `DocumentAreaView` is created per window, and scope disposal, fire-and-forget
-  from synchronous `Dispose` since S2.3, is awaited by the window's close.
+  `DocumentAreaView` is created per window. The session's handle owns every
+  window scope (decision 13): the last workspace window's close disposes them
+  with the session, and a document window's close, which leaves the session
+  open, disposes its own window scope through the session's handle, awaited.
 
 - **S5.4 Lifetime tests.** `DocumentAreaViewModel` view switching (unit), a
   viewport's unload, reload and re-attach on tab switches (unit), a material
@@ -832,7 +876,7 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.15 Enforcement                                    | `done`        | Boundary test and project construction; the editor's hand-built test containers are `HostContainer`s, and the topology tests compose the registration modules over one                      |
 | S2.1 to S2.3 Scope factory and topology              | `done`        | `DroidNet.Composition`; the composition root in `Oxygen.Editor.Composition` with its topology and project-switch tests; workspace and Content Explorer scopes on the factory                |
 | S3.1 Registration modules                            | `done`        | Modules per subsystem and layer; `EditorModule` composes the editor scope through `ScopeFactory.CreateRoot`; the App references only what its host and XAML use                             |
-| S4.1 to S4.4 Project Session                         | `not started` |                                                                                                                                                                                             |
+| S4.1 to S4.4 Project Session                         | `in progress` |                                                                                                                                                                                             |
 | S5.1 to S5.4 Documents across windows, panels in one | `not started` |                                                                                                                                                                                             |
 | S6.1 to S6.3 Service location and messenger          | `not started` |                                                                                                                                                                                             |
 | S7 Documentation                                     | `not started` |                                                                                                                                                                                             |

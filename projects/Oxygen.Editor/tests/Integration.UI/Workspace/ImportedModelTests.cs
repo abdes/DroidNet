@@ -48,9 +48,9 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         timeout.CancelAfter(TimeSpan.FromSeconds(120));
         using var services = new CatalogWorkloadServices(fixture);
         var imported = libraryOnly ? await CreateImportedLibraryAsync(fixture, services, format, timeout.Token).ConfigureAwait(true) : null;
-        await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
+        await using var catalog = new AssetCatalog(services.Session, services.Storage, services.EngineContent, services.Publication);
         using var runtimeStatus = new AssetRuntimeStatusSource(fixture.Runtime);
-        await using var provider = new AssetFeed(catalog, services.Projects, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
+        await using var provider = new AssetFeed(catalog, services.Session, services.Scopes, services.Pipeline, services.Documents, services.Runs, runtimeStatus, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         await using var previewRegistration = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
         if (imported is null)
@@ -60,13 +60,13 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         }
         else
         {
-            using var publication = await services.Publication.AcquireForMountAsync(services.Projects.ActiveProject!, timeout.Token).ConfigureAwait(true);
+            using var publication = await services.Publication.AcquireForMountAsync(services.Session.Context, timeout.Token).ConfigureAwait(true);
             var bindings = publication.Roots.Zip(publication.RootPaths, static (root, path) => new Oxygen.Editor.Runtime.Engine.RuntimeCookedRoot(
                 path,
                 root.Container == Oxygen.Editor.ContentPipeline.Publication.CookPublicationRootContainer.PakFile
                     ? Oxygen.Editor.Runtime.Engine.RuntimeCookedRootKind.PakFile
                     : Oxygen.Editor.Runtime.Engine.RuntimeCookedRootKind.LooseFolder)).ToArray();
-            var mounts = await services.Mounts.PrepareAsync(services.Projects.ActiveProject!, publication, timeout.Token).ConfigureAwait(true);
+            var mounts = await services.Mounts.PrepareAsync(services.Session.Context, publication, timeout.Token).ConfigureAwait(true);
             await fixture.Runtime.RefreshProjectCookedRootsAsync(bindings, mounts).ConfigureAwait(true);
         }
 
@@ -112,8 +112,8 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         var selected = await WaitForNodeAsync(fixture, node.Id, static value => value.IndexCount == 3, cancellationToken).ConfigureAwait(true);
         _ = selected.GeometryKey.Should().Be(ImportedNativeKey(geometry));
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
-        var slot = await ReadSingleSlotAsync(inventories, fixture.Projects.ActiveProject!, geometry.Identity, cancellationToken).ConfigureAwait(true);
-        var built = await MaterialSlotEdits.SetAsync(inventories, fixture.Projects.ActiveProject!, [node.Id], slot, material.Identity, cancellationToken).ConfigureAwait(true);
+        var slot = await ReadSingleSlotAsync(inventories, fixture.Session.Context, geometry.Identity, cancellationToken).ConfigureAwait(true);
+        var built = await MaterialSlotEdits.SetAsync(inventories, fixture.Session.Context, [node.Id], slot, material.Identity, cancellationToken).ConfigureAwait(true);
         _ = built.Error.Should().BeNull("the current native slot must be editable");
         _ = (await fixture.Authoring.ExecuteAsync(built.Edit!).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = fixture.Document.History.UndoStack.Should().HaveCount(2);

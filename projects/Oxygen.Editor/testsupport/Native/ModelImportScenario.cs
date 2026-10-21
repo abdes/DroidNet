@@ -25,7 +25,7 @@ internal sealed class ModelImportScenario : DroidNet.Tests.VisualUserInterfaceTe
     internal static async Task<ContentCookResult> ImportTypedModelAsync(NativeSceneFixture fixture, CatalogWorkloadServices services, string format, CancellationToken cancellationToken)
     {
         var path = await WriteTypedModelSourceAsync(fixture, format, cancellationToken).ConfigureAwait(true);
-        var result = await services.Pipeline.ImportSourceAsync(new(services.Projects.ActiveProject!, path, "Triangle", AssetPath.Parse("/Content/Models")), cancellationToken).ConfigureAwait(true);
+        var result = await services.Pipeline.ImportSourceAsync(new(services.Session.Context, path, "Triangle", AssetPath.Parse("/Content/Models")), cancellationToken).ConfigureAwait(true);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
         _ = result.CookedAssets.Should().Contain(asset => asset.Kind == ContentCookAssetKind.Scene);
         return result;
@@ -66,7 +66,7 @@ internal sealed class ModelImportScenario : DroidNet.Tests.VisualUserInterfaceTe
             File.Copy(path, target);
         }
 
-        var next = services.Projects.ActiveProject! with
+        var next = services.Session.Context with
         {
             LocalFolderMounts = [new("Library", library)],
         };
@@ -79,7 +79,7 @@ internal sealed class ModelImportScenario : DroidNet.Tests.VisualUserInterfaceTe
             CookedContentOrder = [.. next.CookedContentOrder],
         };
         await manager.SaveProjectInfoAsync(updated, saved, cancellationToken).ConfigureAwait(true);
-        services.Projects.Activate(next);
+        services.Sessions.ChangeContext(next);
         return imported;
     }
 }

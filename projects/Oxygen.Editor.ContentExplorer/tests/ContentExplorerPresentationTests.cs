@@ -150,9 +150,8 @@ public sealed class ContentExplorerPresentationTests
     {
         var state = new ContentExplorerState();
         var shell = new RecordingShell();
-        var projects = new ProjectContextService();
-        projects.Activate(TestProject.Create(new MockFileSystem()).Context);
-        using var details = new AssetDetailsViewModel(state, projects, shell);
+        using var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
+        using var details = new AssetDetailsViewModel(state, session, shell);
         _ = details.IsEmpty.Should().BeTrue();
         _ = details.CopyPathCommand.CanExecute(parameter: null).Should().BeFalse();
 

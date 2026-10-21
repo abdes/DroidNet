@@ -28,10 +28,10 @@ public sealed partial class ContentExplorerViewModel
             return false;
         }
 
-        var project = projectContextService.ActiveProject;
+        var project = session.Context;
         var item = await this.scope.Resolver.Resolve<IAssetFeed>().ResolveAsync(asset).ConfigureAwait(true);
-        return item is not null && item.PrimaryState != AssetState.Missing && ReferenceEquals(project, projectContextService.ActiveProject)
-            && !this.isDisposed && project is not null && await this.RevealAssetsAsync(project, [item]).ConfigureAwait(true);
+        return item is not null && item.PrimaryState != AssetState.Missing && ReferenceEquals(project, session.Context)
+            && !this.isDisposed && await this.RevealAssetsAsync(project, [item]).ConfigureAwait(true);
     }
 
     /// <summary>Reveals available imported outputs together without resolving or rescanning each row individually.</summary>
@@ -40,18 +40,19 @@ public sealed partial class ContentExplorerViewModel
     public async Task<bool> ShowAssetsAsync(IReadOnlyCollection<AssetPath> assets)
     {
         ArgumentNullException.ThrowIfNull(assets);
-        if (assets.Count == 0 || this.isDisposed || this.scope is null || this.localRouter is null || this.browserState is null
-            || projectContextService.ActiveProject is not { } project)
+        if (assets.Count == 0 || this.isDisposed || this.scope is null || this.localRouter is null || this.browserState is null)
         {
             return false;
         }
+
+        var project = session.Context;
 
         var provider = this.scope.Resolver.Resolve<IAssetFeed>();
         await provider.RefreshAsync().ConfigureAwait(true);
         var items = await provider.Items.FirstAsync().ToTask().ConfigureAwait(true);
         var requested = assets.ToHashSet();
         var available = items.Where(item => item.PrimaryState != AssetState.Missing && requested.Contains(item.Identity)).ToArray();
-        return available.Length > 0 && !this.isDisposed && ReferenceEquals(project, projectContextService.ActiveProject)
+        return available.Length > 0 && !this.isDisposed && ReferenceEquals(project, session.Context)
             && await this.RevealAssetsAsync(project, available).ConfigureAwait(true);
     }
 
@@ -71,13 +72,14 @@ public sealed partial class ContentExplorerViewModel
         if (needsCooked && ProjectCookedFolders.Roots(project).Length == 0)
         {
             await this.localRouter!.NavigateAsync("/(left:folders//right:" + this.currentAssetsViewPath + ")").ConfigureAwait(true);
-            if (this.LeftPaneViewModel is not ContentFoldersViewModel explorer || !ReferenceEquals(project, projectContextService.ActiveProject))
+            if (this.LeftPaneViewModel is not ContentFoldersViewModel explorer || !ReferenceEquals(project, session.Context))
             {
                 return false;
             }
 
             await explorer.MountKnownLocationCommand.ExecuteAsync(KnownVirtualFolderMount.Cooked).ConfigureAwait(true);
-            if (projectContextService.ActiveProject is not { } mounted || mounted.ProjectId != project.ProjectId
+            var mounted = session.Context;
+            if (mounted.ProjectId != project.ProjectId
                 || mounted.ProjectRoot != project.ProjectRoot
                 || ProjectCookedFolders.Roots(mounted).Length == 0)
             {
@@ -100,7 +102,7 @@ public sealed partial class ContentExplorerViewModel
         }
 
         await this.localRouter!.NavigateAsync("/(left:folders//right:" + this.currentAssetsViewPath + ")" + RouteStateMapping.BuildSelectedQuery(folders)).ConfigureAwait(true);
-        if (this.browserState?.ActiveAssetLayout is not { } layout || this.isDisposed || !ReferenceEquals(project, projectContextService.ActiveProject))
+        if (this.browserState?.ActiveAssetLayout is not { } layout || this.isDisposed || !ReferenceEquals(project, session.Context))
         {
             return false;
         }

@@ -22,7 +22,7 @@ internal static class AssetFeeds
 {
     /// <summary>Creates an asset feed.</summary>
     /// <param name="catalog">The asset records.</param>
-    /// <param name="projects">The active project.</param>
+    /// <param name="session">The project session.</param>
     /// <param name="scopes">The project's cook scope.</param>
     /// <param name="cookStatus">The cook status; none of the assets has one when none is given.</param>
     /// <param name="documents">The unsaved documents; none when none is given.</param>
@@ -33,7 +33,7 @@ internal static class AssetFeeds
     /// <returns>The feed, which the test disposes.</returns>
     public static AssetFeed Create(
         IAssetCatalogReader catalog,
-        IProjectContextService projects,
+        IProjectSession session,
         IProjectCookScopeProvider scopes,
         IAssetCookStatusReader? cookStatus = null,
         IUnsavedDocuments? documents = null,
@@ -43,7 +43,7 @@ internal static class AssetFeeds
         IAssetAuthoring? authoring = null)
         => new(
             catalog,
-            projects,
+            session,
             scopes,
             cookStatus ?? new NoCookStatus(),
             documents ?? Mock.Of<IUnsavedDocuments>(port => port.Find(It.IsAny<IEnumerable<FileSystemPath>>()) == Array.Empty<UnsavedDocument>()),

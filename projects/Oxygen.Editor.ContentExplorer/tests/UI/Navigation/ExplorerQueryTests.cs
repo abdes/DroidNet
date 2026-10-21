@@ -53,11 +53,11 @@ public sealed partial class ExplorerQueryTests : DroidNet.Tests.VisualUserInterf
         var mesh = CreateQueryAsset("Blue mesh", AssetKind.Geometry, AssetCookFreshness.NeedsCooking);
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([material, other, mesh]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject();
+        using var session = CreateQuerySession();
         var state = new ContentExplorerState();
         state.SetSelectedFolders([AssetPath.Parse("/Content")]);
-        using var list = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
-        using var tile = new TilesLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        using var list = new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
+        using var tile = new TilesLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await list.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         await tile.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var queryView = new AssetQueryView
@@ -106,10 +106,10 @@ public sealed partial class ExplorerQueryTests : DroidNet.Tests.VisualUserInterf
     {
         using var updates = new BehaviorSubject<IReadOnlyList<AssetEntry>>([CreateQueryAsset("Blue", AssetKind.Material, AssetCookFreshness.NeedsCooking)]);
         var provider = CreateQueryProvider(updates);
-        var projects = CreateQueryProject(cookedMount: true);
+        using var session = CreateQuerySession(cookedMount: true);
         var state = new ContentExplorerState();
         state.SetSelectedFolders([AssetPath.Parse("/Cooked/Content/Materials")]);
-        using var model = new ListLayoutViewModel(provider.Object, projects, state, CreateStatusHosting());
+        using var model = new ListLayoutViewModel(provider.Object, session, state, CreateStatusHosting());
         await model.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         var view = new ListLayoutView
         {

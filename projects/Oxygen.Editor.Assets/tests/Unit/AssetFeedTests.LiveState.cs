@@ -38,8 +38,8 @@ public sealed partial class AssetFeedTests
             _ = Interlocked.Increment(ref reads);
             return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], []) { SourcePaths = [path], SavedSourceHash = sourceHash }]);
         });
-        var projects = workspace.ActivateProject();
-        var project = projects.ActiveProject!;
+        var projects = workspace.OpenSession();
+        var project = projects.Context;
         using var provider = AssetFeeds.Create(catalog, projects, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, documents: unsaved.Port.Object);
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
@@ -85,7 +85,7 @@ public sealed partial class AssetFeedTests
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         WriteMaterial(workspace.SourcePath("Content/Other/Blue.omat.json"));
         var catalog = new TestProjectAssetCatalog([new AssetRecord(red), new AssetRecord(blue)]);
-        var context = workspace.ActivateProject();
+        var context = workspace.OpenSession();
         IReadOnlyList<CookRunSnapshot> runs = [];
         var cookService = new Mock<ICookRunService>();
         _ = cookService.SetupGet(service => service.Runs).Returns(() => runs);
@@ -109,7 +109,7 @@ public sealed partial class AssetFeedTests
         var run = new CookRunSnapshot
         {
             OperationId = Guid.NewGuid(),
-            ProjectId = context.ActiveProject!.ProjectId,
+            ProjectId = context.Context.ProjectId,
             ProjectRoot = workspace.Root,
             DisplayName = "Cook",
             Request = new(kind, kind is CookTargetKind.Asset or CookTargetKind.CurrentScene ? AssetPath.Parse("/Content/Materials/Red.omat") : kind == CookTargetKind.Folder ? AssetPath.Parse("/Content/Materials") : null),
@@ -136,11 +136,11 @@ public sealed partial class AssetFeedTests
         using var workspace = new AssetWorkspace();
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         var identity = AssetPath.Parse("/Content/Materials/Red.omat");
-        var context = workspace.ActivateProject();
+        var context = workspace.OpenSession();
         var run = new CookRunSnapshot
         {
             OperationId = Guid.NewGuid(),
-            ProjectId = context.ActiveProject!.ProjectId,
+            ProjectId = context.Context.ProjectId,
             ProjectRoot = workspace.Root,
             DisplayName = "Red",
             Request = new(CookTargetKind.Asset, identity, IsAutomatic: true),

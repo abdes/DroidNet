@@ -22,21 +22,20 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
 /// <summary>An in-memory project with one Content mount and a relocation service.</summary>
 internal sealed class RelocationWorkspace : IDisposable
 {
-    private readonly ProjectContextService context = new();
     private readonly Subject<AssetChange> catalogChanges = new();
 
     public RelocationWorkspace()
     {
         _ = this.UnsavedDocuments.Setup(documents => documents.Find(It.IsAny<IEnumerable<FileSystemPath>>())).Returns([]);
-        this.context.Activate(TestProject.Create(this.FileSystem).Context with
+        this.Session = new(TestProject.Create(this.FileSystem).Context with
         {
             Name = "Relocation tests",
             AuthoringMounts = [new ProjectMountPoint("Content", "Content"), new ProjectMountPoint("Cooked", ".cooked")],
         });
-        this.Coordinator = new(this.context);
+        this.Coordinator = new(this.Session);
         this.Files = new NativeAtomicFileStore(this.FileSystem);
         this.Catalog = Mock.Of<IAssetCatalog>(catalog => catalog.Changes == this.catalogChanges);
-        this.Service = new(this.Coordinator, this.context, this.UnsavedDocuments.Object, this.Files, this.Catalog);
+        this.Service = new(this.Coordinator, this.Session, this.UnsavedDocuments.Object, this.Files, this.Catalog);
     }
 
     public MockFileSystem FileSystem { get; } = new();
@@ -54,11 +53,12 @@ internal sealed class RelocationWorkspace : IDisposable
 
     public AssetRelocationService Service { get; }
 
-    public ProjectContext Project => this.context.ActiveProject!;
+    public ProjectContext Project => this.Session.Context;
 
-    public ProjectContextService Context => this.context;
+    /// <summary>Gets the project's session, which the session's services receive.</summary>
+    public TestSession Session { get; }
 
-    public AssetRelocationService CreateService(AssetRedirects? redirects) => new(this.Coordinator, this.context, this.UnsavedDocuments.Object, this.Files, this.Catalog, redirects: redirects);
+    public AssetRelocationService CreateService(AssetRedirects? redirects) => new(this.Coordinator, this.Session, this.UnsavedDocuments.Object, this.Files, this.Catalog, redirects: redirects);
 
     /// <summary>Reports a catalog change, as the file watcher does after an edit outside a relocation.</summary>
     /// <param name="identity">The changed asset's catalog identity, which is its source file's virtual path.</param>
@@ -121,9 +121,10 @@ internal sealed class RelocationWorkspace : IDisposable
 
     public void Dispose()
     {
-        this.context.Close();
+        this.Session.End();
         this.Service.Dispose();
         this.Coordinator.Dispose();
+        this.Session.Dispose();
         this.catalogChanges.Dispose();
     }
 }

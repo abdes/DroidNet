@@ -86,12 +86,48 @@ public sealed class ProjectAssetFilesTests
     }
 
     [TestMethod]
-    [DataRow(@"C:\Games\Demo\project.oxy", DisplayName = "Project file")]
-    [DataRow(@"C:\Games\Demo\ContentOther\Wood.omat.json", DisplayName = "Sibling with the mount's prefix")]
     [DataRow(@"E:\Elsewhere\Wood.omat.json", DisplayName = "Another drive")]
     [DataRow(@"C:\Games\Demo\Content\CON.omat.json", DisplayName = "A name the rules refuse")]
     public void FindByFilePath_OutsideTheMounts_IsNull(string path)
         => _ = Project.FindByFilePath(FileSystemPath.From(path)).Should().BeNull();
+
+    [TestMethod]
+    [DataRow(@"C:\Games\Demo\project.oxy", "/project/project.oxy", DisplayName = "Project file")]
+    [DataRow(@"C:\Games\Demo\ContentOther\Wood.omat.json", "/project/ContentOther/Wood.omat.json", DisplayName = "Sibling with the mount's prefix")]
+    [DataRow(@"C:\Games\Demo\Config", "/project/Config", DisplayName = "A folder at the root")]
+    public void FindByFilePath_UnderTheRootOutsideTheOtherMounts_IsAProjectFile(string path, string expected)
+    {
+        var location = Project.FindByFilePath(FileSystemPath.From(path));
+
+        _ = location!.Path.Should().Be(AssetPath.Parse(expected));
+        _ = location.MountKind.Should().Be(ProjectMountKind.ProjectFiles);
+        _ = location.MountRoot.Should().Be(Project.ProjectRoot);
+    }
+
+    [TestMethod]
+    public void Find_ForAProjectFilesFolder_ResolvesItUnderTheRoot()
+    {
+        var location = Project.Find(AssetPath.Parse("/project/Config"));
+
+        _ = location!.File.Should().Be(FileSystemPath.From(@"C:\Games\Demo\Config"));
+        _ = location.MountKind.Should().Be(ProjectMountKind.ProjectFiles);
+        _ = location.IsMountRoot.Should().BeFalse();
+    }
+
+    [TestMethod]
+    [DataRow("project", DisplayName = "The project's own files")]
+    [DataRow("Project", DisplayName = "Its name in another case")]
+    [DataRow("Engine", DisplayName = "The engine's content")]
+    public void ValidateDeclaredMountName_AMountEveryProjectHas_IsRefused(string name)
+        => _ = ProjectAssetFiles.ValidateDeclaredMountName(name).Should().NotBeNull();
+
+    [TestMethod]
+    public void ValidateDeclaredMountName_AnAuthoredName_IsAccepted()
+        => _ = ProjectAssetFiles.ValidateDeclaredMountName("Levels").Should().BeNull();
+
+    [TestMethod]
+    public void FindByFilePath_InsideAnotherMount_IsNamedFromThatMount()
+        => _ = Project.FindByFilePath(FileSystemPath.From(@"C:\Games\Demo\Content\Wood.omat.json"))!.Path.Should().Be(AssetPath.Parse("/Content/Wood.omat.json"));
 
     [TestMethod]
     public void FindByFilePath_RoundTripsThroughTheVirtualPath()

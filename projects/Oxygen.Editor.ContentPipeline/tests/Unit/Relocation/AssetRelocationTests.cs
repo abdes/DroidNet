@@ -792,7 +792,7 @@ public sealed class AssetRelocationTests
     {
         using var workspace = CreateContent();
         _ = workspace.Write("Content/Levels/Start.oscene.json", Scene);
-        workspace.Context.Activate(workspace.Project with { DefaultSceneId = SceneId.FromValue(Guid.Parse("6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10")) });
+        workspace.Session.ChangeContext(workspace.Project with { DefaultSceneId = SceneId.FromValue(Guid.Parse("6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10")) });
         var recycled = new List<string>();
 
         var delete = () => workspace.Service.DeleteAsync(

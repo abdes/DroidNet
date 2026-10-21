@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Runtime.Engine;
 
@@ -111,14 +110,4 @@ public sealed partial class PreviewSession
 
     private void LogMountsChangeSuperseded(string projectRoot)
         => LogMountsChangeSuperseded(this.logger, projectRoot);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "No project is active; the preview mounts no content.")]
-    private static partial void LogNoActiveProject(ILogger logger);
-
-    [Conditional("DEBUG")]
-    private void LogNoActiveProject()
-        => LogNoActiveProject(this.logger);
 }

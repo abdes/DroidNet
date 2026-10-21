@@ -8,7 +8,6 @@ using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Windows;
 using Testably.Abstractions.Testing;
@@ -65,9 +64,8 @@ public sealed class CookingPresenterTests : DroidNet.Tests.VisualUserInterfaceTe
 
     private static (CookingPanelViewModel Model, CookRunSnapshot Snapshot) CreateModel(Mock<ICookRunService> runs)
     {
-        var projects = new ProjectContextService();
         var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Presenter" };
-        projects.Activate(project);
+        var session = new TestSession(project);
         var snapshot = new CookRunSnapshot
         {
             OperationId = Guid.NewGuid(),
@@ -79,6 +77,6 @@ public sealed class CookingPresenterTests : DroidNet.Tests.VisualUserInterfaceTe
         _ = runs.SetupGet(service => service.Runs).Returns([]);
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
-        return (new CookingPanelViewModel(runs.Object, Mock.Of<IContentPipelineService>(), projects, Mock.Of<ICookRecovery>(), hosting), snapshot);
+        return (new CookingPanelViewModel(runs.Object, Mock.Of<IContentPipelineService>(), session, Mock.Of<ICookRecovery>(), hosting), snapshot);
     }
 }

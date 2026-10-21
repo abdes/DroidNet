@@ -11,15 +11,15 @@ namespace Oxygen.Editor.ContentPipeline;
 
 /// <summary>Routes material cooking through the shared saved-input pipeline.</summary>
 /// <param name="pipeline">The shared cook, compatibility and snapshot workflow.</param>
-/// <param name="projectContextService">The active project context.</param>
+/// <param name="session">The project session, whose project's materials the service cooks.</param>
 /// <param name="logger">Material workflow logging.</param>
 public sealed partial class MaterialCookService(
     IContentPipelineService pipeline,
-    IProjectContextService projectContextService,
+    IProjectSession session,
     ILogger<MaterialCookService> logger) : IMaterialCookService
 {
     private readonly IContentPipelineService pipeline = pipeline ?? throw new ArgumentNullException(nameof(pipeline));
-    private readonly IProjectContextService projectContextService = projectContextService ?? throw new ArgumentNullException(nameof(projectContextService));
+    private readonly IProjectSession session = session ?? throw new ArgumentNullException(nameof(session));
     private readonly ILogger<MaterialCookService> logger = logger ?? throw new ArgumentNullException(nameof(logger));
 
     /// <inheritdoc />
@@ -27,7 +27,8 @@ public sealed partial class MaterialCookService(
     {
         ArgumentNullException.ThrowIfNull(request);
         cancellationToken.ThrowIfCancellationRequested();
-        if (!this.IsCurrentMaterialRequest(request, out var project))
+        var project = this.session.Context;
+        if (!IsCurrentMaterialRequest(request, project))
         {
             this.LogRejected(request.Material);
             return new(request.Material, CookedMaterialUri: null, MaterialCookState.Rejected, OperationId: null);
@@ -43,11 +44,9 @@ public sealed partial class MaterialCookService(
         return new(request.Material, cooked?.CookedAssetUri, state, result.OperationId) { Cook = result };
     }
 
-    private bool IsCurrentMaterialRequest(MaterialCookRequest request, out ProjectContext? project)
+    private static bool IsCurrentMaterialRequest(MaterialCookRequest request, ProjectContext project)
     {
-        project = this.projectContextService.ActiveProject;
-        if (project is null
-            || request.Material is null
+        if (request.Material is null
             || request.ProjectRoot is null || string.IsNullOrWhiteSpace(request.MountName)
             || string.IsNullOrWhiteSpace(request.SourceRelativePath) || Path.IsPathRooted(request.SourceRelativePath))
         {

@@ -35,7 +35,7 @@ namespace Oxygen.Editor.Assets;
 /// </remarks>
 public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IAssetPublicationTarget, IAssetCatalogReader, IDisposable, IAsyncDisposable
 {
-    private readonly IProjectContextService projectContextService;
+    private readonly IProjectSession session;
     private readonly IStorageProvider storage;
     private readonly IEngineContentPak engineContent;
     private readonly ICookPublicationReader publication;
@@ -63,19 +63,19 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     private volatile bool isDisposed;
 
     /// <summary>Initializes a new instance of the <see cref="AssetCatalog"/> class.</summary>
-    /// <param name="projectContextService">The active project context.</param>
+    /// <param name="session">The project session, whose current content mounts the catalog lists.</param>
     /// <param name="storage">The storage provider for indexed folders.</param>
     /// <param name="engineContent">The engine content pak, whose assets every project references.</param>
     /// <param name="publication">Reads the project's publication and the catalogs of its cooked roots.</param>
     /// <param name="logger">Records failures of the catalog's observers.</param>
     public AssetCatalog(
-        IProjectContextService projectContextService,
+        IProjectSession session,
         IStorageProvider storage,
         IEngineContentPak engineContent,
         ICookPublicationReader publication,
         ILogger<AssetCatalog>? logger = null)
     {
-        this.projectContextService = projectContextService;
+        this.session = session;
         this.storage = storage;
         this.engineContent = engineContent;
         this.publication = publication;
@@ -84,10 +84,13 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     }
 
     /// <summary>Gets the mount that lists the project's files outside its other mounts.</summary>
-    public static AssetPath ProjectFiles { get; } = AssetPath.Create("project");
+    public static AssetPath ProjectFiles { get; } = AssetPath.Create(ProjectAssetFiles.ProjectFilesMount);
 
     /// <inheritdoc />
     public IObservable<AssetChange> Changes => this.changes.AsObservable();
+
+    // The session's project in its current content mounts, until the session ends.
+    private ProjectContext? SessionProject => this.session.Lifetime.IsCancellationRequested ? null : this.session.Context;
 
     /// <inheritdoc />
     /// <remarks>Folders of the installed project folder catalogs; the folders of a catalog being replaced are not reported.</remarks>
@@ -105,7 +108,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     /// <returns>Completion after the catalog is current.</returns>
     public async Task RefreshAsync(CancellationToken cancellationToken = default)
     {
-        var project = this.projectContextService.ActiveProject;
+        var project = this.SessionProject;
         if (project is null)
         {
             return;
@@ -129,7 +132,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
             lock (this.stateLock)
             {
                 ObjectDisposedException.ThrowIf(this.isDisposed, this);
-                if (this.refreshSequence != observation || !ReferenceEquals(project, this.projectContextService.ActiveProject))
+                if (this.refreshSequence != observation || !ReferenceEquals(project, this.SessionProject))
                 {
                     return;
                 }
@@ -195,7 +198,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         lock (this.stateLock)
         {
             ObjectDisposedException.ThrowIf(this.isDisposed, this);
-            if (this.projectContextService.ActiveProject is not { } active)
+            if (this.SessionProject is not { } active)
             {
                 return Task.CompletedTask;
             }
@@ -225,7 +228,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         ArgumentNullException.ThrowIfNull(query);
         using var operation = this.CreateOperationCancellation(cancellationToken);
         operation.Token.ThrowIfCancellationRequested();
-        var project = this.projectContextService.ActiveProject;
+        var project = this.SessionProject;
         if (project is null)
         {
             return new([], publication: null);
@@ -330,7 +333,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     private async Task RefreshSelectedAsync(ICookPublicationReadLease selected, long? observation, CancellationToken cancellationToken)
     {
         using var operation = this.CreateOperationCancellation(cancellationToken);
-        var project = this.projectContextService.ActiveProject
+        var project = this.SessionProject
             ?? throw new OperationCanceledException("The project closed before catalog refresh.");
         if (selected.ProjectId != project.ProjectId
             || selected.ProjectRoot != project.ProjectRoot)
@@ -346,10 +349,10 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         await selection.Run.WaitAsync(operation.Token).ConfigureAwait(false);
         lock (this.stateLock)
         {
-            if (!ReferenceEquals(this.initialization, selection.Run) || !ReferenceEquals(project, this.projectContextService.ActiveProject))
+            if (!ReferenceEquals(this.initialization, selection.Run) || !ReferenceEquals(project, this.SessionProject))
             {
                 // An observation only asks for the current publication; a newer installed one satisfies it.
-                if (observation is not null && ReferenceEquals(project, this.projectContextService.ActiveProject))
+                if (observation is not null && ReferenceEquals(project, this.SessionProject))
                 {
                     return;
                 }
@@ -689,7 +692,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         lock (this.stateLock)
         {
             this.lifetimeToken.ThrowIfCancellationRequested();
-            if (!ReferenceEquals(project, this.projectContextService.ActiveProject) || !ReferenceEquals(this.initialization, completion.Task))
+            if (!ReferenceEquals(project, this.SessionProject) || !ReferenceEquals(this.initialization, completion.Task))
             {
                 throw new OperationCanceledException("A newer project configuration superseded catalog initialization.");
             }
@@ -875,7 +878,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     {
         lock (this.stateLock)
         {
-            return !this.isDisposed && this.catalogRevision == revision && ReferenceEquals(project, this.projectContextService.ActiveProject);
+            return !this.isDisposed && this.catalogRevision == revision && ReferenceEquals(project, this.SessionProject);
         }
     }
 
