@@ -1,0 +1,88 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="900" height="470" viewBox="0 0 900 470" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="13">
+  <title>Workspace title bar mockup (dark theme)</title>
+  <desc>The workspace title bar resting (logo, menu button, project switcher, gear, caption buttons), expanded (back arrow and the File, Edit, View, Scene and Cook menus, with the project switcher moved right), and the File menu open with its items and shortcuts.</desc>
+  <defs>
+    <g id="logo">
+      <path d="M 26.401 12.419 A 11 11 0 1 1 19.581 5.599" fill="none" stroke="#78c9e8" stroke-width="4"/>
+      <circle cx="25" cy="7" r="4" fill="none" stroke="#78c9e8" stroke-width="2"/>
+    </g>
+    <g id="caption" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">
+      <text x="0" y="0">&#xE921;</text>
+      <text x="46" y="0">&#xE922;</text>
+      <text x="92" y="0">&#xE8BB;</text>
+    </g>
+  </defs>
+  <rect width="900" height="470" fill="#161616"/>
+
+  <!-- Resting -->
+  <text x="16" y="24" font-size="12" fill="#9e9e9e">Resting</text>
+  <rect x="16" y="34" width="868" height="32" fill="#202225"/>
+  <svg x="26" y="40" width="20" height="20" viewBox="0 0 32 32"><use href="#logo"/></svg>
+  <rect x="56" y="34" width="32" height="32" rx="4" fill="#2c2f33"/>
+  <text x="64" y="55" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="16" fill="#ffffff">&#xE700;</text>
+  <rect x="96" y="38" width="152" height="24" rx="4" fill="#2c2f33" stroke="#3a3d42"/>
+  <text x="106" y="55" font-weight="600" fill="#ffffff">Courtyard study</text>
+  <text x="228" y="54" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="726" y="56" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#c5c5c5">&#xE713;</text>
+  <use href="#caption" x="760" y="55"/>
+  <text x="300" y="55" font-size="11" fill="#6f6f6f">drag area</text>
+
+  <!-- Expanded -->
+  <text x="16" y="94" font-size="12" fill="#9e9e9e">Expanded (the menu button turns into the back arrow and the menus, in place)</text>
+  <rect x="16" y="104" width="868" height="32" fill="#202225"/>
+  <svg x="26" y="110" width="20" height="20" viewBox="0 0 32 32"><use href="#logo"/></svg>
+  <text x="64" y="125" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE72B;</text>
+  <rect x="88" y="108" width="44" height="24" rx="4" fill="#33363b"/>
+  <text x="98" y="125" fill="#ffffff">File</text>
+  <text x="144" y="125" fill="#ffffff">Edit</text>
+  <text x="190" y="125" fill="#ffffff">View</text>
+  <text x="240" y="125" fill="#ffffff">Scene</text>
+  <text x="296" y="125" fill="#ffffff">Cook</text>
+  <rect x="344" y="108" width="152" height="24" rx="4" fill="#2c2f33" stroke="#3a3d42"/>
+  <text x="354" y="125" font-weight="600" fill="#ffffff">Courtyard study</text>
+  <text x="476" y="124" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="726" y="126" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="15" fill="#c5c5c5">&#xE713;</text>
+  <use href="#caption" x="760" y="125"/>
+
+  <!-- File menu open -->
+  <rect x="88" y="138" width="300" height="318" rx="8" fill="#2b2b2b" stroke="#3a3a3a"/>
+  <g fill="#ffffff">
+    <text x="128" y="164">New project…</text>
+    <text x="128" y="192">Open project…</text>
+    <line x1="96" y1="204" x2="380" y2="204" stroke="#3a3a3a"/>
+    <text x="128" y="226">Save</text><text x="372" y="226" text-anchor="end" fill="#9e9e9e">Ctrl+S</text>
+    <text x="128" y="254">Save all</text><text x="372" y="254" text-anchor="end" fill="#9e9e9e">Ctrl+Shift+S</text>
+    <text x="128" y="282">Close</text><text x="372" y="282" text-anchor="end" fill="#9e9e9e">Ctrl+W</text>
+    <text x="128" y="310" fill="#6f6f6f">Close all</text>
+    <line x1="96" y1="322" x2="380" y2="322" stroke="#3a3a3a"/>
+    <text x="128" y="344">New scene…</text>
+    <text x="128" y="372">Import source model…</text>
+    <text x="128" y="400">Import texture or image…</text>
+    <line x1="96" y1="412" x2="380" y2="412" stroke="#3a3a3a"/>
+    <text x="128" y="438">Exit</text><text x="372" y="438" text-anchor="end" fill="#9e9e9e">Alt+F4</text>
+  </g>
+  <g font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#c5c5c5">
+    <text x="102" y="165">&#xE710;</text>
+    <text x="102" y="193">&#xE8B7;</text>
+    <text x="102" y="227">&#xE74E;</text>
+    <text x="102" y="345">&#xF158;</text>
+    <text x="102" y="373">&#xE8B5;</text>
+  </g>
+
+  <!-- Notes -->
+  <g font-size="12" fill="#c5c5c5">
+    <text x="420" y="172" font-weight="600" fill="#ffffff">Order, left to right</text>
+    <text x="420" y="188">Logo, menu (collapsible), project switcher, drag area,</text>
+    <text x="420" y="203">settings gear, caption buttons.</text>
+    <text x="420" y="236" font-weight="600" fill="#ffffff">Collapsing</text>
+    <text x="420" y="252">The back arrow, Esc, a click outside or running a command</text>
+    <text x="420" y="267">returns to the menu button and restores focus.</text>
+    <text x="420" y="300" font-weight="600" fill="#ffffff">Menus</text>
+    <text x="420" y="316">Built from the contributed commands, one menu per category.</text>
+    <text x="420" y="331">Shortcuts right-aligned; items that can't run are dimmed</text>
+    <text x="420" y="346">(Close all here, with no document open).</text>
+    <text x="420" y="379" font-weight="600" fill="#ffffff">Project switcher</text>
+    <text x="420" y="395">Stays visible and moves right while the bar is expanded.</text>
+    <text x="420" y="410">Its flyout is in project-switcher.svg.</text>
+  </g>
+</svg>

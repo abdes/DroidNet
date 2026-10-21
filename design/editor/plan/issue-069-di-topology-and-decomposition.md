@@ -3,7 +3,7 @@
 Status: `in progress` — Phase 0 and S1.1 to S1.11 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
 Scenes, LivePreview, Asset family modules, Cook on change over checked inputs,
-Shell, Unsaved documents) are done and S1.12 (Features) is in progress; see the ledger in section 6. Phase 1 follows
+Shell, Unsaved documents, Features) are done; S1.13 (Dissolve the World Editor) is next; see the ledger in section 6. Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -91,8 +91,10 @@ slices do not reopen them.
    it (architecture decision 6).
 8. **#69 also delivers the behavior of the documents design.** The structural
    moves and the user-visible changes it specifies (the confirmations of its
-   scenario 2.9, cook on change with its quiet window, cooking outside changes,
-   the History panel) are slices of this plan. Visible UI stays uncommitted
+   scenario 2.9, cook on change with its quiet window, cooking outside changes)
+   are slices of this plan. New features are not: the History panel, the
+   workspace title bar and the Texture Editor are delivered after #69 by
+   [ED-M09A](ED-M09A-workspace-chrome-history-textures.md). Visible UI stays uncommitted
    until the reviewer accepts it in the running editor.
 9. **A slice moves code only into its final home.** Work whose owner does not
    exist yet waits for the slice that creates that owner, and existing code
@@ -478,9 +480,9 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   ContentPipeline's `IAssetRelocationService`; `IAssetShell` went to the Shell's
   `IDesktopIntegration`; its left pane, `ProjectExplorer` until then, becomes
   `ContentFolders`) and the Project Browser becomes `ProjectExplorer`. The new
-  `TextureEditor` replaces the Content Browser's texture import dialog, and the
-  new `History` panel (documents design decision 1) comes last, as a passive
-  panel over the Shell's histories. After each, the workspace stops registering
+  `TextureEditor` and `History` modules are not moves; they come with their
+  features in [ED-M09A](ED-M09A-workspace-chrome-history-textures.md). After
+  each, the workspace stops registering
   that feature's types and the document host stops constructing it. Gate: that
   feature's tests; UI test failures go to the reviewer; visible changes wait for
   the reviewer's acceptance (decision 8).
@@ -736,7 +738,7 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.9 Cook on change over checked inputs     | `done`        |                                                                                                                                                                                        |
 | S1.10 Shell                                 | `done`        | Consistent clipboard and delete commands across parts: #86                                                                                                                             |
 | S1.11 Unsaved documents                     | `done`        | Shell `UnsavedDocuments` implements the port; Play, Cook and relocation ask before they run                                                                                            |
-| S1.12 Features                              | `in progress` | See the feature table below                                                                                                                                                            |
+| S1.12 Features                              | `done`        | See the feature table below; the Texture Editor and History panel moved to ED-M09A                                                                                                     |
 | S1.13 Dissolve the World Editor             | `not started` | Places the World Editor's native integration tests and benchmark, which build the scene editor and pipeline together through `NativeSceneFixture` and edit through the scene authoring |
 | S1.14 Test boundaries                       | `not started` | Includes the SceneInspector UI tests that use `NumberBox` internals: revisit them when `NumberBox` is refactored                                                                       |
 | S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; the shared host-equivalent builder lands with S3.1                                                                                        |

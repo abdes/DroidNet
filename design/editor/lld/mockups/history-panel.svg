@@ -1,0 +1,104 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="470" viewBox="0 0 760 470" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="13">
+  <title>History panel mockup (dark theme)</title>
+  <desc>The History panel docked with Output and Problems: a document section for the Courtyard scene and a project section, each with a header, a start row, done rows, a current row, undone rows, a saved tag and a refused step. Annotations on the right explain each element.</desc>
+  <rect width="760" height="470" fill="#1c1c1c"/>
+
+  <!-- Panel frame -->
+  <rect x="16" y="16" width="360" height="438" rx="6" fill="#272727" stroke="#3a3a3a"/>
+  <!-- Dock tabs -->
+  <rect x="16" y="16" width="360" height="34" rx="6" fill="#202020"/>
+  <rect x="16" y="44" width="360" height="6" fill="#202020"/>
+  <line x1="16" y1="50" x2="376" y2="50" stroke="#3a3a3a"/>
+  <text x="34" y="38" fill="#9e9e9e">Output</text>
+  <text x="96" y="38" fill="#9e9e9e">Problems</text>
+  <rect x="166" y="22" width="70" height="29" rx="4" fill="#272727" stroke="#3a3a3a"/>
+  <rect x="167" y="46" width="68" height="6" fill="#272727"/>
+  <text x="180" y="40" fill="#ffffff">History</text>
+
+  <!-- Document section header -->
+  <text x="26" y="75" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="44" y="76" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#c5c5c5">&#xF158;</text>
+  <text x="66" y="75" font-weight="600" fill="#ffffff">Courtyard</text>
+  <text x="134" y="75" fill="#c5c5c5">scene</text>
+  <circle cx="178" cy="70" r="3" fill="#c5c5c5"><title>Unsaved changes</title></circle>
+  <text x="268" y="75" font-size="12" fill="#c5c5c5">5 of 7</text>
+  <rect x="314" y="58" width="24" height="24" rx="4" fill="#323232"/>
+  <text x="319" y="76" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#c5c5c5">&#xE7A7;</text>
+  <text x="347" y="76" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#c5c5c5">&#xE7A6;</text>
+  <line x1="16" y1="88" x2="376" y2="88" stroke="#3a3a3a"/>
+
+  <!-- Document rows: 28px each, starting at y=92 -->
+  <text x="26" y="111" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#9e9e9e">&#xE8A5;</text>
+  <text x="48" y="111" fill="#c5c5c5">Opened</text>
+  <text x="48" y="139" fill="#ffffff">Add node "Fountain"</text>
+  <text x="48" y="167" fill="#ffffff">Move 3 nodes</text>
+  <rect x="140" y="153" width="44" height="18" rx="4" fill="#1e3a1e"/>
+  <text x="147" y="166" font-size="11" fill="#6ccb5f">Saved</text>
+  <text x="48" y="195" fill="#ffffff">Rename "Lamp" to "Street lamp"</text>
+  <text x="48" y="223" fill="#ffffff">Set material on "Bench"</text>
+  <!-- Current row -->
+  <rect x="17" y="232" width="358" height="28" fill="#1f3340"/>
+  <rect x="17" y="232" width="3" height="28" fill="#4cc2ff"/>
+  <circle cx="32" cy="246" r="4" fill="#4cc2ff"/>
+  <text x="48" y="251" font-weight="600" fill="#ffffff">Change light intensity</text>
+  <!-- Undone rows -->
+  <text x="25" y="279" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#787878">&#xE7A6;</text>
+  <text x="48" y="279" fill="#787878">Delete node "Crate"</text>
+  <text x="25" y="307" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#787878">&#xE7A6;</text>
+  <text x="48" y="307" fill="#787878">Duplicate "Bench"</text>
+
+  <!-- Project section header -->
+  <line x1="16" y1="322" x2="376" y2="322" stroke="#3a3a3a"/>
+  <text x="26" y="343" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="44" y="344" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#c5c5c5">&#xE8B7;</text>
+  <text x="66" y="343" font-weight="600" fill="#ffffff">Project</text>
+  <text x="118" y="343" fill="#c5c5c5">Harbor Demo</text>
+  <text x="268" y="343" font-size="12" fill="#c5c5c5">2 of 2</text>
+  <text x="319" y="344" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#c5c5c5">&#xE7A7;</text>
+  <text x="347" y="344" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#5a5a5a">&#xE7A6;</text>
+  <line x1="16" y1="356" x2="376" y2="356" stroke="#3a3a3a"/>
+
+  <text x="26" y="379" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#9e9e9e">&#xE838;</text>
+  <text x="48" y="379" fill="#c5c5c5">Project opened</text>
+  <text x="26" y="407" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#fce100">&#xE7BA;</text>
+  <text x="48" y="407" fill="#ffffff">Rename "Stone" to "Cobble"<title>Can't undo: Textures/Stone.otex.json already exists</title></text>
+  <rect x="17" y="416" width="358" height="28" fill="#1f3340"/>
+  <rect x="17" y="416" width="3" height="28" fill="#4cc2ff"/>
+  <circle cx="32" cy="430" r="4" fill="#4cc2ff"/>
+  <text x="48" y="435" font-weight="600" fill="#ffffff">Move 4 assets to Props</text>
+
+  <!-- Annotations -->
+  <g font-size="12" fill="#c5c5c5">
+    <line x1="380" y1="70" x2="404" y2="70" stroke="#5a5a5a"/>
+    <text x="410" y="66" font-weight="600" fill="#ffffff">Section header</text>
+    <text x="410" y="82">Kind icon, title, unsaved dot, "current of total",</text>
+    <text x="410" y="97">and this history's own Undo and Redo.</text>
+
+    <line x1="380" y1="106" x2="404" y2="120" stroke="#5a5a5a"/>
+    <text x="410" y="124" font-weight="600" fill="#ffffff">Start row</text>
+    <text x="410" y="140">"Opened" or "Project opened". Click to undo everything.</text>
+
+    <line x1="380" y1="162" x2="404" y2="166" stroke="#5a5a5a"/>
+    <text x="410" y="166" font-weight="600" fill="#ffffff">Saved tag</text>
+    <text x="410" y="182">The step the file on disk matches.</text>
+
+    <line x1="380" y1="246" x2="404" y2="210" stroke="#5a5a5a"/>
+    <text x="410" y="208" font-weight="600" fill="#ffffff">Current step</text>
+    <text x="410" y="224">Accent bar, dot and accent wash; body-strong label.</text>
+
+    <line x1="380" y1="292" x2="404" y2="262" stroke="#5a5a5a"/>
+    <text x="410" y="258" font-weight="600" fill="#ffffff">Undone steps</text>
+    <text x="410" y="274">Tertiary text with a redo arrow. Clicking one redoes</text>
+    <text x="410" y="289">every step up to it in one operation.</text>
+
+    <line x1="380" y1="402" x2="404" y2="330" stroke="#5a5a5a"/>
+    <text x="410" y="326" font-weight="600" fill="#ffffff">Refused step</text>
+    <text x="410" y="342">The walk stopped here. Its tooltip gives the reason;</text>
+    <text x="410" y="357">the operation-results notification reports it too.</text>
+
+    <text x="410" y="392" font-weight="600" fill="#ffffff">Rows</text>
+    <text x="410" y="408">28 px, as in Output and Problems. Tooltip on every row:</text>
+    <text x="410" y="423">"Undo 3 steps to here", "Redo 2 steps to here",</text>
+    <text x="410" y="438">or "Current state".</text>
+  </g>
+</svg>

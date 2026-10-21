@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="520" viewBox="0 0 760 520" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
+  <title>Project switcher flyout mockup (dark theme)</title>
+  <desc>The project switcher button and its flyout: New project and Open project, the current project with its folder and a check mark, recent projects with their folders (one invalid, with a warning icon), and Project information.</desc>
+  <rect width="760" height="520" fill="#161616"/>
+
+  <!-- Button -->
+  <rect x="16" y="12" width="152" height="24" rx="4" fill="#2c2f33" stroke="#3a3d42"/>
+  <text x="26" y="29" font-size="13" font-weight="600" fill="#ffffff">Courtyard study</text>
+  <text x="148" y="28" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+
+  <!-- Flyout -->
+  <rect x="16" y="42" width="330" height="462" rx="8" fill="#2b2b2b" stroke="#3a3a3a"/>
+  <g font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="16" fill="#c5c5c5">
+    <text x="32" y="75" fill="#78c9e8">&#xE710;</text>
+    <text x="32" y="111">&#xE8B7;</text>
+  </g>
+  <text x="62" y="74" fill="#78c9e8">New project…</text>
+  <text x="62" y="110" fill="#ffffff">Open project…</text>
+  <line x1="24" y1="126" x2="338" y2="126" stroke="#3a3a3a"/>
+
+  <text x="32" y="150" font-size="12" fill="#9e9e9e">Current project</text>
+  <rect x="24" y="160" width="314" height="54" rx="6" fill="#1f3340"/>
+  <text x="36" y="185" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#78c9e8">&#xF158;</text>
+  <text x="66" y="183" font-weight="600" fill="#ffffff">Courtyard study</text>
+  <text x="66" y="203" font-size="12" fill="#c5c5c5">D:/OxygenProjects/CourtyardStudy</text>
+  <text x="316" y="187" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#78c9e8">&#xE73E;</text>
+
+  <text x="32" y="240" font-size="12" fill="#9e9e9e">Recent projects</text>
+  <text x="36" y="268" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#c5c5c5">&#xE8B7;</text>
+  <text x="66" y="266" font-weight="600" fill="#ffffff">Material studies</text>
+  <text x="66" y="286" font-size="12" fill="#c5c5c5">D:/OxygenProjects/MaterialStudies</text>
+  <text x="36" y="322" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#c5c5c5">&#xE8B7;</text>
+  <text x="66" y="320" font-weight="600" fill="#ffffff">Lighting sandbox</text>
+  <text x="66" y="340" font-size="12" fill="#c5c5c5">D:/OxygenProjects/LightingSandbox</text>
+  <text x="36" y="376" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#fce100">&#xE7BA;</text>
+  <text x="66" y="374" font-weight="600" fill="#787878">Harbor demo</text>
+  <text x="66" y="394" font-size="12" fill="#787878">E:/Archive/HarborDemo</text>
+  <line x1="24" y1="418" x2="338" y2="418" stroke="#3a3a3a"/>
+
+  <text x="32" y="452" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="16" fill="#c5c5c5">&#xE946;</text>
+  <text x="62" y="451" fill="#ffffff">Project information…</text>
+
+  <!-- Tooltip on the invalid recent -->
+  <rect x="200" y="384" width="230" height="26" rx="4" fill="#2c2c2c" stroke="#454545"/>
+  <text x="210" y="401" font-size="12" fill="#ffffff">The project folder no longer exists.</text>
+
+  <!-- Notes -->
+  <g font-size="12" fill="#c5c5c5">
+    <text x="456" y="74" font-weight="600" fill="#ffffff">Actions</text>
+    <text x="456" y="90">New project and Open project open the start window</text>
+    <text x="456" y="105">on its New or Open page; the workspace stays open</text>
+    <text x="456" y="120">until a project activates.</text>
+    <text x="456" y="166" font-weight="600" fill="#ffffff">Current project</text>
+    <text x="456" y="182">Accent wash, cube icon and check mark. Not a switch.</text>
+    <text x="456" y="248" font-weight="600" fill="#ffffff">Recent projects</text>
+    <text x="456" y="264">Up to five, most recent first. Choosing one switches</text>
+    <text x="456" y="279">projects: unsaved documents are prompted for first,</text>
+    <text x="456" y="294">and Cancel keeps the current project.</text>
+    <text x="456" y="342" font-weight="600" fill="#ffffff">Invalid recent</text>
+    <text x="456" y="358">Warning icon, dimmed, not selectable; the tooltip</text>
+    <text x="456" y="373">gives the validation reason.</text>
+    <text x="456" y="446" font-weight="600" fill="#ffffff">Project information</text>
+    <text x="456" y="462">Opens the dialog in project-information.svg.</text>
+  </g>
+</svg>

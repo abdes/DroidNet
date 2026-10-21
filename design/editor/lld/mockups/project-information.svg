@@ -1,0 +1,57 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="760" height="560" viewBox="0 0 760 560" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
+  <title>Project information dialog mockup (dark theme)</title>
+  <desc>A content dialog showing the project's name, category, folder with an Open folder button, content roots, cooked content in mount order, the Cook on change toggle, and a Close button.</desc>
+  <rect width="760" height="560" fill="#101010"/>
+  <rect x="40" y="24" width="500" height="512" rx="8" fill="#2b2b2b" stroke="#3a3a3a"/>
+
+  <text x="64" y="66" font-size="20" font-weight="600" fill="#ffffff">Project information</text>
+
+  <g font-size="13">
+    <text x="64" y="106" fill="#9e9e9e">Name</text>
+    <text x="190" y="106" fill="#ffffff">Courtyard study</text>
+    <text x="64" y="136" fill="#9e9e9e">Category</text>
+    <text x="190" y="136" fill="#ffffff">Game</text>
+    <text x="64" y="166" fill="#9e9e9e">Folder</text>
+    <text x="190" y="166" fill="#ffffff">D:/OxygenProjects/CourtyardStudy</text>
+    <rect x="190" y="176" width="112" height="28" rx="4" fill="#373737" stroke="#454545"/>
+    <text x="202" y="195" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xE8B7;</text>
+    <text x="222" y="195" fill="#ffffff">Open folder</text>
+
+    <line x1="64" y1="222" x2="516" y2="222" stroke="#3a3a3a"/>
+    <text x="64" y="248" font-weight="600" fill="#ffffff">Content roots</text>
+    <text x="64" y="274" fill="#ffffff">Content</text><text x="190" y="274" fill="#c5c5c5">/Content</text>
+    <text x="64" y="298" fill="#ffffff">Engine</text><text x="190" y="298" fill="#c5c5c5">/Engine (read-only)</text>
+
+    <line x1="64" y1="316" x2="516" y2="316" stroke="#3a3a3a"/>
+    <text x="64" y="342" font-weight="600" fill="#ffffff">Cooked content, in mount order</text>
+    <text x="64" y="368" fill="#c5c5c5">1</text><text x="84" y="368" fill="#ffffff">.cooked/Content</text><text x="516" y="368" text-anchor="end" fill="#9e9e9e">Folder</text>
+    <text x="64" y="392" fill="#c5c5c5">2</text><text x="84" y="392" fill="#ffffff">Paks/Engine.pak</text><text x="516" y="392" text-anchor="end" fill="#9e9e9e">Pak file</text>
+
+    <line x1="64" y1="410" x2="516" y2="410" stroke="#3a3a3a"/>
+    <text x="64" y="436" font-weight="600" fill="#ffffff">Cook on change</text>
+    <text x="64" y="456" font-size="12" fill="#c5c5c5">Cook a source automatically when it is saved.</text>
+    <rect x="472" y="424" width="40" height="20" rx="10" fill="#78c9e8"/>
+    <circle cx="502" cy="434" r="6" fill="#101010"/>
+  </g>
+
+  <rect x="40" y="476" width="500" height="60" fill="#202020"/>
+  <rect x="40" y="532" width="500" height="4" rx="2" fill="#202020"/>
+  <rect x="404" y="490" width="112" height="32" rx="4" fill="#373737" stroke="#454545"/>
+  <text x="460" y="511" text-anchor="middle" fill="#ffffff">Close</text>
+
+  <g font-size="12" fill="#c5c5c5">
+    <text x="566" y="106" font-weight="600" fill="#ffffff">Facts</text>
+    <text x="566" y="122">Read-only, from the</text>
+    <text x="566" y="137">project context.</text>
+    <text x="566" y="196" font-weight="600" fill="#ffffff">Open folder</text>
+    <text x="566" y="212">Opens it in File Explorer.</text>
+    <text x="566" y="272" font-weight="600" fill="#ffffff">Lists</text>
+    <text x="566" y="288">Content roots and cooked</text>
+    <text x="566" y="303">content as the project</text>
+    <text x="566" y="318">declares them.</text>
+    <text x="566" y="436" font-weight="600" fill="#ffffff">Setting</text>
+    <text x="566" y="452">Applies at once; the</text>
+    <text x="566" y="467">Content Explorer's item</text>
+    <text x="566" y="482">edits the same setting.</text>
+  </g>
+</svg>
