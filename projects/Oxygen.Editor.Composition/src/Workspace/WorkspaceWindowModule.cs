@@ -26,7 +26,6 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell;
 using Oxygen.Editor.Shell.Contributions;
-using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Workspace;
@@ -62,7 +61,7 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
     public static IReadOnlyList<IScopeModule<IWindowLayer>> Compose(IReadOnlyList<IFeatureModule> features)
     {
         ArgumentNullException.ThrowIfNull(features);
-        return [new AssetsWindowModule(), new LivePreviewWindowModule(), new WorkspaceWindowModule(features), new ShellWindowModule(), new ContentPipelineWindowModule(), .. features];
+        return [new AssetsWindowModule(), new ScriptingWindowModule(), new InputWindowModule(), new LivePreviewWindowModule(), new WorkspaceWindowModule(features), new ShellWindowModule(), new ContentPipelineWindowModule(), .. features];
     }
 
     /// <inheritdoc />
@@ -77,7 +76,6 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
         RegisterPreviewContentDemand(scope);
         scope.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
         RegisterPreferences(scope);
-        RegisterScriptServices(scope);
     }
 
     // The panels the features contribute, which the registry checks once.
@@ -154,15 +152,5 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
                 resolver.Resolve<IStatusReducer>(),
                 resolver.Resolve<ILoggerFactory>()),
             Reuse.Singleton);
-    }
-
-    // Script and input authoring: the script and input facts, the code editor and project tooling. The family facts
-    // follow this workspace's asset catalog, so they live as long as it does.
-    private static void RegisterScriptServices(IRegistrator scope)
-    {
-        scope.RegisterInstance(ScriptToolingPaths.Discover());
-        scope.Register<ProjectScriptTooling>(Reuse.Singleton);
-        scope.RegisterMany([typeof(IScripts), typeof(IAssetProblemSource)], typeof(ScriptFacts), Reuse.Singleton);
-        scope.RegisterMany([typeof(IInputSources), typeof(IAssetProblemSource)], typeof(InputFacts), Reuse.Singleton);
     }
 }

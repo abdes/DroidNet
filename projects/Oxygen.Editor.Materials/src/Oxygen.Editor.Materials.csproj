@@ -14,10 +14,12 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Composition\src\Composition.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.ContentPipeline\src\Oxygen.Editor.ContentPipeline.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Documents\src\Oxygen.Editor.Documents.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />

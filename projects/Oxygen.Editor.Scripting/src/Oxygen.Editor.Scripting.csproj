@@ -15,12 +15,14 @@
     </PropertyGroup>
 
     <ItemGroup>
+        <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="System.Reactive" />
         <PackageReference Include="Testably.Abstractions.FileSystem.Interface" />
     </ItemGroup>
 
     <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Composition\src\Composition.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Projects\src\Oxygen.Editor.Projects.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.World\src\Oxygen.Editor.World.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />

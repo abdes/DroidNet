@@ -25,7 +25,7 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Diagnostics;
 using Oxygen.Editor.LivePreview;
 using Oxygen.Editor.MaterialEditor;
-using Oxygen.Editor.Materials.Documents;
+using Oxygen.Editor.Materials;
 using Oxygen.Editor.Output;
 using Oxygen.Editor.Problems;
 using Oxygen.Editor.ProjectExplorer;
@@ -41,6 +41,7 @@ using Oxygen.Editor.Services;
 using Oxygen.Editor.Shell;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Textures;
 using Oxygen.Editor.Workspace;
 using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core.Services;
@@ -66,6 +67,8 @@ public static class EditorModule
         new ProjectExplorerModule(),
         new ContentPipelineModule(),
         new LivePreviewModule(),
+        new MaterialsModule(),
+        new TexturesModule(),
     ];
 
     /// <summary>
@@ -186,7 +189,6 @@ public static class EditorModule
 
         RegisterEditorDataServices(container);
         RegisterDiagnosticsServices(container);
-        RegisterAssetServices(container);
         container.Register<IEngineService, EngineService>(Reuse.Singleton);
 
         // Transform gizmo snapping and space: per-user preferences kept across projects, serialized writes.
@@ -291,16 +293,5 @@ public static class EditorModule
         container.Register<IFeatureModule, SceneEditorModule>(Reuse.Singleton);
         container.Register<IFeatureModule, SceneExplorerModule>(Reuse.Singleton);
         container.Register<IFeatureModule, SceneInspectorModule>(Reuse.Singleton);
-    }
-
-    private static void RegisterAssetServices(IContainer container)
-    {
-        // Materials: one document kind and one set of edits for every workspace window.
-        container.Register<MaterialValidation>(Reuse.Singleton);
-        container.Register<MaterialDocumentKind>(Reuse.Singleton);
-        container.Register<MaterialEdits>(Reuse.Singleton);
-
-        // Textures: image import for every window.
-        container.Register<Textures.TextureImport>(Reuse.Singleton);
     }
 }
