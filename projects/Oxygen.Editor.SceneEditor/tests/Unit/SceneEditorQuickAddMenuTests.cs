@@ -6,12 +6,14 @@ using AwesomeAssertions;
 using DroidNet.Controls.Menus;
 using DroidNet.TestHelpers;
 using DryIoc;
+using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.Shell.Windows;
@@ -65,16 +67,17 @@ public sealed partial class SceneEditorQuickAddMenuTests
     private sealed partial class Fixture : IDisposable
     {
         private readonly IContainer container = HostContainer.Create();
+        private readonly TestSession session;
 
         public Fixture()
         {
+            this.session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
             this.Metadata = TestScenes.Open(new Scene { Name = "Quick Add" });
             this.Tab = new DocumentTab(this.Metadata.Document, new DocumentEditorDescriptor(this.Metadata.Document.Kind, static _ => new object()) { IsClosable = false });
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync(It.IsAny<DroidNet.Documents.DocumentId>())).Returns(Task.CompletedTask);
             this.Editor = new(
                 this.Tab,
-                new TestDocumentArea(this.Metadata.Document),
                 Mock.Of<IEngineService>(),
                 Mock.Of<Oxygen.Editor.LivePreview.Scenes.IScenePreview>(),
                 input.Object,
@@ -82,13 +85,13 @@ public sealed partial class SceneEditorQuickAddMenuTests
                 new OperationStatusReducer(),
                 Mock.Of<IContentPipelineService>(),
                 this.container,
-                Mock.Of<IAssetReveal>(),
                 new PreviewSettingsService(
                     Mock.Of<IEngineService>(),
                     Mock.Of<Data.Services.IEditorSettingsManager>(),
-                    new TestSession(TestProject.Create(new MockFileSystem()).Context),
+                    this.session,
                     Mock.Of<IOperationResultPublisher>(),
                     new OperationStatusReducer()));
+            this.Editor.AttachWindow(new DocumentWindowServices(new WindowId(1), new TestDocumentArea(this.Metadata.Document), Mock.Of<ICommandService>(), Mock.Of<IPlacementService>(), Mock.Of<IAssetReveal>()));
         }
 
         public TestScene Metadata { get; }
@@ -103,6 +106,7 @@ public sealed partial class SceneEditorQuickAddMenuTests
             this.container.Dispose();
             this.Tab.Dispose();
             this.Metadata.Dispose();
+            this.session.Dispose();
         }
     }
 }

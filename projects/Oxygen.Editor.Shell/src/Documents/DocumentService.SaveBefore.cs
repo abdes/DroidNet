@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Microsoft.UI;
 using Oxygen.Editor.Documents;
 
 namespace Oxygen.Editor.Shell.Documents;
@@ -11,6 +12,7 @@ public sealed partial class DocumentService
 {
     /// <inheritdoc/>
     public async Task<bool> SaveBeforeAsync(
+        WindowId window,
         SaveBeforeOperation operation,
         Func<CancellationToken, Task<IReadOnlyList<UnsavedDocument>>> findUnsaved,
         CancellationToken cancellationToken = default)
@@ -18,7 +20,7 @@ public sealed partial class DocumentService
         ArgumentNullException.ThrowIfNull(findUnsaved);
 
         // An edit in progress becomes an edit of its own first, so its document counts as unsaved.
-        await this.inputCommitter.CommitAsync(this.area.Window).ConfigureAwait(true);
+        await this.inputCommitter.CommitAsync(window).ConfigureAwait(true);
         foreach (var document in this.documents.Documents.Where(static document => document.Content.HasEditsInProgress).ToArray())
         {
             await document.Content.FinishEditsAsync(cancellationToken).ConfigureAwait(true);
@@ -30,7 +32,7 @@ public sealed partial class DocumentService
             return true;
         }
 
-        if (!await this.confirmations.ConfirmSaveBeforeAsync(this.area.Window, needed, operation).ConfigureAwait(true))
+        if (!await this.confirmations.ConfirmSaveBeforeAsync(window, needed, operation).ConfigureAwait(true))
         {
             this.LogSaveBeforeCancelled(operation, needed.Count);
             return false;

@@ -27,7 +27,7 @@ public sealed class CommandServiceTests
         using var histories = new HistoryService();
         var undone = 0;
         histories.GlobalHistory.AddChange("Rename", Rename);
-        var service = new CommandService(Mock.Of<IDocumentService>(), Mock.Of<IDocumentArea>(), histories, NoContributions());
+        var service = new CommandService(Mock.Of<IDocumentArea>(), histories, NoContributions());
 
         _ = (await service.ExecuteAsync(ShellCommands.Undo.Id, context: null).ConfigureAwait(false)).Should().BeTrue();
 
@@ -53,9 +53,9 @@ public sealed class CommandServiceTests
         var editor = new Mock<ICommandHandler>();
         _ = editor.Setup(value => value.CanExecute(ShellCommands.Undo.Id)).Returns(value: true);
         _ = editor.Setup(value => value.ExecuteAsync(ShellCommands.Undo.Id)).Returns(Task.CompletedTask);
-        var documents = new Mock<IDocumentService>();
-        _ = documents.SetupGet(value => value.ActiveEditor).Returns(editor.Object);
-        var service = new CommandService(documents.Object, Mock.Of<IDocumentArea>(), histories, NoContributions());
+        var area = new Mock<IDocumentArea>();
+        _ = area.SetupGet(value => value.ActiveEditor).Returns(editor.Object);
+        var service = new CommandService(area.Object, histories, NoContributions());
 
         _ = (await service.ExecuteAsync(ShellCommands.Undo.Id, context: null).ConfigureAwait(false)).Should().BeTrue();
 
@@ -75,7 +75,7 @@ public sealed class CommandServiceTests
         document.History.AddChange("Edit", static () => { });
         var area = new Mock<IDocumentArea>();
         _ = area.SetupGet(value => value.ActiveDocument).Returns(document);
-        var service = new CommandService(Mock.Of<IDocumentService>(), area.Object, histories, NoContributions());
+        var service = new CommandService(area.Object, histories, NoContributions());
 
         _ = (await service.ExecuteAsync(ShellCommands.Undo.Id, context: null).ConfigureAwait(false)).Should().BeTrue();
 
@@ -92,7 +92,7 @@ public sealed class CommandServiceTests
         var handler = new Mock<ICommandHandler>();
         _ = handler.Setup(value => value.CanExecute("Scene.Rename")).Returns(value: true);
         _ = handler.Setup(value => value.ExecuteAsync("Scene.Rename")).Returns(Task.CompletedTask);
-        var service = new CommandService(Mock.Of<IDocumentService>(), Mock.Of<IDocumentArea>(), histories, NoContributions());
+        var service = new CommandService(Mock.Of<IDocumentArea>(), histories, NoContributions());
 
         var registration = service.Register(handler.Object);
         _ = service.CanExecute("Scene.Rename", context: null).Should().BeTrue();
@@ -113,11 +113,11 @@ public sealed class CommandServiceTests
         var editor = new Mock<ICommandHandler>();
         _ = editor.Setup(value => value.CanExecute("Scene.Duplicate")).Returns(value: true);
         _ = editor.Setup(value => value.ExecuteAsync("Scene.Duplicate")).Returns(Task.CompletedTask);
-        var documents = new Mock<IDocumentService>();
-        _ = documents.SetupGet(value => value.ActiveEditor).Returns(editor.Object);
+        var area = new Mock<IDocumentArea>();
+        _ = area.SetupGet(value => value.ActiveEditor).Returns(editor.Object);
         var registered = new Mock<ICommandHandler>();
         _ = registered.Setup(value => value.CanExecute("Scene.Duplicate")).Returns(value: true);
-        var service = new CommandService(documents.Object, Mock.Of<IDocumentArea>(), histories, NoContributions());
+        var service = new CommandService(area.Object, histories, NoContributions());
         using var registration = service.Register(registered.Object);
 
         _ = (await service.ExecuteAsync("Scene.Duplicate", context: null).ConfigureAwait(false)).Should().BeTrue();
@@ -132,7 +132,7 @@ public sealed class CommandServiceTests
     {
         using var histories = new HistoryService();
         var rename = new CommandDescriptor("Scene.Rename", "Rename");
-        var service = new CommandService(Mock.Of<IDocumentService>(), Mock.Of<IDocumentArea>(), histories, new ContributionRegistry([], [rename]));
+        var service = new CommandService(Mock.Of<IDocumentArea>(), histories, new ContributionRegistry([], [rename]));
 
         _ = service.Commands.Should().Contain([ShellCommands.Undo, rename]);
     }

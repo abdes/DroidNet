@@ -32,7 +32,7 @@ public sealed class CookRecoveryTests
     private const string ProjectFolder = @"C:\CookingTests";
 
     private readonly Mock<IAssetCatalog> catalog = new();
-    private readonly Mock<IDocumentService> documents = new();
+    private readonly Mock<IDocumentArea> documents = new();
     private readonly Mock<IUnsavedCookInputs> unsaved = new();
     private readonly Mock<IPlacementService> placement = new();
     private readonly SceneSelectionService selection = new();

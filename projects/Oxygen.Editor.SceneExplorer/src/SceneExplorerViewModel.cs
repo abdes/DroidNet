@@ -62,7 +62,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation;
     private readonly Oxygen.Editor.Shell.Documents.IHistoryService? histories;
     private readonly Oxygen.Editor.Shell.Windows.IPlacementService? placement;
-    private readonly Oxygen.Editor.Shell.Documents.IDocumentService? documents;
     private readonly ISceneViews? views;
     private readonly ISceneAvailability? availability;
     private readonly IDisposable? commandRegistration;
@@ -142,7 +141,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="relocation">Optional relocation service that renames the scene's file.</param>
     /// <param name="histories">Optional history service whose global history records a scene file rename.</param>
     /// <param name="placement">Optional placement, which shows a scene document that becomes active in the window's place for its scene.</param>
-    /// <param name="documents">Optional document service, which saves the unsaved documents before a scene file rename, after asking.</param>
     /// <param name="views">Optional scene views, which frame nodes and run camera commands in the scene's editor.</param>
     /// <param name="availability">Optional scene availability, which reports a scene that failed to load and reloads the previous one.</param>
     /// <param name="commands">Optional command service, with which the explorer registers as a command handler.</param>
@@ -163,7 +161,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation = null,
         Oxygen.Editor.Shell.Documents.IHistoryService? histories = null,
         Oxygen.Editor.Shell.Windows.IPlacementService? placement = null,
-        Oxygen.Editor.Shell.Documents.IDocumentService? documents = null,
         ISceneViews? views = null,
         ISceneAvailability? availability = null,
         ICommandService? commands = null,
@@ -171,7 +168,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         : base(loggerFactory)
     {
         this.clipboard = clipboard ?? new SceneNodeClipboard();
-        this.documents = documents;
         this.views = views;
         this.availability = availability;
         this.relocation = relocation;
@@ -786,8 +782,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         var relocation = this.relocation;
-        if (this.documents is { } documents
-            && !await documents.SaveBeforeAsync(Oxygen.Editor.Shell.Documents.SaveBeforeOperation.Rename, _ => Task.FromResult(relocation.FindUnsavedDocuments())).ConfigureAwait(true))
+        if (!await this.documentArea.SaveBeforeAsync(Oxygen.Editor.Shell.Documents.SaveBeforeOperation.Rename, _ => Task.FromResult(relocation.FindUnsavedDocuments())).ConfigureAwait(true))
         {
             return TreeItemRenameResult.Rejected("Not renamed: the documents were not saved.");
         }

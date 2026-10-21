@@ -10,7 +10,7 @@ using Microsoft.UI;
 namespace Oxygen.Editor.Shell.Documents;
 
 /// <summary>
-///     The tabs of every window, which Aura draws. Each window's close coordinator decides what its closes save.
+///     The tabs of every window, which Aura draws. The project session's close coordinator decides what closes save.
 /// </summary>
 /// <param name="loggerFactory">
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the
@@ -19,12 +19,12 @@ namespace Oxygen.Editor.Shell.Documents;
 public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocumentTabs, IDocumentServiceState
 {
     private readonly ILogger logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<DocumentTabs>();
-    private readonly Dictionary<WindowId, DocumentCloseCoordinator> coordinators = [];
 
     // Store documents per window
     private readonly Dictionary<WindowId, Dictionary<DocumentId, IDocumentMetadata>> windowDocs = [];
     private readonly Dictionary<WindowId, DocumentId> activeDocuments = [];
     private readonly HashSet<WindowId> closingWindows = [];
+    private DocumentCloseCoordinator? coordinator;
 
     /// <inheritdoc/>
     public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
@@ -124,15 +124,16 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
     }
 
     /// <inheritdoc/>
-    public IDisposable UseCloseCoordinator(WindowId windowId, DocumentCloseCoordinator coordinator)
+    public IDisposable UseCloseCoordinator(DocumentCloseCoordinator coordinator)
     {
         ArgumentNullException.ThrowIfNull(coordinator);
-        if (!this.coordinators.TryAdd(windowId, coordinator))
+        if (this.coordinator is not null)
         {
-            throw new InvalidOperationException($"Window {windowId.Value} already has a close coordinator.");
+            throw new InvalidOperationException("Another close coordinator is in use.");
         }
 
-        return new CoordinatorUse(this.coordinators, windowId, coordinator);
+        this.coordinator = coordinator;
+        return new CoordinatorUse(this, coordinator);
     }
 
     /// <inheritdoc/>
@@ -273,7 +274,7 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
                 return null;
             }
 
-            if (this.coordinators.TryGetValue(windowId, out var coordinator))
+            if (this.coordinator is { } coordinator)
             {
                 authoring = await coordinator.PrepareAsync(windowId, documents, force).ConfigureAwait(true);
                 if (authoring is null)
@@ -366,13 +367,13 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
         return docs;
     }
 
-    private sealed partial class CoordinatorUse(Dictionary<WindowId, DocumentCloseCoordinator> coordinators, WindowId windowId, DocumentCloseCoordinator coordinator) : IDisposable
+    private sealed partial class CoordinatorUse(DocumentTabs tabs, DocumentCloseCoordinator coordinator) : IDisposable
     {
         public void Dispose()
         {
-            if (coordinators.TryGetValue(windowId, out var current) && ReferenceEquals(current, coordinator))
+            if (ReferenceEquals(tabs.coordinator, coordinator))
             {
-                _ = coordinators.Remove(windowId);
+                tabs.coordinator = null;
             }
         }
     }

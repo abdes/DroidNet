@@ -7,6 +7,7 @@ using AwesomeAssertions;
 using DroidNet.TestHelpers;
 using DroidNet.TimeMachine;
 using DryIoc;
+using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
@@ -17,6 +18,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.Shell.Windows;
@@ -80,6 +82,7 @@ internal sealed partial class SceneEditorConflictTests
     private sealed partial class Fixture : IDisposable
     {
         private readonly IContainer container = HostContainer.Create();
+        private readonly List<TestSession> sessions = [];
 
         private Fixture(TestSceneDocuments scenes, Document document)
         {
@@ -125,6 +128,11 @@ internal sealed partial class SceneEditorConflictTests
         {
             this.Editor.Dispose();
             this.container.Dispose();
+            foreach (var session in Enumerable.Reverse(this.sessions))
+            {
+                session.Dispose();
+            }
+
             this.Scenes.Dispose();
         }
 
@@ -148,7 +156,7 @@ internal sealed partial class SceneEditorConflictTests
 
         private void CreateEditor(bool active, PreviewSettingsService? previewSettings, Action? commitInput, bool synchronized)
         {
-            this.container.RegisterInstance<IProjectSession>(new TestSession(this.Scenes.Project.Context));
+            this.container.RegisterInstance<IProjectSession>(this.NewSession());
             _ = this.Preview.Setup(value => value.IsReady(this.Tab.DocumentId)).Returns(synchronized);
             var documents = new TestDocumentArea(this.Tab.Document);
             if (!active)
@@ -161,12 +169,11 @@ internal sealed partial class SceneEditorConflictTests
             var previewSettingsService = previewSettings ?? new PreviewSettingsService(
                     Mock.Of<IEngineService>(),
                     Mock.Of<Data.Services.IEditorSettingsManager>(),
-                    new TestSession(this.Scenes.Project.Context),
+                    this.NewSession(),
                     Mock.Of<IOperationResultPublisher>(),
                     new OperationStatusReducer());
             this.Editor = new(
                 this.Tab,
-                documents,
                 Mock.Of<IEngineService>(),
                 this.Preview.Object,
                 input.Object,
@@ -174,8 +181,15 @@ internal sealed partial class SceneEditorConflictTests
                 new OperationStatusReducer(),
                 Mock.Of<IContentPipelineService>(),
                 this.container,
-                Mock.Of<IAssetReveal>(),
                 previewSettingsService);
+            this.Editor.AttachWindow(new DocumentWindowServices(new WindowId(1), documents, Mock.Of<ICommandService>(), Mock.Of<IPlacementService>(), Mock.Of<IAssetReveal>()));
+        }
+
+        private TestSession NewSession()
+        {
+            var session = new TestSession(this.Scenes.Project.Context);
+            this.sessions.Add(session);
+            return session;
         }
     }
 

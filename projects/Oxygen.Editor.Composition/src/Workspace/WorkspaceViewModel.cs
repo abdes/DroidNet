@@ -41,7 +41,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     private readonly IProjectUsageService projectUsage;
     private readonly ILogger logger;
     private IProjectSession? session;
-    private IDocumentService? documentService;
+    private IDocumentArea? documentArea;
     private IPlacementService? placement;
     private IAssetCatalog? assetCatalog;
     private PreviewSession? previewSession;
@@ -120,7 +120,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         this.session = window.Resolve<IProjectSession>();
         this.windows.SetMetadata(window.Resolve<WindowId>(), EditorWindows.SessionMetadataKey, this.session);
         this.assetCatalog = window.Resolve<IAssetCatalog>();
-        this.documentService = window.Resolve<IDocumentService>();
+        this.documentArea = window.Resolve<IDocumentArea>();
         this.placement = window.Resolve<IPlacementService>();
         this.previewSession = window.Resolve<PreviewSession>();
         this.ObservePreviewSession();
@@ -145,7 +145,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             _ = this.previewSession?.DisposeAsync();
             this.previewSession = null;
 
-            this.documentService = null;
+            this.documentArea = null;
             this.placement = null;
             this.assetCatalog = null;
             this.session = null;
@@ -196,13 +196,13 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             return;
         }
 
-        if (this.documentService is null)
+        if (this.documentArea is null)
         {
             this.LogInitialSceneManagerUnavailable(scene);
             return;
         }
 
-        var opened = await this.documentService.OpenAsync(scene).ConfigureAwait(true);
+        var opened = await this.documentArea.OpenAsync(scene).ConfigureAwait(true);
         if (!opened.Succeeded)
         {
             this.LogInitialSceneNotOpened(scene, context.Name);

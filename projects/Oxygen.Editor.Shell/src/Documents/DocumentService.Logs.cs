@@ -15,14 +15,6 @@ public sealed partial class DocumentService
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Warning,
-        Message = "'{Asset}' was not opened: {Problem}")]
-    private static partial void LogNotOpened(ILogger logger, AssetPath asset, string problem);
-
-    private void LogNotOpened(AssetPath asset, string problem) => LogNotOpened(this.logger, asset, problem);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
         Message = "The editor of '{Title}' takes no part in closing it; its unsaved changes cannot be saved when it closes.")]
     private static partial void LogEditorNotClosable(ILogger logger, string title);
 

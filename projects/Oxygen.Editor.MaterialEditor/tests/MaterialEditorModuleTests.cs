@@ -22,14 +22,25 @@ public sealed class MaterialEditorModuleTests
     }
 
     [TestMethod]
-    public void MaterialEditorModule_RegistersTheEditorProviderAndItsView()
+    public void MaterialEditorModule_RegistersTheEditorsView()
     {
         using var window = HostContainer.Create();
 
         new MaterialEditorModule().Register(window);
 
         var registrations = window.GetServiceRegistrations().ToArray();
-        _ = registrations.Should().Contain(registration => registration.ServiceType == typeof(IDocumentEditorProvider) && registration.ImplementationType == typeof(MaterialEditorProvider));
         _ = registrations.Should().Contain(registration => registration.ServiceType == typeof(MaterialEditorView));
+        _ = registrations.Should().NotContain(registration => registration.ServiceType == typeof(IDocumentEditorProvider));
+    }
+
+    [TestMethod]
+    public void MaterialEditorSessionModule_RegistersTheEditorProvider()
+    {
+        using var session = HostContainer.Create();
+
+        new MaterialEditorSessionModule().Register(session);
+
+        var registrations = session.GetServiceRegistrations().ToArray();
+        _ = registrations.Should().Contain(registration => registration.ServiceType == typeof(IDocumentEditorProvider) && registration.ImplementationType == typeof(MaterialEditorProvider));
     }
 }

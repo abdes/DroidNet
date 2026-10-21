@@ -15,7 +15,7 @@ namespace Oxygen.Editor.Shell.Documents;
 ///     the active document when its file is missing or changed on disk.
 /// </summary>
 /// <remarks>
-///     The document service owns the editors; the area only shows them. The view of the editor that leaves is deactivated
+///     The session's document service owns the editors; the area only shows them. The view of the editor that leaves is deactivated
 ///     before the next one shows, so an editor that holds native surfaces releases them first.
 /// </remarks>
 public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposable
@@ -36,7 +36,7 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
     /// <summary>
     ///     Initializes a new instance of the <see cref="DocumentAreaViewModel" /> class.
     /// </summary>
-    /// <param name="documents">The document service of the area.</param>
+    /// <param name="documents">The session's document service, which the banner's actions save, reload and keep with.</param>
     /// <param name="area">The document area of the window.</param>
     /// <param name="confirmations">The confirmations, which the banner's actions ask.</param>
     /// <param name="window">The window of the area, which asks the banner's confirmations.</param>
@@ -61,9 +61,9 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
         this.window = window;
         this.viewLocator = viewLocator;
 
-        this.documents.ActiveEditorChanged += this.OnServiceActiveEditorChanged;
+        this.area.ActiveEditorChanged += this.OnActiveEditorChanged;
         this.area.ActiveDocumentChanged += this.OnActiveDocumentChanged;
-        this.ActiveEditor = this.documents.ActiveEditor;
+        this.ActiveEditor = this.area.ActiveEditor;
         this.ObserveActiveDocument(this.area.ActiveDocument);
     }
 
@@ -80,7 +80,7 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
     public partial object? ActiveEditorView { get; private set; }
 
     /// <summary>
-    ///     Stops following the area. The editors belong to the document service.
+    ///     Stops following the area. The editors belong to the session's document service.
     /// </summary>
     public void Dispose()
     {
@@ -90,13 +90,13 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
         }
 
         this.disposed = true;
-        this.documents.ActiveEditorChanged -= this.OnServiceActiveEditorChanged;
+        this.area.ActiveEditorChanged -= this.OnActiveEditorChanged;
         this.area.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
         this.ObserveActiveDocument(document: null);
         _ = Interlocked.Increment(ref this.activeEditorViewRequestId);
     }
 
-    private void OnServiceActiveEditorChanged(object? sender, EventArgs e) => this.ActiveEditor = this.documents.ActiveEditor;
+    private void OnActiveEditorChanged(object? sender, EventArgs e) => this.ActiveEditor = this.area.ActiveEditor;
 
     partial void OnActiveEditorChanged(object? value)
     {

@@ -29,7 +29,7 @@ namespace Oxygen.Editor.ContentExplorer.Relocation;
 /// </remarks>
 /// <param name="relocation">Applies the file changes.</param>
 /// <param name="histories">Holds the global history that renames and moves are recorded in.</param>
-/// <param name="documents">Saves the unsaved documents before a rename or move, after asking.</param>
+/// <param name="documents">The window's document area, which saves the unsaved documents before a rename or move after asking.</param>
 /// <param name="openDocuments">The open documents, which a delete names when it closes them.</param>
 /// <param name="dialogs">Asks for names, and confirms deleting content that other content uses or that is open.</param>
 /// <param name="shell">Moves deleted files to the Recycle Bin.</param>
@@ -37,7 +37,7 @@ namespace Oxygen.Editor.ContentExplorer.Relocation;
 public sealed partial class AssetRelocationWorkflow(
     IAssetRelocationService relocation,
     IHistoryService histories,
-    IDocumentService documents,
+    IDocumentArea documents,
     OpenDocuments openDocuments,
     IDialogService dialogs,
     IDesktopIntegration shell,

@@ -2,10 +2,16 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Reactive.Concurrency;
 using AwesomeAssertions;
+using DroidNet.Documents;
+using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
+using DroidNet.Tests;
 using DroidNet.TimeMachine;
 using Microsoft.UI;
+using Microsoft.UI.Dispatching;
+using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Materials;
@@ -22,15 +28,17 @@ using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
+namespace Oxygen.Editor.SceneExplorer.Unit.UI.Tests;
 
 /// <summary>
-/// Exercises the Scene Explorer while the Shell's document service replaces the window's scene, with its close guards:
+/// Exercises the Scene Explorer while the window's document area replaces its scene, with the session's close guards:
 /// the explorer keeps its scene, selection and clipboard until a replacement is accepted, without keyboard, pointer or
 /// window focus.
 /// </summary>
 [TestClass]
-public sealed partial class SceneExplorerReplacementTests
+[TestCategory("UITest")]
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "MSTest discovers public test classes with the repository's discovery configuration.")]
+public sealed partial class SceneExplorerReplacementTests : VisualUserInterfaceTests
 {
     private enum CloseDecision
     {
@@ -44,13 +52,13 @@ public sealed partial class SceneExplorerReplacementTests
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task OpenSceneAsync_CancelledGuardPreservesAcceptedSceneSelectionAndClipboard(bool cut)
+    public Task OpenSceneAsync_CancelledGuardPreservesAcceptedSceneSelectionAndClipboard(bool cut) => EnqueueAsync(async () =>
     {
-        using var fixture = await LifetimeFixture.CreateAsync(cut).ConfigureAwait(false);
+        using var fixture = await LifetimeFixture.CreateAsync(cut).ConfigureAwait(true);
         fixture.Participant.PendingEdit = true;
         fixture.PromptDecision = CloseDecision.Cancel;
 
-        var opened = await fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var opened = await fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(true);
 
         _ = opened.Should().BeFalse();
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
@@ -62,43 +70,43 @@ public sealed partial class SceneExplorerReplacementTests
         _ = ((SceneContent)fixture.FirstDocument.Content).Authoring.IsRetired.Should().BeFalse();
         _ = fixture.Documents.GetOpenDocuments(fixture.Window).Should().ContainSingle();
         _ = fixture.Scenes.Open.Documents.Should().Equal(fixture.FirstDocument);
-    }
+    });
 
     [TestMethod]
-    public async Task OpenSceneAsync_SaveFailurePreservesAcceptedSceneAndCut()
+    public Task OpenSceneAsync_SaveFailurePreservesAcceptedSceneAndCut() => EnqueueAsync(async () =>
     {
-        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
+        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(true);
         fixture.Participant.PendingEdit = true;
         fixture.Participant.SaveSucceeds = false;
         fixture.PromptDecision = CloseDecision.Save;
 
-        _ = (await fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeFalse();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Cut);
         _ = fixture.Explorer.PasteCommand.CanExecute(parameter: null).Should().BeTrue();
         _ = fixture.FirstDocument.IsDirty.Should().BeTrue();
         _ = fixture.Participant.Closed.Should().BeFalse();
-    }
+    });
 
     [TestMethod]
-    public async Task OpenSceneAsync_CancelledOperationKeepsAcceptedSceneAndCut()
+    public Task OpenSceneAsync_CancelledOperationKeepsAcceptedSceneAndCut() => EnqueueAsync(async () =>
     {
-        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
+        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(true);
         using var cancellation = new CancellationTokenSource();
-        await cancellation.CancelAsync().ConfigureAwait(false);
+        await cancellation.CancelAsync().ConfigureAwait(true);
 
-        _ = (await fixture.OpenAsync(fixture.SecondAsset, cancellation.Token).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.OpenAsync(fixture.SecondAsset, cancellation.Token).ConfigureAwait(true)).Should().BeFalse();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Cut);
         _ = fixture.Participant.Prepared.Should().BeFalse();
-    }
+    });
 
     [TestMethod]
-    public async Task OpenSceneAsync_NewerRequestRejectsOlderReadBeforeRetirement()
+    public Task OpenSceneAsync_NewerRequestRejectsOlderReadBeforeRetirement() => EnqueueAsync(async () =>
     {
-        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
+        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(true);
         fixture.WriteScene("Third");
         var reading = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
@@ -107,33 +115,33 @@ public sealed partial class SceneExplorerReplacementTests
             if (string.Equals(path, fixture.PathOf("Second").FullPath, StringComparison.OrdinalIgnoreCase))
             {
                 reading.SetResult();
-                await release.Task.ConfigureAwait(false);
+                await release.Task.ConfigureAwait(true);
             }
         };
         var older = fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken);
-        await reading.Task.ConfigureAwait(false);
+        await reading.Task.ConfigureAwait(true);
         var newer = fixture.OpenAsync(fixture.Scenes.FileOf("Third").Asset, this.TestContext.CancellationToken);
         release.SetResult();
 
-        _ = (await older.ConfigureAwait(false)).Should().BeFalse();
-        _ = (await newer.ConfigureAwait(false)).Should().BeTrue();
+        _ = (await older.ConfigureAwait(true)).Should().BeFalse();
+        _ = (await newer.ConfigureAwait(true)).Should().BeTrue();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Name.Should().Be("Third");
         _ = fixture.Area.Documents.Should().ContainSingle()
             .Which.File.Path.Should().Be(fixture.PathOf("Third"));
         _ = fixture.Scenes.Open.Documents.Should().ContainSingle("the older request closed the document it read");
-    }
+    });
 
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task OpenSceneAsync_ApprovedReplacementRetiresThePreviousSceneAndAppliesClipboardPolicy(bool cut)
+    public Task OpenSceneAsync_ApprovedReplacementRetiresThePreviousSceneAndAppliesClipboardPolicy(bool cut) => EnqueueAsync(async () =>
     {
-        using var fixture = await LifetimeFixture.CreateAsync(cut).ConfigureAwait(false);
+        using var fixture = await LifetimeFixture.CreateAsync(cut).ConfigureAwait(true);
         fixture.FirstDocument.History.AddChange("Old edit", static () => { });
         fixture.PromptDecision = CloseDecision.Discard;
 
-        _ = (await fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+        _ = (await fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
 
         var accepted = fixture.Explorer.Scene!.AttachedObject;
         _ = accepted.Name.Should().Be("Second");
@@ -143,16 +151,16 @@ public sealed partial class SceneExplorerReplacementTests
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(cut ? DroidNet.Controls.ClipboardState.Empty : DroidNet.Controls.ClipboardState.Copied);
         _ = fixture.Explorer.PasteCommand.CanExecute(parameter: null).Should().Be(!cut);
         _ = fixture.Explorer.ClipboardItems.Should().BeEmpty();
-    }
+    });
 
     [TestMethod]
-    public async Task OpenSceneAsync_InvalidSourceAbandonsThePreparedCloseAndKeepsDirtySceneAndClipboard()
+    public Task OpenSceneAsync_InvalidSourceAbandonsThePreparedCloseAndKeepsDirtySceneAndClipboard() => EnqueueAsync(async () =>
     {
-        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
+        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(true);
         fixture.FirstDocument.History.AddChange("Edit", static () => { });
         fixture.Context.FileSystem.File.Delete(fixture.PathOf("Second").FullPath);
 
-        _ = (await fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeFalse();
+        _ = (await fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeFalse();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.PasteCommand.CanExecute(parameter: null).Should().BeTrue();
@@ -161,20 +169,20 @@ public sealed partial class SceneExplorerReplacementTests
         _ = fixture.Participant.Closed.Should().BeFalse();
         _ = fixture.Documents.GetOpenDocuments(fixture.Window).Should().ContainSingle();
         _ = fixture.FirstDocument.IsDirty.Should().BeTrue();
-    }
+    });
 
     [TestMethod]
-    public async Task OpenSceneAsync_CopySurvivesGuardedReplacementAndRepeatedPasteUsesSnapshotAndDestinationHistory()
+    public Task OpenSceneAsync_CopySurvivesGuardedReplacementAndRepeatedPasteUsesSnapshotAndDestinationHistory() => EnqueueAsync(async () =>
     {
-        using var fixture = await LifetimeFixture.CreateAsync(cut: false).ConfigureAwait(false);
+        using var fixture = await LifetimeFixture.CreateAsync(cut: false).ConfigureAwait(true);
         var source = fixture.First.RootNodes[0];
         source.Name = "Changed after capture";
         source.Components.OfType<TransformComponent>().Single().LocalPosition = new System.Numerics.Vector3(100, 0, 0);
 
-        _ = (await fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+        _ = (await fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
         var accepted = fixture.Explorer.Scene!.AttachedObject;
-        await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(false);
-        await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(false);
+        await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(true);
+        await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(true);
 
         var pasted = accepted.RootNodes.Where(node => string.Equals(node.Name, "Node", StringComparison.Ordinal)).ToArray();
         _ = pasted.Should().HaveCount(2);
@@ -186,51 +194,51 @@ public sealed partial class SceneExplorerReplacementTests
         _ = destination.History.UndoStack.Should().HaveCount(2);
         _ = destination.IsDirty.Should().BeTrue();
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Copied);
-    }
+    });
 
     [TestMethod]
-    public async Task OpenMaterialAsync_FocusChangeRetainsAcceptedSceneAndClipboard()
+    public Task OpenMaterialAsync_FocusChangeRetainsAcceptedSceneAndClipboard() => EnqueueAsync(async () =>
     {
-        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
+        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(true);
 
-        _ = (await fixture.OpenAsync(fixture.WriteMaterial("Test").Asset, this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+        _ = (await fixture.OpenAsync(fixture.WriteMaterial("Test").Asset, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.PasteCommand.CanExecute(parameter: null).Should().BeTrue();
         _ = fixture.Participant.Prepared.Should().BeFalse();
         _ = fixture.Documents.GetOpenDocuments(fixture.Window).Should().HaveCount(2);
-    }
+    });
 
     [TestMethod]
-    public async Task ProjectNotification_SameActivationSettingsRefreshKeepsExplicitSceneAndClipboard()
+    public Task ProjectNotification_SameActivationSettingsRefreshKeepsExplicitSceneAndClipboard() => EnqueueAsync(async () =>
     {
-        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(false);
+        using var fixture = await LifetimeFixture.CreateAsync(cut: true).ConfigureAwait(true);
 
         fixture.Session.ChangeContext(fixture.Context with { DefaultSceneId = SceneId.New() });
 
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.CurrentClipboardState.Should().Be(DroidNet.Controls.ClipboardState.Cut);
         _ = fixture.Explorer.PasteCommand.CanExecute(parameter: null).Should().BeTrue();
-    }
+    });
 
     [TestMethod]
     [DataRow(false)]
     [DataRow(true)]
-    public async Task ProjectReplacement_CloseCancelled_KeepsTheSceneAndClipboard(bool cut)
+    public Task ProjectReplacement_CloseCancelled_KeepsTheSceneAndClipboard(bool cut) => EnqueueAsync(async () =>
     {
         // Arrange
-        using var fixture = await LifetimeFixture.CreateAsync(cut).ConfigureAwait(false);
+        using var fixture = await LifetimeFixture.CreateAsync(cut).ConfigureAwait(true);
         fixture.Participant.PendingEdit = true;
         fixture.PromptDecision = CloseDecision.Cancel;
 
         // Act
-        using var cancelled = await fixture.Documents.PrepareCloseAllWindowsAsync().ConfigureAwait(false);
+        using var cancelled = await fixture.Documents.PrepareCloseAllWindowsAsync().ConfigureAwait(true);
 
         // Assert: the clipboard ends with the session, which a cancelled replacement keeps.
         _ = cancelled.Should().BeNull();
         _ = fixture.Explorer.Scene!.AttachedObject.Should().BeSameAs(fixture.First);
         _ = fixture.Explorer.PasteCommand.CanExecute(parameter: null).Should().BeTrue();
-    }
+    });
 
     /// <summary>
     /// A workspace with the scene "First" open and one of its nodes selected and copied or cut, and the scene "Second"
@@ -247,23 +255,34 @@ public sealed partial class SceneExplorerReplacementTests
             this.Session = new TestSession(this.Context);
             this.WriteScene("First", "Node");
             this.WriteScene("Second", "Destination");
-            this.Area = new DocumentArea(
-                this.Documents,
-                this.Scenes.Open,
-                this.Scenes.Open.Kinds.Select(kind => new DocumentEditorDescriptor(kind, this.CreateEditor) { IsOnePerArea = kind is SceneDocumentKind }),
-                this.Window,
-                static _ => { });
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync(It.IsAny<WindowId>())).Returns(Task.CompletedTask);
+            _ = input.Setup(value => value.CommitAsync(It.IsAny<DocumentId>())).Returns(Task.CompletedTask);
+            var files = new ContentPipeline.Relocation.ProjectDocumentFiles(this.Scenes.Session);
+            var results = Mock.Of<IOperationResultPublisher>();
             this.Service = new DocumentService(
-                this.Area,
                 this.Documents,
                 this.Scenes.Open,
-                new ContentPipeline.Relocation.ProjectDocumentFiles(this.Scenes.Session),
+                files,
                 this.CreateClosePrompt(),
                 Mock.Of<IDocumentConfirmations>(),
                 input.Object,
-                Mock.Of<IOperationResultPublisher>());
+                results,
+                new HostingContext
+                {
+                    Dispatcher = DispatcherQueue.GetForCurrentThread(),
+                    Application = Application.Current,
+                    DispatcherScheduler = new DispatcherQueueScheduler(DispatcherQueue.GetForCurrentThread()),
+                });
+            this.Area = new DocumentArea(
+                this.Documents,
+                this.Scenes.Open,
+                new DocumentEditors(this.Scenes.Open, this.Scenes.Open.Kinds.Select(kind => new DocumentEditorDescriptor(kind, this.CreateEditor) { IsOnePerArea = kind is SceneDocumentKind })),
+                this.Service,
+                files,
+                results,
+                this.Window,
+                static _ => { });
             this.Explorer = new SceneExplorerViewModel(
                 Mock.Of<IRouter>(),
                 this.Area,
@@ -304,17 +323,17 @@ public sealed partial class SceneExplorerReplacementTests
             var fixture = new LifetimeFixture();
             try
             {
-                _ = (await fixture.OpenAsync(fixture.Scenes.FileOf("First").Asset).ConfigureAwait(false)).Should().BeTrue();
+                _ = (await fixture.OpenAsync(fixture.Scenes.FileOf("First").Asset).ConfigureAwait(true)).Should().BeTrue();
                 fixture.FirstDocument = fixture.Scenes.Open.Find(fixture.PathOf("First"))!;
-                var adapter = await fixture.Explorer.FindAdapterByNodeIdAsync(fixture.First.RootNodes[0].Id).ConfigureAwait(false);
+                var adapter = await fixture.Explorer.FindAdapterByNodeIdAsync(fixture.First.RootNodes[0].Id).ConfigureAwait(true);
                 fixture.Explorer.SelectDisplayedItem(adapter!, [.. fixture.Explorer.ShownItems], isControlDown: false, isShiftDown: false);
                 if (cut)
                 {
-                    await fixture.Explorer.CutItemsAsync([adapter!]).ConfigureAwait(false);
+                    await fixture.Explorer.CutItemsAsync([adapter!]).ConfigureAwait(true);
                 }
                 else
                 {
-                    await fixture.Explorer.CopyItemsAsync([adapter!]).ConfigureAwait(false);
+                    await fixture.Explorer.CopyItemsAsync([adapter!]).ConfigureAwait(true);
                 }
 
                 return fixture;
@@ -327,7 +346,7 @@ public sealed partial class SceneExplorerReplacementTests
         }
 
         public async Task<bool> OpenAsync(AssetPath asset, CancellationToken cancellationToken = default)
-            => (await this.Service.OpenAsync(asset, cancellationToken).ConfigureAwait(false)).Succeeded;
+            => (await this.Area.OpenAsync(asset, cancellationToken).ConfigureAwait(true)).Succeeded;
 
         public FileSystemPath PathOf(string name) => this.Scenes.FileOf(name).Path;
 
@@ -355,9 +374,9 @@ public sealed partial class SceneExplorerReplacementTests
 
         public void Dispose()
         {
-            this.Service.Dispose();
             this.Explorer.Dispose();
             this.Area.Dispose();
+            this.Service.Dispose();
             this.Session.Dispose();
             this.Scenes.Dispose();
         }
@@ -383,7 +402,7 @@ public sealed partial class SceneExplorerReplacementTests
                         item.IsSelected = this.PromptDecision == CloseDecision.Save;
                         if (item.IsSelected)
                         {
-                            _ = await item.SaveAsync().ConfigureAwait(false);
+                            _ = await item.SaveAsync().ConfigureAwait(true);
                         }
                     }
 
@@ -419,7 +438,7 @@ public sealed partial class SceneExplorerReplacementTests
         }
 
         public async Task<bool> SaveForCloseAsync()
-            => this.SaveSucceeds && (await fixture.FirstDocument.SaveAsync().ConfigureAwait(false)).Succeeded;
+            => this.SaveSucceeds && (await fixture.FirstDocument.SaveAsync().ConfigureAwait(true)).Succeeded;
 
         public Task CloseAsync(bool discard)
         {

@@ -139,6 +139,18 @@ slices do not reopen them.
     and owns it; nothing else holds the session's handle. Closing the session
     closes its open windows through the window manager first, then disposes its
     scope, awaited.
+14. **Documents and their editors are the session's; areas are the window's.**
+    The session's `IDocumentService` owns each open document's editor, from the
+    tab's opening in any window until the document closes, follows every
+    session document's file, and registers one close coordinator that serves
+    every window through `IDocumentTabs`, which is keyed by window; no window
+    registers its area and there is no map from windows to areas. A window's
+    `IDocumentArea` opens documents there (with the one-per-area replacement),
+    knows the active editor, saves its documents and asks its confirmations in
+    its own window. Editors get their window's services through
+    `IDocumentWindowEditor`, lent while their document has a tab in the window
+    and withdrawn when it leaves, so an editor never holds a window past its
+    tab, which Phase 5's tear-out needs.
 
 ## 3. Placement of what the spec does not place
 
@@ -730,7 +742,11 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   root-tracked `PersistentState`, which today leaves one `DbContext` held by the
   editor scope per project switch until exit. Each cluster merges its domain's
   layer modules (for example `ContentPipelineModule` and
-  `ContentPipelineWindowModule`) into its Session module.
+  `ContentPipelineWindowModule`) into its Session module. The documents
+  cluster runs in two steps: the open-document registry with per-call prompts,
+  confirmations and input commits, then the document service and every
+  editor into the session (decision 14), with the editor providers in session
+  modules.
 - **S4.3** Remove `CurrentProject` and delete `IProjectContextService`.
 - **S4.4** Close and exit (shell design section 6), before S4.2, so that the
   session's services are disposed when its window closes once Play and the
@@ -876,7 +892,7 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.15 Enforcement                                    | `done`        | Boundary test and project construction; the editor's hand-built test containers are `HostContainer`s, and the topology tests compose the registration modules over one                      |
 | S2.1 to S2.3 Scope factory and topology              | `done`        | `DroidNet.Composition`; the composition root in `Oxygen.Editor.Composition` with its topology and project-switch tests; workspace and Content Explorer scopes on the factory                |
 | S3.1 Registration modules                            | `done`        | Modules per subsystem and layer; `EditorModule` composes the editor scope through `ScopeFactory.CreateRoot`; the App references only what its host and XAML use                             |
-| S4.1 to S4.4 Project Session                         | `in progress` |                                                                                                                                                                                             |
+| S4.1 to S4.4 Project Session                         | `in progress` | S4.1, S4.3, S4.4 and the S4.2 clusters landed in `6e9621d0e`; the document service and editors moved into the session after it (decision 14)                                                |
 | S5.1 to S5.4 Documents across windows, panels in one | `not started` |                                                                                                                                                                                             |
 | S6.1 to S6.3 Service location and messenger          | `not started` |                                                                                                                                                                                             |
 | S7 Documentation                                     | `not started` |                                                                                                                                                                                             |

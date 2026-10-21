@@ -42,6 +42,7 @@ using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.Shell.Windows;
@@ -73,7 +74,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private readonly IOperationResultPublisher previewResults;
     private readonly ContentCookCoordinator materialCookCoordinator;
     private readonly Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture materialPipeline;
-    private readonly Dictionary<FileSystemPath, (ContentCookCoordinator Coordinator, Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture Pipeline)> foreignMaterialPipelines = [];
+    private readonly Dictionary<FileSystemPath, (TestSession Session, ContentCookCoordinator Coordinator, Oxygen.Editor.ContentPipeline.Testing.NativeContentPipelineFixture Pipeline)> foreignMaterialPipelines = [];
     private readonly TestDocumentArea area = new();
     private readonly MaterialValidation materialValidation = new();
     private readonly MaterialDocumentKind materialKind;
@@ -149,7 +150,11 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     /// <summary>Gets the document area of the window that shows the transition host, once it was created.</summary>
     public DocumentArea? TransitionArea { get; private set; }
 
+    /// <summary>Gets the session's document service under the transition host, once it was created.</summary>
     public DocumentService? TransitionDocuments { get; private set; }
+
+    /// <summary>Gets what lends the transition window's services to its editors, once the host was created.</summary>
+    public DocumentWindowAttachments? TransitionAttachments { get; private set; }
 
     public Scene Source { get; private set; }
 
@@ -181,7 +186,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     public TestSessionHost Sessions { get; }
 
     /// <summary>Gets the session of the fixture's project.</summary>
-    public TestSession Session => this.Session;
+    public TestSession Session => this.Sessions.Session ?? throw new InvalidOperationException("The fixture's session is closed.");
 
     public EngineService Runtime { get; }
 
@@ -285,21 +290,31 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         var cook = new MaterialCookService(services.Pipeline, this.Session, NullLogger<MaterialCookService>.Instance);
         DocumentEditorDescriptor[] editors =
         [
-            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, Mock.Of<IAssetReveal>(), preferences)) { IsClosable = false, IsOnePerArea = true },
+            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, preferences)) { IsClosable = false, IsOnePerArea = true },
             new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Session)),
         ];
-        this.TransitionArea = new DocumentArea(documents, this.OpenDocuments, editors, windowId, static _ => { });
-        container.RegisterInstance<IDocumentArea>(this.TransitionArea);
+        var files = new ProjectDocumentFiles(this.Session);
         this.TransitionDocuments = new DocumentService(
-            this.TransitionArea,
             documents,
             this.OpenDocuments,
-            new ProjectDocumentFiles(this.Session),
+            files,
             Mock.Of<IDocumentClosePrompt>(),
             Mock.Of<IDocumentConfirmations>(),
             Mock.Of<IDocumentInputCommitter>(),
-            publisher.Object);
+            publisher.Object,
+            this.hosting);
         container.RegisterInstance<IDocumentService>(this.TransitionDocuments);
+        this.TransitionArea = new DocumentArea(
+            documents,
+            this.OpenDocuments,
+            new DocumentEditors(this.OpenDocuments, editors),
+            this.TransitionDocuments,
+            files,
+            publisher.Object,
+            windowId,
+            static _ => { });
+        container.RegisterInstance<IDocumentArea>(this.TransitionArea);
+        this.TransitionAttachments = new DocumentWindowAttachments(this.TransitionArea, this.TransitionDocuments, Mock.Of<ICommandService>(), Mock.Of<IPlacementService>());
         var views = new Mock<IViewLocator>();
         _ = views.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is SceneEditorViewModel ? new SceneEditorView() : new MaterialEditorView());
         return new DocumentAreaViewModel(this.TransitionDocuments, this.TransitionArea, Mock.Of<IDocumentConfirmations>(), windowId, views.Object);
@@ -427,7 +442,11 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
         var preferences = new PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.Session, publisher.Object, new OperationStatusReducer());
         await preferences.EnsureRestoredAsync().ConfigureAwait(true);
-        return new(this.Tab, this.area, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), Mock.Of<IContentPipelineService>(), container, Mock.Of<IAssetReveal>(), preferences);
+        var editor = new SceneEditorViewModel(this.Tab, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), Mock.Of<IContentPipelineService>(), container, preferences);
+
+        // The editor runs in a window that shows its scene, as the workspace's does.
+        editor.AttachWindow(new DocumentWindowServices(new WindowId(1), this.area, Mock.Of<ICommandService>(), Mock.Of<IPlacementService>(), Mock.Of<IAssetReveal>()));
+        return editor;
     }
 
     /// <summary>Starts the project's preview session over the cook services, as the workspace does.</summary>
@@ -469,10 +488,11 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             this.materialPipeline.Dispose();
             this.materialCookCoordinator.Dispose();
             this.Sessions.Dispose();
-            foreach (var (coordinator, pipeline) in this.foreignMaterialPipelines.Values)
+            foreach (var (session, coordinator, pipeline) in this.foreignMaterialPipelines.Values)
             {
                 pipeline.Dispose();
                 coordinator.Dispose();
+                session.Dispose();
             }
 
             this.compatibility?.Dispose();
@@ -499,7 +519,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             _ = TestProject.SaveProjectFile(project);
             var session = new TestSession(project);
             var coordinator = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);
-            value = (coordinator, new(session, coordinator));
+            value = (session, coordinator, new(session, coordinator));
             this.foreignMaterialPipelines.Add(root, value);
         }
 

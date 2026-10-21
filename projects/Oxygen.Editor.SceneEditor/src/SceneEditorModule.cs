@@ -37,10 +37,7 @@ public sealed class SceneEditorModule : IFeatureModule
     public void Register(IRegistrator scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        scope.Register<IDocumentEditorProvider, SceneEditorProvider>(Reuse.Singleton);
         scope.Register<SceneEditorView>(Reuse.Transient);
-        scope.Register<SceneEditorViews>(Reuse.Singleton);
-        scope.RegisterMapping<ISceneViews, SceneEditorViews>();
         scope.Register<SceneDocumentLifetime>(Reuse.Singleton);
         scope.RegisterMapping<ISceneAvailability, SceneDocumentLifetime>();
 

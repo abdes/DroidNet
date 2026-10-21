@@ -49,6 +49,8 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         var originalSize = window.Size;
         using var host = fixture.CreateDocumentTransitionHost(container, documents, services, window.Id);
         using var service = fixture.TransitionDocuments!;
+        using var area = fixture.TransitionArea!;
+        using var attachments = fixture.TransitionAttachments!;
         var root = new DocumentAreaView
         {
             ViewModel = host,
@@ -59,12 +61,12 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         window.Resize(new((int)(root.Width * root.XamlRoot.RasterizationScale) + 60, (int)(root.Height * root.XamlRoot.RasterizationScale) + 100));
         try
         {
-            _ = await fixture.TransitionArea!.ShowAsync(fixture.Document).ConfigureAwait(true);
+            _ = await area.ShowAsync(fixture.Document).ConfigureAwait(true);
             await fixture.NotifyTransitionSceneReadyAsync(timeout.Token).ConfigureAwait(true);
             await WaitForDocumentViewportAsync(host, fixture, timeout.Token).ConfigureAwait(true);
             await fixture.SuspendCookedContentAsync().ConfigureAwait(true);
             await fixture.RefreshCookedRootsAsync().ConfigureAwait(true);
-            await RunMaterialTransitionsAsync(fixture, host, service, documents, material, window.Id, cycles, timeout.Token).ConfigureAwait(true);
+            await RunMaterialTransitionsAsync(fixture, host, area, documents, material, window.Id, cycles, timeout.Token).ConfigureAwait(true);
         }
         finally
         {
@@ -92,14 +94,14 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         await ObserveRenderedFramesAsync(fixture, cancellationToken).ConfigureAwait(true);
     }
 
-    private static async Task RunMaterialTransitionsAsync(NativeSceneFixture fixture, DocumentAreaViewModel host, DocumentService service, DocumentTabs documents, AssetPath material, WindowId windowId, int cycles, CancellationToken cancellationToken)
+    private static async Task RunMaterialTransitionsAsync(NativeSceneFixture fixture, DocumentAreaViewModel host, DocumentArea area, DocumentTabs documents, AssetPath material, WindowId windowId, int cycles, CancellationToken cancellationToken)
     {
         var mainId = fixture.Document.Id;
         for (var cycle = 0; cycle < cycles; ++cycle)
         {
             var viewport = ((SceneEditorViewModel)host.ActiveEditor!).Viewports.Single();
             var oldView = viewport.AssignedViewId;
-            _ = (await service.OpenAsync(material, cancellationToken).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            _ = (await area.OpenAsync(material, cancellationToken).ConfigureAwait(true)).Succeeded.Should().BeTrue();
             while (host.ActiveEditorView is not MaterialEditorView { IsLoaded: true })
             {
                 await Task.Delay(20, cancellationToken).ConfigureAwait(true);

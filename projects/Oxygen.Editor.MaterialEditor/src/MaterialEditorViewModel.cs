@@ -33,7 +33,11 @@ namespace Oxygen.Editor.MaterialEditor;
 /// View model for the editor of a material document. It edits the document's <see cref="MaterialContent"/> through
 /// <see cref="MaterialEdits"/>, and follows the document's state, reloads and relocations.
 /// </summary>
-public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDisposable
+/// <remarks>
+/// The editor belongs to the project session; the window that shows its material lends it the window's services, which
+/// its cook asks in (<see cref="IDocumentWindowEditor"/>).
+/// </remarks>
+public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentWindowEditor, IDisposable
 {
     private static readonly TimeSpan WheelIdleDelay = TimeSpan.FromMilliseconds(250);
     private readonly DocumentTab tab;
@@ -47,6 +51,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private readonly IDocumentService? documents;
     private readonly IUnsavedCookInputs? unsavedInputs;
     private readonly SemaphoreSlim editGate = new(1, 1);
+    private DocumentWindowServices? window;
     private Task<bool>? pendingSave;
     private MaterialContent? observedContent;
     private bool isApplyingOwnEdit;
@@ -252,6 +257,16 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
             .Build();
         this.ApplyEdit(edit);
     }
+
+    /// <inheritdoc />
+    public void AttachWindow(DocumentWindowServices window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        this.window = window;
+    }
+
+    /// <inheritdoc />
+    public void DetachWindow() => this.window = null;
 
     /// <inheritdoc />
     public void Dispose()
@@ -481,8 +496,10 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
 
         if (this.documents is { } documents && this.unsavedInputs is { } inputs)
         {
+            // Without a window that shows the material, nobody can be asked to save what the cook reads.
             var request = new CookRunRequest(CookTargetKind.Asset, this.document.File.Asset);
-            if (!await documents.SaveBeforeAsync(SaveBeforeOperation.Cook, token => inputs.FindAsync(request, token)).ConfigureAwait(true))
+            if (this.window is not { } window
+                || !await documents.SaveBeforeAsync(window.Window, SaveBeforeOperation.Cook, token => inputs.FindAsync(request, token)).ConfigureAwait(true))
             {
                 return;
             }

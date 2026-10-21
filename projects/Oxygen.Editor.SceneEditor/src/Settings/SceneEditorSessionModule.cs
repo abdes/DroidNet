@@ -9,13 +9,17 @@ using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Views;
+using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneEditor.Settings;
 
 /// <summary>
-///     The scene editor's preferences stored per project, in a project session's scope: the preview settings and the
-///     viewport layouts. They end with the session; the gizmo preferences, kept across projects, are the editor's.
+///     The scene editor in a project session's scope: the editor of scene documents and the registry of the editors that
+///     frame and move cameras, which every window of the session reaches, and the preferences stored per project, the
+///     preview settings and the viewport layouts. They end with the session; the gizmo preferences, kept across
+///     projects, are the editor's.
 /// </summary>
 public sealed class SceneEditorSessionModule : IScopeModule<ISessionLayer>
 {
@@ -29,6 +33,11 @@ public sealed class SceneEditorSessionModule : IScopeModule<ISessionLayer>
     public void Register(IRegistrator scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
+
+        // The scene editors belong to the session; each window that shows one lends it the window's services.
+        scope.Register<IDocumentEditorProvider, SceneEditorProvider>(Reuse.Singleton);
+        scope.Register<SceneEditorViews>(Reuse.Singleton);
+        scope.RegisterMapping<ISceneViews, SceneEditorViews>();
 
         // A dedicated manager owns the session's own database context; preview I/O is serialized by its service.
         scope.Register<IEditorSettingsManager, EditorSettingsManager>(Reuse.Singleton, serviceKey: nameof(PreviewSettingsService));

@@ -23,12 +23,12 @@ Design: [editor-shell.md](../../design/editor/review/editor-shell.md),
 and the prompts, confirmations and input commits of documents in the editor
 scope. Each takes the window it acts on with every call; an editor commits the
 input of the window that shows its document.
-`ShellSessionModule` registers the project session's global history and its
-unsaved documents.
-`ShellWindowModule` registers each window's document area and document service,
-commands, placement and the external code editor, and creates the document
-service when the window opens. The Shell knows no
-project: the composition root opens the session.
+`ShellSessionModule` registers the project session's document service, the
+editors of its document kinds, its global history and its unsaved documents,
+and creates the document service when the session opens.
+`ShellWindowModule` registers each window's document area, the lending of
+window services to editors, commands, placement and the external code editor.
+The Shell knows no project: the composition root opens the session.
 `DockingWindowModule` registers the window's docking.
 
 ## Documents
@@ -36,21 +36,31 @@ project: the composition root opens the session.
 `Oxygen.Editor.Documents` says what a document is; the Shell decides where it
 shows, how it closes and how it follows its file.
 
-- `IDocumentService` opens an asset's file once and shows its document in the
-  window's area. A kind whose descriptor allows one document per area (scenes)
-  replaces the shown one: its unsaved changes are asked about first, and a file
-  that does not open keeps it. The service creates each document's editor from
-  its kind's `DocumentEditorDescriptor`, saves documents through their editors,
-  and reloads, keeps or copies a document whose file changed on disk.
-- It keeps open documents in step with their files: a change the catalog reports
-  makes the document check its file (a clean document reloads, an edited one is
-  marked changed on disk, a deleted one missing); a relocation in the editor
-  moves or rewrites the documents it touches, and closes those whose files it
-  deleted. The project's side comes through two ports of
-  `Oxygen.Editor.Documents`, `IDocumentFiles` and `IDocumentRelocations`.
+- `IDocumentService` is the project session's: it owns every open document's
+  editor, created from its kind's `DocumentEditorDescriptor` when the
+  document's tab opens in any window and disposed once the document has closed.
+  It saves documents through their editors, saves before an operation after
+  asking in the window that asked, and reloads, keeps or copies a document
+  whose file changed on disk.
+- It keeps the session's open documents in step with their files: a change the
+  catalog reports makes the document check its file (a clean document reloads,
+  an edited one is marked changed on disk, a deleted one missing); a relocation
+  in the editor moves or rewrites the documents it touches, and closes those
+  whose files it deleted, in whichever window has their tab. The project's side
+  comes through two ports of `Oxygen.Editor.Documents`, `IDocumentFiles` and
+  `IDocumentRelocations`.
 - `IDocumentArea` is the document area of the window a part runs in: the
-  documents with a tab there and the active one. `DocumentTab` is the tab of one
-  `Document`.
+  documents with a tab there, the active one and its editor. It opens an
+  asset's file once and shows its document there. A kind whose descriptor
+  allows one document per area (scenes) replaces the shown one: its unsaved
+  changes are asked about first, and a file that does not open keeps it. It
+  saves all of its documents, and saves before an operation after asking in
+  its window. `DocumentTab` is the tab of one `Document`.
+- An editor that needs its window implements `IDocumentWindowEditor`: while its
+  document has a tab in a window, `DocumentWindowAttachments` lends it that
+  window's `DocumentWindowServices` (area, commands, placement, asset reveal),
+  and withdraws them when the tab leaves. The editor reads them at call time
+  and never keeps them past the withdrawal.
 - `DocumentAreaView` shows the active document's editor under two banners: the
   file is missing on disk (Save, Close), or it changed on disk while the
   document has unsaved changes (Reload, Keep Mine, Save a Copy).
@@ -81,9 +91,9 @@ A close is a transaction: it is prepared, then committed or dropped.
   replacement of the project. `WindowDocumentsClose` prepares the window's
   documents when the window closes (see [Closing windows](#closing-windows)).
 - Preparing raises `DocumentClosing`, whose handlers may veto, then hands the
-  tabs to the window's `DocumentCloseCoordinator`, which the window's document
-  service registers with the tabs. Each editor takes part in the close as an
-  `IDocumentCloseParticipant`.
+  tabs to the session's one `DocumentCloseCoordinator`, which the document
+  service registers with the tabs and which serves every window. Each editor
+  takes part in the close as an `IDocumentCloseParticipant`.
 - The coordinator asks `IDocumentClosePrompt`, in the window that closes them: _Save changes to 2
   documents?_ with Save, Don't Save and Cancel, each document listed with its
   asset and, when there are several, a check box. A document whose file changed
@@ -91,13 +101,14 @@ A close is a transaction: it is prepared, then committed or dropped.
   dirty after a save that succeeded, it changed while saving, and the close is
   refused with a published failure.
 - Committing closes each participant, then the tab. The area then closes the
-  document in `OpenDocuments`; editors never do.
+  document in `OpenDocuments`; editors never do. The document service disposes
+  the editor after the document closed.
 
 ### Events
 
 | Event               | When raised                                      |
 | ------------------- | ------------------------------------------------ |
-| `DocumentOpened`    | A tab was added                                  |
+| `DocumentOpened`    | A tab was added; the session creates its editor  |
 | `DocumentClosing`   | Before a close that is not forced; handlers veto |
 | `DocumentClosed`    | A tab was removed                                |
 | `DocumentActivated` | A tab was selected                               |

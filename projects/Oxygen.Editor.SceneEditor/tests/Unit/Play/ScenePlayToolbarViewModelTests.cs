@@ -107,7 +107,7 @@ public sealed class ScenePlayToolbarViewModelTests
                     this.Asked++;
                     return Task.FromResult(saved);
                 },
-                placement: null);
+                placement: static () => null);
             toolbar.UpdateScene(hasCamera);
             return toolbar;
         }

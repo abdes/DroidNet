@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Microsoft.UI;
+using Moq;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core.Diagnostics;
@@ -91,7 +92,7 @@ public sealed partial class DocumentAreaTests
         using var notes = new Notes();
         var coordinator = new DocumentCloseCoordinator(new ApprovingPrompt(), new IgnoredResults());
         var tabs = new DocumentTabs();
-        using var coordinatorUse = tabs.UseCloseCoordinator(Window, coordinator);
+        using var coordinatorUse = tabs.UseCloseCoordinator(coordinator);
         using var area = CreateArea(tabs, notes);
         var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
         var outro = await notes.OpenAsync("Outro", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -151,23 +152,30 @@ public sealed partial class DocumentAreaTests
         _ = area.ActiveDocument.Should().BeSameAs(intro);
     }
 
-    /// <summary>The area refuses to start when a kind has no editor, or an editor names a kind no document opens with.</summary>
+    /// <summary>The session's editors refuse a kind with no editor, or an editor that names a kind no document opens with.</summary>
     [TestMethod]
     public void EveryKindNeedsExactlyItsEditor()
     {
         using var notes = new Notes();
-        var tabs = new DocumentTabs();
         var stranger = new Notes.NoteKind();
 
-        var missing = () => new DocumentArea(tabs, notes.Documents, [], Window, static _ => { });
-        var foreign = () => new DocumentArea(tabs, notes.Documents, [Editor(notes.Kind), Editor(stranger)], Window, static _ => { });
+        var missing = () => new DocumentEditors(notes.Documents, []);
+        var foreign = () => new DocumentEditors(notes.Documents, [Editor(notes.Kind), Editor(stranger)]);
 
         _ = missing.Should().Throw<InvalidOperationException>().WithMessage("*Note kind has no editor*");
         _ = foreign.Should().Throw<InvalidOperationException>().WithMessage("*names a kind*");
     }
 
     private static DocumentArea CreateArea(DocumentTabs tabs, Notes notes, WindowId? window = null, Action<WindowId>? bringForward = null)
-        => new(tabs, notes.Documents, [Editor(notes.Kind)], window ?? Window, bringForward ?? (static _ => { }));
+        => new(
+            tabs,
+            notes.Documents,
+            new DocumentEditors(notes.Documents, [Editor(notes.Kind)]),
+            Mock.Of<IDocumentService>(),
+            Mock.Of<IDocumentFiles>(),
+            new IgnoredResults(),
+            window ?? Window,
+            bringForward ?? (static _ => { }));
 
     private static DocumentEditorDescriptor Editor(IDocumentKind kind) => new(kind, static _ => new object());
 

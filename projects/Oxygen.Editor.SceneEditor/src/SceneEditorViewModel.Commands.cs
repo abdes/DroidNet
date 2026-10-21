@@ -88,7 +88,7 @@ public partial class SceneEditorViewModel : ICommandHandler
     // The viewport's Ctrl+Z, Ctrl+Y and Delete run the shell commands: the focused part, the active editor or a registered
     // handler (the Scene Explorer) takes them, and the active document's history takes Undo and Redo nobody handles.
     private Task RunShellCommandAsync(CommandDescriptor command)
-        => this.container.Resolve<ICommandService>(IfUnresolved.ReturnDefault) is { } commands
-            ? commands.ExecuteAsync(command.Id, context: null)
+        => this.window is { } window
+            ? window.Commands.ExecuteAsync(command.Id, context: null)
             : Task.CompletedTask;
 }

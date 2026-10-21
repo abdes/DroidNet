@@ -15,7 +15,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
-///     The scene policies of a window's documents, over the Shell's document service: the project remembers the scene
+///     The scene policies of a window's documents, over the window's document area: the project remembers the scene
 ///     the window last showed, and a scene that failed to replace the one it closed leaves the window without a scene,
 ///     from which the previous one can be opened again.
 /// </summary>
@@ -26,7 +26,6 @@ namespace Oxygen.Editor.SceneEditor;
 public sealed partial class SceneDocumentLifetime : ISceneAvailability, IDisposable
 {
     private readonly ILogger logger;
-    private readonly IDocumentService documents;
     private readonly IDocumentArea area;
     private readonly IProjectSession session;
     private readonly IProjectUsageService projectUsage;
@@ -35,25 +34,22 @@ public sealed partial class SceneDocumentLifetime : ISceneAvailability, IDisposa
     private bool disposed;
 
     /// <summary>Initializes a new instance of the <see cref="SceneDocumentLifetime"/> class.</summary>
-    /// <param name="documents">The window's document service.</param>
-    /// <param name="area">The window's document area.</param>
+    /// <param name="area">The window's document area, which opens and places its documents.</param>
     /// <param name="session">The project session the window belongs to.</param>
     /// <param name="projectUsage">The project's usage record, which keeps its last scene.</param>
     /// <param name="loggerFactory">The logger factory, if any.</param>
     public SceneDocumentLifetime(
-        IDocumentService documents,
         IDocumentArea area,
         IProjectSession session,
         IProjectUsageService projectUsage,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<SceneDocumentLifetime>() ?? NullLoggerFactory.Instance.CreateLogger<SceneDocumentLifetime>();
-        this.documents = documents;
         this.area = area;
         this.session = session;
         this.projectUsage = projectUsage;
 
-        this.documents.Placed += this.OnPlaced;
+        this.area.Placed += this.OnPlaced;
         this.area.ActiveDocumentChanged += this.OnActiveDocumentChanged;
     }
 
@@ -65,7 +61,7 @@ public sealed partial class SceneDocumentLifetime : ISceneAvailability, IDisposa
         => this.previousScene is { } previous
             && this.session.Context.ProjectId == previous.ProjectId
             && this.session.Context.ProjectRoot == previous.ProjectRoot
-            && (await this.documents.OpenAsync(previous.Scene).ConfigureAwait(true)).Succeeded;
+            && (await this.area.OpenAsync(previous.Scene).ConfigureAwait(true)).Succeeded;
 
     /// <inheritdoc/>
     public void Dispose()
@@ -76,7 +72,7 @@ public sealed partial class SceneDocumentLifetime : ISceneAvailability, IDisposa
         }
 
         this.disposed = true;
-        this.documents.Placed -= this.OnPlaced;
+        this.area.Placed -= this.OnPlaced;
         this.area.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
     }
 

@@ -8,7 +8,7 @@ using Oxygen.Editor.Shell.Contributions;
 
 namespace Oxygen.Editor.MaterialEditor;
 
-/// <summary>The material editor: the editor of material documents, with the view that shows it.</summary>
+/// <summary>The material editor in a window: the view that shows a material's editor, which the session creates.</summary>
 public sealed class MaterialEditorModule : IFeatureModule
 {
     /// <inheritdoc />
@@ -27,7 +27,6 @@ public sealed class MaterialEditorModule : IFeatureModule
     public void Register(IRegistrator scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        scope.Register<IDocumentEditorProvider, MaterialEditorProvider>(Reuse.Singleton);
         scope.Register<MaterialEditorView>(Reuse.Transient);
     }
 }

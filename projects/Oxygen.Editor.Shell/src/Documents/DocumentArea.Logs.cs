@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Shell.Documents;
 
@@ -25,4 +26,12 @@ public sealed partial class DocumentArea
     private static partial void LogShowRefused(ILogger logger, string title);
 
     private void LogShowRefused(string title) => LogShowRefused(this.logger, title);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "'{Asset}' was not opened: {Problem}")]
+    private static partial void LogNotOpened(ILogger logger, AssetPath asset, string problem);
+
+    private void LogNotOpened(AssetPath asset, string problem) => LogNotOpened(this.logger, asset, problem);
 }

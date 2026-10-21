@@ -159,6 +159,7 @@ public sealed class EditorCloseTests : VisualUserInterfaceTests
         _ = scopes.ShowWindows(new OpenWindow(Workspace, EditorWindows.WorkspaceCategory, sessions.Current), new OpenWindow(document, WindowCategory.Document, sessions.Current));
         var tabs = new Mock<IDocumentTabs>();
         _ = tabs.Setup(value => value.PrepareCloseAllAsync(document)).ReturnsAsync((DocumentCloseTransaction?)null);
+        _ = tabs.Setup(value => value.UseCloseCoordinator(It.IsAny<DocumentCloseCoordinator>())).Returns(Mock.Of<IDisposable>());
         scopes.Host.RegisterInstance(tabs.Object, IfAlreadyRegistered.Replace);
 
         // Act
@@ -244,6 +245,7 @@ public sealed class EditorCloseTests : VisualUserInterfaceTests
     {
         var engine = new Mock<IEngineService>();
         _ = engine.SetupGet(value => value.State).Returns(EngineServiceState.Running);
+        _ = engine.SetupGet(value => value.WorldCommands).Returns(Mock.Of<IRuntimeWorldCommands>());
         _ = engine.Setup(value => value.ShutdownAsync()).Returns(ValueTask.CompletedTask);
         scopes.Host.RegisterInstance(engine.Object, IfAlreadyRegistered.Replace);
         return engine;

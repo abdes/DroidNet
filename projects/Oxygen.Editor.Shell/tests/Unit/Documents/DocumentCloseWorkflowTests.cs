@@ -254,9 +254,9 @@ public sealed partial class DocumentCloseWorkflowTests
     private sealed partial class Fixture(Func<IReadOnlyList<DocumentCloseItem>, Task<bool>> prompt) : IDisposable
     {
         private readonly Notes notes = new();
-        private readonly Dictionary<WindowId, DocumentCloseCoordinator> coordinators = [];
-        private readonly List<IDisposable> coordinatorUses = [];
         private readonly List<DocumentTab> tabs = [];
+        private DocumentCloseCoordinator? coordinator;
+        private IDisposable? coordinatorUse;
 
         public Mock<IOperationResultPublisher> Results { get; } = new();
 
@@ -273,28 +273,28 @@ public sealed partial class DocumentCloseWorkflowTests
             this.tabs.Add(tab);
             var participant = new Participant(tab);
             _ = (await this.Service.OpenDocumentAsync(target, tab).ConfigureAwait(false)).Should().BeTrue();
-            this.CoordinatorOf(target).Register(tab, participant);
+            this.Coordinator().Register(tab, participant);
             this.Participants.Add(participant);
             return participant;
         }
 
         public void Dispose()
         {
-            this.coordinatorUses.ForEach(static use => use.Dispose());
+            this.coordinatorUse?.Dispose();
             this.tabs.ForEach(static tab => tab.Dispose());
             this.notes.Dispose();
         }
 
-        private DocumentCloseCoordinator CoordinatorOf(WindowId window)
+        // One coordinator decides the closes of every window, as the project session's does.
+        private DocumentCloseCoordinator Coordinator()
         {
-            if (!this.coordinators.TryGetValue(window, out var coordinator))
+            if (this.coordinator is null)
             {
-                coordinator = new DocumentCloseCoordinator(new Prompt(prompt), this.Results.Object);
-                this.coordinators.Add(window, coordinator);
-                this.coordinatorUses.Add(this.Service.UseCloseCoordinator(window, coordinator));
+                this.coordinator = new DocumentCloseCoordinator(new Prompt(prompt), this.Results.Object);
+                this.coordinatorUse = this.Service.UseCloseCoordinator(this.coordinator);
             }
 
-            return coordinator;
+            return this.coordinator;
         }
     }
 

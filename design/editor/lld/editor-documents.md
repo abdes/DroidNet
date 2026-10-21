@@ -2,7 +2,7 @@
 
 Status: `agreed`
 
-Last Updated: 2026-10-20 01:32
+Last Updated: 2026-10-22 03:51
 
 ## 1. Purpose
 
@@ -41,7 +41,7 @@ document and the document kinds are in [document-kinds.md](document-kinds.md).
 ## 4. Current Baseline
 
 The steps that bring the code to this design, and what each has done, are S1.9
-to S1.12 of the
+to S1.12 and S4.2 of the
 [issue-069 plan](../plan/issue-069-di-topology-and-decomposition.md).
 
 ## 5. Target Design
@@ -99,6 +99,18 @@ to S1.12 of the
      ([document-kinds.md](document-kinds.md)). `EditorDocumentService`,
      `DocumentHostViewModel` and `DocumentManager` fold into the Shell's
      service.
+
+     The document service belongs to the project session, not to a window. It
+     owns each open document's editor, from the moment the document's tab
+     opens in any window until the document closes, and one close coordinator
+     that serves every window; a confirmation is asked in the window where the
+     user acted. Each window has a document area (`IDocumentArea`): it opens
+     documents there, replacing the shown one for a kind that allows one per
+     area, knows the active document and its editor, and saves its documents.
+     An editor that needs its window's services (commands, placement, asset
+     reveal) is lent them while its document has a tab in that window and reads
+     them at call time, so a document's editor and history outlive the window
+     that shows it.
 
      Its name is `IDocumentService` in `Oxygen.Editor.Shell`, implemented by
      `DocumentService`. The Aura-facing contract in `DroidNet.Documents` is
@@ -349,7 +361,7 @@ and preview work goes ahead of automatic work.
 
 | Owner                           | Owns                                                                                                                                                                                        |
 | ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor.Shell`           | The document service (`IDocumentService`): placement, tabs, prompts, the missing and conflict banner, Undo and Redo routing; the global history (`IHistoryService`)                         |
+| `Oxygen.Editor.Shell`           | The session's document service (`IDocumentService`) and editors; each window's document area (`IDocumentArea`): placement, tabs, prompts, the banner, Undo and Redo; `IHistoryService`      |
 | `Oxygen.Editor.Documents`       | What a document is: identity, file, kind, versions, dirty, missing and changed on disk; open once per file, save against the version read, reload, follow a relocation; `IUnsavedDocuments` |
 | Document kinds                  | Decoding, encoding and the content of their documents (Scenes, Materials)                                                                                                                   |
 | `Oxygen.Editor.Assets`          | The only file watcher (`AssetCatalog`) and the asset feed's statuses                                                                                                                        |
@@ -359,10 +371,12 @@ and preview work goes ahead of automatic work.
 
 ## 7. Data Contracts
 
-- `IDocumentService` (Shell, implemented by `DocumentService`) is the document
-  service parts use; inside the Shell, `DocumentTabs` implements the Aura-facing
-  contract of `DroidNet.Documents`, `IDocumentTabSource`, for every window (5.1,
-  decision 2).
+- `IDocumentService` (Shell, implemented by `DocumentService`) is the project
+  session's document service: editors, saving, reloading and the conflict
+  actions. `IDocumentArea` is the document area of the window a part runs in:
+  opening, showing, the active editor and closing there. Inside the Shell,
+  `DocumentTabs` implements the Aura-facing contract of `DroidNet.Documents`,
+  `IDocumentTabSource`, for every window (5.1, decision 2).
 - `IUnsavedDocuments` (`Oxygen.Editor.Documents`): given file paths, the open
   documents that edit them with unsaved changes (5.3.3).
 - **Cook on change** is a project setting (`ProjectSettings.CookOnChange`), on

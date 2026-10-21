@@ -11,7 +11,6 @@ using Oxygen.Editor.SceneEditor.Play;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Shell.Documents;
-using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.SceneEditor;
@@ -34,22 +33,23 @@ public partial class SceneEditorViewModel
             return;
         }
 
-        this.Play = new ScenePlayToolbarViewModel(session, this.Document.Id, () => this.SaveInputsAsync(SaveBeforeOperation.Play), this.container.Resolve<IPlacementService>(IfUnresolved.ReturnDefault));
+        this.Play = new ScenePlayToolbarViewModel(session, this.Document.Id, () => this.SaveInputsAsync(SaveBeforeOperation.Play), () => this.window?.Placement);
         this.RefreshPlayScene();
     }
 
-    // Play and Cook read the saved files: the unsaved documents the scene uses are saved first, after asking, through the
-    // ordinary Save and its conflict handling.
+    // Play and Cook read the saved files: the unsaved documents the scene uses are saved first, after asking in the window
+    // that shows the scene, through the ordinary Save and its conflict handling. Without a window, nobody can be asked.
     private Task<bool> SaveInputsAsync(SaveBeforeOperation operation)
     {
-        if (this.container.Resolve<IDocumentService>(IfUnresolved.ReturnDefault) is not { } documents
+        if (this.window is not { } window
+            || this.container.Resolve<IDocumentService>(IfUnresolved.ReturnDefault) is not { } documents
             || this.container.Resolve<IUnsavedCookInputs>(IfUnresolved.ReturnDefault) is not { } inputs)
         {
-            return Task.FromResult(true);
+            return Task.FromResult(this.window is not null);
         }
 
         var request = new CookRunRequest(CookTargetKind.CurrentScene, this.Document.File.Asset);
-        return documents.SaveBeforeAsync(operation, token => inputs.FindAsync(request, token));
+        return documents.SaveBeforeAsync(window.Window, operation, token => inputs.FindAsync(request, token));
     }
 
     // Also follows the current authoring, which a reload replaces.

@@ -131,6 +131,7 @@ public sealed class TopologyTests
         (nameof(IScenePreview), null),
         ("PreviewContentDemand", null),
         (nameof(IAssetProblemSources), null),
+        (nameof(DocumentEditors), null),
     ];
 
     // The reviewed delegate registrations of a workspace window's scope.

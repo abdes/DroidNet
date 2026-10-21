@@ -18,7 +18,6 @@ using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Shell.Documents;
-using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -27,9 +26,12 @@ namespace Oxygen.Editor.SceneEditor;
 /// <summary>
 /// ViewModel for the Scene Editor.
 /// </summary>
-public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDisposable
+/// <remarks>
+/// The editor belongs to the project session. The window that shows its scene lends it the window's area, commands,
+/// placement and asset reveal (<see cref="IDocumentWindowEditor"/>); without a window, what needs one does nothing.
+/// </remarks>
+public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentWindowEditor, IDisposable
 {
-    private readonly IAssetReveal assetReveal;
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
@@ -39,8 +41,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
     private readonly IContentPipelineService contentPipelineService;
-    private readonly IDocumentArea documentArea;
     private readonly IContainer container;
+    private DocumentWindowServices? window;
     private Oxygen.Editor.World.Scene? scene;
     private bool sceneReady;
     private bool isClosing;
@@ -51,21 +53,18 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// Initializes a new instance of the <see cref="SceneEditorViewModel"/> class.
     /// </summary>
     /// <param name="tab">The scene document's tab.</param>
-    /// <param name="documentArea">The document area of the editor's window, which says whether the scene is active.</param>
     /// <param name="engineService">Coordinates native engine usage for the document.</param>
     /// <param name="scenePreview">Reports when the engine shows the document's scene.</param>
     /// <param name="inputCommitter">Completes the focused inspector control's text input.</param>
     /// <param name="operationResults">The visible operation-result publisher.</param>
     /// <param name="statusReducer">The diagnostic status reducer.</param>
     /// <param name="contentPipelineService">The explicit content cooking service.</param>
-    /// <param name="container">DI container used to create child services for viewports.</param>
-    /// <param name="assetReveal">What shows assets in the Content Explorer.</param>
+    /// <param name="container">The session's container, from which the editor gets its session services.</param>
     /// <param name="previewSettings">The shared project preview preferences.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="engineSettings">The engine startup settings, whose logging verbosity the editor edits; optional.</param>
     public SceneEditorViewModel(
         DocumentTab tab,
-        IDocumentArea documentArea,
         IEngineService engineService,
         IScenePreview scenePreview,
         IDocumentInputCommitter inputCommitter,
@@ -73,7 +72,6 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IStatusReducer statusReducer,
         IContentPipelineService contentPipelineService,
         IContainer container,
-        IAssetReveal assetReveal,
         PreviewSettingsService previewSettings,
         ILoggerFactory? loggerFactory = null,
         ISettingsService<IEngineStartupSettings>? engineSettings = null)
@@ -89,14 +87,12 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.operationResults = operationResults;
         this.statusReducer = statusReducer;
         this.contentPipelineService = contentPipelineService;
-        this.documentArea = documentArea;
         this.loggerFactory = loggerFactory;
         this.Viewports = [];
         this.Tab = tab ?? throw new ArgumentNullException(nameof(tab));
         this.Document = tab.Document;
         this.scene = (tab.Document.Content as SceneContent)?.Scene;
         this.container = container;
-        this.assetReveal = assetReveal ?? throw new ArgumentNullException(nameof(assetReveal));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger(nameof(SceneEditorViewModel));
         this.InitializeTransformTools();
 
@@ -158,6 +154,16 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             }
         }
     }
+
+    /// <inheritdoc/>
+    public void AttachWindow(DocumentWindowServices window)
+    {
+        ArgumentNullException.ThrowIfNull(window);
+        this.window = window;
+    }
+
+    /// <inheritdoc/>
+    public void DetachWindow() => this.window = null;
 
     /// <inheritdoc/>
     public void Dispose()

@@ -34,11 +34,11 @@ public interface IDocumentTabs : IDocumentTabSource
     public WindowId? FindWindow(DocumentId documentId);
 
     /// <summary>
-    /// Has a window's close decisions made by its close coordinator: which documents are saved, and which editors
-    /// veto. Without one, a window refuses to close a dirty document unless forced.
+    /// Has every window's close decisions made by the open project session's close coordinator: which documents are
+    /// saved, and which editors veto. Without one, a window refuses to close a dirty document unless forced.
     /// </summary>
-    /// <param name="windowId">The window.</param>
-    /// <param name="coordinator">The window's close coordinator.</param>
+    /// <param name="coordinator">The session's close coordinator.</param>
     /// <returns>Stops using the coordinator when disposed.</returns>
-    public IDisposable UseCloseCoordinator(WindowId windowId, DocumentCloseCoordinator coordinator);
+    /// <exception cref="InvalidOperationException">Another coordinator is in use.</exception>
+    public IDisposable UseCloseCoordinator(DocumentCloseCoordinator coordinator);
 }

@@ -23,8 +23,8 @@ namespace Oxygen.Editor.MaterialEditor;
 /// <param name="session">The project session the window lives in.</param>
 /// <param name="inputCommitter">Commits the focused control's input before a save.</param>
 /// <param name="documents">
-/// The window's document service, which saves the documents a cook reads after asking. It creates the editors, so it is
-/// reached once an editor is created.
+/// The session's document service, which saves the documents a cook reads after asking. It creates the editors, so it
+/// is reached once an editor is created.
 /// </param>
 /// <param name="unsavedInputs">Finds the unsaved documents a cook reads.</param>
 /// <param name="loggerFactory">The logger factory, if any.</param>

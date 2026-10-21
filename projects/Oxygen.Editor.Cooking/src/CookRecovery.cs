@@ -24,7 +24,7 @@ namespace Oxygen.Editor.Cooking;
 /// </summary>
 /// <param name="session">The project session the window lives in.</param>
 /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
-/// <param name="documents">The window's document service, which asks before it saves.</param>
+/// <param name="documents">The window's document area, which asks in its window before it saves.</param>
 /// <param name="unsaved">What finds the unsaved documents a cook reads.</param>
 /// <param name="placement">Where documents and panels show.</param>
 /// <param name="selection">The scene selection every panel follows.</param>
@@ -33,7 +33,7 @@ namespace Oxygen.Editor.Cooking;
 public sealed class CookRecovery(
     IProjectSession session,
     IAssetCatalog catalog,
-    IDocumentService documents,
+    IDocumentArea documents,
     IUnsavedCookInputs unsaved,
     IPlacementService placement,
     ISceneSelectionService selection,

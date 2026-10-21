@@ -179,12 +179,12 @@ public partial class SceneEditorViewModel
     {
         var assets = this.GetSelectedAssets();
         this.LogBrowseToAssetRequested(assets.Count);
-        if (assets.Count == 0 || this.ActiveProject is null)
+        if (assets.Count == 0 || this.ActiveProject is null || this.window?.Reveal is not { } reveal)
         {
             return;
         }
 
-        _ = await this.assetReveal.RevealAsync(assets).ConfigureAwait(true);
+        _ = await reveal.RevealAsync(assets).ConfigureAwait(true);
     }
 
     /// <summary>Selects the scene itself, so the Inspector shows its environment.</summary>

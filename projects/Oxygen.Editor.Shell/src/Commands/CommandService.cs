@@ -22,13 +22,14 @@ namespace Oxygen.Editor.Shell.Commands;
 /// A command takes no arguments: it acts on the window's active document and its selection, so it runs the same from a
 /// key, a menu or a script that names it, with or without a control to start from.
 /// </remarks>
-/// <param name="documents">The window's document service, whose active editor is asked after the parts.</param>
-/// <param name="area">The window's document area, whose active document's history Undo and Redo run.</param>
+/// <param name="area">
+/// The window's document area: its active editor is asked after the parts, and its active document's history runs Undo and
+/// Redo.
+/// </param>
 /// <param name="histories">The session's histories, whose global history Undo and Redo run when no document is active.</param>
 /// <param name="contributions">The window's contributions, which name its commands.</param>
 /// <param name="loggerFactory">The logger factory, if any.</param>
 public sealed partial class CommandService(
-    IDocumentService documents,
     IDocumentArea area,
     IHistoryService histories,
     ContributionRegistry contributions,
@@ -99,7 +100,7 @@ public sealed partial class CommandService(
 
     private ICommandHandler? HandlerFor(string commandId, DependencyObject? context)
         => HandlersAround(context)
-            .Append(documents.ActiveEditor as ICommandHandler)
+            .Append(area.ActiveEditor as ICommandHandler)
             .Concat([.. this.registered])
             .OfType<ICommandHandler>()
             .FirstOrDefault(handler => handler.CanExecute(commandId));

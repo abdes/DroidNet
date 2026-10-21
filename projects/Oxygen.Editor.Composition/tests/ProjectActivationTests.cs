@@ -48,6 +48,7 @@ public sealed class ProjectActivationTests
         var next = this.Arrange(scopes, navigationFails: false);
         var documents = new Mock<IDocumentTabs>();
         _ = documents.Setup(tabs => tabs.PrepareCloseAllWindowsAsync()).ReturnsAsync((DocumentCloseTransaction?)null);
+        _ = documents.Setup(tabs => tabs.UseCloseCoordinator(It.IsAny<DocumentCloseCoordinator>())).Returns(Mock.Of<IDisposable>());
         scopes.Host.RegisterInstance(documents.Object, IfAlreadyRegistered.Replace);
         var sessions = scopes.Host.Resolve<IProjectSessionHost>();
         var (open, openProject) = NewProject();

@@ -49,20 +49,20 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
     private readonly PlaySession session;
     private readonly DocumentId documentId;
     private readonly Func<Task<bool>> saveInputs;
-    private readonly IPlacementService? placement;
+    private readonly Func<IPlacementService?> placement;
     private bool hasCamera;
 
     /// <summary>Initializes a new instance of the <see cref="ScenePlayToolbarViewModel"/> class.</summary>
     /// <param name="session">The workspace's play sessions.</param>
     /// <param name="documentId">The scene document of this toolbar.</param>
     /// <param name="saveInputs">Saves the unsaved documents Play reads, after asking; false when Play must not run.</param>
-    /// <param name="placement">Brings the panels with a failure's details forward, if any.</param>
-    public ScenePlayToolbarViewModel(PlaySession session, DocumentId documentId, Func<Task<bool>> saveInputs, IPlacementService? placement)
+    /// <param name="placement">The placement of the window that shows the scene now, which brings the panels with a failure's details forward; null when no window shows it.</param>
+    public ScenePlayToolbarViewModel(PlaySession session, DocumentId documentId, Func<Task<bool>> saveInputs, Func<IPlacementService?> placement)
     {
         this.session = session;
         this.documentId = documentId;
         this.saveInputs = saveInputs;
-        this.placement = placement;
+        this.placement = placement ?? throw new ArgumentNullException(nameof(placement));
         this.session.PropertyChanged += this.OnSessionChanged;
         _ = this.session.Settings.EnsureLoadedAsync();
     }
@@ -290,7 +290,7 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
             PlayStatusTarget.Output => PlayPanel.Output,
             _ => PlayPanel.None,
         };
-        if (PanelIdOf(panel) is { } panelId && this.placement is { } placement)
+        if (PanelIdOf(panel) is { } panelId && this.placement() is { } placement)
         {
             _ = placement.ShowPanelAsync(panelId);
         }

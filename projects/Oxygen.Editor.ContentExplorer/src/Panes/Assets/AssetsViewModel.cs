@@ -54,7 +54,7 @@ namespace Oxygen.Editor.ContentExplorer;
 /// <param name="creation">New Script, New Input File and New Scene; without it those commands are unavailable.</param>
 /// <param name="codeEditor">The code editor that opens scripts and input files; without it Edit is unavailable.</param>
 /// <param name="placement">Opens scenes and materials and shows panels; without it opening them does nothing.</param>
-/// <param name="documents">Saves the unsaved documents a cook reads, after asking; without it a cook does not ask.</param>
+/// <param name="documents">The window's document area, which saves the unsaved documents a cook reads after asking; without it a cook does not ask.</param>
 /// <param name="unsavedInputs">Finds the unsaved documents a cook reads; without it a cook does not ask.</param>
 /// <param name="assetReveal">Shows the source of an imported asset; without it Show Source reports it unavailable.</param>
 /// <param name="cookedInspections">Inspects cooked output; without it Inspect and Validate report it unavailable.</param>
@@ -77,7 +77,7 @@ public partial class AssetsViewModel(
     Authoring.AuthoredAssetCreation? creation = null,
     ICodeEditorService? codeEditor = null,
     IPlacementService? placement = null,
-    IDocumentService? documents = null,
+    IDocumentArea? documents = null,
     IUnsavedCookInputs? unsavedInputs = null,
     IAssetReveal? assetReveal = null,
     ICookedInspections? cookedInspections = null) : AbstractOutletContainer, IRoutingAware

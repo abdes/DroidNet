@@ -13,7 +13,6 @@ using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
-using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneEditor;
@@ -23,7 +22,7 @@ namespace Oxygen.Editor.SceneEditor;
 /// scene's tab does not close on its own.
 /// </summary>
 /// <param name="kind">The scene document kind.</param>
-/// <param name="container">The window's container, from which each editor gets its services.</param>
+/// <param name="container">The project session's container, from which each editor gets its services.</param>
 public sealed class SceneEditorProvider(SceneDocumentKind kind, IContainer container) : IDocumentEditorProvider
 {
     /// <inheritdoc/>
@@ -32,7 +31,6 @@ public sealed class SceneEditorProvider(SceneDocumentKind kind, IContainer conta
     private static SceneEditorViewModel Create(IContainer container, DocumentTab tab)
         => new(
             tab,
-            container.Resolve<IDocumentArea>(),
             container.Resolve<IEngineService>(),
             container.Resolve<IScenePreview>(),
             container.Resolve<IDocumentInputCommitter>(),
@@ -40,7 +38,6 @@ public sealed class SceneEditorProvider(SceneDocumentKind kind, IContainer conta
             container.Resolve<IStatusReducer>(),
             container.Resolve<IContentPipelineService>(),
             container,
-            container.Resolve<IAssetReveal>(),
             container.Resolve<PreviewSettingsService>(),
             container.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault),
             engineSettings: container.Resolve<ISettingsService<IEngineStartupSettings>>(IfUnresolved.ReturnDefault));

@@ -76,9 +76,9 @@ public sealed class RelocationHistoryTests
             Mock.Of<IDialogService>(),
             Mock.Of<IDesktopIntegration>());
 
-    private static IDocumentService SavingDocuments()
+    private static IDocumentArea SavingDocuments()
     {
-        var documents = new Mock<IDocumentService>();
+        var documents = new Mock<IDocumentArea>();
         _ = documents.Setup(value => value.SaveBeforeAsync(It.IsAny<SaveBeforeOperation>(), It.IsAny<Func<CancellationToken, Task<IReadOnlyList<UnsavedDocument>>>>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: true);
         return documents.Object;
     }
