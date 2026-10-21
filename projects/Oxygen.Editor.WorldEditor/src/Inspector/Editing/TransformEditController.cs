@@ -41,7 +41,7 @@ internal sealed partial class TransformEditController(
     private static readonly TimeSpan MouseWheelCommitDelay = TimeSpan.FromMilliseconds(250);
     private static readonly SceneEditResult Nothing = new(SceneEditOutcome.Applied, []);
 
-    private readonly ILogger logger = loggerFactory?.CreateLogger<TransformEditController>() ?? NullLoggerFactory.Instance.CreateLogger<TransformEditController>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<TransformEditController>() ?? NullLogger<TransformEditController>.Instance;
     private readonly InspectorFieldDiagnostics diagnostics = diagnostics;
     private readonly HashSet<string> supersededFields = [with(StringComparer.Ordinal)];
 

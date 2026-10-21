@@ -24,12 +24,7 @@ namespace Oxygen.Editor.Projects;
 public partial class ProjectManagerService(IStorageProvider storage, ILoggerFactory? loggerFactory = null, IAtomicFileStore? atomicFiles = null)
     : IProjectManagerService
 {
-    [SuppressMessage(
-        "Performance",
-        "CA1823:Avoid unused private fields",
-        Justification = "used by generated logging methods")]
-    private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectManagerService>() ??
-                                      NullLoggerFactory.Instance.CreateLogger<ProjectManagerService>();
+    private readonly ILogger logger = loggerFactory?.CreateLogger<ProjectManagerService>() ?? NullLogger<ProjectManagerService>.Instance;
 
     // Writes of one project file run one at a time, each against the version the one before it wrote.
     private readonly DocumentWriteCoordinator manifestWrites = new();

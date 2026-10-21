@@ -2,11 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
-using System.Diagnostics.CodeAnalysis;
-using DroidNet.Storage;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Oxygen.Editor.Projects;
 
@@ -14,17 +10,29 @@ namespace Oxygen.Editor.Projects;
 public partial class ProjectManagerService
 {
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Could not load project info from `{location}`; {error}")]
-    partial void CouldNotSaveProjectInfo(string location, string error);
+        Message = "Could not save project info to `{Location}`; {Error}")]
+    private static partial void CouldNotSaveProjectInfo(ILogger logger, string location, string error);
+
+    private void CouldNotSaveProjectInfo(string location, string error)
+        => CouldNotSaveProjectInfo(this.logger, location, error);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Could not load project info from `{location}`; {error}")]
-    partial void CouldNotLoadProjectInfo(string location, string error);
+        Message = "Could not load project info from `{Location}`; {Error}")]
+    private static partial void CouldNotLoadProjectInfo(ILogger logger, string location, string error);
+
+    private void CouldNotLoadProjectInfo(string location, string error)
+        => CouldNotLoadProjectInfo(this.logger, location, error);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Could not load project info from `{location}`; {error}")]
-    partial void CouldNotLoadProject(string location, string error);
+        Message = "Could not load project from `{Location}`; {Error}")]
+    private static partial void CouldNotLoadProject(ILogger logger, string location, string error);
+
+    private void CouldNotLoadProject(string location, string error)
+        => CouldNotLoadProject(this.logger, location, error);
 }

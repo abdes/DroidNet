@@ -22,6 +22,7 @@ public partial class ContentBrowserViewModel
         => LogHistoryPush(this.logger, url);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "Navigated back from index {FromIndex} to {ToIndex} (URL: {Url})")]
     private static partial void LogNavigationBack(ILogger logger, int fromIndex, int toIndex, string url);
@@ -30,6 +31,7 @@ public partial class ContentBrowserViewModel
         => LogNavigationBack(this.logger, fromIndex, toIndex, url);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "Navigated forward from index {FromIndex} to {ToIndex} (URL: {Url})")]
     private static partial void LogNavigationForward(ILogger logger, int fromIndex, int toIndex, string url);
@@ -38,6 +40,7 @@ public partial class ContentBrowserViewModel
         => LogNavigationForward(this.logger, fromIndex, toIndex, url);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "Navigated Up to: {Url} (from '{Current}')")]
     private static partial void LogNavigationUp(ILogger logger, string url, AssetPath current);
@@ -46,6 +49,7 @@ public partial class ContentBrowserViewModel
         => LogNavigationUp(this.logger, url, current);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "ContentBrowserState changed, updating history only: {Url}")]
     private static partial void LogContentBrowserStateChanged(ILogger logger, string url);
@@ -55,6 +59,7 @@ public partial class ContentBrowserViewModel
         => LogContentBrowserStateChanged(this.logger, url);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "NavigationEnd event: URL={Url}, IsFromHistory={IsFromHistory}")]
     private static partial void LogNavigationEnd(ILogger logger, string url, bool isFromHistory);
@@ -64,6 +69,7 @@ public partial class ContentBrowserViewModel
         => LogNavigationEnd(this.logger, url, isFromHistory);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Duplicate of current entry, skipping add to history")]
     private static partial void LogHistoryDuplicateSkipped(ILogger logger);
@@ -73,6 +79,7 @@ public partial class ContentBrowserViewModel
         => LogHistoryDuplicateSkipped(this.logger);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Removing {Count} forward history items from index {Index}")]
     private static partial void LogHistoryForwardCleared(ILogger logger, int count, int index);
@@ -82,6 +89,7 @@ public partial class ContentBrowserViewModel
         => LogHistoryForwardCleared(this.logger, count, index);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "History state: Count={Count}, CurrentIndex={CurrentIndex}")]
     private static partial void LogHistoryState(ILogger logger, int count, int currentIndex);
@@ -91,6 +99,7 @@ public partial class ContentBrowserViewModel
         => LogHistoryState(this.logger, count, currentIndex);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Trace,
         Message = "Full history: {History}")]
     private static partial void LogHistoryFull(ILogger logger, string history);
@@ -106,6 +115,7 @@ public partial class ContentBrowserViewModel
     }
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "CanGoUp updated: {CanGoUp}, current='{Current}', parent='{Parent}'")]
     private static partial void LogCanGoUpUpdated(ILogger logger, bool canGoUp, AssetPath? current, AssetPath? parent);
@@ -124,6 +134,7 @@ public partial class ContentBrowserViewModel
         => LogRefreshRequested(this.logger);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Failed to retrieve project name for breadcrumbs")]
     private static partial void LogProjectNameRetrievalFailed(ILogger logger, Exception ex);
@@ -133,6 +144,7 @@ public partial class ContentBrowserViewModel
         => LogProjectNameRetrievalFailed(this.logger, ex);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Warning,
         Message = "Failed to persist content browser state for project {ProjectName}.")]
     private static partial void LogContentBrowserStatePersistFailed(ILogger logger, Exception ex, string projectName);

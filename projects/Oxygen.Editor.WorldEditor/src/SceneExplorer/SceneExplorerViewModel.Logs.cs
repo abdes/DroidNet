@@ -361,6 +361,7 @@ public partial class SceneExplorerViewModel
         => LogCannotApplyLayoutNoActiveScene(this.logger);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         EventName = $"ui-{nameof(SceneExplorerViewModel)}-ItemAdded",
         Level = LogLevel.Information,
         Message = "Item added: '{ItemName}'.")]
@@ -370,6 +371,7 @@ public partial class SceneExplorerViewModel
         => LogItemAdded(this.logger, itemName);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         EventName = $"ui-{nameof(SceneExplorerViewModel)}-ItemRemoved",
         Level = LogLevel.Information,
         Message = "Item removed: '{ItemName}'.")]

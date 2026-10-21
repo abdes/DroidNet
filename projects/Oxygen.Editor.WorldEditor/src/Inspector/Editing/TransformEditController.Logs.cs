@@ -18,12 +18,16 @@ internal sealed partial class TransformEditController
         Message = "[TransformViewModel] Constructed (HasLoggerFactory={HasFactory})")]
     private static partial void LogConstructed(ILogger logger, bool hasFactory);
 
+    [Conditional("DEBUG")]
     private void LogConstructed()
     {
-        if (this.logger is ILogger lg)
+        if (!this.logger.IsEnabled(LogLevel.Trace))
         {
-            LogConstructed(lg, this.LoggerFactory is not null);
+            return;
         }
+
+        var hasFactory = this.LoggerFactory is not null;
+        LogConstructed(this.logger, hasFactory);
     }
 
     [LoggerMessage(
@@ -34,12 +38,7 @@ internal sealed partial class TransformEditController
 
     [Conditional("DEBUG")]
     private void LogUpdateValues(int count)
-    {
-        if (this.logger is ILogger lg)
-        {
-            LogUpdateValues(lg, count);
-        }
-    }
+        => LogUpdateValues(this.logger, count);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -49,12 +48,7 @@ internal sealed partial class TransformEditController
 
     [Conditional("DEBUG")]
     private void LogApplyingChange(string property, float value, int targetCount)
-    {
-        if (this.logger is ILogger lg)
-        {
-            LogApplyingChange(lg, property, value, targetCount);
-        }
-    }
+        => LogApplyingChange(this.logger, property, value, targetCount);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -63,10 +57,5 @@ internal sealed partial class TransformEditController
     private static partial void LogApplyFailed(ILogger logger, string property, Exception exception);
 
     private void LogApplyFailed(string property, Exception ex)
-    {
-        if (this.logger is ILogger lg)
-        {
-            LogApplyFailed(lg, property, ex);
-        }
-    }
+        => LogApplyFailed(this.logger, property, ex);
 }
