@@ -54,10 +54,10 @@ public sealed class ScopeActivationTests
         // Arrange
         var log = new EventLog();
         using var host = TestScopes.CreateHost(scope => scope.RegisterInstance(log));
-        IScopeModule<IRootLayer>[] modules =
+        IScopeModule<IApplicationLayer>[] modules =
         [
-            new TestModule<IRootLayer>(scope => scope.Register<SecondRecorder>(Reuse.Singleton)) { Activation = [typeof(SecondRecorder)] },
-            new TestModule<IRootLayer>(scope => scope.Register<FirstRecorder>(Reuse.Singleton)) { Activation = [typeof(FirstRecorder)] },
+            new TestModule<IApplicationLayer>(scope => scope.Register<SecondRecorder>(Reuse.Singleton)) { Activation = [typeof(SecondRecorder)] },
+            new TestModule<IApplicationLayer>(scope => scope.Register<FirstRecorder>(Reuse.Singleton)) { Activation = [typeof(FirstRecorder)] },
         ];
 
         // Act

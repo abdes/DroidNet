@@ -18,7 +18,6 @@ using Microsoft.UI.Xaml;
 using Oxygen.Editor.Routing;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
-using Oxygen.Editor.Shell.Scopes;
 
 namespace Oxygen.Editor.Shell.Layout;
 

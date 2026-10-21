@@ -19,7 +19,6 @@ using Oxygen.Editor.ContentExplorer;
 using Oxygen.Editor.Routing;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Layout;
-using Oxygen.Editor.Shell.Scopes;
 using Oxygen.Editor.Workspace;
 using Testably.Abstractions.Testing;
 

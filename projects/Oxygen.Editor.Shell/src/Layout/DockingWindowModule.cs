@@ -8,7 +8,6 @@ using DroidNet.Docking.Controls;
 using DroidNet.Docking.Layouts;
 using DroidNet.Docking.Workspace;
 using DryIoc;
-using Oxygen.Editor.Shell.Scopes;
 
 namespace Oxygen.Editor.Shell.Layout;
 

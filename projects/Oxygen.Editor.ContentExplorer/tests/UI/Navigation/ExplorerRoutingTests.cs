@@ -15,7 +15,6 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
-using Oxygen.Editor.Shell.Scopes;
 using static DroidNet.Tests.UiTestHosting;
 using static Oxygen.Editor.ContentExplorer.TestSupport.ExplorerTestData;
 

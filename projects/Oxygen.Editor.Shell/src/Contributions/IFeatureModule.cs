@@ -4,7 +4,6 @@
 
 using DroidNet.Composition;
 using Oxygen.Editor.Shell.Commands;
-using Oxygen.Editor.Shell.Scopes;
 
 namespace Oxygen.Editor.Shell.Contributions;
 

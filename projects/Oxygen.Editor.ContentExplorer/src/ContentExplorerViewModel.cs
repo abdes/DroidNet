@@ -24,7 +24,6 @@ using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
-using Oxygen.Editor.Shell.Scopes;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 

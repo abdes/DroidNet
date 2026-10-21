@@ -3,15 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Composition;
 
-namespace Oxygen.Editor.Shell.Scopes;
+namespace DroidNet.Composition;
 
 /// <summary>
-///     The layer of a window's scope: the window's router and view location, its docking, its documents and the
-///     services of the features it shows.
+///     The layer of the application's scope, the root of the chain: one per process, over the host's container. It
+///     holds the services that every session and window of the application shares.
 /// </summary>
 [SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "a layer is a compile-time marker; it has no members")]
-public interface IWindowLayer : IScopeLayer
+public interface IApplicationLayer : IScopeLayer
 {
 }

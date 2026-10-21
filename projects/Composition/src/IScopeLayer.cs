@@ -7,9 +7,9 @@ using System.Diagnostics.CodeAnalysis;
 namespace DroidNet.Composition;
 
 /// <summary>
-///     Marks a layer of a scope chain. An application derives one marker interface per layer (for
-///     example editor, session, window and panel) and builds each scope of that layer from modules of
-///     that layer only.
+///     Marks a layer of a scope chain: <see cref="IApplicationLayer" />, <see cref="ISessionLayer" />,
+///     <see cref="IWindowLayer" /> and <see cref="IPanelLayer" />. Each scope of a layer is built from
+///     modules of that layer only.
 /// </summary>
 /// <remarks>
 ///     A module for every layer implements <see cref="IScopeModule{TLayer}" /> of this interface, which

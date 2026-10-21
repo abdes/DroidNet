@@ -5,14 +5,15 @@ Registration modules fill it, and a tree of scope handles owns it.
 
 ## At a glance
 
-| Type                        | Role                                                                                            |
-| --------------------------- | ----------------------------------------------------------------------------------------------- |
-| `IScopeLayer`               | Marker of a layer; an application derives one interface per layer (session, window, panel)      |
-| `IScopeModule<in TLayer>`   | Registers what one subsystem owns in a scope of its layer; declares shadows and activation list |
-| `ScopeFactory`              | Creates the root handle over the host container and every child scope                           |
-| `ScopeHandle`               | Owns one scope: its container, its child scopes and the async disposables it awaits             |
-| `ScopeRegistrations`        | What a scope chain provides, by type and key; finds undeclared shadows                          |
-| `UndeclaredShadowException` | Thrown when a scope re-registers a parent service that no module declares                       |
+| Type                                                                | Role                                                                                            |
+| ------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------- |
+| `IScopeLayer`                                                       | Marker of a layer; the base of the four layers below                                            |
+| `IApplicationLayer`, `ISessionLayer`, `IWindowLayer`, `IPanelLayer` | The layers of the chain, from the root down                                                     |
+| `IScopeModule<in TLayer>`                                           | Registers what one subsystem owns in a scope of its layer; declares shadows and activation list |
+| `ScopeFactory`                                                      | Creates the root handle over the host container and every child scope                           |
+| `ScopeHandle`                                                       | Owns one scope: its container, its child scopes and the async disposables it awaits             |
+| `ScopeRegistrations`                                                | What a scope chain provides, by type and key; finds undeclared shadows                          |
+| `UndeclaredShadowException`                                         | Thrown when a scope re-registers a parent service that no module declares                       |
 
 ```mermaid
 flowchart TB
@@ -27,6 +28,23 @@ flowchart TB
 
 Arrows are container parentage: a scope sees its own registrations, then asks
 its immediate parent.
+
+## Layers
+
+Each scope belongs to one layer, and a module names the layer it registers
+into, so a module composed into the wrong scope is a compile error.
+
+| Layer               | Scope                                                                                      |
+| ------------------- | ------------------------------------------------------------------------------------------ |
+| `IApplicationLayer` | The root: one per process, over the host's container; what every session and window shares |
+| `ISessionLayer`     | One unit of work the application opens and closes as a whole, shared by its windows        |
+| `IWindowLayer`      | One window: its router, view location and what its content shows                           |
+| `IPanelLayer`       | One panel inside a window: the services only that panel uses                               |
+
+All four derive from `IScopeLayer`. A subsystem that registers into several
+layers has one module per layer; a module of `IScopeLayer` itself is accepted
+at every layer and is meant only for infrastructure that every routed scope
+repeats, such as a local router.
 
 ## How a scope resolves
 

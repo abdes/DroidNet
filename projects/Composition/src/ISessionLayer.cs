@@ -3,14 +3,14 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using DroidNet.Composition;
 
-namespace Oxygen.Editor.Shell.Scopes;
+namespace DroidNet.Composition;
 
 /// <summary>
-///     The layer of a panel's scope: the panel's own router, view location and the services only the panel uses.
+///     The layer of a session's scope: one unit of work the application opens and closes as a whole, whose services
+///     every window of that session shares.
 /// </summary>
 [SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "a layer is a compile-time marker; it has no members")]
-public interface IPanelLayer : IScopeLayer
+public interface ISessionLayer : IScopeLayer
 {
 }

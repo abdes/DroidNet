@@ -98,6 +98,12 @@ compose them, and only the application host, `Oxygen.Editor`, references it.
 Routing that the Shell's layout and the panels' own navigation both use, and it
 knows no editor module.
 
+Every module names the layer it registers into with the layers of
+`DroidNet.Composition`: `IApplicationLayer` is the editor scope, `ISessionLayer`
+the project session, `IWindowLayer` a window and `IPanelLayer` a panel. Because
+they are foundation, domain modules declare their layer as Shell and feature
+modules do.
+
 ### 5.3 Naming conventions
 
 Proposed conventions; the direction is agreed, individual names are open.

@@ -2,40 +2,14 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics.CodeAnalysis;
-
 namespace DroidNet.Composition.Tests.TestSupport;
 
 /// <summary>
-///     The layers and services of the test chain root &gt; session &gt; window &gt; panel. Tests import
-///     them with <c>using static</c>.
+///     The services of the test chain root &gt; session &gt; window &gt; panel. Tests import them with
+///     <c>using static</c>.
 /// </summary>
 internal static class Fixtures
 {
-    /// <summary>The root layer of the test chain root &gt; session &gt; window &gt; panel.</summary>
-    [SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "a layer is a compile-time marker")]
-    public interface IRootLayer : IScopeLayer
-    {
-    }
-
-    /// <summary>The session layer of the test chain.</summary>
-    [SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "a layer is a compile-time marker")]
-    public interface ISessionLayer : IScopeLayer
-    {
-    }
-
-    /// <summary>The window layer of the test chain.</summary>
-    [SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "a layer is a compile-time marker")]
-    public interface IWindowLayer : IScopeLayer
-    {
-    }
-
-    /// <summary>The panel layer of the test chain.</summary>
-    [SuppressMessage("Design", "CA1040:Avoid empty interfaces", Justification = "a layer is a compile-time marker")]
-    public interface IPanelLayer : IScopeLayer
-    {
-    }
-
     /// <summary>A service the tests register at one layer and resolve from another.</summary>
     public interface IService
     {

@@ -8,7 +8,6 @@ using Oxygen.Editor.ContentExplorer.Panes.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.Shell.Desktop;
-using Oxygen.Editor.Shell.Scopes;
 
 namespace Oxygen.Editor.ContentExplorer;
 

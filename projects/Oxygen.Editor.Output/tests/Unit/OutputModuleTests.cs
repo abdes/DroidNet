@@ -10,7 +10,6 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Moq;
 using Oxygen.Editor.LivePreview.Play;
-using Oxygen.Editor.Shell.Scopes;
 
 namespace Oxygen.Editor.Output.Unit.Tests;
 

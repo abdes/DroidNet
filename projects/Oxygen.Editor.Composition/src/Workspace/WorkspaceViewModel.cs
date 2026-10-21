@@ -16,7 +16,6 @@ using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Layout;
-using Oxygen.Editor.Shell.Scopes;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Assets.Catalog;
 
