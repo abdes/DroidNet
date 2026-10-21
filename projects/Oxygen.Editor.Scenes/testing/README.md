@@ -10,6 +10,10 @@ reference it.
   project's file system (Testably's `MockFileSystem` in unit tests). `Write`
   puts a scene in its file as another program would, `FileOf` names a scene's
   file, and `OpenAsync` opens it.
+- `TestScenes.Open(scene)` writes a scene a test built to a file of an
+  in-memory project and opens it, as the editor opens it. The `TestScene` it
+  returns holds the document and the document's own scene and nodes (`NodeOf`);
+  disposing it closes them.
 - `FakeNodeInteraction` is an in-memory `ISceneNodeInteraction`: the lock and
   hide state a test sets, with descendants locked through a locked ancestor.
 

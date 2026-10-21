@@ -11,11 +11,12 @@ using Moq;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
@@ -33,7 +34,7 @@ public sealed class SceneExplorerOpenDocumentTests
         var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
-        using var metadata = SceneTabs.Open(scene);
+        using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
@@ -59,7 +60,7 @@ public sealed class SceneExplorerOpenDocumentTests
         var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
-        using var metadata = SceneTabs.Open(scene);
+        using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
@@ -85,7 +86,7 @@ public sealed class SceneExplorerOpenDocumentTests
         var scene = new Scene { Name = "Scene" };
         var node = new SceneNode(scene) { Name = "Original" };
         scene.RootNodes.Add(node);
-        using var metadata = SceneTabs.Open(scene);
+        using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
@@ -111,7 +112,7 @@ public sealed class SceneExplorerOpenDocumentTests
         var original = new Scene { Name = "Scene" };
         var originalNode = new SceneNode(original) { Name = "Original node" };
         original.RootNodes.Add(originalNode);
-        using var metadata = SceneTabs.Open(original);
+        using var metadata = TestScenes.Open(original);
         var replacement = Scene.CreateAndHydrate(original.Dehydrate());
         replacement.RootNodes[0].Name = "Reloaded node";
         metadata.WriteFile(replacement);
@@ -152,11 +153,11 @@ public sealed class SceneExplorerOpenDocumentTests
         var node = new SceneNode(first) { Name = "Unsaved node" };
         node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(9, 8, 7);
         first.RootNodes.Add(node);
-        using var firstMetadata = SceneTabs.Open(first);
+        using var firstMetadata = TestScenes.Open(first);
         first = firstMetadata.Scene;
         node = firstMetadata.NodeOf(node);
         firstMetadata.Document.History.AddChange("Unsaved edit", static () => { });
-        using var secondMetadata = SceneTabs.Open(second);
+        using var secondMetadata = TestScenes.Open(second);
         second = secondMetadata.Scene;
         var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
         _ = manager.SetupGet(value => value.CurrentProject).Returns(project);

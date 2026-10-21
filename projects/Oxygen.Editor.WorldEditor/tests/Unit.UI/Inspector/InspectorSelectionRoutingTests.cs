@@ -32,7 +32,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var host = fixture.CreateInspectorHost("Environment");
         var folderId = FolderId.New();
         fixture.Selection.Publish(
-            fixture.Tab.DocumentId,
+            fixture.TestScene.DocumentId,
             new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId),
             "Test");
         _ = host.HasSelectionSummary.Should().BeTrue();
@@ -53,7 +53,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var host = fixture.CreateInspectorHost("Transform");
         var folderId = FolderId.New();
         fixture.Selection.Publish(
-            fixture.Tab.DocumentId,
+            fixture.TestScene.DocumentId,
             new SceneSelectionContext(SceneSelectionKind.Mixed, [fixture.Node.Id], [folderId], fixture.Node.Id, PrimaryFolderId: null),
             "Test");
         _ = host.HasSelectionSummary.Should().BeTrue();
@@ -71,7 +71,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Environment");
         fixture.Selection.Publish(
-            fixture.Tab.DocumentId,
+            fixture.TestScene.DocumentId,
             new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNodeId: null, PrimaryFolderId: null),
             "Test");
         _ = host.HasEnvironmentView.Should().BeTrue();
@@ -134,7 +134,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         };
         using var host = fixture.CreateInspectorHost("Transform");
 
-        fixture.Selection.Publish(fixture.Tab.DocumentId, previous, "Test");
+        fixture.Selection.Publish(fixture.TestScene.DocumentId, previous, "Test");
 
         _ = superseded.Should().BeTrue();
 
@@ -150,7 +150,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var host = fixture.CreateInspectorHost("Transform");
         var missingNodeId = NodeId.New();
         var context = new SceneSelectionContext(SceneSelectionKind.Node, [missingNodeId], [], missingNodeId, PrimaryFolderId: null);
-        fixture.Selection.Publish(fixture.Tab.DocumentId, context, "Test");
+        fixture.Selection.Publish(fixture.TestScene.DocumentId, context, "Test");
 
         _ = host.HasEnvironmentView.Should().BeFalse();
         _ = host.PropertyEditors.Should().BeEmpty();
@@ -167,7 +167,7 @@ internal sealed class InspectorSelectionRoutingTests : DroidNet.Tests.VisualUser
         using var host = fixture.CreateInspectorHost("Transform");
         var folderId = FolderId.New();
         var folderContext = new SceneSelectionContext(SceneSelectionKind.Folder, [], [folderId], PrimaryNodeId: null, folderId);
-        fixture.Selection.Publish(fixture.Tab.DocumentId, folderContext, "Test");
+        fixture.Selection.Publish(fixture.TestScene.DocumentId, folderContext, "Test");
         _ = host.PropertyEditors.Should().BeEmpty();
 
         fixture.Select(fixture.Node);

@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <Title>Oxygen Editor Shell Testing</Title>
+        <Description>Test kit of the Shell: an in-memory document area, for the tests of the parts that show documents.</Description>
+        <PackageTags>oxygen;editor;shell;testing</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+        <RootNamespace>Oxygen.Editor.Shell.Testing</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Shell\src\Oxygen.Editor.Shell.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Documents\src\Oxygen.Editor.Documents.csproj" />
+    </ItemGroup>
+
+</Project>

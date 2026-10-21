@@ -12,9 +12,10 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
@@ -142,7 +143,7 @@ public sealed partial class SceneExplorerAuthoringTests
     private sealed partial class AuthoringHarness : IDisposable
     {
         private readonly Scene scene;
-        private readonly List<SceneTab> openDocuments = [];
+        private readonly List<TestScene> openDocuments = [];
 
         public AuthoringHarness(out Scene scene, out SceneNode node)
         {
@@ -156,7 +157,7 @@ public sealed partial class SceneExplorerAuthoringTests
             this.Manager = manager;
 
             var documents = new TestDocumentArea();
-            var metadata = SceneTabs.Open(built);
+            var metadata = TestScenes.Open(built);
             scene = metadata.Scene;
             node = metadata.NodeOf(builtNode);
             this.scene = scene;
@@ -183,16 +184,16 @@ public sealed partial class SceneExplorerAuthoringTests
 
         public void Dispose()
         {
-            foreach (var tab in this.openDocuments)
+            foreach (var testScene in this.openDocuments)
             {
-                tab.Dispose();
+                testScene.Dispose();
             }
         }
 
         public Scene AddScene(string name)
         {
             var added = new Scene { Name = name };
-            var metadata = SceneTabs.Open(added);
+            var metadata = TestScenes.Open(added);
             added = metadata.Scene;
             this.openDocuments.Add(metadata);
             this.Documents.Add(metadata.Document);

@@ -10,9 +10,10 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
@@ -30,7 +31,7 @@ public sealed partial class SceneExplorerSearchTests
         var child = new SceneNode(scene) { Name = "FindMe" };
         parent.AddChild(child);
         scene.RootNodes.Add(parent);
-        using var metadata = SceneTabs.Open(scene);
+        using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
         parent = metadata.NodeOf(parent);
         child = metadata.NodeOf(child);
@@ -275,8 +276,8 @@ public sealed partial class SceneExplorerSearchTests
     }
 
     // A collapsed folder holding one node, and an expanded folder holding a collapsed folder that holds the other.
-    private static void SetCollapsedAndNestedLayout(SceneTab tab, (NodeId Node, FolderId Folder) collapsed, (NodeId Node, FolderId Outer, FolderId Folder) nested)
-        => tab.ReplaceLayout(
+    private static void SetCollapsedAndNestedLayout(TestScene testScene, (NodeId Node, FolderId Folder) collapsed, (NodeId Node, FolderId Outer, FolderId Folder) nested)
+        => testScene.ReplaceLayout(
             [
                 new ExplorerEntryData
                 {
@@ -318,7 +319,7 @@ public sealed partial class SceneExplorerSearchTests
         public Harness(Project project, Scene scene)
         {
             this.Project = project;
-            this.Metadata = SceneTabs.Open(scene);
+            this.Metadata = TestScenes.Open(scene);
             this.Scene = this.Metadata.Scene;
 
             var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
@@ -334,7 +335,7 @@ public sealed partial class SceneExplorerSearchTests
 
         public Scene Scene { get; }
 
-        public SceneTab Metadata { get; }
+        public TestScene Metadata { get; }
 
         public Mock<IProjectManagerService> Manager { get; }
 

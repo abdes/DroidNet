@@ -8,25 +8,23 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Layout;
-using Oxygen.Editor.Scenes.Testing;
-using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.Scenes.Testing;
 
-/// <summary>A scene document a test opened, with its tab and the open documents that hold it; disposing it closes them.</summary>
-internal sealed partial class SceneTab : IDisposable
+/// <summary>A scene document a test opened, with the open documents that hold it; disposing it closes them.</summary>
+public sealed class TestScene : IDisposable
 {
     private readonly TestSceneDocuments documents;
 
-    /// <summary>Initializes a new instance of the <see cref="SceneTab"/> class: opens a scene file as its document.</summary>
-    /// <param name="documents">The scene documents, which this tab owns and disposes with itself.</param>
+    /// <summary>Initializes a new instance of the <see cref="TestScene"/> class: opens a scene file as its document.</summary>
+    /// <param name="documents">The scene documents, which this scene owns and disposes with itself.</param>
     /// <param name="file">The scene's file.</param>
     /// <exception cref="InvalidOperationException">The scene did not open at once.</exception>
-    public SceneTab(TestSceneDocuments documents, DocumentFile file)
+    public TestScene(TestSceneDocuments documents, DocumentFile file)
     {
+        ArgumentNullException.ThrowIfNull(documents);
         this.documents = documents;
-        var kind = documents.Kind;
         var opening = this.documents.Open.OpenAsync(file);
         if (!opening.IsCompletedSuccessfully || opening.Result.Document is not { } document)
         {
@@ -34,11 +32,8 @@ internal sealed partial class SceneTab : IDisposable
             throw new InvalidOperationException(problem);
         }
 
-        this.Tab = new DocumentTab(document, new DocumentEditorDescriptor(kind, static _ => new object()) { IsClosable = false });
+        this.Document = document;
     }
-
-    /// <summary>Gets the document's tab.</summary>
-    public DocumentTab Tab { get; }
 
     /// <summary>Gets the open documents that hold the document; closing it there ends it.</summary>
     public OpenDocuments Documents => this.documents.Open;
@@ -47,10 +42,10 @@ internal sealed partial class SceneTab : IDisposable
     public ProjectContext Project => this.documents.Project.Context;
 
     /// <summary>Gets the scene document.</summary>
-    public Document Document => this.Tab.Document;
+    public Document Document { get; }
 
     /// <summary>Gets the document's id.</summary>
-    public DocumentId DocumentId => this.Tab.DocumentId;
+    public DocumentId DocumentId => this.Document.Id;
 
     /// <summary>Gets the scene the document holds now.</summary>
     public Scene Scene => this.Authoring.Scene;
@@ -72,7 +67,11 @@ internal sealed partial class SceneTab : IDisposable
 
     /// <summary>Replaces the document's file with what a scene records, as another program would; a reload reads it.</summary>
     /// <param name="scene">The scene the file records.</param>
-    public void WriteFile(Scene scene) => this.documents.Write(this.Document.File, scene.Dehydrate());
+    public void WriteFile(Scene scene)
+    {
+        ArgumentNullException.ThrowIfNull(scene);
+        this.documents.Write(this.Document.File, scene.Dehydrate());
+    }
 
     /// <summary>Replaces the explorer layout of the document's scene in place, outside the history.</summary>
     /// <param name="entries">The layout's top-level entries.</param>
@@ -88,9 +87,5 @@ internal sealed partial class SceneTab : IDisposable
     }
 
     /// <inheritdoc/>
-    public void Dispose()
-    {
-        this.Tab.Dispose();
-        this.documents.Dispose();
-    }
+    public void Dispose() => this.documents.Dispose();
 }

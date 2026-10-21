@@ -11,6 +11,8 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Slots;
@@ -46,25 +48,25 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         });
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun" });
         scene.RootNodes.Add(node);
-        this.Tab = SceneTabs.Open(scene, interaction);
-        this.Projects.Activate(this.Tab.Project);
-        this.Scene = this.Tab.Scene;
-        this.Node = this.Tab.NodeOf(node);
+        this.TestScene = TestScenes.Open(scene, interaction);
+        this.Projects.Activate(this.TestScene.Project);
+        this.Scene = this.TestScene.Scene;
+        this.Node = this.TestScene.NodeOf(node);
         this.Camera = this.Node.Components.OfType<PerspectiveCamera>().Single();
-        this.Area = new TestDocumentArea(this.Tab.Document);
+        this.Area = new TestDocumentArea(this.TestScene.Document);
     }
 
-    /// <summary>Gets the scene's document and its tab.</summary>
-    public SceneTab Tab { get; }
+    /// <summary>Gets the scene's document.</summary>
+    public TestScene TestScene { get; }
 
     /// <summary>Gets the document area that shows the scene's document, active.</summary>
     public TestDocumentArea Area { get; }
 
     /// <summary>Gets the scene's document, whose history the edits record into.</summary>
-    public Documents.Document Document => this.Tab.Document;
+    public Documents.Document Document => this.TestScene.Document;
 
     /// <summary>Gets what edits the document's scene.</summary>
-    public SceneAuthoring Authoring => this.Tab.Authoring;
+    public SceneAuthoring Authoring => this.TestScene.Authoring;
 
     public ProjectContextService Projects { get; } = new();
 
@@ -95,11 +97,11 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     /// <summary>Writes the node selection of the fixture's document through the shared selection service, as the Explorer, a viewport or another panel does.</summary>
     /// <param name="nodes">The selected nodes, of which the last is primary; none clears the selection.</param>
     public void Select(params SceneNode[] nodes)
-        => this.Selection.SetSelection(this.Tab.DocumentId, nodes, "Test");
+        => this.Selection.SetSelection(this.TestScene.DocumentId, nodes, "Test");
 
     public void Dispose()
     {
         this.Slots.Dispose();
-        this.Tab.Dispose();
+        this.TestScene.Dispose();
     }
 }

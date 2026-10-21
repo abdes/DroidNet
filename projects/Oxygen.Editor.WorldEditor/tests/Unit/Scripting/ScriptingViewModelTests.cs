@@ -6,12 +6,12 @@ using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Scripting.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector.Scripting;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
@@ -47,7 +47,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
     private readonly FakeScripts scripts = new();
     private readonly Scene scene = new() { Name = "Main" };
     private SceneNode player;
-    private SceneTab? tab;
+    private TestScene? testScene;
     private ScriptingComponent scripting = new() { Name = ScriptingComponent.DefaultName, Slots = [new ScriptSlot { Script = MoveScript }] };
 
     public ScriptingViewModelTests()
@@ -58,7 +58,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
     }
 
     /// <inheritdoc />
-    public void Dispose() => this.tab?.Dispose();
+    public void Dispose() => this.testScene?.Dispose();
 
     [TestMethod]
     public void OneCardPerSlotWithOneFieldPerDeclaredParameter()
@@ -241,16 +241,16 @@ public sealed partial class ScriptingViewModelTests : IDisposable
     private ScriptingViewModel CreateModel(Action? onEdit = null)
     {
         // The document edits its own copy of the scene: the test reads the player and its slots from it.
-        this.tab = SceneTabs.Open(this.scene);
-        this.player = this.tab.NodeOf(this.player);
+        this.testScene = TestScenes.Open(this.scene);
+        this.player = this.testScene.NodeOf(this.player);
         this.scripting = this.player.Components.OfType<ScriptingComponent>().Single();
         if (onEdit is not null)
         {
-            this.tab.Authoring.Changed += (_, _) => onEdit();
+            this.testScene.Authoring.Changed += (_, _) => onEdit();
         }
 
         var projects = new ProjectContextService();
         projects.Activate(TestProject.Create(new MockFileSystem()).Context with { Name = "Project" });
-        return new ScriptingViewModel(() => this.tab.Authoring, scripts: this.scripts, projects: projects);
+        return new ScriptingViewModel(() => this.testScene.Authoring, scripts: this.scripts, projects: projects);
     }
 }

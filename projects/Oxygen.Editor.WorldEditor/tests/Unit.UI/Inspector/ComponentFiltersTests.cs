@@ -11,6 +11,7 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Interaction;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
@@ -248,7 +249,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         };
         _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") });
         scene.RootNodes.Add(node);
-        using var metadata = SceneTabs.Open(scene);
+        using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
         node = metadata.NodeOf(node);
         fixture.Area.Activate(metadata.Document);

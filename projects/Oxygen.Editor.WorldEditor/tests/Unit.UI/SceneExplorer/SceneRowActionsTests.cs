@@ -462,7 +462,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             var childNode = new SceneNode(scene) { Name = "Nested child" };
             scene.RootNodes.Add(secondaryNode);
             fixture.Node.AddChild(childNode);
-            var metadata = fixture.Tab;
+            var metadata = fixture.TestScene;
             viewModel = new SceneExplorerViewModel(
                 Mock.Of<IProjectManagerService>(),
                 Mock.Of<IRouter>(),

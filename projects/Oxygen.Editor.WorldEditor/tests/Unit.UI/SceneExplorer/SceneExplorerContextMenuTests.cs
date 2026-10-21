@@ -13,12 +13,13 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Scenes.Views;
+using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.SceneExplorer;
@@ -289,7 +290,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     private sealed class AuthoringHarness : IDisposable
     {
         private readonly Scene scene;
-        private readonly List<SceneTab> openDocuments = [];
+        private readonly List<TestScene> openDocuments = [];
 
         public AuthoringHarness(out Scene scene, out SceneNode node, Action<Scene, SceneNode>? build = null, Func<SceneNode, IList<ExplorerEntryData>>? layout = null)
         {
@@ -301,7 +302,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
             this.Manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
             _ = this.Manager.SetupGet(value => value.CurrentProject).Returns(project);
             this.Documents = new TestDocumentArea();
-            var metadata = SceneTabs.Open(built, layout: layout?.Invoke(builtNode));
+            var metadata = TestScenes.Open(built, layout: layout?.Invoke(builtNode));
             scene = metadata.Scene;
             node = metadata.NodeOf(builtNode);
             this.scene = scene;
@@ -326,16 +327,16 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
 
         public void Dispose()
         {
-            foreach (var tab in this.openDocuments)
+            foreach (var testScene in this.openDocuments)
             {
-                tab.Dispose();
+                testScene.Dispose();
             }
         }
 
         public Scene AddScene(string name)
         {
             var added = new Scene { Name = name };
-            var metadata = SceneTabs.Open(added);
+            var metadata = TestScenes.Open(added);
             added = metadata.Scene;
             this.openDocuments.Add(metadata);
             this.Documents.Add(metadata.Document);

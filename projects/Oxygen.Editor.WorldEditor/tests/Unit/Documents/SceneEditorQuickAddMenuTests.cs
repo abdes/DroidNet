@@ -10,10 +10,11 @@ using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneEditor;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
@@ -65,11 +66,12 @@ public sealed partial class SceneEditorQuickAddMenuTests
 
         public Fixture()
         {
-            this.Metadata = SceneTabs.Open(new Scene { Name = "Quick Add" });
+            this.Metadata = TestScenes.Open(new Scene { Name = "Quick Add" });
+            this.Tab = new DocumentTab(this.Metadata.Document, new DocumentEditorDescriptor(this.Metadata.Document.Kind, static _ => new object()) { IsClosable = false });
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync()).Returns(Task.CompletedTask);
             this.Editor = new(
-                this.Metadata.Tab,
+                this.Tab,
                 new TestDocumentArea(this.Metadata.Document),
                 Mock.Of<IEngineService>(),
                 Mock.Of<Oxygen.Editor.LivePreview.Scenes.IScenePreview>(),
@@ -87,7 +89,9 @@ public sealed partial class SceneEditorQuickAddMenuTests
                     new OperationStatusReducer()));
         }
 
-        public SceneTab Metadata { get; }
+        public TestScene Metadata { get; }
+
+        public DocumentTab Tab { get; }
 
         public SceneEditorViewModel Editor { get; }
 
@@ -98,6 +102,7 @@ public sealed partial class SceneEditorQuickAddMenuTests
             this.Editor.Dispose();
             this.Messenger.Reset();
             this.container.Dispose();
+            this.Tab.Dispose();
             this.Metadata.Dispose();
         }
     }

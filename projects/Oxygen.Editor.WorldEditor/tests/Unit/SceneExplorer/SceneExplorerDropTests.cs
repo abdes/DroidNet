@@ -10,9 +10,10 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.SceneExplorer;
-using Oxygen.Editor.WorldEditor.TestSupport;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneExplorer;
 
@@ -128,7 +129,7 @@ public sealed partial class SceneExplorerDropTests
         {
             this.Project = project;
             this.FolderId = folderId;
-            this.Metadata = SceneTabs.Open(scene);
+            this.Metadata = TestScenes.Open(scene);
             this.Scene = this.Metadata.Scene;
 
             var manager = new Mock<IProjectManagerService>(MockBehavior.Strict);
@@ -146,7 +147,7 @@ public sealed partial class SceneExplorerDropTests
 
         public FolderId FolderId { get; }
 
-        public SceneTab Metadata { get; }
+        public TestScene Metadata { get; }
 
         public Mock<IProjectManagerService> Manager { get; }
 

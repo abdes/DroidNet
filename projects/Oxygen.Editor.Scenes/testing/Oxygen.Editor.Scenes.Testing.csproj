@@ -15,6 +15,7 @@
 
     <ItemGroup>
         <PackageReference Include="Testably.Abstractions.FileSystem.Interface" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
     </ItemGroup>
 
     <ItemGroup>

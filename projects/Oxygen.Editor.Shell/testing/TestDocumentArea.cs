@@ -5,13 +5,13 @@
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Shell.Documents;
 
-namespace Oxygen.Editor.WorldEditor.TestSupport;
+namespace Oxygen.Editor.Shell.Testing;
 
 /// <summary>
 /// Stands in for a window's document area: the test says which documents have a tab and which one is active.
 /// </summary>
 /// <remarks>Closing through this area only removes the tab; a test that needs the close flow uses the Shell's area.</remarks>
-internal sealed class TestDocumentArea : IDocumentArea
+public sealed class TestDocumentArea : IDocumentArea
 {
     private readonly List<Document> documents = [];
 

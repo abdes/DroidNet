@@ -7,11 +7,11 @@ using AwesomeAssertions;
 using DroidNet.Controls;
 using Oxygen.Editor.Input;
 using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspector;
@@ -32,8 +32,8 @@ public sealed class InspectorSceneEditingTests
     public async Task CameraDrag_OverTwoCameras_IsOneUndoStepThatRestoresEach()
     {
         var scene = CreateScene();
-        using var tab = Open(scene, CameraNode(scene, 60), CameraNode(scene, 80), out var first, out var second);
-        using var editor = new PerspectiveCameraViewModel(() => tab.Authoring);
+        using var testScene = Open(scene, CameraNode(scene, 60), CameraNode(scene, 80), out var first, out var second);
+        using var editor = new PerspectiveCameraViewModel(() => testScene.Authoring);
         editor.UpdateValues([first, second]);
         editor.BeginEditSession("FieldOfView", NumberBoxEditInteractionKind.PointerDrag);
 
@@ -42,15 +42,15 @@ public sealed class InspectorSceneEditingTests
             editor.FieldOfView.Value = value;
         }
 
-        _ = tab.Document.History.UndoStack.Should().BeEmpty();
+        _ = testScene.Document.History.UndoStack.Should().BeEmpty();
         editor.CompleteEditSession(new NumberBoxEditSessionEventArgs(NumberBoxEditInteractionKind.PointerDrag, NumberBoxEditCompletionKind.Commit));
         await editor.PendingEdits.ConfigureAwait(false);
 
-        _ = tab.Document.History.UndoStack.Should().ContainSingle();
+        _ = testScene.Document.History.UndoStack.Should().ContainSingle();
         _ = FieldOfViewOf(first).Should().Be(100);
-        _ = await tab.Authoring.UndoAsync().ConfigureAwait(false);
+        _ = await testScene.Authoring.UndoAsync().ConfigureAwait(false);
         _ = (FieldOfViewOf(first), FieldOfViewOf(second)).Should().Be((60f, 80f));
-        _ = await tab.Authoring.RedoAsync().ConfigureAwait(false);
+        _ = await testScene.Authoring.RedoAsync().ConfigureAwait(false);
         _ = FieldOfViewOf(second).Should().Be(100);
     }
 
@@ -58,8 +58,8 @@ public sealed class InspectorSceneEditingTests
     public async Task CameraDrag_CancelledAfterTheSelectionChanged_LeavesBothCameras()
     {
         var scene = CreateScene();
-        using var tab = Open(scene, CameraNode(scene, 60), CameraNode(scene, 80), out var first, out var second);
-        using var editor = new PerspectiveCameraViewModel(() => tab.Authoring);
+        using var testScene = Open(scene, CameraNode(scene, 60), CameraNode(scene, 80), out var first, out var second);
+        using var editor = new PerspectiveCameraViewModel(() => testScene.Authoring);
         editor.UpdateValues([first]);
         editor.BeginEditSession("FieldOfView", NumberBoxEditInteractionKind.PointerDrag);
         editor.FieldOfView.Value = 110;
@@ -71,16 +71,16 @@ public sealed class InspectorSceneEditingTests
 
         _ = (FieldOfViewOf(first), FieldOfViewOf(second)).Should().Be((60f, 80f));
         _ = editor.FieldOfView.Value.Should().Be(80);
-        _ = tab.Document.History.UndoStack.Should().BeEmpty();
-        _ = tab.Document.IsDirty.Should().BeFalse();
+        _ = testScene.Document.History.UndoStack.Should().BeEmpty();
+        _ = testScene.Document.IsDirty.Should().BeFalse();
     }
 
     [TestMethod]
     public async Task WheelTicks_CommitOnceAfterTheWheelIdles()
     {
         var scene = CreateScene();
-        using var tab = Open(scene, CameraNode(scene, 60), out var node);
-        using var editor = new PerspectiveCameraViewModel(() => tab.Authoring);
+        using var testScene = Open(scene, CameraNode(scene, 60), out var node);
+        using var editor = new PerspectiveCameraViewModel(() => testScene.Authoring);
         editor.UpdateValues([node]);
         for (var tick = 0; tick < 4; ++tick)
         {
@@ -89,10 +89,10 @@ public sealed class InspectorSceneEditingTests
             editor.CompleteEditSession(new NumberBoxEditSessionEventArgs(NumberBoxEditInteractionKind.MouseWheel, NumberBoxEditCompletionKind.Commit));
         }
 
-        _ = tab.Document.History.UndoStack.Should().BeEmpty();
+        _ = testScene.Document.History.UndoStack.Should().BeEmpty();
         await editor.PendingEdits.ConfigureAwait(false);
 
-        _ = tab.Document.History.UndoStack.Should().ContainSingle();
+        _ = testScene.Document.History.UndoStack.Should().ContainSingle();
         _ = FieldOfViewOf(node).Should().Be(64);
     }
 
@@ -104,9 +104,9 @@ public sealed class InspectorSceneEditingTests
         var builtCamera = built.Components.OfType<PerspectiveCamera>().Single();
         builtCamera.NearPlane = 1;
         builtCamera.FarPlane = 10;
-        using var tab = Open(scene, built, out var node);
+        using var testScene = Open(scene, built, out var node);
         var camera = node.Components.OfType<PerspectiveCamera>().Single();
-        using var editor = new PerspectiveCameraViewModel(() => tab.Authoring);
+        using var editor = new PerspectiveCameraViewModel(() => testScene.Authoring);
         editor.UpdateValues([node]);
         editor.BeginEditSession("NearPlane", NumberBoxEditInteractionKind.Text);
         editor.NearPlane.Value = 11;
@@ -115,7 +115,7 @@ public sealed class InspectorSceneEditingTests
         _ = (camera.NearPlane, editor.NearPlane.Value).Should().Be((1f, 1f));
         _ = editor.NearPlaneDiagnostic.Message.Should().NotBeEmpty();
         _ = editor.FarPlaneDiagnostic.Message.Should().NotBeEmpty();
-        _ = tab.Document.History.UndoStack.Should().BeEmpty();
+        _ = testScene.Document.History.UndoStack.Should().BeEmpty();
         editor.EndEditSession(NumberBoxEditCompletionKind.Cancel);
         await editor.PendingEdits.ConfigureAwait(false);
         editor.BeginEditSession("FarPlane", NumberBoxEditInteractionKind.Text);
@@ -135,8 +135,8 @@ public sealed class InspectorSceneEditingTests
         var secondBuilt = DirectionalLightNode(scene, "Second", AtmosphereLightSlot.None);
         firstBuilt.Components.OfType<DirectionalLightComponent>().Single().Color = new Vector3(0.1f, 0.2f, 0.3f);
         secondBuilt.Components.OfType<DirectionalLightComponent>().Single().Color = new Vector3(0.4f, 0.5f, 0.6f);
-        using var tab = Open(scene, firstBuilt, secondBuilt, out var first, out var second);
-        using var editor = new DirectionalLightViewModel(() => tab.Authoring);
+        using var testScene = Open(scene, firstBuilt, secondBuilt, out var first, out var second);
+        using var editor = new DirectionalLightViewModel(() => testScene.Authoring);
         editor.UpdateValues([first, second]);
         editor.BeginEditSession("ColorR", NumberBoxEditInteractionKind.PointerDrag);
         editor.ColorR = 0.7f;
@@ -146,8 +146,8 @@ public sealed class InspectorSceneEditingTests
 
         _ = ColorOf(first).Should().Be(new Vector3(0.8f, 0.2f, 0.3f));
         _ = ColorOf(second).Should().Be(new Vector3(0.8f, 0.5f, 0.6f));
-        _ = tab.Document.History.UndoStack.Should().ContainSingle();
-        _ = await tab.Authoring.UndoAsync().ConfigureAwait(false);
+        _ = testScene.Document.History.UndoStack.Should().ContainSingle();
+        _ = await testScene.Authoring.UndoAsync().ConfigureAwait(false);
         _ = ColorOf(first).Should().Be(new Vector3(0.1f, 0.2f, 0.3f));
         _ = ColorOf(second).Should().Be(new Vector3(0.4f, 0.5f, 0.6f));
     }
@@ -155,9 +155,9 @@ public sealed class InspectorSceneEditingTests
     [TestMethod]
     public async Task EnvironmentDrag_IsOneUndoStepAndTheFieldFollowsUndoAndRedo()
     {
-        using var tab = SceneTabs.Open(CreateScene());
-        using var editor = new EnvironmentViewModel(() => tab.Authoring);
-        editor.SetScene(tab.Scene);
+        using var testScene = TestScenes.Open(CreateScene());
+        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
+        editor.SetScene(testScene.Scene);
         var original = editor.Backdrop.SolidColorR;
         editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
         for (var sample = 1; sample <= 100; ++sample)
@@ -165,34 +165,34 @@ public sealed class InspectorSceneEditingTests
             editor.Backdrop.SolidColorR = sample / 100f;
         }
 
-        _ = tab.Document.History.UndoStack.Should().BeEmpty();
+        _ = testScene.Document.History.UndoStack.Should().BeEmpty();
         editor.EndEditSession(NumberBoxEditCompletionKind.Commit);
         await editor.PendingEdits.ConfigureAwait(false);
-        _ = tab.Document.History.UndoStack.Should().ContainSingle();
+        _ = testScene.Document.History.UndoStack.Should().ContainSingle();
 
-        _ = await tab.Authoring.UndoAsync().ConfigureAwait(false);
+        _ = await testScene.Authoring.UndoAsync().ConfigureAwait(false);
         _ = editor.Backdrop.SolidColorR.Should().Be(original);
-        _ = await tab.Authoring.RedoAsync().ConfigureAwait(false);
+        _ = await testScene.Authoring.RedoAsync().ConfigureAwait(false);
         _ = editor.Backdrop.SolidColorR.Should().Be(1f);
     }
 
     [TestMethod]
     public async Task EnvironmentDrag_PreviewsThenCancelsWithoutHistory()
     {
-        using var tab = SceneTabs.Open(CreateScene());
-        var original = SceneSkyFields.SolidColorOf(tab.Scene.Environment);
-        using var editor = new EnvironmentViewModel(() => tab.Authoring);
-        editor.SetScene(tab.Scene);
+        using var testScene = TestScenes.Open(CreateScene());
+        var original = SceneSkyFields.SolidColorOf(testScene.Scene.Environment);
+        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
+        editor.SetScene(testScene.Scene);
         editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
         editor.Backdrop.SolidColorR = 0.8f;
-        _ = SceneSkyFields.SolidColorOf(tab.Scene.Environment).X.Should().Be(0.8f);
+        _ = SceneSkyFields.SolidColorOf(testScene.Scene.Environment).X.Should().Be(0.8f);
 
         editor.EndEditSession(NumberBoxEditCompletionKind.Cancel);
         await editor.PendingEdits.ConfigureAwait(false);
 
-        _ = SceneSkyFields.SolidColorOf(tab.Scene.Environment).Should().Be(original);
-        _ = tab.Document.History.UndoStack.Should().BeEmpty();
-        _ = tab.Document.IsDirty.Should().BeFalse();
+        _ = SceneSkyFields.SolidColorOf(testScene.Scene.Environment).Should().Be(original);
+        _ = testScene.Document.History.UndoStack.Should().BeEmpty();
+        _ = testScene.Document.IsDirty.Should().BeFalse();
     }
 
     [TestMethod]
@@ -201,10 +201,10 @@ public sealed class InspectorSceneEditingTests
     public async Task UnrelatedEnvironmentEdit_KeepsTheSunsAtmosphereSlot(bool gesture)
     {
         var scene = CreateScene();
-        using var tab = Open(scene, DirectionalLightNode(scene, "Sun", AtmosphereLightSlot.Primary), out var sun);
+        using var testScene = Open(scene, DirectionalLightNode(scene, "Sun", AtmosphereLightSlot.Primary), out var sun);
         var light = sun.Components.OfType<DirectionalLightComponent>().Single();
-        using var editor = new EnvironmentViewModel(() => tab.Authoring);
-        editor.SetScene(tab.Scene);
+        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
+        editor.SetScene(testScene.Scene);
         if (gesture)
         {
             editor.BeginEditSession("BackgroundR", NumberBoxEditInteractionKind.PointerDrag);
@@ -218,19 +218,19 @@ public sealed class InspectorSceneEditingTests
 
         await editor.PendingEdits.ConfigureAwait(false);
         _ = light.AtmosphereSlot.Should().Be(AtmosphereLightSlot.Primary);
-        _ = await tab.Authoring.UndoAsync().ConfigureAwait(false);
+        _ = await testScene.Authoring.UndoAsync().ConfigureAwait(false);
         _ = light.AtmosphereSlot.Should().Be(AtmosphereLightSlot.Primary);
-        _ = await tab.Authoring.RedoAsync().ConfigureAwait(false);
+        _ = await testScene.Authoring.RedoAsync().ConfigureAwait(false);
         _ = light.AtmosphereSlot.Should().Be(AtmosphereLightSlot.Primary);
     }
 
     [TestMethod]
     public async Task EnvironmentDiagnostic_KeepsTheBoundInstanceWhenTheSceneArrives()
     {
-        using var tab = SceneTabs.Open(CreateScene());
-        using var editor = new EnvironmentViewModel(() => tab.Authoring);
+        using var testScene = TestScenes.Open(CreateScene());
+        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
         var boundDiagnostic = editor.Exposure.ManualExposureEvDiagnostic;
-        editor.SetScene(tab.Scene);
+        editor.SetScene(testScene.Scene);
 
         editor.Exposure.ManualExposureEv = double.NaN;
         await editor.PendingEdits.ConfigureAwait(false);
@@ -238,7 +238,7 @@ public sealed class InspectorSceneEditingTests
         _ = editor.Exposure.ManualExposureEvDiagnostic.Should().BeSameAs(boundDiagnostic);
         _ = boundDiagnostic.Message.Should().NotBeEmpty();
         _ = double.IsFinite(editor.Exposure.ManualExposureEv).Should().BeTrue();
-        _ = tab.Document.History.UndoStack.Should().BeEmpty();
+        _ = testScene.Document.History.UndoStack.Should().BeEmpty();
     }
 
     [TestMethod]
@@ -288,9 +288,9 @@ public sealed class InspectorSceneEditingTests
         firstBuilt.Name = "Overview";
         var secondBuilt = CameraNode(scene, 60);
         secondBuilt.Name = "Gameplay";
-        using var tab = Open(scene, firstBuilt, secondBuilt, out _, out var second);
-        using var editor = new EnvironmentViewModel(() => tab.Authoring);
-        editor.SetScene(tab.Scene);
+        using var testScene = Open(scene, firstBuilt, secondBuilt, out _, out var second);
+        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
+        editor.SetScene(testScene.Scene);
         var play = editor.Play;
 
         _ = play.CameraChoices.Select(static choice => choice.Name).Should().Equal("Automatic", "Overview", "Gameplay");
@@ -300,9 +300,9 @@ public sealed class InspectorSceneEditingTests
         play.SelectedCamera = play.CameraChoices.Single(choice => choice.Id == second.Id);
         await play.Pending.ConfigureAwait(false);
 
-        _ = tab.Scene.StartingCamera.Should().Be(second.Id);
+        _ = testScene.Scene.StartingCamera.Should().Be(second.Id);
         _ = play.ShowsAutomaticCamera.Should().BeFalse("a chosen camera needs no explanation");
-        _ = await tab.Authoring.UndoAsync().ConfigureAwait(false);
+        _ = await testScene.Authoring.UndoAsync().ConfigureAwait(false);
         _ = play.SelectedCamera!.Id.Should().BeNull();
     }
 
@@ -310,9 +310,9 @@ public sealed class InspectorSceneEditingTests
     public async Task PlaySection_KeepsItsCameraListAndSelectionAcrossRefreshes()
     {
         var scene = CreateScene();
-        using var tab = Open(scene, CameraNode(scene, 60), CameraNode(scene, 60), out _, out var second);
-        using var editor = new EnvironmentViewModel(() => tab.Authoring);
-        editor.SetScene(tab.Scene);
+        using var testScene = Open(scene, CameraNode(scene, 60), CameraNode(scene, 60), out _, out var second);
+        using var editor = new EnvironmentViewModel(() => testScene.Authoring);
+        editor.SetScene(testScene.Scene);
         var play = editor.Play;
         play.SelectedCamera = play.CameraChoices.Single(choice => choice.Id == second.Id);
         await play.Pending.ConfigureAwait(false);
@@ -357,9 +357,9 @@ public sealed class InspectorSceneEditingTests
     {
         var scene = CreateScene();
         scene.SetStartingInputContexts([new StartingInputContextData(GameplayContext), new StartingInputContextData(MenuContext)]);
-        using var tab = SceneTabs.Open(scene);
-        using var editor = new EnvironmentViewModel(() => tab.Authoring, inputContextSource: uri => uri == GameplayContext ? new InputContextSource(IsProjectContext: true, DeclaredPriority: 3) : InputContextSource.External);
-        editor.SetScene(tab.Scene);
+        using var testScene = TestScenes.Open(scene);
+        using var editor = new EnvironmentViewModel(() => testScene.Authoring, inputContextSource: uri => uri == GameplayContext ? new InputContextSource(IsProjectContext: true, DeclaredPriority: 3) : InputContextSource.External);
+        editor.SetScene(testScene.Scene);
         var gameplay = editor.Play.Contexts[0];
 
         _ = (gameplay.Priority, gameplay.IsOverridden, editor.Play.Contexts[1].Priority).Should().Be((3.0, false, 0.0));
@@ -367,12 +367,12 @@ public sealed class InspectorSceneEditingTests
 
         gameplay.Priority = 8;
         await editor.Play.Pending.ConfigureAwait(false);
-        _ = tab.Scene.StartingInputContexts[0].Priority.Should().Be(8);
+        _ = testScene.Scene.StartingInputContexts[0].Priority.Should().Be(8);
         _ = gameplay.IsOverridden.Should().BeTrue();
 
         gameplay.Priority = 3;
         await editor.Play.Pending.ConfigureAwait(false);
-        _ = tab.Scene.StartingInputContexts[0].Priority.Should().BeNull("typing the context's own priority follows it again");
+        _ = testScene.Scene.StartingInputContexts[0].Priority.Should().BeNull("typing the context's own priority follows it again");
 
         var menu = editor.Play.Contexts[1];
         menu.Priority = 5;
@@ -401,9 +401,9 @@ public sealed class InspectorSceneEditingTests
     public async Task StartingCameraToggle_TakesTheStartFromAnotherCameraAndReturnsToAutomatic()
     {
         var scene = CreateScene();
-        using var tab = Open(scene, CameraNode(scene, 60), CameraNode(scene, 60), out var first, out var second);
-        using var firstToggle = new StartingCameraToggle(() => tab.Authoring);
-        using var secondToggle = new StartingCameraToggle(() => tab.Authoring);
+        using var testScene = Open(scene, CameraNode(scene, 60), CameraNode(scene, 60), out var first, out var second);
+        using var firstToggle = new StartingCameraToggle(() => testScene.Authoring);
+        using var secondToggle = new StartingCameraToggle(() => testScene.Authoring);
         firstToggle.Bind([first]);
         secondToggle.Bind([second]);
 
@@ -411,17 +411,17 @@ public sealed class InspectorSceneEditingTests
 
         secondToggle.IsChecked = true;
         await secondToggle.Pending.ConfigureAwait(false);
-        _ = tab.Scene.StartingCamera.Should().Be(second.Id);
+        _ = testScene.Scene.StartingCamera.Should().Be(second.Id);
         _ = (firstToggle.IsAutomatic, secondToggle.IsChecked).Should().Be((false, true));
 
         firstToggle.IsChecked = true;
         await firstToggle.Pending.ConfigureAwait(false);
-        _ = tab.Scene.StartingCamera.Should().Be(first.Id);
+        _ = testScene.Scene.StartingCamera.Should().Be(first.Id);
         _ = (firstToggle.IsChecked, secondToggle.IsChecked).Should().Be((true, false));
 
         firstToggle.IsChecked = false;
         await firstToggle.Pending.ConfigureAwait(false);
-        _ = tab.Scene.StartingCamera.Should().BeNull();
+        _ = testScene.Scene.StartingCamera.Should().BeNull();
         _ = firstToggle.IsAutomatic.Should().BeTrue();
     }
 
@@ -444,24 +444,24 @@ public sealed class InspectorSceneEditingTests
         return node;
     }
 
-    // The caller disposes the tab.
-    private static SceneTab Open(Scene scene, SceneNode node, out SceneNode opened)
+    // The caller disposes the opened scene.
+    private static TestScene Open(Scene scene, SceneNode node, out SceneNode opened)
     {
         scene.RootNodes.Add(node);
-        var tab = SceneTabs.Open(scene);
-        opened = tab.NodeOf(node);
-        return tab;
+        var testScene = TestScenes.Open(scene);
+        opened = testScene.NodeOf(node);
+        return testScene;
     }
 
-    // The caller disposes the tab.
-    private static SceneTab Open(Scene scene, SceneNode first, SceneNode second, out SceneNode openedFirst, out SceneNode openedSecond)
+    // The caller disposes the opened scene.
+    private static TestScene Open(Scene scene, SceneNode first, SceneNode second, out SceneNode openedFirst, out SceneNode openedSecond)
     {
         scene.RootNodes.Add(first);
         scene.RootNodes.Add(second);
-        var tab = SceneTabs.Open(scene);
-        openedFirst = tab.NodeOf(first);
-        openedSecond = tab.NodeOf(second);
-        return tab;
+        var testScene = TestScenes.Open(scene);
+        openedFirst = testScene.NodeOf(first);
+        openedSecond = testScene.NodeOf(second);
+        return testScene;
     }
 
     private static float FieldOfViewOf(SceneNode node) => node.Components.OfType<PerspectiveCamera>().Single().FieldOfView;

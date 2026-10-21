@@ -18,10 +18,11 @@ using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
@@ -38,11 +39,11 @@ internal sealed class SceneNodeEditorViewModelTests
     {
         var scene = CreateScene();
         var node = CreateNode(scene);
-        using var tab = SceneTabs.Open(node.Scene);
+        using var testScene = TestScenes.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
-        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(2);
+        _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(2);
         using var slots = new FakeMaterialSlotProvider();
-        using var sut = CreateSut(preview.Object, slots, tab, [node]);
+        using var sut = CreateSut(preview.Object, slots, testScene, [node]);
 
         _ = sut.PendingLiveSyncEditCount.Should().Be(2);
         _ = sut.HasPendingLiveSyncEdits.Should().BeTrue();
@@ -67,9 +68,9 @@ internal sealed class SceneNodeEditorViewModelTests
             scene.Id).ConfigureAwait(false);
         interaction.SetLocked(parent.Id, isLocked: true);
 
-        using var tab = SceneTabs.Open(child.Scene);
+        using var testScene = TestScenes.Open(child.Scene);
         using var slots = new FakeMaterialSlotProvider();
-        using var sut = CreateSut(Mock.Of<IScenePreview>(), slots, tab, [child], interaction);
+        using var sut = CreateSut(Mock.Of<IScenePreview>(), slots, testScene, [child], interaction);
 
         _ = sut.SelectedNode!.Id.Should().Be(child.Id);
         _ = sut.HasLockedSelection.Should().BeTrue();
@@ -81,14 +82,14 @@ internal sealed class SceneNodeEditorViewModelTests
     {
         var scene = CreateScene();
         var node = CreateNode(scene);
-        using var tab = SceneTabs.Open(node.Scene);
+        using var testScene = TestScenes.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
-        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(0);
+        _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(0);
         using var slots = new FakeMaterialSlotProvider();
-        using var sut = CreateSut(preview.Object, slots, tab, [node]);
-        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(1);
+        using var sut = CreateSut(preview.Object, slots, testScene, [node]);
+        _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(1);
 
-        preview.Raise(value => value.PendingFieldsChanged += null, preview.Object, new ScenePreviewEventArgs(tab.DocumentId));
+        preview.Raise(value => value.PendingFieldsChanged += null, preview.Object, new ScenePreviewEventArgs(testScene.DocumentId));
 
         _ = sut.PendingLiveSyncEditCount.Should().Be(1);
         _ = sut.HasPendingLiveSyncEdits.Should().BeTrue();
@@ -100,14 +101,14 @@ internal sealed class SceneNodeEditorViewModelTests
     {
         var scene = CreateScene();
         var node = CreateNode(scene);
-        using var tab = SceneTabs.Open(node.Scene);
+        using var testScene = TestScenes.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
-        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(1);
+        _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(1);
         using var slots = new FakeMaterialSlotProvider();
-        using var sut = CreateSut(preview.Object, slots, tab, [node]);
-        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(0);
+        using var sut = CreateSut(preview.Object, slots, testScene, [node]);
+        _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(0);
 
-        preview.Raise(value => value.PendingFieldsChanged += null, preview.Object, new ScenePreviewEventArgs(tab.DocumentId));
+        preview.Raise(value => value.PendingFieldsChanged += null, preview.Object, new ScenePreviewEventArgs(testScene.DocumentId));
 
         _ = sut.PendingLiveSyncEditCount.Should().Be(0);
         _ = sut.HasPendingLiveSyncEdits.Should().BeFalse();
@@ -118,11 +119,11 @@ internal sealed class SceneNodeEditorViewModelTests
     {
         var scene = CreateScene();
         var node = CreateNode(scene);
-        using var tab = SceneTabs.Open(node.Scene);
+        using var testScene = TestScenes.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
-        _ = preview.Setup(value => value.PendingFieldCount(tab.DocumentId)).Returns(1);
+        _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(1);
         using var slots = new FakeMaterialSlotProvider();
-        using var sut = CreateSut(preview.Object, slots, tab, [node]);
+        using var sut = CreateSut(preview.Object, slots, testScene, [node]);
         var other = DroidNet.Documents.DocumentId.New();
         _ = preview.Setup(value => value.PendingFieldCount(other)).Returns(0);
 
@@ -137,37 +138,37 @@ internal sealed class SceneNodeEditorViewModelTests
     {
         var scene = CreateScene();
         var built = CreateDirectionalLightNode(scene);
-        using var tab = SceneTabs.Open(scene);
-        var node = tab.NodeOf(built);
+        using var testScene = TestScenes.Open(scene);
+        var node = testScene.NodeOf(built);
         var before = node.Components.OfType<TransformComponent>().Single().LocalRotation;
 
-        using var sut = new DirectionalLightViewModel(() => tab.Authoring);
+        using var sut = new DirectionalLightViewModel(() => testScene.Authoring);
         sut.UpdateValues([node]);
         sut.SunAzimuth = 45f;
         await sut.PendingEdits.ConfigureAwait(false);
 
         _ = node.Components.OfType<TransformComponent>().Single().LocalRotation.Should().NotBe(before);
-        _ = tab.Document.History.UndoStack.Should().ContainSingle();
+        _ = testScene.Document.History.UndoStack.Should().ContainSingle();
     }
 
     private static SceneNodeEditorViewModel CreateSut(
         IScenePreview scenePreview,
         FakeMaterialSlotProvider slots,
-        SceneTab tab,
+        TestScene testScene,
         IList<SceneNode> selectedNodes,
         SceneNodeInteraction? interaction = null)
     {
         // The document edits its own copy of the scene, so the selection holds the document's nodes. They show no
         // components: the component editors need a window.
-        var nodes = selectedNodes.Select(tab.NodeOf).ToArray();
+        var nodes = selectedNodes.Select(testScene.NodeOf).ToArray();
         foreach (var node in nodes)
         {
             node.Components.Clear();
         }
 
-        var documents = new TestDocumentArea(tab.Document);
+        var documents = new TestDocumentArea(testScene.Document);
         var selectionService = new SceneSelectionService();
-        selectionService.SetSelection(tab.DocumentId, nodes, "Test");
+        selectionService.SetSelection(testScene.DocumentId, nodes, "Test");
 
         return new SceneNodeEditorViewModel(
             new HostingContext
