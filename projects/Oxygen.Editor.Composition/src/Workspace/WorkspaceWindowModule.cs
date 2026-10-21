@@ -31,7 +31,6 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell;
 using Oxygen.Editor.Shell.Contributions;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -74,7 +73,7 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
     public static IReadOnlyList<IScopeModule<IWindowLayer>> Compose(IReadOnlyList<IFeatureModule> features)
     {
         ArgumentNullException.ThrowIfNull(features);
-        return [new WorkspaceWindowModule(features), new ShellWindowModule(), new ContentPipelineWindowModule(), .. features];
+        return [new AssetsWindowModule(), new WorkspaceWindowModule(features), new ShellWindowModule(), new ContentPipelineWindowModule(), .. features];
     }
 
     /// <inheritdoc />
@@ -125,12 +124,7 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
     // this window's scope whichever scope asks first.
     private static void RegisterContentServices(IRegistrator scope)
     {
-        scope.Register<AssetCatalog>(Reuse.Singleton);
-        scope.RegisterMapping<IAssetCatalog, AssetCatalog>();
-        scope.RegisterMapping<IAssetFolderSource, AssetCatalog>();
-        scope.RegisterMapping<IAssetPublicationTarget, AssetCatalog>();
         scope.Register<IAssetRuntimeStatusSource, AssetRuntimeStatusSource>(Reuse.Singleton);
-        scope.Register<IAssetFeed, AssetFeed>(Reuse.Singleton);
     }
 
     // The engine preview and the preview content demand follow the open scene documents. The project's preview also
