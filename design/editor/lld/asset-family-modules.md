@@ -690,10 +690,10 @@ publishes nothing. Editable models
 All per-project state of `ScriptFacts` lives in an internal
 `ProjectScriptFacts`, constructed with the `ProjectContext` and disposed when
 the project closes (entries, versions, last valid parameters, scan, catalog
-subscription); `InputFacts` has `ProjectInputFacts` likewise. The outer service
-swaps it on `IProjectContextService.ProjectChanged`, its only use of that
-service, so a scope that constructs the per-project object with its
-`ProjectContext` replaces the swap without changing anything else.
+subscription); `InputFacts` has `ProjectInputFacts` likewise. Both services
+live in the project session and end with it; the outer service swaps the
+per-project object when the session's content mounts change
+(`IProjectSession.ContextChanged`).
 
 ### 8.4 Registration
 

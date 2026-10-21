@@ -45,13 +45,14 @@ Useful existing pieces:
 
 - `Documents` and `Oxygen.Editor.Documents` provide generic document metadata,
   document service events, and editor document service tests.
-- The Shell's `IDocumentService` opens documents, replacing the window's scene
-  when a scene opens, and selects an already-open document.
+- Each window's `IDocumentArea` opens documents, replacing the window's scene
+  when a scene opens, and selects an already-open document. The editors belong
+  to the project session's `IDocumentService`.
 - The Shell's `DocumentAreaViewModel` resolves the active editor view and
   deactivates the leaving editor's view during document switches.
 - `SceneEditorViewModel` implements `IAsyncSaveable`, tracks document metadata,
-  updates dirty state from the undo stack, and saves through
-  `ProjectManagerService.SaveSceneAsync`.
+  updates dirty state from the undo stack, and saves through its scene
+  document, of the Scenes module's document kind.
 - `DroidNet.TimeMachine.UndoRedo` / `HistoryKeeper` already back scene explorer
   and inspector undo stacks.
 - Scene explorer selection is published through messenger messages:
@@ -75,8 +76,6 @@ Brownfield gaps:
 - Scene explorer undo records inverse delegates, but command result,
   dirty-state update, validation invalidation, and live-sync failure handling
   are not centralized.
-- `ProjectManagerService.SaveSceneAsync` persists authoring scene data only;
-  explicit scene cook orchestration is deferred to the content pipeline.
 
 ## 5. Target Design
 

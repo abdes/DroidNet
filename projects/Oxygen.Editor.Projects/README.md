@@ -1,186 +1,66 @@
 # Oxygen.Editor.Projects
 
-## Overview
+What an Oxygen project is to the editor: its manifest and settings, its files
+and mounts, how it is created, validated and loaded, and the contracts of an
+open project, the project session. It knows no document kinds, editors or
+cooking; those modules read the project through it.
 
-The **Oxygen.Editor.Projects** module provides workspace and project file
-management for the Oxygen Editor. It handles loading and saving project metadata
-(`Project.oxy`), discovering scene files, and orchestrating persistence of
-editor world scenes to disk.
+## Components
 
-This module sits **above** the `Oxygen.Editor.World` domain model, providing
-file I/O, project lifecycle management, and workspace-level operations.
+| Component                   | Holds                                                                         |
+| --------------------------- | ----------------------------------------------------------------------------- |
+| `IProjectSession`           | An open project: its `Context`, `Settings`, loaded `Project` and `Lifetime`   |
+| `IProjectSessionHost`       | Opens, changes the mounts of and closes the editor's one session              |
+| `IProjectManagerService`    | Loads, stages, accepts and saves projects (`Project.oxy` and settings)        |
+| `ProjectContext`            | A project as its mounts are now, with the `FileSystem` that holds its files   |
+| `ProjectSettings`           | Settings saved in the manifest and shared by everyone, such as cook on change |
+| `ProjectAssetFiles`         | The one mapping between the project's virtual paths and its files             |
+| `ProjectOutputFolders`      | The pipeline's output folders inside a project (`.cooked`, `.imported`, ...)  |
+| `CookedContentOrdering`     | The priority of the project's output and its libraries                        |
+| `IProjectCookScopeProvider` | A project's cook scope: its root and cooked output root                       |
+| `IAuthoringTargetResolver`  | Where a new asset of a family is created                                      |
+| `AuthoredAssetTemplate`     | Folder, default name, suffixes and content of a family's new files            |
+| `IProjectCreationService`   | Creates a project from a template                                             |
+| `IProjectValidationService` | Classifies a project folder before it opens                                   |
+| `IRecentProjectAdapter`     | Recent projects with their validation state                                   |
 
-## Purpose
+`ProjectsModule` registers the services in the editor scope. The session host is
+the composition root's, because it composes the session's scope.
 
-The Projects module exists to:
+## Project session
 
-1. **Manage Project Manifest** - Load and save `Project.oxy` (project metadata)
-2. **Persist Scenes** - Serialize/deserialize world scenes to/from scene JSON
-   files
-3. **Track Project Metadata** - Project name, category, thumbnail, last-used
-   time, mount points
-4. **Provide Lifecycle APIs** - High-level service for project operations
-5. **Enable Multi-Scene Projects** - Discover and manage scene files within a
-   project folder
+`IProjectSession` is an open project. Every service, window and panel of the
+project receives it, reads `Context` when it acts, and runs long work under
+`Lifetime`, which is cancelled when the session starts to close.
 
-## Technology Stack
+- The project stays the same for the whole session: the same `ProjectId` and
+  root. Opening another project replaces the session.
+- A change of the content mounts (`IProjectSessionHost.ChangeContext`) gives a
+  new `Context` and raises `ContextChanged`; only services whose state comes
+  from the mounts follow it.
+- `UpdateSettings` replaces the settings once they are saved and raises
+  `SettingsChanged`.
+- `IProjectManagerService` holds no open project.
 
-| Technology                       | Version                    | Purpose                                |
-| -------------------------------- | -------------------------- | -------------------------------------- |
-| **.NET**                         | 9.0 (Windows 10.0.26100.0) | Target framework                       |
-| **C#**                           | 13 (preview)               | Language with nullable reference types |
-| **System.Linq.Async**            | Latest                     | Async LINQ operations                  |
-| **Microsoft.Extensions.Logging** | Latest                     | Logging abstractions                   |
+## Files and mounts
 
-## Architecture
+Code reads a project's files through `ProjectContext.FileSystem`, so it takes no
+file system of its own. The application gives an opened project the disk; tests
+make projects on any file system.
 
-### Module Relationships
+- The project's root folder is the `project` mount, so every file of the project
+  has a virtual path: `/project/...` at any depth.
+- A declared mount (an authoring mount, a local folder) is a named folder. A
+  file inside several mounts is named from the innermost.
+- `project` and `Engine` are reserved; `ValidateDeclaredMountName` refuses them
+  in any case.
+- The disk is the truth for a file's existence. `ProjectAssetLocation` tells
+  whether a location is a project file, a source in an authoring mount or a
+  library file. Only authoring mounts cook.
 
-```mermaid
-graph TB
-    subgraph Presentation["Editor Presentation"]
-        UI[Editor features<br/>ViewModels]
-    end
+## Manifest
 
-    subgraph Projects["Oxygen.Editor.Projects"]
-        PM[ProjectManagerService<br/>Lifecycle API]
-        PROJ[Project<br/>Workspace Model]
-        INFO[ProjectInfo<br/>Metadata]
-    end
-
-    subgraph World["Oxygen.Editor.World"]
-        SCENE[Scene<br/>Domain Model]
-        NODE[SceneNode]
-    end
-
-    subgraph Storage["DroidNet.Storage"]
-        FS[File System<br/>Abstractions]
-    end
-
-    UI --> PM
-    PM --> PROJ
-    PM --> INFO
-    PM --> SCENE
-    PROJ --> SCENE
-    PM --> FS
-
-    style Projects fill:#0d47a1,stroke:#64b5f6
-    style World fill:#1b5e20,stroke:#81c784
-    style Storage fill:#e65100,stroke:#ffab91
-```
-
-### Core Components
-
-| Component                    | Purpose                | Key Responsibilities                                               |
-| ---------------------------- | ---------------------- | ------------------------------------------------------------------ |
-| **`ProjectManagerService`**  | High-level project API | Create, open, save, close projects                                 |
-| **`Project`**                | Workspace model        | Metadata, scene references, serialization                          |
-| **`ProjectInfo`**            | Project metadata       | Name, version, author, timestamps                                  |
-| **`IProjectManagerService`** | Service interface      | Abstraction for DI and testing                                     |
-| **`AuthoredAssetTemplate`**  | New file template      | Folder, default name, suffixes and content of a family's new files |
-| **`ProjectContext`**         | Active project         | Mounts, settings and the `FileSystem` that holds the files         |
-
-Code that reads a project's files reads them through `ProjectContext.FileSystem`
-(`FindSource`, `LocateSource` and the modules that resolve sources), so it takes
-no file system of its own. The application gives an opened project the disk;
-tests make projects with `Oxygen.Editor.Projects.Testing.TestProject` on any
-file system.
-
-## Core Concepts
-
-### Project Structure
-
-An **Oxygen Project** is a workspace containing:
-
-```text
-Project.oxy            ← Project manifest (metadata + mount points)
-├── Scenes/
-│   ├── Main.scene       ← Scene files
-│   ├── Menu.scene
-│   └── Level1.scene
-├── Assets/                   ← (Future: Assets, prefabs, etc.)
-└── ProjectSettings/          ← (Future: Build settings, etc.)
-```
-
-**Project Manifest** (`Project.oxy`):
-
-- Project-wide metadata (name, version, author)
-- Unique project ID (GUID)
-- Authoring mount points (`AuthoringMounts`: `Name` + project-relative
-  `RelativePath`)
-
-Notes:
-
-- Scene files are **discovered** by enumerating the `Scenes/` folder (currently
-  `*.scene`). They are not listed in `Project.oxy`.
-- `AuthoringMounts` are persisted in `Project.oxy` and define project-local
-  authoring mounts (e.g., `Content -> Content/`).
-
-### Project Lifecycle
-
-```mermaid
-stateDiagram-v2
-    [*] --> Created: New project
-    [*] --> Loaded: Open existing
-
-    Created --> Dirty: Modify metadata
-    Loaded --> Dirty: Modify scenes
-
-    Dirty --> Saved: Save project
-    Saved --> Dirty: Edit
-
-    Saved --> Closed: Close project
-    Dirty --> Closed: Discard changes
-
-    Closed --> [*]
-
-    note right of Dirty
-        - Metadata changed
-        - Scenes added/removed
-        - Scene content changed
-    end note
-```
-
-### Project Session
-
-`IProjectSession` is an open project: its `ProjectContext`, the loaded
-`IProject`, the project's `Settings` and the `Lifetime` token, cancelled when
-the session starts to close. Every service, window and panel of the project
-receives its session, reads `Context` when it acts, and runs long work under
-that token. A content mount change replaces `Context` and raises
-`ContextChanged`; `UpdateSettings` replaces the settings and raises
-`SettingsChanged`. `IProjectSessionHost` opens and closes the one session the
-editor has at a time; the composition root implements it, because it composes
-the session's scope. `IProjectManagerService` loads, stages, accepts and saves
-projects; it exposes no current project.
-
-### ProjectManagerService Responsibilities
-
-1. **Project Creation**
-   - Generate new project with metadata
-   - Create initial scene
-   - Save to disk
-
-2. **Project Loading**
-   - Deserialize `.oxyproj` file
-   - Validate project structure
-   - Discover scene files
-
-3. **Scene Management**
-   - Load scenes from JSON
-   - Save scenes to JSON
-   - Track open/active scenes
-
-4. **Persistence**
-   - Save project metadata
-   - Save individual scenes
-   - Handle save-all operations
-
-## File Formats
-
-### Project File Format
-
-**File Name**: `Project.oxy`
+`Project.oxy` at the project's root:
 
 ```json
 {
@@ -188,200 +68,46 @@ projects; it exposes no current project.
   "Name": "MyGame",
   "Category": "C44E7604-B265-40D8-9442-11A01ECE334C",
   "Thumbnail": "Media/Preview.png",
-  "AuthoringMounts": [
-    {
-      "Name": "Content",
-      "RelativePath": "Content"
-    }
-  ]
+  "AuthoringMounts": [{ "Name": "Content", "RelativePath": "Content" }]
 }
 ```
 
-- `Id` - Non-empty GUID (project identity)
-- `Name` - Project display name
-- `Category` - Project category identifier
-- `Thumbnail` - Optional project thumbnail path
-- `AuthoringMounts` - Authoring mounts (`Name` + project-relative
-  `RelativePath`)
-- `LocalFolderMounts` - Optional cooked library folders (`Name` +
-  `AbsolutePath`)
-- `PakFileMounts` - Optional pak files mounted read-only as cooked libraries
-  (`Name` + `AbsolutePath` of a `.pak` file)
-- `CookedContentOrder` - Optional library priority, lowest first; kinds are
-  `ProjectOutput`, `LocalFolder` and `PakFile`
+| Field                | Meaning                                                   |
+| -------------------- | --------------------------------------------------------- |
+| `Id`                 | Non-empty GUID, the project's identity                    |
+| `Name`, `Category`   | Display name and category                                 |
+| `Thumbnail`          | Optional image, relative to the root                      |
+| `AuthoringMounts`    | Source folders (`Name` + project-relative `RelativePath`) |
+| `LocalFolderMounts`  | Optional cooked library folders (`Name` + `AbsolutePath`) |
+| `PakFileMounts`      | Optional `.pak` files mounted read-only as libraries      |
+| `CookedContentOrder` | Optional library priority, lowest first                   |
+| `DefaultSceneId`     | The scene the workspace opens first                       |
+| `Settings`           | The project's settings (`ProjectSettings`)                |
 
-**Compatibility:**
+Without `AuthoringMounts`, the loader uses one mount, `Content -> Content`.
+`Location` and `LastUsedOn` are runtime and usage state, never saved in it.
 
-- If `AuthoringMounts` is missing/empty, the loader defaults it to a single
-  mount: `Content -> Content`.
-
-### Scene File Format
-
-Scene files are JSON and are serialized/deserialized by
-`Oxygen.Editor.World.Serialization.SceneSerializer`. This module treats scenes
-as **lazy-loaded**:
-
-- Project load discovers scene files and loads minimal scene metadata.
-- `LoadSceneAsync` loads the full scene graph (nodes/components).
-
-See [World README](../Oxygen.Editor.World/README.md).
-
-## Usage
-
-### Loading an Existing Project
+## Opening a project
 
 ```csharp
-var service = serviceProvider.GetRequiredService<IProjectManagerService>();
-
-// 1) Load project metadata (Project.oxy) from a project folder
-var projectInfo = await service.LoadProjectInfoAsync(
-  projectFolderPath: @"C:\Projects\MyGame",
-  cancellationToken: ct);
-
-// 2) Stage the project, then accept it; the editor opens its session with it
-var staged = await service.StageProjectLoadAsync(projectInfo!);
-var project = service.AcceptProjectLoad(staged!);
+var info = await projects.LoadProjectInfoAsync(@"C:\Projects\MyGame");
+var staged = await projects.StageProjectLoadAsync(info!);
+var project = projects.AcceptProjectLoad(staged!);
 ```
 
-### Loading Scenes
-
-```csharp
-// Scenes are discovered on project load.
-var scene = project!.Scenes[0];
-
-// Load full scene graph for one scene (replaces that entry in project.Scenes)
-var loaded = await service.LoadSceneAsync(scene);
-```
-
-### Saving Changes
-
-```csharp
-// Save project metadata back to Project.oxy
-await service.SaveProjectInfoAsync(project!.ProjectInfo);
-
-// Save a scene back to Scenes/<name>.scene
-await service.SaveSceneAsync(loaded!);
-```
-
-## Design Patterns
-
-### Service Pattern
-
-`ProjectManagerService` provides high-level facade over file I/O and
-serialization
-
-### Repository Pattern
-
-Projects act as containers/references to scenes (repository of scene files)
-
-### Metadata Separation
-
-Project metadata is separated from scene content for modularity
-
-### Async-First
-
-All I/O operations are async for UI responsiveness
+The composition root's `ProjectActivationCoordinator` stages and accepts the
+load, then asks the session host to open the session.
+Scenes and other documents open through their document kinds, in their own
+modules.
 
 ## Dependencies
 
-### Project References
-
-- **`Oxygen.Editor.World`** - Domain models (Scene, SceneNode, etc.)
-- **`DroidNet.Storage`** - File system abstractions (`IStorageProvider`,
-  `IFolder`, `IDocument`)
-
-### NuGet Packages
-
-- `Microsoft.Extensions.Logging.Abstractions` - Logging
-- `System.Linq.Async` - Async LINQ support
-
-## Thread Safety
-
-⚠️ **Not intrinsically thread-safe** - Designed for use on the UI thread.
-
-**Recommendations:**
-
-- Call `ProjectManagerService` methods from **UI thread**
-- Use async/await to prevent blocking
-- Scene modifications should occur on UI thread (property bindings)
-
-## Error Handling
-
-Common exceptions:
-
-| Exception                       | Cause                                   | Mitigation                                 |
-| ------------------------------- | --------------------------------------- | ------------------------------------------ |
-| **FileNotFoundException**       | Project/scene file missing              | Validate paths, handle gracefully          |
-| **JsonException**               | Malformed JSON, missing required fields | Validate project files, repair if possible |
-| **UnauthorizedAccessException** | Insufficient permissions                | Check file system permissions              |
-| **IOException**                 | File locked, disk full                  | Retry logic, user notification             |
-
-## Validation
-
-### Project Validation
-
-- **`Id` must be non-empty GUID** - Enforced on deserialization
-- **`Name` must be non-empty** - Validated by `ProjectInfo`
-- **Scene paths must be relative** - Prevent absolute path issues
-- **Scene files must exist** - Optional validation on load
-
-### Scene Path Resolution
-
-- Paths in `.oxyproj` are **relative** to project directory
-- Service resolves to absolute paths for loading
-- Normalization handles different path separators
-
-## Future Enhancements
-
-### Planned Features
-
-- **Asset Management** - Track textures, models, shaders in project
-- **Prefab System** - Reusable scene node templates
-- **Build Settings** - Platform-specific build configurations
-- **Project Templates** - Starter projects (2D, 3D, VR, etc.)
-- **Recent Projects** - MRU list with metadata
-- **Auto-Save** - Periodic background saves
-- **Backup/Versioning** - Automatic backups, version history
-
-### Extensibility Points
-
-- Custom project metadata via extension properties
-- Pluggable serialization formats (e.g., binary, YAML)
-- Custom scene loaders (e.g., import from Unity, Unreal)
+- `DroidNet.Composition` for the scope layers, `Storage` for files.
+- `Oxygen.Managed.Assets` for asset paths and mount records.
+- `Oxygen.Editor.Data` for recent usage.
+- `Oxygen.Editor.World` for the template's initial scene identity.
 
 ## Testing
 
-Unit tests should cover:
-
-- **Project creation** - Valid metadata, file creation
-- **Project loading** - Deserialization, validation
-- **Scene management** - Add, remove, save scenes
-- **Error handling** - Missing files, invalid JSON
-- **Path resolution** - Relative path handling
-
-Unit tests in this module use mocks around `DroidNet.Storage` abstractions.
-
-## Design Principles
-
-1. **Separation from World** - Projects manage files, World defines data
-2. **Observable Metadata** - `ProjectInfo` implements `INotifyPropertyChanged`
-3. **Lazy Scene Loading** - Don’t fully load all scene graphs upfront
-4. **Relative Paths** - Projects are relocatable
-5. **Async I/O** - Non-blocking file operations
-
-## Related Documentation
-
-- [Oxygen.Editor.World](../Oxygen.Editor.World/README.md) - Domain models for
-  scenes
-- [Oxygen.Editor.Runtime](../Oxygen.Editor.Runtime/README.md) - Engine
-  integration
-- [DroidNet.Storage](../DroidNet.Storage/) - File system abstractions
-
-## License
-
-Distributed under the MIT License. See accompanying `LICENSE` file or visit
-[https://opensource.org/licenses/MIT](https://opensource.org/licenses/MIT).
-
----
-
-**SPDX-License-Identifier**: MIT
+`Oxygen.Editor.Projects.Testing` is the test kit other modules use to make
+projects and sessions: [testing/README.md](testing/README.md).

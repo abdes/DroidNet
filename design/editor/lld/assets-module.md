@@ -391,7 +391,7 @@ diagnostics ([asset identity](asset-identity.md#56-collisions)).
 ```text
 Oxygen.Editor.Assets
   -> Oxygen.Editor.ContentPipeline   publication read side, cook status, cook runs, relocation and authoring events, engine content pak
-  -> Oxygen.Editor.Projects          ProjectContext, IProjectContextService, ProjectOutputFolders
+  -> Oxygen.Editor.Projects          ProjectContext, IProjectSession, ProjectOutputFolders
   -> Oxygen.Managed.Assets           catalogs, records, file types, material authoring
   -> Oxygen.Managed.Core             AssetPath, FileSystemPath, diagnostics
   -> Storage, System.Reactive, logging

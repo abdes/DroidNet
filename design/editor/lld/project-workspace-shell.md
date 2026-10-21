@@ -69,10 +69,10 @@ The baseline is not yet V0.1-ready:
 - Project creation currently mixes template copy, manifest patching, project
   load, recent-project update, and template usage update in one boolean-return
   workflow.
-- `WorkspaceViewModel` currently reads `projectManager.CurrentProject`, builds
-  the world-editor child container, applies the initial dock route, and refreshes
-  cooked roots during navigation. ED-M01 must move project activation and
-  restoration ordering above that workspace composition.
+- `WorkspaceViewModel` asks the session host for the workspace window's scope,
+  which the host creates under the session's and owns, and applies the initial
+  dock route; the activation coordinator opens the session before the workspace
+  is composed.
 
 ED-M01 replaces these target-architecture violations instead of preserving
 compatibility shims:
@@ -303,8 +303,8 @@ Responsibilities:
 - activate `/we` only after project services have committed the project context.
 - pass a project activation context reference through navigation state or a
   host service that `WorkspaceViewModel` consumes during initialization.
-- ensure `WorkspaceViewModel` does not infer activation from a mutable global
-  `CurrentProject` before the coordinator commits the context.
+- ensure `WorkspaceViewModel` reads the project only from its project session,
+  which the coordinator opens before navigation.
 - let the workspace build its child container and initial dock route after the
   activation context is available.
 - keep Project Explorer open on activation failure.

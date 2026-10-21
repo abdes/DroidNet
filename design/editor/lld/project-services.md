@@ -44,8 +44,9 @@ Current project behavior is split across:
 - `Oxygen.Editor.ProjectExplorer.ProjectExplorerService`: template copy, known
   locations, recent project enumeration, create/open entry points, Project
   Browser settings.
-- `Oxygen.Editor.Projects.ProjectManagerService`: loads/saves `Project.oxy`,
-  stores `CurrentProject`, loads/saves scenes, creates scenes.
+- `Oxygen.Editor.Projects.ProjectManagerService`: loads and saves
+  `Project.oxy` and the project settings, and stages a project load that the
+  session host accepts when it opens the project's session.
 - `Oxygen.Editor.Projects.ProjectInfo`: persisted project metadata including
   stable `Id`, name, category, thumbnail, authoring mounts, and local folder
   mounts.
@@ -70,17 +71,16 @@ Baseline gaps:
   classification.
 - `ProjectExplorerService` mixes UI-facing workflow orchestration with project
   service calls and recent/template usage updates.
-- `ProjectManagerService.SaveSceneAsync` now persists authoring scene data only.
-  Save-time scene cook orchestration has been removed from project services and
-  belongs to `Oxygen.Editor.ContentPipeline` when reintroduced through explicit
-  cook commands.
+- Project services persist no scenes: a scene is a document of the Scenes
+  module's document kind, and the cook hears of its saved file like any other.
 - Project settings are not clearly separated from global editor settings and
   Project Explorer settings.
 - Content root validation does not yet produce a first-class project validation
   report.
 - Project cook scope is implicit in current save/cook behavior.
-- `IProjectManagerService.CurrentProject` is consumed by downstream modules such
-  as WorldEditor, Content Explorer, and project asset catalog code.
+- The open project is a project session (`IProjectSession`), which the session
+  host (`IProjectSessionHost`) opens and closes; services of the session read
+  its `Context` when they act.
 
 ## 5. Target Design
 
@@ -117,8 +117,9 @@ Target invariants:
 6. A project can be validated without activating the workspace.
 7. A loaded project has deterministic authoring roots and a deterministic cooked
    root policy.
-8. Active project state is exposed through `IProjectContextService`, not through
-   mutable `IProjectManagerService.CurrentProject`.
+8. The open project is the project session (`IProjectSession`): its `Context`,
+   settings and lifetime. Services that depend on the project live in the
+   session's scope and end with it; there is no global current project.
 9. Content Explorer source roots, local roots, and derived cooked roots are
    exposed from `ProjectContext`/cook-scope policy, not guessed from current UI
    selection.
@@ -134,28 +135,17 @@ Target invariants:
 | `Oxygen.Editor.ContentPipeline` | descriptor generation, import/cook execution, cooked validation                                                                           |
 | `Oxygen.Editor.Runtime`         | engine lifecycle and cooked-root mounts based on project policy                                                                           |
 
-Required cleanup: `ProjectManagerService` no longer performs scene cooking, but
-the brownfield `IProjectManagerService.SaveSceneAsync` scene-persistence method
-still exists. It is tolerated as project persistence plumbing only; new public
-workflows must not extend it, and ED-M07 must keep cook/mount refresh behind
-explicit ContentPipeline commands.
+Service split:
 
-Required service split:
-
-- ED-M01 introduces `IProjectContextService` with read-only `ActiveProject`,
-  active-project change notification through `IObservable<ProjectContext?>`,
-  activation, and close/unload semantics.
-- ED-M01 migrates `CurrentProject` consumers to `IProjectContextService`.
-- `IProjectManagerService` is not the public active-project API in the target
-  design. During ED-M01 it is removed as a cross-project service contract and
-  any remaining implementation is internal to `Oxygen.Editor.Projects`
-  persistence code.
+- `IProjectSessionHost` opens a project's session, changes its content mounts
+  (`ChangeContext`) and closes it; `IProjectSession` gives the session's
+  `Context`, `Settings`, `Project` and `Lifetime`, and reports a mount change
+  through `ContextChanged`.
+- `IProjectManagerService` is project persistence only: project info, settings
+  and staged project loads. It holds no open project.
 - `EnsureDefaultAuthoringMounts` auto-healing is removed from validation paths.
   Missing or invalid manifest mounts must surface as `InvalidContentRoots`
   instead of being silently repaired.
-- `SaveSceneAsync` is not part of the target cross-project service contract.
-  Existing scene persistence may remain until a document-service replacement is
-  introduced, but no cook or runtime mount behavior may be attached to it.
 
 ## 7. Data Contracts
 
@@ -259,9 +249,10 @@ Required fields:
 `ProjectInfo.Location` is a runtime project-context field. `LastUsedOn` belongs
 to persistent usage state. Neither is serialized into `Project.oxy`.
 
-Project context change notification is about active project replacement and
-close/unload. Scene-list, node, and component mutations do not bubble through
-`IProjectContextService`; they flow through document/world authoring channels.
+A project session's `ContextChanged` reports only a change of its content
+mounts; opening another project replaces the session. Scene-list, node, and
+component mutations do not go through the session; they flow through
+document/world authoring channels.
 
 ### Project Content Root
 
@@ -558,9 +549,8 @@ ED-M01 project services are complete when:
 - Project Explorer can show failure reason without parsing logs.
 - project services expose project root and authoring roots for workspace
   activation.
-- `CurrentProject` consumers are migrated to `IProjectContextService`.
-- Content Explorer and project asset catalog resolve project state from
-  `IProjectContextService`, not `IProjectManagerService`.
+- Content Explorer and the project asset catalog read the project from the
+  project session, not from `IProjectManagerService`.
 
 ED-M06 project-service gates:
 

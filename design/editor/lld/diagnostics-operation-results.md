@@ -731,8 +731,8 @@ Straightforward tests should cover:
 - failure-domain mapper: ED-M01 project/workspace domains and ED-M02
   runtime/viewport domains where the mapper is touched by the milestone.
 - project activation integration is validated through the `project-services.md`
-  `IProjectContextService` gates and `project-workspace-shell.md`
-  activation-coordinator gates.
+  project session gates and `project-workspace-shell.md` activation-coordinator
+  gates.
 
 UI tests are appropriate for Project Explorer inline failure display once ED-M01
 implements the surface.
