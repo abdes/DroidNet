@@ -27,6 +27,7 @@ TestHelpers/
 │   ├── TestSuiteWithAssertions.cs    # Base class for assertion-aware test suites
 │   ├── DebugAssertUnitTestTraceListener.cs  # Captures Debug.Assert messages
 │   ├── EventHandlerTestHelper.cs     # Event handler inspection utilities
+│   ├── HostContainer.cs              # Containers built as an application host builds them
 │   ├── TestLoggerProvider.cs         # Serilog integration for MSTest
 │   ├── SuspendTrackerDisposable.cs   # Suspension tracking utilities
 │   ├── TraceListenerCollectionExtensions.cs # TraceListener helpers
@@ -72,6 +73,16 @@ Reflection-based utilities to inspect registered event handlers:
 - **FindRegisteredDelegates():** Filters delegates by target object
 
 **Use this** when verifying that event subscriptions are correctly established or cleaned up.
+
+### 4. Host-Equivalent Containers (`HostContainer`)
+
+`HostContainer.Create` returns the container an application host's
+`DryIocServiceProviderFactory` builds: Microsoft dependency injection rules,
+disposable-transient tracking and the captive-dependency check on, with the
+host's logging and options services (`ILogger<T>`, `IOptions<T>`).
+
+**Use this** when a test composes registrations that run under a host, so it
+resolves under the host's rules instead of DryIoc's defaults.
 
 ## Getting Started
 
