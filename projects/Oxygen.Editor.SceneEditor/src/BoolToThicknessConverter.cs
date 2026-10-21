@@ -5,7 +5,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Data;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// Converts a boolean value into one of two configured <see cref="Thickness"/> values.

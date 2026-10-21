@@ -5,10 +5,8 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.WorldEditor.SceneEditor;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// A small drawing of a pane arrangement: one cell per pane, placed as the scene editor places its

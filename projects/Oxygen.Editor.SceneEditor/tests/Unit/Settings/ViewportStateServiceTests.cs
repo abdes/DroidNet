@@ -12,14 +12,12 @@ using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests.Settings;
 
 /// <summary>
 /// Viewport state is user-local workspace state kept per project and scene: it round-trips through

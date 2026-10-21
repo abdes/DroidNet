@@ -9,12 +9,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.SceneEditor;
+namespace Oxygen.Editor.SceneEditor.Unit.UI.Tests;
 
 /// <summary>
 /// The viewport HUD loads and realizes every flyout: camera, view mode, Show and layout, and the

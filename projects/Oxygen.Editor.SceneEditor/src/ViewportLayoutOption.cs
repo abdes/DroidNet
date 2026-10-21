@@ -4,9 +4,8 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.World.Documents;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>One pane arrangement offered by the viewport layout picker.</summary>
 public sealed partial class ViewportLayoutOption : ObservableObject

@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>An edit the pane's keyboard shortcuts ask the scene to make.</summary>
 public enum ViewportEditCommand

@@ -5,10 +5,9 @@
 using AwesomeAssertions;
 using DroidNet.Documents;
 using Oxygen.Editor.Scenes.Views;
-using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 [TestClass]
 [TestCategory("Viewport Tools")]

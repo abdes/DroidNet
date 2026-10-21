@@ -4,7 +4,7 @@
 
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>How a viewport pick combines with the current selection.</summary>
 public enum ViewportSelectionMode

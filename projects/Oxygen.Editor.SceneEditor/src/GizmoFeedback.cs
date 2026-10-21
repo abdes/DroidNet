@@ -4,7 +4,7 @@
 
 using System.Numerics;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>What the pane shows next to the pointer while a gizmo drag runs.</summary>
 /// <param name="Text">The applied value, for example "X 1.250 m".</param>

@@ -8,11 +8,9 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Shell.Documents;
-using Oxygen.Editor.WorldEditor.SceneEditor;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 ///     Represents the view for editing scenes in the Oxygen World Editor.

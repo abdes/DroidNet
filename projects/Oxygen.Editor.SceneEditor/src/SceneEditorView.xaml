@@ -1,16 +1,16 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 <UserControl
-    x:Class="Oxygen.Editor.World.SceneEditor.SceneEditorView"
+    x:Class="Oxygen.Editor.SceneEditor.SceneEditorView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:Oxygen.Editor.LevelEditor"
+    xmlns:controls="using:Oxygen.Editor.SceneEditor"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dnc="using:DroidNet.Controls"
-    xmlns:editors="using:Oxygen.Editor.World.Documents"
-    xmlns:local="using:Oxygen.Editor.World.SceneEditor"
+    xmlns:editors="using:Oxygen.Editor.SceneEditor"
+    xmlns:local="using:Oxygen.Editor.SceneEditor"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:menus="using:DroidNet.Controls.Menus"
-    xmlns:play="using:Oxygen.Editor.World.Play"
+    xmlns:play="using:Oxygen.Editor.SceneEditor.Play"
     xmlns:seg="using:CommunityToolkit.WinUI.Controls"
     x:Name="Root"
     mc:Ignorable="d">

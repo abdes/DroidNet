@@ -4,7 +4,7 @@
 
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// An authored scene camera a viewport can render through.

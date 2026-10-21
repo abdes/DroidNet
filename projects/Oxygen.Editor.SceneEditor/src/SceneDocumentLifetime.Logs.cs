@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.World.Documents;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 ///     Logging helpers for <see cref="SceneDocumentLifetime"/>.

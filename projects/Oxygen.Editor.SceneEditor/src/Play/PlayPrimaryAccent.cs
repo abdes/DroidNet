@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World.Play;
+namespace Oxygen.Editor.SceneEditor.Play;
 
 /// <summary>How the Play button shows.</summary>
 public enum PlayPrimaryAccent

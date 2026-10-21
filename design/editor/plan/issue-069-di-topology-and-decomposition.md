@@ -691,32 +691,32 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 Status values: `done`, `in progress`, `not started`. Update the row in the commit
 that lands the work. Checked against the tree on 2026-10-20.
 
-| Slice                                       | Status        | Notes                                                                                           |
-| ------------------------------------------- | ------------- | ----------------------------------------------------------------------------------------------- |
-| S0.1 Startup hygiene                        | `done`        |                                                                                                 |
-| S1.1 Assets                                 | `done`        | Remaining items listed in the slice move with S1.8 and S1.11                                    |
-| S1.2 Cook on change                         | `done`        |                                                                                                 |
-| S1.3 Foreground cooks                       | `done`        |                                                                                                 |
-| S1.4a Global history                        | `done`        |                                                                                                 |
-| S1.4 Pipeline workflows out of UI           | `done`        |                                                                                                 |
-| S1.4c Removing one cooked product           | `done`        | `1e32de33f`                                                                                     |
-| S1.5 Document kinds                         | `done`        |                                                                                                 |
-| S1.6 Scenes                                 | `done`        |                                                                                                 |
-| S1.7 LivePreview                            | `done`        |                                                                                                 |
-| S1.8 Asset family modules                   | `done`        | See the sub-slice table below                                                                   |
-| S1.9 Cook on change over checked inputs     | `done`        |                                                                                                 |
-| S1.10 Shell                                 | `done`        | Consistent clipboard and delete commands across parts: #86                                      |
-| S1.11 Unsaved documents                     | `done`        | Shell `UnsavedDocuments` implements the port; Play, Cook and relocation ask before they run     |
-| S1.12 Features                              | `in progress` | See the feature table below                                                                     |
-| S1.13 Dissolve the World Editor             | `not started` |                                                                                                 |
-| S1.14 Test boundaries                       | `not started` |                                                                                                 |
-| S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; the shared host-equivalent builder lands with S3.1 |
-| S2.1 to S2.3 Scope factory and topology     | `not started` |                                                                                                 |
-| S3.1 Registration modules                   | `not started` |                                                                                                 |
-| S4.1 to S4.4 Project Session                | `not started` |                                                                                                 |
-| S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                                                                 |
-| S6.1 to S6.3 Service location and messenger | `not started` |                                                                                                 |
-| S7 Documentation                            | `not started` |                                                                                                 |
+| Slice                                       | Status        | Notes                                                                                                                                                        |
+| ------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| S0.1 Startup hygiene                        | `done`        |                                                                                                                                                              |
+| S1.1 Assets                                 | `done`        | Remaining items listed in the slice move with S1.8 and S1.11                                                                                                 |
+| S1.2 Cook on change                         | `done`        |                                                                                                                                                              |
+| S1.3 Foreground cooks                       | `done`        |                                                                                                                                                              |
+| S1.4a Global history                        | `done`        |                                                                                                                                                              |
+| S1.4 Pipeline workflows out of UI           | `done`        |                                                                                                                                                              |
+| S1.4c Removing one cooked product           | `done`        | `1e32de33f`                                                                                                                                                  |
+| S1.5 Document kinds                         | `done`        |                                                                                                                                                              |
+| S1.6 Scenes                                 | `done`        |                                                                                                                                                              |
+| S1.7 LivePreview                            | `done`        |                                                                                                                                                              |
+| S1.8 Asset family modules                   | `done`        | See the sub-slice table below                                                                                                                                |
+| S1.9 Cook on change over checked inputs     | `done`        |                                                                                                                                                              |
+| S1.10 Shell                                 | `done`        | Consistent clipboard and delete commands across parts: #86                                                                                                   |
+| S1.11 Unsaved documents                     | `done`        | Shell `UnsavedDocuments` implements the port; Play, Cook and relocation ask before they run                                                                  |
+| S1.12 Features                              | `in progress` | See the feature table below                                                                                                                                  |
+| S1.13 Dissolve the World Editor             | `not started` | Places the World Editor's native integration tests and benchmark, which build the scene editor, inspector and pipeline together through `NativeSceneFixture` |
+| S1.14 Test boundaries                       | `not started` |                                                                                                                                                              |
+| S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; the shared host-equivalent builder lands with S3.1                                                              |
+| S2.1 to S2.3 Scope factory and topology     | `not started` |                                                                                                                                                              |
+| S3.1 Registration modules                   | `not started` |                                                                                                                                                              |
+| S4.1 to S4.4 Project Session                | `not started` |                                                                                                                                                              |
+| S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                                                                                                                              |
+| S6.1 to S6.3 Service location and messenger | `not started` |                                                                                                                                                              |
+| S7 Documentation                            | `not started` |                                                                                                                                                              |
 
 ### S1.8 sub-slices
 
@@ -733,11 +733,11 @@ checked URIs, source-collision reporting from the cook (`5d5c2bc0e`).
 
 ### S1.12 features
 
-| #   | Feature         | Status        | Notes                                                                                                                              |
-| --- | --------------- | ------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
-| 1   | Output          | `done`        | Features join the workspace through the Shell's `IFeatureModule`; Output reads the player's log through LivePreview's `IPlayerLog` |
-| 2   | Problems        | `done`        |                                                                                                                                    |
-| 3   | Cooking         | `done`        |                                                                                                                                    |
-| 4   | CookedInspector | `done`        |                                                                                                                                    |
-| 5   | SceneExplorer   | `done`        |                                                                                                                                    |
-| 6   | SceneEditor     | `in progress` |                                                                                                                                    |
+| #   | Feature         | Status | Notes                                                                                                                              |
+| --- | --------------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Output          | `done` | Features join the workspace through the Shell's `IFeatureModule`; Output reads the player's log through LivePreview's `IPlayerLog` |
+| 2   | Problems        | `done` |                                                                                                                                    |
+| 3   | Cooking         | `done` |                                                                                                                                    |
+| 4   | CookedInspector | `done` |                                                                                                                                    |
+| 5   | SceneExplorer   | `done` |                                                                                                                                    |
+| 6   | SceneEditor     | `done` |                                                                                                                                    |

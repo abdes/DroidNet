@@ -3,21 +3,21 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls.Menus;
 using DryIoc;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Testing;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 /// <summary>Verifies the scene editor Quick Add menu: an empty node, the canonical primitives, lights and cameras.</summary>
 [TestClass]
@@ -80,8 +80,8 @@ public sealed partial class SceneEditorQuickAddMenuTests
                 new OperationStatusReducer(),
                 Mock.Of<IContentPipelineService>(),
                 this.container,
-                this.Messenger,
-                new World.Workspace.PreviewSettingsService(
+                Mock.Of<IAssetReveal>(),
+                new PreviewSettingsService(
                     Mock.Of<IEngineService>(),
                     Mock.Of<Data.Services.IEditorSettingsManager>(),
                     Mock.Of<IProjectContextService>(),
@@ -95,12 +95,9 @@ public sealed partial class SceneEditorQuickAddMenuTests
 
         public SceneEditorViewModel Editor { get; }
 
-        public StrongReferenceMessenger Messenger { get; } = new();
-
         public void Dispose()
         {
             this.Editor.Dispose();
-            this.Messenger.Reset();
             this.container.Dispose();
             this.Tab.Dispose();
             this.Metadata.Dispose();

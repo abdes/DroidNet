@@ -3,13 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using DryIoc;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// Viewport selection for the scene: applying the panes' picks to the shared selection, outlining

@@ -5,7 +5,7 @@
 using Oxygen.Editor.Shell.Commands;
 using Windows.System;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// The commands the scene editor runs on the window's active scene. Their keys come after the focused part: a list or a

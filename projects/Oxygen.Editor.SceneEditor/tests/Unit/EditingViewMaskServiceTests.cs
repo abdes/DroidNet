@@ -7,12 +7,11 @@ using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Interaction;
-using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 /// <summary>The pending-suppression warning cadence of the editing view mask.</summary>
 [TestClass]

@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Runtime.Engine;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.SceneEditor.Settings;
 
 /// <summary>The ranges the engine accepts for each ground grid setting.</summary>
 internal static class GroundGridRanges

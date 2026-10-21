@@ -4,10 +4,9 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Shell.Commands;
-using Oxygen.Editor.World.SceneEditor;
 using Windows.System;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 [TestClass]
 [TestCategory("Viewport Tools")]
@@ -33,6 +32,15 @@ public sealed class SceneCommandKeysTests
         var ids = SceneEditorCommands.All.Select(static command => command.Id).ToArray();
 
         _ = ids.Should().OnlyHaveUniqueItems();
+    }
+
+    [TestMethod]
+    public void SceneEditorModule_ContributesTheEditorCommandsAndNoPanel()
+    {
+        var module = new SceneEditorModule();
+
+        _ = module.Panels.Should().BeEmpty();
+        _ = module.Commands.Should().Equal(SceneEditorCommands.All);
     }
 
     private static void AssertKey(CommandDescriptor command, VirtualKey key, VirtualKeyModifiers modifiers)

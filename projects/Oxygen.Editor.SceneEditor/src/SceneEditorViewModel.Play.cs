@@ -6,15 +6,15 @@ using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
+using Oxygen.Editor.LivePreview.Play;
+using Oxygen.Editor.SceneEditor.Play;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
-using Oxygen.Editor.World.Components;
-using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Windows;
-using Oxygen.Editor.World.Play;
+using Oxygen.Editor.World.Components;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// The scene toolbar's Play controls. Play needs a camera to view the scene through, so they follow the cameras the

@@ -7,18 +7,15 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.SceneEditor;
-using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 /// <summary>
 /// The viewport tools: tool choice and cycling, the per-user snapping and space preferences, the

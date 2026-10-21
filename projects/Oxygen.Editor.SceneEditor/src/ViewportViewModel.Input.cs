@@ -5,7 +5,7 @@
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>Routes input through the managed capability and the existing operation-result surface.</summary>
 public partial class ViewportViewModel

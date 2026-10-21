@@ -6,7 +6,7 @@ using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.SceneEditor.Settings;
 
 /// <content>Logging for preview preference persistence.</content>
 public sealed partial class PreviewSettingsService

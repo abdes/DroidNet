@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using DryIoc;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Nodes;
@@ -12,14 +12,14 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Shell.Commands;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
-using Oxygen.Editor.World.Workspace;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// The transform gizmo and scene helpers of the scene's selection: which nodes they act on, and

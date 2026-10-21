@@ -7,7 +7,7 @@ using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// Carries the workspace hidden set toward the editing viewports, and tells the user when the

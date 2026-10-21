@@ -5,7 +5,7 @@
 using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.Runtime.Player;
 
-namespace Oxygen.Editor.World.Play;
+namespace Oxygen.Editor.SceneEditor.Play;
 
 /// <summary>Maps a player window mode to the index of its segment: Windowed, then Borderless.</summary>
 public sealed partial class PlayerWindowModeIndexConverter : IValueConverter

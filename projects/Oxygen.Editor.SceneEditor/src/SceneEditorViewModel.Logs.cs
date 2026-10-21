@@ -5,11 +5,9 @@
 using System.Diagnostics;
 using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.LevelEditor;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>Structured scene-editor lifecycle logging.</summary>
 public partial class SceneEditorViewModel

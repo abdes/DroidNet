@@ -2,8 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.TimeMachine;
 using DryIoc;
 using Moq;
@@ -11,16 +11,21 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Testing;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.SceneEditor;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 /// <summary>Verifies how the scene editor saves, closes and follows its document's content.</summary>
 [TestClass]
@@ -60,13 +65,13 @@ internal sealed partial class SceneEditorConflictTests
         using var fixture = await Fixture.CreateAsync(this.TestContext, active: true).ConfigureAwait(false);
         _ = await fixture.Editor.SaveForCloseAsync().ConfigureAwait(false);
 
-        var copy = await fixture.Editor.Document.SaveCopyAsync(fixture.Files.FileOf("Copy"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var copy = await fixture.Editor.Document.SaveCopyAsync(fixture.Scenes.FileOf("Copy"), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = copy.Succeeded.Should().BeTrue(copy.Message);
-        _ = fixture.Files.Read("Copy").Name.Should().Be("Copy");
+        _ = fixture.ReadScene("Copy").Name.Should().Be("Copy");
         _ = fixture.Editor.Document.IsDirty.Should().BeTrue();
         _ = fixture.Editor.Document.IsChangedOnDisk.Should().BeTrue();
-        _ = fixture.Editor.Document.File.Path.Should().Be(fixture.Files.PathOf("Main"));
+        _ = fixture.Editor.Document.File.Path.Should().Be(fixture.Scenes.FileOf("Main").Path);
         _ = (await fixture.Editor.SaveForCloseAsync().ConfigureAwait(false)).Should().BeFalse();
         _ = fixture.Editor.Document.IsChangedOnDisk.Should().BeTrue();
     }
@@ -75,15 +80,14 @@ internal sealed partial class SceneEditorConflictTests
     {
         private readonly Container container = new();
 
-        private Fixture(GatedFileStore store, SceneDocumentFiles files, Document document)
+        private Fixture(TestSceneDocuments scenes, Document document)
         {
-            this.Store = store;
-            this.Files = files;
+            this.Scenes = scenes;
             this.Scene = ((SceneContent)document.Content).Scene;
             this.Tab = new DocumentTab(document, new DocumentEditorDescriptor(document.Kind, static _ => new object()) { IsClosable = false });
         }
 
-        public SceneDocumentFiles Files { get; }
+        public TestSceneDocuments Scenes { get; }
 
         public Scene Scene { get; }
 
@@ -91,11 +95,7 @@ internal sealed partial class SceneEditorConflictTests
 
         public SceneEditorViewModel Editor { get; private set; } = null!;
 
-        public StrongReferenceMessenger Messenger { get; } = new();
-
         public Mock<IScenePreview> Preview { get; } = new();
-
-        public GatedFileStore Store { get; }
 
         public CapturingResults Results { get; } = new();
 
@@ -106,15 +106,16 @@ internal sealed partial class SceneEditorConflictTests
         /// <param name="commitInput">Runs when the editor commits the focused control's input.</param>
         /// <param name="synchronized">Whether the scene is already in the engine.</param>
         /// <returns>The fixture.</returns>
-        public static async Task<Fixture> CreateAsync(TestContext test, bool active, World.Workspace.PreviewSettingsService? previewSettings = null, Action? commitInput = null, bool synchronized = false)
+        public static async Task<Fixture> CreateAsync(TestContext test, bool active, PreviewSettingsService? previewSettings = null, Action? commitInput = null, bool synchronized = false)
         {
-            var files = new SceneDocumentFiles();
+            ArgumentNullException.ThrowIfNull(test);
+            var scenes = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
             var id = SceneId.New();
-            files.Write("Main", SceneDocumentFiles.Data(id, "Main"));
-            var (document, _) = await files.OpenAsync("Main", test.CancellationToken).ConfigureAwait(false);
+            var file = scenes.Write(Data(id, "Main"));
+            var document = await scenes.OpenAsync(file).ConfigureAwait(false);
             document.History.AddChange("Edit", static () => { });
-            files.Write("Main", SceneDocumentFiles.Data(id, "Main", "Outside"));
-            var fixture = new Fixture(files.Store, files, document);
+            scenes.Write(file, Data(id, "Main", "Outside"));
+            var fixture = new Fixture(scenes, document);
             fixture.CreateEditor(active, previewSettings, commitInput, synchronized);
             return fixture;
         }
@@ -122,15 +123,32 @@ internal sealed partial class SceneEditorConflictTests
         public void Dispose()
         {
             this.Editor.Dispose();
-            this.Messenger.Reset();
             this.container.Dispose();
-            this.Files.Dispose();
+            this.Scenes.Dispose();
         }
 
-        private void CreateEditor(bool active, World.Workspace.PreviewSettingsService? previewSettings, Action? commitInput, bool synchronized)
+        /// <summary>Reads what a scene file records.</summary>
+        /// <param name="name">The scene's name, which names its file.</param>
+        /// <returns>The scene the file records.</returns>
+        public SceneData ReadScene(string name)
+            => JsonSerializer.Deserialize(this.Scenes.Project.Context.FileSystem.File.ReadAllBytes(this.Scenes.FileOf(name).Path.FullPath), SceneJsonContext.Default.SceneData)!;
+
+        // A scene file's content, its nodes complete with their default components.
+        private static SceneData Data(SceneId id, string name, params string[] nodes)
+        {
+            var scene = new Scene { Name = name };
+            foreach (var node in nodes)
+            {
+                scene.RootNodes.Add(new SceneNode(scene) { Name = node });
+            }
+
+            return scene.Dehydrate() with { Id = id };
+        }
+
+        private void CreateEditor(bool active, PreviewSettingsService? previewSettings, Action? commitInput, bool synchronized)
         {
             var projects = new ProjectContextService();
-            projects.Activate(this.Files.Context);
+            projects.Activate(this.Scenes.Project.Context);
             this.container.RegisterInstance<IProjectContextService>(projects);
             _ = this.Preview.Setup(value => value.IsReady(this.Tab.DocumentId)).Returns(synchronized);
             var documents = new TestDocumentArea(this.Tab.Document);
@@ -141,7 +159,7 @@ internal sealed partial class SceneEditorConflictTests
 
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync()).Callback(() => commitInput?.Invoke()).Returns(Task.CompletedTask);
-            var previewSettingsService = previewSettings ?? new World.Workspace.PreviewSettingsService(
+            var previewSettingsService = previewSettings ?? new PreviewSettingsService(
                     Mock.Of<IEngineService>(),
                     Mock.Of<Data.Services.IEditorSettingsManager>(),
                     Mock.Of<IProjectContextService>(),
@@ -157,7 +175,7 @@ internal sealed partial class SceneEditorConflictTests
                 new OperationStatusReducer(),
                 Mock.Of<IContentPipelineService>(),
                 this.container,
-                this.Messenger,
+                Mock.Of<IAssetReveal>(),
                 previewSettingsService);
         }
     }

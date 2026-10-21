@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World.Documents;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// Defines the layout configuration for the scene editor viewports.

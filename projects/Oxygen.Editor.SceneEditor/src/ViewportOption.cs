@@ -5,7 +5,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// One choice in a viewport flyout: a camera mode, an orthographic direction or a scene camera.

@@ -3,19 +3,18 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls.Menus;
 using DryIoc;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// The scene document toolbar: Quick Add, which creates nodes in front of the focused pane's
@@ -180,16 +179,12 @@ public partial class SceneEditorViewModel
     {
         var assets = this.GetSelectedAssets();
         this.LogBrowseToAssetRequested(assets.Count);
-        if (assets.Count == 0 || this.ActiveProject is not { } project)
+        if (assets.Count == 0 || this.ActiveProject is null)
         {
             return;
         }
 
-        var request = this.messenger.Send(new ShowAssetRequestMessage(project, assets));
-        if (request.HasReceivedResponse)
-        {
-            _ = await request.Response.ConfigureAwait(true);
-        }
+        _ = await this.assetReveal.RevealAsync(assets).ConfigureAwait(true);
     }
 
     /// <summary>Selects the scene itself, so the Inspector shows its environment.</summary>

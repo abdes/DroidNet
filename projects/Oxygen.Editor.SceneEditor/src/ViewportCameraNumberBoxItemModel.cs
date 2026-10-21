@@ -4,7 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// View-model data for a numeric camera setting edited with a DroidNet NumberBox.

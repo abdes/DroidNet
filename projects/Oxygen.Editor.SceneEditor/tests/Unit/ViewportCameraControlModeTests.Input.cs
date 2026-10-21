@@ -7,7 +7,7 @@ using AwesomeAssertions;
 using Moq;
 using Oxygen.Editor.Runtime.Engine;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 public sealed partial class ViewportCameraControlModeTests
 {

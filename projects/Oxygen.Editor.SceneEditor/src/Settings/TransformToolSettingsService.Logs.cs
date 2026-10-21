@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.SceneEditor.Settings;
 
 /// <summary>Logging helpers for <see cref="TransformToolSettingsService"/>.</summary>
 public sealed partial class TransformToolSettingsService

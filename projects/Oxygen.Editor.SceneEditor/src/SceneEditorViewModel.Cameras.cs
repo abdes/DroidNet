@@ -4,7 +4,6 @@
 
 using System.Numerics;
 using DryIoc;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Properties;
@@ -13,11 +12,12 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// Scene-camera viewing for the scene's viewports: which cameras exist, which one is selected,

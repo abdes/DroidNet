@@ -12,7 +12,7 @@ using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Documents;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 ///     The scene policies of a window's documents, over the Shell's document service: the project remembers the scene

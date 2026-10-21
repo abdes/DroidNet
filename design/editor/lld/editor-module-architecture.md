@@ -294,7 +294,10 @@ with its owner.
 
 Feature UI projects (editors, explorers, inspectors, passive panels) contain
 views, view models and presentation only (decision 3). They plug into the Shell
-through contributions and consume its services (decision 2).
+through contributions and consume its services (decision 2). One reaches the
+engine: the SceneEditor's viewports draw through Runtime's surfaces, views and
+input, which need the `SwapChainPanel` ([live preview](live-preview.md) decision
+5); it never references Interop.
 
 ## 10. Persistence And Round Trip
 
@@ -306,7 +309,8 @@ through their owners, cooked content through ContentPipeline.
 
 ContentPipeline owns import, cook, publication, relocation and inspection;
 LivePreview owns everything that applies authoring state to the embedded engine.
-No other module references the engine.
+No other module references the engine, except the SceneEditor, whose viewports
+use Runtime's surfaces, views and input and never Interop (section 9).
 
 ## 12. Operation Results And Diagnostics
 

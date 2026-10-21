@@ -7,9 +7,8 @@ using System.Numerics;
 using System.Text;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.WorldEditor.SceneEditor;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>The pane's side of the transform gizmo: hover, drag feedback and editing shortcuts.</summary>
 public partial class ViewportViewModel

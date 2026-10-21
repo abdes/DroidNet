@@ -11,12 +11,12 @@ using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Workspace;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Workspace;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests.Settings;
 
 /// <summary>Checks project preference persistence independently of the native rendering loop.</summary>
 [TestClass]

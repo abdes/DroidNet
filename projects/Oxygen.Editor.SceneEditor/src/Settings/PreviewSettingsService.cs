@@ -13,7 +13,7 @@ using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.SceneEditor.Settings;
 
 /// <summary>
 ///     Owns the active project's embedded-engine preferences, the user's ground grid preferences and their user-local

@@ -6,7 +6,7 @@ using DroidNet.Documents;
 using Oxygen.Editor.Scenes.Views;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// The window's scene views: it keeps the live scene editor of each open scene document and forwards the requests other

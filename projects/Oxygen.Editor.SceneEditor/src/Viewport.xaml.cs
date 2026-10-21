@@ -18,20 +18,19 @@ using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
 using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Managed.Core.Diagnostics;
 using Windows.System;
 using Windows.UI.Core;
 using DispatcherQueueTimer = Microsoft.UI.Dispatching.DispatcherQueueTimer;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// A control that displays a 3D viewport with overlay controls.
 /// </summary>
 public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xaml.cs is doing too much instead of the view model
 {
-    private const string LoggerCategoryName = "Oxygen.Editor.LevelEditor.Viewport";
+    private const string LoggerCategoryName = "Oxygen.Editor.SceneEditor.Viewport";
     private const uint MinimumPixelExtent = 2;
     private const double CompactWidth = 600;
     private const double NarrowWidth = 400;

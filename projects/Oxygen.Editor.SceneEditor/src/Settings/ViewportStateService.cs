@@ -8,16 +8,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.SceneEditor.Settings;
 
 /// <summary>
 /// Keeps each scene's viewport layout, focused pane and pane cameras across sessions, so a scene

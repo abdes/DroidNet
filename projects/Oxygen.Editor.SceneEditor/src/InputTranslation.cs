@@ -6,7 +6,7 @@ using Microsoft.UI.Input;
 using Oxygen.Editor.Runtime.Engine;
 using Windows.System;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// Translates WinUI input types to engine platform input types.

@@ -5,7 +5,6 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Config;
 using DroidNet.Documents;
 using DryIoc;
@@ -13,25 +12,24 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Shell.Documents;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// ViewModel for the Scene Editor.
 /// </summary>
 public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDisposable
 {
-    private readonly IMessenger messenger;
+    private readonly IAssetReveal assetReveal;
     private readonly ILogger logger;
     private readonly ILoggerFactory? loggerFactory;
     private readonly IEngineService engineService;
@@ -61,7 +59,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <param name="statusReducer">The diagnostic status reducer.</param>
     /// <param name="contentPipelineService">The explicit content cooking service.</param>
     /// <param name="container">DI container used to create child services for viewports.</param>
-    /// <param name="messenger">The messenger, for the requests to show assets in the Content Browser.</param>
+    /// <param name="assetReveal">What shows assets in the Content Browser.</param>
     /// <param name="previewSettings">The shared project preview preferences.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     /// <param name="engineSettings">The engine startup settings, whose logging verbosity the editor edits; optional.</param>
@@ -75,8 +73,8 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         IStatusReducer statusReducer,
         IContentPipelineService contentPipelineService,
         IContainer container,
-        IMessenger messenger,
-        Workspace.PreviewSettingsService previewSettings,
+        IAssetReveal assetReveal,
+        PreviewSettingsService previewSettings,
         ILoggerFactory? loggerFactory = null,
         ISettingsService<IEngineStartupSettings>? engineSettings = null)
     {
@@ -98,7 +96,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.Document = tab.Document;
         this.scene = (tab.Document.Content as SceneContent)?.Scene;
         this.container = container;
-        this.messenger = messenger ?? throw new ArgumentNullException(nameof(messenger));
+        this.assetReveal = assetReveal ?? throw new ArgumentNullException(nameof(assetReveal));
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger(nameof(SceneEditorViewModel));
         this.InitializeTransformTools();
 
@@ -145,7 +143,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     public ObservableCollection<ViewportViewModel> Viewports { get; }
 
     /// <summary>Gets the shared project preview preferences.</summary>
-    public Workspace.PreviewSettingsService PreviewSettings { get; }
+    public PreviewSettingsService PreviewSettings { get; }
 
     /// <summary>Gets or sets the native engine logging verbosity, an engine startup setting the running engine takes live.</summary>
     public int EngineLoggingVerbosity

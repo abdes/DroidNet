@@ -29,6 +29,7 @@ using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Cooking;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Content;
@@ -39,17 +40,18 @@ using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.SceneEditor;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Testing;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.Cooking;
 using Oxygen.Editor.World.Inspector;
-using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
@@ -290,13 +292,13 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         container.RegisterInstance<IContentPipelineService>(services.Pipeline);
         container.RegisterInstance<IProjectContextService>(services.Projects);
         container.RegisterInstance<IAssetFeed>(this.AssetCatalog.Object);
-        var preferences = new Oxygen.Editor.World.Workspace.PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), services.Projects, publisher.Object, new OperationStatusReducer());
+        var preferences = new PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), services.Projects, publisher.Object, new OperationStatusReducer());
         container.RegisterInstance(preferences);
         var materials = new MaterialEdits(this.materialValidation, publisher.Object);
         var cook = new MaterialCookService(services.Pipeline, services.Projects, NullLogger<MaterialCookService>.Instance);
         DocumentEditorDescriptor[] editors =
         [
-            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, this.messenger, preferences)) { IsClosable = false, IsOnePerArea = true },
+            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.TransitionArea!, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, Mock.Of<IAssetReveal>(), preferences)) { IsClosable = false, IsOnePerArea = true },
             new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Projects)),
         ];
         this.TransitionArea = new DocumentArea(documents, this.OpenDocuments, editors, windowId, static _ => { });
@@ -440,9 +442,9 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     {
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
-        var preferences = new Oxygen.Editor.World.Workspace.PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.Projects, publisher.Object, new OperationStatusReducer());
+        var preferences = new PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.Projects, publisher.Object, new OperationStatusReducer());
         await preferences.RestoreAsync(this.Projects.ActiveProject!).ConfigureAwait(true);
-        return new(this.Tab, this.area, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), Mock.Of<IContentPipelineService>(), container, this.messenger, preferences);
+        return new(this.Tab, this.area, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), Mock.Of<IContentPipelineService>(), container, Mock.Of<IAssetReveal>(), preferences);
     }
 
     /// <summary>Starts the project's preview session over the cook services, as the workspace does.</summary>

@@ -11,7 +11,7 @@ using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Play;
+namespace Oxygen.Editor.SceneEditor.Play;
 
 /// <summary>
 /// The Play transport of one scene's toolbar: Play (Restart while this scene plays) with the player launch settings,

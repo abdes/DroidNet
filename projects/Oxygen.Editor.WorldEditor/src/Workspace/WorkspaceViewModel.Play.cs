@@ -4,7 +4,6 @@
 
 using DryIoc;
 using Oxygen.Editor.LivePreview.Play;
-using Oxygen.Editor.World.Play;
 using Oxygen.Managed.Assets.Diagnostics;
 
 namespace Oxygen.Editor.World.Workspace;
@@ -17,16 +16,6 @@ public partial class WorkspaceViewModel
 {
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "A singleton of the workspace's child container, which disposes it.")]
     private PlaySession? playSession;
-
-    /// <summary>Brings a panel forward.</summary>
-    /// <param name="panel">The panel; <see cref="PlayPanel.None"/> does nothing.</param>
-    internal void Reveal(PlayPanel panel)
-    {
-        if (ScenePlayToolbarViewModel.PanelIdOf(panel) is { } panelId)
-        {
-            _ = this.placement?.ShowPanelAsync(panelId);
-        }
-    }
 
     // Registered before Problems, which shows the problems of the running scene, and before Output, which shows its log.
     private void RegisterPlayServices(IContainer childContainer)

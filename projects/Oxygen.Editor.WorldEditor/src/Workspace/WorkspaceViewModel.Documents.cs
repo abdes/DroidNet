@@ -17,7 +17,6 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
-using Oxygen.Editor.World.SceneEditor;
 
 namespace Oxygen.Editor.World.Workspace;
 
@@ -43,7 +42,6 @@ public partial class WorkspaceViewModel
             Reuse.Singleton);
 
         // Each kind's editor comes from the module that edits it.
-        childContainer.Register<IDocumentEditorProvider, SceneEditorProvider>(Reuse.Singleton);
         childContainer.Register<IDocumentEditorProvider, MaterialEditorProvider>(Reuse.Singleton);
         childContainer.RegisterDelegate(
             resolver => new DocumentArea(

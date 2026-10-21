@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.World.Play;
+namespace Oxygen.Editor.SceneEditor.Play;
 
 /// <summary>What clicking the Play status shows.</summary>
 public enum PlayStatusTarget

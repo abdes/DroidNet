@@ -7,13 +7,11 @@ using AwesomeAssertions;
 using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 /// <summary>
 /// Piloting a scene camera and aligning a camera to the view: runtime requests, menu state, and

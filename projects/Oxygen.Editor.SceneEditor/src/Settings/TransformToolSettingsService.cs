@@ -10,7 +10,7 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Runtime.Engine;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.SceneEditor.Settings;
 
 /// <summary>
 /// Owns the transform gizmo's snapping and space preferences: per user, kept across sessions and

@@ -6,12 +6,11 @@ using AwesomeAssertions;
 using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 /// <summary>
 /// Viewport selection: how picks combine with the selection, which picked nodes a click or a

@@ -23,18 +23,14 @@ using Oxygen.Editor.Routing;
 using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Documents;
-using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
-using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Layout;
 using Oxygen.Editor.Shell.Windows;
-using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Geometry;
-using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -62,13 +58,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     private readonly IOperationResultPublisher operationResults;
     private readonly IStatusReducer statusReducer;
     private readonly ILogger logger;
-    private SceneDocumentLifetime? sceneLifetime;
     private IDocumentService? documentService;
     private IDocumentArea? documentArea;
     private IPlacementService? placement;
     private IAssetCatalog? assetCatalog;
-    private PreviewSettingsService? previewSettings;
-    private Oxygen.Editor.World.Workspace.EditingViewMaskService? editingViewMask;
     private PreviewSession? previewSession;
     private IMessenger? messenger;
     private IProject? initialSceneProject;
@@ -187,14 +180,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     /// <inheritdoc />
     protected override void OnSetupChildContainer(IContainer childContainer)
     {
-        this.previewSettings = childContainer.Resolve<PreviewSettingsService>();
-
-        // Per-window on purpose: it observes this window's workspace hidden set and unsubscribes when
-        // the window closes, so a second window cannot inherit a stale "pending suppression" state.
-        this.editingViewMask = new Oxygen.Editor.World.Workspace.EditingViewMaskService(
-            childContainer.Resolve<SceneNodeInteraction>(),
-            childContainer.Resolve<IOperationResultPublisher>(),
-            childContainer.Resolve<IStatusReducer>()).Start();
         childContainer.Register<IMessenger, StrongReferenceMessenger>(Reuse.Singleton);
 
         // Resolve messenger instance from the child container so the view model can use it.
@@ -206,9 +191,15 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         // The panels and commands of the window, its documents, their kinds and editors, its document area and its
         // document service, and the placement of documents and panels.
         RegisterContributions(childContainer, this.modules);
+
+        // The features register before anything is resolved, since the window's services take what they contribute,
+        // such as the document editors; their services use the window's, which are all registered when they resolve.
+        foreach (var module in this.modules)
+        {
+            module.RegisterWindowServices(childContainer);
+        }
+
         RegisterDocuments(childContainer);
-        childContainer.Register<SceneEditorViews>(Reuse.Singleton);
-        childContainer.RegisterMapping<ISceneViews, SceneEditorViews>();
         childContainer.Register<ICommandService, CommandService>(Reuse.Singleton);
         childContainer.Register<IPlacementService, DockingPlacementService>(Reuse.Singleton);
 
@@ -245,9 +236,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         this.placement = childContainer.Resolve<IPlacementService>();
         _ = childContainer.Resolve<DocumentAreaViewModel>();
         _ = childContainer.Resolve<WindowCloseCoordinator>();
-        childContainer.Register<SceneDocumentLifetime>(Reuse.Singleton);
-        childContainer.RegisterMapping<ISceneAvailability, SceneDocumentLifetime>();
-        this.sceneLifetime = childContainer.Resolve<SceneDocumentLifetime>();
 
         childContainer.Register<ContentBrowserViewModel>(Reuse.Transient);
         childContainer.Register<ContentBrowserView>(Reuse.Transient);
@@ -260,17 +248,11 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 
         childContainer.Register<SceneNodeEditorViewModel>(Reuse.Transient);
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
-        childContainer.Register<SceneEditorView>(Reuse.Transient);
         childContainer.Register<MaterialEditorView>(Reuse.Transient);
         RegisterInspectorEditors(childContainer);
         this.RegisterAssetReveal(childContainer);
 
-        // The features come last: their services use the window's, and their activation any feature's.
-        foreach (var module in this.modules)
-        {
-            module.RegisterWindowServices(childContainer);
-        }
-
+        // The features activate last: their activation may use any feature's services.
         foreach (var module in this.modules)
         {
             module.ActivateWindowServices(childContainer);
@@ -289,22 +271,13 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     {
         if (disposing)
         {
-            if (this.projectContextService.ActiveProject is { } project)
-            {
-                this.previewSettings?.Deactivate(project);
-            }
-
             this.UnobservePreviewSession();
 
-            this.editingViewMask?.Dispose();
-            this.editingViewMask = null;
             this.ShutdownPlayServices();
 
             _ = this.previewSession?.DisposeAsync();
             this.previewSession = null;
 
-            this.sceneLifetime?.Dispose();
-            this.sceneLifetime = null;
             this.documentService = null;
             this.documentArea = null;
             this.placement = null;
@@ -352,7 +325,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         => childContainer.RegisterDelegate(
             _ => new ContributionRegistry(
                 [.. modules.SelectMany(static module => module.Panels)],
-                [.. SceneEditorCommands.All, .. modules.SelectMany(static module => module.Commands)]),
+                [.. modules.SelectMany(static module => module.Commands)]),
             Reuse.Singleton);
 
     private static void RegisterInspectorEditors(IContainer childContainer)

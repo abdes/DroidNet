@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging;
 
 using Oxygen.Editor.Runtime.Engine;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 ///     Logging helpers for <see cref="Viewport"/>.

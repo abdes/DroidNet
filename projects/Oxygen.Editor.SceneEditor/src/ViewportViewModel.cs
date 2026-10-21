@@ -13,11 +13,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.WorldEditor.SceneEditor;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// ViewModel for one viewport pane: its editor camera, the scene camera it looks through, and the
@@ -85,7 +84,7 @@ public partial class ViewportViewModel : ObservableObject, IDisposable
         ILoggerFactory? loggerFactory = null)
     {
         this.LoggerFactory = loggerFactory;
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Oxygen.Editor.LevelEditor.ViewportViewModel");
+        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger("Oxygen.Editor.SceneEditor.ViewportViewModel");
 
         this.DocumentId = documentId;
         this.EngineService = engineService;

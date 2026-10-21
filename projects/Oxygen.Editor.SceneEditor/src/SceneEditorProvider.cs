@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Config;
 using DryIoc;
 using Microsoft.Extensions.Logging;
@@ -10,13 +9,14 @@ using Microsoft.UI;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
-using Oxygen.Editor.World.Workspace;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// The scene editor, contributed for scene documents. A window shows one scene: opening another one replaces it, and the
@@ -40,7 +40,7 @@ public sealed class SceneEditorProvider(SceneDocumentKind kind, IContainer conta
             container.Resolve<IStatusReducer>(),
             container.Resolve<IContentPipelineService>(),
             container,
-            container.Resolve<IMessenger>(),
+            container.Resolve<IAssetReveal>(),
             container.Resolve<PreviewSettingsService>(),
             container.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault),
             engineSettings: container.Resolve<ISettingsService<IEngineStartupSettings>>(IfUnresolved.ReturnDefault));

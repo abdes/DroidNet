@@ -5,7 +5,7 @@
 using System.Globalization;
 using Microsoft.UI.Xaml.Data;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// Binds an integer view-model value to a NumberBox, whose value is a double. Converts the integer to a double, and

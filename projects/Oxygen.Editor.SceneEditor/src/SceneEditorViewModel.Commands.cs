@@ -3,10 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using DryIoc;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Shell.Commands;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <content>
 /// The scene editor's commands: tools, framing in the focused viewport, duplication and play. The command service asks

@@ -7,7 +7,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// Selecting in the pane: picking the nodes under a click or marquee, and framing the selection or

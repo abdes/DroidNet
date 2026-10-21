@@ -1,8 +1,8 @@
 <UserControl
-    x:Class="Oxygen.Editor.LevelEditor.Viewport"
+    x:Class="Oxygen.Editor.SceneEditor.Viewport"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:controls="using:Oxygen.Editor.LevelEditor"
+    xmlns:controls="using:Oxygen.Editor.SceneEditor"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:dnc="using:DroidNet.Controls"

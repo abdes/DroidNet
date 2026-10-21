@@ -7,7 +7,7 @@ using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.LivePreview.Scenes;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 /// <summary>Checks that a scene editor builds its panes however it learns that its scene is in the engine.</summary>
 internal sealed partial class SceneEditorConflictTests

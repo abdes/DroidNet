@@ -4,10 +4,8 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.WorldEditor.SceneEditor;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]

@@ -7,12 +7,11 @@ using AwesomeAssertions;
 using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.SceneEditor;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 /// <summary>
 /// A pane keeps its camera state across view recreation (dock move, document switch, maximize)

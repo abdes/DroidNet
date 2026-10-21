@@ -7,7 +7,7 @@ using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Runtime.Engine;
 using Windows.UI;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.SceneEditor.Settings;
 
 /// <summary>
 ///     The user's ground grid settings as the Settings flyout edits them. Every edit applies to all viewport panes and

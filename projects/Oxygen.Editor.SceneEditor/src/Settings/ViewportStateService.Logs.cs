@@ -5,7 +5,7 @@
 using Microsoft.Extensions.Logging;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Workspace;
+namespace Oxygen.Editor.SceneEditor.Settings;
 
 /// <summary>Logging helpers for <see cref="ViewportStateService"/>.</summary>
 public sealed partial class ViewportStateService

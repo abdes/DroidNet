@@ -7,9 +7,9 @@ using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Workspace;
+using Oxygen.Editor.SceneEditor.Settings;
 
-namespace Oxygen.Editor.LevelEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// The scene's viewport tools: which gizmo the selection shows (Select Q, Move W, Rotate E, Scale R),

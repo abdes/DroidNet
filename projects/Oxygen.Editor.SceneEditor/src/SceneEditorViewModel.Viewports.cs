@@ -7,14 +7,11 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Documents;
 using DryIoc;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.LevelEditor;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Documents;
-using Oxygen.Editor.World.Workspace;
-using Oxygen.Editor.WorldEditor.SceneEditor;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.SceneEditor;
+namespace Oxygen.Editor.SceneEditor;
 
 /// <summary>
 /// The scene's viewport panes: layout, focus, maximize, the camera preview inset and the state kept

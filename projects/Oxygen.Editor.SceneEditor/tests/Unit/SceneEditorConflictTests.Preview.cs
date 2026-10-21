@@ -9,11 +9,11 @@ using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.World.Workspace;
+using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Documents;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests;
 
 /// <summary>Checks preview preference persistence at the actual document close boundary.</summary>
 internal sealed partial class SceneEditorConflictTests

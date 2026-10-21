@@ -12,14 +12,14 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.SceneEditor.Play;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Play;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Play;
+namespace Oxygen.Editor.SceneEditor.Unit.Tests.Play;
 
 /// <summary>
 /// Checks that Play saves the documents the scene uses before it plays: it asks first, and it does not play when they

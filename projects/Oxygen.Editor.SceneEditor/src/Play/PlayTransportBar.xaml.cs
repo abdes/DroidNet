@@ -6,7 +6,7 @@ using System.ComponentModel;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.World.Play;
+namespace Oxygen.Editor.SceneEditor.Play;
 
 /// <summary>
 /// The scene toolbar's Play transport: Play or Restart with the player launch settings, Stop or Cancel, and the
