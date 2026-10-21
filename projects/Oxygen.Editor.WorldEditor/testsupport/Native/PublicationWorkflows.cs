@@ -252,5 +252,5 @@ internal static class PublicationWorkflows
         };
     }
 
-    internal sealed record PublicationScenario(NativeSceneFixture SceneAuthoringFixture, CatalogWorkloadServices Services, AssetCatalog Catalog, IAssetFeed Feed, MaterialEdits Materials, Document Material, string Key);
+    internal sealed record PublicationScenario(NativeSceneFixture Fixture, CatalogWorkloadServices Services, AssetCatalog Catalog, IAssetFeed Feed, MaterialEdits Materials, Document Material, string Key);
 }

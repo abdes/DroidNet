@@ -4,22 +4,22 @@
 
 using System.Numerics;
 using AwesomeAssertions;
-using CommunityToolkit.WinUI;
-using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Authoring;
+using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.LivePreview.Assets;
+using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector.Geometry;
+using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.WorldEditor.TestSupport.CatalogWorkload;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.ModelImportScenario;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
@@ -31,7 +31,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Imported and library-only assets retain native identity through picking, history and saved scene reload.</summary>
+    /// <summary>Imported and library-only assets retain native identity through their use in a scene, history and saved scene reload.</summary>
     /// <param name="format">The qualified model source format.</param>
     /// <param name="libraryOnly">Whether the consumer has only the cooked library, without original sources.</param>
     /// <returns>The native typed-use integration check.</returns>
@@ -40,7 +40,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
     [DataRow("fbx", false)]
     [DataRow("gltf", true)]
     [DataRow("fbx", true)]
-    public Task ImportedAssetsReachNativeInspectorHistoryAndReopen(string format, bool libraryOnly) => EnqueueAsync(async () =>
+    public Task ImportedAssetsReachNativeThroughHistoryAndReopen(string format, bool libraryOnly) => EnqueueAsync(async () =>
     {
         var fixture = new NativeSceneFixture(automatic: false, scene => AddGeometryNode(scene, "Cube"));
         await using var lifetime = fixture.ConfigureAwait(true);
@@ -77,39 +77,11 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         AssertImportedAssetInformation(geometryRow!, libraryOnly);
         AssertImportedAssetInformation(materialRow!, libraryOnly);
         using var demand = fixture.CreateImportedAssetDemand(services, provider);
-        using var host = fixture.CreateInspectorHost([fixture.Source.RootNodes[0]], provider, services.Pipeline);
-        var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
-        await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
-        while (model.IsMaterialSlotLoading)
-        {
-            await Task.Delay(10, timeout.Token).ConfigureAwait(true);
-        }
-
-        _ = model.CanEditMaterialSlot.Should().BeTrue("the current native slot must be editable: " + model.MaterialSlotNotice);
-        var view = new GeometryView
-        {
-            ViewModel = model,
-        };
-        var scroller = new ScrollViewer
-        {
-            Content = view,
-            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
-            Width = 480,
-            Height = 560,
-        };
-        await LoadTestContentAsync(scroller).ConfigureAwait(true);
-        try
-        {
-            var cookCount = services.Runs.Runs.Count;
-            await CheckImportedAssetControlsAsync(fixture, scroller, geometryRow!, materialRow!, timeout.Token).ConfigureAwait(true);
-            _ = services.Runs.Runs.Should().HaveCount(cookCount, "using verified mounted outputs must not start another cook");
-            var sceneCook = await services.Pipeline.CookCurrentSceneAsync(AssetPath.Create("Content", $"Scenes/{fixture.Source.Name}.oscene"), timeout.Token).ConfigureAwait(true);
-            _ = sceneCook.IsPublished.Should().BeTrue(DescribeWorkloadCook(sceneCook));
-        }
-        finally
-        {
-            await UnloadTestContentAsync(scroller).ConfigureAwait(true);
-        }
+        var cookCount = services.Runs.Runs.Count;
+        await CheckImportedAssetEditsAsync(fixture, services.Pipeline, geometryRow!, materialRow!, timeout.Token).ConfigureAwait(true);
+        _ = services.Runs.Runs.Should().HaveCount(cookCount, "using verified mounted outputs must not start another cook");
+        var sceneCook = await services.Pipeline.CookCurrentSceneAsync(AssetPath.Create("Content", $"Scenes/{fixture.Source.Name}.oscene"), timeout.Token).ConfigureAwait(true);
+        _ = sceneCook.IsPublished.Should().BeTrue(DescribeWorkloadCook(sceneCook));
     });
 
     private static void AssertImportedAssetInformation(AssetEntry row, bool libraryOnly)
@@ -132,31 +104,19 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         }
     }
 
-    private static async Task CheckImportedAssetControlsAsync(NativeSceneFixture fixture, ScrollViewer scroller, AssetEntry geometry, AssetEntry material, CancellationToken cancellationToken)
+    private static async Task CheckImportedAssetEditsAsync(NativeSceneFixture fixture, IGeometryMaterialSlotProvider inventories, AssetEntry geometry, AssetEntry material, CancellationToken cancellationToken)
     {
-        var view = (GeometryView)scroller.Content;
-        var model = view.ViewModel ?? throw new InvalidOperationException("The geometry inspector must be bound.");
         var node = fixture.Source.RootNodes[0];
         var original = await AssertGeometryAsync(fixture, node.Id, "Cube", cancellationToken).ConfigureAwait(true);
-        var geometryButton = (SplitButton)await FindInspectorControlAsync(scroller, () => view.FindDescendant<SplitButton>(button => string.Equals(button.Name, "AssetSplitButton", StringComparison.Ordinal)), "Geometry", cancellationToken).ConfigureAwait(true);
-        await DismissImportedAssetPickerAsync(geometryButton, cancellationToken).ConfigureAwait(true);
-        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
-        await PickAssetAsync(geometryButton, geometry.DisplayName, cancellationToken).ConfigureAwait(true);
+        _ = (await fixture.Authoring.ExecuteAsync(new SetGeometry([node.Id], geometry.Identity)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         var selected = await WaitForNodeAsync(fixture, node.Id, static value => value.IndexCount == 3, cancellationToken).ConfigureAwait(true);
         _ = selected.GeometryKey.Should().Be(ImportedNativeKey(geometry));
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
-        await model.RefreshMaterialSlotsAsync().ConfigureAwait(true);
-        while (model.IsMaterialSlotLoading)
-        {
-            await Task.Delay(10, cancellationToken).ConfigureAwait(true);
-        }
-
-        _ = model.CanEditMaterialSlot.Should().BeTrue(model.MaterialSlotNotice);
-        var materialButton = (SplitButton)await FindInspectorControlAsync(scroller, () => view.FindDescendant<SplitButton>(button => string.Equals(button.Name, "MaterialSplitButton", StringComparison.Ordinal)), "Material", cancellationToken).ConfigureAwait(true);
-        await DismissImportedAssetPickerAsync(materialButton, cancellationToken).ConfigureAwait(true);
-        _ = fixture.Document.History.UndoStack.Should().ContainSingle();
-        await PickAssetAsync(materialButton, material.DisplayName, cancellationToken).ConfigureAwait(true);
-        _ = fixture.Document.History.UndoStack.Should().HaveCount(2, "the enabled picker must apply an authored material edit");
+        var slot = await ReadSingleSlotAsync(inventories, fixture.Projects.ActiveProject!, geometry.Identity, cancellationToken).ConfigureAwait(true);
+        var built = await MaterialSlotEdits.SetAsync(inventories, fixture.Projects.ActiveProject!, [node.Id], slot, material.Identity, cancellationToken).ConfigureAwait(true);
+        _ = built.Error.Should().BeNull("the current native slot must be editable");
+        _ = (await fixture.Authoring.ExecuteAsync(built.Edit!).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = fixture.Document.History.UndoStack.Should().HaveCount(2);
         _ = ReadMaterialAsset(node).Should().Be(material.Identity);
         var assigned = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, cancellationToken).ConfigureAwait(true);
         _ = assigned.MaterialKeys.Should().ContainSingle().Which.Should().Be(ImportedNativeKey(material));
@@ -177,31 +137,19 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         _ = ReadMaterialAsset(fixture.Source.RootNodes[0]).Should().Be(material.Identity);
     }
 
+    // The geometry's one material slot, as its current inventory names it.
+    private static async Task<MaterialSlotTarget> ReadSingleSlotAsync(IGeometryMaterialSlotProvider inventories, ProjectContext project, AssetPath geometry, CancellationToken cancellationToken)
+    {
+        var inventory = await inventories.ReadAsync(project, geometry, cancellationToken).ConfigureAwait(true);
+        _ = inventory.Should().NotBeNull("the imported geometry must have a current slot inventory");
+        var slot = inventory!.Slots.Should().ContainSingle().Which;
+        return new(geometry, slot.SlotId, inventory.LayoutRevision);
+    }
+
     private static string ImportedNativeKey(AssetEntry asset)
     {
         var bytes = new byte[16];
         asset.CookedMetadata!.AssetKey.WriteBytes(bytes);
         return new Guid(bytes, bigEndian: true).ToString();
-    }
-
-    private static async Task DismissImportedAssetPickerAsync(SplitButton button, CancellationToken cancellationToken)
-    {
-        var flyout = (Flyout)button.Flyout;
-        flyout.AreOpenCloseAnimationsEnabled = false;
-        var closed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        void OnClosed(object? sender, object args) => closed.TrySetResult();
-        flyout.Closed += OnClosed;
-        try
-        {
-            flyout.ShowAt(button);
-            await WaitForRenderAsync().WaitAsync(cancellationToken).ConfigureAwait(true);
-            flyout.Hide();
-            await closed.Task.WaitAsync(cancellationToken).ConfigureAwait(true);
-        }
-        finally
-        {
-            flyout.Closed -= OnClosed;
-            flyout.Hide();
-        }
     }
 }

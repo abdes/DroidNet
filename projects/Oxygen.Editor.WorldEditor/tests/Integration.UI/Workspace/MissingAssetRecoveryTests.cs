@@ -3,11 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.WinUI;
-using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -32,19 +29,11 @@ public sealed partial class MissingAssetRecoveryTests : DroidNet.Tests.VisualUse
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         var node = fixture.Source.RootNodes.Single();
-        using var host = fixture.CreateInspectorHost([node]);
-        var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
-        var view = new GeometryView
-        {
-            ViewModel = model,
-        };
-        await LoadTestContentAsync(new ScrollViewer { Content = view }).ConfigureAwait(true);
         var missing = AssetPath.Parse("/Content/Geometry/DoesNotExist.ogeo");
         _ = (await fixture.Authoring.ExecuteAsync(new SetGeometry([node.Id], missing)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         await AssertMissingGeometryFailureAsync(fixture, node.Id, timeout.Token).ConfigureAwait(true);
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
-        _ = model.SelectedGeometry.Should().Be(missing);
-        _ = view.FindDescendant<SplitButton>(button => string.Equals(button.Name, "AssetSplitButton", StringComparison.Ordinal))!.Content.Should().Be("DoesNotExist.ogeo");
+        _ = node.Components.OfType<GeometryComponent>().Single().Geometry.Should().Be(missing, "the missing reference stays authored");
         _ = (await fixture.ReadNodeAsync(node.Id, timeout.Token).ConfigureAwait(true)).GeometryName.Should().Be("Cube", "a failed replacement retains the last resolved geometry");
         await fixture.Document.History.UndoAsync(timeout.Token).ConfigureAwait(true);
         _ = await AssertGeometryAsync(fixture, node.Id, "Cube", timeout.Token).ConfigureAwait(true);

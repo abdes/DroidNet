@@ -13,7 +13,7 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
+using static Oxygen.Editor.WorldEditor.TestSupport.NativeFieldCases;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneAssertions;
 
 namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.SceneExplorer;

@@ -32,7 +32,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
     public Task RenamingPublishedSceneKeepsPreviewAndNextSceneUsable() => EnqueueAsync(() =>
         CheckWorkspacePublicationAsync(this.TestContext, scope: null, async (scenario, token) =>
         {
-            var fixture = scenario.SceneAuthoringFixture;
+            var fixture = scenario.Fixture;
             _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
             var oldName = fixture.Source.Name;
             var oldUri = AssetPath.Create("Content", $"Scenes/{oldName}.oscene");
@@ -102,7 +102,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
 
     private static async Task CheckQueuedPublicationMutationAsync(PublicationScenario scenario, string action, CancellationToken cancellationToken)
     {
-        var fixture = scenario.SceneAuthoringFixture;
+        var fixture = scenario.Fixture;
         var nodes = fixture.Source.RootNodes.ToArray();
         var prior = scenario.Services.Runs.Runs.Select(static run => run.OperationId).ToHashSet();
         var releaseWriter = QueueCookOnChange(scenario.Services, cancellationToken);
@@ -150,24 +150,24 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
     {
         CookTargetKind.Asset => scenario.Services.Pipeline.CookAssetAsync(scenario.Material.File.Asset, cancellationToken),
         CookTargetKind.Folder => scenario.Services.Pipeline.CookFolderAsync(AssetPath.Parse("/Content/Materials"), cancellationToken),
-        CookTargetKind.CurrentScene => scenario.Services.Pipeline.CookCurrentSceneAsync(AssetPath.Create("Content", $"Scenes/{scenario.SceneAuthoringFixture.Source.Name}.oscene"), cancellationToken),
+        CookTargetKind.CurrentScene => scenario.Services.Pipeline.CookCurrentSceneAsync(AssetPath.Create("Content", $"Scenes/{scenario.Fixture.Source.Name}.oscene"), cancellationToken),
         _ => scenario.Services.Pipeline.CookProjectAsync(cancellationToken),
     };
 
     private static async Task CheckUnchangedWorkspaceCookAsync(PublicationScenario scenario, CookTargetKind scope, CancellationToken cancellationToken)
     {
-        _ = (await scenario.SceneAuthoringFixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await scenario.Fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = await CookPublicationScopeAsync(scenario, scope, cancellationToken).ConfigureAwait(true);
-        var content = scenario.SceneAuthoringFixture.Runtime.ContentStatus;
+        var content = scenario.Fixture.Runtime.ContentStatus;
         var fileSystem = NativeSceneFixture.FileSystem;
-        var files = ReadPublishedHashes(fileSystem, scenario.SceneAuthoringFixture.ProjectRoot).Keys.ToDictionary(static path => path, fileSystem.File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase);
+        var files = ReadPublishedHashes(fileSystem, scenario.Fixture.ProjectRoot).Keys.ToDictionary(static path => path, fileSystem.File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase);
         var result = await CookPublicationScopeAsync(scenario, scope, cancellationToken).ConfigureAwait(true);
         _ = result.IsUpToDate.Should().BeTrue();
         _ = result.CookedAssets.Should().BeEmpty();
         _ = result.ReusedAssets.Should().NotBeEmpty();
-        _ = scenario.SceneAuthoringFixture.Runtime.ContentStatus.Should().Be(content);
-        _ = ReadPublishedHashes(fileSystem, scenario.SceneAuthoringFixture.ProjectRoot).Keys.ToDictionary(static path => path, fileSystem.File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase).Should().BeEquivalentTo(files);
-        var state = await scenario.SceneAuthoringFixture.ReadNodeAsync(scenario.SceneAuthoringFixture.Source.RootNodes[0].Id, cancellationToken).ConfigureAwait(true);
+        _ = scenario.Fixture.Runtime.ContentStatus.Should().Be(content);
+        _ = ReadPublishedHashes(fileSystem, scenario.Fixture.ProjectRoot).Keys.ToDictionary(static path => path, fileSystem.File.GetLastWriteTimeUtc, StringComparer.OrdinalIgnoreCase).Should().BeEquivalentTo(files);
+        var state = await scenario.Fixture.ReadNodeAsync(scenario.Fixture.Source.RootNodes[0].Id, cancellationToken).ConfigureAwait(true);
         _ = state.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(1, 0, 0, 1));
     }
 
@@ -183,7 +183,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
 
     private static async Task CheckPublicationAfterSceneSwitchAsync(PublicationScenario scenario, CancellationToken cancellationToken)
     {
-        var fixture = scenario.SceneAuthoringFixture;
+        var fixture = scenario.Fixture;
         var oldNodes = fixture.Source.RootNodes.Select(static node => node.Id).ToArray();
         var prior = scenario.Services.Runs.Runs.Select(static run => run.OperationId).ToHashSet();
         var releaseWriter = QueueCookOnChange(scenario.Services, cancellationToken);
@@ -216,17 +216,17 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         var material = scenario.Material;
         var fileSystem = NativeSceneFixture.FileSystem;
         var original = await fileSystem.File.ReadAllBytesAsync(material.File.Path.FullPath, cancellationToken).ConfigureAwait(true);
-        var content = scenario.SceneAuthoringFixture.Runtime.ContentStatus;
+        var content = scenario.Fixture.Runtime.ContentStatus;
         // Every cook reads the saved file, so a file that is not JSON fails the cook.
         await fileSystem.File.WriteAllTextAsync(material.File.Path.FullPath, "{", cancellationToken).ConfigureAwait(true);
         var failed = await scenario.Services.Pipeline.CookAssetAsync(material.File.Asset, cancellationToken).ConfigureAwait(true);
         _ = failed.Status.Should().Be(OperationStatus.Failed);
         _ = failed.IsPublished.Should().BeFalse();
         _ = failed.Diagnostics.Should().Contain(issue => issue.Severity == DiagnosticSeverity.Error);
-        _ = scenario.SceneAuthoringFixture.Runtime.ContentStatus.Should().Be(content);
-        foreach (var node in scenario.SceneAuthoringFixture.Source.RootNodes)
+        _ = scenario.Fixture.Runtime.ContentStatus.Should().Be(content);
+        foreach (var node in scenario.Fixture.Source.RootNodes)
         {
-            var retained = await scenario.SceneAuthoringFixture.ReadNodeAsync(node.Id, cancellationToken).ConfigureAwait(true);
+            var retained = await scenario.Fixture.ReadNodeAsync(node.Id, cancellationToken).ConfigureAwait(true);
             _ = retained.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(1, 0, 0, 1));
         }
 
@@ -235,9 +235,9 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         var recovered = await scenario.Services.Pipeline.CookAssetAsync(material.File.Asset, cancellationToken).ConfigureAwait(true);
         _ = recovered.IsPublished.Should().BeTrue();
         _ = recovered.IsMounted.Should().BeTrue();
-        foreach (var node in scenario.SceneAuthoringFixture.Source.RootNodes)
+        foreach (var node in scenario.Fixture.Source.RootNodes)
         {
-            var updated = await scenario.SceneAuthoringFixture.ReadNodeAsync(node.Id, cancellationToken).ConfigureAwait(true);
+            var updated = await scenario.Fixture.ReadNodeAsync(node.Id, cancellationToken).ConfigureAwait(true);
             _ = updated.MaterialBaseColors.Should().ContainSingle().Which.Should().Be(new Vector4(0, 1, 0, 1));
         }
     }

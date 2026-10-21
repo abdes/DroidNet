@@ -6,11 +6,10 @@ using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorFieldCases;
+using static Oxygen.Editor.WorldEditor.TestSupport.NativeFieldCases;
 
 namespace Oxygen.Editor.WorldEditor.TestSupport;
 
@@ -23,11 +22,6 @@ internal static class NativeSceneAssertions
         {
             _ = field.ReadSource(fixture.Source.Environment).Should().Be(expected[field.Field], "source field {0}", field.Field);
             _ = field.ReadNative(native).Should().Be(expected[field.Field], "native field {0}", field.Field);
-        }
-
-        foreach (var property in typeof(EnvironmentViewModel).GetProperties().Where(property => property.PropertyType == typeof(InspectorFieldDiagnostic)))
-        {
-            _ = ((InspectorFieldDiagnostic)property.GetValue(fixture.Model)!).Message.Should().BeEmpty("valid field workflow must have no {0} error", property.Name);
         }
     }
 

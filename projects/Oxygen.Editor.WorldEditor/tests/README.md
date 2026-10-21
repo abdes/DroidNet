@@ -40,9 +40,13 @@ an explicit request to include every program beneath it.
 
 ## Ownership
 
-Folders and namespaces follow Documents, Inspector, SceneExplorer, SceneEditor,
+Folders and namespaces follow Authoring, Documents, SceneExplorer, SceneEditor,
 Services, Workspace, Cooking and Inspection. Classes identify the behavior being
 tested; unrelated features do not share a partial test class.
+
+Native tests check what reaches the engine. They edit through the scene's
+authoring, its history and its document, never through a panel's view model or
+controls. A panel's own behavior is tested by its module.
 
 Content Browser filtering, navigation, asset presentation and import-dialog tests
 live under `Oxygen.Editor.ContentBrowser/tests`. Its controls use the separate
@@ -56,8 +60,8 @@ scene or replacing an active viewport during document navigation.
 ## Fixtures and runtime cost
 
 Keep a one-use fixture beside its suite. `../testsupport` contains only helpers
-with real consumers across classes or programs: authoring state, inspector
-control operations and native scene/content lifetimes. Reuse the shared DroidNet
+with real consumers across classes or programs: the authored fields compared
+with the engine's, and native scene/content lifetimes. Reuse the shared DroidNet
 UI host and synchronization helpers. Each scenario owns and disposes its state;
 fixtures do not share mutable engine instances across independent test cases.
 

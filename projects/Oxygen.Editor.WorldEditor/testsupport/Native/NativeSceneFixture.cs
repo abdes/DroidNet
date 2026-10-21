@@ -13,7 +13,6 @@ using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
-using DroidNet.Mvvm.Converters;
 using DroidNet.Storage.Native;
 using DroidNet.Tests;
 using DryIoc;
@@ -24,14 +23,12 @@ using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Cooking;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.Input.Testing;
 using Oxygen.Editor.LivePreview.Content;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Session;
@@ -45,13 +42,11 @@ using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Layout;
-using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
@@ -79,19 +74,16 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private readonly Project loadedProject;
     private readonly ContentCookCoordinator materialCookCoordinator;
     private readonly Oxygen.Testing.NativeContentPipelineFixture materialPipeline;
-    private readonly ActiveSlotProvider materialSlotProvider;
     private readonly Dictionary<FileSystemPath, (ContentCookCoordinator Coordinator, Oxygen.Testing.NativeContentPipelineFixture Pipeline)> foreignMaterialPipelines = [];
     private readonly TestDocumentArea area = new();
     private readonly MaterialValidation materialValidation = new();
     private readonly MaterialDocumentKind materialKind;
     private readonly StrongReferenceMessenger messenger = new();
-    private readonly SceneSelectionService selections = new();
     private readonly HostingContext hosting;
     private readonly BehaviorSubject<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>> feedAssets = new([]);
     private readonly SceneDocumentKind sceneKind;
     private IScenePreview? preview;
     private RuntimeSceneTarget? target;
-    private IGeometryMaterialSlotProvider activeMaterialSlotProvider;
     private PreviewSession? contentSession;
 
     /// <summary>Initializes a new instance of the <see cref="NativeSceneFixture"/> class.</summary>
@@ -137,8 +129,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         this.Projects.Activate(project);
         this.materialCookCoordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
         this.materialPipeline = new(this.Projects, this.materialCookCoordinator);
-        this.activeMaterialSlotProvider = this.materialPipeline.Pipeline;
-        this.materialSlotProvider = new ActiveSlotProvider(this);
         var mode = automatic ? ExposureMode.Auto : ExposureMode.Manual;
         this.Source = Scene.CreateAndHydrate(new SceneData { Id = SceneId.New(), Name = "Environment", Environment = new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = mode } }, });
         seed?.Invoke(this.Source);
@@ -152,8 +142,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         this.UnsavedDocuments = new UnsavedDocuments(this.OpenDocuments);
         this.previewResults = results;
         this.OpenScene(this.WriteScene(this.Source, layout?.Invoke(this.Source)));
-        this.Model = new EnvironmentViewModel(() => this.Authoring);
-        this.Model.SetScene(this.Source);
     }
 
     /// <summary>Gets the file system that holds the project: the disk, which the native cook reads and writes.</summary>
@@ -184,8 +172,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     /// <summary>Gets the unsaved documents of <see cref="OpenDocuments"/>, as the editor's session reports them.</summary>
     public UnsavedDocuments UnsavedDocuments { get; }
 
-    public EnvironmentViewModel Model { get; }
-
     public Mock<Oxygen.Editor.Assets.IAssetFeed> AssetCatalog { get; } = new();
 
     public ConcurrentQueue<OperationResult> Results { get; } = new();
@@ -211,7 +197,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     /// <returns>The task that completes once the saved scene is shown.</returns>
     public async Task SaveSceneChangedInMemoryAsync(CancellationToken cancellationToken)
     {
-        this.Model.SetScene(value: null);
         WriteSceneFile(this.Document.File.Path, new SceneFileData(this.Source.Dehydrate(), this.Layout));
         _ = (await this.Document.CheckFileAsync(cancellationToken).ConfigureAwait(true)).Should().Be(DocumentFileState.Reloaded);
         await this.AdoptContentAsync(cancellationToken).ConfigureAwait(true);
@@ -221,7 +206,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     /// <returns>The task that completes once the reloaded scene is shown.</returns>
     public async Task SetSavedLegacyAerialStartAsync()
     {
-        this.Model.SetScene(value: null);
         var data = this.Source.Dehydrate();
         var environment = data.Environment;
         WriteSceneFile(this.Document.File.Path, new SceneFileData(data with { Environment = environment with { SkyAtmosphere = environment.SkyAtmosphere with { AerialPerspectiveStartDepthMeters = -1 } } }, this.Layout));
@@ -356,13 +340,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     public Task SuspendCookedContentAsync() => this.Runtime.SuspendCookedContentAsync();
 
-    public SceneNodeEditorViewModel CreateInspectorHost(IList<SceneNode> selection, Oxygen.Editor.Assets.IAssetFeed? assets = null, IGeometryMaterialSlotProvider? materialSlots = null)
-    {
-        this.activeMaterialSlotProvider = materialSlots ?? this.materialPipeline.Pipeline;
-        this.selections.SetSelection(this.Document.Id, [.. selection], "Test");
-        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IAssetReveal>(), this.area, assets ?? this.AssetCatalog.Object, this.Preview, this.selections, this.materialSlotProvider, this.Projects, new FakeInputSources());
-    }
-
     /// <summary>Opens the fixture's scene on a running engine, starting the shared engine only if it is not running.</summary>
     /// <param name="cancellationToken">Cancels startup and synchronization.</param>
     /// <param name="mountPublished">Whether the project's published content is mounted before synchronization.</param>
@@ -413,9 +390,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         var stale = this.target;
         this.CloseScene();
         this.OpenScene(file);
-        this.Model.SetScene(this.Source);
         await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
-        this.selections.SetSelection(this.Document.Id, [.. this.Source.RootNodes], "Test");
     }
 
     public async Task<RuntimeNodeState> ReadNodeAsync(NodeId nodeId, CancellationToken cancellationToken)
@@ -434,7 +409,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         var next = Scene.CreateAndHydrate(new SceneData { Id = SceneId.New(), Name = "Next scene" });
         SeedShadowTransitionScene(next, cascades);
         this.OpenScene(this.WriteScene(next));
-        this.Model.SetScene(this.Source);
         await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
     }
 
@@ -460,8 +434,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
-        this.Model.Dispose();
-        await this.Model.PendingEdits.ConfigureAwait(true);
         if (this.contentSession is not null)
         {
             await this.contentSession.DisposeAsync().ConfigureAwait(true);
@@ -579,7 +551,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     private void CloseScene()
     {
-        this.Model.SetScene(value: null);
         _ = this.area.CloseAsync(this.Document);
         this.OpenDocuments.Close(this.Document);
     }
@@ -588,7 +559,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private async Task AdoptContentAsync(CancellationToken cancellationToken)
     {
         this.Source = ((SceneContent)this.Document.Content).Scene;
-        this.Model.SetScene(this.Source);
         if (this.target is { } stale)
         {
             await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
@@ -619,13 +589,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     {
         public Task FollowAsync(Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationChange change)
             => owner.hosting.Dispatcher.DispatchAsync(() => owner.FollowRelocationAsync(change));
-    }
-
-    /// <summary>Reads material slot inventories from the provider the inspector host was created with.</summary>
-    private sealed class ActiveSlotProvider(NativeSceneFixture owner) : IGeometryMaterialSlotProvider
-    {
-        public Task<GeometryMaterialSlotMetadata?> ReadAsync(ProjectContext project, AssetPath geometryUri, CancellationToken cancellationToken = default)
-            => owner.activeMaterialSlotProvider.ReadAsync(project, geometryUri, cancellationToken);
     }
 
     /// <summary>Reads files at once and writes them atomically, so a document can open in a constructor.</summary>

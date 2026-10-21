@@ -3,27 +3,17 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.WinUI;
-using DroidNet.Tests;
-using Microsoft.UI.Xaml;
-using Microsoft.UI.Xaml.Automation.Peers;
-using Microsoft.UI.Xaml.Automation.Provider;
-using Microsoft.UI.Xaml.Controls;
-using Microsoft.UI.Xaml.Input;
-using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
-using Oxygen.Editor.Cooking;
-using Oxygen.Editor.World.Inspector;
+using Oxygen.Editor.Scenes.Edits.Properties;
+using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.Schemas;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
-using static DroidNet.Tests.UiTestHosting;
-using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
 using static Oxygen.Editor.WorldEditor.TestSupport.PublicationWorkflows;
-using NumberBox = DroidNet.Controls.NumberBox;
 
 namespace Oxygen.Editor.WorldEditor.Integration.UI.Tests.Workspace;
 
@@ -56,92 +46,46 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         _ = (await services.Pipeline.CookCurrentSceneAsync(uri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
         var originalOutput = ReadPublishedHashes(NativeSceneFixture.FileSystem, fixture.ProjectRoot);
         await fixture.SetSavedLegacyAerialStartAsync().ConfigureAwait(true);
-        var actions = CreateMainRepairActions(fixture);
-        using var panel = new CookingPanelViewModel(services.Runs, services.Pipeline, services.Projects, actions.Object, CreateStatusHosting());
-        var environment = new EnvironmentView
-        {
-            ViewModel = fixture.Model,
-        };
-        var cooking = new CookingPanelView
-        {
-            ViewModel = panel,
-        };
-        var root = CreateMainRepairSurface(environment, cooking);
-        using var host = new ScaledXamlHost();
-        await host.LoadAsync(root, 1, timeout.Token).ConfigureAwait(true);
         var failed = await services.Pipeline.CookCurrentSceneAsync(uri, timeout.Token).ConfigureAwait(true);
         _ = failed.Status.Should().Be(OperationStatus.Failed);
         _ = ReadPublishedHashes(NativeSceneFixture.FileSystem, fixture.ProjectRoot).Should().BeEquivalentTo(originalOutput);
-        await CheckMainRepairControlsAsync(fixture, services, panel, cooking, environment, failed.OperationId, timeout.Token).ConfigureAwait(true);
+        await CheckFailedRunAsync(services, failed.OperationId, timeout.Token).ConfigureAwait(true);
+        await RepairAerialStartAsync(fixture).ConfigureAwait(true);
+        _ = (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await services.Pipeline.CookCurrentSceneAsync(uri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
+        var retried = services.Runs.Runs.OrderByDescending(static run => run.StartedAt).First();
+        _ = retried.OperationId.Should().NotBe(failed.OperationId);
+        _ = retried.State.Should().BeOneOf(CookRunState.Succeeded, CookRunState.SucceededWithWarnings);
         _ = (await services.Pipeline.ReadAsync(services.Projects.ActiveProject!, [uri], timeout.Token).ConfigureAwait(true)).Single().Freshness.Should().Be(AssetCookFreshness.Current);
         await fixture.SaveAndReopenAsync(timeout.Token).ConfigureAwait(true);
         _ = fixture.Source.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters.Should().Be(100);
         _ = (await fixture.ReadNativeAsync(timeout.Token).ConfigureAwait(true)).AerialPerspectiveStartDepthMeters.Should().Be(100);
         _ = services.Runs.Runs.Single(run => run.OperationId == failed.OperationId).Messages.Should().Contain(message => message.Text.Contains("= -1", StringComparison.Ordinal));
-        actions.Verify(value => value.GoToPropertyAsync(It.IsAny<CookRunSnapshot>(), It.IsAny<DiagnosticRecord>()), Times.Once());
-        actions.Verify(value => value.SaveInputsAsync(It.IsAny<CookRunRequest>()), Times.Once());
     });
 
-    private static Grid CreateMainRepairSurface(EnvironmentView environment, CookingPanelView cooking)
+    // The failed run keeps the captured value and names the property that repairs it.
+    private static async Task CheckFailedRunAsync(CatalogWorkloadServices services, Guid failedId, CancellationToken cancellationToken)
     {
-        var root = new Grid
-        {
-            Width = 1200,
-            Height = 650,
-            RequestedTheme = ElementTheme.Dark,
-            Background = new Microsoft.UI.Xaml.Media.SolidColorBrush(Microsoft.UI.Colors.Black),
-        };
-        root.ColumnDefinitions.Add(new ColumnDefinition { Width = new GridLength(380) });
-        root.ColumnDefinitions.Add(new ColumnDefinition());
-        root.Children.Add(new ScrollViewer { Content = environment });
-        Grid.SetColumn(cooking, 1);
-        root.Children.Add(cooking);
-        return root;
-    }
-
-    private static Mock<ICookRecovery> CreateMainRepairActions(NativeSceneFixture fixture)
-    {
-        var actions = new Mock<ICookRecovery>();
-        _ = actions.Setup(value => value.GoToPropertyAsync(It.IsAny<CookRunSnapshot>(), It.IsAny<DiagnosticRecord>())).Returns<CookRunSnapshot, DiagnosticRecord>((run, issue) =>
-        {
-            _ = run.ProjectId.Should().Be(fixture.Projects.ActiveProject!.ProjectId);
-            fixture.Model.RequestFieldFocus(issue.SuggestedAction!.Payload["PropertyPath"]);
-            return Task.FromResult(true);
-        });
-        _ = actions.Setup(value => value.SaveInputsAsync(It.IsAny<CookRunRequest>())).Returns<CookRunRequest>(async _ =>
-            (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded);
-        return actions;
-    }
-
-    private static async Task CheckMainRepairControlsAsync(NativeSceneFixture fixture, CatalogWorkloadServices services, CookingPanelViewModel panel, CookingPanelView cooking, EnvironmentView environment, Guid failedId, CancellationToken cancellationToken)
-    {
-        while (panel.SelectedRun?.Snapshot is not { State: CookRunState.Failed } displayed || displayed.OperationId != failedId)
+        CookRunSnapshot? run;
+        while ((run = services.Runs.Runs.SingleOrDefault(value => value.OperationId == failedId)) is not { State: CookRunState.Failed })
         {
             await Task.Delay(20, cancellationToken).ConfigureAwait(true);
         }
 
-        _ = panel.SelectedRun.Snapshot.Messages.Should().Contain(message => message.Text.Contains("= -1", StringComparison.Ordinal));
-        _ = panel.SelectedRun.Snapshot.Diagnostics.Should().Contain(issue => issue.Message.Contains("0 m", StringComparison.Ordinal));
-        await WaitForRenderAsync().ConfigureAwait(true);
-        var link = cooking.FindDescendant<HyperlinkButton>(button => string.Equals(button.Content as string, "Go to property", StringComparison.Ordinal))!;
-        ((IInvokeProvider)new HyperlinkButtonAutomationPeer(link).GetPattern(PatternInterface.Invoke)).Invoke();
-        await WaitForRenderAsync().ConfigureAwait(true);
-        var number = environment.FindDescendant<NumberBox>(element => Equals(element.Tag, "AerialPerspectiveStartDepthMeters"))!;
-        _ = number.NumberValue.Should().Be(-1);
-        _ = panel.SelectedRun.Snapshot.OperationId.Should().Be(failedId);
-        await EnterTextAsync(number, "-2").ConfigureAwait(true);
-        number.CompletePendingTextEdit();
-        await fixture.Model.PendingEdits.ConfigureAwait(true);
+        _ = run.Messages.Should().Contain(message => message.Text.Contains("= -1", StringComparison.Ordinal));
+        _ = run.Diagnostics.Should().Contain(value => value.Message.Contains("0 m", StringComparison.Ordinal)
+            && value.SuggestedAction != null
+            && string.Equals(value.SuggestedAction.Payload["PropertyPath"], SceneEnvironmentConstraints.AerialStartPropertyPath, StringComparison.Ordinal));
+    }
+
+    // Authoring refuses a value the cook would refuse, and accepts the repair.
+    private static async Task RepairAerialStartAsync(NativeSceneFixture fixture)
+    {
+        var aerialStart = SceneProperties.SceneEnvironment.AerialPerspectiveStartDepthMeters;
+        _ = (await fixture.Authoring.ExecuteAsync(new SetSceneProperties(PropertyEdit.SingleEdit(aerialStart, -2f), "Aerial Start")).ConfigureAwait(true)).Succeeded.Should().BeFalse();
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Source.Environment.SkyAtmosphere.AerialPerspectiveStartDepthMeters.Should().Be(-1);
-        await EnterTextAsync(number, "100").ConfigureAwait(true);
-        number.CompletePendingTextEdit();
-        await fixture.Model.PendingEdits.ConfigureAwait(true);
+        _ = (await fixture.Authoring.ExecuteAsync(new SetSceneProperties(PropertyEdit.SingleEdit(aerialStart, 100f), "Aerial Start")).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = fixture.Document.IsDirty.Should().BeTrue();
-        await panel.RetryCommand.ExecuteAsync(parameter: null).WaitAsync(cancellationToken).ConfigureAwait(true);
-        var retried = services.Runs.Runs.OrderByDescending(static run => run.StartedAt).First();
-        _ = retried.OperationId.Should().NotBe(failedId);
-        _ = retried.State.Should().BeOneOf(CookRunState.Succeeded, CookRunState.SucceededWithWarnings);
-        _ = fixture.Document.IsDirty.Should().BeFalse();
     }
 }
