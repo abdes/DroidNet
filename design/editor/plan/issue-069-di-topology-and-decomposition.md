@@ -752,23 +752,30 @@ docking state.
   - **Close:** Aura's `WindowClosing`, which S4.4 makes the Shell's single
     close and exit path.
 
+  The scene document never moves. It is unique (one scene document is open at
+  a time, [live-preview.md](../lld/live-preview.md) 5.3 decision 1) and its tab
+  is pinned: the editor descriptor declares it, `DocumentTab.IsPinnedHint`
+  reports it instead of today's constant `false`, and Aura never drags a pinned
+  tab. It therefore stays in the workspace window, and no engine surface or
+  viewport ever changes window. The documents that move are those without
+  engine views: materials, textures, scripts and input assets.
+
   What is the editor's own work: a document window hosts a document area (tabs
   only, no docks); document view models and histories stay in the session, and
-  only the view is recreated in the target window; the Scene Editor's viewports
-  release their surfaces in the old window and acquire them on the new window's
-  panel; document requests resolve to their window through the window manager
-  instead of being broadcast and filtered; dialogs and focus find their window
-  at call time. Closing a document window closes its documents with the usual
+  only the view is recreated in the target window; document requests resolve to
+  their window through the window manager instead of being broadcast and
+  filtered; dialogs and focus find their window at call time. Closing a document window closes its documents with the usual
   unsaved prompt, and Cancel keeps it open (owner's decision).
   `DocumentAreaView` is created per window, and scope disposal, fire-and-forget
   from synchronous `Dispose` since S2.3, is awaited by the window's close.
 
 - **S5.4 Lifetime tests.** `DocumentAreaViewModel` view switching (unit), a
-  viewport's unload, reload and re-attach (unit), a document moved between
-  windows with the native surface count checked (integration), closing a window
-  that holds a dirty document, and window activation.
-- Gate: those tests, and in the running editor: tear a scene tab out, edit and
-  undo there, drag it back, close a document window holding a dirty document,
+  viewport's unload, reload and re-attach on tab switches (unit), a material
+  document moved between windows and back with its history intact, the pinned
+  scene tab refusing detach, closing a window that holds a dirty document, and
+  window activation.
+- Gate: those tests, and in the running editor: tear a material tab out, edit
+  and undo there, drag it back, see that the scene tab cannot be dragged, close a document window holding a dirty document,
   close and reopen a panel with its state intact, and switch projects. Visible
   UI stays uncommitted until the reviewer accepts it.
 
