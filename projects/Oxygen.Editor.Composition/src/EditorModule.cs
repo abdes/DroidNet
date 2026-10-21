@@ -23,6 +23,7 @@ using Oxygen.Editor.Cooking;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Diagnostics;
+using Oxygen.Editor.LivePreview;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Output;
@@ -64,6 +65,7 @@ public static class EditorModule
         new ProjectsModule(),
         new ProjectExplorerModule(),
         new ContentPipelineModule(),
+        new LivePreviewModule(),
     ];
 
     /// <summary>
@@ -293,8 +295,6 @@ public static class EditorModule
 
     private static void RegisterAssetServices(IContainer container)
     {
-        // Scripting: the engine's analyzer, which the script facts of every workspace use.
-        container.Register<Scripting.IScriptAnalyzer, LivePreview.Scripting.NativeScriptAnalyzer>(Reuse.Singleton);
         // Materials: one document kind and one set of edits for every workspace window.
         container.Register<MaterialValidation>(Reuse.Singleton);
         container.Register<MaterialDocumentKind>(Reuse.Singleton);

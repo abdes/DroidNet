@@ -7,19 +7,14 @@ using DroidNet.Storage;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Input;
-using Oxygen.Editor.LivePreview.Assets;
+using Oxygen.Editor.LivePreview;
 using Oxygen.Editor.LivePreview.Content;
-using Oxygen.Editor.LivePreview.Play;
-using Oxygen.Editor.LivePreview.Scenes;
-using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
@@ -49,14 +44,8 @@ namespace Oxygen.Editor.Workspace;
 /// <param name="features">The features whose panels and commands the window shows.</param>
 public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features) : IScopeModule<IWindowLayer>
 {
-    private static readonly Type[] Activated =
-    [
-        // The preview and the preview content demand follow the open scene documents.
-        typeof(IScenePreview),
-        typeof(PreviewContentDemand),
-        typeof(PreviewSession),
-        typeof(PlaySession),
-    ];
+    // The preview content demand follows the open scene documents.
+    private static readonly Type[] Activated = [typeof(PreviewContentDemand)];
 
     /// <inheritdoc />
     public IReadOnlyCollection<Type> Shadows => [];
@@ -73,7 +62,7 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
     public static IReadOnlyList<IScopeModule<IWindowLayer>> Compose(IReadOnlyList<IFeatureModule> features)
     {
         ArgumentNullException.ThrowIfNull(features);
-        return [new AssetsWindowModule(), new WorkspaceWindowModule(features), new ShellWindowModule(), new ContentPipelineWindowModule(), .. features];
+        return [new AssetsWindowModule(), new LivePreviewWindowModule(), new WorkspaceWindowModule(features), new ShellWindowModule(), new ContentPipelineWindowModule(), .. features];
     }
 
     /// <inheritdoc />
@@ -85,12 +74,10 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
         RegisterContributions(scope, features);
         RegisterDocuments(scope);
 
-        RegisterContentServices(scope);
-        RegisterPreview(scope);
+        RegisterPreviewContentDemand(scope);
         scope.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
         RegisterPreferences(scope);
         RegisterScriptServices(scope);
-        RegisterPlayServices(scope);
     }
 
     // The panels the features contribute, which the registry checks once.
@@ -120,26 +107,9 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
             Reuse.Singleton);
     }
 
-    // The project's content as the window sees it. The Content Explorer's scope reaches the same instances, created by
-    // this window's scope whichever scope asks first.
-    private static void RegisterContentServices(IRegistrator scope)
-    {
-        scope.Register<IAssetRuntimeStatusSource, AssetRuntimeStatusSource>(Reuse.Singleton);
-    }
-
-    // The engine preview and the preview content demand follow the open scene documents. The project's preview also
-    // applies the content-mount changes the Content Explorer confirms.
-    private static void RegisterPreview(IRegistrator scope)
-    {
-        scope.RegisterDelegate<IScenePreview>(
-            resolver => ScenePreviews.Create(
-                resolver.Resolve<IEngineService>(),
-                resolver.Resolve<OpenDocuments>(),
-                resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault),
-                resolver.Resolve<IOperationResultPublisher>(IfUnresolved.ReturnDefault),
-                resolver.Resolve<IAssetFeed>(IfUnresolved.ReturnDefault)),
-            Reuse.Singleton);
-        scope.RegisterDelegate(
+    // The preview content demand follows the open scene documents.
+    private static void RegisterPreviewContentDemand(IRegistrator scope)
+        => scope.RegisterDelegate(
             resolver => new PreviewContentDemand(ContentDemands.Start(
                 resolver.Resolve<OpenDocuments>(),
                 resolver.Resolve<IAssetFeed>(),
@@ -147,9 +117,6 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
                 resolver.Resolve<IProjectContextService>(),
                 resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault))),
             Reuse.Singleton);
-        scope.Register<PreviewSession>(Reuse.Singleton);
-        scope.RegisterMapping<IContentMountChanges, PreviewSession>();
-    }
 
     // The preferences stored per project: preview settings, hidden and locked nodes, viewport layouts. They are the
     // window's until the project session owns them; the gizmo preferences, kept across projects, are the editor's.
@@ -197,16 +164,5 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
         scope.Register<ProjectScriptTooling>(Reuse.Singleton);
         scope.RegisterMany([typeof(IScripts), typeof(IAssetProblemSource)], typeof(ScriptFacts), Reuse.Singleton);
         scope.RegisterMany([typeof(IInputSources), typeof(IAssetProblemSource)], typeof(InputFacts), Reuse.Singleton);
-    }
-
-    // Play sessions: the player runs the scenes of this project and ends with the workspace. Its problems and log reach
-    // Problems and Output.
-    private static void RegisterPlayServices(IRegistrator scope)
-    {
-        scope.Register<PlaySettings>(Reuse.Singleton);
-        scope.Register<PlaySession>(Reuse.Singleton);
-        scope.RegisterMapping<IRuntimeProblemSource, PlaySession>();
-        scope.RegisterMapping<IAssetProblemSource, PlaySession>();
-        scope.RegisterMapping<IPlayerLog, PlaySession>();
     }
 }
