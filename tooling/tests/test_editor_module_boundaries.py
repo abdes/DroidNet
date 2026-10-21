@@ -75,6 +75,7 @@ EDITOR_LAYERS: dict[str, Layer] = {
     "Oxygen.Editor.Output": Layer.FEATURE,
     "Oxygen.Editor.Problems": Layer.FEATURE,
     "Oxygen.Editor.ProjectBrowser": Layer.FEATURE,
+    "Oxygen.Editor.SceneEditor": Layer.FEATURE,
     "Oxygen.Editor.SceneExplorer": Layer.FEATURE,
     "Oxygen.Editor.WorldEditor": Layer.FEATURE,
     "Oxygen.Editor.Pickers": Layer.SHARED_UI,
@@ -99,6 +100,12 @@ EDITOR_LAYERS: dict[str, Layer] = {
 ENGINE = frozenset({"Oxygen.Editor.Runtime", "Oxygen.Editor.Interop"})
 ENGINE_USERS = frozenset({"Oxygen.Editor.LivePreview", "Oxygen.Editor.App"}) | ENGINE
 
+# The one exception: the scene editor's viewports draw through Runtime's
+# surfaces, views and input, and never reach Interop (section 11).
+ENGINE_EXCEPTIONS: dict[str, frozenset[str]] = {
+    "Oxygen.Editor.SceneEditor": frozenset({"Oxygen.Editor.Runtime"}),
+}
+
 # Violations the tree still has, each with the work that removes it. An entry
 # that no longer occurs fails the test, so the lists only shrink.
 DISSOLVE_WORLD_EDITOR = "#69 S1.13 dissolves the World Editor"
@@ -111,6 +118,10 @@ PENDING_REFERENCES: dict[tuple[str, str], str] = {
     (
         "Oxygen.Editor.WorldEditor",
         "Oxygen.Editor.MaterialEditor",
+    ): DISSOLVE_WORLD_EDITOR,
+    (
+        "Oxygen.Editor.WorldEditor",
+        "Oxygen.Editor.SceneEditor",
     ): DISSOLVE_WORLD_EDITOR,
     ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Runtime"): DISSOLVE_WORLD_EDITOR,
     ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Interop"): DISSOLVE_WORLD_EDITOR,
@@ -253,7 +264,11 @@ def reference_violation(source: str, target: str) -> str | None:
     source_layer, target_layer = layer_of(source), layer_of(target)
     if target_layer is Layer.ROOT:
         return "nothing references the composition root"
-    if target in ENGINE and source not in ENGINE_USERS:
+    if (
+        target in ENGINE
+        and source not in ENGINE_USERS
+        and target not in ENGINE_EXCEPTIONS.get(source, frozenset())
+    ):
         return "only LivePreview references the engine"
     if target_layer not in ALLOWED[source_layer]:
         return f"{source_layer.value} does not reference {target_layer.value}"
@@ -391,6 +406,13 @@ class EditorModuleBoundaries(unittest.TestCase):
         )
         self.assertIsNone(
             reference_violation("Oxygen.Editor.LivePreview", "Oxygen.Editor.Runtime")
+        )
+        self.assertIsNone(
+            reference_violation("Oxygen.Editor.SceneEditor", "Oxygen.Editor.Runtime")
+        )
+        self.assertEqual(
+            reference_violation("Oxygen.Editor.SceneEditor", "Oxygen.Editor.Interop"),
+            "only LivePreview references the engine",
         )
 
     def test_grant_rules(self) -> None:

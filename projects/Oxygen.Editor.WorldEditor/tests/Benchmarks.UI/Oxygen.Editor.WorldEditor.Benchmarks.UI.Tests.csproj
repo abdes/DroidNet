@@ -9,6 +9,7 @@
     <ItemGroup>
         <Compile Include="../../testsupport/Native/DocumentTransitionScenario.cs" Link="Support/DocumentTransitionScenario.cs" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.WorldEditor/src/Oxygen.Editor.WorldEditor.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.SceneEditor/src/Oxygen.Editor.SceneEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Cooking/src/Oxygen.Editor.Cooking.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Input/testing/Oxygen.Editor.Input.Testing.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Shell/testing/Oxygen.Editor.Shell.Testing.csproj" />
