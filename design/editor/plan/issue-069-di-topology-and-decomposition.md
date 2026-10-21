@@ -754,13 +754,9 @@ docking state.
 
   The scene document never moves. It is unique (one scene document is open at
   a time, [live-preview.md](../lld/live-preview.md) 5.3 decision 1) and its tab
-  is pinned for good, and can never be unpinned. Aura never drags a pinned tab,
-  but its `TabStripItem` pin button toggles `TabItem.IsPinned` freely today, so
-  Aura gains a locked pin: `IDocumentMetadata` and `TabItem` carry a pin lock,
-  the pin button is hidden for a locked tab, and nothing can change a locked
-  tab's pinned state, with Aura tests. The scene editor's descriptor declares
-  its documents pinned and locked, and `DocumentTab` reports both instead of
-  today's constant `false`. It therefore stays in the workspace window, and no engine surface or
+  is pinned for good, and can never be unpinned: Aura's pin lock and the scene
+  editor's pinned, locked descriptor landed ahead of this phase (`32ac842ba`),
+  with their tests, and Aura never drags a pinned tab. It therefore stays in the workspace window, and no engine surface or
   viewport ever changes window. The documents that move are those without
   engine views: materials, textures, scripts and input assets.
 
@@ -775,11 +771,10 @@ docking state.
 
 - **S5.4 Lifetime tests.** `DocumentAreaViewModel` view switching (unit), a
   viewport's unload, reload and re-attach on tab switches (unit), a material
-  document moved between windows and back with its history intact, the pinned
-  scene tab refusing detach and unpin, closing a window that holds a dirty document, and
+  document moved between windows and back with its history intact, closing a window that holds a dirty document, and
   window activation.
 - Gate: those tests, and in the running editor: tear a material tab out, edit
-  and undo there, drag it back, see that the scene tab cannot be dragged or unpinned, close a document window holding a dirty document,
+  and undo there, drag it back, close a document window holding a dirty document,
   close and reopen a panel with its state intact, and switch projects. Visible
   UI stays uncommitted until the reviewer accepts it.
 
