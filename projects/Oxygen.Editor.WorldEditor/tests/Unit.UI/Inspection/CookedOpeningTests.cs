@@ -18,7 +18,7 @@ using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Shell.Windows;
-using Oxygen.Editor.World.Inspection;
+using Oxygen.Editor.CookedInspector;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;

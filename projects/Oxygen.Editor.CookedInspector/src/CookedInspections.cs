@@ -5,7 +5,7 @@
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Shell.Windows;
 
-namespace Oxygen.Editor.World.Inspection;
+namespace Oxygen.Editor.CookedInspector;
 
 /// <summary>Sets what the window's Cooked Inspector inspects and brings it forward.</summary>
 /// <param name="inspector">The window's Cooked Inspector.</param>

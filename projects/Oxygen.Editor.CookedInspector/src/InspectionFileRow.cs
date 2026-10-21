@@ -5,7 +5,7 @@
 using System.Globalization;
 using Oxygen.Editor.ContentPipeline;
 
-namespace Oxygen.Editor.World.Inspection;
+namespace Oxygen.Editor.CookedInspector;
 
 /// <summary>A file belonging to an inspected physical root.</summary>
 /// <param name="RootName">The owning mount.</param>

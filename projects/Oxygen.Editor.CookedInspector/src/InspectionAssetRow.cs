@@ -9,7 +9,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspection;
+namespace Oxygen.Editor.CookedInspector;
 
 /// <summary>A cooked asset in a captured report, with independently verified authoring relationships.</summary>
 /// <param name="Root">The physical root report.</param>

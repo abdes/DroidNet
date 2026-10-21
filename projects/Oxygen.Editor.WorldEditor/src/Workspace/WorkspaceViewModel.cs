@@ -276,8 +276,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
         childContainer.Register<SceneEditorView>(Reuse.Transient);
         childContainer.Register<MaterialEditorView>(Reuse.Transient);
-        this.RegisterCookedInspector(childContainer);
         RegisterInspectorEditors(childContainer);
+        this.RegisterAssetReveal(childContainer);
 
         // The features come last: their services use the window's, and their activation any feature's.
         foreach (var module in this.modules)
@@ -289,6 +289,8 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         {
             module.ActivateWindowServices(childContainer);
         }
+
+        this.cookedInspections = childContainer.Resolve<ICookedInspections>();
     }
 
     /// <inheritdoc />
@@ -358,10 +360,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
                         MatchMethod = PathMatch.Full,
                         ViewModelType = typeof(SceneNodeEditorViewModel),
                     },
-                    new Route
-                    {
-                        Outlet = InspectorDockId, Path = InspectorDockId, MatchMethod = PathMatch.Full, ViewModelType = typeof(Oxygen.Editor.World.Inspection.CookedInspectionViewModel),
-                    },
                     .. modules.SelectMany(static module => module.Panels).Select(static panel => new Route
                     {
                         Outlet = panel.Id, Path = panel.Id, MatchMethod = PathMatch.Full, ViewModelType = panel.ViewModelType,
@@ -370,15 +368,10 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             },
         ]);
 
-    // The panels whose tabs show a title of their own; the others are titled by their content.
+    // The panels the features contribute, which the registry checks once.
     private static void RegisterContributions(IContainer childContainer, IEnumerable<IFeatureModule> modules)
         => childContainer.RegisterDelegate(
-            _ => new ContributionRegistry(
-                [
-                    new PanelDescriptor(InspectorDockId, "Cooked Inspector", typeof(Oxygen.Editor.World.Inspection.CookedInspectionViewModel)),
-                    .. modules.SelectMany(static module => module.Panels),
-                ],
-                []),
+            _ => new ContributionRegistry([.. modules.SelectMany(static module => module.Panels)], []),
             Reuse.Singleton);
 
     private static void RegisterInspectorEditors(IContainer childContainer)

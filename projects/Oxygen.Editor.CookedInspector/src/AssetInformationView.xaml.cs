@@ -5,7 +5,7 @@
 using DroidNet.Mvvm.Generators;
 using Oxygen.Editor.Assets;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets;
+namespace Oxygen.Editor.CookedInspector;
 
 /// <summary>Displays supplemental asset information in a tooltip without reserving browser space.</summary>
 [ViewModel(typeof(AssetInformation))]

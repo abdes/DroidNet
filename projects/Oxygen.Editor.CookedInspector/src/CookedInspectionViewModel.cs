@@ -15,7 +15,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Inspection;
+namespace Oxygen.Editor.CookedInspector;
 
 /// <summary>
 /// The Cooked Inspector panel: a read-only report of the cooked output of one scope, which each inspection request

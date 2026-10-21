@@ -12,11 +12,11 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
-using Oxygen.Editor.World.Inspection;
+using Oxygen.Editor.CookedInspector;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.CookedInspector.Unit.UI.Tests.TestSupport.TestProjects;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Inspection;
+namespace Oxygen.Editor.CookedInspector.Unit.UI.Tests;
 
 [TestClass]
 internal sealed class InspectionTests : DroidNet.Tests.VisualUserInterfaceTests

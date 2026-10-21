@@ -6,7 +6,7 @@ using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspection;
+namespace Oxygen.Editor.CookedInspector;
 
 /// <summary>
 ///     What the Cooked Inspector inspects: a project's cooked output, a folder of it, or one asset's.

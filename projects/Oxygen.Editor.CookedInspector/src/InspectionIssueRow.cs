@@ -5,7 +5,7 @@
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Inspection;
+namespace Oxygen.Editor.CookedInspector;
 
 /// <summary>A native inspection/validation issue with its physical root context.</summary>
 /// <param name="RootName">The owning root.</param>

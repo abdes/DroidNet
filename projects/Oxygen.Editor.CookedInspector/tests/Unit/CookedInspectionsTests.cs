@@ -11,11 +11,11 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Windows;
-using Oxygen.Editor.World.Inspection;
+using Oxygen.Editor.CookedInspector;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.Tests.Inspection;
+namespace Oxygen.Editor.CookedInspector.Unit.Tests;
 
 /// <summary>The Cooked Inspector is told what to inspect by a request, and comes forward.</summary>
 [TestClass]

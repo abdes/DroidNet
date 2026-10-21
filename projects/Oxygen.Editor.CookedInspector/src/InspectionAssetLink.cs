@@ -5,7 +5,7 @@
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspection;
+namespace Oxygen.Editor.CookedInspector;
 
 /// <summary>An explicit navigation target in an inspection report.</summary>
 /// <param name="Asset">The retained logical identity.</param>

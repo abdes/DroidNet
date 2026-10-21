@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.World.Inspection;
+namespace Oxygen.Editor.CookedInspector;
 
 /// <summary>Displays an explicit read-only cooked-output report in the document host.</summary>
 [ViewModel(typeof(CookedInspectionViewModel))]
