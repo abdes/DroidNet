@@ -156,4 +156,38 @@ public sealed partial class DynamicTreeDemoView
 
         await this.ViewModel!.RemoveSelectedItemsCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
     }
+
+    // The tree has no clipboard shortcuts: the page binds them to the same commands as its toolbar.
+    private async void CutInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = sender; // unused
+        args.Handled = true;
+
+        if (this.ViewModel!.CutCommand.CanExecute(parameter: null))
+        {
+            await this.ViewModel.CutCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        }
+    }
+
+    private async void CopyInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = sender; // unused
+        args.Handled = true;
+
+        if (this.ViewModel!.CopyCommand.CanExecute(parameter: null))
+        {
+            await this.ViewModel.CopyCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        }
+    }
+
+    private async void PasteInvoked(KeyboardAccelerator sender, KeyboardAcceleratorInvokedEventArgs args)
+    {
+        _ = sender; // unused
+        args.Handled = true;
+
+        if (this.ViewModel!.PasteCommand.CanExecute(parameter: null))
+        {
+            await this.ViewModel.PasteCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        }
+    }
 }

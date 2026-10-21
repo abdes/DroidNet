@@ -38,6 +38,18 @@
             Invoked="RedoInvoked"
             Modifiers="Control" />
         <KeyboardAccelerator Key="Delete" Invoked="DeleteInvoked" />
+        <KeyboardAccelerator
+            Key="X"
+            Invoked="CutInvoked"
+            Modifiers="Control" />
+        <KeyboardAccelerator
+            Key="C"
+            Invoked="CopyInvoked"
+            Modifiers="Control" />
+        <KeyboardAccelerator
+            Key="V"
+            Invoked="PasteInvoked"
+            Modifiers="Control" />
     </Page.KeyboardAccelerators>
 
     <Grid

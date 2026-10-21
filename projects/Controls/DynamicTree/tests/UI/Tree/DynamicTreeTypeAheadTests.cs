@@ -117,28 +117,6 @@ public sealed partial class DynamicTreeTypeAheadTests : VisualUserInterfaceTests
             _ = focusedAfter!.Label.Should().Be("BETA");
         });
 
-    [TestMethod]
-    [TestCategory("DynamicTree / UI / Clipboard / Host")]
-    public Task ClipboardShortcuts_WhenDisabled_AreLeftToTheHost_Async() => EnqueueAsync(
-        async () =>
-        {
-            var vm = this.viewModel!;
-            vm.Select("ALPHA");
-            this.tree!.AreClipboardShortcutsEnabled = false;
-
-            foreach (var key in new[] { VirtualKey.C, VirtualKey.X, VirtualKey.V })
-            {
-                var handled = await this.tree.InvokeHandleKeyDownAsync(key, isControlDown: true).ConfigureAwait(true);
-                _ = handled.Should().BeFalse("a host binds the clipboard keys to its own commands");
-            }
-
-            _ = vm.CurrentClipboardState.Should().Be(ClipboardState.Empty);
-
-            this.tree.AreClipboardShortcutsEnabled = true;
-            _ = (await this.tree.InvokeHandleKeyDownAsync(VirtualKey.C, isControlDown: true).ConfigureAwait(true)).Should().BeTrue();
-            _ = vm.CurrentClipboardState.Should().NotBe(ClipboardState.Empty);
-        });
-
     protected override async Task TestSetupAsync()
     {
         await base.TestSetupAsync().ConfigureAwait(false);

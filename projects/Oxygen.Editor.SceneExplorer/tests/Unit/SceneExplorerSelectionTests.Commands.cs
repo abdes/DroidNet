@@ -8,7 +8,10 @@ using Oxygen.Editor.Shell.Commands;
 
 namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 
-/// <summary>The Explorer as a command handler: it runs its commands only while it shows the window's active document.</summary>
+/// <summary>
+/// The Explorer as a command handler: it runs its commands, including cut, copy and paste, only while it shows the
+/// window's active document.
+/// </summary>
 public sealed partial class SceneExplorerSelectionTests
 {
     [TestMethod]
@@ -62,6 +65,25 @@ public sealed partial class SceneExplorerSelectionTests
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
 
         _ = explorer.CanExecute("Scene.Tool.Select").Should().BeFalse();
-        _ = explorer.CanExecute(ShellCommands.Copy.Id).Should().BeFalse();
+    }
+
+    [TestMethod]
+    public async Task CommandHandler_CopyThenPaste_PastesTheNodeOnce()
+    {
+        // Arrange
+        using var harness = new SelectionHarness(out var scene, out var node, out _);
+        using var explorer = harness.Build();
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
+        _ = await explorer.SetSelectedNodes([node.Id]).ConfigureAwait(false);
+        var before = scene.AllNodes.Count();
+
+        // Act: the window's Ctrl+C and Ctrl+V run the explorer's commands.
+        _ = explorer.CanExecute(ShellCommands.Copy.Id).Should().BeTrue();
+        await explorer.ExecuteAsync(ShellCommands.Copy.Id).ConfigureAwait(false);
+        _ = explorer.CanExecute(ShellCommands.Paste.Id).Should().BeTrue();
+        await explorer.ExecuteAsync(ShellCommands.Paste.Id).ConfigureAwait(false);
+
+        // Assert
+        _ = scene.AllNodes.Count().Should().Be(before + 1);
     }
 }

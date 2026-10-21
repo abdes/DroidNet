@@ -563,10 +563,11 @@ The control supports keyboard shortcuts for tree manipulation:
 
 | Shortcut   | Action                | Implementation                   |
 | ---------- | --------------------- | -------------------------------- |
-| **Ctrl+C** | Copy selected items   | Calls `CopyItemsAsync`           |
-| **Ctrl+X** | Cut selected items    | Calls `CutItemsAsync`            |
-| **Ctrl+V** | Paste to focused item | Calls `PasteItemsAsync`          |
 | **Delete** | Remove selected items | Calls `RemoveItemAsync` for each |
+
+Copy, cut and paste have no shortcuts in the control: they are application
+commands. A host binds Ctrl+C, Ctrl+X and Ctrl+V to its own commands, which call
+`CopyItemsAsync`, `CutItemsAsync` and `PasteItemsAsync`.
 
 Keyboard-initiated moves use the same validation and event flow as drag-drop operations.
 

@@ -482,15 +482,6 @@ public partial class DynamicTree : Control
 
                 return true;
 
-            case VirtualKey.C when isControlDown && this.AreClipboardShortcutsEnabled:
-                return await this.HandleCopyShortcutAsync().ConfigureAwait(true);
-
-            case VirtualKey.X when isControlDown && this.AreClipboardShortcutsEnabled:
-                return await this.HandleCutShortcutAsync().ConfigureAwait(true);
-
-            case VirtualKey.V when isControlDown && this.AreClipboardShortcutsEnabled:
-                return await this.HandlePasteShortcutAsync().ConfigureAwait(true);
-
             case VirtualKey.Up:
                 return await this.MoveFocusAsync(FocusNavigationDirection.Up).ConfigureAwait(true);
 
@@ -973,76 +964,6 @@ public partial class DynamicTree : Control
         {
             this.isApplyingFocus = false;
         }
-    }
-
-    private async Task<bool> HandleCopyShortcutAsync()
-    {
-        if (this.ViewModel is null)
-        {
-            return false;
-        }
-
-        var selectedItems = this.GetSelectedItems();
-        if (selectedItems.Count == 0)
-        {
-            return false;
-        }
-
-        await this.ViewModel.CopyItemsAsync(selectedItems).ConfigureAwait(true);
-        return true;
-    }
-
-    private async Task<bool> HandleCutShortcutAsync()
-    {
-        if (this.ViewModel is null)
-        {
-            return false;
-        }
-
-        var selectedItems = this.GetSelectedItems()
-            .Where(item => !item.IsLocked)
-            .ToList();
-
-        if (selectedItems.Count == 0)
-        {
-            return false;
-        }
-
-        await this.ViewModel.CutItemsAsync(selectedItems).ConfigureAwait(true);
-        return true;
-    }
-
-    private async Task<bool> HandlePasteShortcutAsync()
-    {
-        if (this.ViewModel is null)
-        {
-            return false;
-        }
-
-        if (this.ViewModel.CurrentClipboardState == ClipboardState.Empty || !this.ViewModel.IsClipboardValid)
-        {
-            return false;
-        }
-
-        // If there's no focused item, allow paste to the first selected item if there is a selection.
-        var targetParent = this.ViewModel.FocusedItem?.Item;
-
-        var selectedItems = this.GetSelectedItems();
-        if (selectedItems.Count == 0)
-        {
-            return false;
-        }
-
-        targetParent ??= selectedItems.FirstOrDefault();
-
-        if (targetParent is null)
-        {
-            return false;
-        }
-
-        // Record that this focus change should be a keyboard focus visual.
-        await this.ViewModel.PasteItemsAsync(targetParent).ConfigureAwait(true);
-        return true;
     }
 
     private async Task<bool> HandleCollapseAsync()
