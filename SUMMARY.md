@@ -25,8 +25,6 @@
       - [AnalyzerReleases.Unshipped](projects/Mvvm.Generators/src/AnalyzerReleases.Unshipped.md)
   - [Oxygen.Editor.ProjectExplorer](projects/oxygen.editor.projectexplorer/README.md)
     - [Project Explorer](projects/Oxygen.Editor.ProjectExplorer/src/README.md)
-  - [Oxygen.Editor.WorldEditor](projects/oxygen.editor.worldeditor/README.md)
-    - [Oxygen World Editor](projects/Oxygen.Editor.WorldEditor/src/README.md)
   - [Oxygen.Editor](projects/oxygen.editor/README.md)
     - [Oxygen Editor](projects/Oxygen.Editor/src/README.md)
   - [Routing.Debugger](projects/routing.debugger/README.md)

@@ -388,7 +388,7 @@ template payload mechanics belong in LLDs that implement this contract.
 
 | Module                          | Architectural Role                      | Owns                                                                                                                                                   | Must Not Own                                                                                   |
 | ------------------------------- | --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor`                 | application composition shell           | bootstrap, DI root, top-level routes, windows, process-local native runtime discovery                                                                  | scene policy, asset workflow policy, cook policy, engine operations beyond bootstrap           |
+| `Oxygen.Editor`                 | application composition shell           | bootstrap, DI root, top-level routes, windows, the scene workspace window, process-local native runtime discovery                                      | scene policy, asset workflow policy, cook policy, engine operations beyond bootstrap           |
 | `Oxygen.Editor.UI`              | Oxygen-specific reusable editor UI kit  | reusable editor controls, fields, overlays, styles, UI helper VMs                                                                                      | feature policy, domain models, project/cook/runtime behavior                                   |
 | `Oxygen.Editor.Shell`           | application frame                       | document service, document areas and tabs, close prompts, histories, command routing, placement, contributions, docking workspace, desktop integration | scene, asset or pipeline policy                                                                |
 | `Oxygen.Editor.Routing`         | editor-specific route glue              | route helpers and editor route integration contracts                                                                                                   | feature state or workflow policy                                                               |
@@ -397,7 +397,8 @@ template payload mechanics belong in LLDs that implement this contract.
 | `Oxygen.Editor.Schemas`         | shared property mechanics               | schema/overlay catalog, typed edits, mixed values, snapshots, reusable apply/session mechanics                                                         | feature policy, WinUI, runtime lifecycle, native calls, cooked binary offsets                  |
 | `Oxygen.Managed.Core`           | shared non-UI contracts                 | operation-result and diagnostic primitives                                                                                                             | workflow orchestration, runtime execution, UI                                                  |
 | `Oxygen.Editor.World`           | scene authoring domain                  | scenes, nodes, components, scene serialization, scene-owned settings, authoring references                                                             | WinUI, routing, docking, runtime handles, native interop, cook execution                       |
-| `Oxygen.Editor.WorldEditor`     | open scene workspace feature            | scene documents, commands, selection, validation presentation, scene-engine sync orchestration                                                         | native calls directly from VMs, reusable asset/cook primitives, project-wide cook policy       |
+| `Oxygen.Editor.Scenes`          | scene authoring domain services         | the scene document kind, scene authoring and its edits, selection, node lock and visibility                                                            | WinUI views, engine calls, histories                                                           |
+| `Oxygen.Editor.LivePreview`     | engine preview of authoring state       | scene engine sync, content demand, mount changes, runtime session start, Play, runtime problems                                                        | authoring state                                                                                |
 | `Oxygen.Editor.MaterialEditor`  | material editor feature                 | material documents, material inspector/tools, material preview UI, material validation presentation                                                    | reusable asset/cook primitives, native engine calls, project policy                            |
 | `Oxygen.Editor.SceneEditor`     | scene document editor                   | viewports, cameras, transform tools, Play bar, preview, viewport and transform tool settings                                                           | engine sync, Play sessions, native calls                                                       |
 | `Oxygen.Editor.SceneInspector`  | scene properties panel                  | properties of the selected nodes, the scene's environment and script slots over the scene authoring                                                    | scene edit rules, shared property controls, engine calls                                       |
@@ -429,7 +430,7 @@ to live and how editor services interact with game project files.
 | Feature UI to native runtime       | Feature view models do not call native interop directly. Runtime work crosses `Oxygen.Editor.Runtime` or a documented managed runtime service.                                              |
 | `Projects` to content pipeline     | `Projects` owns project identity, manifest validation, content-root policy, and cook-scope facts. It does not execute import, cook, pak, mount, or content-pipeline jobs.                   |
 | `ContentPipeline` to projects      | `ContentPipeline` reads project facts through project-service contracts when it needs cook scope, authored roots, or project identity. It does not own project creation or manifest policy. |
-| `WorldEditor` to project layout    | `WorldEditor` creates, opens, and saves scene documents through project/document services. It does not decide global project layout or write cooked output directly.                        |
+| `Scenes` to project layout         | `Scenes` opens and saves scene documents through project and document services. It does not decide global project layout or write cooked output directly.                                   |
 | `ContentExplorer` to scene editing | Content Explorer can return asset identity and diagnostics. It does not mutate scene components or material slots directly.                                                                 |
 | Native interop to authoring policy | Native code exposes capabilities. Managed editor modules own authoring defaults, game project policy, UI behavior, and workflow decisions.                                                  |
 
@@ -634,7 +635,7 @@ Editor-service contract:
 | `Oxygen.Editor.Projects`        | manifest, declared mounts, project metadata, project configuration, project cook scope             | manifest and project-level configuration through project services                  | import, cook, mount runtime roots, mutate scene/material assets directly          |
 | `Oxygen.Editor.ProjectExplorer` | template metadata, project manifest summary, recent project state, validation result               | new project payload through project creation services, recent project state        | define asset layout policy, edit authored assets                                  |
 | `Oxygen.Editor.ContentExplorer` | authored roots, local mounts, source media, descriptors, cooked indexes, derived-state diagnostics | user-requested asset files through feature commands or delegated creation services | treat cooked paths as authored identity, invoke cook/mount as browse side effects |
-| `Oxygen.Editor.WorldEditor`     | scene documents and asset references through document/project services                             | scene documents through command/document save paths                                | choose project layout policy, write cooked output directly                        |
+| `Oxygen.Editor.Scenes`          | scene documents and asset references through document/project services                             | scene documents through edit/document save paths                                   | choose project layout policy, write cooked output directly                        |
 | `Oxygen.Editor.MaterialEditor`  | material descriptors and material asset identity through document/content services                 | material descriptors through material document save paths                          | write scene assignments directly, write cooked output directly                    |
 | `Oxygen.Editor.ContentPipeline` | authored content roots, source media, descriptors, project cook scope                              | generated descriptors, import intermediates, cooked output, cooked indexes         | own UI browsing policy or project-template policy                                 |
 | `Oxygen.Editor.Runtime`         | cooked-root mount requests and runtime settings                                                    | runtime state only                                                                 | read authored files as runtime assets, mutate project files                       |
@@ -1013,7 +1014,9 @@ flowchart TB
     PB[Oxygen.Editor.ProjectExplorer]
     Docs[Oxygen.Editor.Documents]
     Schemas[Oxygen.Editor.Schemas]
-    WorldEditor[Oxygen.Editor.WorldEditor]
+    SceneFeatures[SceneEditor, SceneExplorer, SceneInspector]
+    Scenes[Oxygen.Editor.Scenes]
+    LivePreview[Oxygen.Editor.LivePreview]
     MaterialEditor[Oxygen.Editor.MaterialEditor]
     PhysicsEditor[Oxygen.Editor.PhysicsEditor]
     ContentExplorer[Oxygen.Editor.ContentExplorer]
@@ -1029,20 +1032,23 @@ flowchart TB
     Engine[Oxygen Engine editor interface]
 
     App --> PB
-    App --> WorldEditor
+    App --> SceneFeatures
+    App --> LivePreview
     App --> Projects
     App --> Runtime
     App --> Data
     App --> Routing
-    WorldEditor --> UI
-    WorldEditor --> Routing
-    WorldEditor --> Docs
-    WorldEditor --> Schemas
-    WorldEditor --> World
-    WorldEditor --> ContentExplorer
-    WorldEditor --> Projects
-    WorldEditor --> Pipeline
-    WorldEditor --> Runtime
+    SceneFeatures --> UI
+    SceneFeatures --> Routing
+    SceneFeatures --> Schemas
+    SceneFeatures --> Scenes
+    SceneFeatures --> LivePreview
+    Scenes --> Docs
+    Scenes --> World
+    Scenes --> Projects
+    Scenes --> Pipeline
+    LivePreview --> Scenes
+    LivePreview --> Runtime
     MaterialEditor --> UI
     MaterialEditor --> Docs
     MaterialEditor --> Schemas
@@ -1082,9 +1088,9 @@ contract package or inversion point rather than creating a compile-time cycle.
 | From                          | To                             | Reason                                                        |
 | ----------------------------- | ------------------------------ | ------------------------------------------------------------- |
 | `Oxygen.Editor`               | shell-facing feature modules   | application composition                                       |
-| `WorldEditor`                 | `World`                        | scene authoring domain                                        |
-| `WorldEditor`                 | `Runtime`                      | live preview and scene sync boundary                          |
-| `WorldEditor`                 | `ContentPipeline`              | scene save/cook/mount workflows                               |
+| `Scenes`                      | `World`                        | scene authoring domain                                        |
+| `LivePreview`                 | `Runtime`                      | live preview and scene sync boundary                          |
+| `Scenes`                      | `ContentPipeline`              | scene relocation rules and new scenes                         |
 | `ContentExplorer`             | `Assets`                       | asset identity and catalog data                               |
 | `ContentExplorer`             | `ContentPipeline`              | source/generated/cooked state and pipeline actions            |
 | `ContentPipeline`             | `Projects`                     | project identity, authored roots, and cook-scope facts        |
@@ -1098,11 +1104,11 @@ contract package or inversion point rather than creating a compile-time cycle.
 
 | Forbidden Edge                                                       | Reason                                                            |
 | -------------------------------------------------------------------- | ----------------------------------------------------------------- |
-| `World` -> WinUI, `WorldEditor`, `Runtime`, or `Interop`             | scene domain must remain pure authoring data                      |
+| `World` -> WinUI, `Scenes`, `Runtime`, or `Interop`                  | scene domain must remain pure authoring data                      |
 | `Physics` -> WinUI, `PhysicsEditor`, `Runtime`, or `Interop`         | shared physics domain must remain reusable                        |
-| `ContentExplorer` -> `WorldEditor`                                   | content browsing must not depend on scene editor internals        |
-| `ProjectExplorer` -> `WorldEditor`                                   | project startup must not depend on workspace internals            |
-| `Documents` -> `WorldEditor`                                         | generic document contracts must not depend on scene UI            |
+| `ContentExplorer` -> the scene features                              | content browsing must not depend on scene editor internals        |
+| `ProjectExplorer` -> the scene features                              | project startup must not depend on workspace internals            |
+| `Documents` -> the scene features                                    | generic document contracts must not depend on scene UI            |
 | `Projects` -> runtime UI/lifecycle behavior                          | project policy must not require a live engine                     |
 | feature UI VMs -> `Interop`                                          | native access goes through runtime/content-pipeline services      |
 | `Runtime` -> feature UI modules                                      | runtime must not know workspace or inspector implementation       |

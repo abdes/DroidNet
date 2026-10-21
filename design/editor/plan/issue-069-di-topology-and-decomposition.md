@@ -1,9 +1,9 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0 and S1.1 to S1.11 (Assets, Cook on change,
+Status: `in progress` — Phase 0 and S1.1 to S1.13 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
 Scenes, LivePreview, Asset family modules, Cook on change over checked inputs,
-Shell, Unsaved documents, Features) are done; S1.13 (Dissolve the World Editor) is next; see the ledger in section 6. Phase 1 follows
+Shell, Unsaved documents, Features, Dissolve the World Editor) are done; S1.14 (Test boundaries) is next; see the ledger in section 6. Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -621,11 +621,12 @@ needs instead of a `WindowId`. Every slice follows decision 9.
     sites are fixtures linked as source into other test projects, each of which
     then needs the fixture's packages. The shared host-equivalent builder
     constructs them from registrations instead.
-  - Test projects that link another module's `testsupport` files: WorldEditor
-    Unit.UI (ContentBrowser `BrowserControls`, `BrowserQuerySupport`,
-    `BrowserTestData`; ContentPipeline `EngineContentPakFixture`; Managed.Assets
-    `LooseCookedIndexFixture`), Benchmarks.UI and Integration.UI
-    (ContentPipeline `NativeContentPipelineFixture`, Managed.\* fixtures),
+  - Test projects that link another module's `testsupport` files: LivePreview
+    Unit.UI (ContentPipeline `EngineContentPakFixture`; Managed.Assets
+    `LooseCookedIndexFixture`), the editor's
+    Benchmarks.UI and Integration.UI (ContentPipeline
+    `NativeContentPipelineFixture`, Managed.\* fixtures, and in the benchmarks
+    ContentExplorer `ExplorerControls`),
     ContentBrowser UI, LivePreview Unit and Integration.UI, Assets Unit,
     Integration and Benchmarks (`EngineContentPakFixture`), and MaterialEditor
     (`NativeContentPipelineFixture`, `TemporaryNativeArtifacts`). S1.14 removes
@@ -722,32 +723,32 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 Status values: `done`, `in progress`, `not started`. Update the row in the commit
 that lands the work. Checked against the tree on 2026-10-20.
 
-| Slice                                       | Status        | Notes                                                                                                                                                                                  |
-| ------------------------------------------- | ------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| S0.1 Startup hygiene                        | `done`        |                                                                                                                                                                                        |
-| S1.1 Assets                                 | `done`        | Remaining items listed in the slice move with S1.8 and S1.11                                                                                                                           |
-| S1.2 Cook on change                         | `done`        |                                                                                                                                                                                        |
-| S1.3 Foreground cooks                       | `done`        |                                                                                                                                                                                        |
-| S1.4a Global history                        | `done`        |                                                                                                                                                                                        |
-| S1.4 Pipeline workflows out of UI           | `done`        |                                                                                                                                                                                        |
-| S1.4c Removing one cooked product           | `done`        | `1e32de33f`                                                                                                                                                                            |
-| S1.5 Document kinds                         | `done`        |                                                                                                                                                                                        |
-| S1.6 Scenes                                 | `done`        |                                                                                                                                                                                        |
-| S1.7 LivePreview                            | `done`        |                                                                                                                                                                                        |
-| S1.8 Asset family modules                   | `done`        | See the sub-slice table below                                                                                                                                                          |
-| S1.9 Cook on change over checked inputs     | `done`        |                                                                                                                                                                                        |
-| S1.10 Shell                                 | `done`        | Consistent clipboard and delete commands across parts: #86                                                                                                                             |
-| S1.11 Unsaved documents                     | `done`        | Shell `UnsavedDocuments` implements the port; Play, Cook and relocation ask before they run                                                                                            |
-| S1.12 Features                              | `done`        | See the feature table below; the Texture Editor and History panel moved to ED-M09A                                                                                                     |
-| S1.13 Dissolve the World Editor             | `not started` | Places the World Editor's native integration tests and benchmark, which build the scene editor and pipeline together through `NativeSceneFixture` and edit through the scene authoring |
-| S1.14 Test boundaries                       | `not started` | Includes the SceneInspector UI tests that use `NumberBox` internals: revisit them when `NumberBox` is refactored                                                                       |
-| S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; the shared host-equivalent builder lands with S3.1                                                                                        |
-| S2.1 to S2.3 Scope factory and topology     | `not started` |                                                                                                                                                                                        |
-| S3.1 Registration modules                   | `not started` |                                                                                                                                                                                        |
-| S4.1 to S4.4 Project Session                | `not started` |                                                                                                                                                                                        |
-| S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                                                                                                                                                        |
-| S6.1 to S6.3 Service location and messenger | `not started` |                                                                                                                                                                                        |
-| S7 Documentation                            | `not started` |                                                                                                                                                                                        |
+| Slice                                       | Status        | Notes                                                                                                                                                                                       |
+| ------------------------------------------- | ------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| S0.1 Startup hygiene                        | `done`        |                                                                                                                                                                                             |
+| S1.1 Assets                                 | `done`        | Remaining items listed in the slice move with S1.8 and S1.11                                                                                                                                |
+| S1.2 Cook on change                         | `done`        |                                                                                                                                                                                             |
+| S1.3 Foreground cooks                       | `done`        |                                                                                                                                                                                             |
+| S1.4a Global history                        | `done`        |                                                                                                                                                                                             |
+| S1.4 Pipeline workflows out of UI           | `done`        |                                                                                                                                                                                             |
+| S1.4c Removing one cooked product           | `done`        | `1e32de33f`                                                                                                                                                                                 |
+| S1.5 Document kinds                         | `done`        |                                                                                                                                                                                             |
+| S1.6 Scenes                                 | `done`        |                                                                                                                                                                                             |
+| S1.7 LivePreview                            | `done`        |                                                                                                                                                                                             |
+| S1.8 Asset family modules                   | `done`        | See the sub-slice table below                                                                                                                                                               |
+| S1.9 Cook on change over checked inputs     | `done`        |                                                                                                                                                                                             |
+| S1.10 Shell                                 | `done`        | Consistent clipboard and delete commands across parts: #86                                                                                                                                  |
+| S1.11 Unsaved documents                     | `done`        | Shell `UnsavedDocuments` implements the port; Play, Cook and relocation ask before they run                                                                                                 |
+| S1.12 Features                              | `done`        | See the feature table below; the Texture Editor and History panel moved to ED-M09A                                                                                                          |
+| S1.13 Dissolve the World Editor             | `done`        | The workspace window is the composition root's; its native integration tests and benchmark are the composition root's integration suite; the initial scene lookups are Scenes' `SceneFiles` |
+| S1.14 Test boundaries                       | `not started` | Includes the SceneInspector UI tests that use `NumberBox` internals: revisit them when `NumberBox` is refactored                                                                            |
+| S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; the shared host-equivalent builder lands with S3.1                                                                                             |
+| S2.1 to S2.3 Scope factory and topology     | `not started` |                                                                                                                                                                                             |
+| S3.1 Registration modules                   | `not started` |                                                                                                                                                                                             |
+| S4.1 to S4.4 Project Session                | `not started` |                                                                                                                                                                                             |
+| S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                                                                                                                                                             |
+| S6.1 to S6.3 Service location and messenger | `not started` |                                                                                                                                                                                             |
+| S7 Documentation                            | `not started` |                                                                                                                                                                                             |
 
 ### S1.8 sub-slices
 

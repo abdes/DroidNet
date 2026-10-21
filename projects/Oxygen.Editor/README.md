@@ -25,13 +25,12 @@ Oxygen.Editor is organized as a modular system with clear separation of concerns
 
 ### Core Modules
 
-- **Oxygen.Editor.App** (`src/`) - Main WinUI application entry point with bootstrapping and UI configuration
+- **Oxygen.Editor.App** (`src/`) - Main WinUI application entry point with bootstrapping and UI configuration, and the scene workspace window (`src/Workspace`), which composes the Shell and the feature modules
 - **Oxygen.Managed.Core** - Core services and utilities, foundational extensions for framework classes
 - **Oxygen.Editor.Data** - Data layer with Entity Framework Core models and persistence services
 - **Oxygen.Editor.ProjectExplorer** - Project browsing, discovery, and template management UI
 - **Oxygen.Editor.Projects** - Project metadata and project-related services
 - **DroidNet.Storage** - File system abstraction and storage operations
-- **Oxygen.Editor.WorldEditor** - World editing interface and viewport management
 - **Oxygen.Editor.Interop** - Native interoperability layer for platform-specific operations
 
 ## Getting Started
@@ -78,8 +77,7 @@ Oxygen.Editor/
 ├── src/                              # Main application
 │   ├── App.xaml                      # Application UI shell
 │   ├── Program.cs                    # Entry point with host configuration
-│   ├── Oxygen.Editor/
-│   │   └── WorldEditor/              # World editing workspace
+│   ├── Workspace/                    # The scene workspace window
 │   ├── Services/                     # Application services
 │   │   ├── IActivationService.cs
 │   │   └── ActivationService.cs
@@ -89,6 +87,8 @@ Oxygen.Editor/
 │   │   └── Thickness.xaml
 │   ├── Properties/                   # Assembly configuration
 │   └── Strings/                      # Localization resources
+├── tests/                            # Integration suite of the modules together
+├── testsupport/                      # Native scene and content fixtures of that suite
 ├── Oxygen.Editor.sln                # Solution file
 └── README.md                         # This file
 ```
@@ -100,7 +100,7 @@ Oxygen.Editor/
 - `Oxygen.Editor.ProjectExplorer` - Project browsing UI
 - `Oxygen.Editor.Projects` - Project metadata services
 - `DroidNet.Storage` - File system abstraction
-- `Oxygen.Editor.WorldEditor` - World editing interface
+- `Oxygen.Editor.Shell` and the feature modules (`SceneEditor`, `SceneExplorer`, `SceneInspector`, `ContentExplorer`, ...) - The application frame and the panels and editors it hosts
 - `Oxygen.Editor.Interop` - Native interoperability
 
 **Shared Controls** (from `projects/Controls/`):
@@ -140,7 +140,7 @@ and textures.
 - [DynamicTree startup optimizations](../Controls/DynamicTree/README.md#optional-xaml-performance-settings)
 
 - **Integrated Project Management** - Create, open, and manage game projects with templates
-- **World Editor** - Visual world editing with hierarchical scene management (via DynamicTree)
+- **Scene workspace** - Scene editing with the Scene Explorer, Scene Inspector, Scene Editor and Content Explorer docked around the documents
 - **Data Persistence** - SQLite-backed data storage with Entity Framework Core
 - **MVVM Architecture** - Source-generated View-ViewModel wiring for maintainability
 - **Docking Framework** - Flexible window and panel docking (via Docking module)
@@ -225,7 +225,9 @@ See `.github/instructions/csharp_coding_style.instructions.md` for detailed styl
 
 ## Testing
 
-The project uses **MSTest** with the AAA (Arrange-Act-Assert) pattern:
+The project uses **MSTest** with the AAA (Arrange-Act-Assert) pattern. The
+application's own tests are the [integration suite](tests/README.md): workflows
+across the scene modules, the content pipeline and the engine.
 
 - **Test Projects:** Named with `.Tests` suffix (e.g., `Oxygen.Managed.Core.Tests`)
 - **UI Tests:** Named with `.UI.Tests` suffix

@@ -135,8 +135,6 @@ The Oxygen projects represent a comprehensive game editor and engine implementat
 
 - **[DroidNet.Storage](projects/DroidNet.Storage/)** - Persistence and data storage services for projects and editor state.
 
-- **[Oxygen.Editor.WorldEditor](projects/Oxygen.Editor.WorldEditor/)** - World editing and scene management UI.
-
 - **[Oxygen.Editor.Data](projects/Oxygen.Editor.Data/)** - Data models and serialization for world and project data.
 
 ## Getting Started

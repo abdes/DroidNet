@@ -63,6 +63,50 @@ public static class SceneFiles
         => (await ListAsync(catalog, project, cancellationToken).ConfigureAwait(true))
             .FirstOrDefault(location => string.Equals(SceneContent.NameOf(location.File.Name), name, StringComparison.OrdinalIgnoreCase));
 
+    /// <summary>Resolves a scene from a last-opened name by file stem, file name, or stable ID.</summary>
+    /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
+    /// <param name="project">The project whose scene files are searched.</param>
+    /// <param name="lastOpenedScene">The persisted last-opened scene name.</param>
+    /// <returns>Where the matching scene is, or <see langword="null"/> when no scene matches.</returns>
+    public static async Task<ProjectAssetLocation?> ResolveSceneByNameOrIdAsync(IAssetCatalog catalog, ProjectContext project, string? lastOpenedScene)
+    {
+        if (string.IsNullOrWhiteSpace(lastOpenedScene))
+        {
+            return null;
+        }
+
+        if (Guid.TryParse(lastOpenedScene, out var id))
+        {
+            return await FindByIdAsync(catalog, project, SceneId.FromValue(id)).ConfigureAwait(true);
+        }
+
+        var sceneName = lastOpenedScene.EndsWith(AssetFileTypes.SceneDescriptor, StringComparison.Ordinal)
+            ? lastOpenedScene[..^AssetFileTypes.SceneDescriptor.Length]
+            : lastOpenedScene;
+        return await FindByNameAsync(catalog, project, sceneName).ConfigureAwait(true);
+    }
+
+    /// <summary>Resolves the scene a workspace opens first: the one activation asked for, else the project's start scene.</summary>
+    /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
+    /// <param name="context">The project.</param>
+    /// <returns>The scene's asset URI, or <see langword="null"/> when there is none to open.</returns>
+    public static async Task<AssetPath?> ResolveInitialSceneAsync(IAssetCatalog catalog, ProjectContext context)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        // Fresh activation may carry an explicit scene request (template StarterScene or a workflow open).
+        if (context.InitialScene is { } initialScene && context.FindSource(initialScene) is { IsMountRoot: false } requested)
+        {
+            return requested.Identity;
+        }
+
+        // Otherwise the project's configured start scene, resolved by stable ID.
+        // A missing or invalid start scene is not silently replaced by last-opened or first-listed.
+        return context.DefaultSceneId is { } defaultSceneId
+            ? (await FindByIdAsync(catalog, context, defaultSceneId).ConfigureAwait(true))?.Identity
+            : null;
+    }
+
     /// <summary>Reads the identity a scene file of the project holds.</summary>
     /// <param name="project">The project, through whose file system the file is read.</param>
     /// <param name="location">The scene file.</param>

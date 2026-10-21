@@ -1,0 +1,108 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1040" height="660" viewBox="0 0 1040 660" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="13">
+  <title>Texture Editor mockup (dark theme)</title>
+  <desc>The Texture Editor document tab for Bricks_N: a header with the cook state, a preview of the cooked texture rendered by the engine with its toolbar, a banner and an info strip, and a settings pane with set values, effective values and their origins, and a reset button.</desc>
+  <defs>
+    <pattern id="checker" width="16" height="16" patternUnits="userSpaceOnUse">
+      <rect width="16" height="16" fill="#2a2a2a"/><rect width="8" height="8" fill="#333"/><rect x="8" y="8" width="8" height="8" fill="#333"/>
+    </pattern>
+    <pattern id="bricks" width="64" height="32" patternUnits="userSpaceOnUse">
+      <rect width="64" height="32" fill="#8080ff"/>
+      <rect x="2" y="2" width="60" height="12" fill="#8a86f4"/>
+      <rect x="-30" y="18" width="60" height="12" fill="#7a84fa"/>
+      <rect x="34" y="18" width="60" height="12" fill="#867ef8"/>
+      <line x1="0" y1="15.5" x2="64" y2="15.5" stroke="#6f6ff0" stroke-width="3"/>
+      <line x1="0" y1="31.5" x2="64" y2="31.5" stroke="#6f6ff0" stroke-width="3"/>
+    </pattern>
+  </defs>
+  <rect width="1040" height="660" fill="#161616"/>
+
+  <!-- Document tab strip -->
+  <rect x="0" y="0" width="1040" height="34" fill="#1c1c1c"/>
+  <rect x="12" y="4" width="170" height="30" rx="6" fill="#272727"/>
+  <text x="26" y="24" fill="#ffffff">Bricks_N.otex.json</text>
+  <circle cx="160" cy="19" r="3" fill="#c5c5c5"><title>Unsaved changes</title></circle>
+  <text x="196" y="24" fill="#9e9e9e">Courtyard.scene</text>
+
+  <!-- Header -->
+  <rect x="0" y="34" width="1040" height="40" fill="#272727"/>
+  <text x="16" y="59" font-size="15" font-weight="600" fill="#ffffff">Bricks_N</text>
+  <text x="92" y="59" fill="#c5c5c5">Texture · Normal</text>
+  <rect x="210" y="44" width="88" height="22" rx="11" fill="#1e3a1e"/>
+  <text x="222" y="59" font-size="12" fill="#6ccb5f">Up to date</text>
+  <text x="318" y="59" font-size="12" fill="#c5c5c5">0 problems</text>
+  <rect x="946" y="42" width="80" height="26" rx="4" fill="#373737" stroke="#454545"/>
+  <text x="986" y="60" text-anchor="middle" fill="#ffffff">Cook</text>
+  <line x1="0" y1="74" x2="1040" y2="74" stroke="#3a3a3a"/>
+
+  <!-- Preview toolbar -->
+  <rect x="0" y="75" width="700" height="36" fill="#202020"/>
+  <g font-size="12">
+    <rect x="12" y="82" width="24" height="22" rx="4" fill="#5a2a2a"/><text x="20" y="98" fill="#ff9a9a">R</text>
+    <rect x="40" y="82" width="24" height="22" rx="4" fill="#2a4a2a"/><text x="48" y="98" fill="#9aff9a">G</text>
+    <rect x="68" y="82" width="24" height="22" rx="4" fill="#2a2a5a"/><text x="76" y="98" fill="#9a9aff">B</text>
+    <rect x="96" y="82" width="24" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="104" y="98" fill="#787878">A</text>
+    <text x="138" y="98" fill="#c5c5c5">Mip</text>
+    <rect x="164" y="82" width="70" height="22" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="172" y="98" fill="#ffffff">Auto</text><text x="218" y="97" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+    <text x="250" y="98" fill="#787878">Slice</text>
+    <rect x="282" y="82" width="50" height="22" rx="4" fill="#2b2b2b" stroke="#3a3a3a"/><text x="290" y="98" fill="#787878">0</text>
+    <text x="350" y="98" fill="#787878">Exposure</text>
+    <line x1="406" y1="93" x2="486" y2="93" stroke="#3a3a3a" stroke-width="3"/>
+    <text x="512" y="98" fill="#c5c5c5">Fit</text>
+    <text x="540" y="98" fill="#ffffff">100%</text>
+    <rect x="590" y="82" width="24" height="22" rx="4" fill="#373737"/><rect x="596" y="88" width="12" height="10" fill="url(#checker)"/>
+  </g>
+
+  <!-- Preview -->
+  <rect x="0" y="111" width="700" height="475" fill="url(#checker)"/>
+  <rect x="150" y="160" width="400" height="400" fill="url(#bricks)"/>
+  <rect x="0" y="111" width="700" height="32" fill="#3a3220"/>
+  <text x="14" y="132" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#fce100">&#xE7BA;</text>
+  <text x="36" y="132" fill="#ffffff">Showing the last cooked texture. Save to cook your changes.</text>
+  <text x="572" y="132" fill="#78c9e8">Save and cook</text>
+  <rect x="0" y="586" width="700" height="30" fill="#202020"/>
+  <text x="14" y="606" font-size="12" fill="#c5c5c5">Source 2048 × 2048 RGB8 · Cooked BC7 UNorm · 2048 × 2048 · 12 mips · 5.3 MB</text>
+  <text x="620" y="606" font-size="12" fill="#9e9e9e">Engine preview</text>
+
+  <!-- Settings pane -->
+  <rect x="701" y="75" width="339" height="585" fill="#272727"/>
+  <line x1="700" y1="75" x2="700" y2="660" stroke="#3a3a3a"/>
+  <g font-size="13">
+    <text x="714" y="100" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+    <text x="732" y="101" font-weight="600" fill="#ffffff">Source</text>
+    <text x="732" y="126" fill="#9e9e9e">Image</text><text x="836" y="126" fill="#ffffff">Bricks_N.png</text>
+    <rect x="836" y="134" width="118" height="24" rx="4" fill="#373737" stroke="#454545"/><text x="846" y="151" fill="#ffffff">Change source…</text>
+    <text x="732" y="180" fill="#9e9e9e">More sources</text><text x="836" y="180" fill="#c5c5c5">None</text><text x="992" y="180" fill="#78c9e8">Add</text>
+
+    <text x="714" y="212" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+    <text x="732" y="213" font-weight="600" fill="#ffffff">Usage</text>
+    <text x="732" y="238" fill="#9e9e9e">Preset</text>
+    <rect x="836" y="224" width="150" height="24" rx="4" fill="#2b2b2b" stroke="#454545"/><text x="846" y="241" fill="#ffffff">Normal</text><text x="970" y="240" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+    <text x="1000" y="241" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#c5c5c5">&#xE7A7;</text>
+    <text x="732" y="268" fill="#9e9e9e">Intent</text><text x="836" y="268" fill="#9e9e9e">Normal · from preset</text>
+
+    <text x="714" y="300" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+    <text x="732" y="301" font-weight="600" fill="#ffffff">Shape</text>
+    <text x="732" y="326" fill="#9e9e9e">Shape</text><text x="836" y="326" fill="#9e9e9e">2D · from the image</text>
+
+    <text x="714" y="358" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+    <text x="732" y="359" font-weight="600" fill="#ffffff">Mips</text>
+    <text x="732" y="384" fill="#9e9e9e">Policy</text><text x="836" y="384" fill="#9e9e9e">Full chain · from preset</text>
+    <text x="732" y="412" fill="#9e9e9e">Filter</text>
+    <rect x="836" y="398" width="150" height="24" rx="4" fill="#2b2b2b" stroke="#78c9e8"/><text x="846" y="415" fill="#ffffff">Lanczos</text><text x="970" y="414" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="9" fill="#c5c5c5">&#xE70D;</text>
+    <text x="1000" y="415" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#c5c5c5">&#xE7A7;<title>Reset to the cooker's value (Box, from preset)</title></text>
+    <text x="732" y="440" fill="#9e9e9e">Renormalize</text><text x="836" y="440" fill="#9e9e9e">On · default</text>
+
+    <text x="714" y="472" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+    <text x="732" y="473" font-weight="600" fill="#ffffff">Output</text>
+    <text x="732" y="498" fill="#9e9e9e">Format</text><text x="836" y="498" fill="#9e9e9e">BC7 UNorm · from preset</text>
+    <text x="732" y="526" fill="#9e9e9e">BC7 quality</text><text x="836" y="526" fill="#9e9e9e">Default · from preset</text>
+    <text x="732" y="554" fill="#9e9e9e">Packing</text><text x="836" y="554" fill="#9e9e9e">D3D12 · default</text>
+
+    <text x="714" y="588" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE76C;</text>
+    <text x="732" y="589" font-weight="600" fill="#ffffff">Color</text>
+    <text x="714" y="614" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE76C;</text>
+    <text x="732" y="615" font-weight="600" fill="#787878">HDR</text><text x="772" y="615" font-size="12" fill="#787878">not an HDR image</text>
+    <text x="714" y="640" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE76C;</text>
+    <text x="732" y="641" font-weight="600" fill="#ffffff">Advanced</text>
+  </g>
+</svg>

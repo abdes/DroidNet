@@ -35,10 +35,10 @@
     ./tooling/GenerateSolution.ps1 -Scope projects -SolutionPath artifacts/Check.sln -UseDiagnostics
     Generate all product projects, including native tests, with a diagnostic log.
 .EXAMPLE
-    ./projects/Oxygen.Editor.WorldEditor/open.cmd -TestScope Integration
+    ./projects/Oxygen.Editor/open.cmd -TestScope Integration
     Open native integration tests separately from routine unit and UI tests.
 .EXAMPLE
-    ./projects/Oxygen.Editor.WorldEditor/open.cmd -TestScope Benchmarks -NoLaunch
+    ./projects/Oxygen.Editor/open.cmd -TestScope Benchmarks -NoLaunch
     Generate the explicit benchmark solution without opening Visual Studio.
 #>
 [CmdletBinding()]

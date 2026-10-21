@@ -10,9 +10,9 @@ Sibling editor overlays add presentation metadata in `x-editor-*` annotations.
 The editor consumes those engine schemas rather than maintaining a second
 copy of their constraints.
 
-| File | Owner | Purpose |
-| --- | --- | --- |
-| `*.schema.json` | Engine | Authored fields, types, constraints. |
+| File                   | Owner  | Purpose                                                |
+| ---------------------- | ------ | ------------------------------------------------------ |
+| `*.schema.json`        | Engine | Authored fields, types, constraints.                   |
 | `*.editor.schema.json` | Editor | Labels, groups, widget choices, and other annotations. |
 
 [EditorSchemaCatalog](src/EditorSchemaCatalog.cs) loads and evaluates schemas.
@@ -30,15 +30,15 @@ the engine's validation authority while allowing editor-specific presentation.
 
 ## Shared editing mechanisms
 
-| Type | Responsibility |
-| --- | --- |
-| `PropertyId<T>` | Typed property identity. |
-| `PropertyDescriptor<T>` | Model reader/writer, validator, annotation, and engine command key. |
-| `PropertyEdit` | Descriptor-addressed value map. |
-| `PropertySnapshot` / `PropertyOp` | Per-target before/after values and the target identity set. |
-| `PropertyApply` | Shared apply path for forward edits and history restoration. |
-| `PropertyBinding<T>` | Multi-selection values, including mixed-value state. |
-| `CommitGroupController` | Session grouping for continuous edits. |
+| Type                              | Responsibility                                                      |
+| --------------------------------- | ------------------------------------------------------------------- |
+| `PropertyId<T>`                   | Typed property identity.                                            |
+| `PropertyDescriptor<T>`           | Model reader/writer, validator, annotation, and engine command key. |
+| `PropertyEdit`                    | Descriptor-addressed value map.                                     |
+| `PropertySnapshot` / `PropertyOp` | Per-target before/after values and the target identity set.         |
+| `PropertyApply`                   | Shared apply path for forward edits and history restoration.        |
+| `PropertyBinding<T>`              | Multi-selection values, including mixed-value state.                |
+| `CommitGroupController`           | Session grouping for continuous edits.                              |
 
 [PropertyApply](src/PropertyApply.cs) receives an `IPropertyTarget` resolver
 instead of depending on world models or the C++/CLI facade. It applies the
@@ -57,17 +57,16 @@ The feature command layer owns validation orchestration, history registration,
 dirty state, operation results, and concrete runtime adapters. A descriptor or
 a call to `PropertyApply` alone does not supply those integrations.
 
-The current
-[scene command pipeline](../Oxygen.Editor.WorldEditor/src/Documents/Commands/SceneDocumentCommandService.PropertyPipeline.cs)
-uses the shared operation/session mechanisms for transforms. Other component
-property edits adapt into existing scene commands so their undo/redo, sun
-exclusivity, and specialized asset/environment behavior remain centralized.
+The scene edits of `Oxygen.Editor.Scenes`
+([property writes](../Oxygen.Editor.Scenes/src/Edits/Properties/PropertyWrites.cs))
+apply property values through `PropertyApply`, and record them into the scene
+document's history.
 Material editing uses descriptors and validation; its missing history
 integration is tracked in [issue #9](https://github.com/abdes/DroidNet/issues/9).
 
-[SceneDocumentCommandServiceTests](../Oxygen.Editor.WorldEditor/tests/SceneExplorer/SceneDocumentCommandServiceTests.cs)
-covers session grouping, preservation of original targets, no-op edits,
-validation failures, and undo/redo behavior.
+[SceneGestureTests](../Oxygen.Editor.Scenes/tests/Authoring/SceneGestureTests.cs)
+covers a property edit that previews many times and records once, its refusals,
+invalid previews and no-op commits.
 [PropertyPipelineContractTests](tests/PropertyPipelineContractTests.cs) covers
 the shared mechanisms. This documents test coverage in source, not a current
 execution result.

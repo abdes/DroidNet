@@ -39,7 +39,7 @@ The Projects module exists to:
 ```mermaid
 graph TB
     subgraph Presentation["Editor Presentation"]
-        UI[WorldEditor<br/>ViewModels]
+        UI[Editor features<br/>ViewModels]
     end
 
     subgraph Projects["Oxygen.Editor.Projects"]

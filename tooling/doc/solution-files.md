@@ -37,8 +37,8 @@ This selects whole projects through SlnGen's supported
 without conditional test compilation or hidden discovery filters.
 
 ```powershell
-./projects/Oxygen.Editor.WorldEditor/open.cmd -TestScope Integration
-./projects/Oxygen.Editor.WorldEditor/open.cmd -TestScope Benchmarks
+./projects/Oxygen.Editor/open.cmd -TestScope Integration
+./projects/Oxygen.Editor/open.cmd -TestScope Benchmarks
 ./tooling/GenerateSolution.ps1 -Scope projects -TestScope All -NoLaunch
 ```
 

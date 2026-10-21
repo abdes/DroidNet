@@ -31,7 +31,7 @@ flowchart BT
     scenes["Oxygen.Editor.Scenes<br/>documents, edits, layout"]
     cook["Oxygen.Editor.ContentPipeline<br/>cooking"]
     preview["Oxygen.Editor.LivePreview<br/>engine preview"]
-    ui["Oxygen.Editor.WorldEditor<br/>Explorer, inspector, viewport"]
+    ui["Scene features<br/>Explorer, inspector, editor"]
 
     core --> world
     world --> scenes
@@ -44,14 +44,14 @@ flowchart BT
     class world focus
 ```
 
-| Concern                                                                | Module                                                 |
-| ---------------------------------------------------------------------- | ------------------------------------------------------ |
-| Projects, mount points and project settings                            | `Oxygen.Editor.Projects`                               |
-| Scene documents, edits, undo, dirty state, Explorer folders and layout | `Oxygen.Editor.Scenes`                                 |
-| Cooking scenes into engine descriptors                                 | `Oxygen.Editor.ContentPipeline`                        |
-| Showing a scene in the engine while it is edited                       | `Oxygen.Editor.LivePreview`                            |
-| Script problems; script analysis and tooling                           | `Oxygen.Editor.Scripting`, `Oxygen.Editor.WorldEditor` |
-| Scene Explorer, inspector and viewport UI                              | `Oxygen.Editor.WorldEditor`                            |
+| Concern                                                                | Module                                                                                     |
+| ---------------------------------------------------------------------- | ------------------------------------------------------------------------------------------ |
+| Projects, mount points and project settings                            | `Oxygen.Editor.Projects`                                                                   |
+| Scene documents, edits, undo, dirty state, Explorer folders and layout | `Oxygen.Editor.Scenes`                                                                     |
+| Cooking scenes into engine descriptors                                 | `Oxygen.Editor.ContentPipeline`                                                            |
+| Showing a scene in the engine while it is edited                       | `Oxygen.Editor.LivePreview`                                                                |
+| Script problems; script analysis and tooling                           | `Oxygen.Editor.Scripting`, `Oxygen.Editor.LivePreview`                                     |
+| Scene Explorer, inspector and viewport UI                              | `Oxygen.Editor.SceneExplorer`, `Oxygen.Editor.SceneInspector`, `Oxygen.Editor.SceneEditor` |
 
 ## Source layout
 
@@ -303,7 +303,7 @@ What each module does with a material override:
 | `Oxygen.Editor.Scenes`          | `SetMaterialSlot` sets or clears it after checking the slot against the current inventory; `SetGeometry` keeps those the new mesh still has |
 | `Oxygen.Editor.LivePreview`     | Sends it to the engine with its slot id and layout revision                                                                                 |
 | `Oxygen.Editor.ContentPipeline` | Writes it into the scene descriptor; an override with no matching geometry or slot id fails the scene's cook                                |
-| `Oxygen.Editor.WorldEditor`     | Lists the mesh's slots in the inspector and offers Reassign or Clear for overrides whose slot no longer resolves                            |
+| `Oxygen.Editor.SceneInspector`  | Lists the mesh's slots in the inspector and offers Reassign or Clear for overrides whose slot no longer resolves                            |
 
 An override whose slot no longer exists after a reimport is kept, with its
 material and slot context, until it is reassigned or cleared. It blocks only the
@@ -434,7 +434,7 @@ state and the change stream that the UI and Live Preview follow:
 
 ```mermaid
 sequenceDiagram
-    participant UI as WorldEditor UI
+    participant UI as Scene features
     participant Authoring as Scenes: SceneAuthoring
     participant Model as World: Scene model
     participant Followers as UI and Live Preview

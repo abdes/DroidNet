@@ -140,7 +140,7 @@ feature project.
 
 | Project                                  | Owns                                                                                                                                                                                                | Must Not Own                                                                                                      |
 | ---------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `projects/Oxygen.Editor`                 | App entry point, bootstrap, DI composition, activation, top-level windows, native runtime bootstrap.                                                                                                | Scene editing policy, asset workflow policy, cooker policy, engine operations beyond bootstrap.                   |
+| `projects/Oxygen.Editor`                 | App entry point, bootstrap, DI composition, activation, top-level windows, the scene workspace window, native runtime bootstrap; the integration suite of the modules together.                     | Scene editing policy, asset workflow policy, cooker policy, engine operations beyond bootstrap.                   |
 | `projects/Oxygen.Editor.UI`              | Oxygen-specific reusable editor widgets, field controls, overlays, editor styles, and UI helper view models that are not general DroidNet controls.                                                 | Feature policy, domain models, project/cook/runtime behavior.                                                     |
 | `projects/Oxygen.Editor.Shell`           | Application frame: the document service, document areas and tabs, close prompts, histories, command routing, placement, panel and editor contributions, the docking workspace, desktop integration. | Scene, asset or pipeline policy; references above foundation.                                                     |
 | `projects/Oxygen.Editor.Routing`         | Editor-specific route helpers and route integration glue.                                                                                                                                           | Feature state or feature workflow policy.                                                                         |
@@ -148,7 +148,6 @@ feature project.
 | `projects/Oxygen.Editor.Documents`       | Generic document abstractions shared by editor features.                                                                                                                                            | World-editor-specific scene document behavior.                                                                    |
 | `projects/Oxygen.Editor.Schemas`         | Schema/overlay catalog, typed properties/edits, mixed values, snapshots, apply/session mechanics.                                                                                                   | Feature UI/policy, runtime lifecycle, native calls, cooked binary offsets.                                        |
 | `projects/Oxygen.Editor.World`           | Pure authoring scene/domain model: scenes, nodes, components, scene serialization, scene-owned settings, authoring references.                                                                      | WinUI, routing, docking, runtime engine handles, interop, cook execution.                                         |
-| `projects/Oxygen.Editor.WorldEditor`     | Open scene workspace: documents, commands, selection, scene validation presentation, scene-engine sync orchestration.                                                                               | Native calls directly from view models, reusable asset import/cook primitives, project-wide cook policy.          |
 | `projects/Oxygen.Editor.MaterialEditor`  | Full material document/editor workspace, material inspector/tools, material preview UI, material validation presentation.                                                                           | Reusable asset/cook primitives, native engine calls, project policy.                                              |
 | `projects/Oxygen.Editor.SceneEditor`     | The scene editor: viewports, cameras, transform gizmos and tools, the toolbar and the Play bar; the preview, viewport and transform tool settings.                                                  | Applying authoring state to the engine, Play sessions, native calls (it reaches the engine through Runtime only). |
 | `projects/Oxygen.Editor.SceneInspector`  | The Properties panel of a scene: the selected nodes' components, the scene's environment and the script slots.                                                                                      | Scene edit rules, the shared property controls, engine calls.                                                     |
@@ -178,8 +177,8 @@ feature project.
    UI must not depend on another feature UI's internals. Reusable
    Oxygen-specific widgets move to `Oxygen.Editor.UI`; reusable behavior moves
    to the owning service/model project or an explicit feature contract.
-3. `Oxygen.Editor.WorldEditor` may orchestrate scene sync, but engine work goes
-   through `Oxygen.Editor.Runtime`. View models do not call interop.
+3. `Oxygen.Editor.LivePreview` applies authoring state to the engine, through
+   `Oxygen.Editor.Runtime`. View models do not call interop.
 4. `Oxygen.Editor.Runtime` may call `Oxygen.Editor.Interop`; ordinary editor
    projects must depend on runtime services instead of interop.
 5. `Oxygen.Editor.Interop` must be replaceable by stable managed service
@@ -289,8 +288,8 @@ projects/Oxygen.Editor.UI/src/
 ```
 
 ```text
-projects/Oxygen.Editor.WorldEditor/src/
-+-- Workspace/             # the workspace window: its container, routes and layout
+projects/Oxygen.Editor/src/
++-- Workspace/             # the scene workspace window: its container, routes and layout
 ```
 
 ```text
@@ -352,7 +351,7 @@ Most editor features touch several projects. Split them by product:
 | Validation result model/presentation     | owner service plus UI presentation         |
 
 Example: a new scene component should not be implemented as one large
-WorldEditor patch. Its domain type goes in `World`; its inspector goes in
+patch to one project. Its domain type goes in `World`; its inspector goes in
 `SceneInspector`; its asset references use `Assets`; its cook policy goes through
 `Projects`; its live operation goes through `Runtime`.
 

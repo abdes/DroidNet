@@ -41,7 +41,7 @@ native engine:
 ```mermaid
 graph TD
     subgraph Presentation["Presentation Layer"]
-        WE[WorldEditor]
+        WE[SceneEditor]
         ME[MaterialEditor]
         PE[ParticleEditor]
     end

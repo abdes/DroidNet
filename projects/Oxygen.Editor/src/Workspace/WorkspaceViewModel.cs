@@ -125,48 +125,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         await this.OpenInitialSceneAsync().ConfigureAwait(true);
     }
 
-    /// <summary>Resolves a scene from a last-opened name by file stem, file name, or stable ID.</summary>
-    /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
-    /// <param name="project">The project whose scene files are searched.</param>
-    /// <param name="lastOpenedScene">The persisted last-opened scene name.</param>
-    /// <returns>Where the matching scene is, or <see langword="null"/> when no scene matches.</returns>
-    internal static async Task<ProjectAssetLocation?> ResolveSceneByNameOrIdAsync(IAssetCatalog catalog, ProjectContext project, string? lastOpenedScene)
-    {
-        if (string.IsNullOrWhiteSpace(lastOpenedScene))
-        {
-            return null;
-        }
-
-        if (Guid.TryParse(lastOpenedScene, out var id))
-        {
-            return await SceneFiles.FindByIdAsync(catalog, project, SceneId.FromValue(id)).ConfigureAwait(true);
-        }
-
-        var sceneName = lastOpenedScene.EndsWith(Oxygen.Managed.Assets.AssetFileTypes.SceneDescriptor, StringComparison.Ordinal)
-            ? lastOpenedScene[..^Oxygen.Managed.Assets.AssetFileTypes.SceneDescriptor.Length]
-            : lastOpenedScene;
-        return await SceneFiles.FindByNameAsync(catalog, project, sceneName).ConfigureAwait(true);
-    }
-
-    /// <summary>Resolves the scene a workspace opens first: the one activation asked for, else the project's start scene.</summary>
-    /// <param name="catalog">The project's asset catalog, which lists its scene files.</param>
-    /// <param name="context">The project.</param>
-    /// <returns>The scene's asset URI, or <see langword="null"/> when there is none to open.</returns>
-    internal static async Task<AssetPath?> ResolveInitialSceneAsync(IAssetCatalog catalog, ProjectContext context)
-    {
-        // Fresh activation may carry an explicit scene request (template StarterScene or a workflow open).
-        if (context.InitialScene is { } initialScene && context.FindSource(initialScene) is { IsMountRoot: false } requested)
-        {
-            return requested.Identity;
-        }
-
-        // Otherwise the project's configured start scene, resolved by stable ID.
-        // A missing or invalid start scene is not silently replaced by last-opened or first-listed.
-        return context.DefaultSceneId is { } defaultSceneId
-            ? (await SceneFiles.FindByIdAsync(catalog, context, defaultSceneId).ConfigureAwait(true))?.Identity
-            : null;
-    }
-
     /// <inheritdoc />
     protected override void OnSetupChildContainer(IContainer childContainer)
     {
@@ -339,7 +297,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         // Seed the default scene for projects that predate DefaultSceneId before resolving it.
         await this.MigrateDefaultSceneAsync(catalog, project, context).ConfigureAwait(true);
 
-        var scene = await ResolveInitialSceneAsync(catalog, this.projectContextService.ActiveProject ?? context).ConfigureAwait(true);
+        var scene = await SceneFiles.ResolveInitialSceneAsync(catalog, this.projectContextService.ActiveProject ?? context).ConfigureAwait(true);
         if (scene is null)
         {
             return;
@@ -383,7 +341,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
             }
 
             var lastOpened = usage.LastOpenedScene;
-            if (await ResolveSceneByNameOrIdAsync(catalog, context, lastOpened).ConfigureAwait(true) is not { } migrated
+            if (await SceneFiles.ResolveSceneByNameOrIdAsync(catalog, context, lastOpened).ConfigureAwait(true) is not { } migrated
                 || await SceneFiles.ReadIdAsync(context, migrated).ConfigureAwait(true) is not { } migratedId)
             {
                 return;

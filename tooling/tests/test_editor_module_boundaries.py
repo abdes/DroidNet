@@ -78,7 +78,6 @@ EDITOR_LAYERS: dict[str, Layer] = {
     "Oxygen.Editor.SceneEditor": Layer.FEATURE,
     "Oxygen.Editor.SceneExplorer": Layer.FEATURE,
     "Oxygen.Editor.SceneInspector": Layer.FEATURE,
-    "Oxygen.Editor.WorldEditor": Layer.FEATURE,
     "Oxygen.Editor.Pickers": Layer.SHARED_UI,
     **{name: Layer.DOMAIN for name in DOMAIN_RANK},
     "Oxygen.Editor.Controls": Layer.UI_KIT,
@@ -109,19 +108,12 @@ ENGINE_EXCEPTIONS: dict[str, frozenset[str]] = {
 
 # Violations the tree still has, each with the work that removes it. An entry
 # that no longer occurs fails the test, so the lists only shrink.
-DISSOLVE_WORLD_EDITOR = "#69 S1.13 dissolves the World Editor"
 TEST_BOUNDARIES = "#69 S1.14 removes cross-module internals grants"
-PENDING_REFERENCES: dict[tuple[str, str], str] = {
-    ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Runtime"): DISSOLVE_WORLD_EDITOR,
-    ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Interop"): DISSOLVE_WORLD_EDITOR,
-}
+PENDING_REFERENCES: dict[tuple[str, str], str] = {}
 PENDING_GRANTS: dict[tuple[str, str], str] = {
-    ("Oxygen.Editor.World", "Oxygen.Editor.WorldEditor"): DISSOLVE_WORLD_EDITOR,
     **{
         ("Oxygen.Editor.World", grantee): TEST_BOUNDARIES
         for grantee in (
-            "Oxygen.Editor.WorldEditor.Unit.Tests",
-            "Oxygen.Editor.WorldEditor.Unit.UI.Tests",
             "Oxygen.Editor.ContentPipeline.Unit.Tests",
             "Oxygen.Editor.ContentPipeline.Integration.Tests",
             "Oxygen.Editor.ContentPipeline.Benchmarks.Tests",
@@ -130,10 +122,9 @@ PENDING_GRANTS: dict[tuple[str, str], str] = {
     **{
         ("Oxygen.Editor.ContentPipeline", grantee): TEST_BOUNDARIES
         for grantee in (
-            "Oxygen.Editor.WorldEditor.Unit.Tests",
-            "Oxygen.Editor.WorldEditor.Unit.UI.Tests",
-            "Oxygen.Editor.WorldEditor.Integration.UI.Tests",
-            "Oxygen.Editor.WorldEditor.Benchmarks.UI.Tests",
+            "Oxygen.Editor.LivePreview.Unit.UI.Tests",
+            "Oxygen.Editor.Integration.UI.Tests",
+            "Oxygen.Editor.Benchmarks.UI.Tests",
             "Oxygen.Editor.MaterialEditor.Tests",
             "Oxygen.Editor.ContentExplorer.UI.Tests",
         )

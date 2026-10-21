@@ -6,7 +6,7 @@ Status: C# test projects and templates use MSTest.Sdk 4.5.1 and Microsoft.Testin
 passed 111 tests in both Debug and Release; packaged-identity paths remain outside
 that focused qualification.
 See [hosting](#hosting), [release qualification](#release-qualification), and
-[WorldEditor test organization](../../projects/Oxygen.Editor.WorldEditor/tests/README.md).
+[editor integration test organization](../../projects/Oxygen.Editor/tests/README.md).
 
 ## Hosting
 
