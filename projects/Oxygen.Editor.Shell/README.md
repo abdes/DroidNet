@@ -12,7 +12,7 @@ Design: [editor-shell.md](../../design/editor/review/editor-shell.md),
 
 | Folder          | Holds                                                                                  |
 | --------------- | -------------------------------------------------------------------------------------- |
-| `Contributions` | Panel descriptors, editor providers and the registry that checks them once             |
+| `Contributions` | Feature modules, panel descriptors, editor providers and the registry that checks them |
 | `Documents`     | The document service, each window's document area and tabs, closing, prompts, banners  |
 | `Commands`      | Command descriptors, the window's command service and its key bindings                 |
 | `Windows`       | Placement of documents and panels                                                      |

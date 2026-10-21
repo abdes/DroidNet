@@ -35,7 +35,6 @@ using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Editor.World.Messages;
-using Oxygen.Editor.World.Output;
 using Oxygen.Editor.World.SceneEditor;
 using Oxygen.Editor.World.SceneExplorer;
 using Oxygen.Managed.Assets.Catalog;
@@ -57,6 +56,7 @@ namespace Oxygen.Editor.World.Workspace;
 public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWorkspaceActions
 {
     private readonly IContainer container;
+    private readonly IReadOnlyList<IFeatureModule> modules;
     private readonly IProjectContextService projectContextService;
     private readonly IProjectManagerService projectManager;
     private readonly IProjectUsageService projectUsage;
@@ -87,6 +87,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     /// <param name="engineService">The engine service for mounting cooked roots.</param>
     /// <param name="operationResults">The visible operation-result publisher.</param>
     /// <param name="statusReducer">The diagnostic status reducer.</param>
+    /// <param name="modules">The features whose panels and services each workspace window has.</param>
     /// <param name="loggerFactory">Optional logger factory for logging.</param>
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0290:Use primary constructor", Justification = "will generate another warning due to capture of container arg")]
     public WorkspaceViewModel(
@@ -98,10 +99,14 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         IEngineService engineService,
         IOperationResultPublisher operationResults,
         IStatusReducer statusReducer,
+        IEnumerable<IFeatureModule> modules,
         ILoggerFactory? loggerFactory = null)
         : base(container, router, loggerFactory)
     {
+        ArgumentNullException.ThrowIfNull(modules);
         this.container = container;
+        this.modules = [.. modules];
+        this.RoutesConfig = CreateRoutes(this.modules);
         this.projectContextService = projectContextService;
         this.projectManager = projectManager;
         this.projectUsage = projectUsage;
@@ -118,54 +123,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     protected override string CenterOutletName => "renderer";
 
     /// <inheritdoc />
-    protected override IRoutes RoutesConfig { get; } = new Routes(
-    [
-        new Route
-        {
-            Path = string.Empty,
-            Children = new Routes(
-            [
-                new Route { Outlet = "renderer", Path = "dx", ViewModelType = typeof(DocumentAreaViewModel) },
-                new Route
-                {
-                    Outlet = "se",
-                    Path = "se",
-                    MatchMethod = PathMatch.Full,
-                    ViewModelType = typeof(SceneExplorerViewModel),
-                },
-                new Route
-                {
-                    Outlet = "cb",
-                    Path = "cb",
-                    MatchMethod = PathMatch.Full,
-                    ViewModelType = typeof(ContentBrowserViewModel),
-                },
-                new Route
-                {
-                    Outlet = "props",
-                    Path = "props",
-                    MatchMethod = PathMatch.Full,
-                    ViewModelType = typeof(SceneNodeEditorViewModel),
-                },
-                new Route
-                {
-                    Outlet = "log", Path = "log", MatchMethod = PathMatch.Full, ViewModelType = typeof(OutputViewModel),
-                },
-                new Route
-                {
-                    Outlet = "cook", Path = "cook", MatchMethod = PathMatch.Full, ViewModelType = typeof(CookingPanelViewModel),
-                },
-                new Route
-                {
-                    Outlet = ProblemsDockId, Path = ProblemsDockId, MatchMethod = PathMatch.Full, ViewModelType = typeof(Oxygen.Editor.World.Problems.ProblemsViewModel),
-                },
-                new Route
-                {
-                    Outlet = InspectorDockId, Path = InspectorDockId, MatchMethod = PathMatch.Full, ViewModelType = typeof(Oxygen.Editor.World.Inspection.CookedInspectionViewModel),
-                },
-            ]),
-        },
-    ]);
+    protected override IRoutes RoutesConfig { get; }
 
     /// <inheritdoc />
     public override async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
@@ -264,7 +222,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
         // The panels and commands of the window, its documents, their kinds and editors, its document area and its
         // document service, and the placement of documents and panels.
-        RegisterContributions(childContainer);
+        RegisterContributions(childContainer, this.modules);
         RegisterDocuments(childContainer);
         childContainer.Register<ICommandService, CommandService>(Reuse.Singleton);
         childContainer.Register<IPlacementService, DockingPlacementService>(Reuse.Singleton);
@@ -323,6 +281,17 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<MaterialEditorView>(Reuse.Transient);
         this.RegisterCookedInspector(childContainer);
         RegisterInspectorEditors(childContainer);
+
+        // The features come last: their services use the window's, and their activation any feature's.
+        foreach (var module in this.modules)
+        {
+            module.RegisterWindowServices(childContainer);
+        }
+
+        foreach (var module in this.modules)
+        {
+            module.ActivateWindowServices(childContainer);
+        }
     }
 
     /// <inheritdoc />
@@ -370,11 +339,66 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         base.Dispose(disposing);
     }
 
+    // The window's own routes, and one per contributed panel, shown in the outlet of the panel's identity.
+    private static Routes CreateRoutes(IEnumerable<IFeatureModule> modules)
+        => new(
+        [
+            new Route
+            {
+                Path = string.Empty,
+                Children = new Routes(
+                [
+                    new Route { Outlet = "renderer", Path = "dx", ViewModelType = typeof(DocumentAreaViewModel) },
+                    new Route
+                    {
+                        Outlet = "se",
+                        Path = "se",
+                        MatchMethod = PathMatch.Full,
+                        ViewModelType = typeof(SceneExplorerViewModel),
+                    },
+                    new Route
+                    {
+                        Outlet = "cb",
+                        Path = "cb",
+                        MatchMethod = PathMatch.Full,
+                        ViewModelType = typeof(ContentBrowserViewModel),
+                    },
+                    new Route
+                    {
+                        Outlet = "props",
+                        Path = "props",
+                        MatchMethod = PathMatch.Full,
+                        ViewModelType = typeof(SceneNodeEditorViewModel),
+                    },
+                    new Route
+                    {
+                        Outlet = "cook", Path = "cook", MatchMethod = PathMatch.Full, ViewModelType = typeof(CookingPanelViewModel),
+                    },
+                    new Route
+                    {
+                        Outlet = ProblemsDockId, Path = ProblemsDockId, MatchMethod = PathMatch.Full, ViewModelType = typeof(Oxygen.Editor.World.Problems.ProblemsViewModel),
+                    },
+                    new Route
+                    {
+                        Outlet = InspectorDockId, Path = InspectorDockId, MatchMethod = PathMatch.Full, ViewModelType = typeof(Oxygen.Editor.World.Inspection.CookedInspectionViewModel),
+                    },
+                    .. modules.SelectMany(static module => module.Panels).Select(static panel => new Route
+                    {
+                        Outlet = panel.Id, Path = panel.Id, MatchMethod = PathMatch.Full, ViewModelType = panel.ViewModelType,
+                    }),
+                ]),
+            },
+        ]);
+
     // The panels whose tabs show a title of their own; the others are titled by their content.
-    private static void RegisterContributions(IContainer childContainer)
+    private static void RegisterContributions(IContainer childContainer, IEnumerable<IFeatureModule> modules)
         => childContainer.RegisterDelegate(
             _ => new ContributionRegistry(
-                [new PanelDescriptor("cook", "Cooking"), new PanelDescriptor(InspectorDockId, "Cooked Inspector")],
+                [
+                    new PanelDescriptor("cook", "Cooking", typeof(CookingPanelViewModel)),
+                    new PanelDescriptor(InspectorDockId, "Cooked Inspector", typeof(Oxygen.Editor.World.Inspection.CookedInspectionViewModel)),
+                    .. modules.SelectMany(static module => module.Panels),
+                ],
                 []),
             Reuse.Singleton);
 
@@ -439,8 +463,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         this.previewSession = childContainer.Resolve<PreviewSession>();
         this.ObservePreviewSession();
 
-        childContainer.Register<OutputViewModel>(Reuse.Singleton);
-        childContainer.Register<OutputView>(Reuse.Transient);
         childContainer.RegisterInstance<ICookingWorkspaceActions>(this);
         childContainer.Register<CookingPanelViewModel>(Reuse.Singleton);
         childContainer.Register<CookingPanelView>(Reuse.Transient);

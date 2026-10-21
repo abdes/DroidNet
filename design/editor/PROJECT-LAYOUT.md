@@ -150,6 +150,7 @@ feature project.
 | `projects/Oxygen.Editor.World`           | Pure authoring scene/domain model: scenes, nodes, components, scene serialization, scene-owned settings, authoring references.                                                                      | WinUI, routing, docking, runtime engine handles, interop, cook execution.                                |
 | `projects/Oxygen.Editor.WorldEditor`     | Open scene workspace: documents, hierarchy, inspector, viewport UI, commands, selection, scene validation presentation, scene-engine sync orchestration.                                            | Native calls directly from view models, reusable asset import/cook primitives, project-wide cook policy. |
 | `projects/Oxygen.Editor.MaterialEditor`  | Full material document/editor workspace, material inspector/tools, material preview UI, material validation presentation.                                                                           | Reusable asset/cook primitives, native engine calls, project policy.                                     |
+| `projects/Oxygen.Editor.Output`          | The Output panel: the log view over the editor's output buffer, and the player's output in it.                                                                                                      | Log production.                                                                                          |
 | `projects/Oxygen.Editor.Physics`         | Shared physics authoring domain objects used by physics scenes and scene-attached physics components.                                                                                               | WinUI, editor documents, runtime engine handles, native interop.                                         |
 | `projects/Oxygen.Editor.PhysicsEditor`   | Full physics scene sidecar editor workspace, physics scene documents/tools, physics validation presentation.                                                                                        | Shared physics domain ownership, reusable cook primitives, native engine calls, project policy.          |
 | `projects/Oxygen.Editor.ContentBrowser`  | Project asset navigation, catalogs UI, source/descriptor/cooked views, asset picker UI, content diagnostics presentation.                                                                           | Scene component mutation policy, project template management, engine mounting.                           |
@@ -388,8 +389,11 @@ If any condition is false, use a subfolder under the existing owner.
 
 `Oxygen.Editor.MaterialEditor` and `Oxygen.Editor.PhysicsEditor` are planned
 full editor modules. They own their document/workspace, editing tools,
-validation, and lifecycle. A small panel inside the world editor is not enough
-reason for a new project.
+validation, and lifecycle. Each editor, explorer, inspector and passive panel
+with its own module and tests is a project of its own
+([editor-module-architecture.md](lld/editor-module-architecture.md)), such as
+`Oxygen.Editor.Output`; it contributes its parts through the Shell's
+`IFeatureModule`.
 
 ## 13. Test Placement
 

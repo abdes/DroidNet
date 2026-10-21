@@ -6,10 +6,10 @@ using DroidNet.Controls.OutputConsole;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml;
 
-namespace Oxygen.Editor.World.Output;
+namespace Oxygen.Editor.Output;
 
 /// <summary>
-///     Represents the view for displaying logs in the World Editor.
+///     The Output panel's view: the editor's log and the player's.
 /// </summary>
 [ViewModel(typeof(OutputViewModel))]
 public sealed partial class OutputView

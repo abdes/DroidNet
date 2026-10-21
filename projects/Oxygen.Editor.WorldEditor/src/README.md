@@ -149,9 +149,6 @@ projects/Oxygen.Editor.World/src/
 │   ├── SceneNodeSelectionChangedMessage.cs
 │   └── SceneNodeSelectionRequestMessage.cs
 │
-├── Output/                                # Console and logging output
-│   └── OutputViewModel.cs                 # Output console manager
-│
 ├── ProjectExplorer/                       # Project navigation
 │   └── ProjectLayoutViewModel.cs          # Project tree implementation
 │

@@ -2,32 +2,24 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Controls.OutputConsole.Model;
 using DryIoc;
-using Microsoft.Extensions.Logging;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World.Play;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
-using Serilog.Events;
 
 namespace Oxygen.Editor.World.Workspace;
 
 /// <summary>
 /// Play sessions of the workspace: the player runs the scenes of this project and ends with the workspace. The
-/// workspace shows the player's output in the Output panel, brings Problems forward on a runtime error, and brings
-/// forward the panels the play bar asks for.
+/// workspace brings Problems forward on a runtime error, and brings forward the panels the play bar asks for.
 /// </summary>
 public partial class WorkspaceViewModel
 {
-    private const string PlayerSource = "Player";
-
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "A singleton of the workspace's child container, which disposes it.")]
     private PlaySession? playSession;
-    private OutputLogBuffer? playerOutput;
     private int shownRuntimeProblems;
 
     /// <summary>Brings a panel forward.</summary>
@@ -58,16 +50,15 @@ public partial class WorkspaceViewModel
         return true;
     }
 
-    // Registered before Problems, which shows the problems of the running scene.
+    // Registered before Problems, which shows the problems of the running scene, and before Output, which shows its log.
     private void RegisterPlayServices(IContainer childContainer)
     {
         childContainer.Register<PlaySettings>(Reuse.Singleton);
         childContainer.Register<PlaySession>(Reuse.Singleton);
         childContainer.RegisterMapping<IRuntimeProblemSource, PlaySession>();
         childContainer.RegisterMapping<IAssetProblemSource, PlaySession>();
+        childContainer.RegisterMapping<IPlayerLog, PlaySession>();
         this.playSession = childContainer.Resolve<PlaySession>();
-        this.playerOutput = childContainer.Resolve<OutputLogBuffer>(IfUnresolved.ReturnDefault);
-        this.playSession.LogReceived += this.OnPlayerLogReceived;
         this.playSession.ProblemsChanged += this.OnRuntimeProblemsChanged;
     }
 
@@ -77,41 +68,9 @@ public partial class WorkspaceViewModel
         if (this.playSession is { } session)
         {
             this.playSession = null;
-            session.LogReceived -= this.OnPlayerLogReceived;
             session.ProblemsChanged -= this.OnRuntimeProblemsChanged;
             _ = session.ShutdownAsync();
         }
-    }
-
-    private void OnPlayerLogReceived(object? sender, PlayerLogEventArgs args)
-    {
-        if (this.playerOutput is not { } output)
-        {
-            return;
-        }
-
-        if (args.Clear)
-        {
-            output.Clear();
-            return;
-        }
-
-        output.Append(new OutputLogEntry
-        {
-            Timestamp = args.Timestamp,
-            Level = args.Level switch
-            {
-                LogLevel.Critical => LogEventLevel.Fatal,
-                LogLevel.Error => LogEventLevel.Error,
-                LogLevel.Warning => LogEventLevel.Warning,
-                LogLevel.Debug => LogEventLevel.Debug,
-                LogLevel.Trace => LogEventLevel.Verbose,
-                _ => LogEventLevel.Information,
-            },
-            Source = PlayerSource,
-            Channel = args.Channel,
-            Message = args.Message,
-        });
     }
 
     // A runtime error brings Problems forward; warnings wait to be looked at.

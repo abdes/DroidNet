@@ -15,6 +15,8 @@
 
     <ItemGroup>
         <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
     </ItemGroup>
@@ -22,9 +24,15 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)/Controls/OutputConsole/src/Controls.OutputConsole.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Mvvm/src/Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.LivePreview/src/Oxygen.Editor.LivePreview.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Shell/src/Oxygen.Editor.Shell.csproj" />
 
         <ProjectReference Include="$(ProjectsRoot)/Mvvm.Generators/src/Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
         <ProjectReference Include="$(ProjectsRoot)/Mvvm.Generators.Attributes/src/Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Oxygen.Editor.Output.Unit.Tests" />
     </ItemGroup>
 
 </Project>

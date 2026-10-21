@@ -29,6 +29,7 @@ using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Diagnostics;
 using Oxygen.Editor.Materials.Documents;
+using Oxygen.Editor.Output;
 using Oxygen.Editor.ProjectBrowser.Activation;
 using Oxygen.Editor.ProjectBrowser.Projects;
 using Oxygen.Editor.ProjectBrowser.Templates;
@@ -37,6 +38,7 @@ using Oxygen.Editor.ProjectBrowser.Views;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Services;
+using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Workspace;
@@ -410,6 +412,9 @@ public static partial class Program
 
         container.Register<WorkspaceViewModel>(Reuse.Transient);
         container.Register<WorkspaceView>(Reuse.Transient);
+
+        // The features of the workspace windows: each window registers their services in its own container.
+        container.Register<IFeatureModule, OutputModule>(Reuse.Singleton);
     }
 
     private static void RegisterAssetServices(IContainer container)

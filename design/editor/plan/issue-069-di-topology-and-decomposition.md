@@ -1,9 +1,9 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0 and S1.1 to S1.10 (Assets, Cook on change,
+Status: `in progress` — Phase 0 and S1.1 to S1.11 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
 Scenes, LivePreview, Asset family modules, Cook on change over checked inputs,
-Shell) are done; see the ledger in section 6. Phase 1 follows
+Shell, Unsaved documents) are done and S1.12 (Features) is in progress; see the ledger in section 6. Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -12,7 +12,7 @@ replace section 7 of the spec: there are no `Authoring` or
 `Authoring.Abstractions` projects, `Oxygen.Editor.WorldEditor` is dissolved, and
 the Shell is the application frame.
 
-Last Updated: 2026-10-20
+Last Updated: 2026-10-21
 
 Issue: [#69](https://github.com/abdes/DroidNet/issues/69)
 
@@ -710,6 +710,6 @@ checked URIs, source-collision reporting from the cook (`5d5c2bc0e`).
 
 ### S1.12 features
 
-| #   | Feature | Status        | Notes |
-| --- | ------- | ------------- | ----- |
-| 1   | Output  | `in progress` |       |
+| #   | Feature | Status | Notes                                                                                                                              |
+| --- | ------- | ------ | ---------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | Output  | `done` | Features join the workspace through the Shell's `IFeatureModule`; Output reads the player's log through LivePreview's `IPlayerLog` |

@@ -30,7 +30,7 @@ namespace Oxygen.Editor.LivePreview.Play;
 /// are marshalled there. The session saves nothing: Play cooks the saved files, and the caller saves the documents the
 /// scene uses before Play, after asking. Player output is raised as <see cref="LogReceived"/>.
 /// </remarks>
-public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSource, IDisposable
+public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSource, IPlayerLog, IDisposable
 {
     private readonly IProjectContextService projects;
     private readonly IContentPipelineService pipeline;
@@ -97,7 +97,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     /// <inheritdoc />
     public event EventHandler? ProblemsChanged;
 
-    /// <summary>Occurs for each line of the player's output, and with a clear when a session starts.</summary>
+    /// <inheritdoc />
     public event EventHandler<PlayerLogEventArgs>? LogReceived;
 
     /// <summary>Gets the play session preferences.</summary>

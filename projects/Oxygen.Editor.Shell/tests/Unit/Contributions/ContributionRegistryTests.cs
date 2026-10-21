@@ -16,7 +16,7 @@ public sealed class ContributionRegistryTests
     [TestMethod]
     public void PanelsAreFoundByIdentityBesideTheShellsCommands()
     {
-        var registry = new ContributionRegistry([new PanelDescriptor("cook", "Cooking")], []);
+        var registry = new ContributionRegistry([new PanelDescriptor("cook", "Cooking", typeof(object))], []);
 
         _ = registry.FindPanel("cook")!.Title.Should().Be("Cooking");
         _ = registry.FindPanel("log").Should().BeNull();
@@ -27,7 +27,7 @@ public sealed class ContributionRegistryTests
     [TestMethod]
     public void DuplicateIdentitiesFail()
     {
-        var panels = () => new ContributionRegistry([new PanelDescriptor("cook", "Cooking"), new PanelDescriptor("cook", "Jobs")], []);
+        var panels = () => new ContributionRegistry([new PanelDescriptor("cook", "Cooking", typeof(object)), new PanelDescriptor("cook", "Jobs", typeof(object))], []);
         var commands = () => new ContributionRegistry([], [new CommandDescriptor(ShellCommands.Undo.Id, "Undo again")]);
 
         _ = panels.Should().Throw<InvalidOperationException>().WithMessage("*panels*'cook'*");
