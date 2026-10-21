@@ -1,10 +1,10 @@
 # Issue #69: DI scope topology and WorldEditor decomposition
 
-Status: `in progress` — Phase 0, S1.1 to S1.14 (Assets, Cook on change,
+Status: `in progress` — Phase 0, S1.1 to S1.15 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
 Scenes, LivePreview, Asset family modules, Cook on change over checked inputs,
-Shell, Unsaved documents, Features, Dissolve the World Editor, Test boundaries)
-and Phase 2 (scope factory and topology) are done; see the ledger in section 6. Phase 1 follows
+Shell, Unsaved documents, Features, Dissolve the World Editor, Test boundaries,
+Enforcement), Phase 2 (scope factory and topology) and Phase 3 (registration modules) are done; see the ledger in section 6. Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -669,6 +669,13 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   rest of S1.15). `Oxygen.Editor.App` drops the project references that only
   its old registrations needed. Gate: topology test, reviewer's editor build.
 
+  The layers are general and live in `DroidNet.Composition`:
+  `IApplicationLayer` (the editor scope), `ISessionLayer` (the project session),
+  `IWindowLayer` and `IPanelLayer`. A subsystem has one module per layer it
+  registers into, never a module of `IScopeLayer`. Until the session exists, a
+  session subsystem keeps today's lifetimes with an application and a window
+  module.
+
 ### Phase 4: Project Session
 
 - **S4.1** `IProjectSessionHost`, `IProjectSession`, `ISessionEvents`,
@@ -681,7 +688,9 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   deletes its `ProjectChanged` reset and uses the session lifetime token. The
   preferences cluster also ends the window keyed settings manager's use of a
   root-tracked `PersistentState`, which today leaves one `DbContext` held by the
-  editor scope per project switch until exit.
+  editor scope per project switch until exit. Each cluster merges its domain's
+  layer modules (for example `ContentPipelineModule` and
+  `ContentPipelineWindowModule`) into its Session module.
 - **S4.3** Remove `CurrentProject` and delete `IProjectContextService`.
 - **S4.4** Close and exit (shell design section 6): the Shell's close and exit
   becomes the only subscriber to Aura's `WindowClosing`. Window participants
@@ -766,9 +775,9 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.12 Features                              | `done`        | See the feature table below; the Texture Editor and History panel moved to ED-M09A                                                                                                          |
 | S1.13 Dissolve the World Editor             | `done`        | The workspace window is the composition root's; its native integration tests and benchmark are the composition root's integration suite; the initial scene lookups are Scenes' `SceneFiles` |
 | S1.14 Test boundaries                       | `done`        | Kits of Managed.Core, Managed.Assets and Interop; the ContentPipeline kit fakes `ICookPublicationReader`, which the Content Explorer consumes                                               |
-| S1.15 Enforcement                           | `in progress` | Boundary test and project construction done; `HostContainer` (S2.2) gives the host's rules; composing the registration modules and moving the hand-built containers onto it land with S3.1  |
+| S1.15 Enforcement                           | `done`        | Boundary test and project construction; the editor's hand-built test containers are `HostContainer`s, and the topology tests compose the registration modules over one                      |
 | S2.1 to S2.3 Scope factory and topology     | `done`        | `DroidNet.Composition`; the composition root in `Oxygen.Editor.Composition` with its topology and project-switch tests; workspace and Content Explorer scopes on the factory                |
-| S3.1 Registration modules                   | `not started` |                                                                                                                                                                                             |
+| S3.1 Registration modules                   | `done`        | Modules per subsystem and layer; `EditorModule` composes the editor scope through `ScopeFactory.CreateRoot`; the App references only what its host and XAML use                             |
 | S4.1 to S4.4 Project Session                | `not started` |                                                                                                                                                                                             |
 | S5.1 to S5.5 Docking, windows, panels       | `not started` |                                                                                                                                                                                             |
 | S6.1 to S6.3 Service location and messenger | `not started` |                                                                                                                                                                                             |

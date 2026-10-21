@@ -11,12 +11,15 @@ Design: [di-container-topology.md](../../design/editor/review/di-container-topol
 
 ## Layout
 
-| Path              | Holds                                                                            |
-| ----------------- | -------------------------------------------------------------------------------- |
-| `EditorModule.cs` | The editor scope's registrations and the top-level routes                        |
-| `Workspace/`      | The workspace window: its view model, its view and `WorkspaceWindowModule`       |
-| `Services/`       | Activation, project activation, window placement and the active project's folder |
-| `Diagnostics/`    | The operation-result store and its output-log adapter                            |
+| Path                   | Holds                                                                                             |
+| ---------------------- | ------------------------------------------------------------------------------------------------- |
+| `EditorModule.cs`      | The editor scope's modules, in order, the host's settings and windowing, and the top-level routes |
+| `ApplicationModule.cs` | Paths, storage, activation, window placement, the windows and the scope factory                   |
+| `EditorDataModule.cs`  | The state database, editor settings and project and template usage                                |
+| `EngineModule.cs`      | The embedded engine and its shutdown with the host                                                |
+| `Workspace/`           | The workspace window: its view model and view, `WorkspaceModule` and `WorkspaceWindowModule`      |
+| `Services/`            | Activation, project activation, window placement and the active project's folder                  |
+| `Diagnostics/`         | The operation-result store, its output-log adapter and `DiagnosticsModule`                        |
 
 ## Scopes
 
@@ -32,22 +35,26 @@ flowchart TB
 Arrows are container parentage: a scope registers only what it owns and
 resolves the rest from its parent ([DroidNet.Composition](../Composition/README.md)).
 
-- `Program` builds the host, then calls `EditorModule.Register`, which also
-  registers the `ScopeFactory` and the editor scope's handle.
+- `Program` builds the host, then calls `EditorModule.Register`. It extends the
+  host's container with its settings and windowing, then
+  `ScopeFactory.CreateRoot` registers the editor scope's modules
+  (`IApplicationLayer`) and their activation lists: those of the Shell,
+  Projects, Project Explorer, ContentPipeline, LivePreview, Materials, Textures
+  and the Scene Editor's settings, then this project's own.
 - `WorkspaceViewModel` creates its window's scope from the router's and the
-  docking's modules, `WorkspaceWindowModule` and every feature's module, in that
-  order. It resolves only through that scope.
+  docking's modules, then `WorkspaceWindowModule.Compose`: the window modules
+  of Assets, Scenes, Scripting, Input and LivePreview, `WorkspaceWindowModule`,
+  the Shell's and ContentPipeline's window modules, and every feature's module,
+  in that order. It resolves only through that scope.
 - The Content Explorer creates its own scope under the window's.
 
-`WorkspaceWindowModule` registers the window's documents and their area, the
-project's content as the window sees it, the preview, Play, script tooling and
-the preferences stored per project (preview settings, hidden and locked nodes,
-viewport layouts). Those preferences belong to the window until the project
-session owns them; the gizmo preferences, kept across projects, stay in the
-editor scope.
-
-Registrations whose final home is another module stay here until the
-registration modules of each subsystem take them over.
+Each subsystem registers what it owns through its module, beside its code. The
+editor has no session scope yet, so a subsystem whose services belong to the
+project session (ContentPipeline, Assets, LivePreview, Scenes, Scripting,
+Input) keeps them where they live today, with one module per layer; the
+project session merges them. `WorkspaceWindowModule` keeps what composes
+several subsystems: the panels and commands of the features, the window's open
+documents with the scene and material kinds, and the preview content demand.
 
 ## Tests
 

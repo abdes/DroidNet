@@ -19,6 +19,12 @@ Design: [editor-shell.md](../../design/editor/review/editor-shell.md),
 | `Layout`        | The docking workspace: its routed layout, dock views and the Docking placement adapter |
 | `Desktop`       | Clipboard, File Explorer, Recycle Bin and the external code editor                     |
 
+`ShellModule` registers the tabs of every window in the editor scope.
+`ShellWindowModule` registers each window's document area and document service,
+its prompts and confirmations, commands, placement, the global history and the
+external code editor, and creates the document service when the window opens.
+`DockingWindowModule` registers the window's docking.
+
 ## Documents
 
 `Oxygen.Editor.Documents` says what a document is; the Shell decides where it

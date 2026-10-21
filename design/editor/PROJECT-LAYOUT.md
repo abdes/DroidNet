@@ -290,8 +290,9 @@ projects/Oxygen.Editor.UI/src/
 
 ```text
 projects/Oxygen.Editor.Composition/src/
-+-- EditorModule.cs        # the editor scope's registrations and the top-level routes
-+-- Workspace/             # the scene workspace window: its scope's registrations, routes and layout
++-- EditorModule.cs        # the editor scope's modules and the top-level routes
++-- *Module.cs             # the composition root's own modules: application, data, engine
++-- Workspace/             # the scene workspace window: its modules, routes and layout
 ```
 
 ```text
