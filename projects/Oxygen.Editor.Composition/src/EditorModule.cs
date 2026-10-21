@@ -41,7 +41,6 @@ using Oxygen.Editor.Shell;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Workspace;
-using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core.Services;
 using Serilog;
@@ -64,6 +63,7 @@ public static class EditorModule
         new ShellModule(),
         new ProjectsModule(),
         new ProjectExplorerModule(),
+        new ContentPipelineModule(),
     ];
 
     /// <summary>
@@ -293,55 +293,8 @@ public static class EditorModule
 
     private static void RegisterAssetServices(IContainer container)
     {
-        // The SDK's engine content pak: the /Engine assets every project references, read from the installation.
-        container.RegisterDelegate<IEngineContentPak>(
-            _ => EngineContentPak.Installed(),
-            Reuse.Singleton);
-        container.Register<ISceneDescriptorGenerator, SceneDescriptorGenerator>(Reuse.Singleton);
-        container.Register<IContentImportManifestBuilder, ContentImportManifestBuilder>(Reuse.Singleton);
-        container.Register<IContentImportManifestValidator, ContentImportManifestValidator>(Reuse.Singleton);
-        container.Register<IEngineContentPipelineToolLocator, EngineContentPipelineToolLocator>(Reuse.Singleton);
-        container.Register<IContentPipelineProcessRunner, ContentPipelineProcessRunner>(Reuse.Singleton);
-        container.RegisterDelegate<INativeCompatibilityService>(
-            _ => EditorNativeCompatibilityService.ForCooking(),
-            Reuse.Singleton,
-            serviceKey: EditorNativeCompatibilityService.CookingServiceKey);
-        container.RegisterDelegate<ImportToolContentPipelineApi>(
-            resolver => new(
-            resolver.Resolve<IEngineContentPipelineToolLocator>(),
-            resolver.Resolve<IContentPipelineProcessRunner>(),
-            resolver.Resolve<ILogger<ImportToolContentPipelineApi>>(),
-            resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey)),
-            Reuse.Singleton);
-        container.RegisterMapping<IEngineContentPipelineApi, ImportToolContentPipelineApi>();
-        container.Register<ContentCookCoordinator>(Reuse.Singleton);
-        container.RegisterMapping<IContentCookCoordinator, ContentCookCoordinator>();
-        container.RegisterMapping<ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();
-        container.RegisterDelegate<IContentPipelineService>(
-            resolver => new ContentPipelineService(
-            resolver.Resolve<IProjectContextService>(),
-            resolver.Resolve<IContentCookCoordinator>(),
-            resolver.Resolve<IProjectCookScopeProvider>(),
-            resolver.Resolve<ISceneDescriptorGenerator>(),
-            resolver.Resolve<IContentImportManifestBuilder>(),
-            resolver.Resolve<IContentImportManifestValidator>(),
-            resolver.Resolve<IEngineContentPipelineApi>(),
-            resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey),
-            resolver.Resolve<IAtomicFileStore>(),
-            resolver.Resolve<ContentPipeline.Publication.CookPublicationService>(),
-            resolver.Resolve<IEngineContentPak>()),
-            Reuse.Singleton);
-        container.RegisterDelegate(
-            resolver => (ContentPipeline.Inspection.IGeometryMaterialSlotProvider)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
-        container.RegisterDelegate(
-            resolver => (Scripting.IScriptLibrary)resolver.Resolve<IContentPipelineService>(), Reuse.Singleton);
-
         // Scripting: the engine's analyzer, which the script facts of every workspace use.
         container.Register<Scripting.IScriptAnalyzer, LivePreview.Scripting.NativeScriptAnalyzer>(Reuse.Singleton);
-        container.Register<ContentPipeline.Publication.CookPublicationService>(Reuse.Singleton);
-        container.RegisterMapping<ContentPipeline.Publication.ICookPublicationReader, ContentPipeline.Publication.CookPublicationService>();
-        container.Register<ContentPipeline.Mounting.CookedContentMountService>(Reuse.Singleton);
-        container.Register<IMaterialCookService, MaterialCookService>(Reuse.Singleton);
         // Materials: one document kind and one set of edits for every workspace window.
         container.Register<MaterialValidation>(Reuse.Singleton);
         container.Register<MaterialDocumentKind>(Reuse.Singleton);
@@ -349,9 +302,5 @@ public static class EditorModule
 
         // Textures: image import for every window.
         container.Register<Textures.TextureImport>(Reuse.Singleton);
-
-        // The session's asset relocations, resolved by undo, redo and paste in every open document.
-        container.Register<ContentPipeline.Relocation.AssetRedirects>(Reuse.Singleton);
-        container.RegisterMapping<ContentPipeline.Relocation.IAssetRedirects, ContentPipeline.Relocation.AssetRedirects>();
     }
 }

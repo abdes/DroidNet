@@ -8,6 +8,7 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Runtime;
+using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Data;
@@ -56,9 +57,6 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
         typeof(PreviewContentDemand),
         typeof(PreviewSession),
         typeof(PlaySession),
-
-        // The cook listens to the catalog's changes from the moment the workspace opens.
-        typeof(ContentPipeline.Cooking.IAutomaticCookService),
     ];
 
     /// <inheritdoc />
@@ -76,7 +74,7 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
     public static IReadOnlyList<IScopeModule<IWindowLayer>> Compose(IReadOnlyList<IFeatureModule> features)
     {
         ArgumentNullException.ThrowIfNull(features);
-        return [new WorkspaceWindowModule(features), new ShellWindowModule(), .. features];
+        return [new WorkspaceWindowModule(features), new ShellWindowModule(), new ContentPipelineWindowModule(), .. features];
     }
 
     /// <inheritdoc />
@@ -121,10 +119,6 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
                 resolver.Resolve<IAtomicFileStore>(),
                 resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault)),
             Reuse.Singleton);
-
-        // The project's files and relocations, as documents see them.
-        scope.Register<IDocumentFiles, ProjectDocumentFiles>(Reuse.Singleton);
-        scope.Register<IDocumentRelocations, DocumentRelocationFeed>(Reuse.Singleton);
     }
 
     // The project's content as the window sees it. The Content Explorer's scope reaches the same instances, created by
@@ -135,14 +129,8 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
         scope.RegisterMapping<IAssetCatalog, AssetCatalog>();
         scope.RegisterMapping<IAssetFolderSource, AssetCatalog>();
         scope.RegisterMapping<IAssetPublicationTarget, AssetCatalog>();
-        scope.RegisterDelegate<ContentPipeline.Status.IAssetCookStatusReader>(
-            resolver => resolver.Resolve<ContentPipeline.IContentPipelineService>(), Reuse.Singleton);
         scope.Register<IAssetRuntimeStatusSource, AssetRuntimeStatusSource>(Reuse.Singleton);
         scope.Register<IAssetFeed, AssetFeed>(Reuse.Singleton);
-        scope.Register<IAssetRelocationService, AssetRelocationService>(Reuse.Singleton);
-        scope.Register<ContentPipeline.Authoring.IAssetAuthoring, ContentPipeline.Authoring.AssetAuthoring>(Reuse.Singleton);
-        scope.Register<ContentPipeline.Cooking.IAutomaticCookService, ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);
-        scope.Register<ContentPipeline.Cooking.IUnsavedCookInputs, ContentPipeline.Cooking.UnsavedCookInputs>(Reuse.Singleton);
     }
 
     // The engine preview and the preview content demand follow the open scene documents. The project's preview also
@@ -161,7 +149,7 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
             resolver => new PreviewContentDemand(ContentDemands.Start(
                 resolver.Resolve<OpenDocuments>(),
                 resolver.Resolve<IAssetFeed>(),
-                resolver.Resolve<ContentPipeline.IContentPipelineService>(),
+                resolver.Resolve<IContentPipelineService>(),
                 resolver.Resolve<IProjectContextService>(),
                 resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault))),
             Reuse.Singleton);
