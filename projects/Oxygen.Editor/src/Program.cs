@@ -30,6 +30,7 @@ using Oxygen.Editor.Cooking;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Diagnostics;
+using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Output;
 using Oxygen.Editor.Problems;
@@ -424,6 +425,7 @@ public static partial class Program
         // The features of the workspace windows: each window registers their services in its own container.
         container.Register<IFeatureModule, CookedInspectorModule>(Reuse.Singleton);
         container.Register<IFeatureModule, CookingModule>(Reuse.Singleton);
+        container.Register<IFeatureModule, MaterialEditorModule>(Reuse.Singleton);
         container.Register<IFeatureModule, OutputModule>(Reuse.Singleton);
         container.Register<IFeatureModule, ProblemsModule>(Reuse.Singleton);
         container.Register<IFeatureModule, SceneEditorModule>(Reuse.Singleton);

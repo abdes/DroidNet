@@ -10,7 +10,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.UI;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
@@ -42,7 +41,6 @@ public partial class WorkspaceViewModel
             Reuse.Singleton);
 
         // Each kind's editor comes from the module that edits it.
-        childContainer.Register<IDocumentEditorProvider, MaterialEditorProvider>(Reuse.Singleton);
         childContainer.RegisterDelegate(
             resolver => new DocumentArea(
                 resolver.Resolve<IDocumentTabs>(),

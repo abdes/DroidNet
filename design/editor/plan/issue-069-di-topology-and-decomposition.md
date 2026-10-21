@@ -768,3 +768,4 @@ checked URIs, source-collision reporting from the cook (`5d5c2bc0e`).
 | 5   | SceneExplorer   | `done` |                                                                                                                                    |
 | 6   | SceneEditor     | `done` |                                                                                                                                    |
 | 7   | SceneInspector  | `done` |                                                                                                                                    |
+| 8   | MaterialEditor  | `done` | Contributes its editor provider and view through its module; its view tests live in its own UI test project                        |

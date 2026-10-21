@@ -17,7 +17,6 @@ using Oxygen.Editor.LivePreview.Assets;
 using Oxygen.Editor.LivePreview.Content;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Session;
-using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Routing;
 using Oxygen.Editor.Runtime.Diagnostics;
@@ -243,7 +242,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         // Cook on change toggle reaches the same instance. It reads the family facts, registered with the scripts.
         _ = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService>();
 
-        childContainer.Register<MaterialEditorView>(Reuse.Transient);
         this.RegisterContentBrowserPorts(childContainer);
 
         // The features activate last: their activation may use any feature's services.

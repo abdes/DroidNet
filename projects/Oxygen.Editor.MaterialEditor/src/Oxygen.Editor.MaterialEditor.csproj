@@ -17,6 +17,7 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
         <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="DryIoc.dll" />
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
         <PackageReference Include="Microsoft.WindowsAppSDK" />
         <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
