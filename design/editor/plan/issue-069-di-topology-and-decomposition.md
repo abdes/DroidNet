@@ -730,19 +730,39 @@ docking state.
   dockable from its route and re-attaches the retained view model (the View
   menu of ED-M09A reopens panels through it). `AssetsView` stops being a
   singleton view. Panels never move between windows.
-- **S5.3 Document windows.** Tearing a document tab out opens a document window
-  (Aura's Document category) hosting a document area: tabs only, no docks.
-  Document view models and histories stay in the session; only the view is
-  recreated in the target window, and the Scene Editor's viewports release
-  their surfaces in the old window and acquire them on the new window's panel.
-  Dropping a tab on another window's tab strip moves it there through
-  `AttachDocumentAsync`. A session window registry lets document requests
-  resolve to their window instead of being broadcast and filtered. Dialogs and
-  focus find their window at call time. Closing a document window closes its
-  documents with the usual unsaved prompt, and Cancel keeps it open (owner's
-  decision). `DocumentAreaView` is created per window, and scope disposal,
-  fire-and-forget from synchronous `Dispose` since S2.3, is awaited by the
-  window's close.
+- **S5.3 Document windows, on Aura's window and tab infrastructure.** Aura
+  already provides the window side, and the editor reuses it rather than
+  building its own:
+  - **Window registry:** `IWindowManagerService` (`OpenWindows`, `GetWindow`,
+    lifecycle events, per-window metadata, placement strings). The editor tags
+    each window with its kind and session in metadata; it adds no window
+    registry of its own.
+  - **Window creation:** `IWindowFactory.CreateDecoratedWindow` with Aura's
+    `Document` category, as the Aura MultiWindow sample does.
+  - **Tab drag between windows:** Aura's `TabDragCoordinator`, `TabStrip` and
+    `DocumentTabPresenter` over `IDocumentTabSource`, whose detach and attach are
+    already keyed by window. The Shell's `DocumentTabs` implements
+    `DetachDocumentAsync`, which refuses every detach today, and raises
+    `DocumentDetached`.
+  - **Tear-out:** `TabStrip.TabTearOutRequested` gives the dropped tab and the
+    screen point, and leaves creating the window to the application. The editor
+    handles it in the Shell; if Aura's `DocumentTabPresenter` can offer that
+    handling generally, through a window-factory hook, it goes into Aura
+    instead.
+  - **Close:** Aura's `WindowClosing`, which S4.4 makes the Shell's single
+    close and exit path.
+
+  What is the editor's own work: a document window hosts a document area (tabs
+  only, no docks); document view models and histories stay in the session, and
+  only the view is recreated in the target window; the Scene Editor's viewports
+  release their surfaces in the old window and acquire them on the new window's
+  panel; document requests resolve to their window through the window manager
+  instead of being broadcast and filtered; dialogs and focus find their window
+  at call time. Closing a document window closes its documents with the usual
+  unsaved prompt, and Cancel keeps it open (owner's decision).
+  `DocumentAreaView` is created per window, and scope disposal, fire-and-forget
+  from synchronous `Dispose` since S2.3, is awaited by the window's close.
+
 - **S5.4 Lifetime tests.** `DocumentAreaViewModel` view switching (unit), a
   viewport's unload, reload and re-attach (unit), a document moved between
   windows with the native surface count checked (integration), closing a window
