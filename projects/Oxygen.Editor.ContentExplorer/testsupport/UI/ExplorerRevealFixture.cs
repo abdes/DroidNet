@@ -5,12 +5,13 @@
 using System.Globalization;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
-using DroidNet.Composition;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
+using DroidNet.Composition;
 using DroidNet.Routing;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
+using DroidNet.TestHelpers;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Moq;
@@ -106,7 +107,7 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
 
     private readonly DirectoryInfo directory = Directory.CreateTempSubdirectory("Oxygen-ExplorerReveal-");
     private readonly RealFileSystem fileSystem = new();
-    private readonly Container container = new();
+    private readonly IContainer container = HostContainer.Create();
     private readonly BehaviorSubject<IReadOnlyList<AssetEntry>> items;
     private readonly Mock<ILogger> logger = new();
     private readonly FakeCookPublicationReader publications;

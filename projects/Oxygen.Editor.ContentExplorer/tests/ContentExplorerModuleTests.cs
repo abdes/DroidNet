@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.TestHelpers;
 using DryIoc;
 using Moq;
 using Oxygen.Editor.Scripting;
@@ -31,7 +32,7 @@ public sealed class ContentExplorerModuleTests
     [TestMethod]
     public void RegistersTheExplorerAndThePortsItImplements()
     {
-        using var window = new Container();
+        using var window = HostContainer.Create();
         window.RegisterInstance(Mock.Of<IPlacementService>());
 
         new ContentExplorerModule().Register(window);

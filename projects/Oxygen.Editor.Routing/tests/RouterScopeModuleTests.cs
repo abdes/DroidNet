@@ -9,10 +9,8 @@ using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
+using DroidNet.TestHelpers;
 using DryIoc;
-using DryIoc.Microsoft.DependencyInjection;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Oxygen.Editor.Routing.Tests;
 
@@ -78,14 +76,13 @@ public sealed class RouterScopeModuleTests
     }
 
     /// <summary>
-    ///     Creates a host container registered as the application's root is: Microsoft rules, the
+    ///     Creates a host container registered as the application's root is: the host's rules and logging, the
     ///     application router and the application view location.
     /// </summary>
     /// <returns>The host container.</returns>
-    private static Container CreateApplicationHost()
+    private static IContainer CreateApplicationHost()
     {
-        var host = new Container(DryIocAdapter.MicrosoftDependencyInjectionRules);
-        host.RegisterInstance<ILoggerFactory>(NullLoggerFactory.Instance);
+        var host = HostContainer.Create();
         host.ConfigureRouter(new Routes([]));
         host.Register<IViewLocator, DefaultViewLocator>(Reuse.Singleton);
         host.Register<ViewModelToView>(Reuse.Singleton);

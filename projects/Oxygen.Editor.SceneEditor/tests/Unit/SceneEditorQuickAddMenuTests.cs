@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using DroidNet.Controls.Menus;
+using DroidNet.TestHelpers;
 using DryIoc;
 using Moq;
 using Oxygen.Editor.ContentPipeline;
@@ -62,7 +63,7 @@ public sealed partial class SceneEditorQuickAddMenuTests
 
     private sealed partial class Fixture : IDisposable
     {
-        private readonly Container container = new();
+        private readonly IContainer container = HostContainer.Create();
 
         public Fixture()
         {

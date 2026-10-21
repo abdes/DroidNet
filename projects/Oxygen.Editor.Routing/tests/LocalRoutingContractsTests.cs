@@ -7,9 +7,8 @@ using AwesomeAssertions;
 using DroidNet.Composition;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
+using DroidNet.TestHelpers;
 using DryIoc;
-using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
 
 using RoutingParameters = DroidNet.Routing.Parameters;
@@ -297,8 +296,7 @@ public sealed class LocalRoutingContractsTests
     // A routed scope over a host that provides only logging; the scope owns the host.
     private static ScopeHandle CreateLocalScope(LocalRouterContext localContext)
     {
-        var host = new Container();
-        host.RegisterInstance<ILoggerFactory>(NullLoggerFactory.Instance);
+        var host = HostContainer.Create();
         var scope = new ScopeFactory().Create<IScopeLayer>(ScopeFactory.CreateRoot(host), [new RouterScopeModule(new Routes([]), localContext)]);
         scope.Own(host);
         return scope;

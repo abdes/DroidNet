@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using AwesomeAssertions;
+using DroidNet.TestHelpers;
 using DroidNet.TimeMachine;
 using DryIoc;
 using Moq;
@@ -78,7 +79,7 @@ internal sealed partial class SceneEditorConflictTests
 
     private sealed partial class Fixture : IDisposable
     {
-        private readonly Container container = new();
+        private readonly IContainer container = HostContainer.Create();
 
         private Fixture(TestSceneDocuments scenes, Document document)
         {

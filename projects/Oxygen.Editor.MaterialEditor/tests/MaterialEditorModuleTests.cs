@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.TestHelpers;
 using DryIoc;
 using Oxygen.Editor.Shell.Contributions;
 
@@ -23,7 +24,7 @@ public sealed class MaterialEditorModuleTests
     [TestMethod]
     public void MaterialEditorModule_RegistersTheEditorProviderAndItsView()
     {
-        using var window = new Container();
+        using var window = HostContainer.Create();
 
         new MaterialEditorModule().Register(window);
 

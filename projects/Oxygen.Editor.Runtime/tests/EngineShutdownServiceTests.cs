@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using DroidNet.Aura.Windowing;
 using DroidNet.Hosting.WinUI;
+using DroidNet.TestHelpers;
 using DryIoc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -23,7 +24,7 @@ public sealed class EngineShutdownServiceTests
     [TestMethod]
     public async Task HostedServiceResolution_DoesNotRequireTheUiDispatcherOrWindowManager()
     {
-        var container = new Container();
+        var container = HostContainer.Create();
         await using var lifetime = container.ConfigureAwait(false);
         var hosting = new HostingContext { Application = null!, Dispatcher = null!, DispatcherScheduler = null! };
         container.RegisterInstance(hosting);
@@ -47,7 +48,7 @@ public sealed class EngineShutdownServiceTests
     public void SynchronousContainerDisposal_DoesNotInvokeAsyncOnlyCleanup()
     {
         var engine = new Mock<IEngineService>();
-        using var container = new Container();
+        using var container = HostContainer.Create();
         container.RegisterDelegate<IEngineService>(_ => engine.Object, Reuse.Singleton);
         _ = container.Resolve<IEngineService>();
 
