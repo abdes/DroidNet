@@ -12,7 +12,7 @@ using VirtualPath = Oxygen.Managed.Core.VirtualPath;
 using VirtualPathComparer = Oxygen.Managed.Core.VirtualPathComparer;
 using VirtualPathRuleSet = Oxygen.Managed.Core.VirtualPathRuleSet;
 
-namespace Oxygen.Editor.ProjectBrowser.Templates;
+namespace Oxygen.Editor.ProjectExplorer.Templates;
 
 /// <summary>
 /// Provides functionality to load project templates from the local filesystem.

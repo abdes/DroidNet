@@ -4,7 +4,7 @@
 
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
-using DroidNet.Resources.Generator.Localized_a870a544;
+using DroidNet.Resources.Generator.Localized_e3b91640;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging;
@@ -14,27 +14,27 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Services;
 
-namespace Oxygen.Editor.ProjectBrowser.Projects;
+namespace Oxygen.Editor.ProjectExplorer.Projects;
 
 /* TODO: better error reporting to the caller */
 
 /// <summary>
-/// Implements the <see cref="IProjectBrowserService"/> interface to provide project management functionality
+/// Implements the <see cref="IProjectExplorerService"/> interface to provide project management functionality
 /// in the Oxygen Editor environment.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The ProjectBrowserService handles project creation, browsing, and management operations while maintaining
+/// The ProjectExplorerService handles project creation, browsing, and management operations while maintaining
 /// state for recently used projects and known locations.
 /// </para>
 /// <para>
 /// Key responsibilities include:
 /// - Handling project storage locations
 /// - Tracking recently used projects
-/// - Managing project browser settings.
+/// - Managing project explorer settings.
 /// </para>
 /// </remarks>
-public partial class ProjectBrowserService : IProjectBrowserService
+public partial class ProjectExplorerService : IProjectExplorerService
 {
     private readonly ILogger logger;
 
@@ -45,26 +45,26 @@ public partial class ProjectBrowserService : IProjectBrowserService
     private readonly IEditorSettingsManager settingsManager;
 
     private readonly Lazy<Task<KnownLocation[]>> lazyLocations;
-    private readonly Lazy<Task<ProjectBrowserSettings>> lazySettings;
+    private readonly Lazy<Task<ProjectExplorerSettings>> lazySettings;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ProjectBrowserService"/> class.
+    /// Initializes a new instance of the <see cref="ProjectExplorerService"/> class.
     /// </summary>
     /// <param name="projectCreation">Project creation validation service.</param>
     /// <param name="recentProjects">Recent project adapter.</param>
     /// <param name="finder">Service for locating system paths.</param>
     /// <param name="localStorage">Provider for local storage operations. Must be a <see cref="NativeStorageProvider"/>.</param>
-    /// <param name="settingsManager">Manager for handling project browser settings.</param>
+    /// <param name="settingsManager">Manager for handling project explorer settings.</param>
     /// <param name="loggerFactory">The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger cannot be obtained, a <see cref="NullLogger" /> is used silently.</param>
     /// <exception cref="ArgumentException">
     /// Thrown when <paramref name="localStorage"/> is not an instance of <see cref="NativeStorageProvider"/>.
     /// </exception>
     /// <remarks>
     /// The constructor initializes lazy-loaded components:
-    /// <para>- Project browser settings.</para>
+    /// <para>- Project explorer settings.</para>
     /// <para>- Known locations for project storage.</para>
     /// </remarks>
-    public ProjectBrowserService(
+    public ProjectExplorerService(
         IProjectCreationService projectCreation,
         IRecentProjectAdapter recentProjects,
         IOxygenPathFinder finder,
@@ -72,34 +72,34 @@ public partial class ProjectBrowserService : IProjectBrowserService
         IEditorSettingsManager settingsManager,
         ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger<ProjectBrowserService>() ?? NullLoggerFactory.Instance.CreateLogger<ProjectBrowserService>();
+        this.logger = loggerFactory?.CreateLogger<ProjectExplorerService>() ?? NullLoggerFactory.Instance.CreateLogger<ProjectExplorerService>();
         this.projectCreation = projectCreation;
         this.recentProjects = recentProjects;
         this.finder = finder;
         this.settingsManager = settingsManager;
 
-        this.lazySettings = new Lazy<Task<ProjectBrowserSettings>>(
+        this.lazySettings = new Lazy<Task<ProjectExplorerSettings>>(
             async () =>
             {
-                var settings = new ProjectBrowserSettings();
+                var settings = new ProjectExplorerSettings();
                 await settings.LoadAsync(settingsManager).ConfigureAwait(true);
                 return settings;
             });
 
         this.localStorage = localStorage as NativeStorageProvider ?? throw new ArgumentException(
-            $"{nameof(ProjectBrowserService)} requires a {nameof(NativeStorageProvider)}",
+            $"{nameof(ProjectExplorerService)} requires a {nameof(NativeStorageProvider)}",
             nameof(localStorage));
 
         this.lazyLocations = new Lazy<Task<KnownLocation[]>>(this.InitializeKnownLocationsAsync);
     }
 
     /// <summary>
-    /// Gets the current project browser settings.
+    /// Gets the current project explorer settings.
     /// </summary>
     /// <remarks>
     /// Accesses the lazily-loaded settings instance. The settings are loaded only when first accessed.
     /// </remarks>
-    private ProjectBrowserSettings Settings => this.lazySettings.Value.Result;
+    private ProjectExplorerSettings Settings => this.lazySettings.Value.Result;
 
     /// <inheritdoc/>
     public async Task<bool> CanCreateProjectAsync(string projectName, string atLocationPath)
@@ -143,7 +143,7 @@ public partial class ProjectBrowserService : IProjectBrowserService
         => await this.lazyLocations.Value.ConfigureAwait(true);
 
     /// <inheritdoc/>
-    public async Task<ProjectBrowserSettings> GetSettingsAsync()
+    public async Task<ProjectExplorerSettings> GetSettingsAsync()
         => await this.lazySettings.Value.ConfigureAwait(false);
 
     /// <inheritdoc/>

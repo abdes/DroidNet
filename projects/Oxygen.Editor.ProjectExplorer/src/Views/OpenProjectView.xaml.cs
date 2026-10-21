@@ -9,11 +9,11 @@ using DroidNet.Storage;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
-using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.ViewModels;
+using Oxygen.Editor.ProjectExplorer.Projects;
+using Oxygen.Editor.ProjectExplorer.ViewModels;
 using WinRT;
 
-namespace Oxygen.Editor.ProjectBrowser.Views;
+namespace Oxygen.Editor.ProjectExplorer.Views;
 
 /// <summary>
 /// A page that can be used on its own or navigated to within a Frame to open projects.
@@ -69,7 +69,7 @@ public sealed partial class OpenProjectView
         _ = sender;
 
         // Ensure the proxy is kept in sync if the ViewModel is created/changed after Loaded
-        if (this.Resources.TryGetValue("ViewModelProxy", out var proxyObj) && proxyObj is Oxygen.Editor.ProjectBrowser.Controls.BindingProxy proxy)
+        if (this.Resources.TryGetValue("ViewModelProxy", out var proxyObj) && proxyObj is Oxygen.Editor.ProjectExplorer.Controls.BindingProxy proxy)
         {
             proxy.Data = this.ViewModel;
         }
@@ -88,7 +88,7 @@ public sealed partial class OpenProjectView
             this.ViewModel.PropertyChanged += this.OnViewModelPropertyChanged;
 
             // Initialize binding proxy to expose the ViewModel to item templates
-            if (this.Resources.TryGetValue("ViewModelProxy", out var proxyObj) && proxyObj is Oxygen.Editor.ProjectBrowser.Controls.BindingProxy proxy)
+            if (this.Resources.TryGetValue("ViewModelProxy", out var proxyObj) && proxyObj is Oxygen.Editor.ProjectExplorer.Controls.BindingProxy proxy)
             {
                 proxy.Data = this.ViewModel;
             }

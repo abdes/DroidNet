@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Projects;
 
-namespace Oxygen.Editor.ProjectBrowser.Templates;
+namespace Oxygen.Editor.ProjectExplorer.Templates;
 
 /// <summary>
 /// Defines the contract for project template information in the Oxygen Editor.

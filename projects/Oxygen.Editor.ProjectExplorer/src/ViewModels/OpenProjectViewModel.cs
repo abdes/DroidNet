@@ -14,24 +14,24 @@ using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ProjectBrowser.Activation;
-using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Editor.ProjectExplorer.Activation;
+using Oxygen.Editor.ProjectExplorer.Projects;
 using Oxygen.Managed.Core.Diagnostics;
 #pragma warning disable IDE0001 // Simplify Names
 using IStorageItem = DroidNet.Storage.IStorageItem;
 #pragma warning restore IDE0001 // Simplify Names
 
-namespace Oxygen.Editor.ProjectBrowser.ViewModels;
+namespace Oxygen.Editor.ProjectExplorer.ViewModels;
 
 /// <summary>
-/// ViewModel for the Open Project view in the Oxygen Editor's Project Browser.
+/// ViewModel for the Open Project view in the Oxygen Editor's Project Explorer.
 /// </summary>
 public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
 {
     private const SortDirection DefaultSortDirection = SortDirection.Ascending;
 
     private readonly ILogger logger;
-    private readonly IProjectBrowserService projectBrowser;
+    private readonly IProjectExplorerService projectExplorer;
     private readonly IProjectActivationCoordinator activationCoordinator;
 
 #pragma warning disable CA1859 // Use concrete types when possible for improved performance
@@ -53,7 +53,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     /// </summary>
     /// <param name="activationCoordinator">The shell coordinator that activates projects into the workspace.</param>
     /// <param name="storageProvider">The storage provider for accessing storage items.</param>
-    /// <param name="projectBrowser">The project browser service.</param>
+    /// <param name="projectExplorer">The project explorer service.</param>
     /// <param name="loggerFactory">
     /// The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     /// cannot be obtained, a <see cref="NullLogger" /> is used silently.
@@ -61,14 +61,14 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     public OpenProjectViewModel(
         IProjectActivationCoordinator activationCoordinator,
         NativeStorageProvider storageProvider,
-        IProjectBrowserService projectBrowser,
+        IProjectExplorerService projectExplorer,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<OpenProjectViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<OpenProjectViewModel>();
         this.activationCoordinator = activationCoordinator;
 
         this.storageProvider = storageProvider;
-        this.projectBrowser = projectBrowser;
+        this.projectExplorer = projectExplorer;
 
         this.AdvancedFileList = new AdvancedCollectionView(this.FileList, isLiveShaping: true);
         this.AdvancedFileList.SortDescriptions.Add(new SortDescription(SortDirection.Descending, new ByFolderOrFileComparer()));
@@ -149,9 +149,9 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
         try
         {
             var value = $"Name:{this.NameColumnWidth.ToString(CultureInfo.InvariantCulture)};LastModifiedDate:{this.DateColumnWidth.ToString(CultureInfo.InvariantCulture)}";
-            var settings = await this.projectBrowser.GetSettingsAsync().ConfigureAwait(true);
+            var settings = await this.projectExplorer.GetSettingsAsync().ConfigureAwait(true);
             settings.OpenViewColumnWidths = value;
-            await this.projectBrowser.SaveSettingsAsync().ConfigureAwait(true);
+            await this.projectExplorer.SaveSettingsAsync().ConfigureAwait(true);
             this.LogSavedColumnWidths();
         }
 #pragma warning disable CA1031 // Do not catch general exception types
@@ -172,7 +172,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
     {
         try
         {
-            var settings = await this.projectBrowser.GetSettingsAsync().ConfigureAwait(true);
+            var settings = await this.projectExplorer.GetSettingsAsync().ConfigureAwait(true);
             var widths = settings.OpenViewColumnWidths;
             if (!string.IsNullOrEmpty(widths))
             {
@@ -363,7 +363,7 @@ public partial class OpenProjectViewModel : ObservableObject, IRoutingAware
         this.LogLoadingKnownLocations();
         try
         {
-            this.KnownLocations = await this.projectBrowser.GetKnownLocationsAsync().ConfigureAwait(true);
+            this.KnownLocations = await this.projectExplorer.GetKnownLocationsAsync().ConfigureAwait(true);
             this.knownLocationLoaded = true;
         }
         catch (Exception ex)

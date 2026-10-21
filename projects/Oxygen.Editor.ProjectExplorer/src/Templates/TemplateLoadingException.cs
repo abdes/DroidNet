@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Templates;
+namespace Oxygen.Editor.ProjectExplorer.Templates;
 
 /// <summary>
 /// Represents errors that occur during the loading of a project template.

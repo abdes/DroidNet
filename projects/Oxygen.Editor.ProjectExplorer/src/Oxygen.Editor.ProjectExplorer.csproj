@@ -7,7 +7,7 @@
         <UseWinUI>true</UseWinUI>
         <AllowUnsafeBlocks>True</AllowUnsafeBlocks>
 
-        <RootNamespace>Oxygen.Editor.ProjectBrowser</RootNamespace>
+        <RootNamespace>Oxygen.Editor.ProjectExplorer</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
     </PropertyGroup>
 

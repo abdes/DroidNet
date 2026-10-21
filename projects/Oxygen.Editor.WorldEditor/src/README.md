@@ -145,9 +145,6 @@ projects/Oxygen.Editor.World/src/
 │   ├── ContentFoldersViewModel.cs          # Project tree navigation
 │   └── [Layout Views]                     # Tile/list layout implementations
 │
-├── ProjectExplorer/                       # Project navigation
-│   └── ContentFoldersViewModel.cs          # Project tree implementation
-│
 ├── PropertiesEditor/                      # Property editing system
 │   ├── SceneInspectorViewModel.cs        # Main properties editor
 │   ├── TransformViewModel.cs              # Transform component editor

@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json;
-using Oxygen.Editor.ProjectBrowser.Templates;
+using Oxygen.Editor.ProjectExplorer.Templates;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets.Authoring.Materials;
 using Testably.Abstractions;
 
-namespace Oxygen.Editor.ProjectBrowser.Tests;
+namespace Oxygen.Editor.ProjectExplorer.Tests;
 
 [TestClass]
 [TestCategory(nameof(LocalTemplatesSource))]
@@ -133,7 +133,7 @@ public class LocalTemplatesSourceTests
                 var candidate = Path.Combine(
                     directory.FullName,
                     "projects",
-                    "Oxygen.Editor.ProjectBrowser",
+                    "Oxygen.Editor.ProjectExplorer",
                     "src",
                     "Assets",
                     "Templates");
@@ -146,7 +146,7 @@ public class LocalTemplatesSourceTests
             }
         }
 
-        Assert.Fail("Could not locate built-in Project Browser templates.");
+        Assert.Fail("Could not locate built-in Project Explorer templates.");
         return string.Empty;
     }
 

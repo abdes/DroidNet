@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Projects;
 
-namespace Oxygen.Editor.ProjectBrowser.Controls;
+namespace Oxygen.Editor.ProjectExplorer.Controls;
 
 /// <summary>
 /// Provides data for the <see cref="RecentProjectsList.ItemActivated"/> event.

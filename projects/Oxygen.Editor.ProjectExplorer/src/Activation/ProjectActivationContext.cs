@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Projects;
 
-namespace Oxygen.Editor.ProjectBrowser.Activation;
+namespace Oxygen.Editor.ProjectExplorer.Activation;
 
 /// <summary>
 /// Shell-side context produced after a project has been activated.

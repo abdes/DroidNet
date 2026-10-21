@@ -4,7 +4,7 @@
 
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ProjectBrowser.Activation;
+namespace Oxygen.Editor.ProjectExplorer.Activation;
 
 /// <summary>
 /// Workspace restoration request attached to project activation.

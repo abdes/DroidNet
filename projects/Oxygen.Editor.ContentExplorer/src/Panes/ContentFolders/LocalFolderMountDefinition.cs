@@ -5,7 +5,7 @@
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 
 /// <summary>
-///     Defines the user-provided data required to mount a local folder into the Project Explorer.
+///     Defines the user-provided data required to mount a local folder into the Content Folders pane.
 /// </summary>
 /// <param name="MountPointName">The mount point name (case-sensitive identity).</param>
 /// <param name="AbsoluteFolderPath">The absolute folder path to mount.</param>

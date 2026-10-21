@@ -112,8 +112,8 @@ public partial class App
                 _ => Observable.FromAsync(
                     async () =>
                     {
-                        Debug.WriteLine("Launch activation ==> navigate to project browser");
-                        await this.router.NavigateAsync("/pb/home", new FullNavigation() { Target = new Target { Name = "wnd-pb" } }).ConfigureAwait(true);
+                        Debug.WriteLine("Launch activation ==> navigate to project explorer");
+                        await this.router.NavigateAsync("/pe/home", new FullNavigation() { Target = new Target { Name = "wnd-pe" } }).ConfigureAwait(true);
                     }))
             .Concat()
             .Subscribe();

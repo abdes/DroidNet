@@ -4,7 +4,7 @@
 
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.ProjectBrowser.Views;
+namespace Oxygen.Editor.ProjectExplorer.Views;
 
 /// <summary>
 ///     Logging methods for the <see cref="HomeView"/> class."/>.

@@ -7,16 +7,16 @@ using System.ComponentModel.DataAnnotations;
 using Oxygen.Editor.Data;
 using Oxygen.Editor.Data.Models;
 
-namespace Oxygen.Editor.ProjectBrowser;
+namespace Oxygen.Editor.ProjectExplorer;
 
 /// <summary>
-/// Represents the settings for the Project Browser module in the Oxygen Editor.
+/// Represents the settings for the Project Explorer module in the Oxygen Editor.
 /// </summary>
 /// <remarks>
 /// <para>
-/// The <see cref="ProjectBrowserSettings"/> class extends the <see cref="ModuleSettings"/> class to
-/// include properties specific to the Project Browser module, including window position, size, opacity,
-/// and project browser-specific settings. These properties are automatically persisted and retrieved
+/// The <see cref="ProjectExplorerSettings"/> class extends the <see cref="ModuleSettings"/> class to
+/// include properties specific to the Project Explorer module, including window position, size, opacity,
+/// and project explorer-specific settings. These properties are automatically persisted and retrieved
 /// using the settings manager when saved and loaded.
 /// </para>
 /// <para>
@@ -24,18 +24,18 @@ namespace Oxygen.Editor.ProjectBrowser;
 /// the <see cref="PersistedAttribute"/> and metadata attributes applied to the properties.
 /// </para>
 /// </remarks>
-public sealed partial class ProjectBrowserSettings : ModuleSettings
+public sealed partial class ProjectExplorerSettings : ModuleSettings
 {
-    private new const string ModuleName = "Oxygen.Editor.ProjectBrowser";
+    private new const string ModuleName = "Oxygen.Editor.ProjectExplorer";
 
     private string lastSaveLocation = string.Empty;
     private string openViewColumnWidths = string.Empty;
     private string homeViewColumnWidths = string.Empty;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="ProjectBrowserSettings"/> class.
+    /// Initializes a new instance of the <see cref="ProjectExplorerSettings"/> class.
     /// </summary>
-    public ProjectBrowserSettings()
+    public ProjectExplorerSettings()
         : base(ModuleName)
     {
     }

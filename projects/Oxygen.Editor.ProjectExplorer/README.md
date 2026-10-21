@@ -1,12 +1,12 @@
-# Oxygen.Editor.ProjectBrowser
+# Oxygen.Editor.ProjectExplorer
 
-A WinUI 3 library that provides a comprehensive project browser interface for
+A WinUI 3 library that provides a comprehensive project explorer interface for
 the Oxygen Editor, enabling users to browse, create, and manage projects through
 an intuitive start screen with template support.
 
 ## Overview
 
-The Oxygen.Editor.ProjectBrowser module is part of the
+The Oxygen.Editor.ProjectExplorer module is part of the
 [DroidNet](https://github.com/abdes/DroidNet) repository and serves as the
 project management entry point for the Oxygen Editor. It provides an intuitive
 user interface for discovering, creating, and opening game development projects
@@ -30,7 +30,7 @@ with support for extensible project templates.
 The project is organized using a layered MVVM architecture:
 
 ```text
-Oxygen.Editor.ProjectBrowser/
+Oxygen.Editor.ProjectExplorer/
 ├── src/
 │   ├── Controls/           # Reusable WinUI controls
 │   ├── Projects/           # Project management interfaces and services
@@ -82,12 +82,12 @@ Oxygen.Editor.ProjectBrowser/
 3. **Build the project:**
 
    ```powershell
-   dotnet build projects/Oxygen.Editor.ProjectBrowser/src/Oxygen.Editor.ProjectBrowser.csproj
+   dotnet build projects/Oxygen.Editor.ProjectExplorer/src/Oxygen.Editor.ProjectExplorer.csproj
    ```
 
 ### Configuration
 
-The project browser requires configuration in the application settings. Add the
+The project explorer requires configuration in the application settings. Add the
 following to your `appsettings.json`:
 
 ```json
@@ -120,8 +120,8 @@ following to your `appsettings.json`:
 Register the services in your DI container:
 
 ```csharp
-services.Configure<ProjectBrowserSettings>(configuration.GetSection("ProjectBrowserSettings"));
-services.AddSingleton<IProjectBrowserService, ProjectBrowserService>();
+services.Configure<ProjectExplorerSettings>(configuration.GetSection("ProjectExplorerSettings"));
+services.AddSingleton<IProjectExplorerService, ProjectExplorerService>();
 services.AddSingleton<ITemplatesService, TemplatesService>();
 ```
 
@@ -130,7 +130,7 @@ services.AddSingleton<ITemplatesService, TemplatesService>();
 ### Folder Organization
 
 ```plaintext
-Oxygen.Editor.ProjectBrowser/
+Oxygen.Editor.ProjectExplorer/
 ├── src/
 │   ├── Assets/             # Built-in project templates organized by category
 │   ├── Controls/           # Reusable WinUI controls
@@ -141,11 +141,11 @@ Oxygen.Editor.ProjectBrowser/
 │   ├── Themes/             # XAML theme resources
 │   ├── ViewModels/         # MVVM ViewModels for different screens
 │   ├── Views/              # XAML views paired with code-behind
-│   ├── ProjectBrowserSettings.cs  # Configuration model
-│   └── Oxygen.Editor.ProjectBrowser.csproj
+│   ├── ProjectExplorerSettings.cs  # Configuration model
+│   └── Oxygen.Editor.ProjectExplorer.csproj
 └── tests/
     ├── LocalTemplatesSourceTests.cs  # Template loading tests
-    └── Oxygen.Editor.ProjectBrowser.Tests.csproj
+    └── Oxygen.Editor.ProjectExplorer.Tests.csproj
 ```
 
 ### Detailed Component Breakdown
@@ -161,7 +161,7 @@ Oxygen.Editor.ProjectBrowser/
 
 #### Services
 
-**IProjectBrowserService** - Central service for project management:
+**IProjectExplorerService** - Central service for project management:
 
 - `GetRecentlyUsedProjectsAsync()` - Retrieve recently opened projects
 - `CanCreateProjectAsync()` - Validate project creation
@@ -232,8 +232,8 @@ folder):
 ### Building
 
 ```powershell
-# Build the ProjectBrowser module specifically
-dotnet build projects/Oxygen.Editor.ProjectBrowser/src/Oxygen.Editor.ProjectBrowser.csproj
+# Build the ProjectExplorer module specifically
+dotnet build projects/Oxygen.Editor.ProjectExplorer/src/Oxygen.Editor.ProjectExplorer.csproj
 
 # Build all projects (from projects/ directory)
 cd projects
@@ -243,11 +243,11 @@ cd projects
 ### Testing
 
 ```powershell
-# Run all ProjectBrowser tests
-dotnet test projects/Oxygen.Editor.ProjectBrowser/tests/Oxygen.Editor.ProjectBrowser.Tests.csproj
+# Run all ProjectExplorer tests
+dotnet test projects/Oxygen.Editor.ProjectExplorer/tests/Oxygen.Editor.ProjectExplorer.Tests.csproj
 
 # Run with coverage
-dotnet test projects/Oxygen.Editor.ProjectBrowser/tests/Oxygen.Editor.ProjectBrowser.Tests.csproj `
+dotnet test projects/Oxygen.Editor.ProjectExplorer/tests/Oxygen.Editor.ProjectExplorer.Tests.csproj `
   /p:CollectCoverage=true /p:CoverletOutputFormat=lcov
 ```
 
@@ -296,7 +296,7 @@ The project uses source-generated MVVM wiring from the
 
 Tests use **MSTest** framework following DroidNet conventions:
 
-- **Test Project**: `Oxygen.Editor.ProjectBrowser.Tests`
+- **Test Project**: `Oxygen.Editor.ProjectExplorer.Tests`
 - **Naming Convention**: `MethodName_Scenario_ExpectedBehavior`
 - **Test Pattern**: Arrange-Act-Assert (AAA) pattern
 - **Parameterized Tests**: Use `[DataRow]` and `[DataTestMethod]` for multiple
@@ -332,13 +332,13 @@ public class LocalTemplatesSourceTests
 Current test coverage focuses on:
 
 - Template source loading and discovery
-- Project browser service functionality
+- Project explorer service functionality
 - Configuration validation
 - File system operations
 
 ## Contributing
 
-Contributions to the Oxygen.Editor.ProjectBrowser are welcome! When
+Contributions to the Oxygen.Editor.ProjectExplorer are welcome! When
 contributing:
 
 1. **Follow the coding standards** - Review and adhere to
@@ -376,7 +376,7 @@ contributing:
 
 - [Oxygen.Editor](../Oxygen.Editor/) - Main editor application
 - [Oxygen.Managed.Core](../Oxygen.Managed.Core/) - Core editor services
-- [Oxygen.Editor.ProjectBrowser](../Oxygen.Editor.ProjectBrowser/) - Project
+- [Oxygen.Editor.ProjectExplorer](../Oxygen.Editor.ProjectExplorer/) - Project
   browsing interface (this module)
 - [Mvvm.Generators](../Mvvm.Generators/) - Source generators for MVVM wiring
 
@@ -386,7 +386,7 @@ contributing:
   overview
 - **[DroidNet Repository](https://github.com/abdes/DroidNet)** - Full mono-repo
   with all projects
-- **[Project Browser Configuration](src/README.md)** - Detailed configuration
+- **[Project Explorer Configuration](src/README.md)** - Detailed configuration
   and services documentation
 - **[WinUI 3 Documentation](https://learn.microsoft.com/en-us/windows/apps/winui/)** -
   Official WinUI 3 guides and API reference

@@ -13,7 +13,7 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 
 /// <summary>
-///     Represents the Project Explorer root node.
+///     Represents the Content Folders root node.
 /// </summary>
 /// <remarks>
 ///     Children include:

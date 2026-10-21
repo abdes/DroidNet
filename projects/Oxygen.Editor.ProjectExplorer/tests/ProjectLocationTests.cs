@@ -7,14 +7,14 @@ using DroidNet.Storage.Native;
 using Moq;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Data.Settings;
-using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Templates;
-using Oxygen.Editor.ProjectBrowser.ViewModels;
+using Oxygen.Editor.ProjectExplorer.Projects;
+using Oxygen.Editor.ProjectExplorer.Templates;
+using Oxygen.Editor.ProjectExplorer.ViewModels;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Services;
 using Testably.Abstractions;
 
-namespace Oxygen.Editor.ProjectBrowser.Tests;
+namespace Oxygen.Editor.ProjectExplorer.Tests;
 
 [TestClass]
 public sealed class ProjectLocationTests
@@ -35,7 +35,7 @@ public sealed class ProjectLocationTests
             .Returns(new Dictionary<string, IReadOnlyList<ISettingDescriptor>>(StringComparer.Ordinal)
             {
                 ["Recent"] = [Mock.Of<ISettingDescriptor>(
-                    value => value.Name == nameof(ProjectBrowserSettings.LastSaveLocation))],
+                    value => value.Name == nameof(ProjectExplorerSettings.LastSaveLocation))],
             });
         _ = settings.Setup(value => value.LoadSettingOrDefaultAsync(
                 It.IsAny<SettingKey<string>>(),
@@ -45,9 +45,9 @@ public sealed class ProjectLocationTests
                 It.IsAny<CancellationToken>()))
             .Returns<SettingKey<string>, string, SettingContext?, IProgress<SettingsProgress>?, CancellationToken>(
                 (key, defaultValue, _, _, _) => Task.FromResult(
-                    string.Equals(key.Name, nameof(ProjectBrowserSettings.LastSaveLocation), StringComparison.Ordinal)
+                    string.Equals(key.Name, nameof(ProjectExplorerSettings.LastSaveLocation), StringComparison.Ordinal)
                         ? lastLocation : defaultValue));
-        var browser = new ProjectBrowserService(
+        var browser = new ProjectExplorerService(
             Mock.Of<IProjectCreationService>(),
             Mock.Of<IRecentProjectAdapter>(),
             finder.Object,

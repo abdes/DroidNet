@@ -415,7 +415,7 @@ roots or target folders outside the project layout policy.
 | Owner                           | Responsibility                                                                                 |
 | ------------------------------- | ---------------------------------------------------------------------------------------------- |
 | `Oxygen.Editor.Projects`        | `Project.oxy`, mount validation, project creation layout validation, project cook-scope facts. |
-| `Oxygen.Editor.ProjectBrowser`  | predefined template presentation and create-from-template workflow.                            |
+| `Oxygen.Editor.ProjectExplorer` | predefined template presentation and create-from-template workflow.                            |
 | `Oxygen.Editor.ContentExplorer` | user-facing projection of authoring, local, config, packages, and derived roots.               |
 | `Oxygen.Editor.WorldEditor`     | scene document create/open/save under `Content/Scenes`.                                        |
 | `Oxygen.Editor.MaterialEditor`  | material descriptor create/open/save under `Content/Materials` or selected material target.    |
@@ -587,7 +587,7 @@ Required consumers:
 
 ## 9. UI Surfaces
 
-Project Browser:
+Project Explorer:
 
 - templates show `DisplayName`, `Description`, `Icon`, `Preview`, and category.
 - template detail shows starter scene and mount layout.

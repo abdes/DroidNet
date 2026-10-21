@@ -18,11 +18,11 @@ public static class TraceListenerCollectionExtensions
     /// </summary>
     /// Use it like this to suspend assertions for the code within the scope:
     /// <code>
-    /// ProjectBrowserSettings settings;
+    /// ProjectExplorerSettings settings;
     /// using (Trace.Listeners.AssertSuspend())
     /// {
     ///     // Assertions are disable until we leave the scope
-    ///     settings = new ProjectBrowserSettings() { BuiltinTemplates = templates };
+    ///     settings = new ProjectExplorerSettings() { BuiltinTemplates = templates };
     /// }
     /// // Now assertions are enabled again.
     /// </code>

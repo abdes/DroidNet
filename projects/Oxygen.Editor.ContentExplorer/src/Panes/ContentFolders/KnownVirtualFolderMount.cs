@@ -5,7 +5,7 @@
 namespace Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 
 /// <summary>
-///     Identifies the built-in virtual folder mounts offered by the Project Explorer.
+///     Identifies the built-in virtual folder mounts offered by the Content Folders pane.
 /// </summary>
 public enum KnownVirtualFolderMount
 {

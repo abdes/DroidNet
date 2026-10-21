@@ -144,7 +144,7 @@ feature project.
 | `projects/Oxygen.Editor.UI`              | Oxygen-specific reusable editor widgets, field controls, overlays, editor styles, and UI helper view models that are not general DroidNet controls.                                                 | Feature policy, domain models, project/cook/runtime behavior.                                                     |
 | `projects/Oxygen.Editor.Shell`           | Application frame: the document service, document areas and tabs, close prompts, histories, command routing, placement, panel and editor contributions, the docking workspace, desktop integration. | Scene, asset or pipeline policy; references above foundation.                                                     |
 | `projects/Oxygen.Editor.Routing`         | Editor-specific route helpers and route integration glue.                                                                                                                                           | Feature state or feature workflow policy.                                                                         |
-| `projects/Oxygen.Editor.ProjectBrowser`  | No-project startup experience, project creation/opening UI, recent project UI, project templates UI.                                                                                                | Project persistence rules, scene editing, content browsing inside an opened workspace.                            |
+| `projects/Oxygen.Editor.ProjectExplorer` | No-project startup experience, project creation/opening UI, recent project UI, project templates UI.                                                                                                | Project persistence rules, scene editing, content browsing inside an opened workspace.                            |
 | `projects/Oxygen.Editor.Documents`       | Generic document abstractions shared by editor features.                                                                                                                                            | World-editor-specific scene document behavior.                                                                    |
 | `projects/Oxygen.Editor.Schemas`         | Schema/overlay catalog, typed properties/edits, mixed values, snapshots, apply/session mechanics.                                                                                                   | Feature UI/policy, runtime lifecycle, native calls, cooked binary offsets.                                        |
 | `projects/Oxygen.Editor.World`           | Pure authoring scene/domain model: scenes, nodes, components, scene serialization, scene-owned settings, authoring references.                                                                      | WinUI, routing, docking, runtime engine handles, interop, cook execution.                                         |
@@ -250,7 +250,7 @@ Use this before adding a file:
     composition?**
     Put it in `Oxygen.Editor`.
 14. **Is it the first experience before a project is open?**
-    Put UI in `Oxygen.Editor.ProjectBrowser`; put project persistence/policy in
+    Put UI in `Oxygen.Editor.ProjectExplorer`; put project persistence/policy in
     `Oxygen.Editor.Projects`.
 15. **Is it durable settings infrastructure?**
     Put infrastructure in `Oxygen.Editor.Data`; put setting ownership and UI in

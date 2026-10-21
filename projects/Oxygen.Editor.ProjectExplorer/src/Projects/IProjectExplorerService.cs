@@ -4,12 +4,12 @@
 
 using Oxygen.Editor.Projects;
 
-namespace Oxygen.Editor.ProjectBrowser.Projects;
+namespace Oxygen.Editor.ProjectExplorer.Projects;
 
 /// <summary>
 /// Defines as service API for browsing, creating, and managing projects in the Oxygen Editor.
 /// </summary>
-public interface IProjectBrowserService
+public interface IProjectExplorerService
 {
     /// <summary>
     /// Gets an asynchronous enumerable of recently used projects.
@@ -54,13 +54,13 @@ public interface IProjectBrowserService
     public Task<KnownLocation[]> GetKnownLocationsAsync();
 
     /// <summary>
-    /// Gets the project browser settings.
+    /// Gets the project explorer settings.
     /// </summary>
-    /// <returns>The project browser settings.</returns>
-    public Task<ProjectBrowserSettings> GetSettingsAsync();
+    /// <returns>The project explorer settings.</returns>
+    public Task<ProjectExplorerSettings> GetSettingsAsync();
 
     /// <summary>
-    /// Saves the project browser settings.
+    /// Saves the project explorer settings.
     /// </summary>
     /// <returns>A task representing the asynchronous operation.</returns>
     public Task SaveSettingsAsync();

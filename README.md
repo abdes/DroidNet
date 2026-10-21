@@ -129,7 +129,7 @@ The Oxygen projects represent a comprehensive game editor and engine implementat
 
 - **[Oxygen.Editor.Interop](projects/Oxygen.Editor.Interop/)** - Interoperability layer between managed code and the C++ engine.
 
-- **[Oxygen.Editor.ProjectBrowser](projects/Oxygen.Editor.ProjectBrowser/)** - Project browsing and management UI component.
+- **[Oxygen.Editor.ProjectExplorer](projects/Oxygen.Editor.ProjectExplorer/)** - Project browsing and management UI component.
 
 - **[Oxygen.Editor.Projects](projects/Oxygen.Editor.Projects/)** - Project file and structure management.
 

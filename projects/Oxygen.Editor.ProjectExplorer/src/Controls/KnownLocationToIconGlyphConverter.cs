@@ -4,9 +4,9 @@
 
 using System.ComponentModel;
 using Microsoft.UI.Xaml.Data;
-using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Editor.ProjectExplorer.Projects;
 
-namespace Oxygen.Editor.ProjectBrowser.Controls;
+namespace Oxygen.Editor.ProjectExplorer.Controls;
 
 /// <summary>
 /// Converts a <see cref="KnownLocations"/> value to a corresponding icon glyph.

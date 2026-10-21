@@ -71,7 +71,7 @@ Read: [ownership](#ownership), [C++](#c), [editor](#editor),
 ## Editor
 
 - Minimize cognitive load: consistent alignment/proportions, progressive disclosure
-  and no duplicated information. Open the Project Browser without a project and
+  and no duplicated information. Open the Project Explorer without a project and
   a usable workspace with one. Place authoring in the hierarchy, viewport,
   inspector and content browser, using precise authoring terminology.
 - Complete applicable undo/redo, dirty state, persistence, live sync, cooking and

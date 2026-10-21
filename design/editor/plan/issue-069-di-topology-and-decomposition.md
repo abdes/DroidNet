@@ -135,7 +135,7 @@ tests only.
   registrations and the second `RegisterViewsAndViewModels` call; one owner for
   each (the `Bootstrapper`/`WithMvvm` registration stays). Replace the swallowed
   `ContainerException` in `Main` with a reported, aborting startup failure.
-  Gate: reviewer's editor build starts to the Project Browser and opens a
+  Gate: reviewer's editor build starts to the Project Explorer and opens a
   project.
 
 ### Phase 1: project decomposition
@@ -670,7 +670,7 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   finalize phases; closing the last workspace window of a session returns to
   the Start window.
 - Gate: the spec's Phase 4 tests, including the **open check** of the issue:
-  close the last workspace window with the Project Browser open and assert the
+  close the last workspace window with the Project Explorer open and assert the
   process stays up. If WinAppSDK ends the process, stop and raise the shutdown
   policy before continuing.
 
@@ -773,3 +773,4 @@ checked URIs, source-collision reporting from the cook (`5d5c2bc0e`).
 | 7   | SceneInspector  | `done` |                                                                                                                                    |
 | 8   | MaterialEditor  | `done` | Contributes its editor provider and view through its module; its view tests live in its own UI test project                        |
 | 9   | ContentExplorer | `done` | The window sends no messages; relocation and creation rules live in ContentPipeline, their dialogs in the explorer                 |
+| 10  | ProjectExplorer | `done` | The Start experience under its new name; its window kind and routes move with the Shell's window kinds (S5.3)                      |

@@ -5,10 +5,10 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.ProjectBrowser.Projects;
+namespace Oxygen.Editor.ProjectExplorer.Projects;
 
-/// <summary>Logging helpers for <see cref="ProjectBrowserService"/>.</summary>
-public partial class ProjectBrowserService
+/// <summary>Logging helpers for <see cref="ProjectExplorerService"/>.</summary>
+public partial class ProjectExplorerService
 {
     [LoggerMessage(
         SkipEnabledCheck = true,

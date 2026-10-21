@@ -40,7 +40,7 @@ The V0.1 editor is designed as six cooperating product areas:
 
 ```mermaid
 flowchart TB
-    Shell[Shell, Project Browser, Workspace]
+    Shell[Shell, Project Explorer, Workspace]
     Authoring[Authoring Domains and Documents]
     FeatureUI[Feature UI<br/>inspectors, viewports, content explorer, material editor]
     Pipeline[Content Pipeline]
@@ -68,7 +68,7 @@ owner.
 
 | Area                                      | LLD                                                                          | Covers                                                                                                                          |
 | ----------------------------------------- | ---------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------- |
-| Shell, project open, workspace activation | [project-workspace-shell.md](lld/project-workspace-shell.md)                 | Project Browser startup, project open/create, workspace activation, restoration, project/service boundaries.                    |
+| Shell, project open, workspace activation | [project-workspace-shell.md](lld/project-workspace-shell.md)                 | Project Explorer startup, project open/create, workspace activation, restoration, project/service boundaries.                   |
 | Project layout and templates              | [project-layout-and-templates.md](lld/project-layout-and-templates.md)       | Standard project filesystem layout, authoring mounts, derived roots, and predefined template output rules.                      |
 | Project services                          | [project-services.md](lld/project-services.md)                               | Project metadata, project settings, content roots, project cook scope and policy.                                               |
 | Documents, commands, undo, dirty state    | [documents-and-commands.md](lld/documents-and-commands.md)                   | Generic document abstractions, document lifecycle, command model, undo/redo, dirty state, selection state, command result flow. |
@@ -109,9 +109,9 @@ project-workspace-shell
 
 Design contract:
 
-- Project Browser remains the startup experience.
+- Project Explorer remains the startup experience.
 - Process bootstrap performs native discovery/compatibility checks before native
-  calls. Failure keeps Project Browser and safe authoring/save available and
+  calls. Failure keeps Project Explorer and safe authoring/save available and
   disables native work with visible diagnostics.
 - Project open/create establishes active project context before workspace
   activation.

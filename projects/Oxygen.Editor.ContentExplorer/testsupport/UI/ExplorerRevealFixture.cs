@@ -18,12 +18,14 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -157,6 +159,11 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         this.container.RegisterInstance(Mock.Of<IStatusReducer>());
         this.container.RegisterInstance(Mock.Of<IWindowManagerService>());
         this.container.RegisterInstance(new Oxygen.Editor.Textures.TextureImport(new RealFileSystem()));
+
+        // The creation workflow the explorer builds over the window's services; without a relocation service the
+        // explorer renames folders itself.
+        this.container.RegisterInstance(Mock.Of<IAssetAuthoring>());
+        this.container.RegisterInstance(Mock.Of<ICodeEditorService>());
         this.Explorer = new(this.container, Mock.Of<IRouter>(), this.Projects, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
     }
 

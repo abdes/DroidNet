@@ -5,11 +5,11 @@
     <PropertyGroup>
         <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
-        <RootNamespace>Oxygen.Editor.ProjectBrowser.Tests</RootNamespace>
+        <RootNamespace>Oxygen.Editor.ProjectExplorer.Tests</RootNamespace>
     </PropertyGroup>
 
     <ItemGroup>
-        <ProjectReference Include="..\src\Oxygen.Editor.ProjectBrowser.csproj" />
+        <ProjectReference Include="..\src\Oxygen.Editor.ProjectExplorer.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.World\src\Oxygen.Editor.World.csproj" />
     </ItemGroup>
 

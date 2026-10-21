@@ -6,22 +6,22 @@ using System.Runtime.CompilerServices;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
 
-namespace Oxygen.Editor.ProjectBrowser.Projects;
+namespace Oxygen.Editor.ProjectExplorer.Projects;
 
 /// <summary>
-/// Represents a known location within the project browser, providing methods to retrieve storage items from the location.
+/// Represents a known location within the project explorer, providing methods to retrieve storage items from the location.
 /// </summary>
 /// <param name="key">The key identifying the known location.</param>
 /// <param name="name">The name of the known location.</param>
 /// <param name="location">The path of the known location.</param>
 /// <param name="storage">The storage provider used to access storage items.</param>
-/// <param name="projectBrowserService">The project browser service used to access recently used projects.</param>
+/// <param name="projectExplorerService">The project explorer service used to access recently used projects.</param>
 public class KnownLocation(
     KnownLocations key,
     string name,
     string location,
     NativeStorageProvider storage,
-    IProjectBrowserService projectBrowserService)
+    IProjectExplorerService projectExplorerService)
 {
     /// <summary>
     /// Gets the key identifying the known location.
@@ -48,7 +48,7 @@ public class KnownLocation(
         switch (this.Key)
         {
             case KnownLocations.RecentProjects:
-                await foreach (var item in projectBrowserService.GetRecentlyUsedProjectsAsync(cancellationToken)
+                await foreach (var item in projectExplorerService.GetRecentlyUsedProjectsAsync(cancellationToken)
                                    .ConfigureAwait(false))
                 {
                     if (cancellationToken.IsCancellationRequested)

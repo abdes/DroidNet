@@ -2,10 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.ViewModels;
+namespace Oxygen.Editor.ProjectExplorer.ViewModels;
 
 /// <summary>
-/// Represents a navigation item in the project browser.
+/// Represents a navigation item in the project explorer.
 /// </summary>
 /// <param name="path">The path associated with the navigation item.</param>
 /// <param name="text">The display text for the navigation item.</param>

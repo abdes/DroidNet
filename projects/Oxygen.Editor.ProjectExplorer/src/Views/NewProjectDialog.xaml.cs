@@ -7,11 +7,11 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Templates;
-using Oxygen.Editor.ProjectBrowser.ViewModels;
+using Oxygen.Editor.ProjectExplorer.Projects;
+using Oxygen.Editor.ProjectExplorer.Templates;
+using Oxygen.Editor.ProjectExplorer.ViewModels;
 
-namespace Oxygen.Editor.ProjectBrowser.Views;
+namespace Oxygen.Editor.ProjectExplorer.Views;
 
 /// <summary>
 ///     A dialog for creating a new project.
@@ -25,12 +25,12 @@ public sealed partial class NewProjectDialog
     /// <summary>
     ///     Initializes a new instance of the <see cref="NewProjectDialog" /> class.
     /// </summary>
-    /// <param name="projectBrowser">The project browser service.</param>
+    /// <param name="projectExplorer">The project explorer service.</param>
     /// <param name="template">The template information for the new project.</param>
     /// <param name="dialogService">The owner-aware picker service.</param>
     /// <param name="loggerFactory">The logger factory.</param>
     public NewProjectDialog(
-        IProjectBrowserService projectBrowser,
+        IProjectExplorerService projectExplorer,
         ITemplateInfo template,
         IDialogService dialogService,
         ILoggerFactory? loggerFactory = null)
@@ -40,7 +40,7 @@ public sealed partial class NewProjectDialog
         this.logger = loggerFactory?.CreateLogger<NewProjectDialog>() ?? NullLogger<NewProjectDialog>.Instance;
         this.InitializeComponent();
 
-        this.ViewModel = new NewProjectDialogViewModel(projectBrowser, template);
+        this.ViewModel = new NewProjectDialogViewModel(projectExplorer, template);
         this.DataContext = this.ViewModel;
 
         _ = this.ProjectNameTextBox.Focus(FocusState.Programmatic);

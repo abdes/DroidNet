@@ -32,7 +32,7 @@ See [hosting](#hosting), [release qualification](#release-qualification), and
 The stable pin was built and exercised by the full DynamicTree UI suite in Debug
 and Release (111 tests each); the resolved graph includes MTP 2.5.1. This does not
 cover Visual Studio Test Explorer discovery/debugging or package identity. Package-
-sensitive asset resolution and Project Browser thumbnail loading need a packaged
+sensitive asset resolution and Project Explorer thumbnail loading need a packaged
 integration host; unpackaged component tests do not cover those paths.
 
 C# test projects use the supported `EnableMSTestV2CopyResources=false` setting

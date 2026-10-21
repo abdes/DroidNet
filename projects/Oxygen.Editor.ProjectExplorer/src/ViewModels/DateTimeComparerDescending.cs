@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.ViewModels;
+namespace Oxygen.Editor.ProjectExplorer.ViewModels;
 
 /// <summary>
 /// Compares <see cref="DateTime"/> values in descending order.

@@ -8,11 +8,11 @@ using CommunityToolkit.Mvvm.Input;
 using DroidNet.Routing;
 using DroidNet.Routing.WinUI;
 
-namespace Oxygen.Editor.ProjectBrowser.ViewModels;
+namespace Oxygen.Editor.ProjectExplorer.ViewModels;
 
 /// <summary>
 /// The view model for the start screen. Mainly responsible for the navigation
-/// between the different views in the project browser start screen.
+/// between the different views in the project explorer start screen.
 /// </summary>
 /// <param name="router">The application router to use when navigating.</param>
 public partial class MainViewModel(IRouter router) : ObservableObject, IOutletContainer, IRoutingAware
@@ -102,7 +102,7 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         if (index != this.SelectedItemIndex)
         {
             // Avoid navigation if the selected item is same than before
-            await router.NavigateAsync($"/pb/{navItem.Path}").ConfigureAwait(true);
+            await router.NavigateAsync($"/pe/{navItem.Path}").ConfigureAwait(true);
         }
     }
 
@@ -116,7 +116,7 @@ public partial class MainViewModel(IRouter router) : ObservableObject, IOutletCo
         if (!this.IsSettingsSelected)
         {
             // Avoid navigation if the selected item is same than before
-            await router.NavigateAsync("/pb/settings").ConfigureAwait(true);
+            await router.NavigateAsync("/pe/settings").ConfigureAwait(true);
         }
     }
 

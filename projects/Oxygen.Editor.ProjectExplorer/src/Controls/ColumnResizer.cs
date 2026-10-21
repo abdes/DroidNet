@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Controls.Primitives;
 
-namespace Oxygen.Editor.ProjectBrowser.Controls;
+namespace Oxygen.Editor.ProjectExplorer.Controls;
 
 /// <summary>
 ///     A custom control that provides a drag handle for resizing a column's width.

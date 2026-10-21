@@ -115,16 +115,16 @@ Tracks template usage for prioritizing frequently used templates.
 
 Flexible key-value storage for module-specific settings with JSON serialization.
 
-| Column           | Type            | Constraints                | Description                                           |
-| ---------------- | --------------- | -------------------------- | ----------------------------------------------------- |
-| `Id`             | INTEGER         | PRIMARY KEY, AUTOINCREMENT | Unique identifier                                     |
-| `SettingsModule` | TEXT(255)       | NOT NULL, MIN 1            | Module identifier (e.g., "Docking", "ProjectBrowser") |
-| `Name`           | TEXT(255)       | NOT NULL, MIN 1            | Setting identifier within module namespace            |
-| `Scope`          | INTEGER         | NOT NULL, DEFAULT 0        | Setting scope (0 = Application, 1 = Project)          |
-| `ScopeId`        | TEXT(1024)      | NULL                       | Optional scope identifier e.g. project path           |
-| `JsonValue`      | TEXT(2048)      | NULL                       | JSON-serialized setting value (camelCase convention)  |
-| `CreatedAt`      | TEXT (DateTime) | NOT NULL, DEFAULT UTC NOW  | Record creation timestamp                             |
-| `UpdatedAt`      | TEXT (DateTime) | NOT NULL, DEFAULT UTC NOW  | Last modification timestamp                           |
+| Column           | Type            | Constraints                | Description                                            |
+| ---------------- | --------------- | -------------------------- | ------------------------------------------------------ |
+| `Id`             | INTEGER         | PRIMARY KEY, AUTOINCREMENT | Unique identifier                                      |
+| `SettingsModule` | TEXT(255)       | NOT NULL, MIN 1            | Module identifier (e.g., "Docking", "ProjectExplorer") |
+| `Name`           | TEXT(255)       | NOT NULL, MIN 1            | Setting identifier within module namespace             |
+| `Scope`          | INTEGER         | NOT NULL, DEFAULT 0        | Setting scope (0 = Application, 1 = Project)           |
+| `ScopeId`        | TEXT(1024)      | NULL                       | Optional scope identifier e.g. project path            |
+| `JsonValue`      | TEXT(2048)      | NULL                       | JSON-serialized setting value (camelCase convention)   |
+| `CreatedAt`      | TEXT (DateTime) | NOT NULL, DEFAULT UTC NOW  | Record creation timestamp                              |
+| `UpdatedAt`      | TEXT (DateTime) | NOT NULL, DEFAULT UTC NOW  | Last modification timestamp                            |
 
 **Indexes:**
 

@@ -35,11 +35,11 @@ using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Output;
 using Oxygen.Editor.Problems;
-using Oxygen.Editor.ProjectBrowser.Activation;
-using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Templates;
-using Oxygen.Editor.ProjectBrowser.ViewModels;
-using Oxygen.Editor.ProjectBrowser.Views;
+using Oxygen.Editor.ProjectExplorer.Activation;
+using Oxygen.Editor.ProjectExplorer.Projects;
+using Oxygen.Editor.ProjectExplorer.Templates;
+using Oxygen.Editor.ProjectExplorer.ViewModels;
+using Oxygen.Editor.ProjectExplorer.Views;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor;
@@ -163,7 +163,7 @@ public static partial class Program
                 },
                 new Route
                 {
-                    Path = "pb",
+                    Path = "pe",
                     MatchMethod = PathMatch.Prefix,
                     ViewModelType = typeof(MainViewModel),
                     Children = new Routes(
@@ -339,7 +339,7 @@ public static partial class Program
         container.Register<ITemplatesSource, LocalTemplatesSource>(Reuse.Singleton, serviceKey: Uri.UriSchemeFile);
         container.Register<ITemplatesService, TemplatesService>(Reuse.Transient);
 
-        container.Register<IProjectBrowserService, ProjectBrowserService>(Reuse.Singleton);
+        container.Register<IProjectExplorerService, ProjectExplorerService>(Reuse.Singleton);
         container.Register<IProjectActivationCoordinator, ProjectActivationCoordinator>(Reuse.Singleton);
         container.Register<IProjectValidationService, ProjectValidationService>(Reuse.Singleton);
         container.Register<IProjectContextService, ProjectContextService>(Reuse.Singleton);
@@ -394,16 +394,16 @@ public static partial class Program
             Reuse.Transient,
             serviceKey: new Target { Name = "wnd-we" });
 
-        // Project Browser window
+        // Project Explorer window
         container.RegisterDelegate<Window>(
             resolverContext =>
             {
                 var windowFactory = resolverContext.Resolve<IWindowFactory>();
-                var category = new WindowCategory("wnd-pb");
+                var category = new WindowCategory("wnd-pe");
                 return windowFactory.CreateDecoratedWindow<RoutedWindow>(category).GetAwaiter().GetResult();
             },
             Reuse.Transient,
-            serviceKey: new Target { Name = "wnd-pb" });
+            serviceKey: new Target { Name = "wnd-pe" });
     }
 
     private static void RegisterViewsAndViewModels(IContainer container)

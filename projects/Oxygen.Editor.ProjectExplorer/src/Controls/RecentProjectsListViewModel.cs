@@ -10,10 +10,10 @@ using CommunityToolkit.WinUI.Collections;
 using DroidNet.Collections;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Editor.ProjectExplorer.Projects;
 using Oxygen.Editor.Projects;
 
-namespace Oxygen.Editor.ProjectBrowser.Controls;
+namespace Oxygen.Editor.ProjectExplorer.Controls;
 
 /// <summary>
 /// ViewModel for the recent projects list control.
@@ -22,7 +22,7 @@ namespace Oxygen.Editor.ProjectBrowser.Controls;
 /// </summary>
 internal partial class RecentProjectsListViewModel : ObservableObject
 {
-    private readonly IProjectBrowserService projectBrowser;
+    private readonly IProjectExplorerService projectExplorer;
     private readonly ILogger logger;
     private readonly ProjectItemWithThumbnail.ByNameComparer byNameComparer = new();
     private readonly ProjectItemWithThumbnail.ByLastUsedOnComparer byLastUsedComparer = new();
@@ -37,17 +37,17 @@ internal partial class RecentProjectsListViewModel : ObservableObject
     /// <summary>
     /// Initializes a new instance of the <see cref="RecentProjectsListViewModel"/> class.
     /// </summary>
-    /// <param name="projectBrowser">The project browser service.</param>
+    /// <param name="projectExplorer">The project explorer service.</param>
     /// <param name="defaultThumbnailUri">The default thumbnail URI to use when no thumbnail is available.</param>
     /// <param name="loggerFactory">
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
     /// </param>
-    public RecentProjectsListViewModel(IProjectBrowserService projectBrowser, string defaultThumbnailUri, ILoggerFactory? loggerFactory = null)
+    public RecentProjectsListViewModel(IProjectExplorerService projectExplorer, string defaultThumbnailUri, ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<RecentProjectsListViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<RecentProjectsListViewModel>();
 
-        this.projectBrowser = projectBrowser;
+        this.projectExplorer = projectExplorer;
         this.DefaultThumbnailUri = defaultThumbnailUri;
         this.ItemsView = new AdvancedCollectionView(new ObservableCollection<ProjectItemWithThumbnail>(), isLiveShaping: true);
         this.currentSortDescription ??= new SortDescription(SortDirection.Descending, this.byLastUsedComparer);
@@ -116,9 +116,9 @@ internal partial class RecentProjectsListViewModel : ObservableObject
         try
         {
             var value = $"Name:{this.NameColumnWidth.ToString(CultureInfo.InvariantCulture)};LastModifiedDate:{this.DateColumnWidth.ToString(CultureInfo.InvariantCulture)}";
-            var settings = await this.projectBrowser.GetSettingsAsync().ConfigureAwait(true);
+            var settings = await this.projectExplorer.GetSettingsAsync().ConfigureAwait(true);
             settings.HomeViewColumnWidths = value;
-            await this.projectBrowser.SaveSettingsAsync().ConfigureAwait(true);
+            await this.projectExplorer.SaveSettingsAsync().ConfigureAwait(true);
         }
 #pragma warning disable CA1031 // Do not catch general exception types
         catch (Exception ex)
@@ -167,7 +167,7 @@ internal partial class RecentProjectsListViewModel : ObservableObject
     {
         try
         {
-            var settings = await this.projectBrowser.GetSettingsAsync().ConfigureAwait(true);
+            var settings = await this.projectExplorer.GetSettingsAsync().ConfigureAwait(true);
             var widths = settings.HomeViewColumnWidths;
             if (!string.IsNullOrEmpty(widths))
             {
@@ -221,7 +221,7 @@ internal partial class RecentProjectsListViewModel : ObservableObject
             return;
         }
 
-        await this.projectBrowser.RemoveRecentProjectAsync(item.Entry.Name, item.Entry.Location).ConfigureAwait(true);
+        await this.projectExplorer.RemoveRecentProjectAsync(item.Entry.Name, item.Entry.Location).ConfigureAwait(true);
         _ = this.sourceProjects?.Remove(item.Entry);
     }
 

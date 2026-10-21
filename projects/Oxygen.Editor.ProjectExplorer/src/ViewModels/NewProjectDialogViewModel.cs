@@ -4,13 +4,13 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Templates;
+using Oxygen.Editor.ProjectExplorer.Projects;
+using Oxygen.Editor.ProjectExplorer.Templates;
 
-namespace Oxygen.Editor.ProjectBrowser.ViewModels;
+namespace Oxygen.Editor.ProjectExplorer.ViewModels;
 
 /// <summary>
-///     ViewModel for the New Project dialog in the Oxygen Editor's Project Browser.
+///     ViewModel for the New Project dialog in the Oxygen Editor's Project Explorer.
 /// </summary>
 public partial class NewProjectDialogViewModel : ObservableObject, IDisposable
 {
@@ -20,13 +20,13 @@ public partial class NewProjectDialogViewModel : ObservableObject, IDisposable
     /// <summary>
     ///     Initializes a new instance of the <see cref="NewProjectDialogViewModel" /> class.
     /// </summary>
-    /// <param name="projectBrowser">The project browser service.</param>
+    /// <param name="projectExplorer">The project explorer service.</param>
     /// <param name="template">The template information for the new project.</param>
-    public NewProjectDialogViewModel(IProjectBrowserService projectBrowser, ITemplateInfo template)
+    public NewProjectDialogViewModel(IProjectExplorerService projectExplorer, ITemplateInfo template)
     {
         this.Template = template;
 
-        this.PinnedLocations = projectBrowser.GetQuickSaveLocations();
+        this.PinnedLocations = projectExplorer.GetQuickSaveLocations();
         this.SelectedLocation = this.PinnedLocations[0];
 
         this.ProjectName = string.Empty;

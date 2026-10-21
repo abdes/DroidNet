@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Activation;
+namespace Oxygen.Editor.ProjectExplorer.Activation;
 
 /// <summary>
 /// Project activation workflow kind.

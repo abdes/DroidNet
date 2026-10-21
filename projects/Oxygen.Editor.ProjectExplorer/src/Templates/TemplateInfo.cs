@@ -3,11 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using System.Text.Json.Serialization;
-using DroidNet.Resources.Generator.Localized_a870a544;
+using DroidNet.Resources.Generator.Localized_e3b91640;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
-namespace Oxygen.Editor.ProjectBrowser.Templates;
+namespace Oxygen.Editor.ProjectExplorer.Templates;
 
 /// <summary>
 /// Represents a project template with its metadata and localization support in the Oxygen Editor.

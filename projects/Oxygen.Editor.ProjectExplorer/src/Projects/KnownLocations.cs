@@ -2,11 +2,11 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Projects;
+namespace Oxygen.Editor.ProjectExplorer.Projects;
 
 /// <summary>
 /// Represents known locations that can be used to categorize or identify specific directories
-/// within the project browser.
+/// within the project explorer.
 /// </summary>
 public enum KnownLocations
 {

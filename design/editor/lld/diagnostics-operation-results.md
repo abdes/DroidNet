@@ -58,7 +58,7 @@ The baseline gaps are architectural:
 - Logs are technical and chronological; they do not answer whether a specific
   user operation succeeded.
 - Output/log panel is available in the workspace but not clearly connected to
-  Project Browser startup/open failures.
+  Project Explorer startup/open failures.
 - Diagnostics from different subsystems use different shapes and severity
   vocabularies.
 - There is no correlation ID tying UI result, service logs, and output panel
@@ -98,7 +98,7 @@ Target invariants:
 6. Feature UI chooses placement, but not diagnostic vocabulary.
 7. Exceptions are adapted into diagnostics at subsystem boundaries.
 8. Compound workflows produce child diagnostics, not nested top-level results.
-9. Project Browser and workspace panels read from the same host-level result
+9. Project Explorer and workspace panels read from the same host-level result
    store.
 
 ## 6. Ownership
@@ -110,19 +110,19 @@ Target invariants:
 | `Oxygen.Editor`             | host-level result store, publisher, DI composition, and log-correlation setup |
 | feature UI                  | presents workflow-local results near the triggering surface                   |
 | WorldEditor workspace shell | owns V0.1 output/log panel composition and global result affordances          |
-| Project Browser shell       | presents startup/open/create results before workspace exists                  |
+| Project Explorer shell      | presents startup/open/create results before workspace exists                  |
 | output/log panel            | shows adapted result summaries, correlated technical detail, and history      |
 
 This LLD owns common vocabulary and contracts. It does not own every feature's
 presentation layout.
 
 Target placement: ED-M01 puts operation-result and diagnostic contracts in
-`Oxygen.Managed.Core` because Project Browser, WorldEditor, Runtime, Content
+`Oxygen.Managed.Core` because Project Explorer, WorldEditor, Runtime, Content
 Browser, and later pipeline code already need a shared non-UI contract layer.
 The host-level store, publisher, and output-log wiring are composed by
 `Oxygen.Editor`. Neither the contracts nor host services may depend on feature
 UI projects such as `Oxygen.Editor.WorldEditor` or
-`Oxygen.Editor.ProjectBrowser`.
+`Oxygen.Editor.ProjectExplorer`.
 
 ## 7. Data Contracts
 
@@ -273,7 +273,7 @@ Domains are stable vocabulary, not class names.
 
 | Domain                 | Active Milestone                            | Producer                                                             |
 | ---------------------- | ------------------------------------------- | -------------------------------------------------------------------- |
-| `ProjectBrowser`       | ED-M01                                      | Project Browser open/create surfaces.                                |
+| `ProjectExplorer`      | ED-M01                                      | Project Explorer open/create surfaces.                               |
 | `ProjectValidation`    | ED-M01                                      | Project validation service.                                          |
 | `ProjectPersistence`   | ED-M01                                      | Project manifest/persistent-state service.                           |
 | `ProjectTemplate`      | ED-M01                                      | Project creation/template service.                                   |
@@ -406,9 +406,9 @@ Used near the triggering control.
 
 Required for ED-M01:
 
-- Project Browser open/create failure.
-- Project Browser invalid recent project state.
-- Project Browser successful activation records a non-blocking success result in
+- Project Explorer open/create failure.
+- Project Explorer invalid recent project state.
+- Project Explorer successful activation records a non-blocking success result in
   the host result store and output log adapter. The normal transition to
   workspace is the visible success state.
 
@@ -440,7 +440,7 @@ Workspace output panel shows:
 ED-M01 should use the existing output console infrastructure and define how
 operation results appear in or link to that panel.
 
-Project Browser does not need a separate compact output panel in ED-M01. It uses
+Project Explorer does not need a separate compact output panel in ED-M01. It uses
 inline results with details and writes the same operation result into the host
 store for later workspace/output-panel inspection.
 
@@ -667,7 +667,7 @@ Forbidden:
 - diagnostics contracts must not depend on WinUI controls.
 - diagnostics contracts must not depend on WorldEditor-specific types.
 - diagnostics contracts in `Oxygen.Managed.Core` must not depend on feature
-  projects such as `Oxygen.Editor.WorldEditor`, `Oxygen.Editor.ProjectBrowser`,
+  projects such as `Oxygen.Editor.WorldEditor`, `Oxygen.Editor.ProjectExplorer`,
   or `Oxygen.Editor.ContentExplorer`.
 - host diagnostics services in `Oxygen.Editor` must not depend on feature UI
   projects for their public contracts.
@@ -686,7 +686,7 @@ ED-M01 diagnostics are complete when:
 - recent project missing state is visible before or during activation.
 - workspace partial restoration emits `PartiallySucceeded` or warning result.
 - project activation logs can be correlated with operation result.
-- Project Browser remains usable after failed result.
+- Project Explorer remains usable after failed result.
 
 Later milestones must add validation for:
 
@@ -734,7 +734,7 @@ Straightforward tests should cover:
   `IProjectContextService` gates and `project-workspace-shell.md`
   activation-coordinator gates.
 
-UI tests are appropriate for Project Browser inline failure display once ED-M01
+UI tests are appropriate for Project Explorer inline failure display once ED-M01
 implements the surface.
 
 ED-M06 diagnostics are complete when:
@@ -779,7 +779,7 @@ observable run state owned by its coordinator and the dockable
 remain shared operation results. Cooking also presents the selected run's
 ordered progress messages and technical output directly, using shared logging
 capture where applicable; it does not require navigating the global Logs view.
-No general progress bus is required. Project Browser uses existing inline
+No general progress bus is required. Project Explorer uses existing inline
 details; workspace/viewport show pending/failure state and output details.
 ED-M07A.3 owns current field diagnostic replacement by revision/target;
 historical operation results remain separate. There is no full validation

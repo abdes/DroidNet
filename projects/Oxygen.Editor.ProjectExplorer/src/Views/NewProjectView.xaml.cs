@@ -7,10 +7,10 @@ using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.ViewModels;
+using Oxygen.Editor.ProjectExplorer.Projects;
+using Oxygen.Editor.ProjectExplorer.ViewModels;
 
-namespace Oxygen.Editor.ProjectBrowser.Views;
+namespace Oxygen.Editor.ProjectExplorer.Views;
 
 /// <summary>
 /// A page for creating a new project.
@@ -18,7 +18,7 @@ namespace Oxygen.Editor.ProjectBrowser.Views;
 [ViewModel(typeof(NewProjectViewModel))]
 public sealed partial class NewProjectView
 {
-    private readonly IProjectBrowserService projectBrowser;
+    private readonly IProjectExplorerService projectExplorer;
     private readonly IDialogService dialogService;
     private readonly ILoggerFactory? loggerFactory;
     private Control? templatesGridControl;
@@ -26,14 +26,14 @@ public sealed partial class NewProjectView
     /// <summary>
     /// Initializes a new instance of the <see cref="NewProjectView"/> class.
     /// </summary>
-    /// <param name="projectBrowser">The project browser service.</param>
+    /// <param name="projectExplorer">The project explorer service.</param>
     /// <param name="dialogService">The owner-aware picker service.</param>
     /// <param name="loggerFactory">The logger factory.</param>
-    public NewProjectView(IProjectBrowserService projectBrowser, IDialogService dialogService, ILoggerFactory? loggerFactory = null)
+    public NewProjectView(IProjectExplorerService projectExplorer, IDialogService dialogService, ILoggerFactory? loggerFactory = null)
     {
         this.InitializeComponent();
 
-        this.projectBrowser = projectBrowser;
+        this.projectExplorer = projectExplorer;
         this.dialogService = dialogService;
         this.loggerFactory = loggerFactory;
         this.Loaded += this.OnNewProjectViewLoaded;
@@ -84,7 +84,7 @@ public sealed partial class NewProjectView
         _ = args;
 
         var template = this.ViewModel!.SelectedItem!;
-        var dialog = new NewProjectDialog(this.projectBrowser, template, this.dialogService, this.loggerFactory) { XamlRoot = this.XamlRoot };
+        var dialog = new NewProjectDialog(this.projectExplorer, template, this.dialogService, this.loggerFactory) { XamlRoot = this.XamlRoot };
 
         var result = await dialog.ShowAsync();
 

@@ -112,7 +112,7 @@ editor runtime modules.
 
 At V0.1, the editor exists at the intersection of:
 
-- WinUI shell and Project Browser
+- WinUI shell and Project Explorer
 - project and workspace services
 - document and docking systems
 - managed scene authoring domain
@@ -131,7 +131,7 @@ flowchart TB
     User[User]
     subgraph Editor[Oxygen Editor process]
         Shell[Shell and bootstrap]
-        PB[Project Browser]
+        PB[Project Explorer]
         WS[Workspace and documents]
         UI[Editor UI surfaces]
         World[Authoring domains]
@@ -300,7 +300,7 @@ evidence, not the primary product surface for user-triggered failures.
 
 ### 4.1 Ground Truths
 
-1. The Project Browser is the startup experience when the editor launches.
+1. The Project Explorer is the startup experience when the editor launches.
 2. `Oxygen.Editor.World` owns scene authoring data for V0.1.
 3. Sibling authoring domains may exist for material, physics, and future
    editors when their dependency sets require separate ownership.
@@ -352,7 +352,7 @@ The architectural layers are:
 
 ```mermaid
 flowchart TB
-    Shell[Shell and project browser]
+    Shell[Shell and project explorer]
     Workspace[Workspace, documents, docking, routes]
     FeatureUI[Feature editor UI<br/>hierarchy, inspectors, viewports, content explorer]
     AppServices[Application services<br/>commands, documents, asset catalog, settings, operation results]
@@ -392,7 +392,7 @@ template payload mechanics belong in LLDs that implement this contract.
 | `Oxygen.Editor.UI`              | Oxygen-specific reusable editor UI kit  | reusable editor controls, fields, overlays, styles, UI helper VMs                                                                                      | feature policy, domain models, project/cook/runtime behavior                                   |
 | `Oxygen.Editor.Shell`           | application frame                       | document service, document areas and tabs, close prompts, histories, command routing, placement, contributions, docking workspace, desktop integration | scene, asset or pipeline policy                                                                |
 | `Oxygen.Editor.Routing`         | editor-specific route glue              | route helpers and editor route integration contracts                                                                                                   | feature state or workflow policy                                                               |
-| `Oxygen.Editor.ProjectBrowser`  | no-project/startup UX                   | recent projects, templates, create/open flow, invalid project states, transition to workspace                                                          | project persistence rules, scene editing, content browsing inside workspace                    |
+| `Oxygen.Editor.ProjectExplorer` | no-project/startup UX                   | recent projects, templates, create/open flow, invalid project states, transition to workspace                                                          | project persistence rules, scene editing, content browsing inside workspace                    |
 | `Oxygen.Editor.Documents`       | generic document abstractions           | shared document contracts, document identity, document lifecycle primitives                                                                            | world-specific document behavior                                                               |
 | `Oxygen.Editor.Schemas`         | shared property mechanics               | schema/overlay catalog, typed edits, mixed values, snapshots, reusable apply/session mechanics                                                         | feature policy, WinUI, runtime lifecycle, native calls, cooked binary offsets                  |
 | `Oxygen.Managed.Core`           | shared non-UI contracts                 | operation-result and diagnostic primitives                                                                                                             | workflow orchestration, runtime execution, UI                                                  |
@@ -443,7 +443,7 @@ flowchart LR
     Xaml[XAML requirements]
     Native[Process-local native runtime discovery]
     Root[Root DI and settings]
-    Browser[Project Browser]
+    Browser[Project Explorer]
     Open[Open or create project]
     Workspace[Workspace route]
     Child[Workspace child container]
@@ -455,7 +455,7 @@ flowchart LR
 
 Architectural requirements:
 
-- Project Browser remains the startup route.
+- Project Explorer remains the startup route.
 - Workspace restoration happens after a project is open.
 - Partial restoration failures must be visible.
 - Workspace activation is the first normal engine startup trigger. Process
@@ -622,7 +622,7 @@ Project creation contract:
 - every created project receives a new project identity
 - created projects include a valid manifest, the required authored content
   root, project configuration location, starter content declared by the
-  template, and enough metadata for the Project Browser to show the project
+  template, and enough metadata for the Project Explorer to show the project
 - templates define startup intent, such as the starter scene or empty workspace
   state, without requiring the shell to inspect arbitrary files
 - project creation validates the created project before workspace activation
@@ -632,7 +632,7 @@ Editor-service contract:
 | Service                         | May Read                                                                                           | May Write                                                                          | Must Not Do                                                                       |
 | ------------------------------- | -------------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------- | --------------------------------------------------------------------------------- |
 | `Oxygen.Editor.Projects`        | manifest, declared mounts, project metadata, project configuration, project cook scope             | manifest and project-level configuration through project services                  | import, cook, mount runtime roots, mutate scene/material assets directly          |
-| `Oxygen.Editor.ProjectBrowser`  | template metadata, project manifest summary, recent project state, validation result               | new project payload through project creation services, recent project state        | define asset layout policy, edit authored assets                                  |
+| `Oxygen.Editor.ProjectExplorer` | template metadata, project manifest summary, recent project state, validation result               | new project payload through project creation services, recent project state        | define asset layout policy, edit authored assets                                  |
 | `Oxygen.Editor.ContentExplorer` | authored roots, local mounts, source media, descriptors, cooked indexes, derived-state diagnostics | user-requested asset files through feature commands or delegated creation services | treat cooked paths as authored identity, invoke cook/mount as browse side effects |
 | `Oxygen.Editor.WorldEditor`     | scene documents and asset references through document/project services                             | scene documents through command/document save paths                                | choose project layout policy, write cooked output directly                        |
 | `Oxygen.Editor.MaterialEditor`  | material descriptors and material asset identity through document/content services                 | material descriptors through material document save paths                          | write scene assignments directly, write cooked output directly                    |
@@ -1010,7 +1010,7 @@ flowchart TB
     App[Oxygen.Editor]
     UI[Oxygen.Editor.UI]
     Routing[Oxygen.Editor.Routing]
-    PB[Oxygen.Editor.ProjectBrowser]
+    PB[Oxygen.Editor.ProjectExplorer]
     Docs[Oxygen.Editor.Documents]
     Schemas[Oxygen.Editor.Schemas]
     WorldEditor[Oxygen.Editor.WorldEditor]
@@ -1101,7 +1101,7 @@ contract package or inversion point rather than creating a compile-time cycle.
 | `World` -> WinUI, `WorldEditor`, `Runtime`, or `Interop`             | scene domain must remain pure authoring data                      |
 | `Physics` -> WinUI, `PhysicsEditor`, `Runtime`, or `Interop`         | shared physics domain must remain reusable                        |
 | `ContentExplorer` -> `WorldEditor`                                   | content browsing must not depend on scene editor internals        |
-| `ProjectBrowser` -> `WorldEditor`                                    | project startup must not depend on workspace internals            |
+| `ProjectExplorer` -> `WorldEditor`                                   | project startup must not depend on workspace internals            |
 | `Documents` -> `WorldEditor`                                         | generic document contracts must not depend on scene UI            |
 | `Projects` -> runtime UI/lifecycle behavior                          | project policy must not require a live engine                     |
 | feature UI VMs -> `Interop`                                          | native access goes through runtime/content-pipeline services      |
@@ -1115,7 +1115,7 @@ contract package or inversion point rather than creating a compile-time cycle.
 
 | Architecture Decision                                                                                      | Traced Requirements                                                         |
 | ---------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Project Browser remains startup and workspace opens only after project context exists.                     | `REQ-001`, `REQ-002`, `REQ-003`                                             |
+| Project Explorer remains startup and workspace opens only after project context exists.                    | `REQ-001`, `REQ-002`, `REQ-003`                                             |
 | Scene mutation converges on commands or command-equivalent services.                                       | `REQ-004`, `REQ-005`, `REQ-006`, `REQ-008`                                  |
 | Supported component chain closes from domain to persistence, UI, live sync, cook/runtime, and diagnostics. | `REQ-007`, `REQ-009`, `REQ-026`, `REQ-037`                                  |
 | Material editor is a first-class planned module with scalar material scope.                                | `REQ-010`, `REQ-011`, `REQ-012`, `REQ-013`, `REQ-014`                       |

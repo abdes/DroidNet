@@ -15,9 +15,9 @@ public enum FailureDomain
     Unknown,
 
     /// <summary>
-    /// Project Browser shell or UI workflow.
+    /// Project Explorer shell or UI workflow.
     /// </summary>
-    ProjectBrowser,
+    ProjectExplorer,
 
     /// <summary>
     /// Project folder or manifest validation.

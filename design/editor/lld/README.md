@@ -23,7 +23,7 @@ implementation and review, and must trace to [PRD.md](../PRD.md),
 
 | LLD                                                                        | Purpose                                                                                                                                     |
 | -------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| [project-workspace-shell.md](./project-workspace-shell.md)                 | Project Browser startup, project open/create, workspace activation, restoration, shell/project boundaries.                                  |
+| [project-workspace-shell.md](./project-workspace-shell.md)                 | Project Explorer startup, project open/create, workspace activation, restoration, shell/project boundaries.                                 |
 | [project-layout-and-templates.md](./project-layout-and-templates.md)       | Standard project filesystem layout, authoring mounts, derived roots, and predefined template output rules.                                  |
 | [project-services.md](./project-services.md)                               | Project metadata, project settings, content roots, project cook scope and policy.                                                           |
 | [editor-module-architecture.md](./editor-module-architecture.md)           | The editor's modules, layers, naming, ownership and dependency rules after the WorldEditor decomposition.                                   |

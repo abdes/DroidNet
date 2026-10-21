@@ -29,7 +29,7 @@ public sealed class ContentExplorerModule : IFeatureModule
     public void RegisterWindowServices(IContainer window)
     {
         ArgumentNullException.ThrowIfNull(window);
-        window.Register<ContentExplorerViewModel>(Reuse.Transient);
+        window.Register<ContentExplorerViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
         window.Register<ContentExplorerView>(Reuse.Transient);
 
         // The window's explorer shows the assets that parts ask to reveal, and creates the scripts they ask for.

@@ -5,8 +5,8 @@
 using System.Diagnostics.CodeAnalysis;
 using DroidNet.Routing;
 using Oxygen.Editor.Data.Services;
-using Oxygen.Editor.ProjectBrowser.Activation;
-using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Editor.ProjectExplorer.Activation;
+using Oxygen.Editor.ProjectExplorer.Projects;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -26,7 +26,7 @@ internal sealed partial class ProjectActivationCoordinator(
     IProjectContextService projectContextService,
     IRecentProjectAdapter recentProjects,
     ITemplateUsageService templateUsage,
-    IProjectBrowserService projectBrowser,
+    IProjectExplorerService projectExplorer,
     Oxygen.Editor.Shell.Documents.IDocumentTabs documents,
     IOperationResultPublisher operationResults,
     IStatusReducer statusReducer,
@@ -212,7 +212,7 @@ internal sealed partial class ProjectActivationCoordinator(
                 exceptionAdapter.ToDiagnostic(
                     ex,
                     operationId,
-                    FailureDomain.ProjectBrowser,
+                    FailureDomain.ProjectExplorer,
                     DiagnosticCodes.ProjectPrefix + "CANCELLED",
                     "Project activation was cancelled.",
                     request.ProjectLocation ?? request.ParentLocation));
@@ -294,7 +294,7 @@ internal sealed partial class ProjectActivationCoordinator(
         {
             diagnostics.Add(this.CreateDiagnostic(
                 operationId,
-                FailureDomain.ProjectBrowser,
+                FailureDomain.ProjectExplorer,
                 InvalidRequestCode,
                 DiagnosticSeverity.Error,
                 "No project location was provided."));
@@ -493,9 +493,9 @@ internal sealed partial class ProjectActivationCoordinator(
         {
             try
             {
-                var settings = await projectBrowser.GetSettingsAsync().ConfigureAwait(true);
+                var settings = await projectExplorer.GetSettingsAsync().ConfigureAwait(true);
                 settings.LastSaveLocation = request.ParentLocation;
-                await projectBrowser.SaveSettingsAsync().ConfigureAwait(true);
+                await projectExplorer.SaveSettingsAsync().ConfigureAwait(true);
             }
             catch (Exception ex) when (ex is not OperationCanceledException)
             {

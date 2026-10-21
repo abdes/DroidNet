@@ -272,7 +272,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         }
 
         // Only create the presenter if the window is configured to show document tabs.
-        // This prevents creating unnecessary presenters for windows like the Project Browser.
+        // This prevents creating unnecessary presenters for windows like the Project Explorer.
         if (this.ViewModel?.Context?.Decorations?.TitleBar?.WithDocumentTabs != true)
         {
             this.cachedTabSource = null;

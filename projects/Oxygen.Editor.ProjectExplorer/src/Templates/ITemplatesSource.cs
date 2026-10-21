@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Templates;
+namespace Oxygen.Editor.ProjectExplorer.Templates;
 
 /// <summary>
 /// Defines the contract for loading project templates from various storage locations.

@@ -9,13 +9,13 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
-using Oxygen.Editor.ProjectBrowser.Controls;
-using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Templates;
-using Oxygen.Editor.ProjectBrowser.ViewModels;
+using Oxygen.Editor.ProjectExplorer.Controls;
+using Oxygen.Editor.ProjectExplorer.Projects;
+using Oxygen.Editor.ProjectExplorer.Templates;
+using Oxygen.Editor.ProjectExplorer.ViewModels;
 using Oxygen.Editor.Projects;
 
-namespace Oxygen.Editor.ProjectBrowser.Views;
+namespace Oxygen.Editor.ProjectExplorer.Views;
 
 /// <summary>
 ///     Start Home page.
@@ -24,7 +24,7 @@ namespace Oxygen.Editor.ProjectBrowser.Views;
 public sealed partial class HomeView
 {
     private readonly ILogger logger;
-    private readonly IProjectBrowserService projectBrowser;
+    private readonly IProjectExplorerService projectExplorer;
     private readonly IDialogService dialogService;
     private readonly ILoggerFactory? loggerFactory;
     private readonly RecentProjectsListViewModel? recentProjectsListViewModel;
@@ -32,24 +32,24 @@ public sealed partial class HomeView
     /// <summary>
     ///     Initializes a new instance of the <see cref="HomeView"/> class.
     /// </summary>
-    /// <param name="projectBrowser">The project browser service.</param>
+    /// <param name="projectExplorer">The project explorer service.</param>
     /// <param name="dialogService">The owner-aware picker service.</param>
     /// <param name="loggerFactory">
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
     /// </param>
-    public HomeView(IProjectBrowserService projectBrowser, IDialogService dialogService, ILoggerFactory? loggerFactory = null)
+    public HomeView(IProjectExplorerService projectExplorer, IDialogService dialogService, ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<HomeView>() ?? NullLoggerFactory.Instance.CreateLogger<HomeView>();
 
-        this.projectBrowser = projectBrowser;
+        this.projectExplorer = projectExplorer;
         this.dialogService = dialogService;
         this.loggerFactory = loggerFactory;
         this.InitializeComponent();
 
         // Setup the RecentProjectsList control with its ViewModel
         var defaultThumbnail = $"ms-appx:///{typeof(ProjectInfo).Assembly.GetName().Name}/Data/Images/DefaultProjectIcon.png";
-        this.recentProjectsListViewModel = new RecentProjectsListViewModel(this.projectBrowser, defaultThumbnail, loggerFactory);
+        this.recentProjectsListViewModel = new RecentProjectsListViewModel(this.projectExplorer, defaultThumbnail, loggerFactory);
         this.RecentProjectsListControl.ViewModel = this.recentProjectsListViewModel;
 
         // Wire up the HomeViewModel's DataContextChanged to sync RecentProjects
@@ -102,7 +102,7 @@ public sealed partial class HomeView
             return;
         }
 
-        var dialog = new NewProjectDialog(this.projectBrowser, templateInfo, this.dialogService, this.loggerFactory) { XamlRoot = this.XamlRoot };
+        var dialog = new NewProjectDialog(this.projectExplorer, templateInfo, this.dialogService, this.loggerFactory) { XamlRoot = this.XamlRoot };
         var result = await dialog.ShowAsync();
         if (result == ContentDialogResult.Primary)
         {

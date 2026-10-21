@@ -2,11 +2,11 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:ctkcvt="using:CommunityToolkit.WinUI.Converters"
-    xmlns:pbc="using:Oxygen.Editor.ProjectBrowser.Controls">
+    xmlns:pec="using:Oxygen.Editor.ProjectExplorer.Controls">
 
 
     <CollectionViewSource x:Key="GroupedLocationsSource" IsSourceGrouped="True" />
-    <pbc:KnownLocationToIconGlyphConverter x:Key="KnownLocationToIconGlyphConverter" />
+    <pec:KnownLocationToIconGlyphConverter x:Key="KnownLocationToIconGlyphConverter" />
     <ctkcvt:EmptyStringToObjectConverter
         x:Key="EmptyStringToVisibilityConverter"
         EmptyValue="Collapsed"
@@ -57,7 +57,7 @@
         </Setter>
     </Style>
 
-    <Style TargetType="pbc:KnownLocationsListView">
+    <Style TargetType="pec:KnownLocationsListView">
         <Setter Property="ItemsSource" Value="{Binding Source={StaticResource GroupedLocationsSource}, Mode=OneWay}" />
         <Setter Property="SelectionMode" Value="Single" />
         <Setter Property="ItemTemplate">

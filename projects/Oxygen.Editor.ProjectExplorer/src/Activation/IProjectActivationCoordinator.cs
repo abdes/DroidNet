@@ -4,7 +4,7 @@
 
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.ProjectBrowser.Activation;
+namespace Oxygen.Editor.ProjectExplorer.Activation;
 
 /// <summary>
 /// Coordinates project open/create requests into workspace activation.

@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.ProjectBrowser.Controls;
+namespace Oxygen.Editor.ProjectExplorer.Controls;
 
 /// <summary>
 /// A custom control for viewing the project templates in a grid which can be

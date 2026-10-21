@@ -3,11 +3,11 @@
 <ResourceDictionary
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:local="using:Oxygen.Editor.ProjectBrowser.Controls">
+    xmlns:local="using:Oxygen.Editor.ProjectExplorer.Controls">
 
     <ResourceDictionary.MergedDictionaries>
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.ProjectBrowser/Controls/KnownLocationsListView.xaml" />
-        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.ProjectBrowser/Controls/TemplatesGridView.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.ProjectExplorer/Controls/KnownLocationsListView.xaml" />
+        <ResourceDictionary Source="ms-appx:///Oxygen.Editor.ProjectExplorer/Controls/TemplatesGridView.xaml" />
     </ResourceDictionary.MergedDictionaries>
 
     <SolidColorBrush

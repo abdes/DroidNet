@@ -1,14 +1,14 @@
 ﻿<?xml version="1.0" encoding="utf-8" ?>
 
 <Page
-    x:Class="Oxygen.Editor.ProjectBrowser.Views.HomeView"
+    x:Class="Oxygen.Editor.ProjectExplorer.Views.HomeView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
     xmlns:muxc="using:Microsoft.UI.Xaml.Controls"
-    xmlns:pb="using:Oxygen.Editor.ProjectBrowser.Controls"
-    xmlns:projects="using:Oxygen.Editor.ProjectBrowser.Projects"
+    xmlns:pe="using:Oxygen.Editor.ProjectExplorer.Controls"
+    xmlns:projects="using:Oxygen.Editor.ProjectExplorer.Projects"
     KeyDown="OnHomeViewKeyDown"
     mc:Ignorable="d">
 
@@ -52,7 +52,7 @@
                     Grid.Row="0"
                     BorderBrush="{ThemeResource ControlStrokeColorDefault}"
                     BorderThickness="0,0,0,1">
-                    <pb:TemplatesGridView
+                    <pe:TemplatesGridView
                         Height="165"
                         VerticalAlignment="Top"
                         IsItemClickEnabled="True"
@@ -83,7 +83,7 @@
                     Grid.Row="2"
                     BorderBrush="{ThemeResource ControlStrokeColorDefault}"
                     BorderThickness="0,0,0,1">
-                    <pb:RecentProjectsList
+                    <pe:RecentProjectsList
                         x:Name="RecentProjectsListControl"
                         VerticalAlignment="Top"
                         ItemActivated="OnRecentProjectOpenAsync" />

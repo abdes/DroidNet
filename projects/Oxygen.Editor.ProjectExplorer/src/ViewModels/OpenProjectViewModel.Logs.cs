@@ -5,7 +5,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.ProjectBrowser.ViewModels;
+namespace Oxygen.Editor.ProjectExplorer.ViewModels;
 
 /// <summary>Logging helpers for <see cref="OpenProjectViewModel"/>.</summary>
 public partial class OpenProjectViewModel

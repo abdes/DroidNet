@@ -4,7 +4,7 @@
 
 using Microsoft.UI.Xaml;
 
-namespace Oxygen.Editor.ProjectBrowser.Controls;
+namespace Oxygen.Editor.ProjectExplorer.Controls;
 
 /// <summary>
 /// A lightweight binding proxy to expose the ViewModel instance into DataTemplates.

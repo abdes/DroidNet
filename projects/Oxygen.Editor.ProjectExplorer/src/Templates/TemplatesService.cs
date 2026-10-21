@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Data.Services;
 
-namespace Oxygen.Editor.ProjectBrowser.Templates;
+namespace Oxygen.Editor.ProjectExplorer.Templates;
 
 /// <summary>
 /// Provides services for managing and accessing project templates in the Oxygen Editor.
@@ -87,7 +87,7 @@ public partial class TemplatesService(
     private List<string> BuiltinTemplates { get; } = Templates.ConvertAll(
                 location => fs.Path.Combine(
                     pathFinder.ProgramData,
-                    $"{Assembly.GetAssembly(typeof(ProjectBrowserSettings))!.GetName().Name}",
+                    $"{Assembly.GetAssembly(typeof(ProjectExplorerSettings))!.GetName().Name}",
                     "Assets",
                     "Templates",
                     location));

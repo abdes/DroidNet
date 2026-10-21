@@ -5,7 +5,7 @@
 using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 
-namespace Oxygen.Editor.ProjectBrowser.Controls;
+namespace Oxygen.Editor.ProjectExplorer.Controls;
 
 /// <summary>
 ///     Logging methods for the <see cref="RecentProjectsListViewModel"/> class.

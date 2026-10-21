@@ -7,9 +7,9 @@ using System.Reflection;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
-using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Editor.ProjectExplorer.Projects;
 
-namespace Oxygen.Editor.ProjectBrowser.Controls;
+namespace Oxygen.Editor.ProjectExplorer.Controls;
 
 /// <summary>
 /// Represents a ListView control that displays known locations grouped by categories.

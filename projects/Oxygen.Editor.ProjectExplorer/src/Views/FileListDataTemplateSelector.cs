@@ -6,7 +6,7 @@ using DroidNet.Storage;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.ProjectBrowser.Views;
+namespace Oxygen.Editor.ProjectExplorer.Views;
 
 /// <summary>
 /// A <see cref="DataTemplateSelector"/> that returns the correct template to be used based on whether

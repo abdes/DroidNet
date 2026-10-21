@@ -120,7 +120,7 @@ flowchart LR
 
 Invariants:
 
-1. Project Browser does not start the engine.
+1. Project Explorer does not start the engine.
 2. Workspace activation is the first normal runtime startup trigger.
 3. Cooked-root mount, surface attach, resize, view create, and view destroy
    require `EngineServiceState.Running`.
@@ -372,7 +372,7 @@ logs to prove presentation.
 
 ED-M02 runtime UI surfaces:
 
-- Project Browser: no runtime UI; startup failures must not block Project
+- Project Explorer: no runtime UI; startup failures must not block Project
   Browser visibility.
 - Workspace shell: shows the preview session's "runtime is starting / failed /
   cooked roots missing" state (`PreviewSession.State` and `Failure`).
@@ -555,7 +555,7 @@ Allowed:
 
 Forbidden:
 
-- Project Browser must not depend on `IEngineService`.
+- Project Explorer must not depend on `IEngineService`.
 - Feature UI must not call `Oxygen.Editor.Interop` directly for runtime engine
   operations.
 - Runtime services must not depend on WorldEditor UI types.
@@ -567,7 +567,7 @@ Forbidden:
 
 ED-M02 can be validated when:
 
-- normal launch still starts at Project Browser without initializing or starting
+- normal launch still starts at Project Explorer without initializing or starting
   the engine.
 - opening a valid project starts the runtime before workspace cooked-root mount.
 - runtime DLL discovery loads native engine DLLs from the engine install runtime
@@ -602,9 +602,9 @@ diagnostics dashboard is required.
 ED-M07B implements the ordinary build-compatibility policy in PRD section 9.
 Runtime startup checks Interop's recorded SDK dependencies; cooking verifies its
 tools and schemas on demand. Missing/mismatched native artifacts disable the
-affected capability visibly while Project Browser and safe authoring/save remain
+affected capability visibly while Project Explorer and safe authoring/save remain
 available. The public managed boundary is loadable without initializing Interop
-merely to open the Project Browser.
+merely to open the Project Explorer.
 
 SDK data lives under `share/oxygen`: cooking reads `schemas`, and default editor
 startup reads `shaders/shaders.bin` from the selected Debug, Release or bundled

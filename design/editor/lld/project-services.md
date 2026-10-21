@@ -8,30 +8,30 @@ Define the V0.1 project service layer: project metadata, project validation,
 project context, project settings, content roots, recent-project integration,
 and project-level cook scope policy.
 
-This LLD owns project facts and policy. It does not own Project Browser UI,
+This LLD owns project facts and policy. It does not own Project Explorer UI,
 workspace UI, content pipeline execution, engine mounts, or native interop.
 
 ## 2. PRD Traceability
 
-| ID        | Coverage                                                                                           |
-| --------- | -------------------------------------------------------------------------------------------------- |
-| `REQ-002` | Project open/create services support Project Browser workflows and invalid project classification. |
-| `REQ-003` | Project state exposes enough persisted context for workspace restoration.                          |
-| `REQ-017` | Project content roots and authoring mounts provide the source identity basis for assets.           |
-| `REQ-018` | Project policy can identify descriptor/cooked roots for later pipeline milestones.                 |
-| `REQ-019` | Project cook scope is defined as policy, not hardcoded in UI.                                      |
-| `REQ-020` | Content Explorer can derive browsable roots from project content-root policy.                      |
-| `REQ-021` | Asset references use project mount identity rather than cooked filesystem paths.                   |
-| `REQ-022` | Project workflows return typed results to the caller.                                              |
-| `REQ-024` | Project load/save failures expose useful diagnostics.                                              |
-| `REQ-036` | Project content-root policy supports predictable browser navigation and creation targets.          |
+| ID        | Coverage                                                                                            |
+| --------- | --------------------------------------------------------------------------------------------------- |
+| `REQ-002` | Project open/create services support Project Explorer workflows and invalid project classification. |
+| `REQ-003` | Project state exposes enough persisted context for workspace restoration.                           |
+| `REQ-017` | Project content roots and authoring mounts provide the source identity basis for assets.            |
+| `REQ-018` | Project policy can identify descriptor/cooked roots for later pipeline milestones.                  |
+| `REQ-019` | Project cook scope is defined as policy, not hardcoded in UI.                                       |
+| `REQ-020` | Content Explorer can derive browsable roots from project content-root policy.                       |
+| `REQ-021` | Asset references use project mount identity rather than cooked filesystem paths.                    |
+| `REQ-022` | Project workflows return typed results to the caller.                                               |
+| `REQ-024` | Project load/save failures expose useful diagnostics.                                               |
+| `REQ-036` | Project content-root policy supports predictable browser navigation and creation targets.           |
 
 ## 3. Architecture Links
 
 - `ARCHITECTURE.md` sections 5, 6, 7, 8, 13, 15.
 - `DESIGN.md` sections 3, 4.1, 4.5, 5.4.
 - `PROJECT-LAYOUT.md` ownership for `Oxygen.Editor.Projects`,
-  `Oxygen.Editor.ProjectBrowser`, `Oxygen.Editor.ContentPipeline`,
+  `Oxygen.Editor.ProjectExplorer`, `Oxygen.Editor.ContentPipeline`,
   `Oxygen.Editor.Data`, `Oxygen.Editor.World`, and `Oxygen.Managed.Assets`.
 - `project-workspace-shell.md` for activation workflow.
 - `content-pipeline.md` for import/cook execution.
@@ -41,7 +41,7 @@ workspace UI, content pipeline execution, engine mounts, or native interop.
 
 Current project behavior is split across:
 
-- `Oxygen.Editor.ProjectBrowser.ProjectBrowserService`: template copy, known
+- `Oxygen.Editor.ProjectExplorer.ProjectExplorerService`: template copy, known
   locations, recent project enumeration, create/open entry points, Project
   Browser settings.
 - `Oxygen.Editor.Projects.ProjectManagerService`: loads/saves `Project.oxy`,
@@ -68,14 +68,14 @@ Baseline gaps:
 
 - Create/open/load APIs return `bool` or nullable objects and lose failure
   classification.
-- `ProjectBrowserService` mixes UI-facing workflow orchestration with project
+- `ProjectExplorerService` mixes UI-facing workflow orchestration with project
   service calls and recent/template usage updates.
 - `ProjectManagerService.SaveSceneAsync` now persists authoring scene data only.
   Save-time scene cook orchestration has been removed from project services and
   belongs to `Oxygen.Editor.ContentPipeline` when reintroduced through explicit
   cook commands.
 - Project settings are not clearly separated from global editor settings and
-  Project Browser settings.
+  Project Explorer settings.
 - Content root validation does not yet produce a first-class project validation
   report.
 - Project cook scope is implicit in current save/cook behavior.
@@ -90,7 +90,7 @@ directly for policy decisions.
 
 ```mermaid
 flowchart TB
-    UI[Project Browser / Workspace]
+    UI[Project Explorer / Workspace]
     Workflow[Shell Activation Coordinator]
     ProjectServices[Oxygen.Editor.Projects]
     Data[Oxygen.Editor.Data]
@@ -128,7 +128,7 @@ Target invariants:
 | Owner                           | Responsibility                                                                                                                            |
 | ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
 | `Oxygen.Editor.Projects`        | project metadata, project validation, active project context, future project settings ownership, authoring/local roots, cook scope policy |
-| `Oxygen.Editor.ProjectBrowser`  | project discovery UX, create/open request UI, recent-project presentation                                                                 |
+| `Oxygen.Editor.ProjectExplorer` | project discovery UX, create/open request UI, recent-project presentation                                                                 |
 | `Oxygen.Editor.Data`            | persistent recent usage, per-project restoration hints, settings storage                                                                  |
 | `Oxygen.Editor.World`           | shared project and scene-domain abstractions consumed by authoring features                                                               |
 | `Oxygen.Editor.ContentPipeline` | descriptor generation, import/cook execution, cooked validation                                                                           |
@@ -415,7 +415,7 @@ Project services own no UI.
 
 Consumers are described by their owning LLDs:
 
-- Project Browser and workspace activation: `project-workspace-shell.md`.
+- Project Explorer and workspace activation: `project-workspace-shell.md`.
 - Settings UI: `settings-architecture.md`.
 - Content Explorer and asset identity: `content-explorer-asset-identity.md`.
 
@@ -523,7 +523,7 @@ Examples:
 
 Allowed:
 
-- `Oxygen.Editor.ProjectBrowser` may depend on project services contracts.
+- `Oxygen.Editor.ProjectExplorer` may depend on project services contracts.
 - `Oxygen.Editor.WorldEditor` may consume current project context.
 - `Oxygen.Editor.ContentPipeline` may consume project cook scope policy.
 - `Oxygen.Editor.Runtime` may consume project cooked-root policy.
@@ -532,7 +532,7 @@ Allowed:
 
 Forbidden:
 
-- `Oxygen.Editor.Projects` must not depend on Project Browser UI.
+- `Oxygen.Editor.Projects` must not depend on Project Explorer UI.
 - `Oxygen.Editor.Projects` must not depend on WorldEditor UI.
 - `Oxygen.Editor.Projects` must not depend on native interop.
 - `Oxygen.Editor.Projects` must not depend on `Oxygen.Editor.ContentPipeline`.
@@ -555,7 +555,7 @@ ED-M01 project services are complete when:
 - project activation sets active project only after validation/load succeeds.
 - failed activation leaves previous active project unchanged.
 - recent project usage updates only after successful activation.
-- Project Browser can show failure reason without parsing logs.
+- Project Explorer can show failure reason without parsing logs.
 - project services expose project root and authoring roots for workspace
   activation.
 - `CurrentProject` consumers are migrated to `IProjectContextService`.
@@ -582,7 +582,7 @@ ED-M07 project-service gates:
   import manifest paths into `Project.oxy`.
 - content pipeline can construct `ContentCookScope` for current-scene,
   asset/folder, and project cook from project-service facts without depending on
-  Project Browser or WinUI.
+  Project Explorer or WinUI.
 
 Straightforward unit tests should cover:
 
@@ -596,7 +596,7 @@ Straightforward unit tests should cover:
 ## 15. Open Issues
 
 - Exact visual treatment for stale recent-project rows is owned by
-  `project-workspace-shell.md` and Project Browser UI. Project services keep the
+  `project-workspace-shell.md` and Project Explorer UI. Project services keep the
   classification stable and do not remove stale entries implicitly.
 
 ## 16. V0.1 Policy Boundary

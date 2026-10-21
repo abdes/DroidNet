@@ -28,7 +28,7 @@ Oxygen.Editor is organized as a modular system with clear separation of concerns
 - **Oxygen.Editor.App** (`src/`) - Main WinUI application entry point with bootstrapping and UI configuration
 - **Oxygen.Managed.Core** - Core services and utilities, foundational extensions for framework classes
 - **Oxygen.Editor.Data** - Data layer with Entity Framework Core models and persistence services
-- **Oxygen.Editor.ProjectBrowser** - Project browsing, discovery, and template management UI
+- **Oxygen.Editor.ProjectExplorer** - Project browsing, discovery, and template management UI
 - **Oxygen.Editor.Projects** - Project metadata and project-related services
 - **DroidNet.Storage** - File system abstraction and storage operations
 - **Oxygen.Editor.WorldEditor** - World editing interface and viewport management
@@ -97,7 +97,7 @@ Oxygen.Editor/
 
 - `Oxygen.Managed.Core` - Core services and utilities
 - `Oxygen.Editor.Data` - Data layer with Entity Framework Core
-- `Oxygen.Editor.ProjectBrowser` - Project browsing UI
+- `Oxygen.Editor.ProjectExplorer` - Project browsing UI
 - `Oxygen.Editor.Projects` - Project metadata services
 - `DroidNet.Storage` - File system abstraction
 - `Oxygen.Editor.WorldEditor` - World editing interface
@@ -215,7 +215,7 @@ The `Oxygen.Editor.Data` module uses EF Core with SQLite for persistence:
 
 ### Code Organization & Standards
 
-- **Namespaces:** Follow project structure (e.g., `Oxygen.Editor.ProjectBrowser.Views`)
+- **Namespaces:** Follow project structure (e.g., `Oxygen.Editor.ProjectExplorer.Views`)
 - **Access Modifiers:** Explicit on all types and members
 - **Member Access:** Use `this.` prefix for instance members
 - **Nullable:** Enabled with strict null checking

@@ -4,7 +4,7 @@
 
 using Oxygen.Editor.Projects;
 
-namespace Oxygen.Editor.ProjectBrowser.Activation;
+namespace Oxygen.Editor.ProjectExplorer.Activation;
 
 /// <summary>
 /// Request to open or create a project and activate the workspace.
@@ -27,7 +27,7 @@ public sealed record ProjectActivationRequest
     public required ProjectActivationMode Mode { get; init; }
 
     /// <summary>
-    /// Gets the Project Browser surface that initiated the request.
+    /// Gets the Project Explorer surface that initiated the request.
     /// </summary>
     public required ProjectActivationSourceSurface SourceSurface { get; init; }
 

@@ -4,11 +4,11 @@ Status: `review`
 
 ## 1. Purpose
 
-Define the V0.1 startup and project activation shell: Project Browser first,
+Define the V0.1 startup and project activation shell: Project Explorer first,
 project create/open workflows, workspace window activation, workspace
 restoration, and visible failure behavior.
 
-This LLD owns the user-facing flow across Project Browser and workspace shell
+This LLD owns the user-facing flow across Project Explorer and workspace shell
 boundaries. It does not own project metadata policy, editor runtime internals,
 scene documents, or content pipeline execution.
 
@@ -16,19 +16,19 @@ scene documents, or content pipeline execution.
 
 | ID            | Coverage                                                                                                 |
 | ------------- | -------------------------------------------------------------------------------------------------------- |
-| `REQ-001`     | Project Browser is always the first visible editor experience on normal launch.                          |
+| `REQ-001`     | Project Explorer is always the first visible editor experience on normal launch.                         |
 | `REQ-002`     | Recent projects, create/open project, invalid project state, and transition to workspace.                |
 | `REQ-003`     | Workspace and recent document/layout restoration after project activation, with visible partial failure. |
 | `REQ-022`     | User-triggered project workflows expose success/failure results.                                         |
 | `REQ-024`     | Open/create failures are not silent log-only failures.                                                   |
-| `SUCCESS-001` | V0.1 starts from Project Browser and reaches an authoring workspace without manual file edits.           |
+| `SUCCESS-001` | V0.1 starts from Project Explorer and reaches an authoring workspace without manual file edits.          |
 
 ## 3. Architecture Links
 
 - `ARCHITECTURE.md` sections 6, 7, 8, 10, 13, 15.
 - `DESIGN.md` sections 3, 4.1, 5.
 - `PROJECT-LAYOUT.md` ownership for `Oxygen.Editor`,
-  `Oxygen.Editor.ProjectBrowser`, `Oxygen.Editor.Projects`,
+  `Oxygen.Editor.ProjectExplorer`, `Oxygen.Editor.Projects`,
   `Oxygen.Editor.Runtime`, `Oxygen.Editor.Documents`, and
   `Oxygen.Editor.Routing`.
 - `diagnostics-operation-results.md` for operation result shape and
@@ -39,10 +39,10 @@ scene documents, or content pipeline execution.
 
 The current editor already has several pieces worth keeping:
 
-- `Oxygen.Editor.App` starts normal launch by navigating to `/pb/home` in a
-  `wnd-pb` window.
-- `Oxygen.Editor.ProjectBrowser` provides Home, New, and Open surfaces.
-- Project Browser view models call `IProjectBrowserService` and then navigate
+- `Oxygen.Editor.App` starts normal launch by navigating to `/pe/home` in a
+  `wnd-pe` window.
+- `Oxygen.Editor.ProjectExplorer` provides Home, New, and Open surfaces.
+- Project Explorer view models call `IProjectExplorerService` and then navigate
   to `/we` in `wnd-we` with target replacement.
 - `Oxygen.Editor.Projects.ProjectManagerService` holds the current project in
   memory.
@@ -55,12 +55,12 @@ The baseline is not yet V0.1-ready:
 - Project create/open service calls return `bool`, so failure reason, failure
   domain, and recommended recovery are lost at the UI boundary.
 - Several preload and activation failures are logged but not visible in the
-  Project Browser.
-- Project Browser view models own direct navigation to `/we`, which makes
+  Project Explorer.
+- Project Explorer view models own direct navigation to `/we`, which makes
   workflow ordering hard to audit.
 - Engine startup currently happens during application launch before a project
   is selected: `App.OnLaunched` calls `EnsureEngineIsReady`, which initializes
-  and starts `IEngineService` before routing to `/pb/home`. That makes Project
+  and starts `IEngineService` before routing to `/pe/home`. That makes Project
   Browser startup depend on runtime health and must be removed from the clean
   ED-M01 flow. Native runtime directory discovery in `Program.Main` can remain
   bootstrap infrastructure.
@@ -77,22 +77,22 @@ The baseline is not yet V0.1-ready:
 ED-M01 replaces these target-architecture violations instead of preserving
 compatibility shims:
 
-- `IProjectBrowserService.OpenProjectAsync(IProjectInfo)`.
-- `IProjectBrowserService.OpenProjectAsync(string)`.
-- `IProjectBrowserService.NewProjectFromTemplate(...)`.
+- `IProjectExplorerService.OpenProjectAsync(IProjectInfo)`.
+- `IProjectExplorerService.OpenProjectAsync(string)`.
+- `IProjectExplorerService.NewProjectFromTemplate(...)`.
 
-`IProjectBrowserService` is narrowed to Project Browser support services such
+`IProjectExplorerService` is narrowed to Project Explorer support services such
 as known locations, templates, settings, and recent-project presentation. It no
 longer owns open/create activation.
 
 ## 5. Target Design
 
 Project activation is a staged workflow with one shell-owned coordinator. The
-coordinator receives a create/open request from Project Browser, calls project
+coordinator receives a create/open request from Project Explorer, calls project
 services, runs workspace activation, requests workspace restoration, and
 publishes one operation result.
 
-The Project Browser is engine-independent. Native runtime directory discovery
+The Project Explorer is engine-independent. Native runtime directory discovery
 belongs to process bootstrap. Engine startup, surface creation, cooked-root
 mounts, and scene sync happen only after a project context exists and the
 workspace/runtime path needs them.
@@ -100,7 +100,7 @@ workspace/runtime path needs them.
 ```mermaid
 flowchart LR
     Launch[Application Launch]
-    Browser[Project Browser]
+    Browser[Project Explorer]
     Request[Create/Open Request]
     Validate[Request Validation]
     Project[Project Services]
@@ -123,39 +123,39 @@ flowchart LR
 
 Target invariants:
 
-1. The Project Browser is always reachable and is the first visible route on
+1. The Project Explorer is always reachable and is the first visible route on
    normal launch.
 2. Opening or creating a project does not navigate to the workspace until a
    valid active project context exists.
 3. Navigation to workspace is owned by a shell-level activation workflow, not
-   scattered across individual Project Browser controls.
+   scattered across individual Project Explorer controls.
 4. Workspace restoration is best effort. Critical project activation failure
    blocks workspace entry; non-critical restoration failure allows entry and is
    visible.
-5. Project Browser remains usable after a failed open/create attempt.
+5. Project Explorer remains usable after a failed open/create attempt.
 6. Closing a workspace does not corrupt the active project record or recent
    project state.
 7. A failed workspace activation after window creation closes the partially
-   created workspace window and returns the visible result to Project Browser.
+   created workspace window and returns the visible result to Project Explorer.
 
 ## 6. Ownership
 
-| Owner                          | Responsibility                                                                                                                                                       |
-| ------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor`                | application bootstrap, Project Browser startup route, shell-level project activation workflow, workspace window activation, native runtime discovery failure routing |
-| `Oxygen.Editor.ProjectBrowser` | Project Browser pages, create/open/recent-project UX, request construction, inline project workflow result presentation                                              |
-| `Oxygen.Editor.Projects`       | project load/create validation and project context creation; no workspace UI and no native interop                                                                   |
-| `Oxygen.Editor.Runtime`        | runtime lifecycle and mount preparation requested after workspace activation; no Project Browser UI and no startup dependency for Project Browser                    |
-| `Oxygen.Editor.WorldEditor`    | workspace composition, initial workspace routes, dock layout, world-editor child container                                                                           |
-| `Oxygen.Editor.Documents`      | recent document restoration contract once a project workspace exists                                                                                                 |
-| `Oxygen.Editor.Data`           | persistent recent project, layout, placement, and workspace-restoration records                                                                                      |
-| `diagnostics services`         | operation result publication, aggregation, and output/log panel correlation                                                                                          |
+| Owner                           | Responsibility                                                                                                                                                        |
+| ------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor`                 | application bootstrap, Project Explorer startup route, shell-level project activation workflow, workspace window activation, native runtime discovery failure routing |
+| `Oxygen.Editor.ProjectExplorer` | Project Explorer pages, create/open/recent-project UX, request construction, inline project workflow result presentation                                              |
+| `Oxygen.Editor.Projects`        | project load/create validation and project context creation; no workspace UI and no native interop                                                                    |
+| `Oxygen.Editor.Runtime`         | runtime lifecycle and mount preparation requested after workspace activation; no Project Explorer UI and no startup dependency for Project Explorer                   |
+| `Oxygen.Editor.WorldEditor`     | workspace composition, initial workspace routes, dock layout, world-editor child container                                                                            |
+| `Oxygen.Editor.Documents`       | recent document restoration contract once a project workspace exists                                                                                                  |
+| `Oxygen.Editor.Data`            | persistent recent project, layout, placement, and workspace-restoration records                                                                                       |
+| `diagnostics services`          | operation result publication, aggregation, and output/log panel correlation                                                                                           |
 
 ## 7. Data Contracts
 
 ### Project Activation Request
 
-Represents a user intent from the Project Browser.
+Represents a user intent from the Project Explorer.
 
 Required fields:
 
@@ -234,7 +234,7 @@ Rules:
 ### Shell Activation Coordinator
 
 Host-level shell service owned by `Oxygen.Editor`. The coordinator survives the
-Project Browser to workspace window transition and is reused for each activation
+Project Explorer to workspace window transition and is reused for each activation
 attempt.
 
 Responsibilities:
@@ -246,13 +246,13 @@ Responsibilities:
   activate the created project in the same workflow.
 - update recent project/template usage only after successful project context
   creation.
-- navigate from Project Browser to workspace.
+- navigate from Project Explorer to workspace.
 - request workspace restoration.
 - emit one operation result for the complete workflow.
 
 The coordinator returns a typed operation result, not `bool`.
 
-The coordinator owns recent-project updates. Project Browser view models and
+The coordinator owns recent-project updates. Project Explorer view models and
 project services do not update recent usage during open/create activation.
 
 ### Threading And Cancellation
@@ -262,10 +262,10 @@ Activation is asynchronous and cancellable.
 Rules:
 
 - file I/O and project validation run asynchronously off the UI-critical path.
-- UI dispatcher access is limited to Project Browser state updates, window
+- UI dispatcher access is limited to Project Explorer state updates, window
   navigation, and result publication to UI-bound stores.
 - each activation request carries a cancellation token.
-- closing the Project Browser during activation cancels the workflow before
+- closing the Project Explorer during activation cancels the workflow before
   workspace navigation starts.
 - cancellation before project context creation leaves active project state
   unchanged.
@@ -275,9 +275,9 @@ Rules:
 - only one activation attempt can be in progress per host process unless a
   later multi-project design explicitly changes this.
 
-### Project Browser View Models
+### Project Explorer View Models
 
-Project Browser view models construct requests and present results. They do
+Project Explorer view models construct requests and present results. They do
 not decide final workspace navigation once the coordinator exists.
 
 Allowed state:
@@ -307,7 +307,7 @@ Responsibilities:
   `CurrentProject` before the coordinator commits the context.
 - let the workspace build its child container and initial dock route after the
   activation context is available.
-- keep Project Browser open on activation failure.
+- keep Project Explorer open on activation failure.
 - close a partially created workspace window if activation cannot produce a
   usable workspace shell.
 
@@ -324,9 +324,9 @@ Responsibilities:
 
 ## 9. UI Surfaces
 
-### Project Browser
+### Project Explorer
 
-Project Browser remains a real app surface, not a transient splash screen.
+Project Explorer remains a real app surface, not a transient splash screen.
 
 Required V0.1 states:
 
@@ -338,7 +338,7 @@ Required V0.1 states:
 - create/open failed with visible reason.
 - create/open succeeded and workspace transition in progress.
 
-The failed state must keep the user on the Project Browser and allow retry.
+The failed state must keep the user on the Project Explorer and allow retry.
 
 ### Workspace Activation Failure
 
@@ -347,7 +347,7 @@ Browser near the attempted operation and in the output/log panel if available.
 
 If activation fails after workspace window creation but before workspace is
 usable, the partially created workspace window is closed. The result is
-presented in Project Browser. ED-M01 does not introduce a workspace failure
+presented in Project Explorer. ED-M01 does not introduce a workspace failure
 pane for this path.
 
 ### Partial Restoration Notice
@@ -370,7 +370,7 @@ Persistent shell state:
 - last opened scene/document per project.
 - content explorer state per project.
 - workspace route/layout state per project.
-- Project Browser settings such as last save location and open-view columns.
+- Project Explorer settings such as last save location and open-view columns.
 - window placement through `WindowPlacementService` using a stable shell
   route/window-category key.
 
@@ -392,7 +392,7 @@ Project workspace shell does not cook assets and does not call native interop.
 Runtime involvement in ED-M01 is limited to readiness policy:
 
 - native runtime directory discovery remains process-bootstrap infrastructure.
-- engine startup is not part of Project Browser launch.
+- engine startup is not part of Project Explorer launch.
 - runtime startup is triggered by `runtime-integration.md` through the managed
   runtime readiness service when the workspace first needs runtime behavior,
   such as surface/view creation or cooked-root mount. The workspace activation
@@ -402,7 +402,7 @@ Runtime involvement in ED-M01 is limited to readiness policy:
   `content-pipeline.md`; shell only requests the workspace activation sequence
   that will later trigger those services.
 
-ED-M01 should remove any hard dependency that makes Project Browser launch fail
+ED-M01 should remove any hard dependency that makes Project Explorer launch fail
 because the embedded engine cannot start. Runtime failures remain visible, but
 they belong to workspace/runtime workflows, not no-project startup.
 
@@ -419,7 +419,7 @@ for each stage:
 
 Required failure domains:
 
-- `ProjectBrowser`.
+- `ProjectExplorer`.
 - `ProjectValidation`.
 - `ProjectPersistence`.
 - `ProjectTemplate`.
@@ -450,7 +450,7 @@ Allowed dependency direction:
 flowchart LR
     Editor[Oxygen.Editor]
     Coordinator[Activation Coordinator]
-    PB[Oxygen.Editor.ProjectBrowser]
+    PB[Oxygen.Editor.ProjectExplorer]
     Projects[Oxygen.Editor.Projects]
     Data[Oxygen.Editor.Data]
     Runtime[Oxygen.Editor.Runtime]
@@ -478,10 +478,10 @@ flowchart LR
 
 Forbidden:
 
-- `Oxygen.Editor.ProjectBrowser` must not depend on `Oxygen.Editor.WorldEditor`.
-- `Oxygen.Editor.ProjectBrowser` must not reference
+- `Oxygen.Editor.ProjectExplorer` must not depend on `Oxygen.Editor.WorldEditor`.
+- `Oxygen.Editor.ProjectExplorer` must not reference
   `Oxygen.Editor.WorldEditor` at the project/MSBuild level.
-- `Oxygen.Editor.Projects` must not depend on Project Browser UI,
+- `Oxygen.Editor.Projects` must not depend on Project Explorer UI,
   WorldEditor UI, Runtime UI/lifecycle, or native interop.
 - Feature view models must not call native interop directly.
 - Workspace activation must not rely on mutable global project state before
@@ -491,23 +491,23 @@ Forbidden:
 
 ED-M01 is complete when:
 
-- normal launch opens Project Browser first.
+- normal launch opens Project Explorer first.
 - recent project list loads without blocking the UI.
 - missing/invalid recent project produces visible state.
 - valid recent project opens the workspace.
 - valid project selected from Open opens the workspace.
 - valid project created from template opens the workspace.
-- failed create/open stays in Project Browser and shows a reason.
-- Project Browser launch does not initialize or start the embedded engine.
-- Project Browser launch path does not inject, reference, or transitively depend
+- failed create/open stays in Project Explorer and shows a reason.
+- Project Explorer launch does not initialize or start the embedded engine.
+- Project Explorer launch path does not inject, reference, or transitively depend
   on `IEngineService`.
 - workspace route and window placement restoration run after project activation.
 - partial restoration failure is visible and non-fatal.
-- no Project Browser project reference depends on WorldEditor internals.
+- no Project Explorer project reference depends on WorldEditor internals.
 - project activation emits operation results with log correlation.
 - cancellation before workspace navigation leaves active project state unchanged.
 - half-created workspace failure closes the workspace window and reports the
-  result in Project Browser.
+  result in Project Explorer.
 
 Straightforward tests should cover project activation coordinator behavior,
 stage ordering, recent-update guarding, create-then-activate behavior,
@@ -521,7 +521,7 @@ validation practical.
 Workspace layout uses the existing versioned/guarded persistence service; invalid
 restoration is best effort with visible diagnostics. V0.1 has one active project
 per editor process. To change projects, close the current workspace through the
-normal Save/Discard/Cancel guards, return to Project Browser, then activate the
+normal Save/Discard/Cancel guards, return to Project Explorer, then activate the
 new project. In-place hot project switching and simultaneous independent project
 runtimes are excluded. Closing/cancelling cannot leak a prior project's async
 results into the next activation. Native mismatch must not prevent Project

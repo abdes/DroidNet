@@ -2,15 +2,15 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-namespace Oxygen.Editor.ProjectBrowser.Activation;
+namespace Oxygen.Editor.ProjectExplorer.Activation;
 
 /// <summary>
-/// Project Browser surface that initiated an activation request.
+/// Project Explorer surface that initiated an activation request.
 /// </summary>
 public enum ProjectActivationSourceSurface
 {
     /// <summary>
-    /// Project Browser home surface.
+    /// Project Explorer home surface.
     /// </summary>
     Home,
 

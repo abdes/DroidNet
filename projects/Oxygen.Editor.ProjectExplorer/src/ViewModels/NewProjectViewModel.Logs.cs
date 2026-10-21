@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.ProjectBrowser.Templates;
+using Oxygen.Editor.ProjectExplorer.Templates;
 
-namespace Oxygen.Editor.ProjectBrowser.ViewModels;
+namespace Oxygen.Editor.ProjectExplorer.ViewModels;
 
 /// <summary>
 ///     Logging methods for the <see cref="NewProjectViewModel"/> class.

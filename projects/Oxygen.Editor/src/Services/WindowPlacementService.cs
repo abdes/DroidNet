@@ -22,7 +22,7 @@ namespace Oxygen.Editor.Services;
 ///     its application to windows.
 /// </summary>
 /// <remarks>
-///     This is a working implementation that currently handle placement of the `ProjectBrowser`
+///     This is a working implementation that currently handle placement of the `ProjectExplorer`
 ///     and `WroldEditor` windows. Identification of the windows relies on the fact that we use
 ///     routed navigation, and wach window will be associated with a navigation context. The
 ///     Navigation URL is used to identify the window type, and the placement information is stored

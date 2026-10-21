@@ -1,8 +1,8 @@
-# Project Browser
+# Project Explorer
 
 ## Config Data
 
-The project browser uses one configuration section `ProjectTemplatesSettings`
+The project explorer uses one configuration section `ProjectTemplatesSettings`
 that needs to be loaded and configured in the DI injector. The corresponding
 model class is `ProjectTemplateSettings`.
 
@@ -41,13 +41,13 @@ suggestion, and the stable `Oxygen.ProjectLocation` settings identifier. Selecti
 is unrestricted: the user can choose any accessible drive, folder or network
 share. A cancelled picker leaves the selected location unchanged.
 
-The project browser exposes the following services:
+The project explorer exposes the following services:
 
 - `ProjectTemplatesService` via the `IProjectTemplatesService` interface.
 
 ## Assets
 
-The project browser includes `assets` that need to be copied to the application
+The project explorer includes `assets` that need to be copied to the application
 program data folder. All assets are under the `Assets` folder.
 
 Note that the config file does not have to be a separate file as long as the
@@ -55,9 +55,9 @@ Note that the config file does not have to be a separate file as long as the
 from somewhere and is configured into the DI injector.
 
 ```xml
-  <!-- Copy assets from `ProjectBrowser` project-->
+  <!-- Copy assets from `ProjectExplorer` project-->
   <ItemGroup>
-    <Content Include="..\ProjectBrowser\Assets\**">
+    <Content Include="..\ProjectExplorer\Assets\**">
       <Link>Assets\%(RecursiveDir)%(Filename)%(Extension)</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
     </Content>

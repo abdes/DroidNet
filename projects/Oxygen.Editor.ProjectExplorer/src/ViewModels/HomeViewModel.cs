@@ -12,20 +12,20 @@ using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ProjectBrowser.Activation;
-using Oxygen.Editor.ProjectBrowser.Projects;
-using Oxygen.Editor.ProjectBrowser.Templates;
+using Oxygen.Editor.ProjectExplorer.Activation;
+using Oxygen.Editor.ProjectExplorer.Projects;
+using Oxygen.Editor.ProjectExplorer.Templates;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.ProjectBrowser.ViewModels;
+namespace Oxygen.Editor.ProjectExplorer.ViewModels;
 
 /// <summary>
-///     ViewModel for the Home view in the Oxygen Editor's Project Browser.
+///     ViewModel for the Home view in the Oxygen Editor's Project Explorer.
 /// </summary>
 /// <param name="router">The router for navigating between views.</param>
 /// <param name="templateService">The service for managing project templates.</param>
-/// <param name="projectBrowser">The service for managing projects.</param>
+/// <param name="projectExplorer">The service for managing projects.</param>
 /// <param name="loggerFactory">
 ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
 ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
@@ -34,7 +34,7 @@ public partial class HomeViewModel(
     HostingContext hostingContext,
     IRouter router,
     ITemplatesService templateService,
-    IProjectBrowserService projectBrowser,
+    IProjectExplorerService projectExplorer,
     IProjectActivationCoordinator activationCoordinator,
     ILoggerFactory? loggerFactory = null) : ObservableObject, IRoutingAware
 {
@@ -149,14 +149,14 @@ public partial class HomeViewModel(
     /// </summary>
     [RelayCommand]
     private async Task MoreTemplatesAsync()
-        => await router.NavigateAsync("/pb/new").ConfigureAwait(true);
+        => await router.NavigateAsync("/pe/new").ConfigureAwait(true);
 
     /// <summary>
     /// Navigates to the view for more projects.
     /// </summary>
     [RelayCommand]
     private async Task MoreProjectsAsync()
-        => await router.NavigateAsync("/pb/open").ConfigureAwait(true);
+        => await router.NavigateAsync("/pe/open").ConfigureAwait(true);
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "pre-loading happens during route activation and we cannot report exceptions in that stage")]
     private async Task PreloadRecentTemplatesAsync()
@@ -229,14 +229,14 @@ public partial class HomeViewModel(
     {
         this.LogUpdatingRecentProjects(this.RecentProjects.Count);
 
-        // Track the recent projects loaded from the project browser service in
+        // Track the recent projects loaded from the project explorer service in
         // a dictionary keyed by project Id for fast lookup. Using Guid avoids
         // accidental reference-equality comparisons when the dictionary is
         // typed against the interface `IProjectInfo`.
         var recentlyUsedProjectDict = new Dictionary<string, RecentProjectEntry>(StringComparer.OrdinalIgnoreCase);
 
         // Update existing items and add new items in the RecentProjects collection
-        await foreach (var entry in projectBrowser.GetRecentlyUsedProjectsAsync().ConfigureAwait(true))
+        await foreach (var entry in projectExplorer.GetRecentlyUsedProjectsAsync().ConfigureAwait(true))
         {
             var projectInfo = entry.ProjectInfo;
             this.LogGotProjectInfo(projectInfo?.Id ?? Guid.Empty, entry.Name, entry.LastUsedOn);
@@ -254,7 +254,7 @@ public partial class HomeViewModel(
             }
         }
 
-        // Remove items not in the collection obtained from the project browser
+        // Remove items not in the collection obtained from the project explorer
         for (var index = this.RecentProjects.Count - 1; index >= 0; index--)
         {
             if (!recentlyUsedProjectDict.ContainsKey(this.RecentProjects[index].Location))

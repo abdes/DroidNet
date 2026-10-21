@@ -3,12 +3,12 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.UI.Xaml;
-using Oxygen.Editor.ProjectBrowser.Projects;
+using Oxygen.Editor.ProjectExplorer.Projects;
 
-namespace Oxygen.Editor.ProjectBrowser.Controls;
+namespace Oxygen.Editor.ProjectExplorer.Controls;
 
 /// <summary>
-/// Represents a group of known locations within the project browser.
+/// Represents a group of known locations within the project explorer.
 /// </summary>
 /// <param name="items">The collection of <see cref="KnownLocation"/> items in this group.</param>
 internal sealed partial class KnownLocationsGroup(IEnumerable<KnownLocation> items) : List<KnownLocation>(items)

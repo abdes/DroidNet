@@ -43,7 +43,7 @@ The settings management system in Oxygen.Editor.Data provides a **type-safe, sco
 
 ### Settings Module
 
-A **settings module** is a logical grouping of related configuration values. Each setting belongs to exactly one module. Module names are typically reverse-DNS style (e.g., `"Oxygen.Editor.Docking"`, `"Oxygen.Editor.ProjectBrowser"`) to avoid collisions across the application.
+A **settings module** is a logical grouping of related configuration values. Each setting belongs to exactly one module. Module names are typically reverse-DNS style (e.g., `"Oxygen.Editor.Docking"`, `"Oxygen.Editor.ProjectExplorer"`) to avoid collisions across the application.
 
 ### Settings as Key-Value Pairs
 

@@ -6,12 +6,12 @@ using System.Diagnostics;
 using DroidNet.Converters;
 using DroidNet.Mvvm.Generators;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ProjectBrowser.ViewModels;
+using Oxygen.Editor.ProjectExplorer.ViewModels;
 
-namespace Oxygen.Editor.ProjectBrowser.Views;
+namespace Oxygen.Editor.ProjectExplorer.Views;
 
 /// <summary>
-/// The project browser main view; which uses a <see cref="NavigationView" />, but instead of relying on a <see cref="Frame" />
+/// The project explorer main view; which uses a <see cref="NavigationView" />, but instead of relying on a <see cref="Frame" />
 /// for page navigation, it uses the application router.
 /// </summary>
 [ViewModel(typeof(MainViewModel))]

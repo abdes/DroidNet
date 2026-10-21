@@ -74,7 +74,7 @@ EDITOR_LAYERS: dict[str, Layer] = {
     "Oxygen.Editor.MaterialEditor": Layer.FEATURE,
     "Oxygen.Editor.Output": Layer.FEATURE,
     "Oxygen.Editor.Problems": Layer.FEATURE,
-    "Oxygen.Editor.ProjectBrowser": Layer.FEATURE,
+    "Oxygen.Editor.ProjectExplorer": Layer.FEATURE,
     "Oxygen.Editor.SceneEditor": Layer.FEATURE,
     "Oxygen.Editor.SceneExplorer": Layer.FEATURE,
     "Oxygen.Editor.SceneInspector": Layer.FEATURE,

@@ -11,7 +11,7 @@ using Microsoft.UI.Xaml.Media.Imaging;
 using Oxygen.Editor.Projects;
 using Windows.Storage;
 
-namespace Oxygen.Editor.ProjectBrowser.Controls;
+namespace Oxygen.Editor.ProjectExplorer.Controls;
 
 /// <summary>
 /// Represents a project item with a thumbnail image.

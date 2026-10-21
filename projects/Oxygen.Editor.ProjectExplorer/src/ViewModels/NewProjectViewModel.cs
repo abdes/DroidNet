@@ -9,11 +9,11 @@ using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ProjectBrowser.Activation;
-using Oxygen.Editor.ProjectBrowser.Templates;
+using Oxygen.Editor.ProjectExplorer.Activation;
+using Oxygen.Editor.ProjectExplorer.Templates;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.ProjectBrowser.ViewModels;
+namespace Oxygen.Editor.ProjectExplorer.ViewModels;
 
 /// <summary>
 /// The ViewModel for the StartNewPage.

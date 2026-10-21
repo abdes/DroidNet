@@ -114,7 +114,7 @@ public partial class ContentFoldersViewModel(
     {
         this.activeRoute = route;
 
-        // Default selection mode for Project Explorer.
+        // Default selection mode for the Content Folders pane.
         this.SelectionMode = SelectionMode.Multiple;
 
         if (!this.isSubscribed)
