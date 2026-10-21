@@ -85,3 +85,9 @@ private void OnAssets(IReadOnlyList<AssetEntry> assets)
 `tests/` covers the model: group order and hiding, search, row identity across
 updates, duplicates, and the clearing and row-identity contracts. The World
 Editor's UI tests exercise the control inside the inspector.
+
+## Asset kind presentation
+
+`AssetKindToIconConverter` and `AssetKindToBrushConverter` (namespace
+`Oxygen.Editor.Pickers.Converters`) give an asset kind its glyph and color, so
+the Content Browser and the Cooked Inspector show a kind the same way.

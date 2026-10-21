@@ -3,7 +3,7 @@
     x:Class="Oxygen.Editor.World.Inspection.CookedInspectionView"
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-    xmlns:assetcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters"
+    xmlns:assetcvt="using:Oxygen.Editor.Pickers.Converters"
     xmlns:assets="using:Oxygen.Editor.ContentBrowser.Panes.Assets"
     xmlns:dnc="using:DroidNet.Controls"
     xmlns:local="using:Oxygen.Editor.World.Inspection">

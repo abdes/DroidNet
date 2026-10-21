@@ -6,11 +6,12 @@
     xmlns:browser="using:Oxygen.Editor.ContentBrowser"
     xmlns:identity="using:Oxygen.Editor.ContentBrowser.Panes.Assets"
     xmlns:layouts="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts"
-    xmlns:localcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters">
+    xmlns:localcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters"
+    xmlns:pickercvt="using:Oxygen.Editor.Pickers.Converters">
 
     <UserControl.Resources>
-        <localcvt:AssetKindToIconConverter x:Key="AssetKindToIconConverter" />
-        <localcvt:AssetKindToBrushConverter x:Key="AssetKindToBrushConverter" />
+        <pickercvt:AssetKindToIconConverter x:Key="AssetKindToIconConverter" />
+        <pickercvt:AssetKindToBrushConverter x:Key="AssetKindToBrushConverter" />
         <localcvt:StatusToneToBrushConverter x:Key="StatusToneToBrushConverter" />
         <localcvt:MaterialPreviewColorToBrushConverter x:Key="MaterialPreviewColorToBrushConverter" />
 

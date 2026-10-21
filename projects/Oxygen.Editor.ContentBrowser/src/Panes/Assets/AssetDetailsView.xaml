@@ -4,11 +4,12 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:identity="using:Oxygen.Editor.Assets"
-    xmlns:localcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters">
+    xmlns:localcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters"
+    xmlns:pickercvt="using:Oxygen.Editor.Pickers.Converters">
 
     <UserControl.Resources>
-        <localcvt:AssetKindToIconConverter x:Key="AssetKindToIconConverter" />
-        <localcvt:AssetKindToBrushConverter x:Key="AssetKindToBrushConverter" />
+        <pickercvt:AssetKindToIconConverter x:Key="AssetKindToIconConverter" />
+        <pickercvt:AssetKindToBrushConverter x:Key="AssetKindToBrushConverter" />
         <localcvt:StatusToneToBrushConverter x:Key="StatusToneToBrushConverter" />
         <localcvt:MaterialPreviewColorToBrushConverter x:Key="MaterialPreviewColorToBrushConverter" />
 

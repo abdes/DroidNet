@@ -5,7 +5,7 @@
 using Microsoft.UI.Xaml.Data;
 using Oxygen.Editor.Assets;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Converters;
+namespace Oxygen.Editor.Pickers.Converters;
 
 /// <summary>
 ///     Converts an <see cref="AssetKind" /> to a corresponding icon glyph.

@@ -8,7 +8,7 @@ using Microsoft.UI.Xaml.Data;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Assets;
 
-namespace Oxygen.Editor.ContentBrowser.Panes.Assets.Converters;
+namespace Oxygen.Editor.Pickers.Converters;
 
 /// <summary>
 ///     Converts an <see cref="AssetKind" /> to a Brush for icon foregrounds.

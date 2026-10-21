@@ -7,11 +7,12 @@
     xmlns:identity="using:Oxygen.Editor.ContentBrowser.Panes.Assets"
     xmlns:localcvt="using:Oxygen.Editor.ContentBrowser.Panes.Assets.Converters"
     xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+    xmlns:pickercvt="using:Oxygen.Editor.Pickers.Converters"
     mc:Ignorable="d">
 
     <UserControl.Resources>
-        <localcvt:AssetKindToIconConverter x:Key="AssetKindToIconConverter" />
-        <localcvt:AssetKindToBrushConverter x:Key="AssetKindToBrushConverter" />
+        <pickercvt:AssetKindToIconConverter x:Key="AssetKindToIconConverter" />
+        <pickercvt:AssetKindToBrushConverter x:Key="AssetKindToBrushConverter" />
         <localcvt:StatusToneToBrushConverter x:Key="StatusToneToBrushConverter" />
         <localcvt:MaterialPreviewColorToBrushConverter x:Key="MaterialPreviewColorToBrushConverter" />
 
