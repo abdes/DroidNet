@@ -7,13 +7,23 @@ using Microsoft.Extensions.Logging;
 namespace Oxygen.Editor.Shell.Documents;
 
 /// <summary>
-///     Logging methods for <see cref="DocumentAreaViewModel" />.
+///     Logging helpers for <see cref="DocumentAreaViewModel" />.
 /// </summary>
 public sealed partial class DocumentAreaViewModel
 {
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The view of the editor that leaves the document area failed to deactivate.")]
-    private partial void LogViewDeactivationFailed(Exception exception);
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "The view of the editor that leaves the document area failed to deactivate.")]
+    private static partial void LogViewDeactivationFailed(ILogger logger, Exception exception);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "'{Title}': {Message}")]
-    private partial void LogConflictAction(string title, string message);
+    private void LogViewDeactivationFailed(Exception exception) => LogViewDeactivationFailed(this.logger, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "'{Title}': {Message}")]
+    private static partial void LogConflictAction(ILogger logger, string title, string message);
+
+    private void LogConflictAction(string title, string message) => LogConflictAction(this.logger, title, message);
 }

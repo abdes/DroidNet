@@ -9,8 +9,8 @@ using DroidNet.Storage.Native;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Relocation;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Testing;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Assets.Catalog;
@@ -27,6 +27,7 @@ internal sealed class RelocationWorkspace : IDisposable
 
     public RelocationWorkspace()
     {
+        _ = this.UnsavedDocuments.Setup(documents => documents.Find(It.IsAny<IEnumerable<FileSystemPath>>())).Returns([]);
         this.context.Activate(TestProject.Create(this.FileSystem).Context with
         {
             Name = "Relocation tests",
@@ -35,14 +36,15 @@ internal sealed class RelocationWorkspace : IDisposable
         this.Coordinator = new(this.context);
         this.Files = new NativeAtomicFileStore(this.FileSystem);
         this.Catalog = Mock.Of<IAssetCatalog>(catalog => catalog.Changes == this.catalogChanges);
-        this.Service = new(this.Coordinator, this.context, this.Documents, this.Files, this.Catalog);
+        this.Service = new(this.Coordinator, this.context, this.UnsavedDocuments.Object, this.Files, this.Catalog);
     }
 
     public MockFileSystem FileSystem { get; } = new();
 
     public string Root => this.Project.ProjectRoot.FullPath;
 
-    public CookDocumentRegistry Documents { get; } = new();
+    /// <summary>Gets the open documents with unsaved changes; it reports none until a test sets up <see cref="IUnsavedDocuments.Find"/>.</summary>
+    public Mock<IUnsavedDocuments> UnsavedDocuments { get; } = new();
 
     public FakeContentCookCoordinator Coordinator { get; }
 
@@ -56,7 +58,7 @@ internal sealed class RelocationWorkspace : IDisposable
 
     public ProjectContextService Context => this.context;
 
-    public AssetRelocationService CreateService(AssetRedirects? redirects) => new(this.Coordinator, this.context, this.Documents, this.Files, this.Catalog, redirects: redirects);
+    public AssetRelocationService CreateService(AssetRedirects? redirects) => new(this.Coordinator, this.context, this.UnsavedDocuments.Object, this.Files, this.Catalog, redirects: redirects);
 
     /// <summary>Reports a catalog change, as the file watcher does after an edit outside a relocation.</summary>
     /// <param name="identity">The changed asset's catalog identity, which is its source file's virtual path.</param>

@@ -23,7 +23,7 @@ internal static class BrowserTestData
         var file = FileSystemPath.From("C:/Query" + identity.VirtualPath + AssetPath.AuthoringSuffix);
         return new(identity, name, AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Unknown, identity.VirtualPath, file, file, CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
         {
-            CookStatus = new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []),
+            CookStatus = new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], []),
         };
     }
 
@@ -86,7 +86,7 @@ internal static class BrowserTestData
         return asset with
         {
             DisplayName = name,
-            CookStatus = new(asset.Identity, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []),
+            CookStatus = new(asset.Identity, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], []),
         };
     }
 }

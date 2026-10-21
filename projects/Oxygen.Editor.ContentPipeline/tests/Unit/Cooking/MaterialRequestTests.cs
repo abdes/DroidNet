@@ -3,10 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Microsoft.Extensions.Logging.Abstractions;
 using Moq;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Managed.Core;
@@ -92,8 +93,10 @@ public sealed class MaterialRequestTests
             published,
             verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing,
             [],
-            dirty ? [new CookDocumentState(source, "Material", IsDirty: true, new string('A', 64))] : [],
-            []);
+            [])
+        {
+            UnsavedDocuments = dirty ? [new UnsavedDocument(DocumentId.New(), new DocumentFile(source, uri), "Material")] : [],
+        };
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
         _ = pipeline.Setup(service => service.ReadAsync(projects.ActiveProject!, It.Is<IReadOnlyList<AssetPath>>(uris => uris.Count == 1 && uris[0] == uri), It.IsAny<CancellationToken>()))
             .ReturnsAsync([state]);

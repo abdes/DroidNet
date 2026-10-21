@@ -50,6 +50,7 @@ public partial class ContentBrowserViewModel
         Message = "ContentBrowserState changed, updating history only: {Url}")]
     private static partial void LogContentBrowserStateChanged(ILogger logger, string url);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogContentBrowserStateChanged(string url)
         => LogContentBrowserStateChanged(this.logger, url);
 
@@ -58,6 +59,7 @@ public partial class ContentBrowserViewModel
         Message = "NavigationEnd event: URL={Url}, IsFromHistory={IsFromHistory}")]
     private static partial void LogNavigationEnd(ILogger logger, string url, bool isFromHistory);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogNavigationEnd(string url, bool isFromHistory)
         => LogNavigationEnd(this.logger, url, isFromHistory);
 
@@ -66,6 +68,7 @@ public partial class ContentBrowserViewModel
         Message = "Duplicate of current entry, skipping add to history")]
     private static partial void LogHistoryDuplicateSkipped(ILogger logger);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogHistoryDuplicateSkipped()
         => LogHistoryDuplicateSkipped(this.logger);
 
@@ -74,6 +77,7 @@ public partial class ContentBrowserViewModel
         Message = "Removing {Count} forward history items from index {Index}")]
     private static partial void LogHistoryForwardCleared(ILogger logger, int count, int index);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogHistoryForwardCleared(int count, int index)
         => LogHistoryForwardCleared(this.logger, count, index);
 
@@ -82,6 +86,7 @@ public partial class ContentBrowserViewModel
         Message = "History state: Count={Count}, CurrentIndex={CurrentIndex}")]
     private static partial void LogHistoryState(ILogger logger, int count, int currentIndex);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogHistoryState(int count, int currentIndex)
         => LogHistoryState(this.logger, count, currentIndex);
 
@@ -90,6 +95,7 @@ public partial class ContentBrowserViewModel
         Message = "Full history: {History}")]
     private static partial void LogHistoryFull(ILogger logger, string history);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogHistoryFull(List<string> history, int currentIndex)
     {
         if (this.logger.IsEnabled(LogLevel.Trace))
@@ -104,6 +110,7 @@ public partial class ContentBrowserViewModel
         Message = "CanGoUp updated: {CanGoUp}, current='{Current}', parent='{Parent}'")]
     private static partial void LogCanGoUpUpdated(ILogger logger, bool canGoUp, AssetPath? current, AssetPath? parent);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogCanGoUpUpdated(bool canGoUp, AssetPath? current, AssetPath? parent)
         => LogCanGoUpUpdated(this.logger, canGoUp, current, parent);
 
@@ -121,6 +128,7 @@ public partial class ContentBrowserViewModel
         Message = "Failed to retrieve project name for breadcrumbs")]
     private static partial void LogProjectNameRetrievalFailed(ILogger logger, Exception ex);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogProjectNameRetrievalFailed(Exception ex)
         => LogProjectNameRetrievalFailed(this.logger, ex);
 

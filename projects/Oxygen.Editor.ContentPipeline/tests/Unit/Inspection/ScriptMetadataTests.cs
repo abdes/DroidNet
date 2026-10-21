@@ -40,7 +40,7 @@ public sealed class ScriptMetadataTests
         _ = cooked.Script.Parameters.Should().Equal(
             new ScriptParameter { Name = "speed", Kind = ScriptParameterKind.FloatParameter, Default = ScriptValue.FromFloat(0.9f) },
             new ScriptParameter { Name = "count", Kind = ScriptParameterKind.Int32Parameter, Default = ScriptValue.FromInt(3) },
-            new ScriptParameter { Name = "armed", Kind = ScriptParameterKind.BoolParameter, Default = ScriptValue.FromBool(true) },
+            new ScriptParameter { Name = "armed", Kind = ScriptParameterKind.BoolParameter, Default = ScriptValue.FromBool(value: true) },
             new ScriptParameter { Name = "mode", Kind = ScriptParameterKind.StringParameter, Default = ScriptValue.FromString("walk") },
             new ScriptParameter { Name = "offset", Kind = ScriptParameterKind.Vec3Parameter, Default = ScriptValue.FromVector(new Vector3(1, 2, 3)) },
             new ScriptParameter { Name = "fire", Kind = ScriptParameterKind.AssetParameter, AssetType = 5 },

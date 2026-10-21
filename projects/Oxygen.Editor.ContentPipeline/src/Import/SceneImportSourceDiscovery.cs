@@ -13,10 +13,9 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.ContentPipeline.Import;
 
 /// <summary>Discovers a portable source bundle through native recipe analysis and captured-input proofs.</summary>
-/// <param name="documents">Saved source owners and their read gates.</param>
 /// <param name="coordinator">The project writer and activation lifetime.</param>
 /// <param name="native">The native analysis and cooking owner.</param>
-public sealed class SceneImportSourceDiscovery(ICookDocumentRegistry documents, IContentCookCoordinator coordinator, IEngineContentPipelineApi native)
+public sealed class SceneImportSourceDiscovery(IContentCookCoordinator coordinator, IEngineContentPipelineApi native)
 {
     /// <summary>Analyzes the actual recipe and retains every declared file and observed probe for coherent capture.</summary>
     /// <param name="operation">The operation holding the project writer.</param>
@@ -31,8 +30,6 @@ public sealed class SceneImportSourceDiscovery(ICookDocumentRegistry documents, 
         cancellationToken.ThrowIfCancellationRequested();
         var primary = Path.GetFullPath(sourcePath);
 
-        // Check editor-owned saved state before launching native work. Capture later compares every native observation.
-        _ = await CookSavedSourceReader.HashAsync(documents, primary, cancellationToken).ConfigureAwait(false);
         var directory = Path.GetDirectoryName(primary)!;
         var operationRoot = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N"));
         var scratch = Path.Combine(operationRoot, "discovery-" + Guid.NewGuid().ToString("N"));
@@ -73,7 +70,7 @@ public sealed class SceneImportSourceDiscovery(ICookDocumentRegistry documents, 
             }
 
             var root = FindCommonRoot(directory, facts.Observations.Select(static item => item.Path).Concat(facts.Files.Select(static file => file.Path)));
-            var files = await CookSavedSourceReader.ReadNativeInputsAsync(documents, facts, FileSystemPath.From(root), ImmutableHashSet<FileSystemPath>.Empty, cancellationToken).ConfigureAwait(false);
+            var files = await CookSavedSourceReader.ReadNativeInputsAsync(facts, FileSystemPath.From(root), ImmutableHashSet<FileSystemPath>.Empty, cancellationToken).ConfigureAwait(false);
             if (!files.Any(file => file.Kind == CookSnapshotInputKind.File && file.SourcePath == FileSystemPath.From(primary)))
             {
                 throw new InvalidDataException("Native analysis omitted its primary source file.");

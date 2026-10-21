@@ -7,7 +7,6 @@ using CommunityToolkit.Mvvm.Input;
 using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Controls;
-using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentBrowser.Messages;
@@ -382,9 +381,6 @@ public partial class ProjectLayoutViewModel
         }).ToArray();
         contentBrowserState.SetSelectedFolders(folders.Any(static folder => folder is null) ? [] : folders.OfType<AssetPath>());
     }
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Content mount update failed.")]
-    private partial void LogMountChangeFailed(Exception exception);
 
     /// <summary>A declared library: a local folder or a pak file, with the container that identifies it across renames.</summary>
     /// <param name="Kind">The library's kind in the content priority.</param>

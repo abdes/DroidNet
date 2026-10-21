@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Aura.Windowing;
@@ -34,6 +35,27 @@ public sealed class DocumentConfirmations(IDialogService dialogs, IWindowManager
     }
 
     /// <inheritdoc/>
+    public Task<bool> ConfirmSaveBeforeAsync(IReadOnlyList<UnsavedDocument> documents, SaveBeforeOperation operation)
+    {
+        ArgumentNullException.ThrowIfNull(documents);
+        var (button, verb, why) = operation switch
+        {
+            SaveBeforeOperation.Play => ("Play", "play", "Play cooks the saved files."),
+            SaveBeforeOperation.Cook => ("Cook", "cook", "The cook reads the saved files."),
+            SaveBeforeOperation.Rename => ("Rename", "rename", "Renaming rewrites the files that use it."),
+            SaveBeforeOperation.Move => ("Move", "move", "Moving rewrites the files that use it."),
+            _ => throw new ArgumentOutOfRangeException(nameof(operation), operation, message: null),
+        };
+        var count = documents.Count == 1 ? "1 document" : string.Create(CultureInfo.CurrentCulture, $"{documents.Count} documents");
+        return this.AskAsync(() => new DialogSpec($"Save {count} and {verb}?", CreateDocumentList(why, documents))
+        {
+            PrimaryButtonText = $"Save and {button}",
+            CloseButtonText = "Cancel",
+            DefaultButton = DialogButton.Primary,
+        });
+    }
+
+    /// <inheritdoc/>
     public Task<string?> AskCopyNameAsync(Document document)
     {
         ArgumentNullException.ThrowIfNull(document);
@@ -58,6 +80,27 @@ public sealed class DocumentConfirmations(IDialogService dialogs, IWindowManager
                 windowId).ConfigureAwait(true);
             return result == DialogButton.Primary && !string.IsNullOrWhiteSpace(name.Text) ? name.Text : null;
         });
+    }
+
+    private static ScrollViewer CreateDocumentList(string why, IReadOnlyList<UnsavedDocument> documents)
+    {
+        var list = new StackPanel { Spacing = 8, MinWidth = 320 };
+        list.Children.Add(new TextBlock { Text = why, TextWrapping = TextWrapping.Wrap });
+        foreach (var document in documents)
+        {
+            var row = new StackPanel { Spacing = 2 };
+            row.Children.Add(new TextBlock { Text = document.Title, TextWrapping = TextWrapping.Wrap });
+            row.Children.Add(new TextBlock { Text = document.File.Asset.VirtualPath, TextWrapping = TextWrapping.Wrap, Opacity = 0.7 });
+            list.Children.Add(row);
+        }
+
+        return new ScrollViewer
+        {
+            Content = list,
+            MaxHeight = 320,
+            VerticalScrollBarVisibility = ScrollBarVisibility.Auto,
+            HorizontalScrollBarVisibility = ScrollBarVisibility.Disabled,
+        };
     }
 
     // The dialog's content is built on the window's thread, which owns it.

@@ -134,13 +134,13 @@ public sealed class AssetsViewModelCommandTests
                 state.SetClipboard([AssetPath.Parse("/Content/Materials")], isCut: false);
                 state.SetSelectedFolders([AssetPath.Parse("/Content/Props")]);
                 await browser.PasteCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
-                workflow.Verify(value => value.PasteAsync(It.Is<IReadOnlyList<AssetPath>>(items => items.SequenceEqual(new[] { AssetPath.Parse("/Content/Materials") })), false, AssetPath.Parse("/Content/Props")));
+                workflow.Verify(value => value.PasteAsync(It.Is<IReadOnlyList<AssetPath>>(items => items.SequenceEqual(new[] { AssetPath.Parse("/Content/Materials") })), move: false, AssetPath.Parse("/Content/Props")));
 
-                _ = workflow.Setup(value => value.PasteAsync(It.IsAny<IReadOnlyList<AssetPath>>(), true, AssetPath.Parse("/Content/Props")))
+                _ = workflow.Setup(value => value.PasteAsync(It.IsAny<IReadOnlyList<AssetPath>>(), move: true, AssetPath.Parse("/Content/Props")))
                     .ReturnsAsync(new AssetRelocationOutcome(Succeeded: true, "Move", "Moved."));
                 state.SetClipboard([AssetPath.Parse("/Content/Materials")], isCut: true);
                 await browser.PasteCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
-                workflow.Verify(value => value.PasteAsync(It.Is<IReadOnlyList<AssetPath>>(items => items.SequenceEqual(new[] { AssetPath.Parse("/Content/Materials") })), true, AssetPath.Parse("/Content/Props")));
+                workflow.Verify(value => value.PasteAsync(It.Is<IReadOnlyList<AssetPath>>(items => items.SequenceEqual(new[] { AssetPath.Parse("/Content/Materials") })), move: true, AssetPath.Parse("/Content/Props")));
                 _ = state.Clipboard.Should().BeEmpty("cut items are pasted once");
             }
         }

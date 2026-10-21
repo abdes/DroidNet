@@ -5,10 +5,11 @@
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Windowing;
 using Microsoft.UI;
+
 namespace Oxygen.Editor.Shell.Documents;
 
 /// <summary>Prepares documents before an Aura window closes and commits only after every guard approves.</summary>
-public sealed class WindowCloseCoordinator : IDisposable
+public sealed partial class WindowCloseCoordinator : IDisposable
 {
     private readonly IWindowManagerService windows;
     private readonly IDocumentTabs documents;

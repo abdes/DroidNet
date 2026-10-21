@@ -10,13 +10,13 @@ using Oxygen.Managed.Core.Compatibility;
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 /// <summary>Uses installed native interpretation in graph tests instead of duplicating descriptor parsing.</summary>
-internal sealed class NativeSourceFactsFixture(ProjectContext project, ICookDocumentRegistry documents) : ICookSourceFactsProvider
+internal sealed class NativeSourceFactsFixture(ProjectContext project) : ICookSourceFactsProvider
 {
     /// <summary>Creates the dependency discovery of a workspace over the installed native analysis.</summary>
     /// <param name="workspace">The workspace whose sources are analyzed.</param>
     /// <returns>The discovery.</returns>
     public static CookDependencyDiscovery CreateDiscovery(CookWorkspace workspace)
-        => new(new NativeSourceFactsFixture(workspace.ProjectContext, workspace.Documents));
+        => new(new NativeSourceFactsFixture(workspace.ProjectContext));
 
     public static async Task<global::Oxygen.Editor.ContentPipeline.Import.NativeSourceAnalysisReport> AnalyzeAsync(ContentSourceAnalysisExecution execution, CancellationToken cancellationToken)
     {
@@ -38,7 +38,7 @@ internal sealed class NativeSourceFactsFixture(ProjectContext project, ICookDocu
         var native = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
         var scopes = new ProjectCookScopeProvider(new DroidNet.Storage.Native.NativeStorageProvider(new Testably.Abstractions.RealFileSystem()));
         var analyzer = new CookSourceAnalyzer(operation, artifacts, native, new ContentImportManifestBuilder(),
-            new SceneDescriptorGenerator(), scopes, documents);
+            new SceneDescriptorGenerator(), scopes);
         return await analyzer.ReadAsync(inputs, cancellationToken).ConfigureAwait(false);
     }
 }

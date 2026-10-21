@@ -11,30 +11,21 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.MaterialEditor;
 
 /// <summary>An editable texture slot and the textures it can be assigned.</summary>
-public sealed partial class MaterialTextureChannel : ObservableObject
+/// <remarks>Initializes a new instance of the <see cref="MaterialTextureChannel"/> class.</remarks>
+/// <param name="channel">The native material schema field.</param>
+/// <param name="displayName">The user-facing channel name.</param>
+/// <param name="selectionChanged">The owning document edit callback.</param>
+public sealed partial class MaterialTextureChannel(string channel, string displayName, Action<MaterialTextureChannel, AssetPath?> selectionChanged) : ObservableObject
 {
     private static readonly AssetChoice NoTexture = new("None", Asset: null, "Remove the texture", "No texture", IsEnabled: true, Glyph: string.Empty);
-
-    private readonly Action<MaterialTextureChannel, AssetPath?> selectionChanged;
     private IReadOnlyDictionary<AssetPath, string> namesByTexture = new Dictionary<AssetPath, string>();
     private AssetPath? selectedTexture;
 
-    /// <summary>Initializes a new instance of the <see cref="MaterialTextureChannel"/> class.</summary>
-    /// <param name="channel">The native material schema field.</param>
-    /// <param name="displayName">The user-facing channel name.</param>
-    /// <param name="selectionChanged">The owning document edit callback.</param>
-    public MaterialTextureChannel(string channel, string displayName, Action<MaterialTextureChannel, AssetPath?> selectionChanged)
-    {
-        this.Channel = channel;
-        this.DisplayName = displayName;
-        this.selectionChanged = selectionChanged;
-    }
-
     /// <summary>Gets the native channel key.</summary>
-    public string Channel { get; }
+    public string Channel { get; } = channel;
 
     /// <summary>Gets the user-facing channel name.</summary>
-    public string DisplayName { get; }
+    public string DisplayName { get; } = displayName;
 
     /// <summary>Gets the textures the channel can be assigned, grouped as Engine, Packages and Content, with a choice that removes the texture.</summary>
     public AssetPickerModel Choices { get; } = new(static asset => AssetChoice.For(asset, "Texture", "\uE7C3"), NoTexture);
@@ -48,7 +39,7 @@ public sealed partial class MaterialTextureChannel : ObservableObject
             if (this.SetProperty(ref this.selectedTexture, value))
             {
                 this.OnSelectionShown();
-                this.selectionChanged(this, value);
+                selectionChanged(this, value);
             }
         }
     }
@@ -56,7 +47,7 @@ public sealed partial class MaterialTextureChannel : ObservableObject
     /// <summary>Gets the picker's text: the assigned texture's name, <c>None</c>, or the missing path.</summary>
     public string SelectedText => this.SelectedTexture is not { } texture
         ? "None"
-        : this.namesByTexture.GetValueOrDefault(texture) ?? "Missing: " + texture.VirtualPath;
+        : this.namesByTexture.GetValueOrDefault(texture) ?? ("Missing: " + texture.VirtualPath);
 
     /// <summary>Gets a warning for a missing or invalid assigned texture.</summary>
     public string WarningText => this.SelectedTexture is { } texture && !this.namesByTexture.ContainsKey(texture)

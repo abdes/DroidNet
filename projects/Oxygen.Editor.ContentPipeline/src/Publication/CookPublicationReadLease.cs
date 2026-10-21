@@ -216,8 +216,7 @@ public sealed class CookPublicationReadLease : ICookPublicationReadLease
                 throw new InvalidDataException("The publication document does not match the selected digest.");
             }
 
-            var document = JsonSerializer.Deserialize<CookPublicationDocument>(bytes.Content.AsSpan(), CookPublicationDocument.JsonOptions)
-                ?? throw new InvalidDataException("The publication document is empty.");
+            var document = CookPublicationDocument.Parse(bytes.Content.AsSpan());
             document.Validate(project);
             if (document.OperationId != head.PublicationId)
             {

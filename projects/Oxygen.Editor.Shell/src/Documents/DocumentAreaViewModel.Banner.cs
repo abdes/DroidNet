@@ -54,10 +54,7 @@ public sealed partial class DocumentAreaViewModel
             }
 
             this.observedDocument = document;
-            if (document is not null)
-            {
-                document.StateChanged += this.OnActiveDocumentStateChanged;
-            }
+            document?.StateChanged += this.OnActiveDocumentStateChanged;
         }
 
         this.RefreshBanner(outcome: null);

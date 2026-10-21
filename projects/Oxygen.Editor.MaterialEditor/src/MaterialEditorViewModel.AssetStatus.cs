@@ -3,11 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Textures;
-using Oxygen.Managed.Assets;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.MaterialEditor;
 
@@ -45,6 +42,7 @@ public sealed partial class MaterialEditorViewModel
         if (!this.isDisposed)
         {
             this.AssetStatus = items.Find(this.document.File.Asset);
+
             // A project texture names its image; a packaged or library texture states its shape.
             var files = this.projects.ActiveProject?.FileSystem;
             this.availableTextures = [.. AssetRule.For(AssetKind.Texture).Apply(items)
@@ -55,7 +53,6 @@ public sealed partial class MaterialEditorViewModel
             {
                 channel.Refresh(this.availableTextures, channel.SelectedTexture);
             }
-
         }
     }
 
@@ -90,7 +87,4 @@ public sealed partial class MaterialEditorViewModel
             this.LogAssetStatusFailed(exception, this.document.File.Asset);
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Could not refresh shared asset status for material {Material}.")]
-    private partial void LogAssetStatusFailed(Exception exception, AssetPath material);
 }

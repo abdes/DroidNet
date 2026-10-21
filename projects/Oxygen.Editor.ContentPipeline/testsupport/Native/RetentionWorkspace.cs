@@ -24,14 +24,12 @@ internal sealed partial class RetentionWorkspace : IDisposable
         Directory.CreateDirectory(this.ProjectRoot);
         this.Projects.Activate(TestProject.Create(new RealFileSystem(), this.ProjectRoot).Context with { Name = "Retention" });
         this.Coordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
-        this.Retention = new(this.Documents, this.Coordinator);
+        this.Retention = new(this.Coordinator);
     }
 
     public string ProjectRoot => Path.Combine(this.root, "Project");
 
     public ProjectContextService Projects { get; } = new();
-
-    public CookDocumentRegistry Documents { get; } = new();
 
     public ContentCookCoordinator Coordinator { get; }
 
@@ -45,7 +43,7 @@ internal sealed partial class RetentionWorkspace : IDisposable
         return new(AssetUri: null, FileSystemPath.From(path), relative, Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(text))));
     }
 
-    public Task<ImportSourceRetentionResult> RetainAsync(string name, IReadOnlyList<CookSnapshotInput> inputs, CancellationToken cancellationToken)
+    public Task<RetainedImportSource> RetainAsync(string name, IReadOnlyList<CookSnapshotInput> inputs, CancellationToken cancellationToken)
         => this.Coordinator.RunAsync((owner, token) => this.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), name, _ => Task.FromResult(new ImportSourceBundle(inputs[0].RelativePath, inputs.ToImmutableArray())), token), cancellationToken);
 
     public void Dispose()

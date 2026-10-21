@@ -20,6 +20,15 @@ public interface IDocumentConfirmations
     /// <returns><see langword="true"/> when the user chose to reload.</returns>
     public Task<bool> ConfirmReloadAsync(Document document);
 
+    /// <summary>
+    /// Asks to save documents before an operation that reads saved files: <c>Save 2 documents and play?</c> with
+    /// <b>Save and Play</b> and <b>Cancel</b>, listing the documents.
+    /// </summary>
+    /// <param name="documents">The unsaved documents the operation needs saved.</param>
+    /// <param name="operation">The operation.</param>
+    /// <returns><see langword="true"/> when the user chose to save and continue.</returns>
+    public Task<bool> ConfirmSaveBeforeAsync(IReadOnlyList<UnsavedDocument> documents, SaveBeforeOperation operation);
+
     /// <summary>Asks for the name of a copy of a document, saved beside it.</summary>
     /// <param name="document">The document.</param>
     /// <returns>The name, or <see langword="null"/> when the user cancelled.</returns>

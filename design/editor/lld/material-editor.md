@@ -316,9 +316,9 @@ persistence and completes independently of cooking.
 
 `MaterialCookService.CookMaterialAsync` routes to
 `IContentPipelineService.CookAssetAsync`. Native material-descriptor cooking
-owns the binary output. Dirty participating documents require explicit Save;
-automatic work shows Needs save. The selected publication supplies the physical
-generation:
+owns the binary output. Cook asks to save the material first when it has
+unsaved changes (Save and Cook, or Cancel); cook on change cooks the saved file.
+The selected publication supplies the physical generation:
 
 ```text
 source: <ProjectRoot>/Content/Materials/Gold.omat.json

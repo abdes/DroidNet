@@ -149,7 +149,7 @@ public sealed partial class ContentPipelineService
     {
         this.cookCoordinator.VerifyWriter(operation);
         var recipe = this.manifestBuilder.BuildJob(input, [], settings);
-        return new SceneImportSourceDiscovery(cookDocuments, this.cookCoordinator, this.engineContentPipelineApi)
+        return new SceneImportSourceDiscovery(this.cookCoordinator, this.engineContentPipelineApi)
             .DiscoverAsync(operation, input.SourceAbsolutePath.FullPath, recipe, cancellationToken, artifacts);
     }
 

@@ -30,12 +30,12 @@ internal sealed class GeometryFixture : IDisposable
             DisplayName = "Custom",
             Kind = AssetKind.Geometry,
             DerivedState = null,
-            CookStatus = new(this.GeometryAsset, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
+            CookStatus = new(this.GeometryAsset, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], []),
         };
         var material = CreateStatusAsset(1) with
         {
             Identity = this.MaterialAsset,
-            CookStatus = new(this.MaterialAsset, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
+            CookStatus = new(this.MaterialAsset, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], []),
         };
         _ = this.Assets.SetupGet(value => value.Items).Returns(Observable.Return<IReadOnlyList<AssetEntry>>([geometry, material]));
         _ = this.Assets.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);

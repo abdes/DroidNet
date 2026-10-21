@@ -66,6 +66,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private readonly ILogger logger;
     private SceneDocumentLifetime? sceneLifetime;
     private IDocumentService? documentService;
+    private Oxygen.Editor.ContentPipeline.Cooking.IUnsavedCookInputs? unsavedCookInputs;
     private IDocumentArea? documentArea;
     private IPlacementService? placement;
     private IAssetCatalog? assetCatalog;
@@ -290,14 +291,14 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             Reuse.Singleton);
         childContainer.Register<ISceneSelectionService, SceneSelectionService>(Reuse.Singleton);
 
-        // Everything the documents need is registered: the cook, the preview and the content demand follow them from now on.
-        _ = childContainer.Resolve<OpenDocumentCookInputs>();
+        // Everything the documents need is registered: the preview and the content demand follow them from now on.
         _ = childContainer.Resolve<IScenePreview>();
         _ = childContainer.Resolve<PreviewContentDemand>();
 
         // The document service follows the window's tabs before anything opens a document, and the window's close asks
         // about its documents.
         this.documentService = childContainer.Resolve<IDocumentService>();
+        this.unsavedCookInputs = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Cooking.IUnsavedCookInputs>();
         this.documentArea = childContainer.Resolve<IDocumentArea>();
         this.placement = childContainer.Resolve<IPlacementService>();
         _ = childContainer.Resolve<DocumentAreaViewModel>();
@@ -359,6 +360,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             this.sceneLifetime?.Dispose();
             this.sceneLifetime = null;
             this.documentService = null;
+            this.unsavedCookInputs = null;
             this.documentArea = null;
             this.placement = null;
             this.assetCatalog = null;
@@ -415,6 +417,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         childContainer.Register<Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService, Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationService>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.ContentPipeline.Authoring.IAssetAuthoring, Oxygen.Editor.ContentPipeline.Authoring.AssetAuthoring>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService, Oxygen.Editor.ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);
+        childContainer.Register<Oxygen.Editor.ContentPipeline.Cooking.IUnsavedCookInputs, Oxygen.Editor.ContentPipeline.Cooking.UnsavedCookInputs>(Reuse.Singleton);
         childContainer.Register<Oxygen.Editor.Shell.Documents.IHistoryService, Oxygen.Editor.Shell.Documents.HistoryService>(Reuse.Singleton);
 
         // The project's global history: the Content Browser's child container records into this instance, and it ends
@@ -470,14 +473,14 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
 
         if (this.documentService is null)
         {
-            this.LogInitialSceneManagerUnavailable(scene.ToString());
+            this.LogInitialSceneManagerUnavailable(scene);
             return;
         }
 
         var opened = await this.documentService.OpenAsync(scene).ConfigureAwait(true);
         if (!opened.Succeeded)
         {
-            this.LogInitialSceneNotOpened(scene.ToString(), context.Name);
+            this.LogInitialSceneNotOpened(scene, context.Name);
         }
     }
 

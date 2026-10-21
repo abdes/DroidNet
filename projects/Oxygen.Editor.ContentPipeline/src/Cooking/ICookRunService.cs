@@ -30,9 +30,4 @@ public interface ICookRunService
     /// <param name="cancellationToken">Stops waiting.</param>
     /// <returns>Completion once the writer is idle; it may be taken again right after.</returns>
     public Task WhenWriterIdleAsync(CancellationToken cancellationToken);
-
-    /// <summary>Requeues a blocked run after an explicit save action; capture rechecks all inputs.</summary>
-    /// <param name="operationId">The blocked run.</param>
-    /// <returns>Whether the run was waiting for saved inputs.</returns>
-    public bool ResumeAfterSave(Guid operationId);
 }

@@ -12,21 +12,62 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneExplorer;
 
-/// <summary>
-/// Logging helpers for <see cref="SceneExplorerViewModel"/>.
-/// This keeps LoggerMessage attributed methods in a separate partial type file,
-/// following the repo convention (static partial + instance wrapper).
-/// </summary>
+/// <summary>Logging helpers for <see cref="SceneExplorerViewModel"/>.</summary>
 public partial class SceneExplorerViewModel
 {
-    [LoggerMessage(Level = LogLevel.Error, Message = "Scene Explorer selection update failed for document {DocumentId}.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Scene Explorer selection update failed for document {DocumentId}.")]
     private static partial void LogSelectionApplyFailed(ILogger logger, Exception exception, DocumentId documentId);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Scene Explorer projection update failed for document {DocumentId}.")]
+    private void LogSelectionApplyFailed(Exception exception, DocumentId documentId)
+        => LogSelectionApplyFailed(this.logger, exception, documentId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Scene Explorer projection update failed for document {DocumentId}.")]
     private static partial void LogProjectionUpdateFailed(ILogger logger, Exception exception, DocumentId documentId);
 
-    [LoggerMessage(Level = LogLevel.Error, Message = "Scene Explorer search failed for query {SearchQuery}.")]
+    private void LogProjectionUpdateFailed(Exception exception, DocumentId documentId)
+        => LogProjectionUpdateFailed(this.logger, exception, documentId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Scene Explorer search failed for query {SearchQuery}.")]
     private static partial void LogSearchFailed(ILogger logger, Exception exception, string searchQuery);
+
+    private void LogSearchFailed(Exception exception, string searchQuery)
+        => LogSearchFailed(this.logger, exception, searchQuery);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to apply scene explorer add for {Item}.")]
+    private static partial void LogAuthoringAddFailed(ILogger logger, Exception exception, string item);
+
+    private void LogAuthoringAddFailed(Exception exception, string item)
+        => LogAuthoringAddFailed(this.logger, exception, item);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to load scene {SceneId} ({SceneName}).")]
+    private static partial void LogAuthoringLoadFailed(ILogger logger, Exception exception, SceneId sceneId, string sceneName);
+
+    private void LogAuthoringLoadFailed(Exception exception, SceneId sceneId, string sceneName)
+        => LogAuthoringLoadFailed(this.logger, exception, sceneId, sceneName);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to apply in-place rename for {Item}.")]
+    private static partial void LogAuthoringRenameFailed(ILogger logger, Exception exception, string item);
+
+    private void LogAuthoringRenameFailed(Exception exception, string item)
+        => LogAuthoringRenameFailed(this.logger, exception, item);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -35,8 +76,16 @@ public partial class SceneExplorerViewModel
     private static partial void LogCreateFolderInvoked(ILogger logger, string? type, int count);
 
     [Conditional("DEBUG")]
-    private void LogCreateFolderInvoked(string? type, int count)
-        => LogCreateFolderInvoked(this.logger, type, count);
+    private void LogCreateFolderInvoked(object? selectionModel, int count)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var type = selectionModel?.GetType().Name;
+        LogCreateFolderInvoked(this.logger, type, count);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -177,8 +226,17 @@ public partial class SceneExplorerViewModel
         Message = "Created folder '{FolderName}' was inserted into layout but no matching folder adapter was found.")]
     private static partial void LogCreatedFolderAdapterNotFound(ILogger logger, string folderName);
 
+    [Conditional("DEBUG")]
     private void LogCreatedFolderAdapterNotFound(string? folderName)
-        => LogCreatedFolderAdapterNotFound(this.logger, folderName ?? "<null>");
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var name = folderName ?? "<null>";
+        LogCreatedFolderAdapterNotFound(this.logger, name);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -186,8 +244,18 @@ public partial class SceneExplorerViewModel
         Message = "Auto-expanded and selected new folder '{FolderName}' ({FolderId}).")]
     private static partial void LogAutoExpandedSelectedFolder(ILogger logger, string folderName, string folderId);
 
+    [Conditional("DEBUG")]
     private void LogAutoExpandedSelectedFolder(string? folderName, FolderId? folderId)
-        => LogAutoExpandedSelectedFolder(this.logger, folderName ?? "<null>", folderId.HasValue ? folderId.Value.ToString() : "<null>");
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var name = folderName ?? "<null>";
+        var id = folderId.HasValue ? folderId.Value.ToString() : "<null>";
+        LogAutoExpandedSelectedFolder(this.logger, name, id);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -195,6 +263,7 @@ public partial class SceneExplorerViewModel
         Message = "CreateFolderFromSelection: moved adapter {Label} into folder {FolderName}.")]
     private static partial void LogCreateFolderMovedAdapter(ILogger logger, string label, string folderName);
 
+    [Conditional("DEBUG")]
     private void LogCreateFolderMovedAdapter(string label, string folderName)
         => LogCreateFolderMovedAdapter(this.logger, label, folderName);
 
@@ -204,6 +273,7 @@ public partial class SceneExplorerViewModel
         Message = "{Label}: layout entries = [{Entries}].")]
     private static partial void LogLayoutEntries(ILogger logger, string label, string entries);
 
+    [Conditional("DEBUG")]
     private void LogLayoutEntries(string label, string entries)
         => LogLayoutEntries(this.logger, label, entries);
 
@@ -222,6 +292,7 @@ public partial class SceneExplorerViewModel
         Message = "No scene addition action for change '{OperationName}'.")]
     private static partial void LogNoSceneAdditionAction(ILogger logger, string operationName);
 
+    [Conditional("DEBUG")]
     private void LogNoSceneAdditionAction(string operationName)
         => LogNoSceneAdditionAction(this.logger, operationName);
 
@@ -232,7 +303,16 @@ public partial class SceneExplorerViewModel
     private static partial void LogFailedApplySceneChange(ILogger logger, Exception ex, string operationName, string nodeName, string nodeId);
 
     private void LogFailedApplySceneChange(Exception ex, string operationName, string? nodeName, NodeId? nodeId)
-        => LogFailedApplySceneChange(this.logger, ex, operationName, nodeName ?? "<null>", nodeId.HasValue ? nodeId.Value.ToString() : "<null>");
+    {
+        if (!this.logger.IsEnabled(LogLevel.Error))
+        {
+            return;
+        }
+
+        var name = nodeName ?? "<null>";
+        var id = nodeId.HasValue ? nodeId.Value.ToString() : "<null>";
+        LogFailedApplySceneChange(this.logger, ex, operationName, name, id);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -240,6 +320,7 @@ public partial class SceneExplorerViewModel
         Message = "Skipping removal handler for change '{OperationName}'.")]
     private static partial void LogSkippingRemovalHandler(ILogger logger, string operationName);
 
+    [Conditional("DEBUG")]
     private void LogSkippingRemovalHandler(string operationName)
         => LogSkippingRemovalHandler(this.logger, operationName);
 
@@ -310,10 +391,18 @@ public partial class SceneExplorerViewModel
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
         Message = "LoadSceneAsync: loaded scene {SceneId} (Name={SceneName})")]
-    private static partial void LogSceneLoaded(ILogger logger, SceneId sceneId, string? sceneName);
+    private static partial void LogSceneLoaded(ILogger logger, SceneId sceneId, string sceneName);
 
     private void LogSceneLoaded(SceneId sceneId, string? sceneName)
-        => LogSceneLoaded(this.logger, sceneId, sceneName);
+    {
+        if (!this.logger.IsEnabled(LogLevel.Information))
+        {
+            return;
+        }
+
+        var name = sceneName ?? "<unnamed>";
+        LogSceneLoaded(this.logger, sceneId, name);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,

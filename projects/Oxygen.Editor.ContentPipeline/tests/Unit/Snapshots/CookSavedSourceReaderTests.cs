@@ -5,8 +5,6 @@
 using System.Runtime.ExceptionServices;
 using AwesomeAssertions;
 using DroidNet.Storage.Native;
-using Oxygen.Editor.ContentPipeline.Snapshots;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Snapshots;
 
@@ -15,35 +13,6 @@ namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Snapshots;
 public sealed class CookSavedSourceReaderTests
 {
     public TestContext TestContext { get; set; } = null!;
-
-    /// <summary>A source read queued before rename cancels without opening the vanished source.</summary>
-    /// <returns>The asynchronous rename race regression.</returns>
-    [TestMethod]
-    public async Task RenamedSourceCancelsQueuedReadBeforeOpeningOldFile()
-    {
-        var registry = new CookDocumentRegistry();
-        var path = Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"), "Main.oscene.json");
-        var state = new CookDocumentState(FileSystemPath.From(path), "Main", IsDirty: false, "hash");
-        var entered = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var released = false;
-        using var registration = registry.Register(FileSystemPath.From(path), async token =>
-        {
-            entered.SetResult();
-            await release.Task.WaitAsync(token).ConfigureAwait(false);
-            return new(state, () => released = true);
-        });
-        registration.UpdateState(state);
-        var read = CookSavedSourceReader.ReadAsync(registry, path, this.TestContext.CancellationToken);
-        await entered.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        state = state with { SourcePath = FileSystemPath.From(Path.Combine(Path.GetDirectoryName(path)!, "Demo.oscene.json")) };
-        registration.RelocateSource(state);
-        release.SetResult();
-
-        Func<Task> finishRead = async () => _ = await read.ConfigureAwait(false);
-        _ = await finishRead.Should().ThrowAsync<OperationCanceledException>().ConfigureAwait(false);
-        _ = released.Should().BeTrue();
-    }
 
     /// <summary>Missing settings and a first cook's missing provenance are ordinary absence, without a thrown exception.</summary>
     /// <param name="missingParent">Whether the parent directory is also absent.</param>

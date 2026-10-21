@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using DroidNet.TimeMachine;
+using Oxygen.Editor.Documents;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Relocation;
@@ -66,10 +67,12 @@ public interface IAssetRelocationService
     /// <returns>The referrers' virtual paths, sorted and without duplicates.</returns>
     public Task<IReadOnlyList<AssetPath>> FindReferrersOutsideAsync(IReadOnlyList<AssetPath> sources, CancellationToken cancellationToken);
 
-    /// <summary>Finds the open documents whose files a delete of the sources removes, so the delete can name them.</summary>
-    /// <param name="sources">The assets or folders to delete.</param>
-    /// <returns>The documents' names, each with whether it has unsaved edits, sorted by name.</returns>
-    public IReadOnlyList<(string Name, bool IsDirty)> FindOpenDocuments(IReadOnlyList<AssetPath> sources);
+    /// <summary>
+    /// Finds the open documents with unsaved changes that a relocation needs saved first: every one of the project, since
+    /// an unsaved edit may reference what moves. A relocation, its undo and its redo are refused while any remains.
+    /// </summary>
+    /// <returns>The unsaved documents, sorted by title.</returns>
+    public IReadOnlyList<UnsavedDocument> FindUnsavedDocuments();
 
     /// <summary>Copies assets or folders into a folder under unique names; references are not rewritten.</summary>
     /// <param name="sources">The virtual paths to copy.</param>

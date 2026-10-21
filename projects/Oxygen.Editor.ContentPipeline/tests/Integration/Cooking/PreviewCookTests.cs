@@ -3,13 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.IncrementalCookScenario;
-using static Oxygen.Editor.ContentPipeline.TestSupport.SavedSourceScenario;
 
 namespace Oxygen.Editor.ContentPipeline.Integration.Tests.Cooking;
 
@@ -20,11 +18,11 @@ public sealed class PreviewCookTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>A material demand joins its paused Save without saving or cooking its dirty consuming scene.</summary>
+    /// <summary>A material demand joins its paused Save without cooking its consuming scene.</summary>
     /// <returns>The asynchronous native preview-demand regression.</returns>
     [TestMethod]
     [TestCategory("NativeContent")]
-    public async Task PreviewMaterialSharesSavedScopeWithoutIncludingDirtyConsumingScene()
+    public async Task PreviewMaterialSharesSavedScopeWithoutIncludingConsumingScene()
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
         using var compatibility = EditorNativeCompatibilityService.ForCooking();
@@ -32,9 +30,6 @@ public sealed class PreviewCookTests
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var pipeline = CreateIncrementalService(workspace, api, compatibility);
         var materialUri = AssetPath.Parse("/Content/Materials/Blue.omat");
-        var scenePath = Path.Combine(workspace.Root, "Content", "Scenes", "Main.oscene.json");
-        var scene = SavedState(scenePath) with { IsDirty = true };
-        using var registration = workspace.Documents.Register(FileSystemPath.From(scenePath), _ => Task.FromResult<CookDocumentReadLease?>(new(scene, static () => { })));
         var hold = WriterHold.Take(workspace.CookCoordinator, this.TestContext.CancellationToken);
         var saved = pipeline.CookSavedAssetAsync(materialUri, workspace.ProjectContext, this.TestContext.CancellationToken);
         var preview = pipeline.CookPreviewAssetAsync(materialUri, workspace.ProjectContext, this.TestContext.CancellationToken);
@@ -49,8 +44,6 @@ public sealed class PreviewCookTests
         _ = result.InputSnapshot.Should().NotBeNull();
         var snapshot = result.InputSnapshot!;
         _ = snapshot.Inputs.Should().NotContain(input => input.AssetUri != null && input.AssetUri.VirtualPath.EndsWith(".oscene", StringComparison.Ordinal));
-        _ = snapshot.Documents.Should().NotContain(document => document.SourcePath == scene.SourcePath);
-        _ = scene.IsDirty.Should().BeTrue();
     }
 
     /// <summary>Geometry preview demand includes the saved material it needs before either asset has been cooked.</summary>

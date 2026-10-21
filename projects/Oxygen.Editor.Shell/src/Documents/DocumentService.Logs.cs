@@ -34,6 +34,7 @@ public sealed partial class DocumentService
         Message = "'{Title}' did not check its file: {Reason}")]
     private static partial void LogFileCheckFailed(ILogger logger, string title, string reason);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogFileCheckFailed(string title, string reason) => LogFileCheckFailed(this.logger, title, reason);
 
     [LoggerMessage(
@@ -59,4 +60,20 @@ public sealed partial class DocumentService
     private static partial void LogDeletedDocumentNotClosed(ILogger logger, string title, FileSystemPath path);
 
     private void LogDeletedDocumentNotClosed(string title, FileSystemPath path) => LogDeletedDocumentNotClosed(this.logger, title, path);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "{Operation} did not run: the user kept {Count} unsaved documents unsaved.")]
+    private static partial void LogSaveBeforeCancelled(ILogger logger, SaveBeforeOperation operation, int count);
+
+    private void LogSaveBeforeCancelled(SaveBeforeOperation operation, int count) => LogSaveBeforeCancelled(this.logger, operation, count);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "{Operation} did not run: '{Title}' was not saved.")]
+    private static partial void LogSaveBeforeFailed(ILogger logger, SaveBeforeOperation operation, string title);
+
+    private void LogSaveBeforeFailed(SaveBeforeOperation operation, string title) => LogSaveBeforeFailed(this.logger, operation, title);
 }

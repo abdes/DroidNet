@@ -104,41 +104,41 @@ public static class SceneExplorerContextMenu
         switch (kind)
         {
             case SceneSelectionKind.Node:
-                entries.Add(new(SceneExplorerCommandKind.NewNode, "New child node", true));
-                entries.Add(new(SceneExplorerCommandKind.NewFolder, "New folder", true));
+                entries.Add(new(SceneExplorerCommandKind.NewNode, "New child node", IsEnabled: true));
+                entries.Add(new(SceneExplorerCommandKind.NewFolder, "New folder", IsEnabled: true));
                 entries.Add(new(SceneExplorerCommandKind.Rename, "Rename", primaryIsUnlocked));
                 entries.Add(new(SceneExplorerCommandKind.Cut, "Cut", primaryIsUnlocked));
-                entries.Add(new(SceneExplorerCommandKind.Copy, "Copy", true));
-                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", true));
-                entries.Add(new(SceneExplorerCommandKind.PasteAsChild, "Paste as child", true));
+                entries.Add(new(SceneExplorerCommandKind.Copy, "Copy", IsEnabled: true));
+                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true));
+                entries.Add(new(SceneExplorerCommandKind.PasteAsChild, "Paste as child", IsEnabled: true));
                 entries.Add(new(SceneExplorerCommandKind.Delete, "Delete node", primaryIsUnlocked));
                 if (primaryIsInFolder)
                 {
-                    entries.Add(new(SceneExplorerCommandKind.RemoveFromFolder, "Remove from folder", true));
+                    entries.Add(new(SceneExplorerCommandKind.RemoveFromFolder, "Remove from folder", IsEnabled: true));
                 }
                 else
                 {
-                    entries.Add(new(SceneExplorerCommandKind.MoveToSceneRoot, "Move to scene root", true));
+                    entries.Add(new(SceneExplorerCommandKind.MoveToSceneRoot, "Move to scene root", IsEnabled: true));
                 }
 
                 if (primaryHasChildren)
                 {
-                    entries.Add(new(SceneExplorerCommandKind.Expand, "Expand", true));
+                    entries.Add(new(SceneExplorerCommandKind.Expand, "Expand", IsEnabled: true));
                 }
 
                 break;
 
             case SceneSelectionKind.Folder:
-                entries.Add(new(SceneExplorerCommandKind.NewNode, "New node in folder", true));
-                entries.Add(new(SceneExplorerCommandKind.NewFolder, "New subfolder", true));
+                entries.Add(new(SceneExplorerCommandKind.NewNode, "New node in folder", IsEnabled: true));
+                entries.Add(new(SceneExplorerCommandKind.NewFolder, "New subfolder", IsEnabled: true));
                 entries.Add(new(SceneExplorerCommandKind.Rename, "Rename", primaryIsUnlocked));
-                entries.Add(new(SceneExplorerCommandKind.Cut, "Cut", true));
-                entries.Add(new(SceneExplorerCommandKind.Copy, "Copy", true));
-                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", true));
-                entries.Add(new(SceneExplorerCommandKind.Delete, "Remove folder", true));
+                entries.Add(new(SceneExplorerCommandKind.Cut, "Cut", IsEnabled: true));
+                entries.Add(new(SceneExplorerCommandKind.Copy, "Copy", IsEnabled: true));
+                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true));
+                entries.Add(new(SceneExplorerCommandKind.Delete, "Remove folder", IsEnabled: true));
                 if (primaryHasChildren)
                 {
-                    entries.Add(new(SceneExplorerCommandKind.Collapse, "Collapse", true));
+                    entries.Add(new(SceneExplorerCommandKind.Collapse, "Collapse", IsEnabled: true));
                 }
 
                 break;
@@ -147,18 +147,18 @@ public static class SceneExplorerContextMenu
             case SceneSelectionKind.Empty:
                 if (kind == SceneSelectionKind.Scene)
                 {
-                    entries.Add(new(SceneExplorerCommandKind.Rename, "Rename scene", true));
+                    entries.Add(new(SceneExplorerCommandKind.Rename, "Rename scene", IsEnabled: true));
                 }
 
-                entries.Add(new(SceneExplorerCommandKind.NewNode, "New node", true));
-                entries.Add(new(SceneExplorerCommandKind.NewFolder, "New folder", true));
-                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", true));
+                entries.Add(new(SceneExplorerCommandKind.NewNode, "New node", IsEnabled: true));
+                entries.Add(new(SceneExplorerCommandKind.NewFolder, "New folder", IsEnabled: true));
+                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true));
                 break;
 
             case SceneSelectionKind.Mixed:
                 entries.Add(new(SceneExplorerCommandKind.Cut, "Cut", primaryIsUnlocked));
-                entries.Add(new(SceneExplorerCommandKind.Copy, "Copy", true));
-                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", true));
+                entries.Add(new(SceneExplorerCommandKind.Copy, "Copy", IsEnabled: true));
+                entries.Add(new(SceneExplorerCommandKind.Paste, "Paste", IsEnabled: true));
                 entries.Add(new(SceneExplorerCommandKind.Delete, "Delete selected items", primaryIsUnlocked));
                 break;
 

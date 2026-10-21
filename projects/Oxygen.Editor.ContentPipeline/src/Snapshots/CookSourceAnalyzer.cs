@@ -28,7 +28,6 @@ internal sealed partial class CookSourceAnalyzer(
     IContentImportManifestBuilder recipes,
     ISceneDescriptorGenerator scenes,
     IProjectCookScopeProvider scopes,
-    ICookDocumentRegistry documents,
     CookProvenance? previous = null) : ICookSourceFactsProvider
 {
     private readonly string root = Path.Combine(operation.Project.ProjectRoot.FullPath, ".build", "cook", operation.OperationId.ToString("N"), "analysis", Guid.NewGuid().ToString("N"));
@@ -81,7 +80,7 @@ internal sealed partial class CookSourceAnalyzer(
 
             var digest = observation.Reads.FirstOrDefault(static read => read.Offset == 0 && (read.MaxBytes == 0))
                 ?? throw new InvalidDataException("Native analysis did not retain the complete generated descriptor.");
-            generatedInputs.Add(new(path.FullPath, true, metadata, new(path.FullPath, metadata.Size, digest.Sha256)));
+            generatedInputs.Add(new(path.FullPath, Exists: true, metadata, new(path.FullPath, metadata.Size, digest.Sha256)));
         }
 
         return generatedInputs.ToImmutable();
@@ -179,7 +178,7 @@ internal sealed partial class CookSourceAnalyzer(
                 continue;
             }
 
-            var files = await CookSavedSourceReader.ReadNativeInputsAsync(documents, facts, operation.Project.ProjectRoot, generatedPaths, cancellationToken).ConfigureAwait(false);
+            var files = await CookSavedSourceReader.ReadNativeInputsAsync(facts, operation.Project.ProjectRoot, generatedPaths, cancellationToken).ConfigureAwait(false);
             analyzed.Add(new(
                 source.Input,
                 facts.Outputs,
@@ -205,8 +204,8 @@ internal sealed partial class CookSourceAnalyzer(
         var settingsPath = input.SourceAbsolutePath + NativeSceneImportSettings.SidecarSuffix;
         if (CookSavedSourceReader.Exists(settingsPath))
         {
-            var bytes = await CookSavedSourceReader.ReadAsync(documents, settingsPath, cancellationToken).ConfigureAwait(false);
-            managed.Add(new(null, FileSystemPath.From(settingsPath), input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, Convert.ToHexString(SHA256.HashData(bytes))));
+            var bytes = await CookSavedSourceReader.ReadAsync(settingsPath, cancellationToken).ConfigureAwait(false);
+            managed.Add(new(AssetUri: null, FileSystemPath.From(settingsPath), input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, Convert.ToHexString(SHA256.HashData(bytes))));
             if (input.Kind == ContentCookAssetKind.ForeignSource)
             {
                 settings = NativeSceneImportSettings.Parse(bytes);
@@ -214,7 +213,7 @@ internal sealed partial class CookSourceAnalyzer(
         }
         else
         {
-            managed.Add(new(null, FileSystemPath.From(settingsPath), input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, string.Empty, CookSnapshotInputKind.Absent));
+            managed.Add(new(AssetUri: null, FileSystemPath.From(settingsPath), input.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix, string.Empty, CookSnapshotInputKind.Absent));
         }
 
         var textureDiagnostics = input.Kind == ContentCookAssetKind.Material
@@ -230,7 +229,7 @@ internal sealed partial class CookSourceAnalyzer(
         CancellationToken cancellationToken)
     {
         var sourcePath = snapshot is null ? input.SourceAbsolutePath.FullPath : Path.Combine(snapshot.InputRoot, input.SourceRelativePath);
-        var bytes = await CookSavedSourceReader.ReadAsync(documents, sourcePath, cancellationToken).ConfigureAwait(false);
+        var bytes = await CookSavedSourceReader.ReadAsync(sourcePath, cancellationToken).ConfigureAwait(false);
         ImmutableArray<CookSnapshotInput> managed = [new(input.AssetUri, input.SourceAbsolutePath, input.SourceRelativePath, Convert.ToHexString(SHA256.HashData(bytes)))];
         var stream = new MemoryStream(bytes, writable: false);
         await using var lifetime = stream.ConfigureAwait(false);
@@ -254,7 +253,7 @@ internal sealed partial class CookSourceAnalyzer(
     // A material that cannot be read reports its own problem; one that can has each texture checked.
     private async Task<ImmutableArray<DiagnosticRecord>> ValidateMaterialTextureSourcesAsync(ContentCookInput input, CancellationToken cancellationToken)
     {
-        var materialBytes = await CookSavedSourceReader.ReadAsync(documents, input.SourceAbsolutePath.FullPath, cancellationToken).ConfigureAwait(false);
+        var materialBytes = await CookSavedSourceReader.ReadAsync(input.SourceAbsolutePath.FullPath, cancellationToken).ConfigureAwait(false);
         MaterialSource material;
         try
         {

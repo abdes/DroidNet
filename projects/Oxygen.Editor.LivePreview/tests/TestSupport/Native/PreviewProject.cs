@@ -11,7 +11,6 @@ using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.LivePreview.Session;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
@@ -40,7 +39,7 @@ internal sealed partial class PreviewProject : IDisposable
         _ = TestProject.SaveProjectFile(this.Context);
         this.Projects.Activate(this.Context);
         this.coordinator = new ContentCookCoordinator(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
-        this.native = new Oxygen.Testing.NativeContentPipelineFixture(this.Projects, this.coordinator, new CookDocumentRegistry());
+        this.native = new Oxygen.Testing.NativeContentPipelineFixture(this.Projects, this.coordinator);
         this.manager = new ProjectManagerService(new NativeStorageProvider(new RealFileSystem()), atomicFiles: new NativeAtomicFileStore(new RealFileSystem()));
         _ = this.Catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
     }

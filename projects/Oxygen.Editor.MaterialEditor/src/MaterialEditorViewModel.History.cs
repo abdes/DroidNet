@@ -88,9 +88,9 @@ public sealed partial class MaterialEditorViewModel
         }
     }
 
-    private bool CanUndo() => this.acceptsInput && !this.isDisposed && !this.isClosing && this.edits.CanUndo(this.document);
+    private bool CanUndo() => this.acceptsInput && !this.isDisposed && !this.isClosing && MaterialEdits.CanUndo(this.document);
 
-    private bool CanRedo() => this.acceptsInput && !this.isDisposed && !this.isClosing && this.edits.CanRedo(this.document);
+    private bool CanRedo() => this.acceptsInput && !this.isDisposed && !this.isClosing && MaterialEdits.CanRedo(this.document);
 
     [RelayCommand(CanExecute = nameof(CanUndo))]
     private Task UndoAsync() => this.ApplyHistoryAsync(undo: true);
@@ -131,7 +131,7 @@ public sealed partial class MaterialEditorViewModel
             {
                 _ = this.ApplyOwnEdit(() =>
                 {
-                    this.edits.CompleteEditSession(this.document, session, commit);
+                    MaterialEdits.CompleteEditSession(this.document, session, commit);
                     return new MaterialEditResult(Succeeded: true, OperationId: null);
                 });
                 if (!this.isDisposed)

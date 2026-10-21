@@ -11,6 +11,12 @@ namespace Oxygen.Editor.World.Documents;
 /// </summary>
 public sealed partial class SceneDocumentLifetime
 {
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Failed to persist last opened scene {SceneName} for project {ProjectName}.")]
-    private partial void LogSceneUsageUpdateFailed(Exception exception, string sceneName, string projectName);
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Failed to persist last opened scene {SceneName} for project {ProjectName}.")]
+    private static partial void LogSceneUsageUpdateFailed(ILogger logger, Exception exception, string sceneName, string projectName);
+
+    private void LogSceneUsageUpdateFailed(Exception exception, string sceneName, string projectName)
+        => LogSceneUsageUpdateFailed(this.logger, exception, sceneName, projectName);
 }

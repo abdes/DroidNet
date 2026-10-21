@@ -4,18 +4,18 @@
 
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Relocation;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Core.Diagnostics;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Assets;
 
@@ -33,14 +33,12 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     private readonly IProjectCookScopeProvider projectCookScopeProvider;
     private readonly AssetIdentityReducer reducer = new();
     private readonly IAssetCookStatusReader cookStatus;
-    private readonly ICookDocumentRegistry documents;
+    private readonly IUnsavedDocuments documents;
     private readonly ICookRunService cooks;
     private readonly IAssetRelocationService relocation;
     private readonly IAssetAuthoring authoring;
     private readonly IAssetRuntimeStatusSource runtimeStatus;
     private readonly BehaviorSubject<IReadOnlyList<AssetEntry>> items = new([]);
-    private readonly IDisposable changesSubscription;
-    private readonly IDisposable projectSubscription;
     private readonly ILogger<AssetFeed> logger;
     private readonly CancellationTokenSource lifetime = new();
     private bool disposed;
@@ -50,7 +48,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     /// <param name="projectContextService">The active project lifetime.</param>
     /// <param name="projectCookScopeProvider">The published mount paths.</param>
     /// <param name="cookStatus">The cook-owned freshness reader.</param>
-    /// <param name="documents">Live authoring-state notifications.</param>
+    /// <param name="documents">The open documents with unsaved changes.</param>
     /// <param name="cooks">Cook progress and completion notifications.</param>
     /// <param name="runtimeStatus">The preview's acknowledged content and asset request outcomes.</param>
     /// <param name="relocation">Reports the files that relocations, copies and deletes changed.</param>
@@ -61,7 +59,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         IProjectContextService projectContextService,
         IProjectCookScopeProvider projectCookScopeProvider,
         IAssetCookStatusReader cookStatus,
-        ICookDocumentRegistry documents,
+        IUnsavedDocuments documents,
         ICookRunService cooks,
         IAssetRuntimeStatusSource runtimeStatus,
         IAssetRelocationService relocation,
@@ -76,7 +74,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     /// <param name="projectContextService">The active project lifetime.</param>
     /// <param name="projectCookScopeProvider">The published mount paths.</param>
     /// <param name="cookStatus">The cook-owned freshness reader.</param>
-    /// <param name="documents">Live authoring-state notifications.</param>
+    /// <param name="documents">The open documents with unsaved changes.</param>
     /// <param name="cooks">Cook progress and completion notifications.</param>
     /// <param name="runtimeStatus">The preview's acknowledged content and asset request outcomes.</param>
     /// <param name="relocation">Reports the files that relocations, copies and deletes changed.</param>
@@ -87,7 +85,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         IProjectContextService projectContextService,
         IProjectCookScopeProvider projectCookScopeProvider,
         IAssetCookStatusReader cookStatus,
-        ICookDocumentRegistry documents,
+        IUnsavedDocuments documents,
         ICookRunService cooks,
         IAssetRuntimeStatusSource runtimeStatus,
         IAssetRelocationService relocation,
@@ -104,11 +102,9 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         this.relocation = relocation;
         this.authoring = authoring;
         this.logger = logger ?? NullLogger<AssetFeed>.Instance;
-        this.changesSubscription = this.catalog.Changes
-            .Subscribe(_ => this.OnCatalogChanged());
-        this.projectSubscription = this.projectContextService.ProjectChanged.Skip(1)
-            .Subscribe(_ => this.OnProjectChanged());
-        this.documents.StateChanged += this.OnDocumentStateChanged;
+        this.catalog.Changes.Subscribe(_ => this.OnCatalogChanged(), this.lifetime.Token);
+        this.projectContextService.ProjectChanged.Skip(1).Subscribe(_ => this.OnProjectChanged(), this.lifetime.Token);
+        this.documents.Changed += this.OnUnsavedDocumentsChanged;
         this.cooks.RunChanged += this.OnCookRunChanged;
         this.cookStatus.Changed += this.OnFreshnessChanged;
         this.runtimeStatus.Changed += this.OnRuntimeStatusChanged;
@@ -149,6 +145,7 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
             }
 
             project = active;
+
             // The engine publishes its content changes asynchronously: the row takes the preview's state as it is now.
             if (this.items.Value.Find(identity) is { } match)
             {
@@ -172,38 +169,13 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     }
 
     /// <inheritdoc />
-    public void Dispose()
-    {
-        lock (this.refreshSync)
-        {
-            if (this.disposed)
-            {
-                return;
-            }
-
-            this.disposed = true;
-            this.scanCancellation?.Cancel();
-            this.lifetime.Cancel();
-            this.lifetime.Dispose();
-            _ = this.refreshCompletion?.TrySetCanceled(new CancellationToken(canceled: true));
-            this.items.Dispose();
-        }
-
-        this.changesSubscription.Dispose();
-        this.projectSubscription.Dispose();
-        this.documents.StateChanged -= this.OnDocumentStateChanged;
-        this.cooks.RunChanged -= this.OnCookRunChanged;
-        this.cookStatus.Changed -= this.OnFreshnessChanged;
-        this.runtimeStatus.Changed -= this.OnRuntimeStatusChanged;
-        this.relocation.FilesChanged -= this.OnEditorFilesChanged;
-        this.authoring.FilesChanged -= this.OnEditorFilesChanged;
-    }
+    public void Dispose() => this.Close();
 
     /// <summary>Cancels discovery and waits until its retained publication readers have drained.</summary>
     /// <returns>Completion after background refresh releases its resources.</returns>
     public async ValueTask DisposeAsync()
     {
-        this.Dispose();
+        this.Close();
         Task? pending;
         lock (this.refreshSync)
         {
@@ -223,9 +195,9 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         {
             CookStatus = state,
             CookedPath = item.CookedMetadata is not null ? item.CookedPath : ResolvePublishedOutputPath(item, state),
-            DiagnosticCodes = item.DiagnosticCodes.Where(code => !string.Equals(code, AssetIdentityDiagnosticCodes.CookedMissing, StringComparison.Ordinal)
+            DiagnosticCodes = [.. item.DiagnosticCodes.Where(code => !string.Equals(code, AssetIdentityDiagnosticCodes.CookedMissing, StringComparison.Ordinal)
                     || (state.OutputAvailability == CookedOutputAvailability.Missing && state.HasPublishedOutput))
-                .Concat(state.Diagnostics.Select(static diagnostic => diagnostic.Code)).Distinct(StringComparer.Ordinal).ToArray(),
+                .Concat(state.Diagnostics.Select(static diagnostic => diagnostic.Code)).Distinct(StringComparer.Ordinal)],
             PrimaryState = state.Freshness == AssetCookFreshness.Unknown ? item.PrimaryState : state.Freshness switch
             {
                 AssetCookFreshness.MissingSource => AssetState.Missing,
@@ -244,6 +216,32 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
     private static FileSystemPath? TryResolveSourcePath(ProjectContext project, AssetPath path)
         => project.Find(path) is { MountKind: ProjectMountKind.Authoring, IsMountRoot: false } location ? location.File : null;
 
+    // Cancelling the lifetime also ends the catalog and project subscriptions.
+    private void Close()
+    {
+        lock (this.refreshSync)
+        {
+            if (this.disposed)
+            {
+                return;
+            }
+
+            this.disposed = true;
+            this.scanCancellation?.Cancel();
+            this.lifetime.Cancel();
+            this.lifetime.Dispose();
+            _ = this.refreshCompletion?.TrySetCanceled(new CancellationToken(canceled: true));
+            this.items.Dispose();
+        }
+
+        this.documents.Changed -= this.OnUnsavedDocumentsChanged;
+        this.cooks.RunChanged -= this.OnCookRunChanged;
+        this.cookStatus.Changed -= this.OnFreshnessChanged;
+        this.runtimeStatus.Changed -= this.OnRuntimeStatusChanged;
+        this.relocation.FilesChanged -= this.OnEditorFilesChanged;
+        this.authoring.FilesChanged -= this.OnEditorFilesChanged;
+    }
+
     private async Task<IReadOnlyList<AssetEntry>> ApplyCookStatusAsync(
         ProjectContext project,
         IReadOnlyList<AssetEntry> source,
@@ -251,9 +249,9 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
         Oxygen.Editor.ContentPipeline.Publication.ICookPublicationReadLease? publication = null,
         string? publicationError = null)
     {
-        source = source.Select(item => item.Kind == AssetKind.ForeignSource && item.SourcePath is { } path
+        source = [.. source.Select(item => item.Kind == AssetKind.ForeignSource && item.SourcePath is { } path
             && project.FileSystem.File.Exists(path.FullPath + Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.SidecarSuffix)
-                ? item with { ImportSource = item.Identity, ImportSourcePath = path } : item).ToArray();
+                ? item with { ImportSource = item.Identity, ImportSourcePath = path } : item)];
         var candidates = source.Where(item => item.ImportSource is not null
             || (item.DescriptorPath is not null && item.Kind is AssetKind.Material or AssetKind.Geometry or AssetKind.Scene or AssetKind.Texture)
             || IsProjectCookedOutput(publication?.ProjectRoots.Values ?? [], item)).ToArray();
@@ -274,9 +272,9 @@ public sealed partial class AssetFeed : IAssetFeed, IDisposable, IAsyncDisposabl
                 Message = publicationError,
             };
             var affected = candidates.Select(static item => item.Identity).ToHashSet();
-            return source.Select(item => affected.Contains(item.Identity)
-                ? ApplyCookStatus(item, new(item.Identity, AssetCookFreshness.Unknown, false, CookedOutputAvailability.Unknown, [], [], [diagnostic]))
-                : item).ToArray();
+            return [.. source.Select(item => affected.Contains(item.Identity)
+                ? ApplyCookStatus(item, new(item.Identity, AssetCookFreshness.Unknown, HasPublishedOutput: false, CookedOutputAvailability.Unknown, [], [diagnostic]))
+                : item)];
         }
 
         var read = publication is null ? this.cookStatus.ReadAsync(project, identities, cancellationToken)

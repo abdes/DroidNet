@@ -9,7 +9,6 @@ using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.UI;
 using Oxygen.Editor.ContentPipeline.Relocation;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.MaterialEditor;
 using Oxygen.Editor.Materials.Documents;
@@ -66,10 +65,8 @@ public partial class WorkspaceViewModel
         childContainer.Register<DocumentAreaViewModel>(Reuse.Singleton);
         childContainer.Register<DocumentAreaView>(Reuse.Singleton);
 
-        // The cook knows every open document from the moment it opens.
-        childContainer.RegisterDelegate(
-            resolver => new OpenDocumentCookInputs(resolver.Resolve<OpenDocuments>(), resolver.Resolve<ICookDocumentRegistry>()),
-            Reuse.Singleton);
+        // The cook, Play, relocations and the asset feed ask which documents are unsaved.
+        childContainer.Register<IUnsavedDocuments, UnsavedDocuments>(Reuse.Singleton);
     }
 
     // The prompts, confirmations and input of the window, which act on it without features naming it.

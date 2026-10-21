@@ -38,14 +38,13 @@ internal sealed class AssetIdentityReducer
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(cookScope);
 
-        return records
+        return [.. records
             .Where(static record => IsBrowsableRecord(record.Identity))
             .GroupBy(static record => record.Cooked is null ? AssetFileTypes.ToIdentity(record.Identity) : record.Identity)
-            .Select(group => this.CreateItem(group.Key, group.ToList(), project))
+            .Select(group => this.CreateItem(group.Key, [.. group], project))
             .OfType<AssetEntry>()
             .Where(item => IsIncluded(item, includeMissing))
-            .OrderBy(static item => item.DisplayPath, StringComparer.OrdinalIgnoreCase)
-            .ToList();
+            .OrderBy(static item => item.DisplayPath, StringComparer.OrdinalIgnoreCase)];
     }
 
     /// <summary>Resolves a descriptor path only when it stays inside its indexed root.</summary>
@@ -245,7 +244,7 @@ internal sealed class AssetIdentityReducer
         return canRead;
     }
 
-    private (AssetState primary, AssetState? derived) ReadDescriptorState(IFileSystem fileSystem, FileSystemPath? descriptorPath, FileSystemPath? cookedPath, List<string> diagnostics)
+    private (AssetState Primary, AssetState? Derived) ReadDescriptorState(IFileSystem fileSystem, FileSystemPath? descriptorPath, FileSystemPath? cookedPath, List<string> diagnostics)
     {
         if (descriptorPath is null || !fileSystem.File.Exists(descriptorPath.FullPath) || !this.CanReadMaterialDescriptor(fileSystem, descriptorPath))
         {

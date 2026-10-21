@@ -20,7 +20,7 @@ namespace Oxygen.Editor.Assets.Unit.Tests;
 /// <param name="projectRoot">The project's root folder.</param>
 internal sealed class FakeCookPublication(Guid projectId, FileSystemPath projectRoot) : ICookPublicationReader
 {
-    private Selection current = new(null, [], ImmutableDictionary<string, FileSystemPath>.Empty);
+    private Selection current = new(PublicationId: null, [], ImmutableDictionary<string, FileSystemPath>.Empty);
 
     /// <summary>Gets the project the publication belongs to.</summary>
     public Guid ProjectId { get; } = projectId;

@@ -19,9 +19,8 @@ namespace Oxygen.Editor.ContentPipeline.Cooking;
 /// <summary>Turns the asset catalog's changes into automatic cooks of the changed sources, through the shared cook writer and run history.</summary>
 /// <remarks>
 /// A change to a cookable source under an authoring mount opens a quiet window, which each further change restarts, up
-/// to <see cref="QuietWindowLimit"/> after the first change. When it closes, a run waiting for one of the changed
-/// sources to be saved resumes. The other sources wait for the next automatic run, which starts once the project
-/// writer is idle, so no cook, import or relocation is half done. Sources from every window that closes while it
+/// to <see cref="QuietWindowLimit"/> after the first change. When it closes, the changed sources wait for the next
+/// automatic run, which starts once the project writer is idle, so no cook, import or relocation is half done. Sources from every window that closes while it
 /// waits join it, and so do those that change while an automatic run cooks: there is one automatic run at a time, and
 /// a running one is never interrupted by changes. When it starts, while Cook on change is on, it covers each waiting
 /// source whose published output does not match what is on disk; a cook that ran after the change, such as Play's,
@@ -54,7 +53,7 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     private readonly TimeProvider time;
     private readonly ILogger<AutomaticCookService> logger;
     private readonly Lock sync = new();
-    private readonly Dictionary<AssetPath, string> changed = [];
+    private readonly HashSet<AssetPath> changed = [];
     private readonly HashSet<AssetPath> waiting = [];
     private readonly Dictionary<AssetPath, AssetPath[]> skipped = [];
     private readonly ITimer window;
@@ -160,15 +159,10 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
 
     // A source name the catalog reports for a cooked record resolves to the same source; only a change to the source
     // file itself, an authored descriptor or a script, is cooked.
-    private static bool TryResolveSource(ProjectContext project, AssetPath uri, [NotNullWhen(true)] out string? source)
-    {
-        source = project.AuthoringMounts.Any(mount => !ProjectOutputFolders.Contains(mount) && string.Equals(mount.Name, uri.Mount, StringComparison.Ordinal))
+    private static bool IsCookableSource(ProjectContext project, AssetPath uri)
+        => project.AuthoringMounts.Any(mount => !ProjectOutputFolders.Contains(mount) && string.Equals(mount.Name, uri.Mount, StringComparison.Ordinal))
             && project.Find(uri) is { IsMountRoot: false } location
-            && (ContentPipelineService.IsCookableDescriptorFile(project, location.File.FullPath) || AssetFileTypes.Is(uri.Name, AssetFileCategory.Script))
-                ? location.File.FullPath
-                : null;
-        return source is not null;
-    }
+            && (ContentPipelineService.IsCookableDescriptorFile(project, location.File.FullPath) || AssetFileTypes.Is(uri.Name, AssetFileCategory.Script));
 
     // The other sources in a source's dependency closure, as the catalog names them.
     private static AssetPath[] UsedSources(ProjectContext project, AssetPath source, AssetCookStatus status)
@@ -249,13 +243,13 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
     private void Note(ProjectContext current, AssetPath uri)
     {
         _ = this.skipped.Remove(uri);
-        if (!TryResolveSource(current, uri, out var source))
+        if (!IsCookableSource(current, uri))
         {
             this.LogChangeIgnored(uri);
             return;
         }
 
-        this.changed[uri] = source;
+        _ = this.changed.Add(uri);
         var now = this.time.GetTimestamp();
         if (!this.windowOpen)
         {
@@ -269,8 +263,6 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
 
     private void CloseWindow()
     {
-        KeyValuePair<AssetPath, string>[] closed;
-        ProjectContext current;
         lock (this.sync)
         {
             if (this.disposed || this.project is null || !this.windowOpen)
@@ -279,25 +271,8 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
             }
 
             this.windowOpen = false;
-            closed = [.. this.changed];
+            this.waiting.UnionWith(this.changed);
             this.changed.Clear();
-            current = this.project;
-        }
-
-        var resumed = closed.Where(item => this.ResumeWaitingRuns(current, item.Value)).Select(static item => item.Key).ToHashSet();
-        if (resumed.Count != 0)
-        {
-            this.LogResumedWaitingRuns(resumed.Count);
-        }
-
-        lock (this.sync)
-        {
-            if (this.disposed || !ReferenceEquals(current, this.project))
-            {
-                return;
-            }
-
-            this.waiting.UnionWith(closed.Select(static item => item.Key).Where(asset => !resumed.Contains(asset)));
             if (this.waiting.Count == 0 || this.draining)
             {
                 return;
@@ -540,17 +515,5 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
         {
             this.LogSchedulingFailure(exception, changes.Sources.Count);
         }
-    }
-
-    private bool ResumeWaitingRuns(ProjectContext current, string source)
-    {
-        var resumed = false;
-        foreach (var run in this.runs.Runs.Where(run => run.ProjectId == current.ProjectId && run.State == CookRunState.NeedsSave
-            && run.UnsavedDocuments.Any(document => document.SourcePath == FileSystemPath.From(source))))
-        {
-            resumed |= this.runs.ResumeAfterSave(run.OperationId);
-        }
-
-        return resumed;
     }
 }

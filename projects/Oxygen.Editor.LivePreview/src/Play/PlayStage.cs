@@ -7,9 +7,6 @@ namespace Oxygen.Editor.LivePreview.Play;
 /// <summary>The step of Play that failed.</summary>
 public enum PlayStage
 {
-    /// <summary>Saving the open documents, or a document that stayed unsaved.</summary>
-    Save,
-
     /// <summary>Cooking the scene.</summary>
     Cook,
 

@@ -23,7 +23,7 @@ public sealed partial class AssetFeedTests
     public void UnknownOutputAvailabilityDoesNotClaimDamage()
     {
         var status = new AssetCookStatus(AssetPath.Parse("/Content/Material.omat"), AssetCookFreshness.Current,
-            HasPublishedOutput: true, CookedOutputAvailability.Unknown, [], [], []);
+            HasPublishedOutput: true, CookedOutputAvailability.Unknown, [], []);
         _ = AssetStatusText.GetText(status, activity: null).Should().Be("Status pending");
         _ = AssetStatusText.GetTone(status, activity: null).Should().Be("Neutral");
         _ = AssetStatusText.GetDescription(status, activity: null).Should().NotContain("damaged");
@@ -46,7 +46,7 @@ public sealed partial class AssetFeedTests
         WriteMaterial(workspace.SourcePath("Content/Materials/Red.omat.json"));
         var source = AssetPath.Parse("/Content/Materials/Red.omat.json");
         var catalog = new TestProjectAssetCatalog([new AssetRecord(source)]);
-        var state = new AssetCookStatus(AssetPath.Parse("/Content/Materials/Red.omat"), freshness, published, verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []);
+        var state = new AssetCookStatus(AssetPath.Parse("/Content/Materials/Red.omat"), freshness, published, verified ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], []);
         var reader = new DelegateStatusReader((_, _, _) => Task.FromResult<IReadOnlyList<AssetCookStatus>>([state]));
         using var provider = AssetFeeds.Create(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader);
         IReadOnlyList<AssetEntry> rows = [];

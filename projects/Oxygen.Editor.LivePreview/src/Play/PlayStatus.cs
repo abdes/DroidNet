@@ -25,7 +25,7 @@ public sealed record PlayStatus(
     public static PlayStatus Idle { get; } = new(PlayActivity.Idle);
 
     /// <summary>Gets a value indicating whether a Play is on its way to a session.</summary>
-    public bool IsBusy => this.Activity is PlayActivity.Saving or PlayActivity.Cooking or PlayActivity.StartingPlayer or PlayActivity.LoadingScene;
+    public bool IsBusy => this.Activity is PlayActivity.Cooking or PlayActivity.StartingPlayer or PlayActivity.LoadingScene;
 
     /// <summary>Gets a value indicating whether a session runs.</summary>
     public bool IsRunning => this.Activity is PlayActivity.Playing or PlayActivity.Paused;

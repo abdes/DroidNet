@@ -67,9 +67,16 @@ internal sealed class Notes : IDisposable
 
     internal sealed class NoteContent : IDocumentContent
     {
-        public bool HasEditsInProgress => false;
+        /// <summary>Gets or sets whether text is being typed, which finishing the edits ends.</summary>
+        public bool Pending { get; set; }
 
-        public Task FinishEditsAsync(CancellationToken cancellationToken) => Task.CompletedTask;
+        public bool HasEditsInProgress => this.Pending;
+
+        public Task FinishEditsAsync(CancellationToken cancellationToken)
+        {
+            this.Pending = false;
+            return Task.CompletedTask;
+        }
 
         public DocumentCapture Capture() => DocumentCapture.Of(_ => Task.FromResult<ReadOnlyMemory<byte>>(Encoding.UTF8.GetBytes("saved")));
 

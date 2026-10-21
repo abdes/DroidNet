@@ -4,7 +4,6 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
@@ -89,82 +88,6 @@ public sealed class SavedSourceCookTests
         _ = (await cook.ConfigureAwait(false)).Status.Should().Be(OperationStatus.Succeeded);
         _ = VersionOf(generator.Scene!).Should().Be("Latest saved");
         _ = VersionOf(workspace.Scene).Should().Be("New unsaved edits");
-    }
-
-    /// <summary>Changed saved files require acknowledgement even when the document is not dirty.</summary>
-    /// <param name="material">Whether to exercise material descriptor preparation.</param>
-    /// <returns>The asynchronous test operation.</returns>
-    [TestMethod]
-    [DataRow(false)]
-    [DataRow(true)]
-    public async Task UnacknowledgedExternalChangeFailsBeforeNativeImport(bool material)
-    {
-        using var workspace = new CookWorkspace();
-        var relative = material ? "Content/Materials/Red.omat.json" : "Content/Scenes/Main.oscene.json";
-        if (material)
-        {
-            workspace.WriteMaterial(relative, "Red");
-        }
-        else
-        {
-            await workspace.WriteSceneAsync(relative).ConfigureAwait(false);
-        }
-
-        var path = Path.Combine(workspace.Root, relative);
-        var state = SavedState(path);
-        using var registration = workspace.Documents.Register(FileSystemPath.From(path), _ => Task.FromResult<CookDocumentReadLease?>(new(state, static () => { })));
-        await File.AppendAllTextAsync(path, " ", this.TestContext.CancellationToken).ConfigureAwait(false);
-        var api = CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync);
-        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator([]));
-        var result = material
-            ? await service.CookAssetAsync(AssetPath.Parse("/" + relative), this.TestContext.CancellationToken).ConfigureAwait(false)
-            : await service.CookCurrentSceneAsync(AssetPath.Parse("/" + relative), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = result.Status.Should().Be(OperationStatus.Failed);
-        _ = result.Diagnostics.Should().Contain(diagnostic => diagnostic.Message.Contains("Reload", StringComparison.Ordinal));
-
-        _ = api.ImportedManifest.Should().BeNull();
-        _ = workspace.CookCoordinator.Runs.Single().State.Should().Be(CookRunState.Failed);
-    }
-
-    /// <summary>A document becoming dirty after the initial check is rechecked under the actual source read lease.</summary>
-    /// <returns>The asynchronous test operation.</returns>
-    [TestMethod]
-    public async Task SceneBecomingDirtyBeforeReadWaitsForExplicitSaveAndResume()
-    {
-        using var workspace = new CookWorkspace();
-        const string relative = "Content/Scenes/Main.oscene.json";
-        await workspace.WriteSceneAsync(relative).ConfigureAwait(false);
-        var path = Path.Combine(workspace.Root, relative);
-        var state = SavedState(path);
-        var acquireCount = 0;
-        using var registration = workspace.Documents.Register(FileSystemPath.From(path), _ =>
-        {
-            if (++acquireCount == 2)
-            {
-                state = state with { IsDirty = true };
-            }
-
-            return Task.FromResult<CookDocumentReadLease?>(new(state, static () => { }));
-        });
-        var blocked = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);
-        workspace.CookCoordinator.RunChanged += (_, args) =>
-        {
-            if (args.Run.State == CookRunState.NeedsSave)
-            {
-                _ = blocked.TrySetResult(args.Run.OperationId);
-            }
-        };
-        var generator = new CapturingSceneDescriptorGenerator([]);
-        var service = CreateService(workspace, CreateSuccessfulApi(workspace, ControlledSourceAnalysis.AnalyzeAsync), generator);
-        var cook = service.CookCurrentSceneAsync(AssetPath.Parse("/" + relative), this.TestContext.CancellationToken);
-        var runId = await blocked.Task.WaitAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = generator.Scene.Should().BeNull();
-        MarkVersion(workspace, "Explicitly saved");
-        await workspace.WriteSceneAsync(relative).ConfigureAwait(false);
-        state = SavedState(path);
-        _ = workspace.CookCoordinator.ResumeAfterSave(runId).Should().BeTrue();
-        _ = (await cook.ConfigureAwait(false)).Status.Should().Be(OperationStatus.Succeeded);
-        _ = VersionOf(generator.Scene!).Should().Be("Explicitly saved");
     }
 
     // The scene's name is its file name, so a root node tells one saved version from another.

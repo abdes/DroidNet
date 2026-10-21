@@ -57,8 +57,9 @@ public partial class ProjectLayoutViewModel
         var before = this.GetVirtualPath(folder);
         if (relocation is not null && before is not null)
         {
-            var request = new AssetRelocationRequest { Moves = [new(before, RelocationPaths.Rename(before, name, isFolder: true))] };
-            this.LogFolderRenameRequested(before, request.Moves[0].Target);
+            var target = RelocationPaths.Rename(before, name, isFolder: true);
+            var request = new AssetRelocationRequest { Moves = [new(before, target)] };
+            this.LogFolderRenameRequested(before, target);
             var outcome = await relocation.RelocateAsync(request, "Rename folder").ConfigureAwait(true);
             return outcome switch
             {

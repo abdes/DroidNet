@@ -6,6 +6,7 @@ using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Shell.Contributions;
@@ -21,6 +22,11 @@ namespace Oxygen.Editor.MaterialEditor;
 /// <param name="cook">Cooks a material on request.</param>
 /// <param name="projects">The active project.</param>
 /// <param name="inputCommitter">Commits the focused control's input before a save.</param>
+/// <param name="documents">
+/// The window's document service, which saves the documents a cook reads after asking. It creates the editors, so it is
+/// reached once an editor is created.
+/// </param>
+/// <param name="unsavedInputs">Finds the unsaved documents a cook reads.</param>
 /// <param name="loggerFactory">The logger factory, if any.</param>
 public sealed class MaterialEditorProvider(
     MaterialDocumentKind kind,
@@ -30,10 +36,12 @@ public sealed class MaterialEditorProvider(
     IMaterialCookService cook,
     IProjectContextService projects,
     IDocumentInputCommitter inputCommitter,
+    Lazy<IDocumentService> documents,
+    IUnsavedCookInputs unsavedInputs,
     ILoggerFactory? loggerFactory = null) : IDocumentEditorProvider
 {
     /// <inheritdoc/>
     public DocumentEditorDescriptor Editor { get; } = new(
         kind,
-        tab => new MaterialEditorViewModel(tab, edits, assets, hosting.DispatcherScheduler, cook, projects, loggerFactory, inputCommitter));
+        tab => new MaterialEditorViewModel(tab, edits, assets, hosting.DispatcherScheduler, cook, projects, loggerFactory, inputCommitter, documents.Value, unsavedInputs));
 }

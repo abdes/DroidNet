@@ -228,7 +228,7 @@ public sealed partial class SceneContentDemandTests
         private static AssetEntry Entry(AssetPath asset, AssetCookFreshness freshness)
             => new(asset, asset.Name, asset.VirtualPath.Contains("/Materials/", StringComparison.Ordinal) ? AssetKind.Material : AssetKind.Geometry, AssetState.Descriptor, DerivedState: null, AssetRuntimeAvailability.NotMounted, asset.VirtualPath, SourcePath: null, DescriptorPath: FileSystemPath.From(@"C:\LivePreviewTests\Content").Combine(asset.RelativePath + AssetPath.AuthoringSuffix), CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
             {
-                CookStatus = new(asset, freshness, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
+                CookStatus = new(asset, freshness, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], []),
             };
     }
 }

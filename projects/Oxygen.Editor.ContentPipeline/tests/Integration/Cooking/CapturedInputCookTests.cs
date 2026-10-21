@@ -6,7 +6,6 @@ using System.Text.Json;
 using System.Text.Json.Nodes;
 using AwesomeAssertions;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -153,35 +152,6 @@ public sealed class CapturedInputCookTests
         _ = workspace.ReadText(source).Should().Be(authored);
     }
 
-    /// <summary>Later unsaved edits remain dirty while a captured cook succeeds as a historical result.</summary>
-    /// <returns>The asynchronous snapshot test.</returns>
-    [TestMethod]
-    public async Task LaterDirtyDocumentDoesNotBlockCapturedCookOrBecomeClean()
-    {
-        using var workspace = new CookWorkspace();
-        const string source = "Content/Materials/Red.omat.json";
-        workspace.WriteMaterial(source, "Red");
-        var state = SavedState(Path.Combine(workspace.Root, source));
-        using var registration = workspace.Documents.Register(state.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(state, static () => { })));
-        var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), SucceededInspection(workspace))
-        {
-            BeforeImport = (_, _) =>
-            {
-                state = state with { IsDirty = true };
-                return Task.CompletedTask;
-            },
-            SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
-        };
-        var service = CreateService(workspace, api, new CapturingSceneDescriptorGenerator([]));
-
-        var result = await service.CookAssetAsync(AssetPath.Parse("/" + source[..^5]), this.TestContext.CancellationToken).ConfigureAwait(false);
-
-        _ = result.Status.Should().Be(OperationStatus.Succeeded);
-        _ = result.InputSnapshot!.Documents.Should().ContainSingle();
-        _ = result.InputsAreCurrent.Should().BeFalse();
-        _ = state.IsDirty.Should().BeTrue();
-    }
-
     /// <summary>The material facade keeps the shared captured operation and its later-change status.</summary>
     /// <returns>The asynchronous material pipeline test.</returns>
     [TestMethod]
@@ -190,14 +160,12 @@ public sealed class CapturedInputCookTests
         using var workspace = new CookWorkspace();
         const string source = "Content/Materials/Red.omat.json";
         workspace.WriteMaterial(source, "Red");
-        var state = SavedState(Path.Combine(workspace.Root, source));
-        using var registration = workspace.Documents.Register(state.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(state, static () => { })));
         var inspection = SucceededInspection(workspace) with { Assets = [new("/Content/Materials/Red.omat", ContentCookAssetKind.Material)] };
         var api = new CapturingEngineContentPipelineApi(new(workspace.Root, Succeeded: true, []), inspection)
         {
             BeforeImport = (_, _) =>
             {
-                state = state with { IsDirty = true };
+                workspace.WriteText(source, workspace.ReadText(source) + " ");
                 return Task.CompletedTask;
             },
             SourceAnalysis = NativeSourceFactsFixture.AnalyzeAsync,
@@ -213,7 +181,6 @@ public sealed class CapturedInputCookTests
 
         _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
         _ = result.OperationId.Should().Be(workspace.CookCoordinator.Runs.Single().OperationId);
-        _ = state.IsDirty.Should().BeTrue();
     }
 
     /// <summary>An origin mismatch is rechecked after the request obtains the shared writer.</summary>

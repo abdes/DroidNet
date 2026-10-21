@@ -231,7 +231,6 @@ public sealed class CookOrchestrationTests
             new InvalidManifestBuilder(),
             new ContentImportManifestValidator(),
             api,
-            workspace.Documents,
             workspace.Compatibility,
             workspace.Files,
             workspace.Publication,

@@ -438,7 +438,6 @@ public static partial class Program
         container.Register<ContentCookCoordinator>(Reuse.Singleton);
         container.RegisterMapping<IContentCookCoordinator, ContentCookCoordinator>();
         container.RegisterMapping<ContentPipeline.Cooking.ICookRunService, ContentCookCoordinator>();
-        container.Register<ContentPipeline.Snapshots.ICookDocumentRegistry, ContentPipeline.Snapshots.CookDocumentRegistry>(Reuse.Singleton);
         container.RegisterDelegate<IContentPipelineService>(
             resolver => new ContentPipelineService(
             resolver.Resolve<IProjectContextService>(),
@@ -448,7 +447,6 @@ public static partial class Program
             resolver.Resolve<IContentImportManifestBuilder>(),
             resolver.Resolve<IContentImportManifestValidator>(),
             resolver.Resolve<IEngineContentPipelineApi>(),
-            resolver.Resolve<ContentPipeline.Snapshots.ICookDocumentRegistry>(),
             resolver.Resolve<INativeCompatibilityService>(EditorNativeCompatibilityService.CookingServiceKey),
             resolver.Resolve<IAtomicFileStore>(),
             resolver.Resolve<ContentPipeline.Publication.CookPublicationService>(),

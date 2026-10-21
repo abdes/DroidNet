@@ -344,7 +344,7 @@ public sealed partial class ScriptParameterFieldViewModel : ObservableObject
     }
 
     [RelayCommand]
-    private void Reset() => this.Commit(null);
+    private void Reset() => this.Commit(candidate: null);
 
     private void CommitNumbers()
     {

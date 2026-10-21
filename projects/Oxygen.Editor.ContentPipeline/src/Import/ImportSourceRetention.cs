@@ -11,9 +11,8 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.ContentPipeline.Import;
 
 /// <summary>Retains a complete discovered source bundle under the existing project writer and coherent-input contract.</summary>
-/// <param name="documents">Existing document owners and saved-input gates.</param>
 /// <param name="coordinator">The project writer and activation lifetime.</param>
-public sealed class ImportSourceRetention(ICookDocumentRegistry documents, IContentCookCoordinator coordinator)
+public sealed class ImportSourceRetention(IContentCookCoordinator coordinator)
 {
     /// <summary>Captures all discovered dependencies, then installs the new bundle without overwriting an existing source.</summary>
     /// <param name="operation">The operation owning the project writer.</param>
@@ -21,8 +20,8 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
     /// <param name="bundleName">The bundle folder's name inside <paramref name="folder"/>.</param>
     /// <param name="discover">Complete source/dependency discovery, including hashes and preserved relative paths.</param>
     /// <param name="cancellationToken">Cancels capture before the bundle is installed.</param>
-    /// <returns>The retained portable source facts or the participating document blockers.</returns>
-    public async Task<ImportSourceRetentionResult> RetainAsync(
+    /// <returns>The retained portable source facts.</returns>
+    public async Task<RetainedImportSource> RetainAsync(
         ContentCookOperation operation,
         AssetPath folder,
         string bundleName,
@@ -36,8 +35,8 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         var destination = ResolveDestination(operation.Project, folder, bundleName);
         EnsureAvailable(destination);
         string? primary = null;
-        var capture = new CookInputSnapshotCapture(documents, coordinator);
-        var result = await capture.CaptureAsync(
+        var capture = new CookInputSnapshotCapture(coordinator);
+        var snapshot = await capture.CaptureAsync(
             operation,
             async token =>
             {
@@ -47,11 +46,6 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
             },
             buildFingerprint: "Oxygen.SourceRetention/v1",
             cancellationToken).ConfigureAwait(false);
-        if (result.Snapshot is not { } snapshot)
-        {
-            return new(Source: null, result.NeedsSave, result.ExternalChanges);
-        }
-
         cancellationToken.ThrowIfCancellationRequested();
         coordinator.VerifyWriter(operation);
         EnsureAvailable(destination);
@@ -59,12 +53,11 @@ public sealed class ImportSourceRetention(ICookDocumentRegistry documents, ICont
         _ = Directory.CreateDirectory(parent);
         CookOutputLease.RejectReparsePoint(parent);
         Directory.Move(snapshot.InputRoot, destination);
-        var retained = new RetainedImportSource(
+        return new RetainedImportSource(
             Path.GetRelativePath(operation.Project.ProjectRoot.FullPath, destination).Replace('\\', '/'),
             snapshot.Inputs.Single(file => string.Equals(file.RelativePath, primary, FileSystemPath.NameComparison)).RelativePath,
             snapshot.Inputs.Where(static file => file.Kind == CookSnapshotInputKind.File)
                 .Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
-        return new(retained, [], []);
     }
 
     /// <summary>Resolves the bundle folder a model is imported into: <paramref name="bundleName"/> in the chosen folder.</summary>

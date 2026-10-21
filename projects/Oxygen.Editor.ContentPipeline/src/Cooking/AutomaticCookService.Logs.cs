@@ -61,15 +61,6 @@ public sealed partial class AutomaticCookService
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "{Count} changed sources were not cooked on their own: each resumed a cook that was waiting for it to be saved.")]
-    private static partial void LogResumedWaitingRuns(ILogger logger, int count);
-
-    private void LogResumedWaitingRuns(int count)
-        => LogResumedWaitingRuns(this.logger, count);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
         Message = "{Count} changed sources were not cooked again: their published output already matches the files.")]
     private static partial void LogAlreadyCooked(ILogger logger, int count);
 

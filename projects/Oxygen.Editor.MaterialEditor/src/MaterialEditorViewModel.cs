@@ -16,6 +16,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Media;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Materials.Documents;
 using Oxygen.Editor.Materials.Properties;
@@ -43,6 +44,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     private readonly ILogger logger;
     private readonly IAssetFeed assets;
     private readonly IDocumentInputCommitter? inputCommitter;
+    private readonly IDocumentService? documents;
+    private readonly IUnsavedCookInputs? unsavedInputs;
     private readonly SemaphoreSlim editGate = new(1, 1);
     private Task<bool>? pendingSave;
     private MaterialContent? observedContent;
@@ -67,6 +70,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     /// textures, read to offer only those with their images.</param>
     /// <param name="loggerFactory">Optional logger factory.</param>
     /// <param name="inputCommitter">Completes the focused numeric control before snapshot capture.</param>
+    /// <param name="documents">Saves the unsaved documents a cook reads, after asking; without it a cook does not ask.</param>
+    /// <param name="unsavedInputs">Finds the unsaved documents a cook reads; without it a cook does not ask.</param>
     public MaterialEditorViewModel(
         DocumentTab tab,
         MaterialEdits edits,
@@ -75,8 +80,12 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         IMaterialCookService cookService,
         IProjectContextService projects,
         ILoggerFactory? loggerFactory = null,
-        IDocumentInputCommitter? inputCommitter = null)
+        IDocumentInputCommitter? inputCommitter = null,
+        IDocumentService? documents = null,
+        IUnsavedCookInputs? unsavedInputs = null)
     {
+        this.documents = documents;
+        this.unsavedInputs = unsavedInputs;
         this.tab = tab ?? throw new ArgumentNullException(nameof(tab));
         this.document = tab.Document.Content is MaterialContent
             ? tab.Document
@@ -158,6 +167,28 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
     [ObservableProperty]
     public partial double RoughnessFactor { get; set; } = 0.5;
 
+    [ObservableProperty]
+    public partial string AlphaMode { get; set; } = "Opaque";
+
+    [ObservableProperty]
+    public partial double AlphaCutoff { get; set; } = 0.5;
+
+    [ObservableProperty]
+    public partial bool DoubleSided { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(CookStatusText))]
+    [NotifyPropertyChangedFor(nameof(CookStatusTone))]
+    [NotifyPropertyChangedFor(nameof(CookStatusDescription))]
+    public partial bool IsDirty { get; set; }
+
+    [ObservableProperty]
+    [NotifyPropertyChangedFor(nameof(StatusMessageVisibility))]
+    public partial string StatusText { get; set; } = string.Empty;
+
+    /// <summary>Gets the visibility of an actionable document message or command acknowledgement.</summary>
+    public Visibility StatusMessageVisibility => string.IsNullOrEmpty(this.StatusText) ? Visibility.Collapsed : Visibility.Visible;
+
     /// <summary>Gets or sets the normal-map scale.</summary>
     public double NormalScale
     {
@@ -184,27 +215,43 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         }
     }
 
-    [ObservableProperty]
-    public partial string AlphaMode { get; set; } = "Opaque";
+    /// <summary>
+    /// Applies a picked base color to the scalar descriptor channels as one edit.
+    /// </summary>
+    /// <param name="color">The linear red, green, blue and alpha channels.</param>
+    public void SetBaseColor(ColorChannels color)
+    {
+        var (r, g, b, a) = (color.Red, color.Green, color.Blue, color.Alpha);
+        if (NearlyEqual(this.BaseColorR, r)
+            && NearlyEqual(this.BaseColorG, g)
+            && NearlyEqual(this.BaseColorB, b)
+            && NearlyEqual(this.BaseColorA, a))
+        {
+            return;
+        }
 
-    [ObservableProperty]
-    public partial double AlphaCutoff { get; set; } = 0.5;
+        this.isApplyingBaseColor = true;
+        try
+        {
+            this.BaseColorR = r;
+            this.BaseColorG = g;
+            this.BaseColorB = b;
+            this.BaseColorA = a;
+        }
+        finally
+        {
+            this.isApplyingBaseColor = false;
+        }
 
-    [ObservableProperty]
-    public partial bool DoubleSided { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(CookStatusText))]
-    [NotifyPropertyChangedFor(nameof(CookStatusTone))]
-    [NotifyPropertyChangedFor(nameof(CookStatusDescription))]
-    public partial bool IsDirty { get; set; }
-
-    [ObservableProperty]
-    [NotifyPropertyChangedFor(nameof(StatusMessageVisibility))]
-    public partial string StatusText { get; set; } = string.Empty;
-
-    /// <summary>Gets the visibility of an actionable document message or command acknowledgement.</summary>
-    public Visibility StatusMessageVisibility => string.IsNullOrEmpty(this.StatusText) ? Visibility.Collapsed : Visibility.Visible;
+        this.OnPropertyChanged(nameof(this.BaseColorBrush));
+        var edit = new PropertyEdit.Builder()
+            .Set(MaterialDescriptors.BaseColorR, (float)r)
+            .Set(MaterialDescriptors.BaseColorG, (float)g)
+            .Set(MaterialDescriptors.BaseColorB, (float)b)
+            .Set(MaterialDescriptors.BaseColorA, (float)a)
+            .Build();
+        this.ApplyEdit(edit);
+    }
 
     /// <inheritdoc />
     public void Dispose()
@@ -217,7 +264,7 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.isDisposed = true;
         this.document.StateChanged -= this.OnDocumentStateChanged;
         this.document.ContentReplaced -= this.OnDocumentContentReplaced;
-        this.ObserveContent(null);
+        this.ObserveContent(content: null);
         this.assetStatusSubscription.Dispose();
         this.assetStatusLifetime.Cancel();
         this.EndEditSession(NumberBoxEditCompletionKind.Cancel);
@@ -265,42 +312,19 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         this.RefreshHistoryCommands();
     }
 
-    /// <summary>
-    /// Applies a picked base color to the scalar descriptor channels as one edit.
-    /// </summary>
-    /// <param name="color">The linear red, green, blue and alpha channels.</param>
-    public void SetBaseColor(ColorChannels color)
+    // A material's GUID is derived from its asset URI, as the cooker derives it.
+    private static Guid GuidOf(AssetPath material)
     {
-        var (r, g, b, a) = (color.Red, color.Green, color.Blue, color.Alpha);
-        if (NearlyEqual(this.BaseColorR, r)
-            && NearlyEqual(this.BaseColorG, g)
-            && NearlyEqual(this.BaseColorB, b)
-            && NearlyEqual(this.BaseColorA, a))
-        {
-            return;
-        }
+        var text = material.ToUriString().ToUpperInvariant();
+        Span<byte> hash = stackalloc byte[32];
+        _ = SHA256.HashData(Encoding.UTF8.GetBytes(text), hash);
 
-        this.isApplyingBaseColor = true;
-        try
-        {
-            this.BaseColorR = r;
-            this.BaseColorG = g;
-            this.BaseColorB = b;
-            this.BaseColorA = a;
-        }
-        finally
-        {
-            this.isApplyingBaseColor = false;
-        }
+        Span<byte> bytes = stackalloc byte[16];
+        hash[..16].CopyTo(bytes);
 
-        this.OnPropertyChanged(nameof(this.BaseColorBrush));
-        var edit = new PropertyEdit.Builder()
-            .Set(MaterialDescriptors.BaseColorR, (float)r)
-            .Set(MaterialDescriptors.BaseColorG, (float)g)
-            .Set(MaterialDescriptors.BaseColorB, (float)b)
-            .Set(MaterialDescriptors.BaseColorA, (float)a)
-            .Build();
-        this.ApplyEdit(edit);
+        bytes[7] = (byte)((bytes[7] & 0x0F) | 0x50);
+        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
+        return new Guid(bytes);
     }
 
     private static bool NearlyEqual(double left, double right)
@@ -443,7 +467,8 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         return !this.IsDirty;
     }
 
-    // The cook reads the saved file; the catalog status shows its result and whether unsaved edits remain.
+    // The cook reads the saved file, so an unsaved material is saved first, after asking; the catalog status shows the
+    // cook's result.
     [RelayCommand]
     private async Task CookAsync()
     {
@@ -452,6 +477,15 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         {
             this.StatusText = "The material is not in the active project and cannot be cooked.";
             return;
+        }
+
+        if (this.documents is { } documents && this.unsavedInputs is { } inputs)
+        {
+            var request = new CookRunRequest(CookTargetKind.Asset, this.document.File.Asset);
+            if (!await documents.SaveBeforeAsync(SaveBeforeOperation.Cook, token => inputs.FindAsync(request, token)).ConfigureAwait(true))
+            {
+                return;
+            }
         }
 
         // An authoring mount's file is named from the project root; a local folder mount's file from its mount.
@@ -477,21 +511,6 @@ public sealed partial class MaterialEditorViewModel : ObservableObject, IAsyncSa
         package.SetText(text);
         Clipboard.SetContent(package);
         this.StatusText = statusText;
-    }
-
-    // A material's GUID is derived from its asset URI, as the cooker derives it.
-    private static Guid GuidOf(AssetPath material)
-    {
-        var text = material.ToUriString().ToUpperInvariant();
-        Span<byte> hash = stackalloc byte[32];
-        _ = SHA256.HashData(Encoding.UTF8.GetBytes(text), hash);
-
-        Span<byte> bytes = stackalloc byte[16];
-        hash[..16].CopyTo(bytes);
-
-        bytes[7] = (byte)((bytes[7] & 0x0F) | 0x50);
-        bytes[8] = (byte)((bytes[8] & 0x3F) | 0x80);
-        return new Guid(bytes);
     }
 
     private void ReadFromContent()

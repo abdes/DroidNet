@@ -102,7 +102,7 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
             catch (Exception ex)
             {
                 // Log the failure, but continue with the rest
-                this.CouldNotLoadProjectFolders(this.Folder.Location, ex.Message);
+                this.CouldNotLoadProjectFolders(this.Folder.Location, ex);
             }
 #pragma warning restore CA1031
             finally
@@ -137,9 +137,4 @@ public partial class FolderTreeItemAdapter : TreeItemAdapter, IDisposable
             this.disposed = true;
         }
     }
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "An error occurred while loading project folders from `{location}`: {error}")]
-    private partial void CouldNotLoadProjectFolders(string location, string error);
 }

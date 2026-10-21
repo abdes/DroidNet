@@ -161,7 +161,7 @@ public sealed class AssetRuleTests
             IsSelectable: selectable);
 
     private static AssetCookStatus Status(AssetPath identity, bool available)
-        => new(identity, available ? AssetCookFreshness.Current : AssetCookFreshness.NeedsCooking, available, available ? CookedOutputAvailability.Present : CookedOutputAvailability.Unknown, [], [], []);
+        => new(identity, available ? AssetCookFreshness.Current : AssetCookFreshness.NeedsCooking, available, available ? CookedOutputAvailability.Present : CookedOutputAvailability.Unknown, [], []);
 
     private static void WriteMaterial(IFileSystem fileSystem, string path, float r, float g, float b, float a)
     {

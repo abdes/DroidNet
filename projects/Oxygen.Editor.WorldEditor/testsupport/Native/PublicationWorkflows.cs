@@ -186,7 +186,6 @@ internal static class PublicationWorkflows
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         var publication = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
         await using var publicationLifetime = publication.ConfigureAwait(true);
-        using var cookInputs = new OpenDocumentCookInputs(fixture.OpenDocuments, services.Documents);
         var materials = new MaterialEdits(new MaterialValidation());
         var material = await CreateMaterialAsync(fixture, "Shared", timeout.Token).ConfigureAwait(true);
         try

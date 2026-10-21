@@ -272,6 +272,11 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             return;
         }
 
+        if (!await this.SaveInputsAsync(SaveBeforeOperation.Cook).ConfigureAwait(true))
+        {
+            return;
+        }
+
         try
         {
             var sceneUri = this.Document.File.Asset;

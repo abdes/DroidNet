@@ -33,7 +33,7 @@ mandatory edit rules it implements, are in
 - [editor-documents.md](editor-documents.md): one history per document, handed
   to the domain code that records into it.
 - [document-kinds.md](document-kinds.md): the common document behavior (reload,
-  relocation, read leases) that `SceneContent` takes part in.
+  relocation) that `SceneContent` takes part in.
 - [live-preview.md](live-preview.md): the preview that projects the change
   stream into the engine.
 - [editor-module-architecture.md](editor-module-architecture.md#72-scenes): the
@@ -486,18 +486,13 @@ batch.
 
 ### 5.13 Reading a document while it is cooked
 
-The cook reads a scene document's file and captures its state; a reload must not
-replace the content during that read. This is a document concern, not an
-authoring one: `Document.AcquireReadLease()` defers content replacement until
-the lease is released. ContentPipeline's open-document cook inputs
-(`OpenDocumentCookInputs`) take a lease while a cook reads the file, and read
-`HasEditsInProgress` with the document's dirty state.
-
-A lease does not defer a save. The cook opens the files it reads with
-`FileShare.Read | FileShare.Delete`: in-place writes stay excluded, and a save's
-atomic replace proceeds. The cook keeps reading the replaced file, whose bytes
-match the saved state it captured under the lease, and the save is a change of
-its own that the cook reads again.
+The cook reads saved files only and holds nothing of an open scene document. It
+opens the files it reads with `FileShare.Read | FileShare.Delete`: in-place
+writes stay excluded, and a save's atomic replace proceeds; the cook keeps
+reading the replaced file, and the save is a change of its own that is cooked
+again. Before an explicit cook or Play, the unsaved documents it reads,
+including one with an edit in progress (`HasEditsInProgress`), are saved after
+asking ([editor-documents.md](editor-documents.md#533-asking-before-play-and-cook)).
 
 ### 5.14 Decoding with the document's identity and history
 
@@ -514,8 +509,8 @@ Task<DocumentDecodeResult> DecodeAsync(
   constructs the `Document` with the same pair; `Document` does not create its
   history. On a failed decode, both are dropped.
 - `Document.ReplaceContentAsync` decodes with its own id and history, takes the
-  new content, clears the history and disposes the replaced content once its
-  read leases are released. The replaced authoring is retired by that dispose;
+  new content, clears the history and disposes the replaced content. The
+  replaced authoring is retired by that dispose;
   the cleared history holds none of its entries.
 - A kind whose content needs neither (material) ignores the context. A kind
   never stores the history beyond the content it decodes.
@@ -661,7 +656,7 @@ These build edits; they are not edits.
 | Scene explorer                                                         | edits and batches, `ValidateAsync`, `Changed`, `UndoAsync`        |
 | Scene editor close and reload                                          | `Document` close and reload; the content disposes the authoring   |
 | Relocation of a referenced asset                                       | nothing in the views; LivePreview (5.12)                          |
-| The cook's open-document inputs                                        | `HasEditsInProgress`, `Document.AcquireReadLease()`               |
+| Unsaved documents before a cook or Play                                | `HasEditsInProgress`, through `IUnsavedDocuments`                 |
 
 The explorer evaluates command enablement synchronously from `CanExecute`; it
 precomputes enablement with `ValidateAsync` when it captures a context and
@@ -730,7 +725,8 @@ unchanged (5.10). Edits round-trip through `SceneEditJson` (5.18).
 ## 11. Live Sync / Cook / Runtime Behavior
 
 Live sync follows the change stream in LivePreview (5.8). The cook reads saved
-files under a read lease and waits for edits in progress (5.13).
+files; an explicit cook or Play saves the unsaved documents it reads first,
+after asking (5.13).
 
 ## 12. Operation Results And Diagnostics
 
@@ -749,8 +745,7 @@ Edits return `SceneEditResult` with coded diagnostics; Scenes posts nothing
 - TimeMachine's `HistoryKeeper.Undo`/`Redo` restore a failed entry and return
   `false` (5.5).
 - Documents creates each document's id and history before decoding and passes
-  them in `DocumentDecodeContext`; `Document.AcquireReadLease()` defers content
-  replacement (5.13, 5.14).
+  them in `DocumentDecodeContext` (5.14).
 - Schemas' descriptors carry no engine mapping.
 
 ## 14. Validation Gates

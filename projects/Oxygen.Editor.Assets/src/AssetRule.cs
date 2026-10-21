@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Frozen;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -26,12 +27,12 @@ namespace Oxygen.Editor.Assets;
 /// </remarks>
 public sealed class AssetRule
 {
-    private static readonly IReadOnlyDictionary<AssetKind, (AssetRule Any, AssetRule Cooked)> Rules
+    private static readonly FrozenDictionary<AssetKind, (AssetRule Any, AssetRule Cooked)> Rules
         = AssetFileTypes.Suffixes(AssetFileCategory.Cooked)
             .Select(static suffix => AssetKinds.FromFileName(suffix))
             .Where(static kind => kind != AssetKind.Unknown)
             .Distinct()
-            .ToDictionary(
+            .ToFrozenDictionary(
                 static kind => kind,
                 static kind => (new AssetRule(kind, cooked: false, referenceable: true), new AssetRule(kind, cooked: true, referenceable: true)));
 
@@ -91,7 +92,7 @@ public sealed class AssetRule
         var accepted = assets.Where(this.Accepts).ToList();
         foreach (var identity in keeping.OfType<AssetPath>())
         {
-            if (accepted.Any(asset => asset.Identity == identity))
+            if (accepted.Exists(asset => asset.Identity == identity))
             {
                 continue;
             }

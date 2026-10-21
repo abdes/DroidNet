@@ -152,7 +152,6 @@ public sealed class ImportReplacementTests
     [TestCategory("NativeContent")]
     [DataRow("source changed")]
     [DataRow("renamed output")]
-    [DataRow("dirty during cook")]
     public async Task ReplacementConflictsPreserveSourceAndOutput(string conflict)
     {
         using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
@@ -183,15 +182,6 @@ public sealed class ImportReplacementTests
             }
 
             var original = await File.ReadAllBytesAsync(primary, this.TestContext.CancellationToken).ConfigureAwait(false);
-            var dirty = false;
-            var state = new global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(FileSystemPath.From(primary), "Model", IsDirty: true, Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(original)));
-            using var registration = workspace.Documents.Register(FileSystemPath.From(primary), _ => Task.FromResult<global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentReadLease?>(dirty ? new(state, static () =>
-{ }) : null));
-            runner.BeforeBatch = () =>
-            {
-                dirty = string.Equals(conflict, "dirty during cook", StringComparison.Ordinal);
-                return Task.CompletedTask;
-            };
             var result = await service.ImportSourceAsync(new(workspace.ProjectContext, incoming, "Model", AssetPath.Parse("/Content/Models")) { Replacement = review }, this.TestContext.CancellationToken).ConfigureAwait(false);
 
             _ = result.Status.Should().Be(OperationStatus.Failed);

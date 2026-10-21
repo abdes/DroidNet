@@ -101,11 +101,12 @@ Content/Geometry/Cube.ogeo.json        # canonical geometry source when authored
 ```
 
 Derived descriptors/manifests never replace authored URI identities. Save owns
-source persistence and acknowledges its captured revision independently of cook.
-Only after successful Save does automatic scheduling consider the saved scope.
-Session pause affects automatic scheduling, not explicit source saving. Browse
-and unsaved edits do not cook. A cook never saves dirty participating documents;
-it reports Needs save through the existing recovery flow.
+source persistence; nothing about cooking slows or fails it. A cook reads the
+saved files on disk and never saves: an explicit cook or Play first asks to save
+the unsaved documents it reads, and cook on change cooks what is saved without
+asking or waiting
+([editor-documents.md](editor-documents.md#533-asking-before-play-and-cook)).
+Browse and unsaved edits do not cook.
 
 The normal Cooking, browser, document and inspector surfaces present phase,
 progress/cancel, current/stale status and actionable failures. Catalog refresh
@@ -614,10 +615,10 @@ qualification borrows its normal publication and read APIs.
   cannot publish independently. One cook/publish operation per project runs at a
   time; a later request waits or can be cancelled, and captures inputs only when
   it obtains the project operation gate.
-- Complete/cancel an active edit gesture first. Reject a cook if any open scene
-  or material document in the dependency closure is dirty. Name the documents
-  and offer the ordinary Save workflow, including explicit Save listed and Cook;
-  never save implicitly. Automatic requests surface Needs save without a modal.
+- Finish an active edit gesture first. An explicit cook or Play asks to save
+  the unsaved documents in its dependency closure before it runs, naming them
+  (Save and Cook, or Cancel); a cook never waits for a save and never saves
+  implicitly. Automatic requests cook what is saved.
 - Resolve the saved dependency closure, including importer settings and source
   media, then capture a coherent byte snapshot under document/read coordination.
   Read participating files through handles that exclude concurrent writes while
@@ -742,26 +743,16 @@ happened. The UI may show Cancelling, but a cancellation token alone is not
 proof that native I/O stopped. Publication is also valid when preview is
 unavailable; no engine startup is required merely to cook saved source.
 
-### Document Read Leases
+### Open Documents
 
-The lease type is owned here; the gate it holds belongs to the document.
-`CookDocumentReadLease` and `CookDocumentState` live in
-`Oxygen.Editor.ContentPipeline/src/Snapshots/` and define the entire contract
-between cooking and an authoring document. The pipeline never inspects or holds
-a document's own state: the document's owner — the scene command service, the
-material document service — supplies the lease by capturing its saved-source
-facts and holding its existing save gate open while the cook reads them.
-Releasing that gate is the lease's `Dispose`, so a panel that needs cook inputs
-registers an acquire callback with `CookDocumentRegistry` instead of keeping
-cook state of its own. Editing a document while a lease is held stays the
-owner's concern: the owner defers or re-requests, and an unsaved preview keeps
-the document dirty without changing what the saved snapshot the lease names. A
-held lease serializes exactly three things and nothing more: the document's own
-save and save-copy operations, which take the same gate, and a scene
-replacement, which drains admitted mutations before swapping the model. Ordinary
-authoring commands — including undo, redo and selection — are not blocked,
-because the lease guards a saved version plus a recorded preview flag, not the
-live document.
+The cook reads files only and holds nothing of an open document. It knows open
+documents through `IUnsavedDocuments` (`Oxygen.Editor.Documents`), which the
+Shell implements: `IUnsavedCookInputs` finds the unsaved documents an explicit
+cook or Play reads, from the target's assets and the assets their saved
+descriptors reference, and the caller asks the Shell to save them before the
+cook starts. The cook opens the files it reads with
+`FileShare.Read | FileShare.Delete`: in-place writes stay excluded, and a save's
+atomic replace proceeds; the save is a change of its own that is cooked again.
 
 ### Result And UI Contract
 
@@ -775,7 +766,7 @@ are not authored identities or required manual repair steps.
 
 ### Publication Validation Gates
 
-- [ ] Dirty dependencies reject capture; later edits do not mutate the captured
+- [ ] A cook captures the saved bytes; later edits do not mutate the captured
       bytes or get cleared by cook completion. Overlapping requests serialize.
 - [ ] Asset/folder recook preserves unrelated published entries and stable
       source/subasset identity; deleted generated subassets are reconciled.

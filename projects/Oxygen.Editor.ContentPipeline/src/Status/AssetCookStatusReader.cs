@@ -17,15 +17,13 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 
 /// <summary>Reads the same input fingerprints and output evidence used by incremental cooking.</summary>
 /// <remarks>
-/// A status describes the source files on disk against the published content. It reads the files directly, without
-/// waiting for an open document's save gate, and reports an open document's unsaved changes beside the status.
+/// A status describes the source files on disk against the published content. It reads the files directly; open
+/// documents and their unsaved changes are not part of it.
 /// </remarks>
-/// <param name="documents">The open documents, whose unsaved changes the status reports.</param>
 /// <param name="publication">The committed metadata verifier.</param>
 /// <param name="nativeCompatibility">The current cooking producer identity.</param>
 /// <param name="engineContent">The engine content pak, the lowest library engine references resolve through.</param>
 public sealed partial class AssetCookStatusReader(
-    ICookDocumentRegistry documents,
     CookPublicationService publication,
     INativeCompatibilityService nativeCompatibility,
     IEngineContentPak engineContent) : IAssetCookStatusReader
@@ -94,14 +92,12 @@ public sealed partial class AssetCookStatusReader(
         var producer = prior.Products.IsEmpty ? NativeProducerObservation.Unknown : nativeCompatibility.Observation;
         var plan = await ReadFreshnessAsync(snapshot, producer.Fingerprint ?? string.Empty, validGraph, prior, cancellationToken).ConfigureAwait(false);
         var changed = await FindChangedInputsAsync(graph.Files, cancellationToken).ConfigureAwait(false);
-        var owners = documents.GetState();
         var products = prior.Products.ToDictionary(static product => product.SourceUri);
         var sourceStatuses = inputs.DistinctBy(static input => input.AssetUri).ToDictionary(static input => input.AssetUri, input => CreateStatus(
             input,
             graph,
             plan,
             products,
-            owners.Documents,
             prior.Products.IsEmpty || producer.Fingerprint is not null,
             producer.Diagnostics,
             metadataUnavailable,
@@ -138,7 +134,6 @@ public sealed partial class AssetCookStatusReader(
             HasPublishedOutput: false,
             CookedOutputAvailability.Unknown,
             [],
-            [],
             [
                 new DiagnosticRecord
                 {
@@ -169,7 +164,6 @@ public sealed partial class AssetCookStatusReader(
         CookDependencyGraph graph,
         FreshnessSnapshot plan,
         Dictionary<AssetPath, CookProvenance.Product> products,
-        ImmutableArray<CookDocumentState> documents,
         bool nativeAvailable,
         IReadOnlyList<DiagnosticRecord> nativeDiagnostics,
         bool metadataUnavailable,
@@ -218,7 +212,6 @@ public sealed partial class AssetCookStatusReader(
             prior is not null,
             availability,
             published,
-            [.. documents.Where(document => document.IsDirty && paths.Contains(document.SourcePath))],
             [.. issues, .. nativeDiagnostics])
         {
             SourcePaths = [.. paths],

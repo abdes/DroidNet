@@ -30,7 +30,7 @@ public sealed partial class AssetFeedTests
         var reader = new DelegateStatusReader((_, _, _) =>
         {
             reads++;
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(identity, identity, Oxygen.Editor.ContentPipeline.ContentCookAssetKind.Material, "Content", "/Content/Materials/Red.omat") { DescriptorRelativePath = "Materials/Red.omat" }], [], []) { OutputRoots = System.Collections.Immutable.ImmutableDictionary<string, FileSystemPath>.Empty.Add("Content", FileSystemPath.From(workspace.SourcePath(".cooked/Content"))) }]);
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [new(identity, identity, Oxygen.Editor.ContentPipeline.ContentCookAssetKind.Material, "Content", "/Content/Materials/Red.omat") { DescriptorRelativePath = "Materials/Red.omat" }], []) { OutputRoots = System.Collections.Immutable.ImmutableDictionary<string, FileSystemPath>.Empty.Add("Content", FileSystemPath.From(workspace.SourcePath(".cooked/Content"))) }]);
         });
         using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]), context, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, runtimeStatus: preview);
         IReadOnlyList<AssetEntry> rows = [];

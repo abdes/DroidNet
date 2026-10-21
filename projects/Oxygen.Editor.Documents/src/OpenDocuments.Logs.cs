@@ -7,16 +7,25 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Documents;
 
-/// <summary>Logging methods for <see cref="OpenDocuments"/>.</summary>
+/// <summary>Logging helpers for <see cref="OpenDocuments"/>.</summary>
 public sealed partial class OpenDocuments
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "Opened {Kind} '{Title}' from '{Path}'.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Opened {Kind} '{Title}' from '{Path}'.")]
     private static partial void LogOpened(ILogger logger, string kind, string title, FileSystemPath path);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Did not open '{Path}': {Problem}")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Did not open '{Path}': {Problem}")]
     private static partial void LogOpenFailed(ILogger logger, FileSystemPath path, string problem);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Closed {Kind} '{Title}'; unsaved edits discarded: {Discarded}.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Closed {Kind} '{Title}'; unsaved edits discarded: {Discarded}.")]
     private static partial void LogClosed(ILogger logger, string kind, string title, bool discarded);
 
     private void LogOpened(string kind, string title, FileSystemPath path) => LogOpened(this.logger, kind, title, path);

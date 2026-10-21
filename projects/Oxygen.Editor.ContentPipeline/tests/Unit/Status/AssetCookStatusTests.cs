@@ -60,23 +60,6 @@ internal sealed partial class AssetCookStatusTests
         _ = Directory.EnumerateDirectories(Path.Combine(project.Root, ".build", "cook")).Should().BeEquivalentTo(operationDirectories);
     }
 
-    /// <summary>Unsaved edits remain separate from the last acknowledged saved product.</summary>
-    /// <returns>The asynchronous dirty-overlay regression.</returns>
-    [TestMethod]
-    public async Task UnsavedDocumentRetainsItsVerifiedSavedOutput()
-    {
-        using var project = new StatusProject();
-        await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var hash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(project.SourcePath, this.TestContext.CancellationToken).ConfigureAwait(false)));
-        var dirty = new CookDocumentState(project.SourceFile, "Material", IsDirty: true, hash);
-        using var registration = project.Documents.Register(project.SourceFile, token => Task.FromResult<CookDocumentReadLease?>(new(dirty, static () => { })));
-        registration.UpdateState(dirty);
-        var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = status.Freshness.Should().Be(AssetCookFreshness.Current);
-        _ = status.HasUnsavedChanges.Should().BeTrue();
-        _ = status.HasAvailableOutput.Should().BeTrue();
-    }
-
     /// <summary>Changed source remains unvalidated until cooking and retains its prior usable output.</summary>
     /// <returns>The asynchronous invalid-source regression.</returns>
     [TestMethod]
@@ -249,23 +232,6 @@ internal sealed partial class AssetCookStatusTests
         _ = status.Diagnostics.Should().BeEmpty();
     }
 
-    /// <summary>A deleted source retains an unsaved owner's identity and prior output facts.</summary>
-    /// <returns>The asynchronous missing-source regression.</returns>
-    [TestMethod]
-    public async Task MissingSourcePreservesDirtyOwnerAndPriorOutput()
-    {
-        using var project = new StatusProject();
-        await project.PublishAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        var dirty = new CookDocumentState(project.SourceFile, "Material", IsDirty: true, new string('A', 64));
-        using var owner = project.Documents.Register(project.SourceFile, _ => Task.FromResult<CookDocumentReadLease?>(new(dirty, static () => { })));
-        owner.UpdateState(dirty);
-        File.Delete(project.SourcePath);
-        var status = await project.ReadAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = status.Freshness.Should().Be(AssetCookFreshness.MissingSource);
-        _ = status.HasUnsavedChanges.Should().BeTrue();
-        _ = status.HasAvailableOutput.Should().BeTrue();
-    }
-
     private sealed partial class StatusProject : IDisposable
     {
         public static readonly AssetPath SourceUri = AssetPath.Parse("/Content/Material.omat");
@@ -298,13 +264,9 @@ internal sealed partial class AssetCookStatusTests
 
         public string SourcePath => Path.Combine(this.Root, "Content", "Material.omat.json");
 
-        public FileSystemPath SourceFile => FileSystemPath.From(this.SourcePath);
-
         public string OutputPath => Path.Combine(this.selectedRoot ?? throw new InvalidOperationException("Publish the fixture first."), "Material.omat");
 
         public ProjectContext Project { get; }
-
-        public CookDocumentRegistry Documents { get; } = new();
 
         public static string CreateMaterialJson(float roughness)
         {
@@ -319,7 +281,7 @@ internal sealed partial class AssetCookStatusTests
         }
 
         public AssetCookStatusReader CreateReader(INativeCompatibilityService? compatibility = null)
-            => new(this.Documents, this.publication, compatibility ?? this.native, this.engineContent);
+            => new(this.publication, compatibility ?? this.native, this.engineContent);
 
         public async Task<AssetCookStatus> ReadAsync(CancellationToken cancellationToken)
             => (await this.CreateReader().ReadAsync(this.Project, [SourceUri], cancellationToken).ConfigureAwait(false)).Single();
@@ -371,7 +333,7 @@ internal sealed partial class AssetCookStatusTests
                 CookPublicationDocument.ConfigurationIdentity(this.Project),
                 staging.SealRoots(),
                 provenance.Products,
-                new(producer.Fingerprint, new string('A', 64), graph.Files, [], [], []));
+                new(producer.Fingerprint, new string('A', 64), graph.Files, [], []));
             await staging.Transaction.PrepareAsync(operation, document, sourceReplacement: null, [], projectChange: null, cancellationToken).ConfigureAwait(false);
             staging.RetainForPublication();
             using var accepted = await staging.Transaction.PublishAsync(preview: null, baseline, static () => { }, cancellationToken).ConfigureAwait(false);

@@ -234,33 +234,6 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         _ = ((SolidColorBrush)icon.Foreground).Color.Should().Be(((SolidColorBrush)reference.Background).Color);
     });
 
-    /// <summary>Unsaved recovery stays compact and a document's name opens that document.</summary>
-    /// <returns>The asynchronous layout and navigation regression.</returns>
-    [TestMethod]
-    public Task UnsavedRecoveryKeepsItsActionInlineAndNamesNavigable() => EnqueueAsync(async () =>
-    {
-        var document = new Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState(FileSystemPath.From("C:\\Project\\Content\\NewScene2.oscene.json"), "NewScene2", IsDirty: true, SavedContentHash: string.Empty);
-        var actions = new Mock<ICookingWorkspaceActions>();
-        _ = actions.Setup(value => value.OpenDocumentAsync(document.SourcePath)).ReturnsAsync(value: true);
-        using var model = CreateModel(actions.Object, document);
-        var view = new CookingPanelView { ViewModel = model, Width = 960, Height = 340, RequestedTheme = ElementTheme.Dark };
-        await LoadTestContentAsync(view).ConfigureAwait(true);
-        var scale = view.XamlRoot.RasterizationScale;
-        VisualUserInterfaceTestsApp.MainWindow.AppWindow.Resize(new Windows.Graphics.SizeInt32((int)(960 * scale) + 40, (int)(340 * scale) + 80));
-        await WaitForRenderAsync().ConfigureAwait(true);
-        view.UpdateLayout();
-        var banner = view.FindDescendant<InfoBar>(value => string.Equals(value.Title, "Unsaved documents", StringComparison.Ordinal))!;
-        var title = banner.FindDescendant<TextBlock>(value => string.Equals(value.Name, "Title", StringComparison.Ordinal))!;
-        var action = banner.ActionButton;
-        _ = Math.Abs(title.TransformToVisual(view).TransformPoint(default).Y - action.TransformToVisual(view).TransformPoint(default).Y).Should().BeLessThan(20);
-        _ = (banner.TransformToVisual(view).TransformPoint(default).Y + banner.ActualHeight).Should().BeLessThan(view.ActualHeight);
-        var link = banner.FindDescendant<HyperlinkButton>()!;
-        _ = ((TextBlock)link.Content).Text.Should().Be(document.DisplayName);
-        ((Microsoft.UI.Xaml.Automation.Provider.IInvokeProvider)new Microsoft.UI.Xaml.Automation.Peers.HyperlinkButtonAutomationPeer(link).GetPattern(Microsoft.UI.Xaml.Automation.Peers.PatternInterface.Invoke)).Invoke();
-        await WaitForRenderAsync().ConfigureAwait(true);
-        actions.Verify(value => value.OpenDocumentAsync(document.SourcePath), Times.Once);
-    });
-
     /// <summary>Recovery activation waits for the initiating menu event to return and selects the requested run.</summary>
     /// <returns>The asynchronous attention regression.</returns>
     [TestMethod]
@@ -268,7 +241,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     {
         var runs = new Mock<ICookRunService>();
         using var model = CreateModel(runService: runs);
-        var next = model.SelectedRun!.Snapshot with { OperationId = Guid.NewGuid(), State = CookRunState.NeedsSave, CompletedAt = null };
+        var next = model.SelectedRun!.Snapshot with { OperationId = Guid.NewGuid(), State = CookRunState.Queued, CompletedAt = null };
         var revealed = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);
         model.RevealRequested += (_, _) => revealed.TrySetResult(model.SelectedRun!.Snapshot.OperationId);
         runs.Raise(value => value.RunChanged += null, new CookRunChangedEventArgs(next, reveal: true));
@@ -455,7 +428,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
 
     private static async Task VerifyDockAttentionAsync(Mock<ICookRunService> runs, CookingPanelViewModel model, ToolDock dock, Dockable browser, Dockable cooking, TextBlock browserView, CookingPanelView cookingView, DockPanel panel, DockableTabsBar tabs)
     {
-        foreach (var state in new[] { CookRunState.Queued, CookRunState.NeedsSave, CookRunState.Succeeded })
+        foreach (var state in new[] { CookRunState.Queued, CookRunState.Succeeded })
         {
             tabs.ActiveDockable = browser;
             await WaitForRenderAsync().ConfigureAwait(true);
@@ -528,7 +501,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         }
     }
 
-    private static CookingPanelViewModel CreateModel(ICookingWorkspaceActions? actions = null, Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState? waitingDocument = null, Mock<ICookRunService>? runService = null, Func<CookRunSnapshot, CookRunSnapshot>? configure = null)
+    private static CookingPanelViewModel CreateModel(ICookingWorkspaceActions? actions = null, Mock<ICookRunService>? runService = null, Func<CookRunSnapshot, CookRunSnapshot>? configure = null)
     {
         var projects = new ProjectContextService();
         var projectId = Guid.NewGuid();
@@ -563,11 +536,6 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
             Messages = run.Messages.Add(new(1, DateTimeOffset.UtcNow, DiagnosticSeverity.Info, "Checking saved inputs."))
                 .Add(new(2, DateTimeOffset.UtcNow, DiagnosticSeverity.Error, "Aerial Start must be 0 m or greater.")),
         };
-        if (waitingDocument is not null)
-        {
-            run = run with { State = CookRunState.NeedsSave, CompletedAt = null, Diagnostics = [], UnsavedDocuments = [waitingDocument], Assets = run.Assets.Clear(), Messages = [] };
-        }
-
         run = configure?.Invoke(run) ?? run;
         var runs = runService ?? new Mock<ICookRunService>();
         _ = runs.SetupGet(service => service.Runs).Returns(new[] { run });

@@ -9,8 +9,6 @@ using Oxygen.Editor.Runtime.Engine;
 
 namespace Oxygen.Editor.LevelEditor;
 
-#pragma warning disable SA1204 // Static elements should appear before instance elements
-
 /// <summary>
 ///     Logging helpers for <see cref="Viewport"/>.
 /// </summary>
@@ -250,5 +248,3 @@ public sealed partial class Viewport
     private void LogSwapChainAccessFailed(Exception exception)
         => LogSwapChainAccessFailed(this.logger, exception);
 }
-
-#pragma warning restore SA1204

@@ -27,13 +27,11 @@ namespace Oxygen.Editor.LivePreview.Play;
 /// </summary>
 /// <remarks>
 /// Every public member is used, and every event raised, on the thread that created the session; the player's events
-/// are marshalled there. The session saves nothing: the caller saves the open documents before Play, and Play refuses
-/// while one has unsaved changes. Player output is raised as <see cref="LogReceived"/>.
+/// are marshalled there. The session saves nothing: Play cooks the saved files, and the caller saves the documents the
+/// scene uses before Play, after asking. Player output is raised as <see cref="LogReceived"/>.
 /// </remarks>
 public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSource, IDisposable
 {
-    // The saved project files the player's diagnostics name, as the player reads them.
-
     private readonly IProjectContextService projects;
     private readonly IContentPipelineService pipeline;
     private readonly CookPublicationService publication;
@@ -60,6 +58,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     /// <param name="documents">The open documents, whose edits make a running session stale.</param>
     /// <param name="operationResults">Publishes Play failures.</param>
     /// <param name="loggerFactory">The logger factory.</param>
+    /// <param name="playerExecutable">The player to launch; by default the installed SDK's.</param>
     public PlaySession(
         IProjectContextService projects,
         IContentPipelineService pipeline,
@@ -68,7 +67,8 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
         PlaySettings settings,
         OpenDocuments documents,
         IOperationResultPublisher operationResults,
-        ILoggerFactory? loggerFactory = null)
+        ILoggerFactory? loggerFactory = null,
+        string? playerExecutable = null)
     {
         this.projects = projects;
         this.pipeline = pipeline;
@@ -79,7 +79,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
         this.operationResults = operationResults;
         this.loggerFactory = loggerFactory;
         this.logger = loggerFactory?.CreateLogger<PlaySession>() ?? NullLogger<PlaySession>.Instance;
-        this.PlayerExecutable = EditorNativeInstallation.Discover(
+        this.PlayerExecutable = playerExecutable ?? EditorNativeInstallation.Discover(
             AppContext.BaseDirectory,
 #if DEBUG
             "Debug").PlayerPath;
@@ -103,8 +103,8 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
     /// <summary>Gets the play session preferences.</summary>
     public PlaySettings Settings { get; }
 
-    /// <summary>Gets the SDK's player executable.</summary>
-    public string PlayerExecutable { get; internal set; }
+    /// <summary>Gets the player executable Play launches.</summary>
+    public string PlayerExecutable { get; }
 
     /// <summary>Gets a value indicating whether the installed SDK has a player.</summary>
     public bool IsPlayerInstalled => File.Exists(this.PlayerExecutable);
@@ -221,22 +221,14 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
 
     private async Task RunPlayAsync(ProjectContext project, PlayRequest request, CancellationToken cancellationToken)
     {
-        this.Status = new PlayStatus(PlayActivity.Saving, request.DocumentId, request.Scene.Name);
+        this.Status = new PlayStatus(PlayActivity.Cooking, request.DocumentId, request.Scene.Name);
         if (!this.IsPlayerInstalled)
         {
             await this.FailAsync(PlayDiagnosticCodes.PlayerMissing, "Player missing", $"The installed SDK has no player at '{this.PlayerExecutable}'. Install the engine SDK, then press Play again.", PlayStage.Launch).ConfigureAwait(true);
             return;
         }
 
-        // Play cooks what is saved: a document with unsaved changes would play other content than the user sees.
-        if (this.documents.Documents.Any(static document => document.IsDirty))
-        {
-            await this.FailAsync(PlayDiagnosticCodes.SaveFailed, "Save failed", "A document could not be saved, so the scene was not played. Its save result says why.", PlayStage.Save).ConfigureAwait(true);
-            return;
-        }
-
         cancellationToken.ThrowIfCancellationRequested();
-        this.Status = this.Status with { Activity = PlayActivity.Cooking };
         var cook = await this.pipeline.CookCurrentSceneAsync(request.SceneAsset, cancellationToken).ConfigureAwait(true);
         if (cook.Status == OperationStatus.Failed)
         {

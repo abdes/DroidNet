@@ -1,18 +1,16 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Catalog;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
 
 /// <summary>Projects acknowledged native availability without recooking or scanning output on runtime events.</summary>
 public sealed partial class AssetFeed
 {
-    private static (AssetRuntimeAvailability state, string? reason) GetRuntimeAvailability(AssetEntry item, AssetRuntimeStatus status)
+    private static (AssetRuntimeAvailability State, string? Reason) GetRuntimeAvailability(AssetEntry item, AssetRuntimeStatus status)
     {
         if (item.Kind is not (AssetKind.Material or AssetKind.Geometry or AssetKind.Scene))
         {
@@ -64,11 +62,11 @@ public sealed partial class AssetFeed
     private AssetEntry[] ApplyRuntimeState(IReadOnlyList<AssetEntry> items, ProjectContext? project)
     {
         var status = this.runtimeStatus.GetStatus(project?.ProjectId);
-        return items.Select(item =>
+        return [.. items.Select(item =>
         {
             var (availability, reason) = GetRuntimeAvailability(item, status);
             return item.RuntimeAvailability == availability && string.Equals(item.RuntimeReason, reason, StringComparison.Ordinal)
                 ? item : item with { RuntimeAvailability = availability, RuntimeReason = reason };
-        }).ToArray();
+        })];
     }
 }

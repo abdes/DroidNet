@@ -62,6 +62,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     private readonly Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation;
     private readonly Oxygen.Editor.Shell.Documents.IHistoryService? histories;
     private readonly Oxygen.Editor.Shell.Windows.IPlacementService? placement;
+    private readonly Oxygen.Editor.Shell.Documents.IDocumentService? documents;
     private readonly SceneExplorerProjection projection = new();
     private readonly SemaphoreSlim searchGate = new(1, 1);
     private readonly System.Threading.Lock searchLifetimeLock = new();
@@ -150,6 +151,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="relocation">Optional relocation service that renames the scene's file.</param>
     /// <param name="histories">Optional history service whose global history records a scene file rename.</param>
     /// <param name="placement">Optional placement, which shows a scene document that becomes active in the window's place for its scene.</param>
+    /// <param name="documents">Optional document service, which saves the unsaved documents before a scene file rename, after asking.</param>
     public SceneExplorerViewModel(
         IProjectManagerService projectManager,
         IMessenger messenger,
@@ -165,9 +167,11 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         IProjectContextService? projectContexts = null,
         Oxygen.Editor.ContentPipeline.Relocation.IAssetRelocationService? relocation = null,
         Oxygen.Editor.Shell.Documents.IHistoryService? histories = null,
-        Oxygen.Editor.Shell.Windows.IPlacementService? placement = null)
+        Oxygen.Editor.Shell.Windows.IPlacementService? placement = null,
+        Oxygen.Editor.Shell.Documents.IDocumentService? documents = null)
         : base(loggerFactory)
     {
+        this.documents = documents;
         this.relocation = relocation;
         this.histories = histories;
         this.placement = placement;
@@ -586,7 +590,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <param name="exception">The search exception.</param>
     /// <param name="query">The query that failed.</param>
     internal void ReportSearchFailure(Exception exception, string query)
-        => LogSearchFailed(this.logger, exception, query);
+        => this.LogSearchFailed(exception, query);
 
     /// <summary>
     /// Handles document-open actions once the target scene has been resolved.
@@ -792,9 +796,16 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return TreeItemRenameResult.Rejected(invalid.ToMessage());
         }
 
+        var relocation = this.relocation;
+        if (this.documents is { } documents
+            && !await documents.SaveBeforeAsync(Oxygen.Editor.Shell.Documents.SaveBeforeOperation.Rename, _ => Task.FromResult(relocation.FindUnsavedDocuments())).ConfigureAwait(true))
+        {
+            return TreeItemRenameResult.Rejected("Not renamed: the documents were not saved.");
+        }
+
         try
         {
-            _ = await this.relocation.RelocateAsync(
+            _ = await relocation.RelocateAsync(
                 new Oxygen.Editor.ContentPipeline.Relocation.AssetRelocationRequest { Moves = [new(location.Path, target)] },
                 "Rename",
                 this.histories.GlobalHistory,
@@ -1284,7 +1295,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             var loadedScene = scene;
 
             // Trace: scene data successfully loaded from project storage
-            this.LogSceneLoaded(loadedScene.Id, loadedScene.Name ?? "<unnamed>");
+            this.LogSceneLoaded(loadedScene.Id, loadedScene.Name);
 
             this.nextEntityIndex = loadedScene.AllNodes.Count();
 
@@ -1849,7 +1860,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
         catch (Exception exception)
         {
-            LogSelectionApplyFailed(this.logger, exception, args.DocumentId);
+            this.LogSelectionApplyFailed(exception, args.DocumentId);
         }
     }
 
@@ -2074,7 +2085,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
         catch (Exception ex)
         {
-            LogProjectionUpdateFailed(this.logger, ex, this.SceneDocumentId);
+            this.LogProjectionUpdateFailed(ex, this.SceneDocumentId);
         }
     }
 
@@ -2086,7 +2097,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        this.LogCreateFolderInvoked(this.SelectionModel?.GetType().Name, this.ShownItemsCount);
+        this.LogCreateFolderInvoked(this.SelectionModel, this.ShownItemsCount);
 
         var target = this.GetSingleSelectionTarget();
         var container = target switch

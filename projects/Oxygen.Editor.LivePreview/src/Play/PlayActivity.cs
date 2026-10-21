@@ -10,9 +10,6 @@ public enum PlayActivity
     /// <summary>No player runs.</summary>
     Idle,
 
-    /// <summary>Saving the open documents before a session.</summary>
-    Saving,
-
     /// <summary>Cooking the scene before a session.</summary>
     Cooking,
 

@@ -6,9 +6,7 @@ using AwesomeAssertions;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -206,7 +204,6 @@ public sealed class ImportWorkflowTests
                 new ContentImportManifestBuilder(),
                 new ContentImportManifestValidator(),
                 api,
-                workspace.Documents,
                 compatibility,
                 files,
                 workspace.Publication,
@@ -222,48 +219,6 @@ public sealed class ImportWorkflowTests
             var recovered = await service.ImportSourceAsync(retry, this.TestContext.CancellationToken).ConfigureAwait(false);
             _ = recovered.IsPublished.Should().BeTrue();
             _ = recovered.RetainedSourceUri.Should().Be(result.RetainedSourceUri);
-        }
-        finally
-        {
-            external.Delete(recursive: true);
-        }
-    }
-
-    /// <summary>Saving a blocker resumes the same run from retained source even when the external file is gone.</summary>
-    /// <returns>The asynchronous save-and-resume regression.</returns>
-    [TestMethod]
-    [TestCategory("NativeContent")]
-    public async Task ImportResumesAfterSaveWithoutRepeatingSourceRetention()
-    {
-        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        var external = Directory.CreateTempSubdirectory("OxygenImportResume-");
-        try
-        {
-            var source = Path.Combine(external.FullName, "model.gltf");
-            File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures", "static_scalar_triangle.gltf"), source);
-            var settingsPath = Path.Combine(workspace.Root, "Content/Models/Model/model.gltf.import.json");
-            var state = new CookDocumentState(FileSystemPath.From(settingsPath), "Model import settings", IsDirty: true, string.Empty);
-            var dirty = true;
-            using var registration = workspace.Documents.Register(FileSystemPath.From(settingsPath), _ => Task.FromResult<CookDocumentReadLease?>(dirty ? new(state, static () => { }) : null));
-            var blocked = new TaskCompletionSource<Guid>(TaskCreationOptions.RunContinuationsAsynchronously);
-            workspace.CookCoordinator.RunChanged += (sender, args) =>
-            {
-                if (args.Run.State == CookRunState.NeedsSave)
-                {
-                    _ = blocked.TrySetResult(args.Run.OperationId);
-                }
-            };
-            using var cook = NativeCook.Create(workspace);
-            var service = cook.Service;
-            var pending = service.ImportSourceAsync(new(workspace.ProjectContext, source, "Model", AssetPath.Parse("/Content/Models")), this.TestContext.CancellationToken);
-            var operationId = await blocked.Task.WaitAsync(TimeSpan.FromSeconds(15), this.TestContext.CancellationToken).ConfigureAwait(false);
-            File.Delete(source);
-            dirty = false;
-            _ = workspace.CookCoordinator.ResumeAfterSave(operationId).Should().BeTrue();
-            var result = await pending.WaitAsync(TimeSpan.FromSeconds(15), this.TestContext.CancellationToken).ConfigureAwait(false);
-            _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.Message)));
-            _ = result.OperationId.Should().Be(operationId);
-            _ = workspace.CookCoordinator.Runs.Should().ContainSingle();
         }
         finally
         {

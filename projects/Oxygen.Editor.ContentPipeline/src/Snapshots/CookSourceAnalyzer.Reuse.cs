@@ -59,7 +59,7 @@ internal sealed partial class CookSourceAnalyzer
         var accepted = await new AcceptedCookSourceFacts(
                 operation.Project,
                 previous,
-                (path, token) => CookSavedSourceReader.HashAsync(documents, path, token, allowUnsavedDocuments: true))
+                CookSavedSourceReader.HashAsync)
             .ReadAsync(inputs, cancellationToken).ConfigureAwait(false);
         foreach (var facts in accepted.Sources)
         {

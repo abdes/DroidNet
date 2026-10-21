@@ -138,7 +138,7 @@ public sealed partial class BrowserRevealTests : DroidNet.Tests.VisualUserInterf
         var view = browserView.FindDescendant<ProjectLayoutView>()!;
         _ = view.Should().NotBeNull("the router must display the project explorer");
         _ = view.ViewModel.Should().BeSameAs(fixture.Explorer);
-        await fixture.Explorer.MountLocalFolderCommand.ExecuteAsync(null).ConfigureAwait(true);
+        await fixture.Explorer.MountLocalFolderCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Projects.ActiveProject!.LocalFolderMounts.Should().ContainSingle(mount => mount.Name == "Examples");
         _ = fixture.Explorer.ShownItems.Should().Contain(item => item is VirtualFolderMountTreeItemAdapter && item.Label == "Examples", fixture.Diagnostics);
@@ -146,7 +146,7 @@ public sealed partial class BrowserRevealTests : DroidNet.Tests.VisualUserInterf
         _ = displayed.Should().Contain(item => item.Label == "Examples");
         _ = view.FindDescendant<TextBlock>(text => text.Text == "Examples").Should().NotBeNull();
         _ = Directory.CreateDirectory(Path.Combine(fixture.Projects.ActiveProject.ProjectRoot.FullPath, "Refreshed"));
-        await fixture.Browser.RefreshCommand.ExecuteAsync(null).ConfigureAwait(true);
+        await fixture.Browser.RefreshCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = fixture.Explorer.ShownItems.Should().Contain(item => item is VirtualFolderMountTreeItemAdapter && item.Label == "Examples", fixture.Diagnostics);
         _ = view.FindDescendant<TextBlock>(text => text.Text == "Examples").Should().NotBeNull();

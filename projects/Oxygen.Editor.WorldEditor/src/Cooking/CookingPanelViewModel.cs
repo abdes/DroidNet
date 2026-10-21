@@ -293,33 +293,6 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     }
 
     [RelayCommand]
-    private async Task SaveListedAndCookAsync()
-    {
-        if (this.SelectedRun is { Snapshot.State: CookRunState.NeedsSave } selected)
-        {
-            this.ActionError = string.Empty;
-            var displayed = selected.Snapshot;
-            if (await this.workspace.SaveListedAsync(displayed).ConfigureAwait(true))
-            {
-                _ = this.runs.ResumeAfterSave(displayed.OperationId);
-            }
-            else
-            {
-                this.ActionError = "Some listed documents could not be saved. Resolve their save conflicts before cooking.";
-            }
-        }
-    }
-
-    [RelayCommand]
-    private async Task OpenDocumentAsync(Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState? document)
-    {
-        if (document is not null && !await this.workspace.OpenDocumentAsync(document.SourcePath).ConfigureAwait(true))
-        {
-            this.ActionError = "This document is no longer open. Cooking will recheck its saved source when resumed.";
-        }
-    }
-
-    [RelayCommand]
     private async Task GoToPropertyAsync(CookingIssueViewModel? issue)
     {
         if (issue is not null && this.SelectedRun is { } selected
@@ -347,8 +320,14 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
                 return;
             }
 
+            if (!await this.workspace.SaveInputsAsync(request).ConfigureAwait(true))
+            {
+                return;
+            }
+
             _ = request.TargetKind switch
             {
+                CookTargetKind.CurrentScene => await this.pipeline.CookCurrentSceneAsync(request.ScopeUri!, CancellationToken.None).ConfigureAwait(true),
                 CookTargetKind.Project => await this.pipeline.CookProjectAsync(CancellationToken.None).ConfigureAwait(true),
                 CookTargetKind.Folder => await this.pipeline.CookFolderAsync(request.ScopeUri!, CancellationToken.None).ConfigureAwait(true),
                 CookTargetKind.Changes => await this.pipeline.CookAssetsAsync(request.Assets, CancellationToken.None).ConfigureAwait(true),

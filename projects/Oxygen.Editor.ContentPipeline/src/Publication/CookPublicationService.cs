@@ -252,7 +252,6 @@ public sealed partial class CookPublicationService(IContentCookCoordinator coord
             snapshot.BuildFingerprint,
             snapshot.InputIdentity,
             snapshot.Inputs,
-            snapshot.Documents,
             snapshot.CookedDependencies,
             [.. result.ProducedSourceFiles.Select(static file => new CookPublicationSourceTransition(file.RelativePath, file.BeforeHash, file.AfterHash))]);
         return new CookPublicationDocument(

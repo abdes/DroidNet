@@ -13,14 +13,12 @@ namespace Oxygen.Editor.ContentPipeline;
 internal static partial class CookSavedSourceReader
 {
     /// <summary>Reads native-declared inputs and retains their capture requirements.</summary>
-    /// <param name="documents">Document owners protecting saved source bytes.</param>
     /// <param name="facts">The native source-analysis result.</param>
     /// <param name="root">The owning project root.</param>
     /// <param name="excluded">Operation-generated paths handled separately.</param>
     /// <param name="cancellationToken">Cancels source reads.</param>
     /// <returns>The discovered source inputs and their observations.</returns>
     internal static async Task<ImmutableArray<CookSnapshotInput>> ReadNativeInputsAsync(
-        ICookDocumentRegistry documents,
         NativeSourceAnalysisJob facts,
         FileSystemPath root,
         IReadOnlySet<FileSystemPath> excluded,
@@ -43,8 +41,8 @@ internal static partial class CookSavedSourceReader
                 : metadata?.IsDirectory == true || (observation?.Reads.IsEmpty == true && !declared.Contains(path))
                     ? CookSnapshotInputKind.Probe : CookSnapshotInputKind.File;
             var hash = kind == CookSnapshotInputKind.File
-                ? await HashAsync(documents, path.FullPath, cancellationToken).ConfigureAwait(false) : string.Empty;
-            inputs.Add(new(null, path, path.GetPathBelow(root), hash, kind)
+                ? await HashAsync(path.FullPath, cancellationToken).ConfigureAwait(false) : string.Empty;
+            inputs.Add(new(AssetUri: null, path, path.GetPathBelow(root), hash, kind)
             {
                 Metadata = metadata,
                 NativeObservations = observation is null ? [] : [observation],

@@ -352,20 +352,17 @@ in the picker.
 
 ### Save And Cook
 
-Finish/cancel an active gesture through its normal control contract. If the
-selected cook closure contains dirty documents, list them inline with Open and
-Save listed and Cook, plus Cancel. The latter explicitly authorizes ordinary
-saves of exactly the named documents, waits for success, then rechecks the
-closure. Do not save unrelated documents or silently expand the list after
-consent. Any save conflict uses the existing conflict flow and keeps cooking
-blocked. Save and Close keeps its accepted inline conflict actions; a cook
-failure cannot turn a successfully saved document back into an unsaved document
-or reopen it.
+Finish the active gesture through its normal control contract. If the selected
+cook's closure contains unsaved documents, the Shell asks "Save 2 documents and
+cook?" where the user acted, listing them, with Save and Cook or Cancel. Save
+and Cook saves exactly the named documents through the ordinary save, then
+cooks; a save conflict uses the existing conflict flow and the cook does not
+run. A cook failure cannot turn a successfully saved document back into an
+unsaved document or reopen it.
 
-Background requests wait with Needs save and an action, not a surprise modal.
-They never bypass the pipeline's dirty-input rejection. Saves acknowledged after
-a newer edit leave that document dirty, so capture waits for a coherent saved
-closure. Cooking after Save never holds up the source-save success notification.
+Cook on change never asks and never waits: it cooks the saved files, and a
+document edited again after its save keeps its unsaved changes beside the cooked
+status. Cooking after Save never holds up the source-save success notification.
 
 ### Picking And Preview
 

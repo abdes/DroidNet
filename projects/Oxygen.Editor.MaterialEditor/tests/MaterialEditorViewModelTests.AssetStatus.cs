@@ -85,6 +85,6 @@ public sealed partial class MaterialEditorViewModelTests
     private static AssetEntry CreateStatusItem(AssetPath uri) => new(
         uri, "Test", AssetKind.Material, AssetState.Descriptor, AssetState.Cooked, AssetRuntimeAvailability.Unknown, uri.VirtualPath, SourcePath: null, DescriptorPath: null, CookedPath: null, AssetGuid: null, DiagnosticCodes: [], IsSelectable: true)
     {
-        CookStatus = new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []),
+        CookStatus = new(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], []),
     };
 }

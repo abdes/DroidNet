@@ -209,42 +209,6 @@ public sealed class CookRunHistoryTests
         _ = coordinator.Runs.Single().State.Should().Be(CookRunState.Succeeded);
     }
 
-    /// <summary>A blocked cook releases the writer and reads saved inputs again after explicit resume.</summary>
-    /// <returns>The asynchronous test operation.</returns>
-    [TestMethod]
-    public async Task NeedsSaveReleasesWriterAndRechecksInputsOnResume()
-    {
-        using var coordinator = CreateCoordinator(CreateContextService());
-        var needsSave = new TaskCompletionSource<CookRunSnapshot>(TaskCreationOptions.RunContinuationsAsynchronously);
-        coordinator.RunChanged += (_, change) =>
-        {
-            if (change.Run.State == CookRunState.NeedsSave)
-            {
-                _ = needsSave.TrySetResult(change.Run);
-            }
-        };
-        var dirty = true;
-        var captures = 0;
-        var document = new ContentPipeline.Snapshots.CookDocumentState(FileSystemPath.From(Path.Combine(Path.GetTempPath(), "Main.oscene.json")), "Main", IsDirty: true, "saved");
-        var waiting = coordinator.RunCookAsync(
-            new(CookTargetKind.Project, ScopeUri: null),
-            (_, _) =>
-        {
-            captures++;
-            return dirty ? Task.FromException<int>(new CookInputsNeedSaveException([document])) : Task.FromResult(100);
-        },
-            CancellationToken.None);
-        var run = await needsSave.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = run.State.Should().Be(CookRunState.NeedsSave);
-        _ = (await coordinator.RunCookAsync(new(CookTargetKind.Asset, AssetPath.Parse("/Content/Other.omat.json")), (_, _) => Task.FromResult(7), CancellationToken.None).ConfigureAwait(false)).Should().Be(7);
-        _ = waiting.IsCompleted.Should().BeFalse();
-        dirty = false;
-        _ = coordinator.ResumeAfterSave(run.OperationId).Should().BeTrue();
-        _ = (await waiting.ConfigureAwait(false)).Should().Be(100);
-        _ = captures.Should().Be(2);
-        _ = coordinator.Runs.Single(item => item.OperationId == run.OperationId).UnsavedDocuments.Should().BeEmpty();
-    }
-
     /// <summary>Preflight failures retain discovered assets and distinguish the failing asset from skipped work.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]

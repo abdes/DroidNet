@@ -82,8 +82,7 @@ accessible state labels, and tooltips; colour reinforces the icon. Do not repeat
 the status as a distant text badge. Omit the routine Explicit trigger label;
 identify Automatic only when that distinction is useful. The selected run's
 details carry the status explanation and actions.
-Group active/pending work above recent outcomes. Needs save is a pending request,
-not a worker holding the execution slot. Long names remain distinguishable;
+Group active/pending work above recent outcomes. Long names remain distinguishable;
 paths, hashes, stack traces, and diagnostic paragraphs do not belong in rows.
 
 Selection rules:
@@ -290,9 +289,10 @@ previous output; its stale state must not be cleared by that failure.
    the native schema's bound through shared validation in the property edit
    pipeline and cooking preflight. Invalid negative/nonfinite edits are rejected
    without a history entry; 0 and 100 are valid. Show inline field feedback.
-4. Enter 100. Retry before saving becomes Needs save and lists Main.
-5. Save listed & Cook, or ordinary Save followed by Retry, captures the latest
-   saved value. Reuse/coalesce equivalent work from D1 automatic cooking.
+4. Enter 100. Retry before saving asks "Save 1 document and cook?" and lists
+   Main.
+5. Save and Cook, or ordinary Save followed by Retry, captures the latest saved
+   value. Reuse/coalesce equivalent work from D1 automatic cooking.
 6. Successful validated publication updates Main's current status and output.
    Reopening preserves 100; the older failure still records -1. Verify in the
    editor that Main is no longer stale when its saved inputs are current.

@@ -8,7 +8,7 @@ using DroidNet.TimeMachine;
 using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
-using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
@@ -21,12 +21,12 @@ namespace Oxygen.Editor.ContentPipeline.Relocation;
 /// <summary>Runs reference-aware relocation, copy and delete as the project's content writer.</summary>
 /// <param name="coordinator">Serializes project content changes with cooking and import.</param>
 /// <param name="projects">The active project.</param>
-/// <param name="documents">The open documents and their unsaved state.</param>
+/// <param name="documents">The open documents with unsaved changes, which a relocation refuses to run over.</param>
 /// <param name="files">The atomic file store.</param>
 /// <param name="catalog">The asset catalog; its changes make the cached references stale.</param>
 /// <param name="logger">Records every move, rewrite, copy, delete, rejection and restore.</param>
 /// <param name="redirects">The session's relocation record for undo, redo and paste; optional.</param>
-public sealed partial class AssetRelocationService(IContentCookCoordinator coordinator, IProjectContextService projects, ICookDocumentRegistry documents, IAtomicFileStore files,
+public sealed partial class AssetRelocationService(IContentCookCoordinator coordinator, IProjectContextService projects, IUnsavedDocuments documents, IAtomicFileStore files,
     IAssetCatalog catalog, ILogger<AssetRelocationService>? logger = null, AssetRedirects? redirects = null)
     : IAssetRelocationService, IDisposable
 {
@@ -131,21 +131,8 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
     }
 
     /// <inheritdoc/>
-    public IReadOnlyList<(string Name, bool IsDirty)> FindOpenDocuments(IReadOnlyList<AssetPath> sources)
-    {
-        ArgumentNullException.ThrowIfNull(sources);
-        if (projects.ActiveProject is not { } project)
-        {
-            return [];
-        }
-
-        var deleted = sources.Select(source => RelocationPaths.ToPhysical(project, source)).OfType<FileSystemPath>().ToArray();
-        return [.. documents.GetState().Documents
-            .Where(document => deleted.Any(document.SourcePath.IsSameOrInside))
-            .Select(static document => (document.DisplayName, document.IsDirty))
-            .DistinctBy(static document => document.DisplayName, StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static document => document.DisplayName, StringComparer.OrdinalIgnoreCase)];
-    }
+    public IReadOnlyList<UnsavedDocument> FindUnsavedDocuments()
+        => projects.ActiveProject is { } project ? documents.Find([project.ProjectRoot]) : [];
 
     /// <inheritdoc/>
     public async Task<IReadOnlyList<AssetPath>> CopyAsync(IReadOnlyList<AssetPath> sources, AssetPath targetFolder, CancellationToken cancellationToken)
@@ -508,7 +495,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
                 }
 
                 this.LogRelocationPlanned(plan.Moves.Count, plan.Edits.Count, plan.Referrers.Count);
-                this.RejectUnsavedDocuments();
+                RejectUnsavedDocuments(operation.Project, documents);
 
                 coordinator.VerifyWriter(operation);
                 IReadOnlyList<RelocatedFile> written;
@@ -548,7 +535,7 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
             }
             catch (Exception failure)
             {
-                this.LogParticipantFailed(failure, participant.GetType().Name);
+                this.LogParticipantFailed(failure, participant);
             }
         }
     }
@@ -602,13 +589,15 @@ public sealed partial class AssetRelocationService(IContentCookCoordinator coord
         return index;
     }
 
-    private void RejectUnsavedDocuments()
+    // An open document follows a relocation only from its saved file, and an unsaved edit may reference what moves.
+    // The caller asks to save them first; an undo or redo, or an edit made since, is refused.
+    private static void RejectUnsavedDocuments(ProjectContext project, IUnsavedDocuments documents)
     {
-        var unsaved = documents.GetState().Documents.Where(static document => document.IsDirty).Select(static document => document.DisplayName)
-            .Distinct(StringComparer.OrdinalIgnoreCase).Order(StringComparer.OrdinalIgnoreCase).ToArray();
+        var unsaved = documents.Find([project.ProjectRoot]).Select(static document => document.Title)
+            .Distinct(StringComparer.CurrentCultureIgnoreCase).ToArray();
         if (unsaved.Length != 0)
         {
-            throw new AssetRelocationException($"Save or discard the changes in {string.Join(", ", unsaved)} first. Moving content rewrites the files that reference it.");
+            throw new AssetRelocationException(AssetRelocationException.UnsavedDocumentsCode, $"Save {string.Join(", ", unsaved)} first: moving or renaming content rewrites the files that use it.");
         }
     }
 

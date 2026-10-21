@@ -6,7 +6,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Reactive.Concurrency;
 using DroidNet.Aura.Dialogs;
 using DroidNet.Controls;
-using Microsoft.Extensions.Logging;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Persistence.Pak;
@@ -233,13 +232,4 @@ public partial class ProjectLayoutViewModel
             }
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Pak mount '{Name}' ('{Path}') could not be read; the Content Browser does not show it.")]
-    private partial void LogPakMountFailure(Exception exception, string name, FileSystemPath path);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to restore folder mount {Name}.")]
-    private partial void LogMountRestoreFailure(Exception exception, string name);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Failed to navigate to folder.")]
-    private partial void LogFolderNavigationFailure(Exception exception);
 }

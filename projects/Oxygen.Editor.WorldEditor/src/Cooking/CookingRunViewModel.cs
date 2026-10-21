@@ -71,7 +71,7 @@ public sealed partial class CookingRunViewModel : ObservableObject
     public string StatusGlyph => GetGlyph(this.snapshot.State);
 
     /// <summary>Gets a value indicating whether indeterminate progress is appropriate.</summary>
-    public bool IsBusy => !this.snapshot.IsCompleted && this.snapshot.State is not CookRunState.NeedsSave and not CookRunState.Queued;
+    public bool IsBusy => !this.snapshot.IsCompleted && this.snapshot.State is not CookRunState.Queued;
 
     /// <summary>Gets visibility of live progress, hiding the idle track after completion.</summary>
     public Visibility ProgressVisibility => this.IsBusy ? Visibility.Visible : Visibility.Collapsed;
@@ -91,15 +91,6 @@ public sealed partial class CookingRunViewModel : ObservableObject
 
     /// <summary>Gets a value indicating whether cancellation can still be requested.</summary>
     public bool CanCancel => !this.snapshot.IsCompleted && this.snapshot.State != CookRunState.Cancelling;
-
-    /// <summary>Gets visibility of the explicit save recovery controls.</summary>
-    public Visibility SaveVisibility => this.snapshot.State == CookRunState.NeedsSave ? Visibility.Visible : Visibility.Collapsed;
-
-    /// <summary>Gets a value indicating whether the cook is waiting for explicit saves.</summary>
-    public bool NeedsSave => this.snapshot.State == CookRunState.NeedsSave;
-
-    /// <summary>Gets the exact documents requiring explicit save consent.</summary>
-    public IReadOnlyList<Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState> UnsavedDocuments => this.snapshot.UnsavedDocuments;
 
     /// <summary>Gets this run's transcript, independent of the global console.</summary>
     public ObservableCollection<OutputLogEntry> Output { get; } = [];
@@ -208,7 +199,6 @@ public sealed partial class CookingRunViewModel : ObservableObject
         CookRunState.SucceededWithWarnings => "\uE7BA",
         CookRunState.Failed => "\uEA39",
         CookRunState.Cancelled => "\uE711",
-        CookRunState.NeedsSave => "\uE74E",
         CookRunState.Queued => "\uE823",
         _ => "\uE895",
     };
@@ -222,7 +212,6 @@ public sealed partial class CookingRunViewModel : ObservableObject
         CookRunState.SucceededWithWarnings => "Warnings",
         CookRunState.UpToDate => "Up to date",
         CookRunState.Failed => "Failed",
-        CookRunState.NeedsSave => "Needs save",
         CookRunState.Publishing => "Updating preview",
         _ => state.ToString(),
     };

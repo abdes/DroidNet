@@ -2,18 +2,13 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Security.Cryptography;
 using Oxygen.Editor.ContentPipeline.Import;
-using Oxygen.Editor.ContentPipeline.Snapshots;
-using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 
 namespace Oxygen.Editor.ContentPipeline.TestSupport;
 
 internal static class SavedSourceScenario
 {
-    internal static CookDocumentState SavedState(string path) => new(FileSystemPath.From(path), Path.GetFileName(path), IsDirty: false, Convert.ToHexString(SHA256.HashData(File.ReadAllBytes(path))));
-
     internal static CapturingEngineContentPipelineApi CreateSuccessfulApi(
         CookWorkspace workspace,
         Func<ContentSourceAnalysisExecution, CancellationToken, Task<NativeSourceAnalysisReport>> sourceAnalysis)

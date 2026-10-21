@@ -2,10 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -84,6 +83,6 @@ public sealed partial class AssetFeed
             }
         }
 
-        return rows.ToArray();
+        return [.. rows];
     }
 }

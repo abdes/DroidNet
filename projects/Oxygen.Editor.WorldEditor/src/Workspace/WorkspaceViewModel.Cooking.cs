@@ -4,9 +4,9 @@
 
 using DroidNet.Docking;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.SceneExplorer;
@@ -21,17 +21,10 @@ public partial class WorkspaceViewModel
     private CookingPanelViewModel? cookingPanel;
 
     /// <inheritdoc />
-    public Task<bool> SaveListedAsync(CookRunSnapshot run)
-        => this.projectContextService.ActiveProject is { } project && run.ProjectId == project.ProjectId
-            && this.documentService is { } documents
-            ? documents.SaveAsync([.. run.UnsavedDocuments.Select(document => project.FindByFilePath(document.SourcePath)?.Identity).OfType<AssetPath>()])
-            : Task.FromResult(false);
-
-    /// <inheritdoc />
-    public async Task<bool> OpenDocumentAsync(FileSystemPath sourcePath)
-        => this.projectContextService.ActiveProject?.FindByFilePath(sourcePath) is { } location
-            && this.documentService is { } documents
-            && (await documents.OpenAsync(location.Identity).ConfigureAwait(true)).Succeeded;
+    public Task<bool> SaveInputsAsync(CookRunRequest request)
+        => this.documentService is { } documents && this.unsavedCookInputs is { } inputs
+            ? documents.SaveBeforeAsync(SaveBeforeOperation.Cook, token => inputs.FindAsync(request, token))
+            : Task.FromResult(true);
 
     /// <inheritdoc />
     public async Task<bool> GoToPropertyAsync(CookRunSnapshot run, DiagnosticRecord issue)

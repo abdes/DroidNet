@@ -71,13 +71,4 @@ public sealed partial class MaterialCookService(
             return false;
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Cooked material state could not be inspected for {MaterialUri}.")]
-    private partial void LogStateInspectionFailed(AssetPath materialUri, Exception exception);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Material cook rejected for {MaterialUri}: the source identity does not match the active project.")]
-    private partial void LogRejected(AssetPath materialUri);
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Material cook {OperationId} completed for {MaterialUri}: {State}.")]
-    private partial void LogCompleted(AssetPath materialUri, Guid operationId, MaterialCookState state);
 }

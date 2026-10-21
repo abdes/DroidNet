@@ -51,7 +51,7 @@ public sealed partial class AssetBrowserQuery : ObservableObject
         new("Not imported", static asset => asset.Kind == AssetKind.ForeignSource && asset.ImportSource is null),
         new("Needs cooking", static asset => asset.CookStatus?.Freshness == AssetCookFreshness.NeedsCooking),
         new("Out of date", static asset => asset.CookStatus?.Freshness == AssetCookFreshness.OutOfDate),
-        new("Unsaved changes", static asset => asset.CookStatus?.HasUnsavedChanges == true || asset.CookActivity?.State == CookRunState.NeedsSave),
+        new("Unsaved changes", static asset => asset.CookStatus?.HasUnsavedChanges == true),
         new("In progress", static asset => asset.CookActivity?.State is CookRunState.Queued or CookRunState.Preparing or CookRunState.Cooking or CookRunState.Validating or CookRunState.Publishing or CookRunState.Cancelling
             || asset.RuntimeAvailability == AssetRuntimeAvailability.Updating),
         new("Cooked", static asset => asset.CookStatus is { Freshness: AssetCookFreshness.Current, OutputAvailability: CookedOutputAvailability.Present }

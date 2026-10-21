@@ -65,6 +65,7 @@ public partial class ViewportViewModel
         Message = "Viewport {ViewportId} kept its previous editor camera state: the view could not report it")]
     private static partial void LogEditorCameraUnavailable(ILogger logger, Guid viewportId, Exception? ex);
 
+    [Conditional("DEBUG")]
     private void LogEditorCameraUnavailable(Exception? ex = null)
         => LogEditorCameraUnavailable(this.logger, this.ViewportId, ex);
 

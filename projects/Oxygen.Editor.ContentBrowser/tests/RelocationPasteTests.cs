@@ -4,10 +4,12 @@
 
 using AwesomeAssertions;
 using DroidNet.Aura.Dialogs;
+using DroidNet.Storage;
 using DroidNet.TimeMachine;
 using Moq;
 using Oxygen.Editor.ContentBrowser.Relocation;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core;
@@ -63,6 +65,15 @@ public sealed class RelocationPasteTests
         => new(
             service,
             histories,
+            SavingDocuments(),
+            new OpenDocuments([], Mock.Of<IAtomicFileStore>()),
             Mock.Of<IDialogService>(),
             Mock.Of<IDesktopIntegration>());
+
+    private static IDocumentService SavingDocuments()
+    {
+        var documents = new Mock<IDocumentService>();
+        _ = documents.Setup(value => value.SaveBeforeAsync(It.IsAny<SaveBeforeOperation>(), It.IsAny<Func<CancellationToken, Task<IReadOnlyList<UnsavedDocument>>>>(), It.IsAny<CancellationToken>())).ReturnsAsync(value: true);
+        return documents.Object;
+    }
 }

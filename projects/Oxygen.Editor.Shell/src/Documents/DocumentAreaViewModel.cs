@@ -50,7 +50,7 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
         ArgumentNullException.ThrowIfNull(area);
         ArgumentNullException.ThrowIfNull(confirmations);
         ArgumentNullException.ThrowIfNull(viewLocator);
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<DocumentAreaViewModel>();
+        this.logger = loggerFactory?.CreateLogger<DocumentAreaViewModel>() ?? NullLogger<DocumentAreaViewModel>.Instance;
         this.documents = documents;
         this.area = area;
         this.confirmations = confirmations;
@@ -87,7 +87,7 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
         this.disposed = true;
         this.documents.ActiveEditorChanged -= this.OnServiceActiveEditorChanged;
         this.area.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
-        this.ObserveActiveDocument(null);
+        this.ObserveActiveDocument(document: null);
         _ = Interlocked.Increment(ref this.activeEditorViewRequestId);
     }
 

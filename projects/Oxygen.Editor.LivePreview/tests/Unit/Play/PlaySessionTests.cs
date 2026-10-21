@@ -44,21 +44,6 @@ public sealed partial class PlaySessionTests
     }
 
     [TestMethod]
-    public async Task UnsavedDocument_IsRefusedAtTheSaveStep()
-    {
-        using var fixture = new PlayFixture(installedPlayer: true);
-        var document = await fixture.Documents.OpenAsync(new Scene { Name = "Test Scene" }.Dehydrate()).ConfigureAwait(false);
-        document.History.AddChange(new DroidNet.TimeMachine.Changes.SimpleAction(static () => { }) { Key = "edit" });
-
-        await fixture.Session.PlayAsync(document.Id).ConfigureAwait(false);
-
-        _ = fixture.Session.Status.Failure!.Stage.Should().Be(PlayStage.Save);
-        _ = fixture.Session.Status.Failure.Code.Should().Be(PlayDiagnosticCodes.SaveFailed);
-        fixture.Pipeline.Verify(value => value.CookCurrentSceneAsync(It.IsAny<AssetPath>(), It.IsAny<CancellationToken>()), Times.Never);
-        _ = fixture.Results.SelectMany(static result => result.Diagnostics).Should().Contain(static diagnostic => diagnostic.Code == PlayDiagnosticCodes.SaveFailed);
-    }
-
-    [TestMethod]
     public async Task SceneThatDoesNotCook_FailsAtTheCookStep()
     {
         using var fixture = new PlayFixture(installedPlayer: true);
@@ -97,14 +82,13 @@ public sealed partial class PlaySessionTests
             var publication = new CookPublicationService(this.coordinator, projects, files, Mock.Of<IProjectManagerService>(), new EngineContentPakFixture());
             var publisher = new Mock<IOperationResultPublisher>();
             _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Add);
-            this.Session = new PlaySession(projects, this.Pipeline.Object, publication, new CookedContentMountService(), new PlaySettings(settings: null), this.Documents.Open, publisher.Object);
             var player = Path.Combine(this.directory.FullName, "Oxygen.Player.exe");
             if (installedPlayer)
             {
                 File.WriteAllBytes(player, []);
             }
 
-            this.Session.PlayerExecutable = player;
+            this.Session = new PlaySession(projects, this.Pipeline.Object, publication, new CookedContentMountService(), new PlaySettings(settings: null), this.Documents.Open, publisher.Object, playerExecutable: player);
         }
 
         public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));

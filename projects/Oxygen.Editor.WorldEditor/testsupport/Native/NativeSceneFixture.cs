@@ -133,7 +133,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         this.loadedProject = new Project(TestProject.InfoOf(project));
         this.Projects.Activate(project);
         this.materialCookCoordinator = new(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
-        this.materialPipeline = new(this.Projects, this.materialCookCoordinator, new CookDocumentRegistry());
+        this.materialPipeline = new(this.Projects, this.materialCookCoordinator);
         this.activeMaterialSlotProvider = this.materialPipeline.Pipeline;
         this.materialSlotProvider = new ActiveSlotProvider(this);
         var mode = automatic ? ExposureMode.Auto : ExposureMode.Manual;
@@ -146,6 +146,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         this.sceneKind = new SceneDocumentKind(this.Projects.ActiveProject!);
         this.materialKind = new MaterialDocumentKind(this.materialValidation);
         this.OpenDocuments = new OpenDocuments([this.sceneKind, this.materialKind], new ImmediateReadFileStore(new NativeAtomicFileStore(Disk)));
+        this.UnsavedDocuments = new UnsavedDocuments(this.OpenDocuments);
         this.previewResults = results;
         this.OpenScene(this.WriteScene(this.Source, layout?.Invoke(this.Source)));
         this.Model = new EnvironmentViewModel(() => this.Authoring);
@@ -177,6 +178,9 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     /// <summary>Gets the open documents of the fixture's project session: its scene and the materials a test opens.</summary>
     public OpenDocuments OpenDocuments { get; }
 
+    /// <summary>Gets the unsaved documents of <see cref="OpenDocuments"/>, as the editor's session reports them.</summary>
+    public UnsavedDocuments UnsavedDocuments { get; }
+
     public EnvironmentViewModel Model { get; }
 
     public Mock<Oxygen.Editor.Assets.IAssetFeed> AssetCatalog { get; } = new();
@@ -192,9 +196,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private IScenePreview Preview => this.preview ?? throw new InvalidOperationException("The fixture shows its scene once it initializes.");
 
     public CookingPanelViewModel CreateTimingCookingPanel(CatalogWorkloadServices services) => new(services.Runs, services.Pipeline, services.Projects, Mock.Of<ICookingWorkspaceActions>(), this.hosting);
-
-    public IDisposable RegisterMainCookDocument(CatalogWorkloadServices services)
-        => new OpenDocumentCookInputs(this.OpenDocuments, services.Documents);
 
     /// <summary>Has the open scene follow the relocations a service commits, as its scene editor would.</summary>
     /// <param name="relocation">The relocation service.</param>
@@ -305,6 +306,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             this.OpenDocuments,
             new ProjectDocumentFiles(services.Projects),
             Mock.Of<IDocumentClosePrompt>(),
+            Mock.Of<IDocumentConfirmations>(),
             Mock.Of<IDocumentInputCommitter>(),
             publisher.Object);
         container.RegisterInstance<IDocumentService>(this.TransitionDocuments);
@@ -462,6 +464,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             await this.contentSession.DisposeAsync().ConfigureAwait(true);
         }
 
+        this.UnsavedDocuments.Dispose();
         this.OpenDocuments.Dispose();
         (this.preview as IDisposable)?.Dispose();
         this.feedAssets.Dispose();
@@ -512,7 +515,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             _ = TestProject.SaveProjectFile(project);
             contexts.Activate(project);
             var coordinator = new ContentCookCoordinator(contexts, NullLogger<ContentCookCoordinator>.Instance);
-            value = (coordinator, new(contexts, coordinator, new CookDocumentRegistry()));
+            value = (coordinator, new(contexts, coordinator));
             this.foreignMaterialPipelines.Add(root, value);
         }
 

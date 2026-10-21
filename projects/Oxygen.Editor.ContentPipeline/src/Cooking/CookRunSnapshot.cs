@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -48,9 +47,6 @@ public sealed record CookRunSnapshot
 
     /// <summary>Gets actionable structured issues from the cook.</summary>
     public ImmutableArray<DiagnosticRecord> Diagnostics { get; init; } = [];
-
-    /// <summary>Gets the exact unsaved documents preventing input capture.</summary>
-    public ImmutableArray<CookDocumentState> UnsavedDocuments { get; init; } = [];
 
     /// <summary>Gets a value indicating whether this run reached a final outcome.</summary>
     public bool IsCompleted => this.CompletedAt.HasValue;

@@ -69,7 +69,7 @@ public sealed partial class CookingStatusIndicator : UserControl
         var tone = this.IsReused ? "Neutral" : this.State switch
         {
             CookRunState.Failed => "Critical",
-            CookRunState.NeedsSave or CookRunState.SucceededWithWarnings => "Caution",
+            CookRunState.SucceededWithWarnings => "Caution",
             CookRunState.Succeeded or CookRunState.UpToDate => "Success",
             _ => "Neutral",
         };

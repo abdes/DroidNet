@@ -289,7 +289,7 @@ separately, though the services above are shaped for them:
 
 1. Routed layout or a shell layout model (section 2.4). Routing stays unless the
    alternative is shown better.
-2. Panel multiplicity `Many` (two independent explorers, a pinned inspector):
+2. Panel multiplicity `Multiple` (two independent explorers, a pinned inspector):
    supported by descriptors, but no panel needs it yet.
 3. Notification history persistence across editor restarts.
 4. Where user notification settings live (Editor settings through

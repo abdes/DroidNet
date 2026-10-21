@@ -206,7 +206,7 @@ internal sealed partial class BrowserRevealFixture : IDisposable
                 DeclaredOutputs = [new(path, kind == ContentCookAssetKind.Geometry ? "geometry" : "material", string.Empty, Required: true)],
             };
         }).ToImmutableArray();
-        var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(project), [new(CookPublicationRootOwner.Project, "Content", key, digest, null)], products, new("logical-folder-fixture", digest, [], [], [], []));
+        var document = new CookPublicationDocument(CookPublicationDocument.CurrentVersion, project.ProjectId, Guid.NewGuid(), DateTimeOffset.UtcNow, CookPublicationDocument.ConfigurationIdentity(project), [new(CookPublicationRootOwner.Project, "Content", key, digest, LibraryPath: null)], products, new("logical-folder-fixture", digest, [], [], []));
         document.Validate(project);
         var files = new NativeAtomicFileStore(new RealFileSystem());
         using var gate = await CookOutputLease.AcquireWriteAsync(project.ProjectRoot, token).ConfigureAwait(true);

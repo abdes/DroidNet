@@ -113,7 +113,7 @@ public sealed class AssetInformationTests
             [],
             IsSelectable: true)
         {
-            CookStatus = new(identity, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], [], []),
+            CookStatus = new(identity, AssetCookFreshness.NeedsCooking, HasPublishedOutput: false, OutputAvailability: CookedOutputAvailability.Missing, [], []),
         };
     }
 }

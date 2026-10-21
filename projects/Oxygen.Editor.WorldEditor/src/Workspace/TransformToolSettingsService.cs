@@ -198,15 +198,6 @@ public sealed partial class TransformToolSettingsService(
         }
     }
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The transform tool preferences could not be read; the defaults apply.")]
-    private partial void LogPreferencesUnreadable(Exception exception);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Discarded transform tool preferences of version {Version}; the defaults apply.")]
-    private partial void LogPreferencesDiscarded(int version);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The transform tool preferences could not be saved.")]
-    private partial void LogPreferencesNotSaved(Exception exception);
-
     /// <summary>The stored transform tool preferences.</summary>
     /// <param name="Version">The payload version.</param>
     /// <param name="SnapEnabled">Whether drags snap.</param>

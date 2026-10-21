@@ -242,7 +242,7 @@ public sealed partial class ContentPipelineService
             return new(operation.OperationId, targetKind, OperationStatus.Cancelled, NormalizeDiagnostics(operation.OperationId, retired), [], Inspection: null, Validation: null);
         }
 
-        await this.RequireSavedDocumentsAsync(primaryInputs, cancellationToken).ConfigureAwait(false);
+        ReportPreparing(primaryInputs);
         if (replacingSource)
         {
             return null;
@@ -266,8 +266,8 @@ public sealed partial class ContentPipelineService
         }
 
         CookDependencyGraph? graph = null;
-        var capture = new CookInputSnapshotCapture(cookDocuments, this.cookCoordinator);
-        var captured = await capture.CaptureAsync(
+        var capture = new CookInputSnapshotCapture(this.cookCoordinator);
+        var snapshot = await capture.CaptureAsync(
             operation,
             async token =>
             {
@@ -280,13 +280,7 @@ public sealed partial class ContentPipelineService
             },
             artifacts.Fingerprint,
             cancellationToken).ConfigureAwait(false);
-        return captured switch
-        {
-            { NeedsSave.IsEmpty: false } => throw new CookInputsNeedSaveException(captured.NeedsSave),
-            { ExternalChanges.IsEmpty: false } => throw new IOException("Reload changed source before cooking: " + string.Join(", ", captured.ExternalChanges.Select(static document => document.DisplayName))),
-            { Snapshot: { } snapshot } => (snapshot, graph!),
-            _ => throw new InvalidOperationException("Input capture did not produce a snapshot."),
-        };
+        return (snapshot, graph!);
     }
 
     private CookDependencyDiscovery CreateDependencyDiscovery(
@@ -302,7 +296,6 @@ public sealed partial class ContentPipelineService
                 this.manifestBuilder,
                 this.sceneDescriptorGenerator,
                 this.cookScopeProvider,
-                cookDocuments,
                 previous),
             resolveImported: uri => Import.ImportedOutputs.ResolveOutput(operation.Project, uri, ContentCookInputRole.Dependency),
             resolveProducer: previous.CreateProducerLookup(operation.Project),
@@ -324,12 +317,6 @@ public sealed partial class ContentPipelineService
     {
         var expectedInputs = producedSourceFiles.IsDefaultOrEmpty ? snapshot.Inputs
             : CookProducedSourceFile.ExpectedInputs(snapshot.Inputs, producedSourceFiles);
-        using var reads = await cookDocuments.AcquireAsync(expectedInputs.Select(static input => input.SourcePath), cancellationToken).ConfigureAwait(false);
-        if (reads.Documents.Any(static document => document.IsDirty))
-        {
-            return false;
-        }
-
         var streams = new Dictionary<FileSystemPath, FileStream>();
         try
         {

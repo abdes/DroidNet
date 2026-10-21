@@ -126,8 +126,7 @@ public sealed partial class CookPublicationService
             }
 
             var bytes = await File.ReadAllBytesAsync(path, token).ConfigureAwait(false);
-            var document = JsonSerializer.Deserialize<CookPublicationDocument>(bytes, CookPublicationDocument.JsonOptions)
-                ?? throw new InvalidDataException("A retained publication is empty.");
+            var document = CookPublicationDocument.Parse(bytes);
             document.Validate(project);
             if (document.OperationId != id)
             {

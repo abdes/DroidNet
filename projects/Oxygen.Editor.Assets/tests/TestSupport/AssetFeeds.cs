@@ -7,8 +7,8 @@ using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Relocation;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
@@ -25,7 +25,7 @@ internal static class AssetFeeds
     /// <param name="projects">The active project.</param>
     /// <param name="scopes">The project's cook scope.</param>
     /// <param name="cookStatus">The cook status; none of the assets has one when none is given.</param>
-    /// <param name="documents">The open documents; none when none is given.</param>
+    /// <param name="documents">The unsaved documents; none when none is given.</param>
     /// <param name="cooks">The cook runs; none runs when none is given.</param>
     /// <param name="runtimeStatus">The preview's runtime status; unavailable when none is given.</param>
     /// <param name="relocation">The relocation service; one that is never called when none is given.</param>
@@ -36,7 +36,7 @@ internal static class AssetFeeds
         IProjectContextService projects,
         IProjectCookScopeProvider scopes,
         IAssetCookStatusReader? cookStatus = null,
-        ICookDocumentRegistry? documents = null,
+        IUnsavedDocuments? documents = null,
         ICookRunService? cooks = null,
         IAssetRuntimeStatusSource? runtimeStatus = null,
         IAssetRelocationService? relocation = null,
@@ -46,7 +46,7 @@ internal static class AssetFeeds
             projects,
             scopes,
             cookStatus ?? new NoCookStatus(),
-            documents ?? new CookDocumentRegistry(),
+            documents ?? Mock.Of<IUnsavedDocuments>(port => port.Find(It.IsAny<IEnumerable<FileSystemPath>>()) == Array.Empty<UnsavedDocument>()),
             cooks ?? Mock.Of<ICookRunService>(runs => runs.Runs == Array.Empty<CookRunSnapshot>()),
             runtimeStatus ?? AssetStatusFixture.CreateUnavailableRuntimeStatus(),
             relocation ?? Mock.Of<IAssetRelocationService>(),

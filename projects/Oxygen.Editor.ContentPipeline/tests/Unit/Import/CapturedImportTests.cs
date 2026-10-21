@@ -66,11 +66,11 @@ public sealed class CapturedImportTests
             [
                 new(
                     Path.Combine(workspace.Root, execution.Manifest.Jobs[0].AttributedSource),
-                    true,
-                    new(2, false, false, 0, 0),
+Exists: true,
+                    new(2, IsDirectory: false, IsSymlink: false, 0, 0),
                     new(Path.Combine(execution.OperationRoot, "captured.json"), 2, new string('a', 64))),
-                new(Path.Combine(workspace.Root, "absent.png"), false, null, null),
-                new(Path.Combine(workspace.Root, "probe.png"), true, null, null),
+                new(Path.Combine(workspace.Root, "absent.png"), Exists: false, Metadata: null, File: null),
+                new(Path.Combine(workspace.Root, "probe.png"), Exists: true, Metadata: null, File: null),
             ]),
         };
     }

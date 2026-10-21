@@ -121,7 +121,7 @@ public sealed partial class ContentPipelineService
         }
 
         await File.WriteAllBytesAsync(Path.Combine(snapshot.InputRoot, settingsRelative), bytes, cancellationToken).ConfigureAwait(false);
-        inputs = inputs.Add(new(null, operation.Project.ProjectRoot.Combine(settingsRelative), settingsRelative, Convert.ToHexString(SHA256.HashData(bytes)))
+        inputs = inputs.Add(new(AssetUri: null, operation.Project.ProjectRoot.Combine(settingsRelative), settingsRelative, Convert.ToHexString(SHA256.HashData(bytes)))
         {
             Metadata = CookSavedSourceReader.ReadMetadata(Path.Combine(snapshot.InputRoot, settingsRelative)),
         });
@@ -201,13 +201,6 @@ public sealed partial class ContentPipelineService
     private async Task VerifyReplacementTargetAsync(ContentCookOperation operation, SceneImportReplacement replacement, CancellationToken cancellationToken)
     {
         var root = operation.Project.ProjectRoot.Combine(replacement.Settings.BundleRoot).FullPath;
-        using var owners = await cookDocuments.AcquireAsync(replacement.Settings.Files.Append(replacement.Settings.PrimaryRelativePath + NativeSceneImportSettings.SidecarSuffix).Select(path => FileSystemPath.From(Path.Combine(root, path))), cancellationToken).ConfigureAwait(false);
-        var dirty = owners.Documents.Where(static document => document.IsDirty).ToArray();
-        if (dirty.Length != 0)
-        {
-            throw new CookInputsNeedSaveException(dirty);
-        }
-
         if (!replacement.Before.Matches(await CookRootImage.CaptureAsync(root, copyTo: null, cancellationToken).ConfigureAwait(false)))
         {
             throw new IOException("The retained source changed after review. Review the replacement again.");
@@ -224,7 +217,7 @@ public sealed partial class ContentPipelineService
         var (source, original) = (discovery.Source, discovery.Original);
         CookDependencyGraph? graph = null;
         ImmutableArray<CookSnapshotInput> replacementFiles = [];
-        var capture = await new CookInputSnapshotCapture(cookDocuments, this.cookCoordinator).CaptureAsync(
+        var snapshot = await new CookInputSnapshotCapture(this.cookCoordinator).CaptureAsync(
             operation,
             async token =>
             {
@@ -244,9 +237,6 @@ public sealed partial class ContentPipelineService
             },
             artifacts.Fingerprint,
             cancellationToken).ConfigureAwait(false);
-        var snapshot = capture.Snapshot ?? (capture.NeedsSave.IsEmpty
-            ? throw new IOException("The incoming source changed. Review the replacement again.")
-            : throw new CookInputsNeedSaveException(capture.NeedsSave));
         return (snapshot, graph!, replacementFiles);
     }
 

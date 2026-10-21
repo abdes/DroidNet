@@ -216,12 +216,6 @@ public sealed partial class ImportToolContentPipelineApi(
             or InvalidOperationException
             or ArgumentException;
 
-    [LoggerMessage(
-        EventId = 1001,
-        Level = LogLevel.Information,
-        Message = "Invoking ImportTool '{ToolPath}' with manifest '{ManifestPath}' in '{WorkingDirectory}'.")]
-    private partial void LogImportToolInvoked(string toolPath, string manifestPath, string workingDirectory);
-
     private async Task<NativeImportResult> RunImportWorkerAsync(ContentImportExecution execution, NativeArtifactLease artifacts, string manifestPath, string reportPath, string? capturePath, CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

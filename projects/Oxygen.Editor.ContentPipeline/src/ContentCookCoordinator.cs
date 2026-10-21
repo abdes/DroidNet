@@ -163,26 +163,14 @@ public sealed partial class ContentCookCoordinator : IContentCookCoordinator, IC
         {
             progress = request is null ? null : this.AddRun(operation, request, requestCancellation, shared);
             using var reporting = CookRunContext.Enter(progress);
-            while (true)
-            {
-                await this.AcquireWriterAsync(operation, request, shared, requestCancellation.Token).ConfigureAwait(false);
-                acquired = true;
-                await this.BeginWorkAsync(operation, progress, requestCancellation.Token).ConfigureAwait(false);
-                operationOwnership ??= CookOutputLease.AcquireOperation(operation.Project.ProjectRoot, operation.OperationId);
-                progress?.Report(new(Message: "Checking saved inputs and dependencies.", State: CookRunState.Preparing));
-                try
-                {
-                    var result = await work.Invoke(operation, requestCancellation.Token).ConfigureAwait(false);
-                    await this.CompleteWorkAsync(operation, result, verifyCurrentAfterWork, requestCancellation.Token).ConfigureAwait(false);
-                    return result;
-                }
-                catch (CookInputsNeedSaveException ex) when (progress is not null)
-                {
-                    acquired = false;
-                    this.ReleaseWriter();
-                    await this.BlockRun(operation.OperationId, ex.Documents).WaitAsync(requestCancellation.Token).ConfigureAwait(false);
-                }
-            }
+            await this.AcquireWriterAsync(operation, request, shared, requestCancellation.Token).ConfigureAwait(false);
+            acquired = true;
+            await this.BeginWorkAsync(operation, progress, requestCancellation.Token).ConfigureAwait(false);
+            operationOwnership = CookOutputLease.AcquireOperation(operation.Project.ProjectRoot, operation.OperationId);
+            progress?.Report(new(Message: "Checking saved inputs and dependencies.", State: CookRunState.Preparing));
+            var result = await work.Invoke(operation, requestCancellation.Token).ConfigureAwait(false);
+            await this.CompleteWorkAsync(operation, result, verifyCurrentAfterWork, requestCancellation.Token).ConfigureAwait(false);
+            return result;
         }
         catch (ContentPipelineTerminationException ex) when (acquired)
         {

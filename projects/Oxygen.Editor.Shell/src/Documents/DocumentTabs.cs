@@ -366,7 +366,7 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
         return docs;
     }
 
-    private sealed class CoordinatorUse(Dictionary<WindowId, DocumentCloseCoordinator> coordinators, WindowId windowId, DocumentCloseCoordinator coordinator) : IDisposable
+    private sealed partial class CoordinatorUse(Dictionary<WindowId, DocumentCloseCoordinator> coordinators, WindowId windowId, DocumentCloseCoordinator coordinator) : IDisposable
     {
         public void Dispose()
         {

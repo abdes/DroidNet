@@ -212,15 +212,6 @@ public sealed partial class ViewportStateService(
             exception: exception);
     }
 
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Restored viewport state for {SceneCount} scene(s) of project {ProjectRoot} (activation {Activation}).")]
-    private partial void LogRestored(int sceneCount, FileSystemPath projectRoot, long activation);
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Discarded saved viewport state ({Code}) of project {ProjectRoot}.")]
-    private partial void LogDiscarded(Exception exception, string code, FileSystemPath projectRoot);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Viewport state was not saved for project {ProjectRoot}.")]
-    private partial void LogWriteFailed(Exception exception, FileSystemPath projectRoot);
-
     /// <summary>The saved viewport state of a project, guarded by project identity and version.</summary>
     /// <param name="ProjectId">The project owning this state.</param>
     /// <param name="Version">The payload version.</param>

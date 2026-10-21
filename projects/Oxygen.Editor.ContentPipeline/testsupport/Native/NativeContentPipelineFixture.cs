@@ -5,7 +5,6 @@
 using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core.Compatibility;
 using Testably.Abstractions;
@@ -20,8 +19,7 @@ internal sealed partial class NativeContentPipelineFixture : IDisposable
     /// <summary>Initializes a new instance of the <see cref="NativeContentPipelineFixture"/> class.</summary>
     /// <param name="context">The active fixture project.</param>
     /// <param name="coordinator">Its shared cook writer.</param>
-    /// <param name="documents">The document owners participating in capture.</param>
-    public NativeContentPipelineFixture(IProjectContextService context, IContentCookCoordinator coordinator, ICookDocumentRegistry documents)
+    public NativeContentPipelineFixture(IProjectContextService context, IContentCookCoordinator coordinator)
     {
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, this.compatibility);
         var storage = new NativeStorageProvider(new RealFileSystem());
@@ -41,7 +39,6 @@ internal sealed partial class NativeContentPipelineFixture : IDisposable
             new ContentImportManifestBuilder(),
             new ContentImportManifestValidator(),
             api,
-            documents,
             this.compatibility,
             files,
             this.Publication,

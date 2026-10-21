@@ -166,7 +166,6 @@ public sealed partial class AssetFeedTests
             new(source, AssetPath.Parse("/Content/Models/Crate/Materials/Paint.omat"), ContentCookAssetKind.Material, "Content", "/Content/Models/Crate/Materials/Paint.omat"),
             new(source, AssetPath.Parse("/Content/Models/Crate/Scenes/Crate.oscene"), ContentCookAssetKind.Scene, "Content", "/Content/Models/Crate/Scenes/Crate.oscene"),
         ],
-        [],
         [])
     { SourcePaths = [FileSystemPath.From(workspace.SourcePath(source.VirtualPath.TrimStart('/')))] };
 }

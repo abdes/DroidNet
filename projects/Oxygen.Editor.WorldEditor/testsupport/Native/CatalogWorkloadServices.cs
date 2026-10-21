@@ -7,7 +7,7 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
-using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Testably.Abstractions;
 
@@ -20,6 +20,7 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
     public CatalogWorkloadServices(NativeSceneFixture fixture, IContentPipelineProcessRunner? processRunner = null)
     {
         this.Projects = fixture.Projects;
+        this.Documents = fixture.UnsavedDocuments;
         this.Projects.Activate(fixture.Projects.ActiveProject! with { AuthoringMounts = [new("Content", "Content")] });
         var files = new NativeAtomicFileStore(new RealFileSystem());
         this.Runs = new ContentCookCoordinator(this.Projects, NullLogger<ContentCookCoordinator>.Instance);
@@ -27,14 +28,14 @@ internal sealed partial class CatalogWorkloadServices : IDisposable
         this.Scopes = new ProjectCookScopeProvider(this.Storage);
         this.Publication = new(this.Runs, this.Projects, files, new ProjectManagerService(this.Storage, atomicFiles: files), this.EngineContent);
         this.Mounts = new();
-        this.Pipeline = new ContentPipelineService(this.Projects, this.Runs, this.Scopes, new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, this.Documents, this.compatibility, files, this.Publication, this.EngineContent);
+        this.Pipeline = new ContentPipelineService(this.Projects, this.Runs, this.Scopes, new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, this.compatibility, files, this.Publication, this.EngineContent);
     }
 
     public ProjectContextService Projects { get; }
 
     public NativeStorageProvider Storage { get; } = new(new RealFileSystem());
 
-    public CookDocumentRegistry Documents { get; } = new();
+    public IUnsavedDocuments Documents { get; }
 
     public ContentCookCoordinator Runs { get; }
 

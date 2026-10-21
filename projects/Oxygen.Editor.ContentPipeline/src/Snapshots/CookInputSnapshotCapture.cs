@@ -9,18 +9,17 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Snapshots;
 
-/// <summary>Copies a stable dependency set while protecting saved documents from overlapping writes.</summary>
-/// <param name="documents">The registered authoring owners and their save gates.</param>
+/// <summary>Copies a stable dependency set of saved files, as they are on disk.</summary>
 /// <param name="coordinator">The owning project lifetime.</param>
-public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry documents, IContentCookCoordinator coordinator)
+public sealed partial class CookInputSnapshotCapture(IContentCookCoordinator coordinator)
 {
     /// <summary>Discovers and captures coherent saved bytes, retrying changed discovery at most three times.</summary>
     /// <param name="operation">The operation holding the project writer.</param>
     /// <param name="discover">Resolves the complete source closure and its discovery hashes.</param>
     /// <param name="buildFingerprint">The compatible native/tool/schema fingerprint.</param>
     /// <param name="cancellationToken">Cancels capture before native work begins.</param>
-    /// <returns>A snapshot or documents requiring Save/Reload.</returns>
-    public async Task<CookSnapshotCaptureResult> CaptureAsync(
+    /// <returns>The snapshot of the saved inputs.</returns>
+    public async Task<CookInputSnapshot> CaptureAsync(
         ContentCookOperation operation,
         Func<CancellationToken, Task<IReadOnlyList<CookSnapshotInput>>> discover,
         string buildFingerprint,
@@ -38,15 +37,8 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
             cancellationToken.ThrowIfCancellationRequested();
             coordinator.VerifyWriter(operation);
             var inputs = NormalizeInputs(await discover(cancellationToken).ConfigureAwait(false));
-            using var reads = await documents.AcquireAsync(inputs.Select(static input => input.SourcePath), cancellationToken).ConfigureAwait(false);
             cancellationToken.ThrowIfCancellationRequested();
             coordinator.VerifyWriter(operation);
-            var dirty = reads.Documents.Where(static document => document.IsDirty).ToImmutableArray();
-            if (!dirty.IsEmpty)
-            {
-                return new(Snapshot: null, dirty, []);
-            }
-
             var attemptRoot = Path.Combine(operationRoot, "capture-" + attempt.ToString(System.Globalization.CultureInfo.InvariantCulture));
             EnsureNewDirectory(attemptRoot);
             Directory.CreateDirectory(attemptRoot);
@@ -63,19 +55,12 @@ public sealed partial class CookInputSnapshotCapture(ICookDocumentRegistry docum
                     continue;
                 }
 
-                var changed = reads.Documents.Where(document =>
-                    !string.Equals(captured[document.SourcePath].Hash, document.SavedContentHash, StringComparison.OrdinalIgnoreCase)).ToImmutableArray();
-                if (!changed.IsEmpty)
-                {
-                    return new(Snapshot: null, [], changed);
-                }
-
                 cancellationToken.ThrowIfCancellationRequested();
                 coordinator.VerifyWriter(operation);
                 inputs = [.. inputs.Select(input => input with { Metadata = captured[input.SourcePath].Metadata })];
                 var identity = ComputeIdentity(buildFingerprint, inputs);
                 Directory.Move(attemptRoot, inputRoot);
-                return new(new(operation, inputRoot, buildFingerprint, identity, inputs, reads.Documents), [], []);
+                return new(operation, inputRoot, buildFingerprint, identity, inputs);
             }
             finally
             {

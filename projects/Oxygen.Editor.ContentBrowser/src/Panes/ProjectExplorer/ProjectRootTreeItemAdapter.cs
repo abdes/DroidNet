@@ -220,7 +220,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
         }
         catch (Exception ex)
         {
-            this.CouldNotLoadProjectFolders(this.ProjectRootFolder.Location, ex.Message);
+            this.CouldNotLoadProjectFolders(this.ProjectRootFolder.Location, ex);
         }
     }
 
@@ -293,7 +293,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
             }
             catch (Exception ex)
             {
-                this.CouldNotLoadProjectFolders(this.ProjectRootFolder.Location, ex.Message);
+                this.CouldNotLoadProjectFolders(this.ProjectRootFolder.Location, ex);
             }
             finally
             {
@@ -324,7 +324,7 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
             }
             catch (Exception ex)
             {
-                this.CouldNotLoadProjectFolders(this.ProjectRootFolder.Location, ex.Message);
+                this.CouldNotLoadProjectFolders(this.ProjectRootFolder.Location, ex);
             }
             finally
             {
@@ -346,9 +346,4 @@ public sealed partial class ProjectRootTreeItemAdapter : TreeItemAdapter, IDispo
             this.disposed = true;
         }
     }
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "An error occurred while loading project folders from `{location}`: {error}")]
-    private partial void CouldNotLoadProjectFolders(string location, string error);
 }

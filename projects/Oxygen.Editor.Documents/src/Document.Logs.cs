@@ -7,43 +7,79 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Documents;
 
-/// <summary>Logging methods for <see cref="Document"/>.</summary>
+/// <summary>Logging helpers for <see cref="Document"/>.</summary>
 public sealed partial class Document
 {
-    [LoggerMessage(Level = LogLevel.Information, Message = "Saved {Kind} '{Title}' to '{Path}'.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Saved {Kind} '{Title}' to '{Path}'.")]
     private static partial void LogSaved(ILogger logger, string kind, string title, FileSystemPath path);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Did not save {Kind} '{Title}': {Reason}")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Did not save {Kind} '{Title}': {Reason}")]
     private static partial void LogSaveRefused(ILogger logger, string kind, string title, string reason);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Did not save {Kind} '{Title}': '{Path}' changed since it was read or saved. {Details}")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Did not save {Kind} '{Title}': '{Path}' changed since it was read or saved. {Details}")]
     private static partial void LogSaveConflict(ILogger logger, string kind, string title, FileSystemPath path, string details);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Saved a copy of {Kind} '{Title}' to '{Path}'.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Saved a copy of {Kind} '{Title}' to '{Path}'.")]
     private static partial void LogCopySaved(ILogger logger, string kind, string title, FileSystemPath path);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Did not save a copy of {Kind} '{Title}': '{Path}' exists. {Details}")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Did not save a copy of {Kind} '{Title}': '{Path}' exists. {Details}")]
     private static partial void LogCopyConflict(ILogger logger, string kind, string title, FileSystemPath path, string details);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Reloaded {Kind} '{Title}' from '{Path}'; its edits and its history were discarded.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Reloaded {Kind} '{Title}' from '{Path}'; its edits and its history were discarded.")]
     private static partial void LogReloaded(ILogger logger, string kind, string title, FileSystemPath path);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "Did not reload {Kind} '{Title}' from '{Path}': {Problem}")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Did not reload {Kind} '{Title}' from '{Path}': {Problem}")]
     private static partial void LogReloadFailed(ILogger logger, string kind, string title, FileSystemPath path, string problem);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "{Kind} '{Title}' is missing on disk at '{Path}'; it stays open, and saving writes it again.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "{Kind} '{Title}' is missing on disk at '{Path}'; it stays open, and saving writes it again.")]
     private static partial void LogMissing(ILogger logger, string kind, string title, FileSystemPath path);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "'{Path}' holds {Kind} '{Title}' as it was read or saved again.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "'{Path}' holds {Kind} '{Title}' as it was read or saved again.")]
     private static partial void LogRestored(ILogger logger, string kind, string title, FileSystemPath path);
 
-    [LoggerMessage(Level = LogLevel.Warning, Message = "'{Path}' changed outside the editor while {Kind} '{Title}' has edits or could not be read again; its edits are kept.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "'{Path}' changed outside the editor while {Kind} '{Title}' has edits or could not be read again; its edits are kept.")]
     private static partial void LogChangedOnDisk(ILogger logger, string kind, string title, FileSystemPath path);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "{Kind} '{Title}' keeps its edits over the change to '{Path}'; its next save replaces the file.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "{Kind} '{Title}' keeps its edits over the change to '{Path}'; its next save replaces the file.")]
     private static partial void LogKeptMine(ILogger logger, string kind, string title, FileSystemPath path);
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "{Kind} '{Title}' follows its file from '{From}' to '{Path}'.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "{Kind} '{Title}' follows its file from '{From}' to '{Path}'.")]
     private static partial void LogFollowed(ILogger logger, string kind, string title, FileSystemPath from, FileSystemPath path);
 
     private void LogSaved() => LogSaved(this.logger, this.Kind.Name, this.Title, this.File.Path);

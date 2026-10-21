@@ -4,7 +4,6 @@
 
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Managed.Core.Diagnostics;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Cooking;
 
@@ -17,15 +16,10 @@ public interface ICookingWorkspaceActions
     /// <returns>Whether the target was accepted for navigation.</returns>
     public Task<bool> GoToPropertyAsync(CookRunSnapshot run, DiagnosticRecord issue);
 
-    /// <summary>Saves exactly the documents captured in the displayed blocked request.</summary>
-    /// <param name="run">The immutable displayed request and its explicit document list.</param>
-    /// <returns>Whether ordinary saves completed with no remaining dirty documents.</returns>
-    public Task<bool> SaveListedAsync(CookRunSnapshot run);
-
-    /// <summary>Activates a listed open document without hiding Cooking.</summary>
-    /// <param name="sourcePath">The listed document's source file.</param>
-    /// <returns>Whether the document could be activated.</returns>
-    public Task<bool> OpenDocumentAsync(FileSystemPath sourcePath);
+    /// <summary>Saves the unsaved documents a cook reads, after asking.</summary>
+    /// <param name="request">The cook.</param>
+    /// <returns>Whether the cook can run: nothing it reads is unsaved, or every document was saved.</returns>
+    public Task<bool> SaveInputsAsync(CookRunRequest request);
 
     /// <summary>Opens a read-only report of the current published output for a completed cook's scope.</summary>
     /// <param name="run">The selected cook and its original scope.</param>

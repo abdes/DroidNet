@@ -34,10 +34,13 @@ public interface IAssetRelocationWorkflow
     /// <summary>Gets what the next redo redoes, or <see langword="null"/> when there is nothing.</summary>
     public string? RedoLabel { get; }
 
-    /// <summary>Runs a rename or move.</summary>
+    /// <summary>Runs a rename or move, after asking to save the unsaved documents.</summary>
     /// <param name="request">The requested moves.</param>
     /// <param name="title">The operation title for results.</param>
-    /// <returns>The outcome, or null when the request changes nothing.</returns>
+    /// <returns>
+    /// The outcome, or null when the request changes nothing. When the documents were not saved nothing runs, and the
+    /// failed outcome is not reported, since the user chose it.
+    /// </returns>
     public Task<AssetRelocationOutcome?> RelocateAsync(AssetRelocationRequest request, string title);
 
     /// <summary>Undoes the latest entry of the global history.</summary>

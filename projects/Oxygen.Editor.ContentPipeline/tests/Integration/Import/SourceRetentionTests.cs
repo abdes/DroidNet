@@ -28,7 +28,7 @@ public sealed class SourceRetentionTests
         var operation = () => workspace.Coordinator.RunAsync<int>(
             async (owner, token) =>
             {
-                retained = (await workspace.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), "Model", _ => Task.FromResult(new ImportSourceBundle(primary.RelativePath, [primary, buffer])), token).ConfigureAwait(false)).Source;
+                retained = await workspace.Retention.RetainAsync(owner, AssetPath.Parse("/Content/Models"), "Model", _ => Task.FromResult(new ImportSourceBundle(primary.RelativePath, [primary, buffer])), token).ConfigureAwait(false);
                 throw new InvalidDataException("Subsequent native cook failed.");
             },
             this.TestContext.CancellationToken);
@@ -67,8 +67,8 @@ public sealed class SourceRetentionTests
         workspace.Projects.Activate(workspace.Projects.ActiveProject! with { AuthoringMounts = [new("Content", "Authoring")] });
         var input = workspace.Write("model.glb", "source");
         var result = await workspace.RetainAsync("Model", [input], this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = result.Source!.DirectoryRelativePath.Should().Be("Authoring/Models/Model");
-        _ = File.Exists(Path.Combine(workspace.ProjectRoot, result.Source.DirectoryRelativePath, "model.glb")).Should().BeTrue();
+        _ = result.DirectoryRelativePath.Should().Be("Authoring/Models/Model");
+        _ = File.Exists(Path.Combine(workspace.ProjectRoot, result.DirectoryRelativePath, "model.glb")).Should().BeTrue();
     }
 
     /// <summary>Incomplete or changing discovery cannot expose a partially retained source folder.</summary>
@@ -134,21 +134,6 @@ public sealed class SourceRetentionTests
         var input = workspace.Write("model.glb", "source");
         var retain = () => workspace.RetainAsync(bundleName, [input], this.TestContext.CancellationToken);
         _ = await retain.Should().ThrowAsync<ArgumentException>().ConfigureAwait(false);
-        _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/Models")).Should().BeFalse();
-    }
-
-    /// <summary>Dirty participating source documents retain their existing save workflow and do not copy transient state.</summary>
-    /// <returns>The asynchronous document-ownership regression.</returns>
-    [TestMethod]
-    public async Task DirtySourceReturnsSaveRequirementWithoutRetention()
-    {
-        using var workspace = new RetentionWorkspace();
-        var input = workspace.Write("model.gltf", "saved");
-        var document = new CookDocumentState(input.SourcePath, "Model", IsDirty: true, input.DiscoveryHash);
-        using var registration = workspace.Documents.Register(input.SourcePath, _ => Task.FromResult<CookDocumentReadLease?>(new(document, () => { })));
-        var result = await workspace.RetainAsync("Model", [input], this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = result.Source.Should().BeNull();
-        _ = result.NeedsSave.Should().ContainSingle().Which.Should().Be(document);
         _ = Directory.Exists(Path.Combine(workspace.ProjectRoot, "Content/Models")).Should().BeFalse();
     }
 

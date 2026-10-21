@@ -269,6 +269,7 @@ public sealed partial class SceneDocumentLifetimeTests
                 this.Files.Documents,
                 new ContentPipeline.Relocation.ProjectDocumentFiles(this.Contexts),
                 this.CreateClosePrompt(),
+                Mock.Of<IDocumentConfirmations>(),
                 input.Object,
                 Mock.Of<IOperationResultPublisher>());
             this.Explorer = new SceneExplorerViewModel(

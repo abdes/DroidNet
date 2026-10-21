@@ -29,6 +29,7 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
     private readonly DocumentArea area;
     private readonly OpenDocuments documents;
     private readonly IDocumentFiles files;
+    private readonly IDocumentConfirmations confirmations;
     private readonly IDocumentInputCommitter inputCommitter;
     private readonly IOperationResultPublisher operationResults;
     private readonly IDocumentRelocations? relocations;
@@ -54,6 +55,7 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
     /// <param name="documents">The open documents of the session.</param>
     /// <param name="files">Where the project keeps the files that documents edit.</param>
     /// <param name="closePrompt">Asks the window's user about unsaved documents that close.</param>
+    /// <param name="confirmations">Asks the window's user to save documents before an operation that reads saved files.</param>
     /// <param name="inputCommitter">Commits the focused control's input before a document operation.</param>
     /// <param name="operationResults">Publishes the failures of opens and closes.</param>
     /// <param name="catalog">The catalog whose changes name the files that changed on disk, if any.</param>
@@ -65,6 +67,7 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
         OpenDocuments documents,
         IDocumentFiles files,
         IDocumentClosePrompt closePrompt,
+        IDocumentConfirmations confirmations,
         IDocumentInputCommitter inputCommitter,
         IOperationResultPublisher operationResults,
         IAssetCatalog? catalog = null,
@@ -76,11 +79,13 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(files);
         ArgumentNullException.ThrowIfNull(closePrompt);
+        ArgumentNullException.ThrowIfNull(confirmations);
         ArgumentNullException.ThrowIfNull(inputCommitter);
         ArgumentNullException.ThrowIfNull(operationResults);
         this.area = area;
         this.documents = documents;
         this.files = files;
+        this.confirmations = confirmations;
         this.inputCommitter = inputCommitter;
         this.operationResults = operationResults;
         this.relocations = relocations;
@@ -230,11 +235,12 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
         {
             await this.inputCommitter.CommitAsync().ConfigureAwait(true);
             var saved = await document.SaveCopyAsync(copy).ConfigureAwait(true);
-            return saved.Succeeded
-                ? new(Succeeded: true, $"Saved “{typed}” as a separate asset. The original is still unsaved; keep it open or explicitly discard its changes.")
-                : new(Succeeded: false, saved.Outcome == DocumentSaveOutcome.Conflict
+            var message = saved.Succeeded
+                ? $"Saved “{typed}” as a separate asset. The original is still unsaved; keep it open or explicitly discard its changes."
+                : saved.Outcome == DocumentSaveOutcome.Conflict
                     ? $"A file named “{typed}” already exists. Choose another name."
-                    : $"The copy was not saved. {saved.Message}");
+                    : $"The copy was not saved. {saved.Message}";
+            return new(Succeeded: saved.Succeeded, message);
         }
         catch (Exception exception) when (exception is not OperationCanceledException)
         {
@@ -258,13 +264,10 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
         this.area.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
         this.catalogChanges?.Dispose();
         this.relocationFollower?.Dispose();
-        if (this.relocations is not null)
-        {
-            this.relocations.FilesDeleted -= this.OnFilesDeleted;
-        }
+        this.relocations?.FilesDeleted -= this.OnFilesDeleted;
 
         this.closeCoordinatorUse.Dispose();
-        this.SetActiveEditor(null);
+        this.SetActiveEditor(editor: null);
         foreach (var editor in this.editors.Values)
         {
             (editor as IDisposable)?.Dispose();
@@ -447,7 +450,7 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
 
         if (ReferenceEquals(this.ActiveEditor, editor))
         {
-            this.SetActiveEditor(null);
+            this.SetActiveEditor(editor: null);
         }
 
         (editor as IDisposable)?.Dispose();

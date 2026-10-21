@@ -176,10 +176,10 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
     [TestMethod]
     public Task QueuedWorkspaceCookCannotReviveClosedSceneBindings() => EnqueueAsync(() => CheckWorkspacePublicationAsync(this.TestContext, scope: null, CheckPublicationAfterSceneSwitchAsync));
 
-    /// <summary>A changed source baseline fails cooking while the prior native material remains usable.</summary>
-    /// <returns>The source-conflict recovery integration regression.</returns>
+    /// <summary>A saved material that fails to cook leaves the prior native material usable until a cook succeeds.</summary>
+    /// <returns>The cook-failure recovery integration regression.</returns>
     [TestMethod]
-    public Task WorkspaceSourceConflictPreservesPublishedMaterialUntilRecovery() => EnqueueAsync(() => CheckWorkspacePublicationAsync(this.TestContext, scope: null, CheckPublicationSourceConflictAsync));
+    public Task WorkspaceCookFailurePreservesPublishedMaterialUntilRecovery() => EnqueueAsync(() => CheckWorkspacePublicationAsync(this.TestContext, scope: null, CheckPublicationCookFailureAsync));
 
     private static async Task CheckPublicationAfterSceneSwitchAsync(PublicationScenario scenario, CancellationToken cancellationToken)
     {
@@ -211,13 +211,14 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         _ = fixture.Document.IsDirty.Should().BeFalse();
     }
 
-    private static async Task CheckPublicationSourceConflictAsync(PublicationScenario scenario, CancellationToken cancellationToken)
+    private static async Task CheckPublicationCookFailureAsync(PublicationScenario scenario, CancellationToken cancellationToken)
     {
         var material = scenario.Material;
         var fileSystem = NativeSceneFixture.FileSystem;
         var original = await fileSystem.File.ReadAllBytesAsync(material.File.Path.FullPath, cancellationToken).ConfigureAwait(true);
         var content = scenario.SceneAuthoringFixture.Runtime.ContentStatus;
-        await fileSystem.File.WriteAllTextAsync(material.File.Path.FullPath, "{}", cancellationToken).ConfigureAwait(true);
+        // Every cook reads the saved file, so a file that is not JSON fails the cook.
+        await fileSystem.File.WriteAllTextAsync(material.File.Path.FullPath, "{", cancellationToken).ConfigureAwait(true);
         var failed = await scenario.Services.Pipeline.CookAssetAsync(material.File.Asset, cancellationToken).ConfigureAwait(true);
         _ = failed.Status.Should().Be(OperationStatus.Failed);
         _ = failed.IsPublished.Should().BeFalse();

@@ -20,7 +20,6 @@ using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using static DroidNet.Tests.UiTestHosting;
-using static Oxygen.Editor.WorldEditor.TestSupport.CookingScenario;
 using static Oxygen.Editor.WorldEditor.TestSupport.InspectorControls;
 using static Oxygen.Editor.WorldEditor.TestSupport.NativeSceneData;
 using static Oxygen.Editor.WorldEditor.TestSupport.PublicationWorkflows;
@@ -53,7 +52,6 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         using var services = new CatalogWorkloadServices(fixture);
         await using var catalog = new AssetCatalog(services.Projects, services.Storage, services.EngineContent, services.Publication);
         await using var publication = await fixture.StartWorkspacePreviewAsync(services, catalog).ConfigureAwait(true);
-        using var document = fixture.RegisterMainCookDocument(services);
         var uri = AssetPath.Parse("/Content/Scenes/Main.oscene");
         _ = (await services.Pipeline.CookCurrentSceneAsync(uri, timeout.Token).ConfigureAwait(true)).IsPublished.Should().BeTrue();
         var originalOutput = ReadPublishedHashes(NativeSceneFixture.FileSystem, fixture.ProjectRoot);
@@ -81,7 +79,7 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         _ = (await fixture.ReadNativeAsync(timeout.Token).ConfigureAwait(true)).AerialPerspectiveStartDepthMeters.Should().Be(100);
         _ = services.Runs.Runs.Single(run => run.OperationId == failed.OperationId).Messages.Should().Contain(message => message.Text.Contains("= -1", StringComparison.Ordinal));
         actions.Verify(value => value.GoToPropertyAsync(It.IsAny<CookRunSnapshot>(), It.IsAny<DiagnosticRecord>()), Times.Once());
-        actions.Verify(value => value.SaveListedAsync(It.IsAny<CookRunSnapshot>()), Times.Once());
+        actions.Verify(value => value.SaveInputsAsync(It.IsAny<CookRunRequest>()), Times.Once());
     });
 
     private static Grid CreateMainRepairSurface(EnvironmentView environment, CookingPanelView cooking)
@@ -110,11 +108,8 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
             fixture.Model.RequestFieldFocus(issue.SuggestedAction!.Payload["PropertyPath"]);
             return Task.FromResult(true);
         });
-        _ = actions.Setup(value => value.SaveListedAsync(It.IsAny<CookRunSnapshot>())).Returns<CookRunSnapshot>(async run =>
-        {
-            _ = run.UnsavedDocuments.Should().ContainSingle().Which.DisplayName.Should().Be("Main");
-            return (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded;
-        });
+        _ = actions.Setup(value => value.SaveInputsAsync(It.IsAny<CookRunRequest>())).Returns<CookRunRequest>(async _ =>
+            (await fixture.Document.SaveAsync().ConfigureAwait(true)).Succeeded);
         return actions;
     }
 
@@ -143,12 +138,10 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         number.CompletePendingTextEdit();
         await fixture.Model.PendingEdits.ConfigureAwait(true);
         _ = fixture.Document.IsDirty.Should().BeTrue();
-        var retry = panel.RetryCommand.ExecuteAsync(parameter: null);
-        await WaitForBlockedMaterialAsync(panel, fixture.Document.File.Path, cancellationToken).ConfigureAwait(true);
-        var resumedId = panel.SelectedRun!.Snapshot.OperationId;
-        await InvokeCookingSaveAsync(panel, cooking, cancellationToken).ConfigureAwait(true);
-        await retry.WaitAsync(cancellationToken).ConfigureAwait(true);
-        _ = services.Runs.Runs.Single(run => run.OperationId == resumedId).State.Should().BeOneOf(CookRunState.Succeeded, CookRunState.SucceededWithWarnings);
+        await panel.RetryCommand.ExecuteAsync(parameter: null).WaitAsync(cancellationToken).ConfigureAwait(true);
+        var retried = services.Runs.Runs.OrderByDescending(static run => run.StartedAt).First();
+        _ = retried.OperationId.Should().NotBe(failedId);
+        _ = retried.State.Should().BeOneOf(CookRunState.Succeeded, CookRunState.SucceededWithWarnings);
         _ = fixture.Document.IsDirty.Should().BeFalse();
     }
 }

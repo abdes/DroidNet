@@ -3,24 +3,19 @@
 // SPDX-License-Identifier: MIT
 
 using System.Security.Cryptography;
-using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Snapshots;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
-/// <summary>Reads acknowledged saved bytes without retaining live authoring objects.</summary>
+/// <summary>Reads the saved source files a cook consumes, as they are on disk.</summary>
 internal static partial class CookSavedSourceReader
 {
-    /// <summary>Reads one saved source while excluding in-place writes and unacknowledged external changes.</summary>
-    /// <param name="documents">Registered source owners.</param>
+    /// <summary>Reads one saved source while excluding in-place writes.</summary>
     /// <param name="sourcePath">The absolute source path.</param>
-    /// <param name="cancellationToken">Cancels the protected read.</param>
-    /// <param name="allowUnsavedDocuments">Reads acknowledged saved bytes for status inspection while an owner has newer unsaved edits.</param>
-    /// <returns>The saved bytes released from their source read lease.</returns>
-    public static Task<byte[]> ReadAsync(ICookDocumentRegistry documents, string sourcePath, CancellationToken cancellationToken, bool allowUnsavedDocuments = false)
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The saved bytes.</returns>
+    public static Task<byte[]> ReadAsync(string sourcePath, CancellationToken cancellationToken)
         => ReadCoreAsync(
-            documents,
             sourcePath,
             static async (source, token) =>
             {
@@ -28,28 +23,19 @@ internal static partial class CookSavedSourceReader
                 await using var lifetime = buffer.ConfigureAwait(false);
                 await source.CopyToAsync(buffer, token).ConfigureAwait(false);
                 var bytes = buffer.ToArray();
-                return (bytes, Convert.ToHexString(SHA256.HashData(bytes)));
+                return bytes;
             },
-            cancellationToken,
-            allowUnsavedDocuments);
+            cancellationToken);
 
     /// <summary>Hashes a saved source without loading a potentially large dependency into memory.</summary>
-    /// <param name="documents">Registered source owners.</param>
     /// <param name="sourcePath">The absolute source path.</param>
-    /// <param name="cancellationToken">Cancels the protected read.</param>
-    /// <param name="allowUnsavedDocuments">Reads acknowledged saved bytes for read-only status while the document has newer edits.</param>
-    /// <returns>The acknowledged source's SHA-256 hash.</returns>
-    public static Task<string> HashAsync(ICookDocumentRegistry documents, string sourcePath, CancellationToken cancellationToken, bool allowUnsavedDocuments = false)
+    /// <param name="cancellationToken">Cancels the read.</param>
+    /// <returns>The source's SHA-256 hash.</returns>
+    public static Task<string> HashAsync(string sourcePath, CancellationToken cancellationToken)
         => ReadCoreAsync(
-            documents,
             sourcePath,
-            static async (source, token) =>
-            {
-                var hash = Convert.ToHexString(await SHA256.HashDataAsync(source, token).ConfigureAwait(false));
-                return (hash, hash);
-            },
-            cancellationToken,
-            allowUnsavedDocuments);
+            static async (source, token) => Convert.ToHexString(await SHA256.HashDataAsync(source, token).ConfigureAwait(false)),
+            cancellationToken);
 
     /// <summary>Reads a source file as it is on disk, for status, which describes the files and not open documents.</summary>
     /// <param name="sourcePath">The absolute source path.</param>
@@ -80,14 +66,12 @@ internal static partial class CookSavedSourceReader
     }
 
     /// <summary>Copies and hashes one saved source while excluding in-place writes.</summary>
-    /// <param name="documents">Registered source owners.</param>
     /// <param name="sourcePath">The original absolute source path.</param>
     /// <param name="destinationPath">A new private discovery copy.</param>
-    /// <param name="cancellationToken">Cancels the protected copy.</param>
+    /// <param name="cancellationToken">Cancels the copy.</param>
     /// <returns>The hash of the exact bytes copied.</returns>
-    public static Task<string> CopyAsync(ICookDocumentRegistry documents, string sourcePath, string destinationPath, CancellationToken cancellationToken)
+    public static Task<string> CopyAsync(string sourcePath, string destinationPath, CancellationToken cancellationToken)
         => ReadCoreAsync(
-            documents,
             sourcePath,
             async (source, token) =>
             {
@@ -96,7 +80,7 @@ internal static partial class CookSavedSourceReader
                 var output = new FileStream(destinationPath, FileMode.CreateNew, FileAccess.Write, FileShare.None, 65536, FileOptions.Asynchronous);
                 await using var lifetime = output.ConfigureAwait(false);
                 await source.CopyToAsync(output, token).ConfigureAwait(false);
-                return (hash, hash);
+                return hash;
             },
             cancellationToken);
 
@@ -136,34 +120,16 @@ internal static partial class CookSavedSourceReader
     }
 
     private static async Task<T> ReadCoreAsync<T>(
-        ICookDocumentRegistry documents,
         string sourcePath,
-        Func<FileStream, CancellationToken, Task<(T value, string hash)>> read,
-        CancellationToken cancellationToken,
-        bool allowUnsavedDocuments = false)
+        Func<FileStream, CancellationToken, Task<T>> read,
+        CancellationToken cancellationToken)
     {
-        using var reads = await documents.AcquireAsync([FileSystemPath.From(sourcePath)], cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        var dirty = reads.Documents.Where(static document => document.IsDirty).ToArray();
-        if (!allowUnsavedDocuments && dirty.Length != 0)
-        {
-            throw new CookInputsNeedSaveException(dirty);
-        }
 
         // In-place writes stay excluded for the complete read/copy. An atomic replace, as a save makes, proceeds: this
-        // handle keeps reading the replaced file, whose bytes match the saved state captured under the read leases, and
-        // the replacement is a change of its own that is read again.
+        // handle keeps reading the replaced file, and the replacement is a change of its own that is read again.
         var source = new FileStream(sourcePath, FileMode.Open, FileAccess.Read, FileShare.Read | FileShare.Delete, 65536, FileOptions.Asynchronous | FileOptions.SequentialScan);
         await using var lifetime = source.ConfigureAwait(false);
-        var (value, hash) = await read(source, cancellationToken).ConfigureAwait(false);
-        foreach (var document in reads.Documents)
-        {
-            if (!string.Equals(hash, document.SavedContentHash, StringComparison.OrdinalIgnoreCase))
-            {
-                throw new IOException($"'{document.DisplayName}' changed outside the editor. Reload it before cooking. Source: {sourcePath}");
-            }
-        }
-
-        return value;
+        return await read(source, cancellationToken).ConfigureAwait(false);
     }
 }

@@ -13,14 +13,12 @@ namespace Oxygen.Editor.ContentPipeline.Snapshots;
 /// <param name="BuildFingerprint">The compatible artifact/schema identity.</param>
 /// <param name="InputIdentity">The content identity independent of local paths and operation IDs.</param>
 /// <param name="Inputs">The original identities, paths, and captured hashes.</param>
-/// <param name="Documents">The saved revisions of participating open documents.</param>
 public sealed record CookInputSnapshot(
     ContentCookOperation Operation,
     string InputRoot,
     string BuildFingerprint,
     string InputIdentity,
-    ImmutableArray<CookSnapshotInput> Inputs,
-    ImmutableArray<CookDocumentState> Documents)
+    ImmutableArray<CookSnapshotInput> Inputs)
 {
     /// <summary>Gets foreign cooked inputs held alongside the private authoring snapshot.</summary>
     public ImmutableArray<CookedDependencySnapshot> CookedDependencies { get; init; } = [];

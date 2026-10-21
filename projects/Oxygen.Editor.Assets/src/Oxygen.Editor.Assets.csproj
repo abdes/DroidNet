@@ -10,6 +10,7 @@
         <PackageTags>oxygen;gameengine</PackageTags>
         <RootNamespace>Oxygen.Editor.Assets</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>

@@ -1,10 +1,9 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Assets;
@@ -34,20 +33,14 @@ public sealed partial class AssetFeed
     private static int ActivityPriority(CookRunSnapshot run)
         => run.IsCompleted ? 0 : run.State == CookRunState.Queued ? 1 : 2;
 
-    private void OnDocumentStateChanged(object? sender, CookDocumentStateChangedEventArgs args)
+    // A save changes the file too; the catalog reports that change, which refreshes the status.
+    private void OnUnsavedDocumentsChanged(object? sender, EventArgs args)
     {
         lock (this.refreshSync)
         {
-            if (this.disposed)
+            if (!this.disposed)
             {
-                return;
-            }
-
-            this.PublishLiveState(args.SavedSourceChanged ? args.After!.SourcePath : null);
-            if (args.SavedSourceChanged && this.projectContextService.ActiveProject is { } project
-                && args.After!.SourcePath != project.ProjectRoot && args.After.SourcePath.IsSameOrInside(project.ProjectRoot))
-            {
-                _ = this.RequestRefresh(invalidate: true);
+                this.PublishLiveState();
             }
         }
     }
@@ -70,19 +63,18 @@ public sealed partial class AssetFeed
         }
     }
 
-    private void PublishLiveState(FileSystemPath? changedSource = null)
+    private void PublishLiveState()
     {
         var current = this.items.Value;
-        var updated = this.ApplyLiveState(current, changedSource);
+        var updated = this.ApplyLiveState(current);
         if (current.Where((item, index) => !ReferenceEquals(item, updated[index])).Any())
         {
             this.items.OnNext(updated);
         }
     }
 
-    private AssetEntry[] ApplyLiveState(IReadOnlyList<AssetEntry> source, FileSystemPath? changedSource = null)
+    private AssetEntry[] ApplyLiveState(IReadOnlyList<AssetEntry> source)
     {
-        var documentStates = this.documents.GetState().Documents;
         var project = this.projectContextService.ActiveProject;
         var runs = this.cooks.Runs.Where(run => run.ProjectId == project?.ProjectId && run.ProjectRoot == project.ProjectRoot)
             .OrderByDescending(ActivityPriority).ThenByDescending(static run => run.StartedAt).ToArray();
@@ -94,13 +86,7 @@ public sealed partial class AssetFeed
             }
 
             IReadOnlyList<FileSystemPath> paths = !status.SourcePaths.IsEmpty ? status.SourcePaths : item.DescriptorPath is { } descriptor ? [descriptor] : [];
-            if (changedSource is not null && paths.Contains(changedSource)
-                && status.Freshness == Oxygen.Editor.ContentPipeline.Status.AssetCookFreshness.Current)
-            {
-                status = status with { Freshness = Oxygen.Editor.ContentPipeline.Status.AssetCookFreshness.OutOfDate };
-            }
-
-            var dirty = documentStates.Where(document => document.IsDirty && paths.Contains(document.SourcePath)).ToArray();
+            var dirty = this.documents.Find(paths);
             var run = runs.FirstOrDefault(candidate => Includes(candidate, item));
             var activity = run is null ? null : new AssetCookActivity(run.OperationId, run.State);
             return ReferenceEquals(status, item.CookStatus) && status.UnsavedDocuments.SequenceEqual(dirty) && item.CookActivity == activity

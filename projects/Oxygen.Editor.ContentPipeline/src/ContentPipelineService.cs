@@ -6,7 +6,6 @@ using System.Collections.Immutable;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Incremental;
 using Oxygen.Editor.ContentPipeline.Inspection;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
@@ -27,7 +26,6 @@ namespace Oxygen.Editor.ContentPipeline;
 /// <param name="manifestBuilder">The import manifest builder.</param>
 /// <param name="manifestValidator">The import manifest validator.</param>
 /// <param name="engineContentPipelineApi">The engine content-pipeline adapter.</param>
-/// <param name="cookDocuments">The registered saved-document owners.</param>
 /// <param name="nativeCompatibility">The compatible producer identity and file ownership.</param>
 /// <param name="files">Atomic storage for retained source settings.</param>
 /// <param name="publication">The shared journal and runtime-publication owner.</param>
@@ -39,7 +37,6 @@ public sealed partial class ContentPipelineService(
     IContentImportManifestBuilder manifestBuilder,
     IContentImportManifestValidator manifestValidator,
     IEngineContentPipelineApi engineContentPipelineApi,
-    ICookDocumentRegistry cookDocuments,
     INativeCompatibilityService nativeCompatibility,
     DroidNet.Storage.IAtomicFileStore files,
     Publication.CookPublicationService publication,
@@ -418,19 +415,11 @@ public sealed partial class ContentPipelineService(
             CookTargetKind.Project,
             cancellationToken);
 
-    private async Task RequireSavedDocumentsAsync(IEnumerable<ContentCookInput> inputs, CancellationToken cancellationToken)
+    private static void ReportPreparing(IEnumerable<ContentCookInput> inputs)
     {
-        var discovered = inputs.ToArray();
-        foreach (var input in discovered)
+        foreach (var input in inputs)
         {
             CookRunContext.Report(new(Asset: new(input.AssetUri, input.Kind, CookAssetState.Preparing)));
-        }
-
-        using var reads = await cookDocuments.AcquireAsync(discovered.Select(static input => input.SourceAbsolutePath), cancellationToken).ConfigureAwait(false);
-        var dirty = reads.Documents.Where(static document => document.IsDirty).ToArray();
-        if (dirty.Length != 0)
-        {
-            throw new CookInputsNeedSaveException(dirty);
         }
     }
 

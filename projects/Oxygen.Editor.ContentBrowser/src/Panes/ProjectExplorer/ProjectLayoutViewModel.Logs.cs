@@ -7,13 +7,16 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.ProjectExplorer;
 
-#pragma warning disable SA1204 // Static elements should appear before instance elements
-
 /// <inheritdoc cref="ProjectLayoutViewModel"/>
 public partial class ProjectLayoutViewModel
 {
-    [LoggerMessage(Level = LogLevel.Error, Message = "Could not refresh the published output folders.")]
-    private partial void LogCookedProjectionFailure(Exception exception);
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Could not refresh the published output folders.")]
+    private static partial void LogCookedProjectionFailure(ILogger logger, Exception exception);
+
+    private void LogCookedProjectionFailure(Exception exception) => LogCookedProjectionFailure(this.logger, exception);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -69,12 +72,16 @@ public partial class ProjectLayoutViewModel
         Message = "RestoreState: Final ContentBrowserState.SelectedFolders: [{Folders}]")]
     private static partial void LogRestoreStateFinal(ILogger logger, string folders);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogRestoreStateFinal(IEnumerable<AssetPath> folders)
     {
-        if (this.logger.IsEnabled(LogLevel.Debug))
+        if (!this.logger.IsEnabled(LogLevel.Debug))
         {
-            LogRestoreStateFinal(this.logger, string.Join(", ", folders));
+            return;
         }
+
+        var joined = string.Join(", ", folders);
+        LogRestoreStateFinal(this.logger, joined);
     }
 
     [LoggerMessage(
@@ -94,8 +101,16 @@ public partial class ProjectLayoutViewModel
     private static partial void LogTreeSelectionChangedEarlyReturn(ILogger logger, bool isUpdating, bool suppress, string? propertyName, string? type);
 
     [System.Diagnostics.Conditional("DEBUG")]
-    private void LogTreeSelectionChangedEarlyReturn(bool isUpdating, bool suppress, string? propertyName, string? type)
-        => LogTreeSelectionChangedEarlyReturn(this.logger, isUpdating, suppress, propertyName, type);
+    private void LogTreeSelectionChangedEarlyReturn(bool isUpdating, bool suppress, string? propertyName, object? selectionModel)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var type = selectionModel?.GetType().Name;
+        LogTreeSelectionChangedEarlyReturn(this.logger, isUpdating, suppress, propertyName, type);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -113,12 +128,16 @@ public partial class ProjectLayoutViewModel
         Message = "Selected folders: [{Folders}]")]
     private static partial void LogSelectedFolders(ILogger logger, string folders);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogSelectedFolders(IEnumerable<AssetPath> folders)
     {
-        if (this.logger.IsEnabled(LogLevel.Debug))
+        if (!this.logger.IsEnabled(LogLevel.Debug))
         {
-            LogSelectedFolders(this.logger, string.Join(", ", folders));
+            return;
         }
+
+        var joined = string.Join(", ", folders);
+        LogSelectedFolders(this.logger, joined);
     }
 
     [LoggerMessage(
@@ -157,137 +176,123 @@ public partial class ProjectLayoutViewModel
         Message = "ContentBrowserState.SelectedFolders changed. New selection: [{Folders}]")]
     private static partial void LogContentBrowserStateSelectedFoldersChanged(ILogger logger, string folders);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogContentBrowserStateSelectedFoldersChanged(IEnumerable<AssetPath> folders)
     {
-        if (this.logger.IsEnabled(LogLevel.Debug))
+        if (!this.logger.IsEnabled(LogLevel.Debug))
         {
-            LogContentBrowserStateSelectedFoldersChanged(this.logger, string.Join(", ", folders));
+            return;
         }
+
+        var joined = string.Join(", ", folders);
+        LogContentBrowserStateSelectedFoldersChanged(this.logger, joined);
     }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "UpdateTreeSelectionFromStateAsync - projectRoot is null, returning")]
-    private static partial void LogUpdateTreeSelectionProjectRootNull(ILogger logger);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogUpdateTreeSelectionProjectRootNull()
-        => LogUpdateTreeSelectionProjectRootNull(this.logger);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Updating tree selection from ContentBrowserState")]
-    private static partial void LogUpdateTreeSelectionStart(ILogger logger);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogUpdateTreeSelectionStart()
-        => LogUpdateTreeSelectionStart(this.logger);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Set isUpdatingFromState = {Value}")]
-    private static partial void LogSetIsUpdatingFromState(ILogger logger, bool value);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogSetIsUpdatingFromState(bool value)
-        => LogSetIsUpdatingFromState(this.logger, value);
-
-    [LoggerMessage(
-        Level = LogLevel.Debug,
-        Message = "Selected paths to sync: [{Paths}]")]
-    private static partial void LogSelectedPathsToSync(ILogger logger, string paths);
-
-    private void LogSelectedPathsToSync(string paths)
-        => LogSelectedPathsToSync(this.logger, paths);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Cleared all tree item selections")]
-    private static partial void LogClearedTreeItemSelections(ILogger logger);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogClearedTreeItemSelections()
-        => LogClearedTreeItemSelections(this.logger);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Skipping empty path")]
-    private static partial void LogSkippingEmptyPath(ILogger logger);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogSkippingEmptyPath()
-        => LogSkippingEmptyPath(this.logger);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Setting IsSelected=true for path: {Path}")]
-    private static partial void LogSettingIsSelected(ILogger logger, string path);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogSettingIsSelected(string path)
-        => LogSettingIsSelected(this.logger, path);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Could not find folder adapter for path: {Path}")]
-    private static partial void LogFolderAdapterNotFound(ILogger logger, string path);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogFolderAdapterNotFound(string path)
-        => LogFolderAdapterNotFound(this.logger, path);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Completed tree selection update from ContentBrowserState")]
-    private static partial void LogUpdateTreeSelectionCompleted(ILogger logger);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogUpdateTreeSelectionCompleted()
-        => LogUpdateTreeSelectionCompleted(this.logger);
-
-    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Folder rename requested in the sources tree: '{Before}' -> '{After}'.")]
+        Message = "Folder rename requested in the sources tree: '{Before}' -> '{After}'.")]
     private static partial void LogFolderRenameRequested(ILogger logger, AssetPath before, AssetPath after);
 
     [System.Diagnostics.Conditional("DEBUG")]
     private void LogFolderRenameRequested(AssetPath before, AssetPath after)
         => LogFolderRenameRequested(this.logger, before, after);
 
-    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Folder drop in the sources tree: {Operation} [{Folders}] into '{Parent}'.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Folder drop in the sources tree: {Operation} [{Folders}] into '{Parent}'.")]
     private static partial void LogFolderDropRequested(ILogger logger, DroidNet.Controls.TreeDropOperation operation, string folders, AssetPath parent);
 
     [System.Diagnostics.Conditional("DEBUG")]
     private void LogFolderDropRequested(DroidNet.Controls.TreeDropOperation operation, IEnumerable<AssetPath> folders, AssetPath parent)
-#pragma warning disable CA1873 // Compiled out of release builds by Conditional("DEBUG")
-        => LogFolderDropRequested(this.logger, operation, string.Join(", ", folders), parent);
-#pragma warning restore CA1873
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Folder '{Folder}' no longer exists; showing its nearest existing folder '{Shown}' instead, or the whole project when none is.")]
-    private partial void LogMissingSelectedFolder(AssetPath folder, AssetPath? shown);
+        var joined = string.Join(", ", folders);
+        LogFolderDropRequested(this.logger, operation, joined, parent);
+    }
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Reloading the sources tree: the asset catalog reported changed folders.")]
-    private partial void LogReloadingTreeAfterFolderChanges();
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Folder '{Folder}' no longer exists; showing its nearest existing folder '{Shown}' instead, or the whole project when none is.")]
+    private static partial void LogMissingSelectedFolder(ILogger logger, AssetPath folder, AssetPath? shown);
 
-    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Folder delete in the sources tree: [{Folders}].")]
+    private void LogMissingSelectedFolder(AssetPath folder, AssetPath? shown)
+        => LogMissingSelectedFolder(this.logger, folder, shown);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Reloading the sources tree: the asset catalog reported changed folders.")]
+    private static partial void LogReloadingTreeAfterFolderChanges(ILogger logger);
+
+    private void LogReloadingTreeAfterFolderChanges()
+        => LogReloadingTreeAfterFolderChanges(this.logger);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Folder delete in the sources tree: [{Folders}].")]
     private static partial void LogFolderDeleteRequested(ILogger logger, string folders);
 
     [System.Diagnostics.Conditional("DEBUG")]
     private void LogFolderDeleteRequested(IEnumerable<AssetPath> folders)
-#pragma warning disable CA1873 // Compiled out of release builds by Conditional("DEBUG")
-        => LogFolderDeleteRequested(this.logger, string.Join(", ", folders));
-#pragma warning restore CA1873
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
 
-    [LoggerMessage(SkipEnabledCheck = true, Level = LogLevel.Debug, Message = "Reloading the sources tree after {Moves} folder moves and {Deleted} deletes.")]
+        var joined = string.Join(", ", folders);
+        LogFolderDeleteRequested(this.logger, joined);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Reloading the sources tree after {Moves} folder moves and {Deleted} deletes.")]
     private static partial void LogReloadingTreeAfterFileChanges(ILogger logger, int moves, int deleted);
 
     [System.Diagnostics.Conditional("DEBUG")]
     private void LogReloadingTreeAfterFileChanges(int moves, int deleted)
         => LogReloadingTreeAfterFileChanges(this.logger, moves, deleted);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Content mount update failed.")]
+    private static partial void LogMountChangeFailed(ILogger logger, Exception exception);
+
+    private void LogMountChangeFailed(Exception exception) => LogMountChangeFailed(this.logger, exception);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Pak mount '{Name}' ('{Path}') could not be read; the Content Browser does not show it.")]
+    private static partial void LogPakMountFailure(ILogger logger, Exception exception, string name, FileSystemPath path);
+
+    private void LogPakMountFailure(Exception exception, string name, FileSystemPath path)
+        => LogPakMountFailure(this.logger, exception, name, path);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to restore folder mount {Name}.")]
+    private static partial void LogMountRestoreFailure(ILogger logger, Exception exception, string name);
+
+    private void LogMountRestoreFailure(Exception exception, string name)
+        => LogMountRestoreFailure(this.logger, exception, name);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Failed to navigate to folder.")]
+    private static partial void LogFolderNavigationFailure(ILogger logger, Exception exception);
+
+    private void LogFolderNavigationFailure(Exception exception) => LogFolderNavigationFailure(this.logger, exception);
 }

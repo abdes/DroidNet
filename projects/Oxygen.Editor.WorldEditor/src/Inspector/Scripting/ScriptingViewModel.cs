@@ -149,7 +149,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         this.scriptSubscription = null;
         this.assetSubscription?.Dispose();
         this.assetSubscription = null;
-        this.Bind(null);
+        this.Bind(value: null);
     }
 
     /// <summary>Applies one change to the slots as an undoable scene edit.</summary>

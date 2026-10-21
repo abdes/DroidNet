@@ -495,7 +495,7 @@ public partial class ProjectLayoutViewModel(
                 this.isUpdatingFromState,
                 this.suppressTreeSelectionEvents,
                 e.PropertyName,
-                this.SelectionModel?.GetType().Name);
+                this.SelectionModel);
             return;
         }
 

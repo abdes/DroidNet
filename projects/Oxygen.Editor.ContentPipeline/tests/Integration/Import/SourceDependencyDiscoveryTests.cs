@@ -55,15 +55,14 @@ public sealed class SourceDependencyDiscoveryTests
         _ = graph.Files.Should().ContainSingle(input => input.RelativePath == "Content/Materials/Red.omat.json.import.json" && input.IsAbsent);
         _ = graph.PublishedReferences.Should().BeEmpty();
 
-        var capture = new CookInputSnapshotCapture(workspace.Documents, workspace.CookCoordinator);
+        var capture = new CookInputSnapshotCapture(workspace.CookCoordinator);
         var result = await workspace.CookCoordinator.RunAsync(
             (operation, token) => capture.CaptureAsync(operation, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>(graph.Files), "compatible-fixture-artifacts", token),
             this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = result.Snapshot.Should().NotBeNull();
         workspace.WriteText("Content/Geometry/mesh.bin", "changed buffer bytes");
-        var capturedBuffer = await File.ReadAllTextAsync(Path.Combine(result.Snapshot!.InputRoot, "Content", "Geometry", "mesh.bin"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var capturedBuffer = await File.ReadAllTextAsync(Path.Combine(result.InputRoot, "Content", "Geometry", "mesh.bin"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = capturedBuffer.Should().Be("saved buffer bytes");
-        _ = File.Exists(Path.Combine(result.Snapshot.InputRoot, "Content", "Materials", "Red.omat.json.import.json")).Should().BeFalse();
+        _ = File.Exists(Path.Combine(result.InputRoot, "Content", "Materials", "Red.omat.json.import.json")).Should().BeFalse();
 
         var materialOnly = await discovery.DiscoverAsync(workspace.ProjectContext, [CookInputResolver.Resolve(workspace.ProjectContext, materialSource, ContentCookInputRole.Primary)], this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = materialOnly.Assets.Should().ContainSingle().Which.AssetUri.Should().Be(materialSource);
@@ -162,9 +161,9 @@ public sealed class SourceDependencyDiscoveryTests
         workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
         var input = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Materials/Red.omat"), ContentCookInputRole.Primary);
         var discovery = NativeSourceFactsFixture.CreateDiscovery(workspace);
-        var capture = new CookInputSnapshotCapture(workspace.Documents, workspace.CookCoordinator);
+        var capture = new CookInputSnapshotCapture(workspace.CookCoordinator);
         var attempts = 0;
-        var result = await workspace.CookCoordinator.RunAsync(
+        var snapshot = await workspace.CookCoordinator.RunAsync(
             (operation, token) => capture.CaptureAsync(
             operation,
             async cancellationToken =>
@@ -182,8 +181,6 @@ public sealed class SourceDependencyDiscoveryTests
             this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = attempts.Should().Be(2);
-        _ = result.Snapshot.Should().NotBeNull();
-        var snapshot = result.Snapshot!;
         var settings = snapshot.Inputs.Single(file => file.RelativePath.EndsWith(".import.json", StringComparison.Ordinal));
         _ = settings.IsAbsent.Should().BeFalse();
         var savedSettings = await File.ReadAllTextAsync(Path.Combine(snapshot.InputRoot, settings.RelativePath), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -193,31 +190,6 @@ public sealed class SourceDependencyDiscoveryTests
         var savedBytes = await File.ReadAllBytesAsync(Path.Combine(snapshot.InputRoot, savedMaterial.RelativePath), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = Convert.ToHexString(SHA256.HashData(savedBytes)).Should().Be(savedMaterial.DiscoveryHash);
         _ = Encoding.UTF8.GetString(savedBytes).Should().Contain("\"Red\"").And.NotContain("Changed later");
-    }
-
-    /// <summary>A material shared with a dirty scene can be captured independently; a scene's dirty material blocks its capture.</summary>
-    /// <returns>The asynchronous test operation.</returns>
-    [TestMethod]
-    public async Task DirtyDependencyBlocksDiscoveryButDirtyConsumerDoesNot()
-    {
-        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
-        WriteAuthoredGeometry(workspace, withBuffer: false);
-        workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
-        var material = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Materials/Red.omat"), ContentCookInputRole.Primary);
-        AddGeometryNode(workspace, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), "Uses red");
-        await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
-        var scene = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Scenes/Main.oscene"), ContentCookInputRole.Primary);
-        var dirtyScene = SavedState(scene.SourceAbsolutePath.FullPath) with { IsDirty = true };
-        using var sceneRegistration = workspace.Documents.Register(scene.SourceAbsolutePath, _ => Task.FromResult<CookDocumentReadLease?>(new(dirtyScene, static () => { })));
-        var discovery = NativeSourceFactsFixture.CreateDiscovery(workspace);
-        var graph = await discovery.DiscoverAsync(workspace.ProjectContext, [material], this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = graph.Assets.Should().ContainSingle();
-        var dirtyMaterial = SavedState(material.SourceAbsolutePath.FullPath) with { IsDirty = true };
-        using var materialRegistration = workspace.Documents.Register(material.SourceAbsolutePath, _ => Task.FromResult<CookDocumentReadLease?>(new(dirtyMaterial, static () => { })));
-        var geometry = CookInputResolver.Resolve(workspace.ProjectContext, AssetPath.Parse("/Content/Geometry/AuthoredCube.ogeo"), ContentCookInputRole.Primary);
-        Func<Task> discover = () => discovery.DiscoverAsync(workspace.ProjectContext, [geometry], this.TestContext.CancellationToken);
-        var failure = await discover.Should().ThrowAsync<global::Oxygen.Editor.ContentPipeline.Cooking.CookInputsNeedSaveException>().ConfigureAwait(false);
-        _ = failure.Which.Documents.Should().ContainSingle().Which.SourcePath.Should().Be(dirtyMaterial.SourcePath);
     }
 
     /// <summary>Cooked references remain distinct from source inputs and cannot be claimed fresh by discovery.</summary>
@@ -347,13 +319,12 @@ public sealed class SourceDependencyDiscoveryTests
         });
         _ = graph.Files.Count(static file => file.RelativePath.EndsWith(".png", StringComparison.Ordinal)).Should().Be(3);
         _ = graph.PublishedReferences.Should().ContainSingle().Which.Should().Be(AssetPath.Parse("/Library/Textures/Emit.otex"));
-        var capture = new CookInputSnapshotCapture(workspace.Documents, workspace.CookCoordinator);
+        var capture = new CookInputSnapshotCapture(workspace.CookCoordinator);
         var captured = await workspace.CookCoordinator.RunAsync(
             (operation, token) => capture.CaptureAsync(operation, _ => Task.FromResult<IReadOnlyList<CookSnapshotInput>>(graph.Files), "compatible-fixture-artifacts", token),
             this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = captured.Snapshot.Should().NotBeNull();
         workspace.WriteText("Content/Textures/Metal.png", "new image bytes");
-        var saved = await File.ReadAllTextAsync(Path.Combine(captured.Snapshot!.InputRoot, "Content/Textures/Metal.png"), this.TestContext.CancellationToken).ConfigureAwait(false);
+        var saved = await File.ReadAllTextAsync(Path.Combine(captured.InputRoot, "Content/Textures/Metal.png"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = saved.Should().Be("saved image bytes");
     }
 

@@ -21,12 +21,10 @@ internal sealed partial class CaptureWorkspace : IDisposable
         Directory.CreateDirectory(this.Root);
         this.context.Activate(TestProject.Create(new RealFileSystem(), this.Root).Context with { Name = "Capture tests" });
         this.Coordinator = new(this.context, NullLogger<ContentCookCoordinator>.Instance);
-        this.Capture = new(this.Documents, this.Coordinator);
+        this.Capture = new(this.Coordinator);
     }
 
     public string Root { get; } = Path.Combine(Path.GetTempPath(), "OxygenCookCaptureTests", Guid.NewGuid().ToString("N"));
-
-    public CookDocumentRegistry Documents { get; } = new();
 
     public ContentCookCoordinator Coordinator { get; }
 
@@ -40,10 +38,10 @@ internal sealed partial class CaptureWorkspace : IDisposable
         return new(AssetPath.Parse("/" + relativePath), FileSystemPath.From(source), relativePath, Hash(content));
     }
 
-    public Task<CookSnapshotCaptureResult> CaptureAsync(IReadOnlyList<CookSnapshotInput> inputs, string build = "compatible-build")
+    public Task<CookInputSnapshot> CaptureAsync(IReadOnlyList<CookSnapshotInput> inputs, string build = "compatible-build")
         => this.CaptureAsync(_ => Task.FromResult(inputs), build);
 
-    public Task<CookSnapshotCaptureResult> CaptureAsync(
+    public Task<CookInputSnapshot> CaptureAsync(
         Func<CancellationToken, Task<IReadOnlyList<CookSnapshotInput>>> discover, string build = "compatible-build")
         => this.Coordinator.RunAsync((operation, token) => this.Capture.CaptureAsync(operation, discover, build, token), CancellationToken.None);
 

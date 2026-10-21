@@ -2,10 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using System.Diagnostics.CodeAnalysis;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
@@ -57,29 +55,6 @@ public sealed partial class ContentCookCoordinator
 
         this.PublishRun(snapshot);
         return cancelled;
-    }
-
-    /// <inheritdoc />
-    public bool ResumeAfterSave(Guid operationId)
-    {
-        CookRunSnapshot snapshot;
-        TaskCompletionSource resume;
-        lock (this.stateLock)
-        {
-            if (!this.runs.TryGetValue(operationId, out var run)
-                || run.Snapshot.State != CookRunState.NeedsSave || run.Resume is null)
-            {
-                return false;
-            }
-
-            resume = run.Resume;
-            run.Resume = null;
-            run.Snapshot = snapshot = Append(run.Snapshot with { UnsavedDocuments = [] }, new(Message: "Rechecking saved inputs.", State: CookRunState.Queued));
-        }
-
-        this.PublishRun(snapshot);
-        _ = resume.TrySetResult();
-        return true;
     }
 
     private static CookRunSnapshot Append(CookRunSnapshot snapshot, CookRunProgress progress)
@@ -163,23 +138,6 @@ public sealed partial class ContentCookCoordinator
         {
             return this.runs.TryGetValue(operationId, out var run) && run.Preempted;
         }
-    }
-
-    private Task BlockRun(Guid operationId, ImmutableArray<CookDocumentState> documents)
-    {
-        CookRunSnapshot snapshot;
-        Task resume;
-        lock (this.stateLock)
-        {
-            var run = this.runs[operationId];
-            run.Resume = new(TaskCreationOptions.RunContinuationsAsynchronously);
-            resume = run.Resume.Task;
-            run.Snapshot = snapshot = Append(run.Snapshot with { UnsavedDocuments = documents }, new(Message: "Waiting for participating documents to be saved.", State: CookRunState.NeedsSave));
-        }
-
-        this.LogRunWaitingForSave(snapshot);
-        this.PublishRun(snapshot, reveal: !snapshot.Request.IsAutomatic);
-        return resume;
     }
 
     private RunProgress AddRun(ContentCookOperation operation, CookRunRequest request, CancellationTokenSource cancellation, SharedCook? shared)
@@ -411,8 +369,6 @@ public sealed partial class ContentCookCoordinator
         internal CookRunSnapshot Snapshot { get; set; } = snapshot;
 
         internal CancellationTokenSource Cancellation { get; } = cancellation;
-
-        internal TaskCompletionSource? Resume { get; set; }
 
         internal FileStream? RetryOwnership { get; set; }
 

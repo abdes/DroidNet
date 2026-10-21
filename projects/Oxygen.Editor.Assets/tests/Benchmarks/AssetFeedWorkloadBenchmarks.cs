@@ -13,7 +13,6 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.Projects;
@@ -44,7 +43,7 @@ public sealed class AssetFeedWorkloadBenchmarks
         }
 
         var projects = workspace.ActivateProject();
-        var documents = new CookDocumentRegistry();
+        var documents = Mock.Of<Oxygen.Editor.Documents.IUnsavedDocuments>();
         using var runs = new ContentCookCoordinator(projects, NullLogger<ContentCookCoordinator>.Instance);
         var files = new NativeAtomicFileStore(new RealFileSystem());
         var native = new Mock<INativeCompatibilityService>(MockBehavior.Strict);
@@ -52,7 +51,7 @@ public sealed class AssetFeedWorkloadBenchmarks
         var storage = new NativeStorageProvider(new RealFileSystem());
         var engineContent = new EngineContentPakFixture();
         var publication = new CookPublicationService(runs, projects, files, new ProjectManagerService(storage, atomicFiles: files), engineContent);
-        var statuses = new AssetCookStatusReader(documents, publication, native.Object, engineContent);
+        var statuses = new AssetCookStatusReader(publication, native.Object, engineContent);
         await using var catalog = new AssetCatalog(projects, storage, engineContent, publication);
         var runtime = AssetStatusFixture.CreateUnavailableRuntimeStatus();
         using var provider = new AssetFeed(catalog, projects, new WorkspaceCookScopeProvider(workspace), statuses, documents, runs, runtime, Mock.Of<IAssetRelocationService>(), Mock.Of<IAssetAuthoring>());

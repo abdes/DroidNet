@@ -319,7 +319,6 @@ capsule with, left to right:
 | Status                 | Icon          | Shown while                                | Click shows   |
 | ---------------------- | ------------- | ------------------------------------------ | ------------- |
 | Ready · Standalone     | Grey dot      | No player runs                             | Nothing       |
-| Saving…                | Progress ring | Play saves the open documents              | Nothing       |
 | Cooking scene…         | Progress ring | Play cooks the scene                       | Cooking panel |
 | Starting player…       | Progress ring | The player process starts                  | Output panel  |
 | Loading scene…         | Progress ring | The player loads the scene                 | Output panel  |
@@ -383,9 +382,11 @@ not scene data and are never cooked.
 
 ### Starting a session
 
-1. **Save.** Play saves every dirty document without asking; its tooltip reads
-   "Save, cook and play". Saving does not touch undo history. A failed save
-   stops Play with the save's result.
+1. **Save.** When documents the scene uses have unsaved changes, Play asks
+   "Save 2 documents and play?" with **Save and Play** or **Cancel**
+   ([editor-documents.md](editor-documents.md#524-play-with-unsaved-edits)).
+   Saving does not touch undo history. Cancel, or a failed save, stops Play
+   before it starts.
 2. **Cook** the active scene's closure incrementally. A failure stops here with
    its result in the cooking panel.
 3. **Write the launch file** to the project's local (ignored) state folder:

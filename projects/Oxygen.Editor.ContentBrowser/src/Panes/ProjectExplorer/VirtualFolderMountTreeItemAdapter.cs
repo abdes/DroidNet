@@ -198,7 +198,7 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
                 }
                 catch (Exception ex)
                 {
-                    this.CouldNotLoadMountFolders(this.RootFolder.Location, ex.Message);
+                    this.CouldNotLoadMountFolders(this.RootFolder.Location, ex);
                 }
                 finally
                 {
@@ -208,7 +208,7 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
         }
         catch (Exception ex)
         {
-            this.CouldNotLoadMountFolders(this.RootFolder.Location, ex.Message);
+            this.CouldNotLoadMountFolders(this.RootFolder.Location, ex);
         }
     }
 
@@ -230,9 +230,4 @@ public sealed partial class VirtualFolderMountTreeItemAdapter : TreeItemAdapter,
             this.disposed = true;
         }
     }
-
-    [LoggerMessage(
-        Level = LogLevel.Error,
-        Message = "An error occurred while loading folders from mount root `{location}`: {error}")]
-    private partial void CouldNotLoadMountFolders(string location, string error);
 }

@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.Logging;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Assets.Catalog;
@@ -183,7 +182,4 @@ public sealed partial class AssetFeed
             this.LogRefreshFailed(exception);
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Unable to refresh asset status for the Content Browser.")]
-    private partial void LogRefreshFailed(Exception exception);
 }

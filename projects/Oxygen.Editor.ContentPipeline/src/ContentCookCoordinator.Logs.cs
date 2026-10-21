@@ -78,24 +78,6 @@ public sealed partial class ContentCookCoordinator
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Information,
-        Message = "Cook of {Name} waits for {Count} documents to be saved.")]
-    private static partial void LogRunWaitingForSave(ILogger logger, string name, int count);
-
-    private void LogRunWaitingForSave(CookRunSnapshot run)
-    {
-        if (!this.logger.IsEnabled(LogLevel.Information))
-        {
-            return;
-        }
-
-        var name = DescribeRun(run);
-        var count = run.UnsavedDocuments.Length;
-        LogRunWaitingForSave(this.logger, name, count);
-    }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Information,
         Message = "Cook of {Scope} joined the queued cook of {Name}.")]
     private static partial void LogRunJoined(ILogger logger, string scope, string name);
 
@@ -232,7 +214,8 @@ public sealed partial class ContentCookCoordinator
 
         var name = DescribeRun(run);
         var seconds = Elapsed(run);
-        LogRunStopped(this.logger, name, seconds, stoppedFor ?? OtherWriterWork);
+        var work = stoppedFor ?? OtherWriterWork;
+        LogRunStopped(this.logger, name, seconds, work);
     }
 
     [LoggerMessage(

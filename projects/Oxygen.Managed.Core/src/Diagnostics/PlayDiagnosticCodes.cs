@@ -10,11 +10,6 @@ namespace Oxygen.Managed.Core.Diagnostics;
 public static class PlayDiagnosticCodes
 {
     /// <summary>
-    /// A document could not be saved, so Play stopped before cooking.
-    /// </summary>
-    public const string SaveFailed = DiagnosticCodes.PlayPrefix + "SAVE_FAILED";
-
-    /// <summary>
     /// The scene or its content failed to cook, so Play stopped before the player.
     /// </summary>
     public const string CookFailed = DiagnosticCodes.PlayPrefix + "COOK_FAILED";

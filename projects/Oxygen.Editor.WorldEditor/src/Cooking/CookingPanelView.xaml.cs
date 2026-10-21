@@ -90,12 +90,4 @@ public sealed partial class CookingPanelView : UserControl
             await model.GoToPropertyCommand.ExecuteAsync(issue).ConfigureAwait(true);
         }
     }
-
-    private async void OpenDocumentClicked(object sender, RoutedEventArgs args)
-    {
-        if (sender is FrameworkElement { DataContext: Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentState document } && this.ViewModel is { } model)
-        {
-            await model.OpenDocumentCommand.ExecuteAsync(document).ConfigureAwait(true);
-        }
-    }
 }

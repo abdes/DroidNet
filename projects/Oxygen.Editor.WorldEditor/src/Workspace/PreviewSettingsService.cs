@@ -461,7 +461,7 @@ public sealed partial class PreviewSettingsService(
 
     private void ReportFailure(ProjectContext? project, string code, string title, string message, Exception exception)
     {
-        this.LogPreferenceFailure(exception, code, project?.ProjectRoot);
+        this.LogPreferenceFailure(exception, code, project);
         RuntimeOperationResults.PublishFailure(
             results,
             status,

@@ -274,9 +274,7 @@ internal sealed partial class MaterialCookTests
 
         public ContentCookCoordinator CookCoordinator { get; }
 
-        public global::Oxygen.Editor.ContentPipeline.Snapshots.CookDocumentRegistry Documents { get; } = new();
-
-        public Oxygen.Testing.NativeContentPipelineFixture NativePipeline => this.nativePipeline ??= new(this.ContextService, this.CookCoordinator, this.Documents);
+        public Oxygen.Testing.NativeContentPipelineFixture NativePipeline => this.nativePipeline ??= new(this.ContextService, this.CookCoordinator);
 
         public void Dispose()
         {

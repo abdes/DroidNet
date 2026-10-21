@@ -21,9 +21,11 @@ using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentBrowser.Panes.Assets;
 using Oxygen.Editor.ContentBrowser.Panes.Assets.Layouts;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.Textures;
 using Oxygen.Managed.Assets;
@@ -52,6 +54,8 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="creation">New Script, New Input File and New Scene; without it those commands are unavailable.</param>
 /// <param name="codeEditor">The code editor that opens scripts and input files; without it Edit is unavailable.</param>
 /// <param name="placement">Opens scenes and materials and shows panels; without it opening them does nothing.</param>
+/// <param name="documents">Saves the unsaved documents a cook reads, after asking; without it a cook does not ask.</param>
+/// <param name="unsavedInputs">Finds the unsaved documents a cook reads; without it a cook does not ask.</param>
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ViewModelToView vmToViewConverter,
@@ -70,7 +74,9 @@ public partial class AssetsViewModel(
     Relocation.IAssetRelocationWorkflow? relocation = null,
     Authoring.AuthoredAssetCreation? creation = null,
     ICodeEditorService? codeEditor = null,
-    IPlacementService? placement = null) : AbstractOutletContainer, IRoutingAware
+    IPlacementService? placement = null,
+    IDocumentService? documents = null,
+    IUnsavedCookInputs? unsavedInputs = null) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
 
@@ -547,6 +553,11 @@ public partial class AssetsViewModel(
             return;
         }
 
+        if (!await this.SaveInputsAsync(new CookRunRequest(CookTargetKind.Changes, ScopeUri: null) { Assets = [.. assets.Select(static asset => asset.Identity)] }).ConfigureAwait(true))
+        {
+            return;
+        }
+
         foreach (var asset in assets)
         {
             await this.RunCookAsync(
@@ -560,21 +571,32 @@ public partial class AssetsViewModel(
 
     [RelayCommand(CanExecute = nameof(CanCookSelectedFolder))]
     private async Task CookSelectedFolderAsync()
-        => await this.RunCookAsync(
-                ContentPipelineOperationKinds.CookFolder,
-                "Cook Folder",
-                this.GetSelectedFolder(),
-                () => contentPipelineService.CookFolderAsync(this.GetSelectedFolder(), CancellationToken.None))
-            .ConfigureAwait(true);
+    {
+        var folder = this.GetSelectedFolder();
+        if (await this.SaveInputsAsync(new CookRunRequest(CookTargetKind.Folder, folder)).ConfigureAwait(true))
+        {
+            await this.RunCookAsync(
+                    ContentPipelineOperationKinds.CookFolder,
+                    "Cook Folder",
+                    folder,
+                    () => contentPipelineService.CookFolderAsync(folder, CancellationToken.None))
+                .ConfigureAwait(true);
+        }
+    }
 
     [RelayCommand]
     private async Task CookProjectAsync()
-        => await this.RunCookAsync(
-                ContentPipelineOperationKinds.CookProject,
-                "Cook Project",
-                scopeUri: null,
-                () => contentPipelineService.CookProjectAsync(CancellationToken.None))
-            .ConfigureAwait(true);
+    {
+        if (await this.SaveInputsAsync(new CookRunRequest(CookTargetKind.Project, ScopeUri: null)).ConfigureAwait(true))
+        {
+            await this.RunCookAsync(
+                    ContentPipelineOperationKinds.CookProject,
+                    "Cook Project",
+                    scopeUri: null,
+                    () => contentPipelineService.CookProjectAsync(CancellationToken.None))
+                .ConfigureAwait(true);
+        }
+    }
 
     [RelayCommand]
     private Task InspectCookedOutputAsync() => this.OpenSelectedInspectionAsync(validate: false);
@@ -620,6 +642,12 @@ public partial class AssetsViewModel(
                 ex);
         }
     }
+
+    // A cook reads the saved files: the unsaved documents it reads are saved first, after asking.
+    private Task<bool> SaveInputsAsync(CookRunRequest request)
+        => documents is null || unsavedInputs is null
+            ? Task.FromResult(true)
+            : documents.SaveBeforeAsync(SaveBeforeOperation.Cook, token => unsavedInputs.FindAsync(request, token));
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "The view owns this operation boundary and reports failures.")]
     private async Task RunCookAsync(

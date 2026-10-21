@@ -28,8 +28,7 @@ public static class AssetStatusText
     /// <param name="runtimeAvailability">Acknowledged native availability for this identity.</param>
     /// <returns>A short status, or null when this identity has no authored cook status.</returns>
     public static string? GetText(AssetCookStatus? status, AssetCookActivity? activity, bool hasUnsavedChanges = false, AssetRuntimeAvailability runtimeAvailability = AssetRuntimeAvailability.Unknown)
-        => activity?.State is CookRunState.NeedsSave ? "Needs save"
-            : hasUnsavedChanges || status?.HasUnsavedChanges == true ? "Unsaved changes"
+        => hasUnsavedChanges || status?.HasUnsavedChanges == true ? "Unsaved changes"
             : status is null ? null : activity?.State switch
             {
                 CookRunState.Queued => "Queued",
@@ -70,7 +69,7 @@ public static class AssetStatusText
     public static string GetToneForText(string? text)
         => text switch
         {
-            "Unsaved changes" or "Needs save" or "Out of date" or "Status unavailable" or "Overridden" or "Preview unavailable" or "STALE" => "Caution",
+            "Unsaved changes" or "Out of date" or "Status unavailable" or "Overridden" or "Preview unavailable" or "STALE" => "Caution",
             "Cook failed" or "Source missing" or "Invalid source" or "Preview issue" or "ERR" or "MISS" => "Critical",
             "Cooked" or "Ready" => "Success",
             _ => "Neutral",
@@ -88,8 +87,7 @@ public static class AssetStatusText
         var text = GetText(status, activity, hasUnsavedChanges, runtimeAvailability);
         var description = text switch
         {
-            "Needs save" => "Cooking is waiting for unsaved documents. Open Cooking to review them.",
-            "Unsaved changes" => "Save changes before cooking. Automatic cooking follows Save unless paused.",
+            "Unsaved changes" => "An open document has unsaved changes. Cooking reads the saved file; Cook asks to save it first.",
             "Queued" => "Waiting to cook the latest saved inputs.",
             "Cooking" => "Cooking the saved inputs.",
             "Updating preview" => "Installing cooked content and updating the preview.",
@@ -97,7 +95,7 @@ public static class AssetStatusText
             "Cook failed" => "Cooking failed. Open Cooking for details and Retry.",
             "Source missing" => "Restore the missing source or choose a replacement.",
             "Invalid source" => "Correct the source errors before cooking.",
-            "Status unavailable" => string.Join(" ", status!.Diagnostics.Select(static diagnostic => diagnostic.Message)),
+            "Status unavailable" => string.Join(' ', status!.Diagnostics.Select(static diagnostic => diagnostic.Message)),
             "Status pending" => "Waiting for current source, publication or engine information.",
             "Needs cooking" when status?.HasPublishedOutput == true => "Cooked output is missing. Cook again to restore it.",
             "Needs cooking" => "No cooked content yet. Cooking is needed to use this asset in the viewport.",

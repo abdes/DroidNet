@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Globalization;
-using Oxygen.Managed.Assets.Catalog;
 
 namespace Oxygen.Editor.Assets;
 

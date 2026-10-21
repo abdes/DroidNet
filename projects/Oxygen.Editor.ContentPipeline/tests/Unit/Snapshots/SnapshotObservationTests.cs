@@ -25,7 +25,7 @@ public sealed class SnapshotObservationTests
         var directory = Path.Combine(workspace.Root, "Content", "images");
         _ = Directory.CreateDirectory(directory);
         var metadata = CookSavedSourceReader.ReadMetadata(directory);
-        var accepted = new ContentPipeline.Snapshots.CookSnapshotInput(null, FileSystemPath.From(directory), "Content/images", string.Empty, global::Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.Probe)
+        var accepted = new ContentPipeline.Snapshots.CookSnapshotInput(AssetUri: null, FileSystemPath.From(directory), "Content/images", string.Empty, global::Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.Probe)
         {
             Metadata = metadata,
         };
@@ -37,10 +37,10 @@ public sealed class SnapshotObservationTests
         var result = await workspace.CaptureAsync(_ =>
         {
             discoveries++;
-            return Task.FromResult<IReadOnlyList<ContentPipeline.Snapshots.CookSnapshotInput>>([current with { NativeObservations = [new(directory, true, discoveries == 1 ? metadata : current.Metadata, [])] }]);
+            return Task.FromResult<IReadOnlyList<ContentPipeline.Snapshots.CookSnapshotInput>>([current with { NativeObservations = [new(directory, Exists: true, discoveries == 1 ? metadata : current.Metadata, [])] }]);
         }).ConfigureAwait(false);
         _ = discoveries.Should().Be(2);
-        _ = result.Snapshot.Should().NotBeNull();
+        _ = result.Should().NotBeNull();
         Directory.Delete(directory);
         _ = CookSavedSourceReader.MatchesProbe(accepted).Should().BeFalse();
         await File.WriteAllTextAsync(directory, string.Empty).ConfigureAwait(false);
@@ -55,11 +55,11 @@ public sealed class SnapshotObservationTests
         using var workspace = new CaptureWorkspace();
         var path = Path.Combine(workspace.Root, "Content", "sky_px.png");
         _ = Directory.CreateDirectory(path);
-        var input = new ContentPipeline.Snapshots.CookSnapshotInput(null, FileSystemPath.From(path), "Content/sky_px.png", string.Empty, global::Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.Probe)
+        var input = new ContentPipeline.Snapshots.CookSnapshotInput(AssetUri: null, FileSystemPath.From(path), "Content/sky_px.png", string.Empty, global::Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.Probe)
         {
-            NativeObservations = [new(path, true, null, [])],
+            NativeObservations = [new(path, Exists: true, Metadata: null, [])],
         };
-        var snapshot = (await workspace.CaptureAsync([input]).ConfigureAwait(false)).Snapshot!;
+        var snapshot = await workspace.CaptureAsync([input]).ConfigureAwait(false);
         _ = Directory.EnumerateFileSystemEntries(snapshot.InputRoot).Should().BeEmpty();
         var captured = snapshot.CreateNativeInputs().Inputs.Single();
         _ = captured.Exists.Should().BeTrue();
@@ -76,12 +76,12 @@ public sealed class SnapshotObservationTests
         var path = Path.Combine(workspace.Root, "Content", "image.png");
         _ = Directory.CreateDirectory(path);
         var metadata = CookSavedSourceReader.ReadMetadata(path);
-        var input = new ContentPipeline.Snapshots.CookSnapshotInput(null, FileSystemPath.From(path), "Content/image.png", string.Empty, global::Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.Probe)
+        var input = new ContentPipeline.Snapshots.CookSnapshotInput(AssetUri: null, FileSystemPath.From(path), "Content/image.png", string.Empty, global::Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.Probe)
         {
             Metadata = metadata,
-            NativeObservations = [new(path, true, metadata, [])],
+            NativeObservations = [new(path, Exists: true, metadata, [])],
         };
-        var snapshot = (await workspace.CaptureAsync([input]).ConfigureAwait(false)).Snapshot!;
+        var snapshot = await workspace.CaptureAsync([input]).ConfigureAwait(false);
         var serialized = System.Text.Json.JsonSerializer.Serialize(snapshot.Inputs.Single());
         var retained = System.Text.Json.JsonSerializer.Deserialize<ContentPipeline.Snapshots.CookSnapshotInput>(serialized)!;
         _ = retained.Kind.Should().Be(global::Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.Probe);
@@ -107,14 +107,14 @@ public sealed class SnapshotObservationTests
             {
                 NativeObservations =
                 [
-                    new(input.SourcePath.FullPath, true, null, [new(0, 6, Hash("prefix"))]),
-                    new(input.SourcePath.FullPath, true, null, [new(6, 3, Hash(discoveries == 1 ? "OLD" : "NEW")), new(9, 0, Hash("suffix"))]),
+                    new(input.SourcePath.FullPath, Exists: true, Metadata: null, [new(0, 6, Hash("prefix"))]),
+                    new(input.SourcePath.FullPath, Exists: true, Metadata: null, [new(6, 3, Hash(discoveries == 1 ? "OLD" : "NEW")), new(9, 0, Hash("suffix"))]),
                 ],
             };
             return Task.FromResult<IReadOnlyList<ContentPipeline.Snapshots.CookSnapshotInput>>([observed]);
         }).ConfigureAwait(false);
         _ = discoveries.Should().Be(2);
-        _ = result.Snapshot.Should().NotBeNull();
+        _ = result.Should().NotBeNull();
     }
 
     /// <summary>Bounds memory and clamps a ranged read at EOF exactly as the native reader does.</summary>
@@ -129,13 +129,13 @@ public sealed class SnapshotObservationTests
         {
             NativeObservations = [new(
                 input.SourcePath.FullPath,
-                true,
-                null,
+Exists: true,
+Metadata: null,
                 [new(0, 0, Hash(content)), new(3, 150_000, Hash(new string('x', 150_000))),
                  new(199_999, ulong.MaxValue, Hash("x")), new(ulong.MaxValue, 0, Hash(string.Empty))])],
         };
         var result = await workspace.CaptureAsync([input]).ConfigureAwait(false);
-        _ = result.Snapshot.Should().NotBeNull();
+        _ = result.Should().NotBeNull();
     }
 
     /// <summary>Source timestamps are part of observed input state, including dates before the Unix epoch.</summary>
@@ -151,10 +151,10 @@ public sealed class SnapshotObservationTests
         var result = await workspace.CaptureAsync(_ =>
         {
             discoveries++;
-            var metadata = new NativeSourceFileMetadata(5, false, false, -1, discoveries == 1 ? 123456800 : 123456700);
-            return Task.FromResult<IReadOnlyList<ContentPipeline.Snapshots.CookSnapshotInput>>([input with { NativeObservations = [new(input.SourcePath.FullPath, true, metadata, [new(0, 0, input.DiscoveryHash)])] }]);
+            var metadata = new NativeSourceFileMetadata(5, IsDirectory: false, IsSymlink: false, -1, discoveries == 1 ? 123456800 : 123456700);
+            return Task.FromResult<IReadOnlyList<ContentPipeline.Snapshots.CookSnapshotInput>>([input with { NativeObservations = [new(input.SourcePath.FullPath, Exists: true, metadata, [new(0, 0, input.DiscoveryHash)])] }]);
         }).ConfigureAwait(false);
         _ = discoveries.Should().Be(2);
-        _ = result.Snapshot.Should().NotBeNull();
+        _ = result.Should().NotBeNull();
     }
 }

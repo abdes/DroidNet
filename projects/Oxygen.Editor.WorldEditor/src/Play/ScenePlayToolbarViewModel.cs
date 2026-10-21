@@ -48,20 +48,20 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
 
     private readonly PlaySession session;
     private readonly DocumentId documentId;
-    private readonly Func<Task<bool>> saveAll;
+    private readonly Func<Task<bool>> saveInputs;
     private readonly IPlacementService? placement;
     private bool hasCamera;
 
     /// <summary>Initializes a new instance of the <see cref="ScenePlayToolbarViewModel"/> class.</summary>
     /// <param name="session">The workspace's play sessions.</param>
     /// <param name="documentId">The scene document of this toolbar.</param>
-    /// <param name="saveAll">Saves the open documents, through the ordinary Save; false when one stays unsaved.</param>
+    /// <param name="saveInputs">Saves the unsaved documents Play reads, after asking; false when Play must not run.</param>
     /// <param name="placement">Brings the panels with a failure's details forward, if any.</param>
-    public ScenePlayToolbarViewModel(PlaySession session, DocumentId documentId, Func<Task<bool>> saveAll, IPlacementService? placement)
+    public ScenePlayToolbarViewModel(PlaySession session, DocumentId documentId, Func<Task<bool>> saveInputs, IPlacementService? placement)
     {
         this.session = session;
         this.documentId = documentId;
-        this.saveAll = saveAll;
+        this.saveInputs = saveInputs;
         this.placement = placement;
         this.session.PropertyChanged += this.OnSessionChanged;
         _ = this.session.Settings.EnsureLoadedAsync();
@@ -118,7 +118,6 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
             var text = this.Status switch
             {
                 { Activity: PlayActivity.Idle } => "Ready · Standalone",
-                { Activity: PlayActivity.Saving } => "Saving…",
                 { Activity: PlayActivity.Cooking } => "Cooking scene…",
                 { Activity: PlayActivity.StartingPlayer } => "Starting player…",
                 { Activity: PlayActivity.LoadingScene } => "Loading scene…",
@@ -158,7 +157,6 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
     public string StatusToolTip => this.Status switch
     {
         { Activity: PlayActivity.Idle } => "Play opens the scene in the standalone player.",
-        { Activity: PlayActivity.Saving } => "Saving the open documents.",
         { Activity: PlayActivity.Cooking } => "Cooking the scene. Click to show the Cooking panel.",
         { Activity: PlayActivity.StartingPlayer or PlayActivity.LoadingScene } => "The player is loading the scene. Click to show its output.",
         { IsRunning: true, IsStale: true } => "A document changed since the session started; Restart (F5) plays your changes. Click to bring the player to the front.",
@@ -242,8 +240,10 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
         this.PrimaryCommand.NotifyCanExecuteChanged();
     }
 
-    /// <summary>Saves the open documents, then plays or restarts the scene, when the Play button can be pressed.</summary>
-    /// <remarks>A document that stays unsaved makes Play fail at its save step.</remarks>
+    /// <summary>
+    /// Saves the unsaved documents Play reads, after asking, then plays or restarts the scene, when the Play button can be
+    /// pressed. Play does not run when the user keeps them unsaved or a save fails.
+    /// </summary>
     /// <returns>A task that completes when the session began or Play stopped.</returns>
     public async Task PlayAsync()
     {
@@ -252,8 +252,10 @@ public sealed partial class ScenePlayToolbarViewModel : ObservableObject, IDispo
             return;
         }
 
-        _ = await this.saveAll().ConfigureAwait(true);
-        await this.session.PlayAsync(this.documentId).ConfigureAwait(true);
+        if (await this.saveInputs().ConfigureAwait(true))
+        {
+            await this.session.PlayAsync(this.documentId).ConfigureAwait(true);
+        }
     }
 
     /// <summary>Cancels Play or closes the player, when there is one.</summary>

@@ -235,7 +235,7 @@ public sealed class ContentBrowserPresentationTests
             [],
             IsSelectable: true)
         {
-            CookStatus = new(identity, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], [], []),
+            CookStatus = new(identity, freshness, HasPublishedOutput: current, OutputAvailability: current ? CookedOutputAvailability.Present : CookedOutputAvailability.Missing, [], []),
         };
     }
 

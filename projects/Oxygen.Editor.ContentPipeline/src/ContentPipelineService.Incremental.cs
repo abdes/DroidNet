@@ -366,8 +366,7 @@ public sealed partial class ContentPipelineService
                 this.engineContentPipelineApi,
                 this.manifestBuilder,
                 this.sceneDescriptorGenerator,
-                this.cookScopeProvider,
-                cookDocuments)
+                this.cookScopeProvider)
             .PrepareCapturedScenesAsync(missingScenes, snapshot, cancellationToken).ConfigureAwait(false);
         if (HasError(prepared.Diagnostics))
         {
@@ -454,13 +453,6 @@ public sealed partial class ContentPipelineService
             references.Verify();
             libraries.Verify();
             result = result with { ProducedSourceFiles = await PrepareProducedSourceFilesAsync(snapshot, graph, result, cancellationToken).ConfigureAwait(false) };
-            using var sourceOwners = snapshot.SourceReplacement is null && result.ProducedSourceFiles.IsEmpty ? null
-                : await cookDocuments.AcquireAsync(snapshot.Inputs.Select(static input => input.SourcePath), cancellationToken).ConfigureAwait(false);
-            if (sourceOwners?.Documents.Any(static document => document.IsDirty) == true)
-            {
-                throw new InvalidOperationException("The retained source has unsaved edits. Save or discard them and review the replacement again.");
-            }
-
             result = await this.publication.PublishAsync(operation, staging, result, BuildProvenance(previous, plan, graph, results, snapshot, result.ProducedSourceFiles), libraries, cancellationToken).ConfigureAwait(false);
             if (!result.IsPublished && resolveScopes().SingleOrDefault(static scope => scope.ImportReplacement is not null) is { } replacement)
             {

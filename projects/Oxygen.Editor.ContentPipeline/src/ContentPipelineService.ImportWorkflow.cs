@@ -98,7 +98,7 @@ public sealed partial class ContentPipelineService
         var inProject = CookInputResolver.FindAuthoringSourceUri(operation.Project, FileSystemPath.From(source));
         var identity = inProject ?? request.DestinationFolder.Combine(request.Name + "/" + Path.GetFileName(source));
         var recipe = this.manifestBuilder.BuildModelJob(Path.GetFileName(source), [], request.Name, identity, request.Provenance);
-        var discovery = new SceneImportSourceDiscovery(cookDocuments, this.cookCoordinator, this.engineContentPipelineApi);
+        var discovery = new SceneImportSourceDiscovery(this.cookCoordinator, this.engineContentPipelineApi);
         if (inProject is not null)
         {
             var discovered = await discovery.DiscoverAsync(operation, source, recipe, cancellationToken).ConfigureAwait(false);
@@ -110,11 +110,8 @@ public sealed partial class ContentPipelineService
                 discovered.Files.Where(static file => file.Kind == Oxygen.Editor.ContentPipeline.Snapshots.CookSnapshotInputKind.File).Select(static file => new RetainedImportSourceFile(file.RelativePath, file.DiscoveryHash)).ToImmutableArray());
         }
 
-        var result = await new ImportSourceRetention(cookDocuments, this.cookCoordinator).RetainAsync(
+        return await new ImportSourceRetention(this.cookCoordinator).RetainAsync(
             operation, request.DestinationFolder, request.Name, token => discovery.DiscoverAsync(operation, source, recipe, token), cancellationToken).ConfigureAwait(false);
-        return result.Source ?? (result.NeedsSave.IsEmpty
-            ? throw new IOException("Reload changed source before importing.")
-            : throw new CookInputsNeedSaveException(result.NeedsSave));
     }
 
     private async Task CreateImportSettingsAsync(ContentCookOperation operation, RetainedImportSource source, string name, NativeMaterialSlotProvenance provenance, CancellationToken cancellationToken)
@@ -122,12 +119,6 @@ public sealed partial class ContentPipelineService
         this.cookCoordinator.VerifyWriter(operation);
         var settings = NativeSceneImportSettings.Create(source, name) with { MaterialSlotProvenance = provenance };
         var path = settings.ResolveFile(operation.Project.ProjectRoot.FullPath, settings.PrimaryRelativePath) + NativeSceneImportSettings.SidecarSuffix;
-        using var reads = await cookDocuments.AcquireAsync([FileSystemPath.From(path)], cancellationToken).ConfigureAwait(false);
-        if (reads.Documents.Any(static document => document.IsDirty))
-        {
-            throw new CookInputsNeedSaveException(reads.Documents.Where(static document => document.IsDirty));
-        }
-
         var existing = await this.importSettingsFiles.ReadAsync(path, cancellationToken).ConfigureAwait(false);
         var bytes = settings.ToBytes();
         if (existing.Version.Exists)

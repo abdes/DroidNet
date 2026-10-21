@@ -26,7 +26,7 @@ public sealed partial class CookInputSnapshotCapture
             await using var lifetime = stream.ConfigureAwait(false);
             var metadata = ReadNativeMetadata(source.SourceAbsolutePath.FullPath, stream);
             var hash = Convert.ToHexStringLower(await SHA256.HashDataAsync(stream, cancellationToken).ConfigureAwait(false));
-            captured.Add(new(source.SourceAbsolutePath.FullPath, true, metadata, new(source.SourceAbsolutePath.FullPath, metadata.Size, hash)));
+            captured.Add(new(source.SourceAbsolutePath.FullPath, Exists: true, metadata, new(source.SourceAbsolutePath.FullPath, metadata.Size, hash)));
         }
 
         return captured.ToImmutable();

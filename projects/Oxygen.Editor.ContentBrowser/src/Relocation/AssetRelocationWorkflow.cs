@@ -11,8 +11,10 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Relocation;
+using Oxygen.Editor.Documents;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentBrowser.Relocation;
@@ -22,16 +24,21 @@ namespace Oxygen.Editor.ContentBrowser.Relocation;
 /// Renames and moves, of scenes as of any asset, are recorded in the session's global history, so they undo and redo in
 /// order with everything else recorded there; copies and deletes are not recorded and leave the history as it is. The
 /// relocation service reports every file it changed, and the asset feed, the sources tree and open documents follow
-/// that report, whoever asked for the change.
+/// that report, whoever asked for the change. A rename or move first asks to save every unsaved document, since open
+/// documents follow it from their saved files; an undo or redo is refused while one remains.
 /// </remarks>
 /// <param name="relocation">Applies the file changes.</param>
 /// <param name="histories">Holds the global history that renames and moves are recorded in.</param>
+/// <param name="documents">Saves the unsaved documents before a rename or move, after asking.</param>
+/// <param name="openDocuments">The open documents, which a delete names when it closes them.</param>
 /// <param name="dialogs">Asks for names, and confirms deleting content that other content uses or that is open.</param>
 /// <param name="shell">Moves deleted files to the Recycle Bin.</param>
 /// <param name="logger">Records requests and outcomes.</param>
 public sealed partial class AssetRelocationWorkflow(
     IAssetRelocationService relocation,
     IHistoryService histories,
+    IDocumentService documents,
+    OpenDocuments openDocuments,
     IDialogService dialogs,
     IDesktopIntegration shell,
     ILogger<AssetRelocationWorkflow>? logger = null) : IAssetRelocationWorkflow, IDisposable
@@ -68,6 +75,14 @@ public sealed partial class AssetRelocationWorkflow(
     public async Task<AssetRelocationOutcome?> RelocateAsync(AssetRelocationRequest request, string title)
     {
         ArgumentNullException.ThrowIfNull(request);
+        var operation = OperationOf(request);
+        if (!await documents.SaveBeforeAsync(operation, _ => Task.FromResult(relocation.FindUnsavedDocuments())).ConfigureAwait(true))
+        {
+            return new(Succeeded: false, title, operation == SaveBeforeOperation.Rename
+                ? "Not renamed: the documents were not saved."
+                : "Not moved: the documents were not saved.");
+        }
+
         try
         {
             var applied = await relocation.RelocateAsync(request, title, this.history, CancellationToken.None).ConfigureAwait(true);
@@ -131,7 +146,7 @@ public sealed partial class AssetRelocationWorkflow(
         ArgumentNullException.ThrowIfNull(sources);
         const string title = "Delete";
         var referrers = await relocation.FindReferrersOutsideAsync(sources, CancellationToken.None).ConfigureAwait(true);
-        var open = relocation.FindOpenDocuments(sources);
+        var open = this.FindOpenDocuments(sources);
         if (referrers.Count != 0 || open.Count != 0)
         {
             var review = new StringBuilder();
@@ -156,7 +171,7 @@ public sealed partial class AssetRelocationWorkflow(
             _ = review.Append("The files go to the Recycle Bin.");
             if (!await dialogs.ConfirmAsync(title, review.ToString()).ConfigureAwait(true))
             {
-                this.LogReviewCancelled(title, referrers.Count + open.Count);
+                this.LogReviewCancelled(title, referrers.Count, open.Count);
                 return null;
             }
         }
@@ -244,6 +259,21 @@ public sealed partial class AssetRelocationWorkflow(
         {
             _ = text.Append(CultureInfo.CurrentCulture, $"  and {items.Count - ListedItems} more").AppendLine();
         }
+    }
+
+    // A request that keeps every asset in its folder renames; any other moves.
+    private static SaveBeforeOperation OperationOf(AssetRelocationRequest request)
+        => request.Moves.All(static move => move.Source.Parent == move.Target.Parent) ? SaveBeforeOperation.Rename : SaveBeforeOperation.Move;
+
+    // The open documents whose files a delete of the sources removes, so the delete can name them.
+    private IReadOnlyList<(string Name, bool IsDirty)> FindOpenDocuments(IReadOnlyList<AssetPath> sources)
+    {
+        var deleted = sources.Select(AssetFileTypes.ToIdentity).ToArray();
+        return [.. openDocuments.Documents
+            .Where(document => deleted.Any(document.File.Asset.IsSameOrInside))
+            .Select(static document => (document.Title, document.IsDirty))
+            .DistinctBy(static document => document.Title, StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static document => document.Title, StringComparer.OrdinalIgnoreCase)];
     }
 
     // A rejected or rolled-back undo or redo changed nothing, so its entry stays in the history. While another undo or

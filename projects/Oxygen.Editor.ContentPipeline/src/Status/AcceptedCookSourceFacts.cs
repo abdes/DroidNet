@@ -15,7 +15,7 @@ namespace Oxygen.Editor.ContentPipeline.Status;
 /// <summary>Reads acknowledged source state around accepted native facts, without native queries or source parsing.</summary>
 /// <param name="project">The project whose sources are read.</param>
 /// <param name="publication">The accepted facts of the published content.</param>
-/// <param name="hashSource">Hashes one source file: a cook reads what its open documents acknowledge, a status reads the disk.</param>
+/// <param name="hashSource">Hashes one source file: a cook excludes in-place writes while it reads, a status does not.</param>
 internal sealed class AcceptedCookSourceFacts(ProjectContext project, CookProvenance publication, Func<string, CancellationToken, Task<string>> hashSource) : ICookSourceFactsProvider
 {
     private readonly Dictionary<AssetPath, CookProvenance.Product> products = publication.Products.ToDictionary(static product => product.SourceUri);

@@ -51,6 +51,22 @@ public interface IDocumentService
     /// <returns><see langword="true"/> when every document is clean afterwards.</returns>
     public Task<bool> SaveAllAsync();
 
+    /// <summary>
+    /// Saves the unsaved documents an operation that reads saved files needs, after asking: edits in progress are
+    /// finished first, then <paramref name="findUnsaved"/> names the documents, and the user confirms saving them.
+    /// </summary>
+    /// <param name="operation">The operation, which names the confirmation.</param>
+    /// <param name="findUnsaved">Finds the unsaved documents the operation reads.</param>
+    /// <param name="cancellationToken">Cancels finding the documents.</param>
+    /// <returns>
+    /// <see langword="true"/> when the operation can run: nothing it reads was unsaved, or every document was saved;
+    /// <see langword="false"/> when the user cancelled or a save failed, which its document shows.
+    /// </returns>
+    public Task<bool> SaveBeforeAsync(
+        SaveBeforeOperation operation,
+        Func<CancellationToken, Task<IReadOnlyList<UnsavedDocument>>> findUnsaved,
+        CancellationToken cancellationToken = default);
+
     /// <summary>Discards a document's changes and its history, and reads its file again.</summary>
     /// <param name="document">An open document.</param>
     /// <returns>The outcome, with the message to show beside the document.</returns>

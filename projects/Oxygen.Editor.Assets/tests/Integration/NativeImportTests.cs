@@ -7,7 +7,6 @@ using DroidNet.Storage.Native;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Assets.TestSupport;
 using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
@@ -35,7 +34,6 @@ public sealed class NativeImportTests
         File.Copy(Path.Combine(AppContext.BaseDirectory, "Fixtures/static_scalar_triangle.gltf"), sourcePath);
         var source = AssetPath.Parse("/Content/SourceMedia/DCC/model.gltf");
         var projects = workspace.ActivateProject();
-        var documents = new CookDocumentRegistry();
         using var runs = new ContentCookCoordinator(projects, NullLogger<ContentCookCoordinator>.Instance);
         using var compatibility = Oxygen.Testing.TemporaryNativeArtifacts.ForInstalledEngine();
         var api = new ImportToolContentPipelineApi(new EngineContentPipelineToolLocator(), new ContentPipelineProcessRunner(), NullLogger<ImportToolContentPipelineApi>.Instance, compatibility);
@@ -44,9 +42,9 @@ public sealed class NativeImportTests
         var files = new NativeAtomicFileStore(new RealFileSystem());
         var engineContent = EngineContentPak.Installed();
         var publication = new Oxygen.Editor.ContentPipeline.Publication.CookPublicationService(runs, projects, files, new ProjectManagerService(storage, atomicFiles: files), engineContent);
-        var pipeline = new ContentPipelineService(projects, runs, scopes, new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, documents, compatibility, files, publication, engineContent);
+        var pipeline = new ContentPipelineService(projects, runs, scopes, new SceneDescriptorGenerator(), new ContentImportManifestBuilder(), new ContentImportManifestValidator(), api, compatibility, files, publication, engineContent);
         await using var catalog = new AssetCatalog(projects, storage, engineContent, publication);
-        using var provider = AssetFeeds.Create(catalog, projects, scopes, cookStatus: pipeline, documents: documents, cooks: runs);
+        using var provider = AssetFeeds.Create(catalog, projects, scopes, cookStatus: pipeline, cooks: runs);
         IReadOnlyList<AssetEntry> choices = [];
         IReadOnlyList<AssetEntry> rows = [];
         provider.Assets(AssetRule.For(AssetKind.Material)).Subscribe(new Observer<IReadOnlyList<AssetEntry>>(value => choices = value), this.TestContext.CancellationToken);

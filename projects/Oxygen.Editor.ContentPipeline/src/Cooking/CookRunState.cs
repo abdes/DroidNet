@@ -10,9 +10,6 @@ public enum CookRunState
     /// <summary>Waiting for the shared writer.</summary>
     Queued,
 
-    /// <summary>Waiting for explicitly authorized document saves.</summary>
-    NeedsSave,
-
     /// <summary>Resolving and capturing saved inputs.</summary>
     Preparing,
 

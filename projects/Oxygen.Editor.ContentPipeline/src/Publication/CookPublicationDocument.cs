@@ -24,7 +24,7 @@ internal sealed record CookPublicationDocument(
     ImmutableArray<CookProvenance.Product> Products,
     CookPublicationInputs? CookInputs)
 {
-    internal const int CurrentVersion = 5;
+    internal const int CurrentVersion = 6;
 
     internal static JsonSerializerOptions JsonOptions { get; } = new()
     {
@@ -48,6 +48,25 @@ internal sealed record CookPublicationDocument(
                 project.PakFileMounts,
                 Order = CookedContentOrdering.Resolve(project),
             }, JsonOptions)));
+
+    /// <summary>Reads a publication document, refusing one written in another format before reading its fields.</summary>
+    /// <param name="content">The document's bytes.</param>
+    /// <returns>The document.</returns>
+    /// <exception cref="InvalidDataException">The document is empty, or in a format this editor does not read.</exception>
+    internal static CookPublicationDocument Parse(ReadOnlySpan<byte> content)
+    {
+        var version = ReadVersion(content);
+        if (version != CurrentVersion)
+        {
+            throw new InvalidDataException(
+                $"The project's cooked content was published in format {version?.ToString(System.Globalization.CultureInfo.InvariantCulture) ?? "unknown"}, "
+                + $"and this editor reads format {CurrentVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)}. "
+                + "Close the project, delete its .cooked and .build folders, then cook it again.");
+        }
+
+        return JsonSerializer.Deserialize<CookPublicationDocument>(content, JsonOptions)
+            ?? throw new InvalidDataException("The publication document is empty.");
+    }
 
     internal void Validate(ProjectContext project)
     {
@@ -74,13 +93,42 @@ internal sealed record CookPublicationDocument(
 
         if (this.CookInputs is { } inputs && (string.IsNullOrWhiteSpace(inputs.BuildFingerprint) || !IsDigest(inputs.InputIdentity)
             || inputs.Inputs.IsDefault || inputs.Inputs.Any(static input => input is null || !CookProvenance.ValidInputFacts(input))
-            || inputs.Documents.IsDefault || inputs.CookedDependencies.IsDefault || inputs.ProducedSourceFiles.IsDefault))
+            || inputs.CookedDependencies.IsDefault || inputs.ProducedSourceFiles.IsDefault))
         {
             throw new InvalidDataException("The publication contains invalid consumed-input evidence.");
         }
     }
 
     internal static bool IsDigest(string? value) => value is { Length: 64 } && value.All(Uri.IsHexDigit);
+
+    // The format version, read alone so that a document of another format is named as such instead of failing on a
+    // field this format does not have.
+    private static int? ReadVersion(ReadOnlySpan<byte> content)
+    {
+        var reader = new Utf8JsonReader(content);
+        if (!reader.Read() || reader.TokenType != JsonTokenType.StartObject)
+        {
+            return null;
+        }
+
+        while (reader.Read() && reader.TokenType == JsonTokenType.PropertyName)
+        {
+            var isVersion = reader.ValueTextEquals("version"u8);
+            if (!reader.Read())
+            {
+                return null;
+            }
+
+            if (isVersion)
+            {
+                return reader.TokenType == JsonTokenType.Number && reader.TryGetInt32(out var version) ? version : null;
+            }
+
+            reader.Skip();
+        }
+
+        return null;
+    }
 }
 
 /// <summary>The last cook's consumed inputs; mount-only publications preserve these facts unchanged.</summary>
@@ -88,7 +136,6 @@ internal sealed record CookPublicationInputs(
     string BuildFingerprint,
     string InputIdentity,
     ImmutableArray<CookSnapshotInput> Inputs,
-    ImmutableArray<CookDocumentState> Documents,
     ImmutableArray<CookedDependencySnapshot> CookedDependencies,
     ImmutableArray<CookPublicationSourceTransition> ProducedSourceFiles);
 

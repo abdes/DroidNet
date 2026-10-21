@@ -185,6 +185,83 @@ public sealed class DocumentServiceTests
         fixture.Committer.Verify(value => value.CommitAsync(), Times.Once);
     }
 
+    /// <summary>With nothing unsaved, an operation that reads saved files goes on without asking.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task SaveBeforeWithNothingUnsavedContinuesWithoutAsking()
+    {
+        using var fixture = new Fixture();
+        _ = await fixture.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        var proceed = await fixture.Service.SaveBeforeAsync(SaveBeforeOperation.Play, static _ => Task.FromResult<IReadOnlyList<UnsavedDocument>>([]), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = proceed.Should().BeTrue();
+        fixture.Confirmations.Verify(value => value.ConfirmSaveBeforeAsync(It.IsAny<IReadOnlyList<UnsavedDocument>>(), It.IsAny<SaveBeforeOperation>()), Times.Never);
+    }
+
+    /// <summary>Cancelling the question stops the operation and leaves the documents unsaved.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task SaveBeforeCancelledStopsTheOperationAndKeepsTheChanges()
+    {
+        using var fixture = new Fixture();
+        var intro = await fixture.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
+        intro.History.AddChange("Edit", static () => { });
+        _ = fixture.Confirmations.Setup(value => value.ConfirmSaveBeforeAsync(It.IsAny<IReadOnlyList<UnsavedDocument>>(), SaveBeforeOperation.Cook)).ReturnsAsync(value: false);
+
+        var proceed = await fixture.Service.SaveBeforeAsync(SaveBeforeOperation.Cook, _ => Task.FromResult<IReadOnlyList<UnsavedDocument>>([Describe(intro)]), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = proceed.Should().BeFalse();
+        _ = intro.IsDirty.Should().BeTrue();
+        _ = fixture.Editors.Should().ContainSingle().Which.Saves.Should().Be(0);
+    }
+
+    /// <summary>Confirming the question saves the documents it listed and lets the operation go on.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task SaveBeforeConfirmedSavesTheListedDocuments()
+    {
+        using var fixture = new Fixture();
+        var intro = await fixture.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var outro = await fixture.OpenAsync("Outro", this.TestContext.CancellationToken).ConfigureAwait(false);
+        intro.History.AddChange("Edit", static () => { });
+        outro.History.AddChange("Edit", static () => { });
+        _ = fixture.Confirmations.Setup(value => value.ConfirmSaveBeforeAsync(It.IsAny<IReadOnlyList<UnsavedDocument>>(), SaveBeforeOperation.Play)).ReturnsAsync(value: true);
+
+        var proceed = await fixture.Service.SaveBeforeAsync(SaveBeforeOperation.Play, _ => Task.FromResult<IReadOnlyList<UnsavedDocument>>([Describe(intro)]), this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = proceed.Should().BeTrue();
+        _ = intro.IsDirty.Should().BeFalse();
+        _ = outro.IsDirty.Should().BeTrue("the operation did not need it");
+    }
+
+    /// <summary>The operation looks for unsaved documents after the edits in progress were finished.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task SaveBeforeFinishesEditsInProgressBeforeLookingForUnsavedDocuments()
+    {
+        using var fixture = new Fixture();
+        var intro = await fixture.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var content = (Notes.NoteContent)intro.Content;
+        content.Pending = true;
+        bool? pendingWhenAsked = null;
+
+        var proceed = await fixture.Service.SaveBeforeAsync(
+            SaveBeforeOperation.Rename,
+            _ =>
+            {
+                pendingWhenAsked = content.HasEditsInProgress;
+                return Task.FromResult<IReadOnlyList<UnsavedDocument>>([]);
+            },
+            this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        _ = proceed.Should().BeTrue();
+        _ = pendingWhenAsked.Should().BeFalse();
+        fixture.Committer.Verify(value => value.CommitAsync(), Times.Once);
+    }
+
+    private static UnsavedDocument Describe(Document document) => new(document.Id, document.File, document.Title);
+
     /// <summary>A window with a document area of notes and the document service over it.</summary>
     private sealed class Fixture : IDisposable
     {
@@ -209,6 +286,7 @@ public sealed class DocumentServiceTests
                 this.Notes.Documents,
                 this.Notes.Locations,
                 prompt.Object,
+                this.Confirmations.Object,
                 this.Committer.Object,
                 this.Results.Object,
                 catalog.Object,
@@ -226,6 +304,8 @@ public sealed class DocumentServiceTests
         public Subject<AssetChange> Changes { get; } = new();
 
         public Mock<IDocumentInputCommitter> Committer { get; } = new();
+
+        public Mock<IDocumentConfirmations> Confirmations { get; } = new();
 
         public Mock<IOperationResultPublisher> Results { get; } = new();
 

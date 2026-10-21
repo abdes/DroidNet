@@ -234,13 +234,10 @@ public sealed partial class WorkspaceInteractionService(
             return;
         }
 
-        this.LogStateChange(nodeId, requested ? appliedMessage : reversedMessage);
+        this.LogStateChange(nodeId, requested, appliedMessage, reversedMessage);
         this.RaiseStateChanged();
         this.ScheduleSave();
     }
-
-    [LoggerMessage(Level = LogLevel.Information, Message = "Scene Explorer workspace state: {NodeId} {Change}.")]
-    private partial void LogStateChange(NodeId nodeId, string change);
 
     private void RaiseStateChanged() => this.StateChanged?.Invoke(this, EventArgs.Empty);
 
@@ -358,9 +355,6 @@ public sealed partial class WorkspaceInteractionService(
             new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot.FullPath },
             exception: exception);
     }
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Workspace interaction state failed ({Code}) for project {ProjectRoot}.")]
-    private partial void LogInteractionFailure(Exception exception, string code, FileSystemPath projectRoot);
 
     private readonly record struct PendingWrite(ProjectContext Project, ProjectInteraction Value);
 

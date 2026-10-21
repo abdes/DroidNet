@@ -130,35 +130,6 @@ public sealed class AutomaticCookServiceTests
         _ = fixture.Calls.Reader.TryRead(out _).Should().BeFalse();
     }
 
-    /// <summary>A change resumes the run waiting for that source to be saved instead of adding it to a run.</summary>
-    /// <returns>The asynchronous resume regression.</returns>
-    [TestMethod]
-    public async Task ChangeResumesTheRunWaitingForThatSource()
-    {
-        using var fixture = new Fixture();
-        var project = fixture.Projects.ActiveProject!;
-        var operationId = Guid.NewGuid();
-        var resumed = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        fixture.InProgress =
-        [
-            new CookRunSnapshot
-            {
-                OperationId = operationId, ProjectId = project.ProjectId, ProjectRoot = project.ProjectRoot,
-                DisplayName = "Project", Request = new(CookTargetKind.Project, ScopeUri: null), State = CookRunState.NeedsSave,
-                UnsavedDocuments = [new(fixture.SourcePath(Main), "Main", true, "old")],
-            },
-        ];
-        _ = fixture.Runs.Setup(value => value.ResumeAfterSave(operationId)).Callback(resumed.SetResult).Returns(value: true);
-        using var service = fixture.CreateService();
-
-        fixture.Change(AssetChangeKind.Updated, Main);
-        fixture.Change(AssetChangeKind.Updated, Wood);
-        fixture.Time.Advance(AutomaticCookService.QuietWindow);
-
-        await resumed.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = (await fixture.NextCallAsync(this.TestContext).ConfigureAwait(false)).Sources.Should().Equal([Wood], "only the source no run waits for is cooked");
-    }
-
     /// <summary>Cooked records, the project root's view of a source, output folders, files that do not cook and files a project opens with are not cooked.</summary>
     /// <returns>The asynchronous filter regression.</returns>
     [TestMethod]
@@ -691,7 +662,6 @@ public sealed class AutomaticCookServiceTests
                     : AssetCookFreshness.OutOfDate,
                 HasPublishedOutput: !this.NeverCooked.Contains(asset) && !this.Unresolved.Contains(asset),
                 CookedOutputAvailability.Present,
-                [],
                 [],
                 this.Unresolved.Contains(asset)
                     ? [new DiagnosticRecord { OperationId = Guid.Empty, Domain = FailureDomain.AssetCook, Severity = DiagnosticSeverity.Error, Code = AssetCookStatusReader.InputUnresolvedCode, Message = "Unsupported cook dependency." }]

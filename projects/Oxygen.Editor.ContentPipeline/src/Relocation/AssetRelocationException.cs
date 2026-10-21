@@ -14,6 +14,10 @@ public sealed class AssetRelocationException : Exception
     /// <summary>The code of a refused relocation that would leave two sources producing one asset.</summary>
     public const string SourceCollisionCode = "relocation.source_collision";
 
+    /// <summary>The code of a refused relocation, undo or redo while open documents have unsaved changes.</summary>
+    /// <remarks>An open document follows a relocation only from its saved file.</remarks>
+    public const string UnsavedDocumentsCode = "relocation.unsaved_documents";
+
     /// <summary>Initializes a new instance of the <see cref="AssetRelocationException"/> class.</summary>
     public AssetRelocationException()
     {

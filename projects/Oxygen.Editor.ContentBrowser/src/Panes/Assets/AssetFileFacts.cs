@@ -47,11 +47,11 @@ public readonly record struct AssetFileFacts(string? Path, long? Size, DateTimeO
         try
         {
             var file = project.FileSystem.FileInfo.New(path.FullPath);
-            return file.Exists ? new(path.FullPath, file.Length, file.LastWriteTimeUtc) : new(path.FullPath, null, null);
+            return file.Exists ? new(path.FullPath, file.Length, file.LastWriteTimeUtc) : new(path.FullPath, Size: null, Modified: null);
         }
         catch (Exception error) when (error is IOException or UnauthorizedAccessException or ArgumentException or NotSupportedException)
         {
-            return new(path.FullPath, null, null);
+            return new(path.FullPath, Size: null, Modified: null);
         }
     }
 

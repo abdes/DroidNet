@@ -10,7 +10,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Oxygen.Editor.Documents;
 
-/// <summary>An open document: the file it edits, the version of it it holds, its history and its content.</summary>
+/// <summary>An open document: the file it edits, the version of it holds, its history and its content.</summary>
 /// <remarks>
 /// <para>
 /// Every document behaves the same way, whatever its kind: it saves against the version it read or last saved, so an
@@ -348,13 +348,9 @@ public sealed partial class Document : IDisposable
             return;
         }
 
-        lock (this.leaseSync)
-        {
-            this.disposed = true;
-        }
-
+        this.disposed = true;
         ((INotifyCollectionChanged)this.History.UndoStack).CollectionChanged -= this.OnHistoryChanged;
-        this.DisposeContentAfterReads(this.Content);
+        (this.Content as IDisposable)?.Dispose();
         this.operations.Dispose();
     }
 
@@ -367,17 +363,6 @@ public sealed partial class Document : IDisposable
             return decoded.Problem;
         }
 
-        try
-        {
-            // A reader holding a lease keeps the content in place until it is done.
-            await this.ReadsReleasedAsync().WaitAsync(cancellationToken).ConfigureAwait(true);
-        }
-        catch (OperationCanceledException)
-        {
-            (content as IDisposable)?.Dispose();
-            throw;
-        }
-
         var previous = this.Content;
         this.Content = content;
         this.History.Clear();
@@ -387,7 +372,7 @@ public sealed partial class Document : IDisposable
         this.IsChangedOnDisk = false;
         this.LogReloaded();
         this.ContentReplaced?.Invoke(this, new DocumentContentReplacedEventArgs(previous, content));
-        this.DisposeContentAfterReads(previous);
+        (previous as IDisposable)?.Dispose();
         this.PublishState();
         return null;
     }

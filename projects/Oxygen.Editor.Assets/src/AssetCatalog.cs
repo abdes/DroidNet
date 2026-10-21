@@ -7,13 +7,13 @@ using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using System.Text.Json;
 using DroidNet.Storage;
-using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
-using Oxygen.Managed.Assets.Catalog.FileSystem;
 using Oxygen.Managed.Assets.Catalog;
+using Oxygen.Managed.Assets.Catalog.FileSystem;
 using Oxygen.Managed.Assets.Catalog.Pak;
 using Oxygen.Managed.Assets.Persistence.Pak;
 using Oxygen.Managed.Core;
@@ -125,7 +125,6 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         }
         catch (Exception failure) when (IsPublicationUnavailable(failure))
         {
-            TaskCompletionSource? completion = null;
             Task fallback;
             lock (this.stateLock)
             {
@@ -142,7 +141,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
                 }
                 else
                 {
-                    completion = this.StartInitialization(project, supplied: null, failure.Message);
+                    var completion = this.StartInitialization(project, supplied: null, failure.Message);
                     fallback = completion.Task;
                     this.initializedProject = project;
                     this.initializingWithSelection = false;
@@ -170,69 +169,17 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         => this.ReadSnapshotAsync(query, cancellationToken);
 
     /// <inheritdoc />
-    public void Dispose()
-    {
-        Registration[] snapshot;
-        ICookPublicationReadLease? installed;
-        Task? pending;
-        lock (this.stateLock)
-        {
-            if (this.isDisposed)
-            {
-                return;
-            }
-
-            this.isDisposed = true;
-            snapshot = this.catalogs.ToArray();
-            this.catalogs.Clear();
-            installed = this.installedPublication;
-            this.installedPublication = null;
-            pending = Task.WhenAll(this.initializationRuns);
-        }
-
-        this.lifetime.Cancel();
-        foreach (var catalog in snapshot)
-        {
-            catalog.Dispose();
-        }
-
-        installed?.Dispose();
-
-        lock (this.notificationLock)
-        {
-            this.changes.OnCompleted();
-            this.changes.Dispose();
-            this.folderChanges.OnCompleted();
-            this.folderChanges.Dispose();
-        }
-
-        if (pending?.IsCompleted != false)
-        {
-            this.lifetime.Dispose();
-        }
-        else
-        {
-            _ = pending.ContinueWith(
-                task =>
-                {
-                    _ = task.Exception;
-                    this.lifetime.Dispose();
-                },
-                CancellationToken.None,
-                TaskContinuationOptions.ExecuteSynchronously,
-                TaskScheduler.Default);
-        }
-    }
+    public void Dispose() => this.Close();
 
     /// <summary>Cancels catalog work and drains every initialization, including superseded snapshots.</summary>
     /// <returns>Completion after initialization has released retained publications and child catalogs.</returns>
     public async ValueTask DisposeAsync()
     {
-        this.Dispose();
+        this.Close();
         Task[] pending;
         lock (this.stateLock)
         {
-            pending = this.initializationRuns.ToArray();
+            pending = [.. this.initializationRuns];
         }
 
         await Task.WhenAll(pending).ConfigureAwait(false);
@@ -326,6 +273,60 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
             .Select(root => root.GetPathBelow(project.ProjectRoot))
             .Distinct(FileSystemPath.NameComparer)];
 
+    private void Close()
+    {
+        Registration[] snapshot;
+        ICookPublicationReadLease? installed;
+        Task? pending;
+        lock (this.stateLock)
+        {
+            if (this.isDisposed)
+            {
+                return;
+            }
+
+            this.isDisposed = true;
+            snapshot = [.. this.catalogs];
+            this.catalogs.Clear();
+            installed = this.installedPublication;
+            this.installedPublication = null;
+            pending = Task.WhenAll(this.initializationRuns);
+        }
+
+        this.lifetime.Cancel();
+        foreach (var catalog in snapshot)
+        {
+            catalog.Dispose();
+        }
+
+        installed?.Dispose();
+
+        lock (this.notificationLock)
+        {
+            this.changes.OnCompleted();
+            this.changes.Dispose();
+            this.folderChanges.OnCompleted();
+            this.folderChanges.Dispose();
+        }
+
+        if (pending?.IsCompleted != false)
+        {
+            this.lifetime.Dispose();
+        }
+        else
+        {
+            _ = pending.ContinueWith(
+                task =>
+                {
+                    _ = task.Exception;
+                    this.lifetime.Dispose();
+                },
+                CancellationToken.None,
+                TaskContinuationOptions.ExecuteSynchronously,
+                TaskScheduler.Default);
+        }
+    }
+
     private async Task RefreshSelectedAsync(ICookPublicationReadLease selected, long? observation, CancellationToken cancellationToken)
     {
         using var operation = this.CreateOperationCancellation(cancellationToken);
@@ -415,7 +416,9 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
     {
         var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         this.initialization = completion.Task;
-        var run = Task.Run(() => this.InitializeCoreAsync(project, completion, supplied, publicationError));
+
+        // Not cancellable: the run must complete the promise, and it observes the lifetime itself.
+        var run = Task.Run(() => this.InitializeCoreAsync(project, completion, supplied, publicationError), CancellationToken.None);
         this.initializationRuns.Add(run);
         _ = run.ContinueWith(
             task =>
@@ -423,7 +426,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
                 _ = task.Exception;
                 lock (this.stateLock)
                 {
-                    this.initializationRuns.Remove(task);
+                    _ = this.initializationRuns.Remove(task);
                 }
             },
             CancellationToken.None,
@@ -642,8 +645,8 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         var registration = new Registration(catalog, isCooked);
         try
         {
-            registration.Subscription = catalog.Changes.Subscribe(change => this.OnCatalogChange(registration, change));
-            registration.FolderSubscription = (catalog as IAssetFolderSource)?.FolderChanges.Subscribe(folder => this.OnFolderChange(registration, folder));
+            catalog.Changes.Subscribe(change => this.OnCatalogChange(registration, change), registration.Lifetime);
+            (catalog as IAssetFolderSource)?.FolderChanges.Subscribe(folder => this.OnFolderChange(registration, folder), registration.Lifetime);
             registration.Initial = await catalog.QueryAsync(new AssetQuery(AssetQueryScope.All), this.lifetimeToken).ConfigureAwait(false);
             this.lifetimeToken.ThrowIfCancellationRequested();
             return registration;
@@ -694,7 +697,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
             this.CollectInstallChanges(project, candidates, kept, notifications);
 
             retired = [.. this.catalogs.Where(registration => !kept.ContainsKey(registration))];
-            this.catalogs.EnsureCapacity(candidates.Count);
+            _ = this.catalogs.EnsureCapacity(candidates.Count);
             var accepted = publication?.Retain();
             retiredPublication = this.installedPublication;
             this.installedPublication = accepted;
@@ -885,7 +888,7 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
         }
     }
 
-    private sealed class CatalogOpening(long revision, IAssetCatalog[] catalogs, ICookPublicationReadLease? publication, string? publicationError) : IDisposable
+    private sealed partial class CatalogOpening(long revision, IAssetCatalog[] catalogs, ICookPublicationReadLease? publication, string? publicationError) : IDisposable
     {
         internal string? PublicationError { get; } = publicationError;
 
@@ -900,15 +903,13 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
 
     private sealed partial class Registration(IAssetCatalog catalog, bool isCooked) : IDisposable
     {
+        private readonly CancellationTokenSource lifetime = new();
+
         public IAssetCatalog Catalog { get; } = catalog;
 
         public bool IsCooked { get; } = isCooked;
 
         public WatchedFolder? Folder { get; set; }
-
-        public IDisposable? Subscription { get; set; }
-
-        public IDisposable? FolderSubscription { get; set; }
 
         public IReadOnlyList<AssetRecord> Initial { get; set; } = [];
 
@@ -916,10 +917,18 @@ public sealed partial class AssetCatalog : IAssetCatalog, IAssetFolderSource, IA
 
         public bool Published { get; set; }
 
+        // Ends the registration's subscriptions to its catalog.
+        public CancellationToken Lifetime => this.lifetime.Token;
+
         public void Dispose()
         {
-            this.Subscription?.Dispose();
-            this.FolderSubscription?.Dispose();
+            if (this.lifetime.IsCancellationRequested)
+            {
+                return;
+            }
+
+            this.lifetime.Cancel();
+            this.lifetime.Dispose();
             (this.Catalog as IDisposable)?.Dispose();
         }
     }

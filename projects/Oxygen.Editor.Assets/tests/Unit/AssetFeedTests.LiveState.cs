@@ -4,12 +4,13 @@
 
 using System.Security.Cryptography;
 using AwesomeAssertions;
+using DroidNet.Documents;
 using Moq;
 using Oxygen.Editor.Assets.Materials;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.ContentPipeline.Snapshots;
 using Oxygen.Editor.ContentPipeline.Status;
+using Oxygen.Editor.Documents;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Editor.Assets.TestSupport;
@@ -29,20 +30,17 @@ public sealed partial class AssetFeedTests
         WriteMaterial(path.FullPath);
         var identity = AssetPath.Parse("/Content/Materials/Red.omat");
         var catalog = new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
-        var documents = new CookDocumentRegistry();
-        using var owner = documents.Register(path, _ => throw new InvalidOperationException("Presentation must not acquire the source."));
-        var initial = new CookDocumentState(path, "Red", IsDirty: false, new string('A', 64));
-        owner.UpdateState(initial);
+        var unsaved = new OpenEdits(path, identity);
         var reads = 0;
         var sourceHash = Convert.ToHexString(SHA256.HashData(await File.ReadAllBytesAsync(path.FullPath, this.TestContext.CancellationToken).ConfigureAwait(false)));
         var reader = new DelegateStatusReader((_, _, _) =>
         {
             _ = Interlocked.Increment(ref reads);
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = sourceHash }]);
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], []) { SourcePaths = [path], SavedSourceHash = sourceHash }]);
         });
         var projects = workspace.ActivateProject();
         var project = projects.ActiveProject!;
-        using var provider = AssetFeeds.Create(catalog, projects, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, documents: documents);
+        using var provider = AssetFeeds.Create(catalog, projects, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, documents: unsaved.Port.Object);
         IReadOnlyList<AssetEntry> rows = [];
         IReadOnlyList<AssetEntry> choices = [];
         provider.Items.Subscribe(
@@ -54,14 +52,16 @@ public sealed partial class AssetFeedTests
         _ = preview.Should().NotBeNull();
         var lockedSource = new FileStream(path.FullPath, FileMode.Open, FileAccess.Read, FileShare.None);
         await using var lockedSourceLifetime = lockedSource.ConfigureAwait(false);
-        owner.UpdateState(initial with { IsDirty = true });
+        unsaved.Edit();
+        _ = rows.Single().CookStatus!.HasUnsavedChanges.Should().BeTrue();
         _ = rows.Single().PrimaryBadge.Should().Be("Unsaved changes");
         _ = AssetStatusText.ForEntry(choices.Single(choice => choice.Identity == identity)).Should().Be(rows.Single().PrimaryBadge);
         _ = rows.Single().CookStatus!.HasAvailableOutput.Should().BeTrue();
-        owner.UpdateState(initial);
+        unsaved.Clear();
+        _ = rows.Single().CookStatus!.HasUnsavedChanges.Should().BeFalse();
         _ = rows.Single().PrimaryBadge.Should().Be("Cooked");
-        owner.UpdateState(initial with { IsDirty = true });
-        owner.Dispose();
+        unsaved.Edit();
+        unsaved.Clear();
         _ = rows.Single().PrimaryBadge.Should().Be("Cooked");
         _ = AssetStatusText.ForEntry(choices.Single(choice => choice.Identity == identity)).Should().Be("Cooked");
         _ = MaterialPreviewColor.TryRead(project, choices.Single(choice => choice.Identity == identity)).Should().Be(preview);
@@ -93,7 +93,7 @@ public sealed partial class AssetFeedTests
         var reader = new DelegateStatusReader((_, uris, _) =>
         {
             _ = Interlocked.Increment(ref reads);
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>(uris.Select(uri => new AssetCookStatus(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])).ToArray());
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>(uris.Select(uri => new AssetCookStatus(uri, AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [])).ToArray());
         });
         using var provider = AssetFeeds.Create(catalog, context, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, cooks: cookService.Object);
         IReadOnlyList<AssetEntry> rows = [];
@@ -128,57 +128,6 @@ public sealed partial class AssetFeedTests
         _ = reads.Should().Be(1);
     }
 
-    /// <summary>A save invalidates Current immediately, before its asynchronous fingerprint check completes.</summary>
-    /// <returns>The asynchronous saved-source transition regression.</returns>
-    [TestMethod]
-    public async Task SavedBytesInvalidateCurrentBeforeTheRefreshFinishes()
-    {
-        using var workspace = new AssetWorkspace();
-        var path = FileSystemPath.From(workspace.SourcePath("Content/Materials/Red.omat.json"));
-        WriteMaterial(path.FullPath);
-        var identity = AssetPath.Parse("/Content/Materials/Red.omat");
-        var documents = new CookDocumentRegistry();
-        using var owner = documents.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(null));
-        var original = new CookDocumentState(path, "Red", IsDirty: false, "old");
-        owner.UpdateState(original);
-        var started = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var release = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var published = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        var reads = 0;
-        var reader = new DelegateStatusReader(async (_, _, token) =>
-        {
-            var changed = Interlocked.Increment(ref reads) > 1;
-            if (changed)
-            {
-                started.SetResult();
-                await release.Task.WaitAsync(token).ConfigureAwait(false);
-            }
-
-            return [new(identity, changed ? AssetCookFreshness.OutOfDate : AssetCookFreshness.Current, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], []) { SourcePaths = [path], SavedSourceHash = changed ? "new" : "old" }];
-        });
-        var catalog = new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]);
-        using var provider = AssetFeeds.Create(catalog, workspace.ActivateProject(), new WorkspaceCookScopeProvider(workspace), cookStatus: reader, documents: documents);
-        IReadOnlyList<AssetEntry> rows = [];
-        provider.Items.Subscribe(
-            new Observer<IReadOnlyList<AssetEntry>>(value =>
-        {
-            rows = value;
-            if (value.Count == 1 && string.Equals(value[0].CookStatus?.SavedSourceHash, "new", StringComparison.Ordinal))
-            {
-                _ = published.TrySetResult();
-            }
-        }),
-            this.TestContext.CancellationToken);
-        await provider.RefreshAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
-        owner.UpdateState(original with { SavedContentHash = "new" });
-        _ = rows.Single().PrimaryBadge.Should().Be("Out of date");
-        await started.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        release.SetResult();
-        await published.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = reads.Should().Be(2);
-        _ = rows.Single().CookStatus!.HasAvailableOutput.Should().BeTrue();
-    }
-
     /// <summary>Completed cooks refresh output evidence once, including successful automatic cooks.</summary>
     /// <returns>The asynchronous completion refresh regression.</returns>
     [TestMethod]
@@ -204,7 +153,7 @@ public sealed partial class AssetFeedTests
         var reader = new DelegateStatusReader((_, _, _) =>
         {
             var complete = Interlocked.Increment(ref reads) > 1;
-            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, complete ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [], [])]);
+            return Task.FromResult<IReadOnlyList<AssetCookStatus>>([new(identity, complete ? AssetCookFreshness.Current : AssetCookFreshness.OutOfDate, HasPublishedOutput: true, OutputAvailability: CookedOutputAvailability.Present, [], [])]);
         });
         using var provider = AssetFeeds.Create(new TestProjectAssetCatalog([new AssetRecord(AssetPath.Parse("/Content/Materials/Red.omat.json"))]), context, new WorkspaceCookScopeProvider(workspace), cookStatus: reader, cooks: cooks.Object);
         provider.Items.Subscribe(
@@ -222,5 +171,33 @@ public sealed partial class AssetFeedTests
         await refreshed.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
         cooks.Raise(service => service.RunChanged += null, new CookRunChangedEventArgs(run, reveal: true));
         _ = reads.Should().Be(2);
+    }
+
+    /// <summary>The unsaved documents of one material source: an edit and its save change what <c>Find</c> reports.</summary>
+    private sealed class OpenEdits
+    {
+        private readonly FileSystemPath path;
+        private readonly UnsavedDocument document;
+        private IReadOnlyList<UnsavedDocument> open = [];
+
+        public OpenEdits(FileSystemPath path, AssetPath asset)
+        {
+            this.path = path;
+            this.document = new UnsavedDocument(new DocumentId(Guid.NewGuid()), new DocumentFile(path, asset), "Red");
+            _ = this.Port.Setup(value => value.Find(It.IsAny<IEnumerable<FileSystemPath>>()))
+                .Returns((IEnumerable<FileSystemPath> paths) => paths.Contains(this.path) ? this.open : []);
+        }
+
+        public Mock<IUnsavedDocuments> Port { get; } = new();
+
+        public void Edit() => this.Change([this.document]);
+
+        public void Clear() => this.Change([]);
+
+        private void Change(IReadOnlyList<UnsavedDocument> now)
+        {
+            this.open = now;
+            this.Port.Raise(value => value.Changed += null, EventArgs.Empty);
+        }
     }
 }

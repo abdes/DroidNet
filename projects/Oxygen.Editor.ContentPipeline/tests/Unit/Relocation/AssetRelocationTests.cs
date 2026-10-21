@@ -1,4 +1,4 @@
-// Distributed under the MIT License. See accompanying file LICENSE or copy
+﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -6,9 +6,11 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using AwesomeAssertions;
+using DroidNet.Documents;
 using DroidNet.TimeMachine;
+using Moq;
 using Oxygen.Editor.ContentPipeline.Relocation;
-using Oxygen.Editor.ContentPipeline.Snapshots;
+using Oxygen.Editor.Documents;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline.Unit.Tests.Relocation;
@@ -468,20 +470,38 @@ public sealed class AssetRelocationTests
         _ = workspace.Snapshot().Should().BeEquivalentTo(before);
     }
 
-    /// <summary>Unsaved documents reject a relocation and are named.</summary>
+    /// <summary>An unsaved document rejects a relocation, which changes no file.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task UnsavedDocumentsRejectRelocation()
     {
         using var workspace = CreateContent();
-        var path = workspace.FileOf("Content/Scenes/Main.oscene.json");
-        using var registration = workspace.Documents.Register(path, _ => Task.FromResult<CookDocumentReadLease?>(null));
-        registration.UpdateState(new(path, "Main", IsDirty: true, SavedContentHash: string.Empty));
+        _ = workspace.UnsavedDocuments.Setup(documents => documents.Find(It.IsAny<IEnumerable<FileSystemPath>>()))
+            .Returns([UnsavedMain(workspace)]);
+        var before = workspace.Snapshot();
 
         Func<Task> work = () => workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken);
 
-        _ = await work.Should().ThrowAsync<AssetRelocationException>().WithMessage("*Main*").ConfigureAwait(false);
+        _ = (await work.Should().ThrowAsync<AssetRelocationException>().ConfigureAwait(false)).Which.Code.Should().Be(AssetRelocationException.UnsavedDocumentsCode);
         _ = workspace.Exists("Content/Materials/Red.omat.json").Should().BeTrue();
+        _ = workspace.Snapshot().Should().BeEquivalentTo(before);
+    }
+
+    /// <summary>The unsaved documents of the project are the ones the open documents report for its root.</summary>
+    [TestMethod]
+    public void FindUnsavedDocuments_ReturnsTheUnsavedDocumentsUnderTheProjectRoot()
+    {
+        using var workspace = CreateContent();
+        var main = UnsavedMain(workspace);
+        IEnumerable<FileSystemPath>? asked = null;
+        _ = workspace.UnsavedDocuments.Setup(documents => documents.Find(It.IsAny<IEnumerable<FileSystemPath>>()))
+            .Callback<IEnumerable<FileSystemPath>>(paths => asked = paths.ToArray())
+            .Returns([main]);
+
+        var unsaved = workspace.Service.FindUnsavedDocuments();
+
+        _ = unsaved.Should().Equal(main);
+        _ = asked.Should().Contain(workspace.Project.ProjectRoot);
     }
 
     /// <summary>Copies get unique names and their own identity; referrers keep pointing at the original.</summary>
@@ -789,20 +809,8 @@ public sealed class AssetRelocationTests
         _ = workspace.Exists("Content/Levels/Start.oscene.json").Should().BeTrue();
     }
 
-    /// <summary>A delete names the open documents it would close, and which of them have unsaved edits.</summary>
-    [TestMethod]
-    public void FindOpenDocuments_NamesTheOpenDocumentsInsideTheDeletedItems()
-    {
-        using var workspace = CreateContent();
-        using var scene = workspace.Documents.Register(workspace.FileOf("Content/Scenes/Main.oscene.json"), _ => Task.FromResult<CookDocumentReadLease?>(null));
-        scene.UpdateState(new CookDocumentState(workspace.FileOf("Content/Scenes/Main.oscene.json"), "Main", IsDirty: true, string.Empty));
-        using var material = workspace.Documents.Register(workspace.FileOf("Content/Materials/Red.omat.json"), _ => Task.FromResult<CookDocumentReadLease?>(null));
-        material.UpdateState(new CookDocumentState(workspace.FileOf("Content/Materials/Red.omat.json"), "Red", IsDirty: false, string.Empty));
-
-        var open = workspace.Service.FindOpenDocuments([AssetPath.Parse("/Content/Scenes")]);
-
-        _ = open.Should().Equal(("Main", true));
-    }
+    private static UnsavedDocument UnsavedMain(RelocationWorkspace workspace)
+        => new(DocumentId.New(), new(workspace.FileOf("Content/Scenes/Main.oscene.json"), AssetPath.Parse("/Content/Scenes/Main.oscene")), "Main");
 
     private static RelocationWorkspace CreateContent()
     {

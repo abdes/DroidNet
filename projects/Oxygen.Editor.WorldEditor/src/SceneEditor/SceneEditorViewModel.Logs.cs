@@ -11,8 +11,6 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.SceneEditor;
 
-#pragma warning disable SA1204 // Each log method keeps its static and instance forms together
-
 /// <summary>Structured scene-editor lifecycle logging.</summary>
 public partial class SceneEditorViewModel
 {
@@ -22,6 +20,7 @@ public partial class SceneEditorViewModel
         Message = "Unregistering from messages for document {DocumentId}")]
     private static partial void LogUnregisteringFromMessages(ILogger logger, DocumentId documentId);
 
+    [Conditional("DEBUG")]
     private void LogUnregisteringFromMessages(DocumentId documentId)
         => LogUnregisteringFromMessages(this.logger, documentId);
 
@@ -31,6 +30,7 @@ public partial class SceneEditorViewModel
         Message = "Deferring layout change to {Layout} until scene ready for document {DocumentId}")]
     private static partial void LogDeferringLayoutChange(ILogger logger, SceneViewLayout layout, DocumentId documentId);
 
+    [Conditional("DEBUG")]
     private void LogDeferringLayoutChange(SceneViewLayout layout)
         => LogDeferringLayoutChange(this.logger, layout, this.Document.Id);
 
@@ -124,6 +124,7 @@ public partial class SceneEditorViewModel
         Message = "The runtime rejected the selection outline of document {DocumentId}; no engine session is running")]
     private static partial void LogSelectionOutlineRejected(ILogger logger, DocumentId documentId);
 
+    [Conditional("DEBUG")]
     private void LogSelectionOutlineRejected()
         => LogSelectionOutlineRejected(this.logger, this.Document.Id);
 
@@ -133,6 +134,7 @@ public partial class SceneEditorViewModel
         Message = "The runtime rejected the transform gizmo of document {DocumentId}; no engine session is running")]
     private static partial void LogTransformGizmoRejected(ILogger logger, DocumentId documentId);
 
+    [Conditional("DEBUG")]
     private void LogTransformGizmoRejected()
         => LogTransformGizmoRejected(this.logger, this.Document.Id);
 
@@ -142,6 +144,7 @@ public partial class SceneEditorViewModel
         Message = "The runtime rejected the scene helpers of document {DocumentId}; no engine session is running")]
     private static partial void LogSceneHelpersRejected(ILogger logger, DocumentId documentId);
 
+    [Conditional("DEBUG")]
     private void LogSceneHelpersRejected()
         => LogSceneHelpersRejected(this.logger, this.Document.Id);
 

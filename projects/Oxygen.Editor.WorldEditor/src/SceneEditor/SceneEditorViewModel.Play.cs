@@ -4,6 +4,8 @@
 
 using CommunityToolkit.Mvvm.Messaging;
 using DryIoc;
+using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.World.Components;
@@ -33,13 +35,23 @@ public partial class SceneEditorViewModel
             return;
         }
 
-        this.Play = new ScenePlayToolbarViewModel(session, this.Document.Id, this.SaveAllForPlayAsync, this.container.Resolve<IPlacementService>(IfUnresolved.ReturnDefault));
+        this.Play = new ScenePlayToolbarViewModel(session, this.Document.Id, () => this.SaveInputsAsync(SaveBeforeOperation.Play), this.container.Resolve<IPlacementService>(IfUnresolved.ReturnDefault));
         this.RefreshPlayScene();
     }
 
-    // Play saves every document with unsaved changes through the ordinary Save and its conflict handling.
-    private Task<bool> SaveAllForPlayAsync()
-        => this.container.Resolve<IDocumentService>(IfUnresolved.ReturnDefault) is { } documents ? documents.SaveAllAsync() : Task.FromResult(true);
+    // Play and Cook read the saved files: the unsaved documents the scene uses are saved first, after asking, through the
+    // ordinary Save and its conflict handling.
+    private Task<bool> SaveInputsAsync(SaveBeforeOperation operation)
+    {
+        if (this.container.Resolve<IDocumentService>(IfUnresolved.ReturnDefault) is not { } documents
+            || this.container.Resolve<IUnsavedCookInputs>(IfUnresolved.ReturnDefault) is not { } inputs)
+        {
+            return Task.FromResult(true);
+        }
+
+        var request = new CookRunRequest(CookTargetKind.CurrentScene, this.Document.File.Asset);
+        return documents.SaveBeforeAsync(operation, token => inputs.FindAsync(request, token));
+    }
 
     // Also follows the current authoring, which a reload replaces.
     private void RefreshPlayScene()

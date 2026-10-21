@@ -16,49 +16,6 @@ public sealed class SnapshotCaptureTests
 {
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Names dirty participating documents and releases their save gates without capturing bytes.</summary>
-    /// <returns>The asynchronous test operation.</returns>
-    [TestMethod]
-    public async Task DirtyDependencyRequiresSaveBeforeCapture()
-    {
-        using var workspace = new CaptureWorkspace();
-        var input = workspace.WriteInput("Content/material.omat.json", "saved material");
-        var state = State(input) with { IsDirty = true };
-        var released = false;
-        using var registration = workspace.Documents.Register(
-            input.SourcePath,
-            _ => Task.FromResult<CookDocumentReadLease?>(new(state, () => released = true)));
-
-        var result = await workspace.CaptureAsync([input]).ConfigureAwait(false);
-
-        _ = result.Snapshot.Should().BeNull();
-        _ = result.NeedsSave.Should().ContainSingle().Which.Should().Be(state);
-        _ = released.Should().BeTrue();
-        _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".build"), "*", SearchOption.AllDirectories).Should().BeEmpty();
-    }
-
-    /// <summary>Does not block a material cook on a dirty scene that merely consumes that material.</summary>
-    /// <returns>The asynchronous test operation.</returns>
-    [TestMethod]
-    public async Task DirtyConsumerOutsideInputClosureDoesNotBlockCapture()
-    {
-        using var workspace = new CaptureWorkspace();
-        var input = workspace.WriteInput("Content/material.omat.json", "saved material");
-        var consumer = workspace.WriteInput("Content/scene.oscene.json", "saved scene");
-        var acquired = false;
-        using var registration = workspace.Documents.Register(consumer.SourcePath, _ =>
-        {
-            acquired = true;
-            return Task.FromResult<CookDocumentReadLease?>(new(State(consumer) with { IsDirty = true }, () => { }));
-        });
-
-        var result = await workspace.CaptureAsync([input]).ConfigureAwait(false);
-
-        _ = result.Snapshot.Should().NotBeNull();
-        _ = result.NeedsSave.Should().BeEmpty();
-        _ = acquired.Should().BeFalse();
-    }
-
     /// <summary>Retains captured saved bytes and revisions when their original source changes later.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
@@ -66,22 +23,15 @@ public sealed class SnapshotCaptureTests
     {
         using var workspace = new CaptureWorkspace();
         var input = workspace.WriteInput("Content/material.omat.json", "saved material");
-        var state = State(input);
-        using var registration = workspace.Documents.Register(
-            input.SourcePath,
-            _ => Task.FromResult<CookDocumentReadLease?>(new(state, () => { })));
 
         var unnormalized = input with
         {
             SourcePath = FileSystemPath.From(Path.Combine(workspace.Root, "Content", "..", "Content", "material.omat.json")),
         };
-        var result = await workspace.CaptureAsync([unnormalized]).ConfigureAwait(false);
-        _ = result.Snapshot.Should().NotBeNull();
-        var snapshot = result.Snapshot!;
+        var snapshot = await workspace.CaptureAsync([unnormalized]).ConfigureAwait(false);
         await File.WriteAllTextAsync(input.SourcePath.FullPath, "later saved material", CancellationToken.None).ConfigureAwait(false);
 
         _ = (await File.ReadAllTextAsync(Path.Combine(snapshot.InputRoot, input.RelativePath), CancellationToken.None).ConfigureAwait(false)).Should().Be("saved material");
-        _ = snapshot.Documents.Should().ContainSingle();
         _ = snapshot.Inputs.Should().ContainSingle().Which.SourcePath.Should().Be(input.SourcePath);
     }
 
@@ -94,7 +44,7 @@ public sealed class SnapshotCaptureTests
         var input = workspace.WriteInput("Content/source.bin", "before");
         var discoveries = 0;
 
-        var result = await workspace.CaptureAsync(async token =>
+        var snapshot = await workspace.CaptureAsync(async token =>
         {
             discoveries++;
             if (discoveries == 1)
@@ -106,50 +56,23 @@ public sealed class SnapshotCaptureTests
             return [input with { DiscoveryHash = Hash("after") }];
         }).ConfigureAwait(false);
 
-        _ = result.Snapshot.Should().NotBeNull();
-        var snapshot = result.Snapshot!;
         _ = discoveries.Should().Be(2);
         _ = (await File.ReadAllTextAsync(Path.Combine(snapshot.InputRoot, input.RelativePath), CancellationToken.None).ConfigureAwait(false)).Should().Be("after");
         _ = Directory.GetDirectories(Path.GetDirectoryName(snapshot.InputRoot)!).Should().ContainSingle();
     }
 
-    /// <summary>Distinguishes external file changes from unsaved document edits.</summary>
+    /// <summary>Leaves no partial output when a dependency is missing.</summary>
     /// <returns>The asynchronous test operation.</returns>
     [TestMethod]
-    public async Task ExternalChangeRequiresReloadInsteadOfSilentCapture()
-    {
-        using var workspace = new CaptureWorkspace();
-        var input = workspace.WriteInput("Content/material.omat.json", "external material");
-        var state = State(input) with { SavedContentHash = Hash("document's saved material") };
-        using var registration = workspace.Documents.Register(
-            input.SourcePath,
-            _ => Task.FromResult<CookDocumentReadLease?>(new(state, () => { })));
-
-        var result = await workspace.CaptureAsync([input]).ConfigureAwait(false);
-
-        _ = result.Snapshot.Should().BeNull();
-        _ = result.NeedsSave.Should().BeEmpty();
-        _ = result.ExternalChanges.Should().ContainSingle().Which.Should().Be(state);
-        _ = Directory.GetFiles(Path.Combine(workspace.Root, ".build"), "*", SearchOption.AllDirectories).Should().BeEmpty();
-    }
-
-    /// <summary>Releases coordinated document reads and partial output when a dependency is missing.</summary>
-    /// <returns>The asynchronous test operation.</returns>
-    [TestMethod]
-    public async Task FailedCaptureReleasesDocumentReadsAndPartialFiles()
+    public async Task FailedCaptureLeavesNoPartialFiles()
     {
         using var workspace = new CaptureWorkspace();
         var input = workspace.WriteInput("Content/material.omat.json", "saved material");
-        var released = false;
-        using var registration = workspace.Documents.Register(
-            input.SourcePath,
-            _ => Task.FromResult<CookDocumentReadLease?>(new(State(input), () => released = true)));
         File.Delete(input.SourcePath.FullPath);
 
         var capture = () => workspace.CaptureAsync([input]);
         _ = await capture.Should().ThrowAsync<FileNotFoundException>().ConfigureAwait(false);
 
-        _ = released.Should().BeTrue();
         _ = Directory.GetFiles(Path.Combine(workspace.Root, ".build"), "*", SearchOption.AllDirectories).Should().BeEmpty();
     }
 
@@ -181,9 +104,9 @@ public sealed class SnapshotCaptureTests
         using var second = new CaptureWorkspace();
         var firstInput = first.WriteInput("Content/source.bin", "same bytes");
         var secondInput = second.WriteInput("Content/source.bin", "same bytes");
-        var original = (await first.CaptureAsync([firstInput]).ConfigureAwait(false)).Snapshot!;
-        var relocated = (await second.CaptureAsync([secondInput with { RelativePath = "Content\\source.bin" }]).ConfigureAwait(false)).Snapshot!;
-        var changedBuild = (await second.CaptureAsync([secondInput], "different-compatible-build").ConfigureAwait(false)).Snapshot!;
+        var original = await first.CaptureAsync([firstInput]).ConfigureAwait(false);
+        var relocated = await second.CaptureAsync([secondInput with { RelativePath = "Content\\source.bin" }]).ConfigureAwait(false);
+        var changedBuild = await second.CaptureAsync([secondInput], "different-compatible-build").ConfigureAwait(false);
 
         _ = relocated.InputIdentity.Should().Be(original.InputIdentity);
         _ = relocated.InputRoot.Should().NotBe(original.InputRoot);
@@ -208,7 +131,4 @@ public sealed class SnapshotCaptureTests
 
         _ = Directory.EnumerateFiles(Path.Combine(workspace.Root, ".build"), "*", SearchOption.AllDirectories).Should().BeEmpty();
     }
-
-    private static CookDocumentState State(CookSnapshotInput input)
-        => new(input.SourcePath, "Material", IsDirty: false, input.DiscoveryHash);
 }
