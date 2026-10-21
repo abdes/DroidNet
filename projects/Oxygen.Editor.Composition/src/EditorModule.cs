@@ -7,7 +7,6 @@ using DroidNet.Aura.Windowing;
 using DroidNet.Composition;
 using DroidNet.Config;
 using DroidNet.Coordinates;
-using DroidNet.Documents;
 using DroidNet.Routing;
 using DroidNet.Storage;
 using DroidNet.Storage.Native;
@@ -40,9 +39,9 @@ using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.SceneExplorer;
 using Oxygen.Editor.SceneInspector;
 using Oxygen.Editor.Services;
+using Oxygen.Editor.Shell;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Desktop;
-using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Workspace;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -61,6 +60,12 @@ namespace Oxygen.Editor;
 /// </remarks>
 public static class EditorModule
 {
+    // The editor-layer modules of the subsystems.
+    private static readonly IScopeModule<IApplicationLayer>[] Modules =
+    [
+        new ShellModule(),
+    ];
+
     /// <summary>
     ///     Creates the routes of the application's root router: the Project Explorer and the workspace window.
     /// </summary>
@@ -129,6 +134,11 @@ public static class EditorModule
 
         // Register Config module
         _ = container.WithConfig();
+        foreach (var module in Modules)
+        {
+            module.Register(container);
+        }
+
         ConfigureApplicationServices(container);
         ConfigurePersistentStateDatabase(container);
     }
@@ -225,11 +235,6 @@ public static class EditorModule
         container.Register<IRecentProjectAdapter, RecentProjectAdapter>(Reuse.Singleton);
         container.Register<IProjectManagerService, ProjectManagerService>(Reuse.Singleton);
         container.Register<IProjectFolder, ActiveProjectFolder>(Reuse.Singleton);
-
-        // The tabs of every window, which Aura draws; each window's document service makes its close decisions.
-        container.Register<DocumentTabs>(Reuse.Singleton);
-        container.RegisterMapping<IDocumentTabSource, DocumentTabs>();
-        container.RegisterMapping<IDocumentTabs, DocumentTabs>();
     }
 
     private static void RegisterDiagnosticsServices(IContainer container)

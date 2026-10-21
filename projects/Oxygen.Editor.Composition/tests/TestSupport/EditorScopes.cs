@@ -99,7 +99,7 @@ internal sealed class EditorScopes : IAsyncDisposable
     /// <summary>Gets the modules of a workspace window's scope, as the workspace view model creates them.</summary>
     /// <returns>The window's modules, in registration and activation order.</returns>
     public IReadOnlyList<IScopeModule<IWindowLayer>> WindowModules()
-        => [new RouterScopeModule(new Routes([]), new LocalRouterContext(new object())), new DockingWindowModule(), new WorkspaceWindowModule(this.Features), .. this.Features];
+        => [new RouterScopeModule(new Routes([]), new LocalRouterContext(new object())), new DockingWindowModule(), .. WorkspaceWindowModule.Compose(this.Features)];
 
     /// <summary>Gets the modules of the Content Explorer's scope, as the explorer creates them.</summary>
     /// <returns>The explorer's modules, in registration and activation order.</returns>

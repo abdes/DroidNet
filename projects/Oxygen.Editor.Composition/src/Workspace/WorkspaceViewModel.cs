@@ -100,7 +100,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 
     /// <inheritdoc />
     protected override IEnumerable<IScopeModule<IWindowLayer>> CreateWindowModules()
-        => [new WorkspaceWindowModule(this.modules), .. this.modules];
+        => WorkspaceWindowModule.Compose(this.modules);
 
     /// <inheritdoc />
     protected override void OnWindowScopeOpened(IResolver window)

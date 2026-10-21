@@ -2,13 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Aura.Dialogs;
-using DroidNet.Aura.Windowing;
 using DroidNet.Composition;
 using DroidNet.Storage;
 using DryIoc;
 using Microsoft.Extensions.Logging;
-using Microsoft.UI;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Assets.Runtime;
 using Oxygen.Editor.ContentPipeline.Mounting;
@@ -31,12 +28,8 @@ using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scripting;
-using Oxygen.Editor.Shell.Commands;
+using Oxygen.Editor.Shell;
 using Oxygen.Editor.Shell.Contributions;
-using Oxygen.Editor.Shell.Desktop;
-using Oxygen.Editor.Shell.Documents;
-using Oxygen.Editor.Shell.Layout;
-using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
@@ -61,13 +54,6 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
         // The preview and the preview content demand follow the open scene documents.
         typeof(IScenePreview),
         typeof(PreviewContentDemand),
-
-        // The document service follows the window's tabs, and the window's close asks about its documents.
-        typeof(IDocumentService),
-        typeof(IDocumentArea),
-        typeof(IPlacementService),
-        typeof(DocumentAreaViewModel),
-        typeof(WindowCloseCoordinator),
         typeof(PreviewSession),
         typeof(PlaySession),
 
@@ -81,17 +67,26 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
     /// <inheritdoc />
     public IReadOnlyList<Type> Activation => Activated;
 
+    /// <summary>
+    ///     Gets the modules of a workspace window's scope after its router and docking: the window's own services, the
+    ///     Shell's and the features'.
+    /// </summary>
+    /// <param name="features">The features whose panels and commands the window shows.</param>
+    /// <returns>The modules, in registration and activation order.</returns>
+    public static IReadOnlyList<IScopeModule<IWindowLayer>> Compose(IReadOnlyList<IFeatureModule> features)
+    {
+        ArgumentNullException.ThrowIfNull(features);
+        return [new WorkspaceWindowModule(features), new ShellWindowModule(), .. features];
+    }
+
     /// <inheritdoc />
     public void Register(IRegistrator scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
 
-        // The panels and commands of the window, its documents, their kinds and editors, its document area and its
-        // document service, and the placement of documents and panels.
+        // The panels and commands of the window, and its documents and their kinds.
         RegisterContributions(scope, features);
         RegisterDocuments(scope);
-        scope.Register<ICommandService, CommandService>(Reuse.Singleton);
-        scope.Register<IPlacementService, DockingPlacementService>(Reuse.Singleton);
 
         RegisterContentServices(scope);
         RegisterPreview(scope);
@@ -127,46 +122,9 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
                 resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault)),
             Reuse.Singleton);
 
-        // Each kind's editor comes from the module that edits it.
-        scope.RegisterDelegate(
-            resolver => new DocumentArea(
-                resolver.Resolve<IDocumentTabs>(),
-                resolver.Resolve<OpenDocuments>(),
-                resolver.Resolve<IEnumerable<IDocumentEditorProvider>>().Select(static provider => provider.Editor),
-                resolver.Resolve<WindowId>(),
-                resolver.Resolve<IWindowManagerService>().ActivateWindow,
-                resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault)),
-            Reuse.Singleton);
-        scope.RegisterMapping<IDocumentArea, DocumentArea>();
-        RegisterWindowDocumentServices(scope);
-
         // The project's files and relocations, as documents see them.
         scope.Register<IDocumentFiles, ProjectDocumentFiles>(Reuse.Singleton);
         scope.Register<IDocumentRelocations, DocumentRelocationFeed>(Reuse.Singleton);
-        scope.Register<DocumentService>(Reuse.Singleton);
-        scope.RegisterMapping<IDocumentService, DocumentService>();
-        scope.Register<DocumentAreaViewModel>(Reuse.Singleton);
-        scope.Register<DocumentAreaView>(Reuse.Singleton);
-
-        // The cook, Play, relocations and the asset feed ask which documents are unsaved.
-        scope.Register<IUnsavedDocuments, UnsavedDocuments>(Reuse.Singleton);
-    }
-
-    // The prompts, confirmations and input of the window, which act on it without features naming it.
-    private static void RegisterWindowDocumentServices(IRegistrator scope)
-    {
-        scope.RegisterDelegate<IDocumentClosePrompt>(
-            resolver => new DocumentClosePrompt(resolver.Resolve<IDialogService>(), resolver.Resolve<IWindowManagerService>(), resolver.Resolve<WindowId>()),
-            Reuse.Singleton);
-        scope.RegisterDelegate<IDocumentConfirmations>(
-            resolver => new DocumentConfirmations(resolver.Resolve<IDialogService>(), resolver.Resolve<IWindowManagerService>(), resolver.Resolve<WindowId>()),
-            Reuse.Singleton);
-        scope.RegisterDelegate<IDocumentInputCommitter>(
-            resolver => new DocumentInputCommitter(resolver.Resolve<IWindowManagerService>(), resolver.Resolve<WindowId>()),
-            Reuse.Singleton);
-        scope.RegisterDelegate(
-            resolver => new WindowCloseCoordinator(resolver.Resolve<IWindowManagerService>(), resolver.Resolve<IDocumentTabs>(), resolver.Resolve<WindowId>()),
-            Reuse.Singleton);
     }
 
     // The project's content as the window sees it. The Content Explorer's scope reaches the same instances, created by
@@ -185,9 +143,6 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
         scope.Register<ContentPipeline.Authoring.IAssetAuthoring, ContentPipeline.Authoring.AssetAuthoring>(Reuse.Singleton);
         scope.Register<ContentPipeline.Cooking.IAutomaticCookService, ContentPipeline.Cooking.AutomaticCookService>(Reuse.Singleton);
         scope.Register<ContentPipeline.Cooking.IUnsavedCookInputs, ContentPipeline.Cooking.UnsavedCookInputs>(Reuse.Singleton);
-
-        // The project's global history, which ends with the workspace.
-        scope.Register<IHistoryService, HistoryService>(Reuse.Singleton);
     }
 
     // The engine preview and the preview content demand follow the open scene documents. The project's preview also
@@ -257,7 +212,6 @@ public sealed class WorkspaceWindowModule(IReadOnlyList<IFeatureModule> features
     private static void RegisterScriptServices(IRegistrator scope)
     {
         scope.RegisterInstance(ScriptToolingPaths.Discover());
-        scope.Register<ICodeEditorService, CodeEditorService>(Reuse.Singleton);
         scope.Register<ProjectScriptTooling>(Reuse.Singleton);
         scope.RegisterMany([typeof(IScripts), typeof(IAssetProblemSource)], typeof(ScriptFacts), Reuse.Singleton);
         scope.RegisterMany([typeof(IInputSources), typeof(IAssetProblemSource)], typeof(InputFacts), Reuse.Singleton);
