@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Diagnostics;
 using System.Reflection;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -33,7 +32,7 @@ public partial class AssetResolverService(ILoggerFactory loggerFactory)
         Uri? uri;
         var assemblyName = caller.GetName().Name;
 
-        if (IsPackaged())
+        if (IsPackaged)
         {
             _ = TryPackagedAssetAtPath($"Assets/{relativePath}", out uri)
                     || (assemblyName is not null && TryPackagedAssetAtPath($"{assemblyName}/Assets/{relativePath}", out uri));
@@ -46,21 +45,6 @@ public partial class AssetResolverService(ILoggerFactory loggerFactory)
         this.LogIconAsset(isPackaged: false, relativePath, uri);
 
         return uri;
-
-        [DebuggerNonUserCode]
-        [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "just testing for packaged or not")]
-        static bool IsPackaged()
-        {
-            try
-            {
-                _ = Package.Current;
-                return true;
-            }
-            catch (Exception)
-            {
-                return false;
-            }
-        }
 
         bool TryPackagedAssetAtPath(string relativePath, out Uri? uri)
         {
