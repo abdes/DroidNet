@@ -34,6 +34,8 @@ public sealed partial class DocumentTab : IDocumentMetadata, IDisposable
         this.Document = document;
         this.Editor = editor;
         this.IsClosable = editor.IsClosable;
+        this.IsPinnedHint = editor.IsPinned;
+        this.IsPinLockedHint = editor.IsPinLocked;
         this.IconUri = editor.IconUri;
         this.title = document.Title;
         this.isDirty = document.IsDirty;
@@ -71,7 +73,10 @@ public sealed partial class DocumentTab : IDocumentMetadata, IDisposable
     public bool IsClosable { get; }
 
     /// <inheritdoc/>
-    public bool IsPinnedHint => false;
+    public bool IsPinnedHint { get; }
+
+    /// <inheritdoc/>
+    public bool IsPinLockedHint { get; }
 
     /// <inheritdoc/>
     public void Dispose()

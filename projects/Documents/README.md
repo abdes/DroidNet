@@ -17,7 +17,7 @@ DroidNet.Documents provides the core interfaces and event contracts for document
 
 - **DocumentId**: The identity of an open document and of its one tab.
 - **IDocumentTabSource**: Main contract for document lifecycle events (open, close, activate).
-- **IDocumentMetadata**: What a tab shows: identity, title, icon and dirty state, read-only and observable through `INotifyPropertyChanged`.
+- **IDocumentMetadata**: What a tab shows: identity, title, icon, dirty state and pin (`IsPinnedHint`, and `IsPinLockedHint` for a document whose tab must stay pinned: it has no pin button, cannot be unpinned or dragged out, and only the model changes it), read-only and observable through `INotifyPropertyChanged`.
 - **IDocumentServiceState**: Query open/active documents per window.
 - **Event Args**: Rich event argument types for document operations, including async close veto.
 

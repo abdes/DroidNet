@@ -43,6 +43,9 @@ internal sealed class SampleDocumentMetadata : IDocumentMetadata
     public bool IsPinnedHint { get; set => this.Set(ref field, value); }
 
     /// <inheritdoc/>
+    public bool IsPinLockedHint { get; set => this.Set(ref field, value); }
+
+    /// <inheritdoc/>
     public bool IsClosable { get; set => this.Set(ref field, value); } = true;
 
     private void Set<T>(ref T field, T value, [CallerMemberName] string? property = null)

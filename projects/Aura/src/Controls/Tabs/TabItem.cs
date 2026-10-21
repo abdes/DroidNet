@@ -64,10 +64,27 @@ public sealed partial class TabItem : ObservableObject, IDragPayload, IEquatable
     public partial bool IsClosable { get; set; } = true;
 
     /// <summary>
-    ///     Gets or sets a value indicating whether the tab is pinned (always visible and not draggable).
+    ///     Gets or sets a value indicating whether the tab is pinned (always visible and not draggable). While
+    ///     <see cref="IsPinLocked"/> is set the value cannot change.
+    /// </summary>
+    public bool IsPinned
+    {
+        get;
+        set
+        {
+            if (!this.IsPinLocked)
+            {
+                _ = this.SetProperty(ref field, value);
+            }
+        }
+    }
+
+    /// <summary>
+    ///     Gets or sets a value indicating whether the pinned state is locked: the tab hides its pin button and
+    ///     <see cref="IsPinned"/> ignores changes. Only the model unlocks a tab; the control never does.
     /// </summary>
     [ObservableProperty]
-    public partial bool IsPinned { get; set; }
+    public partial bool IsPinLocked { get; set; }
 
     /// <summary>
     ///     Gets or sets a value indicating whether the tab is currently selected.
@@ -97,6 +114,7 @@ public sealed partial class TabItem : ObservableObject, IDragPayload, IEquatable
             CommandParameter = this.CommandParameter,
             IsClosable = this.IsClosable,
             IsPinned = this.IsPinned,
+            IsPinLocked = this.IsPinLocked,
             IsSelected = this.IsSelected,
             IsDirty = this.IsDirty,
         };

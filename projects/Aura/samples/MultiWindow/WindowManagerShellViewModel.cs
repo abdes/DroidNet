@@ -248,6 +248,35 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
+    ///     Command to open a document in the main window whose tab is pinned and pin-locked: it shows no pin button, the
+    ///     user cannot unpin it, and it cannot be dragged out of the tab strip.
+    /// </summary>
+    [RelayCommand]
+    private async Task CreatePinLockedDocumentAsync()
+    {
+        try
+        {
+            var mainCtx = this.windowManager.OpenWindows.FirstOrDefault(wc => wc.Category == WindowCategory.Main);
+            if (this.tabSource is null || mainCtx is null)
+            {
+                return;
+            }
+
+            var md = new SampleDocumentMetadata
+            {
+                Title = "Pinned Document",
+                IsPinnedHint = true,
+                IsPinLockedHint = true,
+            };
+            _ = await this.tabSource.OpenDocumentAsync(mainCtx.Id, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
+        }
+        catch (Exception ex)
+        {
+            Debug.WriteLine($"Failed to create pinned document: {ex.Message}");
+        }
+    }
+
+    /// <summary>
     ///     Command to create a new frameless window with the DroidNet logo.
     /// </summary>
     [RelayCommand]

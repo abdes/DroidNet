@@ -33,6 +33,9 @@ This sample demonstrates Aura's comprehensive multi-window management capabiliti
 
 ### Detach vs Close
 
+- **Pin lock** - "New Pinned Document" opens a tab in the main window whose
+  metadata sets `IsPinnedHint` and `IsPinLockedHint`: it has no pin button, the
+  user cannot unpin it, and it cannot be dragged out.
 - **Detach** - Dragging (tear-out) a document tab starts a non-blocking detach
   operation: the UI immediately removes a tab and the app receives a
   DocumentDetached event to take ownership (for example creating a dedicated

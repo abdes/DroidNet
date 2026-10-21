@@ -29,6 +29,7 @@ internal static class TabItemExtensions
             Header = metadata?.Title ?? string.Empty,
             IsClosable = metadata?.IsClosable ?? true,
             IsPinned = metadata?.IsPinnedHint ?? false,
+            IsPinLocked = metadata?.IsPinLockedHint ?? false,
             IsDirty = metadata?.IsDirty ?? false,
         };
 
@@ -53,7 +54,11 @@ internal static class TabItemExtensions
         ArgumentNullException.ThrowIfNull(tab);
 
         tab.Header = metadata?.Title ?? string.Empty;
+
+        // The model owns the pin: it lifts the lock for the moment it sets the pinned state.
+        tab.IsPinLocked = false;
         tab.IsPinned = metadata?.IsPinnedHint ?? false;
+        tab.IsPinLocked = metadata?.IsPinLockedHint ?? false;
         tab.IsClosable = metadata?.IsClosable ?? tab.IsClosable;
         tab.IsDirty = metadata?.IsDirty ?? false;
 

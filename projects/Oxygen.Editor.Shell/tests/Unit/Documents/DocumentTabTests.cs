@@ -36,6 +36,29 @@ public sealed class DocumentTabTests
         _ = changes.Should().Equal(nameof(tab.IsDirty), nameof(tab.IsDirty));
     }
 
+    /// <summary>A descriptor that pins and locks its tab, as the scene editor's does, yields a pinned, locked tab.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task ADescriptorThatPinsAndLocksYieldsAPinnedLockedTab()
+    {
+        using var notes = new Notes();
+        var document = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
+        var descriptor = new DocumentEditorDescriptor(notes.Kind, static _ => new object())
+        {
+            IsClosable = false,
+            IsOnePerArea = true,
+            IsPinned = true,
+            IsPinLocked = true,
+        };
+        using var tab = new DocumentTab(document, descriptor);
+        using var plain = new DocumentTab(document, new DocumentEditorDescriptor(notes.Kind, static _ => new object()));
+
+        _ = tab.IsPinnedHint.Should().BeTrue();
+        _ = tab.IsPinLockedHint.Should().BeTrue();
+        _ = plain.IsPinnedHint.Should().BeFalse();
+        _ = plain.IsPinLockedHint.Should().BeFalse();
+    }
+
     /// <summary>A document whose file disappears shows as unsaved, and a reload of the file shows as saved.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]

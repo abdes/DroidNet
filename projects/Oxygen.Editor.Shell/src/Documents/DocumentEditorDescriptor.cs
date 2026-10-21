@@ -27,6 +27,17 @@ public sealed class DocumentEditorDescriptor(IDocumentKind kind, Func<DocumentTa
     public bool IsClosable { get; init; } = true;
 
     /// <summary>
+    ///     Gets a value indicating whether the tab of a document of this kind is pinned.
+    /// </summary>
+    public bool IsPinned { get; init; }
+
+    /// <summary>
+    ///     Gets a value indicating whether the pinned state of the tab of a document of this kind is locked: the user can
+    ///     neither unpin the tab nor drag it into another window.
+    /// </summary>
+    public bool IsPinLocked { get; init; }
+
+    /// <summary>
     ///     Gets the URI of the icon the tab of a document of this kind shows, if any.
     /// </summary>
     public Uri? IconUri { get; init; }

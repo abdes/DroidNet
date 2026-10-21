@@ -41,4 +41,11 @@ public interface IDocumentMetadata : INotifyPropertyChanged
     ///     Gets a value indicating whether the tab should be pinned by default. It is a preference, not the tab's state.
     /// </summary>
     public bool IsPinnedHint { get; }
+
+    /// <summary>
+    ///     Gets a value indicating whether the tab's pinned state is locked, so the user can neither unpin the tab nor
+    ///     drag it out. It is the document's own rule; when it is set, the tab follows <see cref="IsPinnedHint"/> and
+    ///     only the model can change either.
+    /// </summary>
+    public bool IsPinLockedHint { get; }
 }

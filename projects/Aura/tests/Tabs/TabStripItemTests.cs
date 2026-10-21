@@ -519,6 +519,46 @@ public partial class TabStripItemTests : VisualUserInterfaceTests
     });
 
     [TestMethod]
+    public Task PinLockedTab_HidesPinButton_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var (tabStripItem, _) = await SetupTabStripItemWithData(new TabItem
+        {
+            Header = "Locked Tab",
+            IsPinned = true,
+            IsPinLocked = true,
+        }).ConfigureAwait(true);
+        var pinButton = tabStripItem.FindDescendant<Button>(e => string.Equals(e.Name, TabStripItem.PinButtonPartName, StringComparison.Ordinal));
+        _ = pinButton.Should().NotBeNull();
+
+        // Assert - locked hides the button; the model lifting the lock shows it again
+        _ = pinButton!.Visibility.Should().Be(Visibility.Collapsed);
+
+        tabStripItem.Item!.IsPinLocked = false;
+        await WaitForRenderCompletion().ConfigureAwait(true);
+        _ = pinButton.Visibility.Should().Be(Visibility.Visible);
+    });
+
+    [TestMethod]
+    public Task PinLockedTab_RefusesPinClick_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var (tabStripItem, _) = await SetupTabStripItemWithData(new TabItem
+        {
+            Header = "Locked Tab",
+            IsPinned = true,
+            IsPinLocked = true,
+        }).ConfigureAwait(true);
+
+        // Act
+        tabStripItem.OnPinClicked();
+        tabStripItem.Item!.IsPinned = false;
+
+        // Assert
+        _ = tabStripItem.Item.IsPinned.Should().BeTrue("a locked tab cannot be unpinned");
+    });
+
+    [TestMethod]
     public Task UpdatesPinGlyphWhenPinned_Async() => EnqueueAsync(async () =>
     {
         // Arrange

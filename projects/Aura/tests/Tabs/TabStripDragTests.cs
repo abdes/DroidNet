@@ -93,6 +93,25 @@ public class TabStripDragTests : TabStripTestsBase
     });
 
     [TestMethod]
+    public Task HandlePointerPressed_OnPinLockedTab_DoesNotEngage_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = await this.CreateAndLoadTabStripAsync(3, pinnedCount: 1).ConfigureAwait(true);
+        tabStrip.DragCoordinator = this.mockCoordinator!.Object;
+        var container = tabStrip.GetTabStripItemForIndex(0);
+        _ = container.Should().NotBeNull();
+        container.Item!.IsPinLocked = true;
+
+        // Act
+        var pressPosition = new Point(PreferredItemWidth, PreferredItemWidth / 2).AsElement();
+        tabStrip.HandlePointerPressed(container, pressPosition, new Point(0, 0));
+
+        // Assert
+        _ = tabStrip.IsDragEngaged.Should().BeFalse("a pin-locked tab stays pinned, so it cannot be dragged");
+        _ = container.Item.IsPinned.Should().BeTrue();
+    });
+
+    [TestMethod]
     public Task HandlePointerPressed_WithoutCoordinator_DoesNotEngage_Async() => EnqueueAsync(async () =>
     {
         // Arrange

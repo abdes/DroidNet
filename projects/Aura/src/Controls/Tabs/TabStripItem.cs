@@ -336,6 +336,11 @@ public partial class TabStripItem : ContentControl
 
         Debug.Assert(this.Item is not null, "a control with a null Item must be disabled");
 
+        if (this.Item.IsPinLocked)
+        {
+            return;
+        }
+
         this.Item.IsPinned = !this.Item.IsPinned;
         this.LogPinClicked();
     }
@@ -385,7 +390,12 @@ public partial class TabStripItem : ContentControl
         _ = this.pinnedIndicator?.Visibility = this.Item.IsPinned ? Visibility.Visible : Visibility.Collapsed;
 
         _ = this.dirtyIndicator?.Visibility = this.Item.IsDirty ? Visibility.Visible : Visibility.Collapsed;
+
+        this.UpdatePinButtonVisibility();
     }
+
+    private void UpdatePinButtonVisibility()
+        => _ = this.pinButton?.Visibility = this.Item?.IsPinLocked == true ? Visibility.Collapsed : Visibility.Visible;
 
     /// <summary>
     ///     Handles changes to the Item property and updates bindings and state.
@@ -444,6 +454,11 @@ public partial class TabStripItem : ContentControl
         {
             this.LogItemPropertyChanged(e);
             this.UpdateVisualStates();
+        }
+        else if (string.Equals(e.PropertyName, nameof(TabItem.IsPinLocked), StringComparison.Ordinal))
+        {
+            this.LogItemPropertyChanged(e);
+            this.UpdatePinButtonVisibility();
         }
         else if (string.Equals(e.PropertyName, nameof(TabItem.IsDirty), StringComparison.Ordinal))
         {

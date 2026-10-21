@@ -393,6 +393,38 @@ public class DocumentTabPresenterTests : TabStripTestsBase
     });
 
     [TestMethod]
+    public Task PinLockedMetadata_OpensPinnedAndLockedTab_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var tabStrip = this.CreateTabStrip(0);
+        await LoadTestContentAsync(tabStrip).ConfigureAwait(true);
+
+        var window = VisualUserInterfaceTestsApp.MainWindow;
+        var ds = new TestDocumentTabSource();
+        var ctx = ManagedWindowFactory.CreateForWindow(window);
+        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+        var meta = new TestDocumentMetadata { Title = "Scene", IsPinnedHint = true, IsPinLockedHint = true };
+
+        // Act
+        _ = await ds.OpenDocumentAsync(ctx.Id, meta, -1, shouldSelect: true).ConfigureAwait(true);
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert
+        var tab = tabStrip.Items[0];
+        _ = tab.IsPinned.Should().BeTrue();
+        _ = tab.IsPinLocked.Should().BeTrue();
+
+        // Act - the model unlocks and unpins
+        meta.IsPinLockedHint = false;
+        meta.IsPinnedHint = false;
+        await WaitForRenderCompletion().ConfigureAwait(true);
+
+        // Assert
+        _ = tab.IsPinLocked.Should().BeFalse();
+        _ = tab.IsPinned.Should().BeFalse();
+    });
+
+    [TestMethod]
     public Task MetadataPropertyChanged_OffTheUiThread_UpdatesTab_Async() => EnqueueAsync(async () =>
     {
         // Arrange
@@ -713,6 +745,8 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         public bool IsDirty { get; set => this.Set(ref field, value); }
 
         public bool IsPinnedHint { get; set => this.Set(ref field, value); }
+
+        public bool IsPinLockedHint { get; set => this.Set(ref field, value); }
 
         public bool IsClosable { get; set => this.Set(ref field, value); } = true;
 

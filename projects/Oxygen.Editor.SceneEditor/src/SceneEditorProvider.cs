@@ -27,7 +27,7 @@ namespace Oxygen.Editor.SceneEditor;
 public sealed class SceneEditorProvider(SceneDocumentKind kind, IContainer container) : IDocumentEditorProvider
 {
     /// <inheritdoc/>
-    public DocumentEditorDescriptor Editor { get; } = new(kind, tab => Create(container, tab)) { IsClosable = false, IsOnePerArea = true };
+    public DocumentEditorDescriptor Editor { get; } = new(kind, tab => Create(container, tab)) { IsClosable = false, IsOnePerArea = true, IsPinned = true, IsPinLocked = true };
 
     private static SceneEditorViewModel Create(IContainer container, DocumentTab tab)
         => new(
