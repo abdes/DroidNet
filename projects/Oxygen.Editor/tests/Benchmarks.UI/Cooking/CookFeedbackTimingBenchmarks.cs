@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.ComponentModel;
 using System.Diagnostics;
 using System.Globalization;
 using System.Text.Json.Nodes;
@@ -89,12 +90,24 @@ public sealed partial class CookFeedbackTimingBenchmarks : DroidNet.Tests.Visual
     {
         var previous = model.SelectedRun?.Snapshot.OperationId;
         var clock = Stopwatch.StartNew();
+        double selected = 0;
+        void OnModelChanged(object? sender, PropertyChangedEventArgs args)
+        {
+            if (selected == 0 && string.Equals(args.PropertyName, nameof(CookingPanelViewModel.SelectedRun), StringComparison.Ordinal) && model.SelectedRun?.Snapshot.OperationId != previous)
+            {
+                selected = clock.Elapsed.TotalMilliseconds;
+            }
+        }
+
+        model.PropertyChanged += OnModelChanged;
         var work = submit();
         var submission = clock.Elapsed.TotalMilliseconds;
         double visible = 0;
+        var frames = 0;
         do
         {
             cancellationToken.ThrowIfCancellationRequested();
+            frames++;
             _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
             {
                 var title = (TextBlock)view.FindName("RunTitle");
@@ -107,8 +120,9 @@ public sealed partial class CookFeedbackTimingBenchmarks : DroidNet.Tests.Visual
             }).ConfigureAwait(true);
         }
         while (visible == 0);
+        model.PropertyChanged -= OnModelChanged;
         var result = await work.WaitAsync(cancellationToken).ConfigureAwait(true);
-        this.TestContext.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Cook feedback: scope={result.TargetKind}; reused={result.IsUpToDate}; submit_ms={submission:F2}; visible_ms={visible:F2}"));
+        this.TestContext.WriteLine(string.Create(CultureInfo.InvariantCulture, $"Cook feedback: scope={result.TargetKind}; reused={result.IsUpToDate}; submit_ms={submission:F2}; selected_ms={selected:F2}; frames={frames}; visible_ms={visible:F2}"));
         _ = visible.Should().BeLessThanOrEqualTo(100, "cook progress or completion must become visible promptly");
         return result;
     }

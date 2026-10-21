@@ -342,7 +342,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     /// <summary>Opens the fixture's scene on a running engine, starting the shared engine only if it is not running.</summary>
     /// <param name="cancellationToken">Cancels startup and synchronization.</param>
-    /// <param name="mountPublished">Whether the project's published content is mounted before synchronization.</param>
+    /// <param name="mountPublished">Whether the project's published content, rather than none, is mounted before synchronization.</param>
     /// <returns>The initialization task.</returns>
     public async Task InitializeAsync(CancellationToken cancellationToken, bool mountPublished = false)
     {
@@ -358,9 +358,15 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             _ = (await SharedNativeEngine.EnsureRunningAsync(cancellationToken).ConfigureAwait(true)).Should().BeTrue();
         }
 
+        // The workspace mounts the project's content before it shows a scene, and the engine holds a scene's asset
+        // loads until it does; without published content the mount is empty.
         if (mountPublished)
         {
             await this.RefreshCookedRootsAsync().ConfigureAwait(true);
+        }
+        else
+        {
+            await this.Runtime.RefreshProjectCookedRootsAsync([]).ConfigureAwait(true);
         }
 
         // One preview shows a scene on an engine, as in a workspace: the fixture's starts once it initializes.

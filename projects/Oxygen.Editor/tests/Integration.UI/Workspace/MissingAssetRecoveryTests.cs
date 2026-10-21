@@ -29,6 +29,10 @@ public sealed partial class MissingAssetRecoveryTests : DroidNet.Tests.VisualUse
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         var node = fixture.Source.RootNodes.Single();
+
+        // The engine loads the seeded geometry after it shows the scene, and a newer request supersedes a pending
+        // load, so the Cube must resolve before its replacement can retain it.
+        _ = await AssertGeometryAsync(fixture, node.Id, "Cube", timeout.Token).ConfigureAwait(true);
         var missing = AssetPath.Parse("/Content/Geometry/DoesNotExist.ogeo");
         _ = (await fixture.Authoring.ExecuteAsync(new SetGeometry([node.Id], missing)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         await AssertMissingGeometryFailureAsync(fixture, node.Id, timeout.Token).ConfigureAwait(true);
