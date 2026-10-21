@@ -56,6 +56,7 @@ namespace Oxygen.Editor.ContentBrowser;
 /// <param name="placement">Opens scenes and materials and shows panels; without it opening them does nothing.</param>
 /// <param name="documents">Saves the unsaved documents a cook reads, after asking; without it a cook does not ask.</param>
 /// <param name="unsavedInputs">Finds the unsaved documents a cook reads; without it a cook does not ask.</param>
+/// <param name="assetReveal">Shows the source of an imported asset; without it Show Source reports it unavailable.</param>
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ViewModelToView vmToViewConverter,
@@ -76,7 +77,8 @@ public partial class AssetsViewModel(
     ICodeEditorService? codeEditor = null,
     IPlacementService? placement = null,
     IDocumentService? documents = null,
-    IUnsavedCookInputs? unsavedInputs = null) : AbstractOutletContainer, IRoutingAware
+    IUnsavedCookInputs? unsavedInputs = null,
+    IAssetReveal? assetReveal = null) : AbstractOutletContainer, IRoutingAware
 {
     private bool disposed;
 
@@ -121,7 +123,6 @@ public partial class AssetsViewModel(
             // Listen for changes to ContentBrowserState selection via PropertyChanged
             contentBrowserState.PropertyChanged += this.OnContentBrowserStatePropertyChanged;
 
-            messenger.Register<CreateScriptRequestMessage>(this, (_, message) => message.Reply(creation?.CreateScriptAsync() ?? Task.FromResult<FileSystemPath?>(null)));
             relocation?.Completed += this.OnRelocationCompleted;
             relocation?.HistoryChanged += this.OnRelocationHistoryChanged;
             automaticCooking.PropertyChanged += this.OnAutomaticCookingChanged;
@@ -862,10 +863,9 @@ public partial class AssetsViewModel(
     {
         try
         {
-            if (projectContextService.ActiveProject is { } project && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSource: { } source })
+            if (projectContextService.ActiveProject is not null && this.LayoutViewModel is AssetsLayoutViewModel { SelectedAsset.ImportSource: { } source })
             {
-                var request = messenger.Send(new ShowAssetRequestMessage(project, source));
-                if (!request.HasReceivedResponse || !await request.Response.ConfigureAwait(true))
+                if (assetReveal is null || !await assetReveal.RevealAsync([source]).ConfigureAwait(true))
                 {
                     await dialogService.ShowMessageAsync("Show source", "The retained model source is no longer available in Content Browser.").ConfigureAwait(true);
                 }

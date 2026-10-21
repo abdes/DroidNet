@@ -5,6 +5,7 @@
 using DryIoc;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
+using Oxygen.Editor.Shell.Windows;
 
 namespace Oxygen.Editor.Problems;
 
@@ -28,6 +29,7 @@ public sealed class ProblemsModule : IFeatureModule
         window.Register<ProblemsViewModel>(Reuse.Singleton);
         window.Register<ProblemsView>(Reuse.Transient);
         window.Register<ProblemsPresenter>(Reuse.Singleton);
+        window.RegisterMapping<IProblemReveal, ProblemsPresenter>();
     }
 
     /// <inheritdoc />

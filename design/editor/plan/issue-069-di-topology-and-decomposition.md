@@ -498,6 +498,23 @@ needs instead of a `WindowId`. Every slice follows decision 9.
   | `WorkspaceInteractionService`, `SceneCategories`                                                       | Scenes, as the implementation of `ISceneNodeInteraction` (amends scenes-module decision 8: three features use it); its failures publish through `SceneOperationResults`, which moves to Scenes |
   | `SceneNodeDragData`                                                                                    | Scenes: the scene-node drag payload, which the Inspector's script slots read                                                                                                                   |
 
+  The features then send no messages at all: each cross-feature request is a
+  call on the port of its owner, which the boundary test can see. With the
+  SceneInspector, before it moves:
+
+  | Today                                                                                                   | Replacement                                                                             |
+  | ------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+  | `ShowAssetRequestMessage` (Inspector, Content Browser)                                                  | The Shell's `IAssetReveal`, implemented by the Content Browser                          |
+  | `CreateScriptRequestMessage` (Inspector's New Script)                                                   | Scripting port `IScriptCreation`, implemented by the Content Browser                    |
+  | `ShowProblemMessage` (a script slot's badge)                                                            | The Shell's `IProblemReveal`, implemented by the Problems panel                         |
+  | `ComponentAddRequestedMessage`, `ComponentRemoveRequestedMessage` (on `WeakReferenceMessenger.Default`) | The Inspector's `ISceneComponentEdits`, which the details header calls on the inspector |
+
+  With the ContentExplorer: `OpenCookedInspectionRequestMessage` becomes the
+  Shell's `ICookedInspections`, `ChangeContentMountsRequestMessage` a port of
+  the mount transaction's owner, and `NavigateToFolderRequestMessage` and
+  `CreateFolderRequestMessage` calls between its panes. The window then
+  registers no `IMessenger`.
+
   Commands are the automation surface: a command takes no arguments and acts on
   the window's active document and its selection, so a script runs it by id
   without focus, as a key does. Parts register their handlers with
@@ -666,8 +683,9 @@ needs instead of a `WindowId`. Every slice follows decision 9.
 
 - **S6.1** Remove `IContainer` from `SceneEditorViewModel`, `WorkspaceViewModel`
   and `ContentExplorerViewModel`, and the `ReturnDefault` paths. **S6.2**
-  Replace `WeakReferenceMessenger.Default` and
-  `StrongReferenceMessenger.Default`. **S6.3** Apply the disposal policy to
+  Replace what is left of `WeakReferenceMessenger.Default` and
+  `StrongReferenceMessenger.Default` (S1.12 removes the window messenger and
+  the features' messages). **S6.3** Apply the disposal policy to
   every registration. Gate: topology test.
 
 ### Phase 7: documentation

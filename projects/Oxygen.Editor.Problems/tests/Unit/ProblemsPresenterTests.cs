@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using Moq;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Problems.Unit.Tests.TestSupport;
@@ -19,7 +18,6 @@ internal sealed class ProblemsPresenterTests
 {
     private readonly Mock<IPlacementService> placement = new();
     private readonly FakeRuntimeProblems runtime = new();
-    private readonly IMessenger messenger = new StrongReferenceMessenger();
 
     /// <summary>The tab shows the title at once, and the title again as the counts change.</summary>
     [TestMethod]
@@ -50,22 +48,25 @@ internal sealed class ProblemsPresenterTests
     }
 
     /// <summary>A request to show a problem selects it and brings the panel forward.</summary>
+    /// <returns>A task that completes when the problem was shown.</returns>
     [TestMethod]
-    public void RequestedProblemIsSelectedAndShown()
+    public async Task RequestedProblemIsSelectedAndShown()
     {
         using var model = this.CreateModel();
         using var presenter = this.CreatePresenter(model);
         var problem = Error();
         this.runtime.Report(problem);
         this.placement.Invocations.Clear();
+        _ = this.placement.Setup(service => service.ShowPanelAsync(ProblemsModule.PanelId, It.IsAny<WindowPlacement>())).ReturnsAsync(true);
 
-        _ = this.messenger.Send(new ShowProblemMessage(problem));
+        var shown = await presenter.RevealAsync(problem).ConfigureAwait(false);
 
+        _ = shown.Should().BeTrue();
         _ = model.Selected!.Problem.Should().Be(problem);
         this.placement.Verify(service => service.ShowPanelAsync(ProblemsModule.PanelId, It.IsAny<WindowPlacement>()), Times.Once);
     }
 
-    /// <summary>A disposed presenter no longer follows the panel or answers requests.</summary>
+    /// <summary>A disposed presenter no longer follows the panel's counts or the running scene's errors.</summary>
     [TestMethod]
     public void DisposedPresenterNoLongerFollows()
     {
@@ -75,7 +76,6 @@ internal sealed class ProblemsPresenterTests
         this.placement.Invocations.Clear();
 
         this.runtime.Report(Error());
-        _ = this.messenger.Send(new ShowProblemMessage(Error()));
 
         this.placement.VerifyNoOtherCalls();
     }
@@ -87,5 +87,5 @@ internal sealed class ProblemsPresenterTests
         => TestProblems.CreateModel([this.runtime], new Mock<ICodeEditorService>().Object, this.runtime);
 
     private ProblemsPresenter CreatePresenter(ProblemsViewModel model)
-        => new(model, this.placement.Object, this.runtime, this.messenger);
+        => new(model, this.placement.Object, this.runtime);
 }

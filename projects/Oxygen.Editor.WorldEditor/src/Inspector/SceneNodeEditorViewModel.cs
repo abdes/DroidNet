@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm.Converters;
@@ -12,7 +11,6 @@ using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Input;
@@ -27,6 +25,7 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scripting;
 using Oxygen.Editor.Shell.Desktop;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
@@ -35,7 +34,7 @@ namespace Oxygen.Editor.World.Inspector;
 /// <summary>
 ///     ViewModel for editing properties of selected SceneNode entities in the World Editor.
 /// </summary>
-public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<SceneNode>, IDisposable
+public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<SceneNode>, ISceneComponentEdits, IDisposable
 {
     // The selection source of this inspector's "inspect this node" requests; the Scene Explorer reveals and focuses the row.
     private const string InspectorSelectionSource = "Inspector";
@@ -43,8 +42,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly ILogger logger;
 
     private readonly Dictionary<Type, IPropertyEditor<SceneNode>> editorInstances = [];
-    private readonly Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> propertyEditorFactories;
-    private readonly IMessenger messenger;
+    private readonly Dictionary<Type, Func<IPropertyEditor<SceneNode>>> propertyEditorFactories;
+    private readonly IAssetReveal assetReveal;
     private readonly IDocumentArea documentArea;
     private readonly IScenePreview scenePreview;
     private readonly SceneNodeInteraction? interaction;
@@ -76,7 +75,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// </summary>
     /// <param name="hosting">The hosting context for WinUI dispatching.</param>
     /// <param name="vmToViewConverter">The converter for resolving views from viewmodels.</param>
-    /// <param name="messenger">The messenger for MVVM messaging.</param>
+    /// <param name="assetReveal">What shows assets in the Content Browser.</param>
     /// <param name="documentArea">The window's document area, whose active scene document the inspector shows.</param>
     /// <param name="assetProvider">The shared asset identity and availability feed.</param>
     /// <param name="scenePreview">The engine preview, which reports the fields still waiting for the engine.</param>
@@ -87,6 +86,8 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     /// <param name="interaction">The shared editor lock owner.</param>
     /// <param name="scripts">The scripts, for script slot parameters and problems.</param>
     /// <param name="codeEditor">The code editor, for editing a slot's script.</param>
+    /// <param name="scriptCreation">What creates a script for a slot, with New Script.</param>
+    /// <param name="problems">What shows a script's problem in the Problems panel.</param>
     /// <param name="loggerFactory">
     ///     Optional factory for creating loggers. If provided, enables detailed logging of the
     ///     recognition process. If <see langword="null" />, logging is disabled.
@@ -94,7 +95,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     public SceneNodeEditorViewModel(
         HostingContext hosting,
         ViewModelToView vmToViewConverter,
-        IMessenger messenger,
+        IAssetReveal assetReveal,
         IDocumentArea documentArea,
         IAssetFeed assetProvider,
         IScenePreview scenePreview,
@@ -105,13 +106,15 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         ILoggerFactory? loggerFactory = null,
         SceneNodeInteraction? interaction = null,
         IScripts? scripts = null,
-        ICodeEditorService? codeEditor = null)
+        ICodeEditorService? codeEditor = null,
+        IScriptCreation? scriptCreation = null,
+        IProblemReveal? problems = null)
         : base(loggerFactory)
     {
         this.logger = loggerFactory?.CreateLogger<SceneNodeEditorViewModel>() ?? NullLoggerFactory.Instance.CreateLogger<SceneNodeEditorViewModel>();
         this.LoggerFactory = loggerFactory;
 
-        this.messenger = messenger;
+        this.assetReveal = assetReveal;
         this.documentArea = documentArea;
         this.scenePreview = scenePreview;
         this.interaction = interaction;
@@ -130,7 +133,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             projectContexts,
             loggerFactory,
             this.AuthoringOf,
-            new InspectorScriptServices(scripts, codeEditor));
+            new InspectorScriptServices(scripts, codeEditor, scriptCreation, problems));
         this.environmentEditor = new EnvironmentViewModel(
             this.AuthoringOf,
             assetProvider,
@@ -166,7 +169,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.LogConstructed(this.items.Count);
 
         this.RegisterSceneSubscriptions();
-        this.RegisterComponentMessages(hosting);
     }
 
     /// <summary>Gets the scene-level editor hosted outside component-property scrolling.</summary>
@@ -303,6 +305,28 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     public HistoryKeeper History => this.DocumentOf(this.items.FirstOrDefault()?.Scene ?? this.activeScene)?.History ?? UndoRedo.Default[this];
 
     /// <inheritdoc />
+    public async Task AddComponentAsync(SceneNode node, string kind)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(kind);
+        if (this.AuthoringOf(node.Scene) is { } authoring)
+        {
+            _ = await authoring.ExecuteAsync(SceneComponents.Add(authoring, node.Id, kind)).ConfigureAwait(true);
+        }
+    }
+
+    /// <inheritdoc />
+    public async Task RemoveComponentAsync(SceneNode node, GameComponent component)
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        ArgumentNullException.ThrowIfNull(component);
+        if (this.AuthoringOf(node.Scene) is { } authoring)
+        {
+            _ = await authoring.ExecuteAsync(new RemoveComponent(node.Id, component.Id)).ConfigureAwait(true);
+        }
+    }
+
+    /// <inheritdoc />
     public void Dispose()
     {
         if (this.isDisposed)
@@ -321,8 +345,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
             interactionService.StateChanged -= this.OnWorkspaceInteractionStateChanged;
         }
 
-        this.messenger.UnregisterAll(this);
-        WeakReferenceMessenger.Default.UnregisterAll(this);
         this.selectionObserver.Dispose();
         this.StopObservingComponentFeedback();
         foreach (var editor in this.editorInstances.Values.OfType<IDisposable>())
@@ -460,16 +482,12 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     // Ctrl+B's navigation: the Content Browser shows and selects the asset.
     private async Task RevealAssetAsync(IProjectContextService projectContexts, AssetPath asset)
     {
-        if (projectContexts.ActiveProject is not { } project)
+        if (projectContexts.ActiveProject is null)
         {
             return;
         }
 
-        var request = this.messenger.Send(new ShowAssetRequestMessage(project, asset));
-        if (request.HasReceivedResponse)
-        {
-            _ = await request.Response.ConfigureAwait(true);
-        }
+        _ = await this.assetReveal.RevealAsync([asset]).ConfigureAwait(true);
     }
 
     private async Task InspectAtmosphereSource(NodeId nodeId)
@@ -540,7 +558,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     }
 
     private IPropertyEditor<SceneNode> GetOrCreatePropertyEditor(
-        KeyValuePair<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> factory)
+        KeyValuePair<Type, Func<IPropertyEditor<SceneNode>>> factory)
     {
         if (this.editorInstances.TryGetValue(factory.Key, out var instance))
         {
@@ -549,7 +567,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         Debug.WriteLine($"[SceneNodeEditorViewModel] Creating NEW editor instance for {factory.Key.Name}");
-        instance = factory.Value(this.messenger);
+        instance = factory.Value();
         ((ComponentPropertyEditor)instance).SetInputEnabled(enabled: false);
         this.editorInstances[factory.Key] = instance;
         this.ObserveComponentFeedback(factory.Key, (ComponentPropertyEditor)instance);
@@ -705,18 +723,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.ApplyPendingAtmosphereFilter();
     }
 
-    private void RegisterComponentMessages(HostingContext hosting)
-    {
-        // Listen for component add/remove requests coming from the details view (sent via global messenger)
-        WeakReferenceMessenger.Default.Register<Messages.ComponentAddRequestedMessage>(this, (_, message) =>
-            _ = hosting.Dispatcher.DispatchAsync(() => this.OnComponentAddRequested(message)));
-
-        WeakReferenceMessenger.Default.Register<Messages.ComponentRemoveRequestedMessage>(this, (_, message) =>
-            _ = hosting.Dispatcher.DispatchAsync(() => this.OnComponentRemoveRequested(message)));
-
-        // Component collection changes are observed per-node via CollectionChanged subscriptions.
-    }
-
     private void ApplyPendingEnvironmentFocus()
     {
         if (this.pendingEnvironmentFocus is not { } target || this.activeScene is null || this.activeDocumentId != target.document)
@@ -802,46 +808,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         => this.PendingLiveSyncEditCount = this.activeDocumentId is { } document
             ? this.scenePreview.PendingFieldCount(document)
             : 0;
-
-    private void OnComponentAddRequested(Messages.ComponentAddRequestedMessage message)
-    {
-        if (message is null || message.Node is null || message.Kind is null)
-        {
-            return;
-        }
-
-        _ = this.AddComponentRequestedAsync(message);
-    }
-
-    private void OnComponentRemoveRequested(Messages.ComponentRemoveRequestedMessage message)
-    {
-        if (message is null || message.Node is null || message.Component is null)
-        {
-            return;
-        }
-
-        _ = this.RemoveComponentRequestedAsync(message);
-    }
-
-    private async Task AddComponentRequestedAsync(Messages.ComponentAddRequestedMessage message)
-    {
-        if (this.AuthoringOf(message.Node.Scene) is not { } authoring)
-        {
-            return;
-        }
-
-        _ = await authoring.ExecuteAsync(SceneComponents.Add(authoring, message.Node.Id, message.Kind)).ConfigureAwait(true);
-    }
-
-    private async Task RemoveComponentRequestedAsync(Messages.ComponentRemoveRequestedMessage message)
-    {
-        if (this.AuthoringOf(message.Node.Scene) is not { } authoring)
-        {
-            return;
-        }
-
-        _ = await authoring.ExecuteAsync(new RemoveComponent(message.Node.Id, message.Component.Id)).ConfigureAwait(true);
-    }
 
     private void SubscribeToComponentCollections()
         => this.selectionObserver.Bind(this.items);

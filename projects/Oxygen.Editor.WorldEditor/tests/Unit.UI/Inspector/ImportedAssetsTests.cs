@@ -22,6 +22,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World.Inspector.Geometry;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -127,13 +128,8 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         var projects = CreateQueryProject();
         var state = new ContentBrowserState();
         var messenger = new StrongReferenceMessenger();
-        AssetPath? revealed = null;
+        var reveal = new Mock<IAssetReveal>();
         AssetPath? inspected = null;
-        messenger.Register<ShowAssetRequestMessage>(this, (_, request) =>
-        {
-            revealed = request.Assets.Single();
-            request.Reply(Task.FromResult(true));
-        });
         messenger.Register<OpenCookedInspectionRequestMessage>(this, (_, request) =>
         {
             inspected = request.Asset;
@@ -147,7 +143,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
             ViewModel = layout,
         };
         await layout.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
-        using var browser = CreateBrowserModel(provider.Object, projects, state, layout, layoutView, messenger, pipeline.Object);
+        using var browser = CreateBrowserModel(provider.Object, projects, state, layout, layoutView, messenger, pipeline.Object, assetReveal: reveal.Object);
         await browser.OnNavigatedToAsync(null!, null!).ConfigureAwait(true);
         browser.LoadContent(layout, "right");
         var view = new AssetsView
@@ -162,7 +158,7 @@ internal sealed class ImportedAssetsTests : DroidNet.Tests.VisualUserInterfaceTe
         pipeline.Verify(value => value.ReimportSourceAsync(source.Identity, projects.ActiveProject!, It.IsAny<CancellationToken>()), Times.Once);
         await browser.InspectCookedOutputCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         _ = inspected.Should().Be(source.Identity);
-        _ = revealed.Should().BeNull();
+        reveal.Verify(value => value.RevealAsync(It.IsAny<IReadOnlyList<AssetPath>>()), Times.Never);
     });
 
     private static async Task InvokeImportMenuActionAsync(AssetsView view, string text, Func<Task?> execution)

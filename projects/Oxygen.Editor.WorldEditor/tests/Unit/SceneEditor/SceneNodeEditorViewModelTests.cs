@@ -4,7 +4,6 @@
 
 using System.Reactive.Linq;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Converters;
@@ -20,6 +19,7 @@ using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Testing;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Inspector;
@@ -178,7 +178,7 @@ internal sealed class SceneNodeEditorViewModelTests
                 DispatcherScheduler = null!,
             },
             new ViewModelToView(new Mock<IViewLocator>().Object),
-            new StrongReferenceMessenger(),
+            Mock.Of<IAssetReveal>(),
             documents,
             Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             scenePreview,

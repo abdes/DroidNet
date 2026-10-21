@@ -73,7 +73,7 @@
                         <local:SceneNodeDetailsView
                             x:Name="NodeDetails"
                             AllComponentsRequested="OnAllComponentsRequested"
-                            HistoryRoot="{x:Bind ViewModel, Mode=OneWay}"
+                            ComponentEdits="{x:Bind ViewModel, Mode=OneWay}"
                             IsAllComponentsSelected="{x:Bind ViewModel.IsAllComponentsSelected, Mode=OneWay}"
                             IsEnabled="{x:Bind ViewModel.CanEditSelectedNodes, Mode=OneWay}"
                             LoggerFactory="{x:Bind ViewModel.LoggerFactory}"

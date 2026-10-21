@@ -145,10 +145,6 @@ projects/Oxygen.Editor.World/src/
 │   ├── ProjectLayoutViewModel.cs          # Project tree navigation
 │   └── [Layout Views]                     # Tile/list layout implementations
 │
-├── Messages/                              # Inter-module communication
-│   ├── ComponentAddRequestedMessage.cs
-│   └── ComponentRemoveRequestedMessage.cs
-│
 ├── ProjectExplorer/                       # Project navigation
 │   └── ProjectLayoutViewModel.cs          # Project tree implementation
 │

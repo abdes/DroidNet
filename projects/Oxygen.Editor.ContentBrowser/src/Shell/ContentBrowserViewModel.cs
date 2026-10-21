@@ -94,6 +94,8 @@ public sealed partial class ContentBrowserViewModel(
     private readonly List<string> navigationHistory = [];
 
     private ContentBrowserAssetReveal? assetReveal;
+    private ContentBrowserScriptCreation? scriptCreation;
+    private Authoring.AuthoredAssetCreation? creation;
     private IContainer? childContainer;
     private string currentAssetsViewPath = "assets/tiles"; // tracks whether we show list or tiles
     private int currentHistoryIndex = -1;
@@ -186,6 +188,11 @@ public sealed partial class ContentBrowserViewModel(
 
             // Make sure to use our own ViewModel to View converter
             this.VmToViewConverter = this.childContainer.Resolve<ViewModelToView>();
+
+            // The window's New Script requests are answered by this browser's creation.
+            this.creation = this.childContainer.Resolve<Authoring.AuthoredAssetCreation>();
+            this.scriptCreation = container.Resolve<ContentBrowserScriptCreation>(IfUnresolved.ReturnDefault);
+            this.scriptCreation?.Attach(this.creation);
 
             this.localRouter = this.childContainer.Resolve<IRouter>();
 
@@ -317,6 +324,11 @@ public sealed partial class ContentBrowserViewModel(
         {
             this.isDisposed = true;
             this.assetReveal?.Detach(this);
+            if (this.creation is { } current)
+            {
+                this.scriptCreation?.Detach(current);
+            }
+
             this.routerEventsSubscription?.Dispose();
 
             this.browserState?.PropertyChanged -= this.OnContentBrowserStateChanged;

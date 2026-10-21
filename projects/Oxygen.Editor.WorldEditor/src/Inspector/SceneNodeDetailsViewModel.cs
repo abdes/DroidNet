@@ -6,7 +6,6 @@ using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Controls.Menus;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
@@ -26,8 +25,8 @@ namespace Oxygen.Editor.World.Inspector;
 /// <remarks>
 /// The view model wires to the <c>SceneNode.PropertyChanged</c> events of the
 /// current <see cref="Node"/> to keep UI-bound properties (for example <see cref="Name"/>)
-/// in sync. Component add/remove requests are emitted via the weak-reference messenger so
-/// that the editor host can perform the actual mutations and maintain undo/redo history.
+/// in sync. Component add/remove requests go to <see cref="ComponentEdits"/>, so that the editor host performs the
+/// actual mutations and records them in the scene's history.
 /// </remarks>
 public sealed partial class SceneNodeDetailsViewModel : ObservableObject
 {
@@ -52,11 +51,8 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         this.LogConstructed(this.dispatcher is not null);
     }
 
-    /// <summary>
-    /// Gets or sets the object used as the undo/redo history root.
-    /// When set (typically to the parent inspector ViewModel), changes are recorded into that history.
-    /// </summary>
-    public object? HistoryRoot { get; set; }
+    /// <summary>Gets or sets what adds and removes the node's components, typically the parent inspector.</summary>
+    public ISceneComponentEdits? ComponentEdits { get; set; }
 
     /// <summary>
     /// Gets or sets the <see cref="ILoggerFactory"/> used by this view-model.
@@ -275,7 +271,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             return;
         }
 
-        WeakReferenceMessenger.Default.Send(new Messages.ComponentRemoveRequestedMessage(this.Node, comp));
+        _ = this.ComponentEdits?.RemoveComponentAsync(this.Node, comp);
     }
 
     private bool CanDeleteComponent(GameComponent? comp) => this.Node is not null && this.IsCurrentComponent(comp) && comp?.IsLocked == false;
@@ -300,8 +296,8 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             return;
         }
 
-        // Request the editor (single mutator) to perform the add; decoupled via messenger.
-        WeakReferenceMessenger.Default.Send(new Messages.ComponentAddRequestedMessage(this.Node, kind));
+        // The inspector, the single mutator of the node, performs the add.
+        _ = this.ComponentEdits?.AddComponentAsync(this.Node, kind);
     }
 
     private void SyncFromNode()

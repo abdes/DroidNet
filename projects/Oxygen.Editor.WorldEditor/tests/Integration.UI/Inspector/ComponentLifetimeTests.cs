@@ -39,7 +39,7 @@ public sealed partial class ComponentLifetimeTests : DroidNet.Tests.VisualUserIn
         var view = new SceneNodeDetailsView
         {
             Node = node,
-            HistoryRoot = host,
+            ComponentEdits = host,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
         await AssertTransformRemovalDeniedAsync(fixture, view, timeout.Token).ConfigureAwait(true);

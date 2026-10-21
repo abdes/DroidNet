@@ -301,7 +301,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         var component = fixture.Node.Components.OfType<GeometryComponent>().Single();
         var header = new SceneNodeDetailsView
         {
-            HistoryRoot = model,
+            ComponentEdits = model,
             IsAllComponentsSelected = false,
         };
         if (selectedFirst)

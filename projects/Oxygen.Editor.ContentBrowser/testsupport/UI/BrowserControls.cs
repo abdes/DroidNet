@@ -40,8 +40,9 @@ internal sealed class BrowserControls : DroidNet.Tests.VisualUserInterfaceTests
     /// <param name="messenger">The messenger the pane sends requests on.</param>
     /// <param name="pipeline">The content pipeline; a mock when null.</param>
     /// <param name="placement">Opens documents and shows panels for the pane, if any.</param>
+    /// <param name="assetReveal">Shows assets for the pane, if any.</param>
     /// <returns>The pane, which the caller disposes.</returns>
-    internal static AssetsViewModel CreateBrowserModel(IAssetFeed provider, IProjectContextService projects, ContentBrowserState state, object layout, object layoutView, IMessenger messenger, IContentPipelineService? pipeline = null, IPlacementService? placement = null)
+    internal static AssetsViewModel CreateBrowserModel(IAssetFeed provider, IProjectContextService projects, ContentBrowserState state, object layout, object layoutView, IMessenger messenger, IContentPipelineService? pipeline = null, IPlacementService? placement = null, IAssetReveal? assetReveal = null)
     {
         var locator = new Mock<IViewLocator>();
         _ = locator.Setup(value => value.ResolveView(layout)).Returns(layoutView);
@@ -60,7 +61,8 @@ internal sealed class BrowserControls : DroidNet.Tests.VisualUserInterfaceTests
             Mock.Of<IWindowManagerService>(),
             Mock.Of<IDesktopIntegration>(),
             new TextureImport(new MockFileSystem()),
-            placement: placement);
+            placement: placement,
+            assetReveal: assetReveal);
     }
 
     internal static void AssertBrowserRowState(ListViewBase selector, AssetBrowserRow row, Control container, object? focus, double offset, AssetsLayoutViewModel model, AssetEntry expected)

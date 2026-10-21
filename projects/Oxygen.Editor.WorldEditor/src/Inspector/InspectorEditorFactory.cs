@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Hosting.WinUI;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
@@ -27,7 +26,7 @@ internal static class InspectorEditorFactory
     /// <param name="authoring">The authoring of the scene being inspected.</param>
     /// <param name="scripts">The scripting services, when the host provides them.</param>
     /// <returns>The component construction operations.</returns>
-    internal static Dictionary<Type, Func<IMessenger?, IPropertyEditor<SceneNode>>> Create(
+    internal static Dictionary<Type, Func<IPropertyEditor<SceneNode>>> Create(
         HostingContext hosting,
         IAssetFeed assets,
         IGeometryMaterialSlotProvider slots,
@@ -37,14 +36,14 @@ internal static class InspectorEditorFactory
         InspectorScriptServices? scripts = null)
         => new()
         {
-            [typeof(TransformComponent)] = _ => new TransformViewModel(logger, authoring),
-            [typeof(GeometryComponent)] = _ => new GeometryViewModel(hosting, assets, slots, projects, authoring),
-            [typeof(PerspectiveCamera)] = _ => new PerspectiveCameraViewModel(authoring),
-            [typeof(OrthographicCamera)] = _ => new OrthographicCameraViewModel(authoring),
-            [typeof(DirectionalLightComponent)] = _ => new DirectionalLightViewModel(authoring),
-            [typeof(PointLightComponent)] = _ => new PointLightViewModel(authoring),
-            [typeof(SpotLightComponent)] = _ => new SpotLightViewModel(authoring),
-            [typeof(LocalFogVolumeComponent)] = _ => new LocalFogVolumeViewModel(authoring),
-            [typeof(ScriptingComponent)] = messenger => new ScriptingViewModel(authoring, assets, scripts?.Scripts, scripts?.CodeEditor, messenger, projects, hosting.DispatcherScheduler),
+            [typeof(TransformComponent)] = () => new TransformViewModel(logger, authoring),
+            [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, slots, projects, authoring),
+            [typeof(PerspectiveCamera)] = () => new PerspectiveCameraViewModel(authoring),
+            [typeof(OrthographicCamera)] = () => new OrthographicCameraViewModel(authoring),
+            [typeof(DirectionalLightComponent)] = () => new DirectionalLightViewModel(authoring),
+            [typeof(PointLightComponent)] = () => new PointLightViewModel(authoring),
+            [typeof(SpotLightComponent)] = () => new SpotLightViewModel(authoring),
+            [typeof(LocalFogVolumeComponent)] = () => new LocalFogVolumeViewModel(authoring),
+            [typeof(ScriptingComponent)] = () => new ScriptingViewModel(authoring, assets, scripts?.Scripts, scripts?.CodeEditor, scripts?.Creation, scripts?.Problems, projects, hosting.DispatcherScheduler),
         };
 }

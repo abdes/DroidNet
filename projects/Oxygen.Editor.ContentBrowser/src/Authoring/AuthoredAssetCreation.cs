@@ -2,11 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Aura.Dialogs;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.ContentPipeline.Authoring;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Input;
@@ -31,18 +29,18 @@ namespace Oxygen.Editor.ContentBrowser.Authoring;
 /// <param name="browserState">The Content Browser state, whose selected folder is the default destination.</param>
 /// <param name="authoring">Proposes and checks the name and folder, and writes the file.</param>
 /// <param name="codeEditor">The code editor service.</param>
-/// <param name="messenger">The messenger that selects the new asset.</param>
 /// <param name="operationResults">The operation-result publisher.</param>
 /// <param name="placement">Opens a new scene or material; without it they are created and not opened.</param>
+/// <param name="assetReveal">Shows and selects the new asset; without it the asset is not shown.</param>
 public sealed class AuthoredAssetCreation(
     IDialogService dialogs,
     IProjectContextService projects,
     ContentBrowserState browserState,
     IAssetAuthoring authoring,
     ICodeEditorService codeEditor,
-    IMessenger messenger,
     IOperationResultPublisher operationResults,
-    IPlacementService? placement = null)
+    IPlacementService? placement = null,
+    IAssetReveal? assetReveal = null)
 {
     /// <summary>Asks for a name and folder and creates a script from the template.</summary>
     /// <returns>The new file, or <see langword="null"/> when cancelled or failed.</returns>
@@ -150,10 +148,9 @@ public sealed class AuthoredAssetCreation(
 
         // The authoring service reported the file before it returned, so the feed is already reading it again and the
         // reveal resolves the new row, not a missing one.
-        var request = messenger.Send(new ShowAssetRequestMessage(project, location.Identity));
-        if (request.HasReceivedResponse)
+        if (assetReveal is not null)
         {
-            _ = await request.Response.ConfigureAwait(true);
+            _ = await assetReveal.RevealAsync([location.Identity]).ConfigureAwait(true);
         }
     }
 

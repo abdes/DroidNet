@@ -360,7 +360,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     {
         this.activeMaterialSlotProvider = materialSlots ?? this.materialPipeline.Pipeline;
         this.selections.SetSelection(this.Document.Id, [.. selection], "Test");
-        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), this.messenger, this.area, assets ?? this.AssetCatalog.Object, this.Preview, this.selections, this.materialSlotProvider, this.Projects, new FakeInputSources());
+        return new(this.hosting, new ViewModelToView(Mock.Of<IViewLocator>()), Mock.Of<IAssetReveal>(), this.area, assets ?? this.AssetCatalog.Object, this.Preview, this.selections, this.materialSlotProvider, this.Projects, new FakeInputSources());
     }
 
     /// <summary>Opens the fixture's scene on a running engine, starting the shared engine only if it is not running.</summary>

@@ -7,8 +7,8 @@ full diagnostic of the selected one.
 `ProblemsModule` contributes the panel (`problems`) to each workspace window.
 From the window's start `ProblemsPresenter` keeps the tab title carrying the
 error and warning counts (`IPlacementService.SetPanelTitle`), brings the panel
-forward when the running scene reports an error, and answers
-`ShowProblemMessage` (sent by a script slot's badge) by selecting the problem.
+forward when the running scene reports an error, and implements the Shell's
+`IProblemReveal`, through which a script slot's badge shows its problem.
 `RuntimeProblemNodes` shows the scene document a runtime problem names and
 selects its node through `ISceneSelectionService`.
 

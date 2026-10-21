@@ -184,7 +184,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 
         // Resolve messenger instance from the child container so the view model can use it.
         this.messenger = childContainer.Resolve<IMessenger>();
-        this.messenger.Register<ShowAssetRequestMessage>(this, (_, message) => message.Reply(this.ShowInspectionAssetAsync(message)));
         this.messenger.Register<OpenCookedInspectionRequestMessage>(this, (_, message) => message.Reply(this.OpenInspectionAsync(message)));
         this.messenger.Register<ChangeContentMountsRequestMessage>(this, (_, message) => message.Reply(this.ChangeContentMountsAsync(message)));
 
@@ -250,7 +249,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         childContainer.Register<SceneNodeEditorView>(Reuse.Transient);
         childContainer.Register<MaterialEditorView>(Reuse.Transient);
         RegisterInspectorEditors(childContainer);
-        this.RegisterAssetReveal(childContainer);
+        this.RegisterContentBrowserPorts(childContainer);
 
         // The features activate last: their activation may use any feature's services.
         foreach (var module in this.modules)

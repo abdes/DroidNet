@@ -8,9 +8,7 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using Oxygen.Editor.Assets;
-using Oxygen.Editor.ContentBrowser.Messages;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
@@ -37,7 +35,8 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     private readonly IAssetFeed? assetProvider;
     private readonly IScripts? scripts;
     private readonly ICodeEditorService? codeEditor;
-    private readonly IMessenger? messenger;
+    private readonly IScriptCreation? scriptCreation;
+    private readonly IProblemReveal? problems;
     private readonly IProjectContextService? projects;
 
     // The library scripts read, or being read when the read is null.
@@ -57,7 +56,8 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <param name="assetProvider">The shared asset catalog, for script and asset pickers.</param>
     /// <param name="scripts">The scripts, for declared parameters and problems.</param>
     /// <param name="codeEditor">The code editor, for Edit.</param>
-    /// <param name="messenger">The messenger, for New Script and Problems.</param>
+    /// <param name="scriptCreation">What creates a script, for New Script.</param>
+    /// <param name="problems">What shows a script's problem in the Problems panel.</param>
     /// <param name="projects">The active project.</param>
     /// <param name="scheduler">The UI scheduler that catalog and script updates are observed on.</param>
     public ScriptingViewModel(
@@ -65,7 +65,8 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         IAssetFeed? assetProvider = null,
         IScripts? scripts = null,
         ICodeEditorService? codeEditor = null,
-        IMessenger? messenger = null,
+        IScriptCreation? scriptCreation = null,
+        IProblemReveal? problems = null,
         IProjectContextService? projects = null,
         IScheduler? scheduler = null)
     {
@@ -73,7 +74,8 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         this.assetProvider = assetProvider;
         this.scripts = scripts;
         this.codeEditor = codeEditor;
-        this.messenger = messenger;
+        this.scriptCreation = scriptCreation;
+        this.problems = problems;
         this.projects = projects;
         var observer = scheduler ?? ImmediateScheduler.Instance;
 
@@ -184,19 +186,18 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <returns>The completion of the creation and the edit.</returns>
     internal async Task CreateScriptForAsync(Guid slotId)
     {
-        if (this.messenger is null || this.projects?.ActiveProject is not { } project)
+        if (this.projects?.ActiveProject is not { } project)
         {
             return;
         }
 
-        var request = this.messenger.Send(new CreateScriptRequestMessage());
-        if (!request.HasReceivedResponse)
+        if (this.scriptCreation is not { IsAvailable: true } creation)
         {
             this.ErrorMessage = "New Script is available once the Content Browser is open.";
             return;
         }
 
-        if (await request.Response.ConfigureAwait(true) is not { } path
+        if (await creation.CreateScriptAsync().ConfigureAwait(true) is not { } path
             || project.FindByFilePath(path) is not { } location)
         {
             return;
@@ -221,7 +222,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
     /// <summary>Shows a problem in the Problems panel.</summary>
     /// <param name="problem">The problem.</param>
     internal void ShowProblem(ScriptProblem problem)
-        => _ = this.messenger?.Send(new ShowProblemMessage(problem));
+        => _ = this.problems?.RevealAsync(problem);
 
     /// <summary>Finds the assets an asset parameter of a native type accepts.</summary>
     /// <param name="assetType">The native asset type the parameter declares.</param>

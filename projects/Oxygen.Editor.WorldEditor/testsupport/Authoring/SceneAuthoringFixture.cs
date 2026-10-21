@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Testing;
@@ -84,8 +83,6 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
 
     /// <summary>Gets the engine preview the views read.</summary>
     public Mock<IScenePreview> Preview { get; } = new();
-
-    public StrongReferenceMessenger Messenger { get; } = new();
 
     public static MaterialSlotTarget TargetFor(AssetPath geometry) => new(geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
 
