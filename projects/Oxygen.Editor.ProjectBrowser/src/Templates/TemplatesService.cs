@@ -156,16 +156,4 @@ public partial class TemplatesService(
                     }
                 }
             });
-
-    [LoggerMessage(
-        EventId = 1000,
-        Level = LogLevel.Error,
-        Message = "Could not load template at `{templatePath}`; {error}")]
-    private partial void CouldNotLoadTemplate(string templatePath, string error);
-
-    [LoggerMessage(
-        EventId = 1001,
-        Level = LogLevel.Error,
-        Message = "Could not load templates MRU at `{mruPath}`; {error}")]
-    private partial void CouldNotLoadTemplatesMru(string mruPath, string error);
 }

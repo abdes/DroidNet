@@ -274,7 +274,7 @@ internal static class EngineStartupSettingsExtensions
 
         if (settings.ScriptSourceRoots.Count > 0)
         {
-            config.ScriptSourceRoots = settings.ScriptSourceRoots.ToArray();
+            config.ScriptSourceRoots = [.. settings.ScriptSourceRoots];
         }
 
         if (!string.IsNullOrWhiteSpace(settings.ScriptBytecodeCachePath))

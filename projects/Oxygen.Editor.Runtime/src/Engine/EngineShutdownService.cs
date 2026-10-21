@@ -140,7 +140,4 @@ public sealed partial class EngineShutdownService : IHostedService
             });
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Engine shutdown failed. Remaining runtime state: {State}.")]
-    private partial void LogShutdownFailed(Exception exception, EngineServiceState state);
 }

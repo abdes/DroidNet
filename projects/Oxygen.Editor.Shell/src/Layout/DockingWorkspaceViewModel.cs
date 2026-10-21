@@ -213,9 +213,9 @@ public abstract partial class DockingWorkspaceViewModel(
             dockable.ViewModel = viewModel;
             this.centerDock.AdoptDockable(dockable);
         }
-        catch (Exception)
+        catch (Exception ex)
         {
-            throw new ContentLoadingException($"could not create the center dock and its dockable to load content for route `{this.activeRoute!.Config.Path}`")
+            throw new ContentLoadingException($"could not create the center dock and its dockable to load content for route `{this.activeRoute!.Config.Path}`", ex)
             {
                 OutletName = this.CenterOutletName,
                 ViewModel = viewModel,

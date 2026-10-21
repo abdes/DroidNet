@@ -543,7 +543,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
         return await revertSync(cancellationToken).ConfigureAwait(false);
     }
 
-    private RuntimeSetEnvironment BuildEnvironmentCommand(SceneEnvironmentData environment)
+    private static RuntimeSetEnvironment BuildEnvironmentCommand(SceneEnvironmentData environment)
     {
         var sky = environment.SkyAtmosphere ?? new SkyAtmosphereEnvironmentData();
         var post = environment.PostProcess ?? new PostProcessEnvironmentData();
@@ -754,7 +754,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
             return false;
         }
 
-        world.Execute(this.BuildEnvironmentCommand(scene.Environment));
+        world.Execute(BuildEnvironmentCommand(scene.Environment));
         lock (this.documentGate)
         {
             if (!this.IsDocumentCurrent(projection.Lifetime) || this.activeWorld?.Target != target)
@@ -853,7 +853,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
             SceneOperationKinds.EditEnvironment,
             LiveSyncDiagnosticCodes.EnvironmentRejected,
             LiveSyncDiagnosticCodes.EnvironmentFailed,
-            world => world.Execute(this.BuildEnvironmentCommand(environment)),
+            world => world.Execute(BuildEnvironmentCommand(environment)),
             cancellationToken,
             dispatchOverride);
     }

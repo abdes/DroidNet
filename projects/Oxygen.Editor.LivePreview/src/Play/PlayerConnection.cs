@@ -193,7 +193,7 @@ internal sealed partial class PlayerConnection : IAsyncDisposable
     private async Task ListenAsync(CancellationToken cancellationToken)
     {
         var client = this.process.Client;
-        client.EventReceived += (_, received) => this.owner.Queue(() => this.OnPlayerEvent(received));
+        client.EventReceived += (_, args) => this.owner.Queue(() => this.OnPlayerEvent(args.Event));
         client.Disconnected += (_, _) => this.owner.Queue(this.OnDisconnected);
         await client.SubscribeAsync(Topics, cancellationToken).ConfigureAwait(true);
         var held = await client.ReadEventsAsync(since: 0, Topics, cancellationToken).ConfigureAwait(true);

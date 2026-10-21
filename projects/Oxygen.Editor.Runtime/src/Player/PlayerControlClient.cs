@@ -6,7 +6,6 @@ using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Sockets;
 using System.Text;
-using System.Text.Json;
 using System.Text.Json.Nodes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -43,7 +42,7 @@ public sealed partial class PlayerControlClient : IAsyncDisposable
     }
 
     /// <summary>Occurs when the server publishes an event to a subscribed topic.</summary>
-    public event EventHandler<PlayerEvent>? EventReceived;
+    public event EventHandler<PlayerEventReceivedEventArgs>? EventReceived;
 
     /// <summary>Occurs once when the connection closes, from either side.</summary>
     public event EventHandler? Disconnected;
@@ -68,12 +67,12 @@ public sealed partial class PlayerControlClient : IAsyncDisposable
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(endpoint);
-        var connection = new TcpClient();
+        var tcp = new TcpClient();
         PlayerControlClient? client = null;
         try
         {
-            await connection.ConnectAsync(IPAddress.Loopback, endpoint.Port, cancellationToken).ConfigureAwait(false);
-            client = new PlayerControlClient(connection, logger ?? NullLogger.Instance);
+            await tcp.ConnectAsync(IPAddress.Loopback, endpoint.Port, cancellationToken).ConfigureAwait(false);
+            client = new PlayerControlClient(tcp, logger ?? NullLogger.Instance);
             client.reading = Task.Run(client.ReadAsync, CancellationToken.None);
             var hello = await client.RequestAsync(
                 "rpc.hello",
@@ -88,16 +87,16 @@ public sealed partial class PlayerControlClient : IAsyncDisposable
         }
         catch (Exception exception) when (exception is SocketException or IOException or PlayerCommandException)
         {
-            await DisposeAsync(client, connection).ConfigureAwait(false);
+            await DisposeAsync(client, tcp).ConfigureAwait(false);
             throw new PlayerLaunchException("The editor could not connect to the player: " + exception.Message, exception);
         }
         catch
         {
-            await DisposeAsync(client, connection).ConfigureAwait(false);
+            await DisposeAsync(client, tcp).ConfigureAwait(false);
             throw;
         }
 
-        static async Task DisposeAsync(PlayerControlClient? client, TcpClient connection)
+        static async Task DisposeAsync(PlayerControlClient? client, TcpClient tcp)
         {
             if (client is not null)
             {
@@ -105,7 +104,7 @@ public sealed partial class PlayerControlClient : IAsyncDisposable
             }
             else
             {
-                connection.Dispose();
+                tcp.Dispose();
             }
         }
     }
@@ -200,6 +199,7 @@ public sealed partial class PlayerControlClient : IAsyncDisposable
             // The reader stops when the lifetime ends.
         }
 
+        await this.stream.DisposeAsync().ConfigureAwait(false);
         this.lifetime.Dispose();
         this.writeGate.Dispose();
     }
@@ -290,7 +290,7 @@ public sealed partial class PlayerControlClient : IAsyncDisposable
             && message["params"] is JsonObject parameters
             && ToEvent(parameters) is { } received)
         {
-            this.EventReceived?.Invoke(this, received);
+            this.EventReceived?.Invoke(this, new PlayerEventReceivedEventArgs(received));
         }
     }
 

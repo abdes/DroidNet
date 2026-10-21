@@ -25,7 +25,7 @@ internal sealed partial class RuntimeCommandDispatcher
         return new(outcome, nodeId, state);
     }
 
-    private async Task<(RuntimeCommandResult outcome, TState? state)> ObserveAsync<TState>(
+    private async Task<(RuntimeCommandResult Outcome, TState? State)> ObserveAsync<TState>(
         Guid operationId,
         RuntimeSceneTarget target,
         Func<IRuntimeCommandTransport, Task<TState>> read,
@@ -78,7 +78,7 @@ internal sealed partial class RuntimeCommandDispatcher
             return Result(Failure(operationId, target.RunId, exception));
         }
 
-        (RuntimeCommandResult outcome, TState? state) Result(RuntimeCommandResult outcome, TState? state = null)
+        (RuntimeCommandResult Outcome, TState? State) Result(RuntimeCommandResult outcome, TState? state = null)
             => (outcome with { SceneTarget = target }, state);
     }
 }

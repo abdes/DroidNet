@@ -152,11 +152,11 @@ internal sealed partial class NativeEngineSession(HostingContext hostingContext,
         this.ReleaseArtifactsIfDestroyed();
     }
 
-    private static (float scale, uint width, uint height) GetInitialDimensions(SwapChainPanel panel)
+    private static (float Scale, uint Width, uint Height) GetInitialDimensions(SwapChainPanel panel)
     {
         var scale = (float)(panel.XamlRoot?.RasterizationScale ?? 1.0);
-        var width = Math.Round(panel.ActualWidth * scale);
-        var height = Math.Round(panel.ActualHeight * scale);
+        var width = Math.Round(panel.ActualWidth * scale, MidpointRounding.ToEven);
+        var height = Math.Round(panel.ActualHeight * scale, MidpointRounding.ToEven);
         if (!double.IsFinite(width) || !double.IsFinite(height) || width < 1 || height < 1)
         {
             return (1, 0, 0);

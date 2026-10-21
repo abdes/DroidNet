@@ -40,7 +40,7 @@ internal sealed partial class LocalRouteActivator(ILoggerFactory? loggerFactory)
         }
 
         var parentViewModel = parent is null ? ((ILocalRouterContext)context).RootViewModel : parent.ViewModel;
-        LogEffectiveParentViewModel(this.Logger, route, parentViewModel);
+        this.LogEffectiveParentViewModel(route, parentViewModel);
 
         if (parentViewModel is IOutletContainer outletContainer)
         {
@@ -48,23 +48,8 @@ internal sealed partial class LocalRouteActivator(ILoggerFactory? loggerFactory)
         }
         else
         {
-            var because = parent is null
-                ? $"I could not find an {nameof(IOutletContainer)} parent for it"
-                : $"the view model of its parent ({parentViewModel}) is not an {nameof(IOutletContainer)}";
-            LogContentLoadingError(this.Logger, route.Outlet, because);
+            this.LogContentLoadingError(route.Outlet, parentViewModel, parent is not null);
             throw new InvalidOperationException($"parent view model of type '{route.Parent?.Config.ViewModelType} is not a {nameof(IOutletContainer)}");
         }
     }
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Cannot load content into {Outlet} {Because}")]
-    private static partial void LogContentLoadingError(ILogger logger, OutletName outlet, string because);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Effective parent for route '{Route}' is {ParentViewModel}")]
-    private static partial void LogEffectiveParentViewModel(ILogger logger, IActiveRoute route, object? parentViewmodel);
 }

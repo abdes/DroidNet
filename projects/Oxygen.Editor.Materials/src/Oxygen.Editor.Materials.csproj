@@ -10,6 +10,7 @@
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
         <RootNamespace>Oxygen.Editor.Materials</RootNamespace>
         <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     </PropertyGroup>
 
     <ItemGroup>

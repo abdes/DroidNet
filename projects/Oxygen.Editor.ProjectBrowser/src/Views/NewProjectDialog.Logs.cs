@@ -6,8 +6,12 @@ using Microsoft.Extensions.Logging;
 
 namespace Oxygen.Editor.ProjectBrowser.Views;
 
+/// <summary>Logging helpers for <see cref="NewProjectDialog"/>.</summary>
 public sealed partial class NewProjectDialog
 {
-    [LoggerMessage(Level = LogLevel.Error, Message = "Could not open project location picker.")]
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Could not open project location picker.")]
     private static partial void LogFailedToOpenPicker(ILogger logger, Exception exception);
 }

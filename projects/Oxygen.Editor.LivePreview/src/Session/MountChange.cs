@@ -3,8 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.IO.Abstractions;
-using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
@@ -21,8 +19,7 @@ internal static class MountChange
     /// <exception cref="InvalidDataException">The candidate's mounts are not valid.</exception>
     public static ProjectContext CandidateContext(ProjectContext expected, ProjectInfo candidate)
     {
-        if (candidate.Id != expected.ProjectId || candidate.Location is null
-            || FileSystemPath.From(candidate.Location) != expected.ProjectRoot)
+        if (!IsSameProject(expected, candidate))
         {
             throw new InvalidOperationException("A content mount change must stay within the active project.");
         }
@@ -33,6 +30,11 @@ internal static class MountChange
             OpenInitialScene = expected.OpenInitialScene,
             InitialScene = expected.InitialScene,
         };
+
+        static bool IsSameProject(ProjectContext expected, ProjectInfo candidate)
+            => candidate.Id == expected.ProjectId
+                && candidate.Location is not null
+                && FileSystemPath.From(candidate.Location) == expected.ProjectRoot;
     }
 
     /// <summary>Builds the saved project information a context records.</summary>
@@ -88,18 +90,12 @@ internal static class MountChange
 
     private static void Validate(IFileSystem fileSystem, ProjectInfo candidate)
     {
-        var names = candidate.AuthoringMounts.Select(static mount => mount.Name)
-            .Concat(candidate.LocalFolderMounts.Select(static mount => mount.Name))
-            .Concat(candidate.PakFileMounts.Select(static mount => mount.Name)).ToArray();
-        if (candidate.AuthoringMounts.Any(static mount => !ProjectOutputFolders.Contains(mount) && VirtualPath.ValidateMountName(mount.Name, VirtualPathRuleSet.Authored) is not null)
-            || candidate.LocalFolderMounts.Select(static mount => mount.Name).Concat(candidate.PakFileMounts.Select(static mount => mount.Name))
-                .Any(static name => string.IsNullOrWhiteSpace(name) || name.IndexOfAny(['/', '\\', ':']) >= 0)
-            || names.Distinct(VirtualPathComparer.CaseFolded).Count() != names.Length)
+        if (HasInvalidAuthoringMountName(candidate) || HasInvalidLibraryMountName(candidate) || HasDuplicateMountNames(candidate))
         {
             throw new InvalidDataException("Content mount names must be unique folder names.");
         }
 
-        if (!candidate.AuthoringMounts.Any(static mount => mount.RelativePath.Trim().Replace('\\', '/').Trim('/') is not (".cooked" or ".imported" or ".build")))
+        if (!HasAuthoringContentFolder(candidate))
         {
             throw new InvalidDataException("The project must keep at least one authoring content folder.");
         }
@@ -126,5 +122,29 @@ internal static class MountChange
         }
 
         _ = CookedContentOrdering.Resolve(candidate);
+
+        // An authored content folder's mount name must pass the authored virtual path rules; output folders are not
+        // authored content and keep their own names.
+        static bool HasInvalidAuthoringMountName(ProjectInfo candidate)
+            => candidate.AuthoringMounts.Any(static mount => !ProjectOutputFolders.Contains(mount)
+                && VirtualPath.ValidateMountName(mount.Name, VirtualPathRuleSet.Authored) is not null);
+
+        // A local folder or pak file mount is named by one folder name: not blank, and without a path separator or drive.
+        static bool HasInvalidLibraryMountName(ProjectInfo candidate)
+            => LibraryMountNames(candidate).Any(static name => string.IsNullOrWhiteSpace(name) || name.IndexOfAny(['/', '\\', ':']) >= 0);
+
+        // Mount names share one namespace, case-folded as the virtual file system compares them.
+        static bool HasDuplicateMountNames(ProjectInfo candidate)
+        {
+            var names = candidate.AuthoringMounts.Select(static mount => mount.Name).Concat(LibraryMountNames(candidate)).ToArray();
+            return names.Distinct(VirtualPathComparer.CaseFolded).Take(names.Length + 1).Count() != names.Length;
+        }
+
+        // The project keeps somewhere to author content: a mount outside the pipeline's output folders.
+        static bool HasAuthoringContentFolder(ProjectInfo candidate)
+            => candidate.AuthoringMounts.Any(static mount => !ProjectOutputFolders.Contains(mount));
+
+        static IEnumerable<string> LibraryMountNames(ProjectInfo candidate)
+            => candidate.LocalFolderMounts.Select(static mount => mount.Name).Concat(candidate.PakFileMounts.Select(static mount => mount.Name));
     }
 }

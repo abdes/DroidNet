@@ -20,7 +20,7 @@ namespace Oxygen.Editor.LivePreview.Scripting;
 /// The analyzer is native. The engine service makes the SDK loadable once it has verified it, so analyses wait until
 /// then. When the analyzer cannot be loaded, each analysis reports itself unavailable.
 /// </remarks>
-public sealed class NativeScriptAnalyzer : IScriptAnalyzer, IDisposable
+public sealed partial class NativeScriptAnalyzer : IScriptAnalyzer, IDisposable
 {
     private readonly IEngineService engine;
     private readonly TaskCompletionSource ready = new(TaskCreationOptions.RunContinuationsAsynchronously);

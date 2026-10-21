@@ -570,4 +570,13 @@ internal sealed partial class ScenePreview
 
     private void LogProjectionFailed(Exception exception, string change)
         => LogProjectionFailed(this.logger, exception, change);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Runtime asset operation {OperationId}, native generation {Generation}, node {NodeId} failed: {Message}")]
+    private static partial void LogAssetLoadFailed(ILogger logger, Guid operationId, ulong generation, NodeId nodeId, string message);
+
+    private void LogAssetLoadFailed(Guid operationId, ulong generation, NodeId nodeId, string message)
+        => LogAssetLoadFailed(this.logger, operationId, generation, nodeId, message);
 }

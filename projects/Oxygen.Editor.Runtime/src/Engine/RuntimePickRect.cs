@@ -2,6 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Runtime.InteropServices;
+
 namespace Oxygen.Editor.Runtime.Engine;
 
 /// <summary>A rectangle of a view's surface to pick, in physical pixels from its top-left corner.</summary>
@@ -9,4 +11,5 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="Y">The top edge.</param>
 /// <param name="Width">The width; at least one pixel.</param>
 /// <param name="Height">The height; at least one pixel.</param>
+[StructLayout(LayoutKind.Auto)]
 public readonly record struct RuntimePickRect(uint X, uint Y, uint Width, uint Height);

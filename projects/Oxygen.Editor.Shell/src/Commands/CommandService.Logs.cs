@@ -20,12 +20,17 @@ public sealed partial class CommandService
         Message = "{Command} from {Context} runs in {Target}")]
     private static partial void LogHandled(ILogger logger, string command, string context, string target);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogHandled(string commandId, DependencyObject? context, object target)
     {
-        if (this.logger.IsEnabled(LogLevel.Debug))
+        if (!this.logger.IsEnabled(LogLevel.Debug))
         {
-            LogHandled(this.logger, commandId, NameOf(context), target.GetType().Name);
+            return;
         }
+
+        var source = NameOf(context);
+        var runner = target.GetType().Name;
+        LogHandled(this.logger, commandId, source, runner);
     }
 
     [LoggerMessage(
@@ -34,11 +39,15 @@ public sealed partial class CommandService
         Message = "{Command} from {Context} has nothing to run it")]
     private static partial void LogUnhandled(ILogger logger, string command, string context);
 
+    [System.Diagnostics.Conditional("DEBUG")]
     private void LogUnhandled(string commandId, DependencyObject? context)
     {
-        if (this.logger.IsEnabled(LogLevel.Debug))
+        if (!this.logger.IsEnabled(LogLevel.Debug))
         {
-            LogUnhandled(this.logger, commandId, NameOf(context));
+            return;
         }
+
+        var source = NameOf(context);
+        LogUnhandled(this.logger, commandId, source);
     }
 }

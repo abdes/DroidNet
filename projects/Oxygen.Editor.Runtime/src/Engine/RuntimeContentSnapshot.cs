@@ -1,4 +1,4 @@
-﻿// Distributed under the MIT License. See accompanying file LICENSE or copy
+// Distributed under the MIT License. See accompanying file LICENSE or copy
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
@@ -20,18 +20,3 @@ public sealed record RuntimeContentSnapshot(Guid RunId, long Revision, RuntimeCo
     /// <summary>Gets physical paths in native precedence order.</summary>
     public ImmutableArray<string> Roots { get; } = [.. Bindings.Select(static root => root.Path)];
 }
-
-/// <summary>How the engine reads a cooked content source.</summary>
-public enum RuntimeCookedRootKind
-{
-    /// <summary>A loose cooked root directory.</summary>
-    LooseFolder,
-
-    /// <summary>A pak file.</summary>
-    PakFile,
-}
-
-/// <summary>An accepted native cooked content source.</summary>
-/// <param name="Path">The physical container: a root directory or a pak file.</param>
-/// <param name="Kind">How the engine reads the container.</param>
-public sealed record RuntimeCookedRoot(string Path, RuntimeCookedRootKind Kind);

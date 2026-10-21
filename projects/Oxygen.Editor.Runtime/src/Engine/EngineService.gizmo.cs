@@ -58,7 +58,7 @@ public sealed partial class EngineService
                     if (this.GizmoEvent is { } handlers)
                     {
                         var args = new RuntimeGizmoEventArgs(gizmoEvent);
-                        foreach (EventHandler<RuntimeGizmoEventArgs> handler in handlers.GetInvocationList())
+                        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler<RuntimeGizmoEventArgs>>())
                         {
                             this.NotifySubscriber(() => handler(this, args));
                         }

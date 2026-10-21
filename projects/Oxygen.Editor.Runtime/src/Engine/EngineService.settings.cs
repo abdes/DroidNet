@@ -56,8 +56,7 @@ public sealed partial class EngineService
 
     private void OnEngineSettingsChanged(object? sender, PropertyChangedEventArgs e)
     {
-        if (e.PropertyName != nameof(IEngineStartupSettings.LoggingVerbosity)
-            || this.State is not (EngineServiceState.Ready or EngineServiceState.Running))
+        if (!string.Equals(e.PropertyName, nameof(IEngineStartupSettings.LoggingVerbosity), StringComparison.Ordinal) || this.State is not (EngineServiceState.Ready or EngineServiceState.Running))
         {
             return;
         }

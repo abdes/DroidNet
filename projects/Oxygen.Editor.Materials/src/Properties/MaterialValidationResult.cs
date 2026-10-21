@@ -9,6 +9,16 @@ using Oxygen.Editor.Schemas;
 namespace Oxygen.Editor.Materials.Properties;
 
 /// <summary>
+/// The validation outcome reported by <see cref="MaterialSchemaValidator"/>.
+/// </summary>
+/// <param name="IsValid">Whether the document was accepted.</param>
+/// <param name="Source">A short label for which schema produced the result
+/// (<c>"engine"</c> or <c>"merged"</c>).</param>
+/// <param name="Errors">The list of error strings; empty when the document
+/// is valid.</param>
+public readonly record struct MaterialValidationResult(bool IsValid, string Source, IReadOnlyList<string> Errors);
+
+/// <summary>
 /// Validates authored material JSON against the engine schema embedded
 /// into the cooker, and against the merged engine + overlay schema used
 /// by the editor.
@@ -39,10 +49,6 @@ public sealed class MaterialSchemaValidator
 
     private readonly EditorSchemaCatalog catalog;
 
-    /// <summary>
-    /// Initializes a new instance from a schema catalog.
-    /// </summary>
-    /// <param name="catalog">The catalog.</param>
     public MaterialSchemaValidator(EditorSchemaCatalog catalog)
     {
         ArgumentNullException.ThrowIfNull(catalog);
@@ -71,7 +77,7 @@ public sealed class MaterialSchemaValidator
     {
         var schema = this.catalog.GetValidationSchema(EngineSchemaFileName);
         var evaluation = schema.Evaluate(ToElement(materialJson), BuildOptions());
-        return ToResult(evaluation, Source: "engine");
+        return ToResult(evaluation, source: "engine");
     }
 
     /// <summary>
@@ -122,16 +128,16 @@ public sealed class MaterialSchemaValidator
     private static System.Text.Json.JsonElement ToElement(JsonNode? node)
         => node is null ? default : System.Text.Json.JsonSerializer.SerializeToElement(node);
 
-    private static MaterialValidationResult ToResult(EvaluationResults evaluation, string Source)
+    private static MaterialValidationResult ToResult(EvaluationResults evaluation, string source)
     {
         if (evaluation.IsValid)
         {
-            return new MaterialValidationResult(IsValid: true, Source, []);
+            return new MaterialValidationResult(IsValid: true, source, []);
         }
 
         var errors = new List<string>();
         FlattenErrors(evaluation, errors);
-        return new MaterialValidationResult(IsValid: false, Source, errors);
+        return new MaterialValidationResult(IsValid: false, source, errors);
     }
 
     private static void FlattenErrors(EvaluationResults node, List<string> errors)
@@ -193,13 +199,3 @@ public sealed class MaterialSchemaValidator
         throw new DirectoryNotFoundException($"Could not find Schemas/ next to {schemasAssemblyDir} or {assemblyDir}.");
     }
 }
-
-/// <summary>
-/// The validation outcome reported by <see cref="MaterialSchemaValidator"/>.
-/// </summary>
-/// <param name="IsValid">Whether the document was accepted.</param>
-/// <param name="Source">A short label for which schema produced the result
-/// (<c>"engine"</c> or <c>"merged"</c>).</param>
-/// <param name="Errors">The list of error strings; empty when the document
-/// is valid.</param>
-public readonly record struct MaterialValidationResult(bool IsValid, string Source, IReadOnlyList<string> Errors);

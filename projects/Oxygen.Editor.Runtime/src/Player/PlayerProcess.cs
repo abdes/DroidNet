@@ -80,24 +80,24 @@ public sealed partial class PlayerProcess : IAsyncDisposable
         };
         start.ArgumentList.Add("--launch");
         start.ArgumentList.Add(launchFile);
-        var process = new Process { StartInfo = start, EnableRaisingEvents = true };
-        var player = new PlayerProcess(process, logger ?? NullLogger.Instance);
-        process.OutputDataReceived += player.OnOutput;
-        process.ErrorDataReceived += player.OnOutput;
+        var launched = new Process { StartInfo = start, EnableRaisingEvents = true };
+        var player = new PlayerProcess(launched, logger ?? NullLogger.Instance);
+        launched.OutputDataReceived += player.OnOutput;
+        launched.ErrorDataReceived += player.OnOutput;
         try
         {
-            if (!process.Start())
+            if (!launched.Start())
             {
                 throw new PlayerLaunchException($"'{executable}' did not start.");
             }
 
             player.started = true;
-            process.BeginOutputReadLine();
-            process.BeginErrorReadLine();
-            player.LogStarted(process.Id, executable, launchFile);
-            var endpoint = await PlayerControlEndpoint.WaitForAsync(process, StartTimeout, cancellationToken).ConfigureAwait(false);
+            launched.BeginOutputReadLine();
+            launched.BeginErrorReadLine();
+            player.LogStarted(launched.Id, executable, launchFile);
+            var endpoint = await PlayerControlEndpoint.WaitForAsync(launched, StartTimeout, cancellationToken).ConfigureAwait(false);
             player.client = await PlayerControlClient.ConnectAsync(endpoint, ClientName, owner: true, logger, cancellationToken).ConfigureAwait(false);
-            player.LogConnected(process.Id, endpoint.Port);
+            player.LogConnected(launched.Id, endpoint.Port);
             return player;
         }
         catch (Exception exception) when (exception is System.ComponentModel.Win32Exception)

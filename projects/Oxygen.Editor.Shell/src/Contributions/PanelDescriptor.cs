@@ -10,7 +10,7 @@ namespace Oxygen.Editor.Shell.Contributions;
 public sealed record PanelDescriptor(string Id, string Title)
 {
     /// <summary>Gets how many instances of the panel a session has.</summary>
-    public PanelMultiplicity Multiplicity { get; init; } = PanelMultiplicity.Single;
+    public PanelMultiplicity Multiplicity { get; init; } = PanelMultiplicity.Unique;
 
     /// <summary>Gets the URI of the panel's icon, if any.</summary>
     public Uri? IconUri { get; init; }

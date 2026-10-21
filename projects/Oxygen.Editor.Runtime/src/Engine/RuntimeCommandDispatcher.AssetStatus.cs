@@ -64,7 +64,7 @@ internal sealed partial class RuntimeCommandDispatcher
             return;
         }
 
-        foreach (EventHandler handler in handlers.GetInvocationList())
+        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler>())
         {
             try
             {

@@ -148,7 +148,7 @@ public sealed class MaterialEditsTests
         _ = document.History.UndoStack.Should().BeEmpty();
         _ = document.Content.HasEditsInProgress.Should().BeTrue();
 
-        materials.Edits.CompleteEditSession(document, session, commit: true);
+        MaterialEdits.CompleteEditSession(document, session, commit: true);
 
         _ = document.Content.HasEditsInProgress.Should().BeFalse();
         _ = document.History.UndoStack.Should().ContainSingle();
@@ -165,7 +165,7 @@ public sealed class MaterialEditsTests
         var session = materials.Edits.BeginEditSession(document, "Roughness");
         _ = materials.Edits.Preview(document, session, PropertyEdit.SingleEdit(MaterialDescriptors.Roughness, 0.9f));
 
-        _ = materials.Edits.CanUndo(document).Should().BeTrue();
+        _ = MaterialEdits.CanUndo(document).Should().BeTrue();
         _ = materials.Edits.Undo(document).Succeeded.Should().BeTrue();
 
         _ = MaterialDocuments.ContentOf(document).Material.Source.PbrMetallicRoughness.RoughnessFactor.Should().Be(0.5f);

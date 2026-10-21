@@ -7,9 +7,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Oxygen.Editor.ProjectBrowser.ViewModels;
 
-/// <summary>
-///     Logging methods for the <see cref="OpenProjectViewModel"/> class.
-/// </summary>
+/// <summary>Logging helpers for <see cref="OpenProjectViewModel"/>.</summary>
 public partial class OpenProjectViewModel
 {
     [LoggerMessage(
@@ -76,6 +74,7 @@ public partial class OpenProjectViewModel
         => LogFailedToLoadColumnWidths(this.logger, ex);
 
     [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Debug,
         Message = "Toggled file list sort: comparer={Comparer}, direction={Direction}.")]
     private static partial void LogToggledSort(ILogger logger, string comparer, string direction);
@@ -94,8 +93,8 @@ public partial class OpenProjectViewModel
             return;
         }
 
-#pragma warning disable CA1873 // Guarded by explicit IsEnabled check above.
-        LogToggledSort(this.logger, desc.Comparer.GetType().Name, desc.Direction.ToString());
-#pragma warning restore CA1873
+        var comparer = desc.Comparer.GetType().Name;
+        var direction = desc.Direction.ToString();
+        LogToggledSort(this.logger, comparer, direction);
     }
 }

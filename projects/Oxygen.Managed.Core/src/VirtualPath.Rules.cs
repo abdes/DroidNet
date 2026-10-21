@@ -11,7 +11,7 @@ namespace Oxygen.Managed.Core;
 /// The virtual path rules of the engine's <c>Content/Docs/virtual_paths.md</c>, implemented to agree with the engine's
 /// <c>VirtualPath.h</c> exactly: both run the engine's <c>VirtualPathCases.json</c> in their tests.
 /// </summary>
-public static partial class VirtualPath
+public static class VirtualPath
 {
     /// <summary>The longest segment, in bytes of UTF-8: the portable file name bound.</summary>
     public const int MaxSegmentBytes = 255;

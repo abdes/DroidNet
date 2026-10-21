@@ -67,8 +67,8 @@ public sealed class VirtualPathTests
         _ = comparer.Equals("/Content/Paint.omat", "/Content/paint.omat").Should().BeTrue();
         _ = comparer.GetHashCode("/Content/Paint.omat").Should().Be(comparer.GetHashCode("/Content/paint.omat"));
         _ = comparer.Equals("/Content/Paint.omat", "/Content/Paints.omat").Should().BeFalse();
-        _ = comparer.Equals(null, null).Should().BeTrue();
-        _ = comparer.Equals("a", null).Should().BeFalse();
+        _ = comparer.Equals(x: null, y: null).Should().BeTrue();
+        _ = comparer.Equals("a", y: null).Should().BeFalse();
     }
 
     [TestMethod]

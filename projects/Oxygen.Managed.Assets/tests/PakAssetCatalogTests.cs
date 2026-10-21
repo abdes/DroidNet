@@ -31,7 +31,7 @@ public sealed class PakAssetCatalogTests
 
         var record = records.Should().ContainSingle().Subject;
         _ = record.Identity.Should().Be(AssetPath.Parse(cube.VirtualPath));
-        _ = record.Cooked.Should().Be(new CookedAssetMetadata(PakPath, null, document.SourceIdentity, cube.AssetKey, cube.AssetType, cube.DescriptorSize, null)
+        _ = record.Cooked.Should().Be(new CookedAssetMetadata(PakPath, DescriptorRelativePath: null, document.SourceIdentity, cube.AssetKey, cube.AssetType, cube.DescriptorSize, DescriptorSha256: null)
         {
             VirtualPath = record.Identity,
             References = cube.References,
@@ -50,7 +50,7 @@ public sealed class PakAssetCatalogTests
 
         var record = records.Should().ContainSingle().Subject;
         _ = record.Identity.Should().Be(AssetPath.Parse(sky));
-        _ = record.Cooked.Should().Be(new CookedAssetMetadata(PakPath, null, document.SourceIdentity, AssetKey.FromVirtualPath(sky), (byte)AssetType.Unknown, TextureResourceRecord.Size, null)
+        _ = record.Cooked.Should().Be(new CookedAssetMetadata(PakPath, DescriptorRelativePath: null, document.SourceIdentity, AssetKey.FromVirtualPath(sky), (byte)AssetType.Unknown, TextureResourceRecord.Size, DescriptorSha256: null)
         {
             VirtualPath = record.Identity,
             Texture = texture,

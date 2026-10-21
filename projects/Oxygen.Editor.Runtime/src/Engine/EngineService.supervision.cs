@@ -4,7 +4,6 @@
 
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.Logging;
 using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -154,7 +153,7 @@ public sealed partial class EngineService
 
         if (this.StateChanged is { } handlers)
         {
-            foreach (EventHandler<EngineStateChangedEventArgs> handler in handlers.GetInvocationList())
+            foreach (var handler in handlers.GetInvocationList().Cast<EventHandler<EngineStateChangedEventArgs>>())
             {
                 this.NotifySubscriber(() => handler(this, change));
             }
@@ -173,12 +172,6 @@ public sealed partial class EngineService
             this.LogStateNotificationFailed(exception);
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Engine run {RunId} terminated unexpectedly: {Reason}")]
-    private partial void LogLoopTerminated(Guid runId, string reason, Exception? exception);
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "A runtime lifecycle notification consumer failed.")]
-    private partial void LogStateNotificationFailed(Exception exception);
 
     private sealed class EngineRun(Guid id, Task loop)
     {

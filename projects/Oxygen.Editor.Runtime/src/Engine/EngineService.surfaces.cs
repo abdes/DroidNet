@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Concurrent;
-using System.Globalization;
 using Microsoft.UI.Xaml.Controls;
 
 namespace Oxygen.Editor.Runtime.Engine;
@@ -172,7 +171,7 @@ public sealed partial class EngineService
             {
                 if (!await this.AwaitRuntimeOperationAsync(this.session!.UnregisterSurfaceAsync(lease.Key.ViewportId)).ConfigureAwait(true))
                 {
-                    throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Native surface release failed for {lease.Key.ViewportId}."));
+                    throw new InvalidOperationException($"Native surface release failed for {lease.Key.ViewportId}.");
                 }
             }
             catch
@@ -190,7 +189,7 @@ public sealed partial class EngineService
     {
         if (this.orphanedViewportIds.ContainsKey(key.ViewportId))
         {
-            throw new InvalidOperationException(string.Create(CultureInfo.InvariantCulture, $"Viewport {key.ViewportId} still requires native cleanup."));
+            throw new InvalidOperationException($"Viewport {key.ViewportId} still requires native cleanup.");
         }
 
         if (this.activeLeases.TryGetValue(key, out var existing))

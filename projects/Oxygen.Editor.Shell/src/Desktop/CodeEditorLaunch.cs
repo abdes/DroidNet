@@ -65,7 +65,7 @@ public static class CodeEditorLaunch
                 }
 
                 var arguments = tokens.Skip(1).Select(Expand).ToList();
-                if (!tokens.Any(static token => token.Contains("{file}", StringComparison.Ordinal)))
+                if (!tokens.Exists(static token => token.Contains("{file}", StringComparison.Ordinal)))
                 {
                     arguments.Add(file);
                 }
@@ -132,7 +132,7 @@ public static class CodeEditorLaunch
             return program;
         }
 
-        string[] extensions = Path.HasExtension(program)
+        var extensions = Path.HasExtension(program)
             ? [string.Empty]
             : (Environment.GetEnvironmentVariable("PATHEXT") ?? ".COM;.EXE;.BAT;.CMD").Split(';', StringSplitOptions.RemoveEmptyEntries);
         return (Environment.GetEnvironmentVariable("PATH") ?? string.Empty)

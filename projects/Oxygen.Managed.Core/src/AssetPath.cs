@@ -76,7 +76,7 @@ public sealed class AssetPath : IEquatable<AssetPath>, IComparable<AssetPath>
     /// <param name="left">The first path.</param>
     /// <param name="right">The second path.</param>
     /// <returns><see langword="true"/> when both are null or both name the same path.</returns>
-    public static bool operator ==(AssetPath? left, AssetPath? right) => left?.Equals(right) ?? right is null;
+    public static bool operator ==(AssetPath? left, AssetPath? right) => left?.Equals(right) ?? (right is null);
 
     /// <summary>Tests whether two paths differ, ordinally.</summary>
     /// <param name="left">The first path.</param>
@@ -155,6 +155,7 @@ public sealed class AssetPath : IEquatable<AssetPath>, IComparable<AssetPath>
     /// <param name="uri">The URI, such as <c>asset:///Content/Materials/Red.omat</c>.</param>
     /// <returns>The path it names.</returns>
     /// <exception cref="ArgumentException">The text is not an asset URI the rules accept.</exception>
+    [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings", Justification = "This text is the asset identity's persisted form; AssetPath owns its escaping. System.Uri has no canonical text for it: ToString() unescapes spaces and non-ASCII but not reserved characters, and OriginalString keeps the caller's spelling.")]
     public static AssetPath ParseUri(string uri)
     {
         ArgumentNullException.ThrowIfNull(uri);
@@ -170,10 +171,11 @@ public sealed class AssetPath : IEquatable<AssetPath>, IComparable<AssetPath>
     /// <param name="uri">The URI.</param>
     /// <param name="path">The path it names, when it is an asset URI.</param>
     /// <returns><see langword="true"/> when <paramref name="uri"/> is an asset URI the rules accept.</returns>
+    [SuppressMessage("Design", "CA1054:URI-like parameters should not be strings", Justification = "This text is the asset identity's persisted form; AssetPath owns its escaping. System.Uri has no canonical text for it: ToString() unescapes spaces and non-ASCII but not reserved characters, and OriginalString keeps the caller's spelling.")]
     public static bool TryParseUri([NotNullWhen(true)] string? uri, [NotNullWhen(true)] out AssetPath? path)
     {
         path = null;
-        if (uri is null || !uri.StartsWith(UriPrefix, StringComparison.OrdinalIgnoreCase) || uri.AsSpan(UriPrefix.Length).IndexOfAny('?', '#') >= 0)
+        if (uri?.StartsWith(UriPrefix, StringComparison.OrdinalIgnoreCase) != true || uri.AsSpan(UriPrefix.Length).IndexOfAny('?', '#') >= 0)
         {
             return false;
         }
@@ -279,6 +281,7 @@ public sealed class AssetPath : IEquatable<AssetPath>, IComparable<AssetPath>
 
     /// <summary>Gets the asset URI of this path, each segment escaped.</summary>
     /// <returns>The URI, such as <c>asset:///Content/Materials/Red%20Wood.omat</c>.</returns>
+    [SuppressMessage("Design", "CA1055:URI-like return values should not be strings", Justification = "This text is the asset identity's persisted form; AssetPath owns its escaping. System.Uri has no canonical text for it: ToString() unescapes spaces and non-ASCII but not reserved characters, and OriginalString keeps the caller's spelling.")]
     public string ToUriString()
         => UriPrefix + string.Join('/', this.VirtualPath.Split('/').Select(Uri.EscapeDataString));
 

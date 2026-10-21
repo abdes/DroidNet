@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
-using Microsoft.Extensions.Logging;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -323,7 +322,4 @@ public sealed partial class EngineService
             return false;
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Engine cleanup failed during {Stage}.")]
-    private partial void LogCleanupFailure(Exception exception, string stage);
 }

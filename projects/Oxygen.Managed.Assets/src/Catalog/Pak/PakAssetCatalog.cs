@@ -28,7 +28,7 @@ public sealed class PakAssetCatalog : IAssetCatalog
         var records = new CookedAssetRecords();
         foreach (var asset in document.Assets)
         {
-            records.Add(asset.VirtualPath, identity => new(pakPath, null, document.SourceIdentity, asset.AssetKey, asset.AssetType, asset.DescriptorSize, null)
+            records.Add(asset.VirtualPath, identity => new(pakPath, DescriptorRelativePath: null, document.SourceIdentity, asset.AssetKey, asset.AssetType, asset.DescriptorSize, DescriptorSha256: null)
             {
                 VirtualPath = identity,
                 References = asset.References,
@@ -37,7 +37,7 @@ public sealed class PakAssetCatalog : IAssetCatalog
 
         foreach (var texture in document.Textures)
         {
-            records.Add(texture.VirtualPath, identity => new(pakPath, null, document.SourceIdentity, AssetKey.FromVirtualPath(texture.VirtualPath), (byte)AssetType.Unknown, TextureResourceRecord.Size, null)
+            records.Add(texture.VirtualPath, identity => new(pakPath, DescriptorRelativePath: null, document.SourceIdentity, AssetKey.FromVirtualPath(texture.VirtualPath), (byte)AssetType.Unknown, TextureResourceRecord.Size, DescriptorSha256: null)
             {
                 VirtualPath = identity,
                 Texture = texture.Texture,

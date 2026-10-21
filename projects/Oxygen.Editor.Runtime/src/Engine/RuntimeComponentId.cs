@@ -12,6 +12,7 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// this copy so its public commands load without Interop; the native transport converts between the two, and a Runtime
 /// test keeps them identical.
 /// </remarks>
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1028:Enum Storage should be Int32", Justification = "It mirrors the native wire enum EngineComponentId, a UInt16; the transport converts between them by value.")]
 public enum RuntimeComponentId : ushort
 {
     /// <summary>Sentinel; not a valid wire id.</summary>

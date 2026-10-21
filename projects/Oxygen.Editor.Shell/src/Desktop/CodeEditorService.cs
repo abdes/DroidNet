@@ -92,71 +92,22 @@ public sealed partial class CodeEditorService(
 
     private async Task<CodeEditorPreference?> AskAsync(string path, CodeEditorPreference? current)
     {
-        var visualStudioCode = CodeEditorLaunch.FindVisualStudioCode();
-        var vsCode = new RadioButton
-        {
-            Content = visualStudioCode is null ? "Visual Studio Code (not found)" : "Visual Studio Code",
-            IsEnabled = visualStudioCode is not null,
-        };
-        var extension = Path.GetExtension(path);
-        var systemDefault = new RadioButton { Content = $"System default for {extension} files" };
-        var custom = new RadioButton { Content = "Custom command" };
-        var command = new TextBox
-        {
-            PlaceholderText = CodeEditorLaunch.ExampleCustomCommand,
-            Text = current?.CustomCommand ?? string.Empty,
-            Margin = new Thickness(28, 0, 0, 0),
-            MinWidth = 360,
-        };
-        var hint = new TextBlock
-        {
-            Text = "Placeholders: {file}, {line}, {column}, {project}",
-            Margin = new Thickness(28, 0, 0, 0),
-            Opacity = 0.7,
-            Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
-        };
-        var remember = new CheckBox { Content = "Remember my choice", IsChecked = true };
-        var error = new TextBlock { TextWrapping = TextWrapping.Wrap, Visibility = Visibility.Collapsed };
-        error.Foreground = Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) ? brush as Microsoft.UI.Xaml.Media.Brush : null;
-
-        var initial = current?.Kind ?? (visualStudioCode is null ? CodeEditorKind.SystemDefault : CodeEditorKind.VisualStudioCode);
-        var selected = initial == CodeEditorKind.VisualStudioCode && visualStudioCode is null ? CodeEditorKind.SystemDefault : initial;
-        vsCode.IsChecked = selected == CodeEditorKind.VisualStudioCode;
-        systemDefault.IsChecked = selected == CodeEditorKind.SystemDefault;
-        custom.IsChecked = selected == CodeEditorKind.Custom;
-        command.IsEnabled = selected == CodeEditorKind.Custom;
-        custom.Checked += (_, _) => command.IsEnabled = true;
-        custom.Unchecked += (_, _) => command.IsEnabled = false;
-
-        var options = new StackPanel { Spacing = 4, Children = { vsCode, systemDefault, custom, command, hint } };
-        var content = new StackPanel { Spacing = 12, Children = { options, remember, error } };
-
-        CodeEditorPreference? chosen = null;
-        var spec = new DialogSpec("Open scripts with", content)
+        var form = new ChoiceForm(Path.GetExtension(path), current);
+        var spec = new DialogSpec("Open scripts with", form.Content)
         {
             PrimaryButtonText = "Open",
             CloseButtonText = "Cancel",
             DefaultButton = DialogButton.Primary,
-            PrimaryAction = () =>
-            {
-                var kind = vsCode.IsChecked == true ? CodeEditorKind.VisualStudioCode
-                    : custom.IsChecked == true ? CodeEditorKind.Custom
-                    : CodeEditorKind.SystemDefault;
-                var text = command.Text.Trim();
-                var invalid = kind == CodeEditorKind.Custom && text.Length == 0;
-                error.Text = invalid ? "Enter the command that opens a file, for example " + CodeEditorLaunch.ExampleCustomCommand + "." : string.Empty;
-                error.Visibility = invalid ? Visibility.Visible : Visibility.Collapsed;
-                chosen = invalid ? null : new CodeEditorPreference(CodeEditorPreference.CurrentVersion, kind, kind == CodeEditorKind.Custom ? text : current?.CustomCommand);
-                return Task.FromResult(!invalid);
-            },
+            PrimaryAction = () => Task.FromResult(form.Validate()),
         };
 
-        if (await dialogs.ShowAsync(spec).ConfigureAwait(true) != DialogButton.Primary || chosen is null)
+        if (await dialogs.ShowAsync(spec).ConfigureAwait(true) != DialogButton.Primary)
         {
             return null;
         }
 
-        if (remember.IsChecked == true)
+        var chosen = form.ToPreference(current);
+        if (form.Remember)
         {
             await this.SaveAsync(chosen).ConfigureAwait(true);
         }
@@ -210,5 +161,83 @@ public sealed partial class CodeEditorService(
                 },
             ],
         });
+    }
+
+    // The choices of the "Open scripts with" dialog, built on the window's thread that shows it.
+    private sealed class ChoiceForm
+    {
+        private readonly RadioButton visualStudioCode;
+        private readonly RadioButton custom;
+        private readonly TextBox command;
+        private readonly CheckBox remember;
+        private readonly TextBlock error;
+
+        public ChoiceForm(string extension, CodeEditorPreference? current)
+        {
+            var found = CodeEditorLaunch.FindVisualStudioCode();
+            this.visualStudioCode = new RadioButton
+            {
+                Content = found is null ? "Visual Studio Code (not found)" : "Visual Studio Code",
+                IsEnabled = found is not null,
+            };
+            var systemDefault = new RadioButton { Content = $"System default for {extension} files" };
+            this.custom = new RadioButton { Content = "Custom command" };
+            this.command = new TextBox
+            {
+                PlaceholderText = CodeEditorLaunch.ExampleCustomCommand,
+                Text = current?.CustomCommand ?? string.Empty,
+                Margin = new Thickness(28, 0, 0, 0),
+                MinWidth = 360,
+            };
+            var hint = new TextBlock
+            {
+                Text = "Placeholders: {file}, {line}, {column}, {project}",
+                Margin = new Thickness(28, 0, 0, 0),
+                Opacity = 0.7,
+                Style = (Style)Application.Current.Resources["CaptionTextBlockStyle"],
+            };
+            this.remember = new CheckBox { Content = "Remember my choice", IsChecked = true };
+            this.error = new TextBlock
+            {
+                TextWrapping = TextWrapping.Wrap,
+                Visibility = Visibility.Collapsed,
+                Foreground = Application.Current.Resources.TryGetValue("SystemFillColorCriticalBrush", out var brush) ? brush as Microsoft.UI.Xaml.Media.Brush : null,
+            };
+
+            var initial = current?.Kind ?? (found is null ? CodeEditorKind.SystemDefault : CodeEditorKind.VisualStudioCode);
+            var selected = initial == CodeEditorKind.VisualStudioCode && found is null ? CodeEditorKind.SystemDefault : initial;
+            this.visualStudioCode.IsChecked = selected == CodeEditorKind.VisualStudioCode;
+            systemDefault.IsChecked = selected == CodeEditorKind.SystemDefault;
+            this.custom.IsChecked = selected == CodeEditorKind.Custom;
+            this.command.IsEnabled = selected == CodeEditorKind.Custom;
+            this.custom.Checked += (_, _) => this.command.IsEnabled = true;
+            this.custom.Unchecked += (_, _) => this.command.IsEnabled = false;
+
+            var options = new StackPanel { Spacing = 4, Children = { this.visualStudioCode, systemDefault, this.custom, this.command, hint } };
+            this.Content = new StackPanel { Spacing = 12, Children = { options, this.remember, this.error } };
+        }
+
+        public StackPanel Content { get; }
+
+        public bool Remember => this.remember.IsChecked == true;
+
+        private CodeEditorKind Kind => this.visualStudioCode.IsChecked == true ? CodeEditorKind.VisualStudioCode
+            : this.custom.IsChecked == true ? CodeEditorKind.Custom
+            : CodeEditorKind.SystemDefault;
+
+        // A custom command needs its text; the error says so and keeps the dialog open.
+        public bool Validate()
+        {
+            var invalid = this.Kind == CodeEditorKind.Custom && this.command.Text.Trim().Length == 0;
+            this.error.Text = invalid ? "Enter the command that opens a file, for example " + CodeEditorLaunch.ExampleCustomCommand + "." : string.Empty;
+            this.error.Visibility = invalid ? Visibility.Visible : Visibility.Collapsed;
+            return !invalid;
+        }
+
+        public CodeEditorPreference ToPreference(CodeEditorPreference? current)
+        {
+            var kind = this.Kind;
+            return new CodeEditorPreference(CodeEditorPreference.CurrentVersion, kind, kind == CodeEditorKind.Custom ? this.command.Text.Trim() : current?.CustomCommand);
+        }
     }
 }

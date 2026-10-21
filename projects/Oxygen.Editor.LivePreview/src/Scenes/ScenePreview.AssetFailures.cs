@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
@@ -116,7 +115,4 @@ internal sealed partial class ScenePreview
                 : null;
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Error, Message = "Runtime asset operation {OperationId}, native generation {Generation}, node {NodeId} failed: {Message}")]
-    private partial void LogAssetLoadFailed(Guid operationId, ulong generation, NodeId nodeId, string message);
 }

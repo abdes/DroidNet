@@ -48,6 +48,34 @@ public sealed partial class MaterialEdits(
     private static MaterialEditResult Accepted { get; } = new(Succeeded: true, OperationId: null);
 
     /// <summary>
+    ///     Ends a gesture: commits its last preview as one history entry, or restores the source it began with.
+    /// </summary>
+    /// <param name="document">The material document the gesture edits.</param>
+    /// <param name="session">The gesture's session; a gesture that already ended is ignored.</param>
+    /// <param name="commit">Whether to keep the gesture's last preview.</param>
+    public static void CompleteEditSession(Document document, MaterialEditSession session, bool commit)
+    {
+        if (ContentOf(document).Gesture is { } gesture && gesture.Session == session)
+        {
+            gesture.Finish(commit);
+        }
+    }
+
+    /// <summary>
+    ///     Tells whether Undo has something to undo: a gesture in progress, or the document's history.
+    /// </summary>
+    /// <param name="document">A material document.</param>
+    /// <returns>Whether Undo has something to undo.</returns>
+    public static bool CanUndo(Document document) => ContentOf(document).Gesture is not null || document.History.CanUndo;
+
+    /// <summary>
+    ///     Tells whether Redo has something to redo.
+    /// </summary>
+    /// <param name="document">A material document.</param>
+    /// <returns>Whether Redo has something to redo.</returns>
+    public static bool CanRedo(Document document) => ContentOf(document).Gesture is null && document.History.CanRedo;
+
+    /// <summary>
     ///     Applies a property edit to a material.
     /// </summary>
     /// <param name="document">A material document.</param>
@@ -156,34 +184,6 @@ public sealed partial class MaterialEdits(
         content.Material.Replace(state.Source);
         return Accepted;
     }
-
-    /// <summary>
-    ///     Ends a gesture: commits its last preview as one history entry, or restores the source it began with.
-    /// </summary>
-    /// <param name="document">The material document the gesture edits.</param>
-    /// <param name="session">The gesture's session; a gesture that already ended is ignored.</param>
-    /// <param name="commit">Whether to keep the gesture's last preview.</param>
-    public void CompleteEditSession(Document document, MaterialEditSession session, bool commit)
-    {
-        if (ContentOf(document).Gesture is { } gesture && gesture.Session == session)
-        {
-            gesture.Finish(commit);
-        }
-    }
-
-    /// <summary>
-    ///     Tells whether Undo has something to undo: a gesture in progress, or the document's history.
-    /// </summary>
-    /// <param name="document">A material document.</param>
-    /// <returns>Whether Undo has something to undo.</returns>
-    public bool CanUndo(Document document) => ContentOf(document).Gesture is not null || document.History.CanUndo;
-
-    /// <summary>
-    ///     Tells whether Redo has something to redo.
-    /// </summary>
-    /// <param name="document">A material document.</param>
-    /// <returns>Whether Redo has something to redo.</returns>
-    public bool CanRedo(Document document) => ContentOf(document).Gesture is null && document.History.CanRedo;
 
     /// <summary>
     ///     Cancels the gesture in progress, or undoes the document's last history entry when the source it restores is

@@ -45,7 +45,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
         IDockViewFactory dockViewFactory,
         ILoggerFactory? loggerFactory = null)
     {
-        this.logger = loggerFactory?.CreateLogger("WorkSpace") ?? NullLoggerFactory.Instance.CreateLogger("WorkSpace");
+        this.logger = loggerFactory?.CreateLogger<DockingWorkspaceLayout>() ?? NullLogger<DockingWorkspaceLayout>.Instance;
 
         this.router = router;
 
@@ -120,12 +120,6 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
 
     /// <inheritdoc/>
     public void Dispose() => this.routerEventsSub.Dispose();
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Syncing docker workspace layout with the router...")]
-    private static partial void LogSyncWithRouter(ILogger logger);
 
     private static bool CheckAndSetMinimized(DockingState dockState, IParameters active, Parameters next)
     {
@@ -239,7 +233,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
 
     private async Task SyncWithRouterAsync(LayoutChangeReason reason)
     {
-        LogSyncWithRouter(this.logger);
+        this.LogSyncWithRouter();
 
         // Build a change set to manipulate the URL tree for our active route
         var changes = new List<RouteChangeItem>();

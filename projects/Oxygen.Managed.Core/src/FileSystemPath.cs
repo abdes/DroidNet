@@ -34,7 +34,7 @@ public sealed class FileSystemPath : IEquatable<FileSystemPath>
     /// <param name="left">The first path.</param>
     /// <param name="right">The second path.</param>
     /// <returns><see langword="true"/> when both are null or both name the same file or folder.</returns>
-    public static bool operator ==(FileSystemPath? left, FileSystemPath? right) => left?.Equals(right) ?? right is null;
+    public static bool operator ==(FileSystemPath? left, FileSystemPath? right) => left?.Equals(right) ?? (right is null);
 
     /// <summary>Tests whether two paths name different files or folders.</summary>
     /// <param name="left">The first path.</param>

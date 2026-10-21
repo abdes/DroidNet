@@ -38,6 +38,7 @@ public sealed partial class EngineService(
     private readonly HostingContext hostingContext = hostingContext;
     private readonly IOperationResultPublisher operationResults = operationResults;
     private readonly IEngineStartupSettings engineSettings = engineSettings?.Settings ?? new EngineStartupSettings();
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "Injected; the container that created it disposes it. The service only unsubscribes from it.")]
     private readonly ISettingsService<IEngineStartupSettings>? engineSettingsService = engineSettings;
     private readonly IPathFinder? pathFinder = pathFinder;
     private readonly ILogger<EngineService> logger = loggerFactory?.CreateLogger<EngineService>() ?? NullLoggerFactory.Instance.CreateLogger<EngineService>();

@@ -62,7 +62,7 @@ public sealed partial class EngineService
                     if (this.ContentStatusChanged is { } handlers)
                     {
                         var args = new RuntimeContentChangedEventArgs(change);
-                        foreach (EventHandler<RuntimeContentChangedEventArgs> handler in handlers.GetInvocationList())
+                        foreach (var handler in handlers.GetInvocationList().Cast<EventHandler<RuntimeContentChangedEventArgs>>())
                         {
                             this.NotifySubscriber(() => handler(this, args));
                         }

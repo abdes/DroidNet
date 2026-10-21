@@ -121,10 +121,4 @@ public sealed partial class MaterialValidation
             return null;
         }
     }
-
-    [LoggerMessage(Level = LogLevel.Debug, Message = "Loaded the material schemas for editor validation.")]
-    private partial void LogSchemaLoaded();
-
-    [LoggerMessage(Level = LogLevel.Warning, Message = "The material schemas are unavailable; saves are still validated by the material writer.")]
-    private partial void LogSchemaUnavailable(Exception exception);
 }

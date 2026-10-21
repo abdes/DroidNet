@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.Immutable;
 using Oxygen.Interop.World;
 using Oxygen.Managed.Core;
 
@@ -18,13 +17,13 @@ internal sealed partial class NativeRuntimeCommandTransport
         return new(
             state.Exists,
             state.IsPrimarySun,
-            state.Properties.Select(value => new RuntimePropertyValue((RuntimeComponentId)value.ComponentId, value.FieldId, value.Value)).ToImmutableArray(),
+            [.. state.Properties.Select(value => new RuntimePropertyValue((RuntimeComponentId)value.ComponentId, value.FieldId, value.Value))],
             state.GeometryKey,
             state.GeometryName,
             state.VertexCount,
             state.IndexCount,
-            state.MaterialKeys.ToImmutableArray())
-        { MaterialBaseColors = state.MaterialBaseColors.ToImmutableArray() };
+            [.. state.MaterialKeys])
+        { MaterialBaseColors = [.. state.MaterialBaseColors] };
     }
 
     /// <inheritdoc/>

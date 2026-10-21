@@ -13,7 +13,7 @@ public sealed class CodeEditorLaunchTests
     [TestMethod]
     public void CreateVisualStudioCodeOpensTheProjectAtTheLine()
     {
-        var start = CodeEditorLaunch.Create(new(CodeEditorPreference.CurrentVersion, CodeEditorKind.VisualStudioCode, null), @"C:\p\Content\move.lua", 12, 18, @"C:\p", @"C:\vs\Code.exe");
+        var start = CodeEditorLaunch.Create(new(CodeEditorPreference.CurrentVersion, CodeEditorKind.VisualStudioCode, CustomCommand: null), @"C:\p\Content\move.lua", 12, 18, @"C:\p", @"C:\vs\Code.exe");
 
         _ = start.FileName.Should().Be(@"C:\vs\Code.exe");
         _ = start.ArgumentList.Should().Equal(@"C:\p", "--goto", @"C:\p\Content\move.lua:12:18");
@@ -23,7 +23,7 @@ public sealed class CodeEditorLaunchTests
     [TestMethod]
     public void CreateVisualStudioCodeWithoutAnInstallationFails()
     {
-        var create = () => CodeEditorLaunch.Create(new(CodeEditorPreference.CurrentVersion, CodeEditorKind.VisualStudioCode, null), "move.lua", null, null, null, visualStudioCode: null);
+        var create = () => CodeEditorLaunch.Create(new(CodeEditorPreference.CurrentVersion, CodeEditorKind.VisualStudioCode, CustomCommand: null), "move.lua", line: null, column: null, projectRoot: null, visualStudioCode: null);
 
         _ = create.Should().Throw<InvalidOperationException>();
     }
@@ -31,7 +31,7 @@ public sealed class CodeEditorLaunchTests
     [TestMethod]
     public void CreateSystemDefaultOpensTheFileThroughTheShell()
     {
-        var start = CodeEditorLaunch.Create(new(CodeEditorPreference.CurrentVersion, CodeEditorKind.SystemDefault, null), @"C:\p\move.lua", 3, 1, null, null);
+        var start = CodeEditorLaunch.Create(new(CodeEditorPreference.CurrentVersion, CodeEditorKind.SystemDefault, CustomCommand: null), @"C:\p\move.lua", 3, 1, projectRoot: null, visualStudioCode: null);
 
         _ = start.FileName.Should().Be(@"C:\p\move.lua");
         _ = start.UseShellExecute.Should().BeTrue();
@@ -42,7 +42,7 @@ public sealed class CodeEditorLaunchTests
     {
         var preference = new CodeEditorPreference(CodeEditorPreference.CurrentVersion, CodeEditorKind.Custom, @"""C:\Tools\My Editor.exe"" -n{line} -c{column} ""{file}""");
 
-        var start = CodeEditorLaunch.Create(preference, @"C:\p\move.lua", 7, 4, null, null);
+        var start = CodeEditorLaunch.Create(preference, @"C:\p\move.lua", 7, 4, projectRoot: null, visualStudioCode: null);
 
         _ = start.FileName.Should().Be(@"C:\Tools\My Editor.exe");
         _ = start.ArgumentList.Should().Equal("-n7", "-c4", @"C:\p\move.lua");
@@ -53,7 +53,7 @@ public sealed class CodeEditorLaunchTests
     {
         var preference = new CodeEditorPreference(CodeEditorPreference.CurrentVersion, CodeEditorKind.Custom, @"C:\Tools\edit.exe --wait");
 
-        var start = CodeEditorLaunch.Create(preference, @"C:\p\move.lua", null, null, null, null);
+        var start = CodeEditorLaunch.Create(preference, @"C:\p\move.lua", line: null, column: null, projectRoot: null, visualStudioCode: null);
 
         _ = start.ArgumentList.Should().Equal("--wait", @"C:\p\move.lua");
     }

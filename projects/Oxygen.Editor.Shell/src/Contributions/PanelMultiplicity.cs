@@ -8,8 +8,8 @@ namespace Oxygen.Editor.Shell.Contributions;
 public enum PanelMultiplicity
 {
     /// <summary>One instance, shown in at most one window at a time.</summary>
-    Single,
+    Unique,
 
     /// <summary>Any number of independent instances.</summary>
-    Many,
+    Multiple,
 }

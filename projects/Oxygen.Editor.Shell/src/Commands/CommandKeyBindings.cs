@@ -116,18 +116,18 @@ public static class CommandKeyBindings
         // outside the frame and leave the place as it was.
         private void Record(DependencyObject? control)
         {
-            var parts = new List<WeakReference<DependencyObject>>();
+            var found = new List<WeakReference<DependencyObject>>();
             for (var current = control; current is not null; current = VisualTreeHelper.GetParent(current))
             {
                 if (ReferenceEquals(current, this.frame))
                 {
-                    this.parts = [.. parts];
+                    this.parts = [.. found];
                     return;
                 }
 
                 if (ReferenceEquals(current, control) || current is IViewFor)
                 {
-                    parts.Add(new(current));
+                    found.Add(new(current));
                 }
             }
         }

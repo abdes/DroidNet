@@ -110,9 +110,9 @@ public sealed class PlayerControlClientTests
         await using var client = await this.ConnectAsync(server).ConfigureAwait(false);
         var received = new List<PlayerEvent>();
         var two = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        client.EventReceived += (_, value) =>
+        client.EventReceived += (_, args) =>
         {
-            received.Add(value);
+            received.Add(args.Event);
             if (received.Count == 2)
             {
                 two.SetResult();

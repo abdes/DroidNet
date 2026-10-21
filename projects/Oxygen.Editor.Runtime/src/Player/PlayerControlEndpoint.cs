@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 
 namespace Oxygen.Editor.Runtime.Player;
@@ -50,12 +51,12 @@ public sealed record PlayerControlEndpoint(int Port, string Token)
 
             if (process.HasExited)
             {
-                throw new PlayerLaunchException($"The player exited with code {process.ExitCode} before it accepted the editor.");
+                throw new PlayerLaunchException(string.Create(CultureInfo.InvariantCulture, $"The player exited with code {process.ExitCode} before it accepted the editor."));
             }
 
             if (deadline.Elapsed > timeout)
             {
-                throw new PlayerLaunchException($"The player did not start its control server within {timeout.TotalSeconds:0} seconds.");
+                throw new PlayerLaunchException(string.Create(CultureInfo.InvariantCulture, $"The player did not start its control server within {timeout.TotalSeconds:0} seconds."));
             }
 
             await Task.Delay(PollInterval, cancellationToken).ConfigureAwait(false);
@@ -99,7 +100,7 @@ public sealed record PlayerControlEndpoint(int Port, string Token)
 
             return protocol.GetInt32() == Protocol
                 ? new PlayerControlEndpoint(port.GetInt32(), value)
-                : throw new PlayerLaunchException($"The player speaks control protocol {protocol.GetInt32()}; this editor speaks {Protocol}. Install a matching SDK.");
+                : throw new PlayerLaunchException(string.Create(CultureInfo.InvariantCulture, $"The player speaks control protocol {protocol.GetInt32()}; this editor speaks {Protocol}. Install a matching SDK."));
         }
         catch (Exception exception) when (exception is JsonException or InvalidOperationException or FormatException)
         {

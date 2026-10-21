@@ -10,8 +10,6 @@ using Microsoft.Extensions.Logging.Abstractions;
 
 namespace Oxygen.Editor.Projects;
 
-#pragma warning disable SA1204 // Each log method keeps its static and instance forms together
-
 /// <summary>Log messages.</summary>
 public partial class ProjectManagerService
 {

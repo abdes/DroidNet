@@ -73,7 +73,7 @@ internal static class ParametersExtensions
     /// <returns>A tuple containing the <see cref="AnchorPosition"/> and the relative dockable ID.</returns>
     /// <exception cref="InvalidOperationException">Thrown if multiple anchor positions are specified.</exception>
     /// <exception cref="ArgumentException">Thrown if the 'with' anchor position is used without a relative dockable ID.</exception>
-    internal static (AnchorPosition anchorPosition, string? relativeDockableId) AnchorInfoOrDefault(
+    internal static (AnchorPosition AnchorPosition, string? RelativeDockableId) AnchorInfoOrDefault(
         this IParameters parameters)
     {
         foreach (var anchor in Enum.GetNames<AnchorPosition>())
