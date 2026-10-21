@@ -6,7 +6,7 @@ This project adapts the shared `DroidNet.Routing` router to work as a **child ro
 
 In other words:
 
-- **Global/WinUI routing** typically selects a navigation *target* (often a `Window`) and loads the root route into that target.
+- **Global/WinUI routing** typically selects a navigation _target_ (often a `Window`) and loads the root route into that target.
 - **Local editor routing** always routes **inside the currently active target** and loads content into **outlets owned by view models**.
 
 ## What this module provides
@@ -20,6 +20,9 @@ In other words:
 - `LocalRouterContextProvider`
   - A context provider for local routers.
   - Always returns the same local context and treats it as “created” once `LocalRouter` is assigned.
+- `RouterScopeModule`
+  - The `DroidNet.Composition` module that gives a window or panel scope its own local router and view location (`IViewLocator`, `ViewModelToView`).
+  - Declares the services it shadows: the router and view location over the application root, and the local router context over an enclosing routed scope (a panel inside a window). It binds the scope's `LocalRouterContext.LocalRouter` to the scope's router when the scope opens.
 - `LocalRoutingExtensions`
   - `WithMvvm(...)` and `WithLocalRouting(...)` helpers to wire up a local router in a DryIoc container.
 
@@ -56,7 +59,7 @@ If you need to navigate to a different target (e.g., open/activate a different w
 
 ## Using it (DryIoc)
 
-The intended usage is to create a *dedicated child container* for the local router, register the local context and routes, then resolve the local `IRouter`.
+The intended usage is to create a _dedicated child container_ for the local router, register the local context and routes, then resolve the local `IRouter`.
 
 ```csharp
 using DroidNet.Routing;

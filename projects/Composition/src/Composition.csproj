@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <IsPackable>true</IsPackable>
+        <TargetFrameworks>net10.0;net10.0-windows10.0.26100.0</TargetFrameworks>
+
+        <Title>DroidNet.Composition</Title>
+        <Description>A chain of DryIoc scopes, each an empty container over its parent, populated by registration modules and owned by a tree of scope handles.</Description>
+        <PackageReadmeFile>README.md</PackageReadmeFile>
+        <PackageTags>dryioc;di;scopes;composition</PackageTags>
+        <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
+
+        <RootNamespace>$(RootNamespace).Composition</RootNamespace>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="DryIoc.Microsoft.DependencyInjection" />
+    </ItemGroup>
+
+</Project>
