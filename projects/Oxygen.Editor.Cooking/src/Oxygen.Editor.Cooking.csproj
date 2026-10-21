@@ -1,0 +1,44 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <UseWinUI>true</UseWinUI>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+
+        <Title>Oxygen Editor Cooking</Title>
+        <Description>The Cooking panel: the project's cook runs, their issues, output and assets.</Description>
+        <PackageTags>oxygen;gameengine</PackageTags>
+        <RootNamespace>Oxygen.Editor.Cooking</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="CommunityToolkit.Mvvm" />
+        <PackageReference Include="CommunityToolkit.WinUI.Controls.Sizers" />
+        <PackageReference Include="CommunityToolkit.WinUI.Extensions" />
+        <PackageReference Include="DryIoc.dll" />
+        <PackageReference Include="Microsoft.WindowsAppSDK" />
+        <PackageReference Include="Microsoft.Windows.SDK.BuildTools" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)/Controls/OutputConsole/src/Controls.OutputConsole.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Controls/ToolBars/src/Controls.ToolBars.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Hosting/src/Hosting.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Mvvm/src/Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Assets/src/Oxygen.Editor.Assets.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/src/Oxygen.Editor.ContentPipeline.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/src/Oxygen.Editor.Projects.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Assets/src/Oxygen.Managed.Assets.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Managed.Core/src/Oxygen.Managed.Core.csproj" />
+
+        <ProjectReference Include="$(ProjectsRoot)/Mvvm.Generators/src/Mvvm.Generators.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <ProjectReference Include="$(ProjectsRoot)/Mvvm.Generators.Attributes/src/Mvvm.Generators.Attributes.csproj" OutputItemType="Analyzer" ReferenceOutputAssembly="true" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <InternalsVisibleTo Include="Oxygen.Editor.Cooking.Unit.UI.Tests" />
+    </ItemGroup>
+
+</Project>
