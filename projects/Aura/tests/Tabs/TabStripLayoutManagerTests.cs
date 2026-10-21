@@ -25,10 +25,10 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, true, 50, 100),
-            new(1, true, 50, 100),
-            new(2, false, 50, 100),
-            new(3, false, 50, 100),
+            new(0, IsPinned: true, 50, 100),
+            new(1, IsPinned: true, 50, 100),
+            new(2, IsPinned: false, 50, 100),
+            new(3, IsPinned: false, 50, 100),
         };
         var request = new LayoutRequest(300, items);
 
@@ -57,9 +57,9 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 100),
-            new(1, false, 50, 100),
-            new(2, false, 50, 100),
+            new(0, IsPinned: false, 50, 100),
+            new(1, IsPinned: false, 50, 100),
+            new(2, IsPinned: false, 50, 100),
         };
         var request = new LayoutRequest(200, items);
 
@@ -85,7 +85,7 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 150),
+            new(0, IsPinned: false, 50, 150),
         };
         var request = new LayoutRequest(200, items);
 
@@ -130,9 +130,9 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, true, 50, 100),
-            new(1, true, 50, 100),
-            new(2, true, 50, 100),
+            new(0, IsPinned: true, 50, 100),
+            new(1, IsPinned: true, 50, 100),
+            new(2, IsPinned: true, 50, 100),
         };
         var request = new LayoutRequest(300, items);
 
@@ -159,8 +159,8 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 100),
-            new(1, false, 50, 100),
+            new(0, IsPinned: false, 50, 100),
+            new(1, IsPinned: false, 50, 100),
         };
         var request = new LayoutRequest(300, items);
 
@@ -187,9 +187,9 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 80),
-            new(1, false, 50, 80),
-            new(2, false, 50, 80),
+            new(0, IsPinned: false, 50, 80),
+            new(1, IsPinned: false, 50, 80),
+            new(2, IsPinned: false, 50, 80),
         };
         var request = new LayoutRequest(200, items);
 
@@ -216,7 +216,7 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 80),
+            new(0, IsPinned: false, 50, 80),
         };
         var request = new LayoutRequest(200, items);
 
@@ -240,7 +240,7 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 80),
+            new(0, IsPinned: false, 50, 80),
         };
         var request = new LayoutRequest(200, items);
 
@@ -262,8 +262,8 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 100),
-            new(1, false, 50, 100),
+            new(0, IsPinned: false, 50, 100),
+            new(1, IsPinned: false, 50, 100),
         };
         var request = new LayoutRequest(300, items);
 
@@ -287,9 +287,9 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 100),
-            new(1, false, 50, 100),
-            new(2, false, 50, 100),
+            new(0, IsPinned: false, 50, 100),
+            new(1, IsPinned: false, 50, 100),
+            new(2, IsPinned: false, 50, 100),
         };
         var request = new LayoutRequest(200, items);
 
@@ -315,8 +315,8 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 80, 100),
-            new(1, false, 80, 100),
+            new(0, IsPinned: false, 80, 100),
+            new(1, IsPinned: false, 80, 100),
         };
         var request = new LayoutRequest(100, items);
 
@@ -340,9 +340,9 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, true, 50, 100),
-            new(1, false, 50, 100),
-            new(2, false, 50, 100),
+            new(0, IsPinned: true, 50, 100),
+            new(1, IsPinned: false, 50, 100),
+            new(2, IsPinned: false, 50, 100),
         };
         var request = new LayoutRequest(150, items);
 
@@ -370,9 +370,9 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 100), // desired 100, min 50
-            new(1, false, 80, 100), // desired 100, min 80
-            new(2, false, 50, 100), // desired 100, min 50
+            new(0, IsPinned: false, 50, 100), // desired 100, min 50
+            new(1, IsPinned: false, 80, 100), // desired 100, min 80
+            new(2, IsPinned: false, 50, 100), // desired 100, min 50
         };
         var request = new LayoutRequest(180, items);
 
@@ -405,7 +405,7 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 150, 200),
+            new(0, IsPinned: false, 150, 200),
         };
         var request = new LayoutRequest(200, items);
 
@@ -427,7 +427,7 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 30),
+            new(0, IsPinned: false, 50, 30),
         };
         var request = new LayoutRequest(200, items);
 
@@ -450,7 +450,7 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 80),
+            new(0, IsPinned: false, 50, 80),
         };
         var request = new LayoutRequest(200, items);
 
@@ -473,8 +473,8 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, true, 50, 100),  // pinned with desired 100
-            new(1, false, 50, 100), // regular with desired 100
+            new(0, IsPinned: true, 50, 100),  // pinned with desired 100
+            new(1, IsPinned: false, 50, 100), // regular with desired 100
         };
         var request = new LayoutRequest(300, items);
 
@@ -504,8 +504,8 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, true, 50, 200),  // pinned with high desired 200, but should be clamped to 120 in Equal mode
-            new(1, false, 50, 100), // regular
+            new(0, IsPinned: true, 50, 200),  // pinned with high desired 200, but should be clamped to 120 in Equal mode
+            new(1, IsPinned: false, 50, 100), // regular
         };
         var request = new LayoutRequest(300, items);
 
@@ -534,9 +534,9 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 10, 33.3),
-            new(1, false, 10, 33.3),
-            new(2, false, 10, 33.3),
+            new(0, IsPinned: false, 10, 33.3),
+            new(1, IsPinned: false, 10, 33.3),
+            new(2, IsPinned: false, 10, 33.3),
         };
         var request = new LayoutRequest(80, items); // sum desired 99.9, available 80, deficit 19.9, shrink ~6.63 each, widths ~26.67
 
@@ -582,8 +582,8 @@ public class TabStripLayoutManagerTests
         // Arrange
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 100),
-            new(1, false, 50, 100),
+            new(0, IsPinned: false, 50, 100),
+            new(1, IsPinned: false, 50, 100),
         };
         var request = new LayoutRequest(150, items);
 
@@ -623,7 +623,7 @@ public class TabStripLayoutManagerTests
         };
         var items = new List<LayoutPerItemInput>
         {
-            new(0, false, 50, 100),
+            new(0, IsPinned: false, 50, 100),
         };
         var request = new LayoutRequest(150, items);
 

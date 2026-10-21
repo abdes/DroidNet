@@ -98,7 +98,7 @@ public class MainShellTitleBarTests : VisualUserInterfaceTests
 
     private static void AssertInteractiveBounds(MainShellView shell, FrameworkElement element)
     {
-        var bounds = element.TransformToVisual(null).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
+        var bounds = element.TransformToVisual(visual: null).TransformBounds(new Rect(0, 0, element.ActualWidth, element.ActualHeight));
         var scale = shell.XamlRoot.RasterizationScale;
         _ = GetPassthroughRegions().Should().Contain(region =>
             region.X == (int)(bounds.X * scale)

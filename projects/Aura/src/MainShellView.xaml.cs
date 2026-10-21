@@ -175,7 +175,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         {
             if (!this.titleBarWindowClosed)
             {
-                window.SetTitleBar(null);
+                window.SetTitleBar(titleBar: null);
             }
 
             window.Closed -= this.OnTitleBarWindowClosed;
