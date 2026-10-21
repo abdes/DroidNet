@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="MSTest.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+        <RootNamespace>Oxygen.Editor.SceneInspector.Unit.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <DroidNetTestTier>Unit</DroidNetTestTier>
+        <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Moq" />
+        <PackageReference Include="Testably.Abstractions.Testing" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="../../src/Oxygen.Editor.SceneInspector.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/testing/Oxygen.Editor.ContentPipeline.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Input/testing/Oxygen.Editor.Input.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Projects/testing/Oxygen.Editor.Projects.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Scenes/testing/Oxygen.Editor.Scenes.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Scripting/testing/Oxygen.Editor.Scripting.Testing.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Shell/testing/Oxygen.Editor.Shell.Testing.csproj" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <Compile Include="../../testsupport/Authoring/SceneAuthoringFixture.cs" Link="TestSupport/SceneAuthoringFixture.cs" />
+        <Compile Include="../../testsupport/Authoring/SceneTestData.cs" Link="TestSupport/SceneTestData.cs" />
+    </ItemGroup>
+
+</Project>

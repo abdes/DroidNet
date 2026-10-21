@@ -77,6 +77,7 @@ EDITOR_LAYERS: dict[str, Layer] = {
     "Oxygen.Editor.ProjectBrowser": Layer.FEATURE,
     "Oxygen.Editor.SceneEditor": Layer.FEATURE,
     "Oxygen.Editor.SceneExplorer": Layer.FEATURE,
+    "Oxygen.Editor.SceneInspector": Layer.FEATURE,
     "Oxygen.Editor.WorldEditor": Layer.FEATURE,
     "Oxygen.Editor.Pickers": Layer.SHARED_UI,
     **{name: Layer.DOMAIN for name in DOMAIN_RANK},
@@ -118,6 +119,10 @@ PENDING_REFERENCES: dict[tuple[str, str], str] = {
     (
         "Oxygen.Editor.WorldEditor",
         "Oxygen.Editor.MaterialEditor",
+    ): DISSOLVE_WORLD_EDITOR,
+    (
+        "Oxygen.Editor.WorldEditor",
+        "Oxygen.Editor.SceneInspector",
     ): DISSOLVE_WORLD_EDITOR,
     ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Runtime"): DISSOLVE_WORLD_EDITOR,
     ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Interop"): DISSOLVE_WORLD_EDITOR,

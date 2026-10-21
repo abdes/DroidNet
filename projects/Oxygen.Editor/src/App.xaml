@@ -7,7 +7,7 @@
             <ResourceDictionary.MergedDictionaries>
                 <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
                 <ResourceDictionary Source="ms-appx:///DroidNet.Docking/Themes/Generic.xaml" />
-                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.WorldEditor/Themes/Generic.xaml" />
+                <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneInspector/Themes/Generic.xaml" />
                 <ResourceDictionary Source="ms-appx:///Oxygen.Editor.SceneEditor/Themes/Generic.xaml" />
                 <ResourceDictionary Source="ms-appx:///Styles/FontSizes.xaml" />
                 <ResourceDictionary Source="ms-appx:///Styles/Thickness.xaml" />
