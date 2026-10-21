@@ -23,6 +23,12 @@ public interface IPlacementService
     /// <returns><see langword="true"/> when the panel is shown.</returns>
     public Task<bool> ShowPanelAsync(string panelId, WindowPlacement placement = WindowPlacement.Current);
 
+    /// <summary>Shows panels so that each one is visible: a panel that shares a dock with a later one moves to a dock of its own.</summary>
+    /// <param name="panelIds">The panels' identities, in the order they are shown; the last is in front where panels still share a dock.</param>
+    /// <param name="placement">Where to show them.</param>
+    /// <returns><see langword="true"/> when every panel is shown.</returns>
+    public Task<bool> ShowPanelsAsync(IReadOnlyList<string> panelIds, WindowPlacement placement = WindowPlacement.Current);
+
     /// <summary>Sets the title a panel's tab shows, for a panel whose title follows its state, such as its problem counts.</summary>
     /// <remarks>A panel that is not shown yet shows the title when it appears.</remarks>
     /// <param name="panelId">The panel's identity.</param>

@@ -25,6 +25,12 @@ public interface ISceneSelectionService
     public event EventHandler<SceneSelectionChangedEventArgs>? SelectionChanged;
 
     /// <summary>
+    /// Raised when a part asks for a property of a scene to be focused, such as the cook issue that names it. The panel
+    /// that edits the scene's properties focuses it once the scene is the one it shows.
+    /// </summary>
+    public event EventHandler<ScenePropertyFocusEventArgs>? PropertyFocusRequested;
+
+    /// <summary>
     /// Sets the selected scene-node identities for a document, classified as a
     /// node selection with the last node as primary.
     /// </summary>
@@ -71,4 +77,10 @@ public interface ISceneSelectionService
     /// <param name="documentId">The document identity.</param>
     /// <returns>The selection context, or <see cref="SceneSelectionContext.Empty"/> when none.</returns>
     public SceneSelectionContext GetContext(DocumentId documentId);
+
+    /// <summary>Asks for a property of a scene document to be focused, once the scene's properties are shown.</summary>
+    /// <param name="documentId">The scene document.</param>
+    /// <param name="propertyPath">The stable property path.</param>
+    /// <param name="source">The requester.</param>
+    public void RequestPropertyFocus(DocumentId documentId, string propertyPath, string source);
 }

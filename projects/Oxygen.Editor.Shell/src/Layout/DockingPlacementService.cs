@@ -36,6 +36,28 @@ public sealed class DockingPlacementService(IDocumentService documents, IDocker 
     }
 
     /// <inheritdoc/>
+    public async Task<bool> ShowPanelsAsync(IReadOnlyList<string> panelIds, WindowPlacement placement = WindowPlacement.Current)
+    {
+        ArgumentNullException.ThrowIfNull(panelIds);
+        var dockables = panelIds.Select(Dockable.FromId).ToArray();
+        for (var index = 0; index < dockables.Length - 1; index++)
+        {
+            if (dockables[index] is { } earlier && dockables.Skip(index + 1).Any(later => later is not null && ReferenceEquals(later.Owner, earlier.Owner)))
+            {
+                this.MoveToOwnDock(earlier);
+            }
+        }
+
+        var shown = true;
+        foreach (var panelId in panelIds)
+        {
+            shown &= await this.ShowPanelAsync(panelId, placement).ConfigureAwait(true);
+        }
+
+        return shown;
+    }
+
+    /// <inheritdoc/>
     public void SetPanelTitle(string panelId, string title)
     {
         ArgumentException.ThrowIfNullOrEmpty(panelId);
@@ -43,6 +65,28 @@ public sealed class DockingPlacementService(IDocumentService documents, IDocker 
         if (Dockable.FromId(panelId) is { } dockable)
         {
             dockable.Title = title;
+        }
+    }
+
+    private void MoveToOwnDock(Dockable dockable)
+    {
+        if (dockable.Owner is not { } shared)
+        {
+            return;
+        }
+
+        shared.DisownDockable(dockable);
+        var dock = ToolDock.New();
+        dock.AdoptDockable(dockable);
+        var anchor = new Anchor(AnchorPosition.Right);
+        try
+        {
+            docker.Dock(dock, anchor);
+            anchor = null;
+        }
+        finally
+        {
+            anchor?.Dispose();
         }
     }
 }

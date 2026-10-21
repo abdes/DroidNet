@@ -93,6 +93,7 @@ public sealed partial class ContentBrowserViewModel(
     // Navigation history management
     private readonly List<string> navigationHistory = [];
 
+    private ContentBrowserAssetReveal? assetReveal;
     private IContainer? childContainer;
     private string currentAssetsViewPath = "assets/tiles"; // tracks whether we show list or tiles
     private int currentHistoryIndex = -1;
@@ -172,6 +173,9 @@ public sealed partial class ContentBrowserViewModel(
     /// <inheritdoc />
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
+        this.assetReveal = container.Resolve<ContentBrowserAssetReveal>(IfUnresolved.ReturnDefault);
+        this.assetReveal?.Attach(this);
+
         // One-time initialization for singleton
         if (!this.isInitialized)
         {
@@ -312,6 +316,7 @@ public sealed partial class ContentBrowserViewModel(
         if (disposing)
         {
             this.isDisposed = true;
+            this.assetReveal?.Detach(this);
             this.routerEventsSubscription?.Dispose();
 
             this.browserState?.PropertyChanged -= this.OnContentBrowserStateChanged;

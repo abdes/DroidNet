@@ -29,7 +29,6 @@ using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Layout;
 using Oxygen.Editor.Shell.Windows;
-using Oxygen.Editor.World.Cooking;
 using Oxygen.Editor.World.Diagnostics;
 using Oxygen.Editor.World.Documents;
 using Oxygen.Editor.World.Inspector;
@@ -53,7 +52,7 @@ namespace Oxygen.Editor.World.Workspace;
 ///     inside the workspace must always use the child container, and that navigations, even the absolute
 ///     ones, will always be relative to the workspace.
 /// </remarks>
-public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWorkspaceActions
+public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 {
     private readonly IContainer container;
     private readonly IReadOnlyList<IFeatureModule> modules;
@@ -66,7 +65,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
     private readonly ILogger logger;
     private SceneDocumentLifetime? sceneLifetime;
     private IDocumentService? documentService;
-    private Oxygen.Editor.ContentPipeline.Cooking.IUnsavedCookInputs? unsavedCookInputs;
     private IDocumentArea? documentArea;
     private IPlacementService? placement;
     private IAssetCatalog? assetCatalog;
@@ -256,7 +254,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         // The document service follows the window's tabs before anything opens a document, and the window's close asks
         // about its documents.
         this.documentService = childContainer.Resolve<IDocumentService>();
-        this.unsavedCookInputs = childContainer.Resolve<Oxygen.Editor.ContentPipeline.Cooking.IUnsavedCookInputs>();
         this.documentArea = childContainer.Resolve<IDocumentArea>();
         this.placement = childContainer.Resolve<IPlacementService>();
         _ = childContainer.Resolve<DocumentAreaViewModel>();
@@ -318,17 +315,9 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
             _ = this.previewSession?.DisposeAsync();
             this.previewSession = null;
 
-            if (this.cookingPanel is not null)
-            {
-                this.cookingPanel.RevealRequested -= this.OnCookingRevealRequested;
-                this.cookingPanel.Dispose();
-                this.cookingPanel = null;
-            }
-
             this.sceneLifetime?.Dispose();
             this.sceneLifetime = null;
             this.documentService = null;
-            this.unsavedCookInputs = null;
             this.documentArea = null;
             this.placement = null;
             this.assetCatalog = null;
@@ -371,10 +360,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
                     },
                     new Route
                     {
-                        Outlet = "cook", Path = "cook", MatchMethod = PathMatch.Full, ViewModelType = typeof(CookingPanelViewModel),
-                    },
-                    new Route
-                    {
                         Outlet = InspectorDockId, Path = InspectorDockId, MatchMethod = PathMatch.Full, ViewModelType = typeof(Oxygen.Editor.World.Inspection.CookedInspectionViewModel),
                     },
                     .. modules.SelectMany(static module => module.Panels).Select(static panel => new Route
@@ -390,7 +375,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         => childContainer.RegisterDelegate(
             _ => new ContributionRegistry(
                 [
-                    new PanelDescriptor("cook", "Cooking", typeof(CookingPanelViewModel)),
                     new PanelDescriptor(InspectorDockId, "Cooked Inspector", typeof(Oxygen.Editor.World.Inspection.CookedInspectionViewModel)),
                     .. modules.SelectMany(static module => module.Panels),
                 ],
@@ -458,11 +442,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel, ICookingWor
         this.previewSession = childContainer.Resolve<PreviewSession>();
         this.ObservePreviewSession();
 
-        childContainer.RegisterInstance<ICookingWorkspaceActions>(this);
-        childContainer.Register<CookingPanelViewModel>(Reuse.Singleton);
-        childContainer.Register<CookingPanelView>(Reuse.Transient);
-        this.cookingPanel = childContainer.Resolve<CookingPanelViewModel>();
-        this.cookingPanel.RevealRequested += this.OnCookingRevealRequested;
     }
 
     private async Task OpenInitialSceneAsync()

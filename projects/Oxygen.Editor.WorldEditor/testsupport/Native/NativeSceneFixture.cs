@@ -46,7 +46,7 @@ using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Cooking;
+using Oxygen.Editor.Cooking;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.World.Messages;
 using Oxygen.Editor.World.SceneEditor;
@@ -195,7 +195,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
 
     private IScenePreview Preview => this.preview ?? throw new InvalidOperationException("The fixture shows its scene once it initializes.");
 
-    public CookingPanelViewModel CreateTimingCookingPanel(CatalogWorkloadServices services) => new(services.Runs, services.Pipeline, services.Projects, Mock.Of<ICookingWorkspaceActions>(), this.hosting);
+    public CookingPanelViewModel CreateTimingCookingPanel(CatalogWorkloadServices services) => new(services.Runs, services.Pipeline, services.Projects, Mock.Of<ICookRecovery>(), this.hosting);
 
     /// <summary>Has the open scene follow the relocations a service commits, as its scene editor would.</summary>
     /// <param name="relocation">The relocation service.</param>

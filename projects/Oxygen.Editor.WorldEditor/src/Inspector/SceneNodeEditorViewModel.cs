@@ -54,7 +54,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
     private readonly EnvironmentViewModel environmentEditor;
     private readonly NodeRenderingViewModel renderingEditor;
     private readonly ISceneSelectionService sceneSelectionService;
-    private (SceneId sceneId, string property)? pendingEnvironmentFocus;
+    private (DocumentId document, string property)? pendingEnvironmentFocus;
 
     private bool isDisposed;
     private Document? watchedDocument;
@@ -120,6 +120,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.VmToViewConverter = vmToViewConverter;
         this.dispatcher = hosting.Dispatcher;
         this.scenePreview.PendingFieldsChanged += this.OnPendingFieldsChanged;
+        this.sceneSelectionService.PropertyFocusRequested += this.OnPropertyFocusRequested;
         this.scenePreview.ReadyChanged += this.OnPreviewReadyChanged;
 
         this.selectionObserver = new(this.dispatcher, this.OnSelectionObserved);
@@ -316,6 +317,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         }
 
         this.scenePreview.PendingFieldsChanged -= this.OnPendingFieldsChanged;
+        this.sceneSelectionService.PropertyFocusRequested -= this.OnPropertyFocusRequested;
         this.scenePreview.ReadyChanged -= this.OnPreviewReadyChanged;
         this.documentArea.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
         this.WatchContent(document: null);
@@ -340,15 +342,6 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.LogDisposed();
 
         this.isDisposed = true;
-    }
-
-    /// <summary>Focuses a scene environment property once its document is active and loaded.</summary>
-    /// <param name="sceneId">The exact scene to inspect.</param>
-    /// <param name="property">The stable environment property path.</param>
-    public void FocusEnvironmentField(SceneId sceneId, string property)
-    {
-        this.pendingEnvironmentFocus = (sceneId, property);
-        this.ApplyPendingEnvironmentFocus();
     }
 
     /// <summary>Undoes the inspected scene's last edit through its authoring.</summary>
@@ -691,7 +684,7 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
 
     private void ApplyPendingEnvironmentFocus()
     {
-        if (this.pendingEnvironmentFocus is not { } target || this.activeScene?.Id != target.sceneId)
+        if (this.pendingEnvironmentFocus is not { } target || this.activeScene is null || this.activeDocumentId != target.document)
         {
             return;
         }
@@ -701,6 +694,13 @@ public sealed partial class SceneNodeEditorViewModel : MultiSelectionDetails<Sce
         this.environmentEditor.SetScene(this.activeScene);
         this.UpdateItemsCollection(this.items);
         this.environmentEditor.RequestFieldFocus(target.property);
+    }
+
+    // The scene's properties show once the scene is the shown one; until then the request waits.
+    private void OnPropertyFocusRequested(object? sender, ScenePropertyFocusEventArgs args)
+    {
+        this.pendingEnvironmentFocus = (args.DocumentId, args.PropertyPath);
+        this.ApplyPendingEnvironmentFocus();
     }
 
     private SceneAuthoring? AuthoringOf()

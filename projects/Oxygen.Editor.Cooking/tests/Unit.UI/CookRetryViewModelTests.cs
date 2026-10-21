@@ -12,12 +12,12 @@ using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
-using Oxygen.Editor.World.Cooking;
+using Oxygen.Editor.Cooking;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Cooking;
+namespace Oxygen.Editor.Cooking.Unit.UI.Tests;
 
 [TestClass]
 internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfaceTests
@@ -53,7 +53,7 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
         _ = pipeline.Setup(value => value.ReimportSourceAsync(source, project, It.IsAny<CancellationToken>())).ReturnsAsync(result);
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
-        using var model = new CookingPanelViewModel(runs.Object, pipeline.Object, projects, Mock.Of<ICookingWorkspaceActions>(), hosting);
+        using var model = new CookingPanelViewModel(runs.Object, pipeline.Object, projects, Mock.Of<ICookRecovery>(), hosting);
         _ = model.SelectedRun!.Kind.Should().Be("Source");
         await model.RetryCommand.ExecuteAsync(parameter: null).ConfigureAwait(true);
         _ = model.ActionError.Should().BeEmpty();
@@ -67,7 +67,7 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
     public Task CookingRetryCooksTheSameChangedSources() => EnqueueAsync(async () =>
     {
         AssetPath[] assets = [AssetPath.Parse("/Content/Materials/Red.omat"), AssetPath.Parse("/Content/Input/Player.input")];
-        var actions = new Mock<ICookingWorkspaceActions>();
+        var actions = new Mock<ICookRecovery>();
         _ = actions.Setup(value => value.SaveInputsAsync(It.IsAny<CookRunRequest>())).ReturnsAsync(value: true);
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.CookAssetsAsync(It.IsAny<IReadOnlyList<AssetPath>>(), It.IsAny<CancellationToken>()))
@@ -84,7 +84,7 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
     [TestMethod]
     public Task CookingRetryDoesNotCookWhenInputsAreNotSaved() => EnqueueAsync(async () =>
     {
-        var actions = new Mock<ICookingWorkspaceActions>();
+        var actions = new Mock<ICookRecovery>();
         _ = actions.Setup(value => value.SaveInputsAsync(It.IsAny<CookRunRequest>())).ReturnsAsync(value: false);
         var pipeline = new Mock<IContentPipelineService>(MockBehavior.Strict);
         using var model = CreateModel("Scenes", new(CookTargetKind.Project, ScopeUri: null), actions.Object, pipeline.Object);
@@ -100,7 +100,7 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
     public Task CookingRetryOfCurrentSceneCooksTheCurrentScene() => EnqueueAsync(async () =>
     {
         var scope = AssetPath.Parse("/Content/Scenes/Main.oscene");
-        var actions = new Mock<ICookingWorkspaceActions>();
+        var actions = new Mock<ICookRecovery>();
         _ = actions.Setup(value => value.SaveInputsAsync(It.IsAny<CookRunRequest>())).ReturnsAsync(value: true);
         var pipeline = new Mock<IContentPipelineService>();
         _ = pipeline.Setup(value => value.CookCurrentSceneAsync(scope, It.IsAny<CancellationToken>()))
@@ -111,7 +111,7 @@ internal sealed class CookRetryViewModelTests : DroidNet.Tests.VisualUserInterfa
         pipeline.Verify(value => value.CookCurrentSceneAsync(scope, It.IsAny<CancellationToken>()), Times.Once());
     });
 
-    private static CookingPanelViewModel CreateModel(string displayName, CookRunRequest request, ICookingWorkspaceActions actions, IContentPipelineService pipeline)
+    private static CookingPanelViewModel CreateModel(string displayName, CookRunRequest request, ICookRecovery actions, IContentPipelineService pipeline)
     {
         var projects = new ProjectContextService();
         var project = TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), Guid.NewGuid().ToString("N"))).Context with { Name = "Retry" };

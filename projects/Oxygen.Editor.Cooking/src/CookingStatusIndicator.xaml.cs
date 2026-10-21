@@ -7,7 +7,7 @@ using Microsoft.UI.Xaml.Automation;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.ContentPipeline.Cooking;
 
-namespace Oxygen.Editor.World.Cooking;
+namespace Oxygen.Editor.Cooking;
 
 /// <summary>Uses WinUI semantic theme resources for a cook or asset status.</summary>
 public sealed partial class CookingStatusIndicator : UserControl

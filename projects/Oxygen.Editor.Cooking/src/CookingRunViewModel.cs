@@ -15,7 +15,7 @@ using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Serilog.Events;
 
-namespace Oxygen.Editor.World.Cooking;
+namespace Oxygen.Editor.Cooking;
 
 /// <summary>Maintains stable presentation collections for one session cook.</summary>
 public sealed partial class CookingRunViewModel : ObservableObject

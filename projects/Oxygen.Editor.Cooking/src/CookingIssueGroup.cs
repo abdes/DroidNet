@@ -5,7 +5,7 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 
-namespace Oxygen.Editor.World.Cooking;
+namespace Oxygen.Editor.Cooking;
 
 /// <summary>Groups recovery issues under their affected asset.</summary>
 public sealed partial class CookingIssueGroup : ObservableObject

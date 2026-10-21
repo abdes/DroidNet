@@ -11,7 +11,7 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects;
 
-namespace Oxygen.Editor.World.Cooking;
+namespace Oxygen.Editor.Cooking;
 
 /// <summary>Projects scoped cook history without moving selection for background updates.</summary>
 public sealed partial class CookingPanelViewModel : ObservableObject, IDisposable
@@ -19,7 +19,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     private readonly ICookRunService runs;
     private readonly IContentPipelineService pipeline;
     private readonly IProjectContextService projects;
-    private readonly ICookingWorkspaceActions workspace;
+    private readonly ICookRecovery recovery;
     private readonly HostingContext hosting;
     private readonly Dictionary<Guid, CookingRunViewModel> items = [];
     private readonly Lock pendingLock = new();
@@ -32,19 +32,19 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     /// <param name="runs">The coordinator's run history and controls.</param>
     /// <param name="pipeline">The shared cook entry points for every scope.</param>
     /// <param name="projects">The active project identity.</param>
-    /// <param name="workspace">Document/property recovery navigation.</param>
+    /// <param name="recovery">Document/property recovery navigation.</param>
     /// <param name="hosting">The authoring dispatcher.</param>
     public CookingPanelViewModel(
         ICookRunService runs,
         IContentPipelineService pipeline,
         IProjectContextService projects,
-        ICookingWorkspaceActions workspace,
+        ICookRecovery recovery,
         HostingContext hosting)
     {
         this.runs = runs;
         this.pipeline = pipeline;
         this.projects = projects;
-        this.workspace = workspace;
+        this.recovery = recovery;
         this.hosting = hosting;
         this.runs.RunChanged += this.OnRunChanged;
         foreach (var run in this.runs.Runs)
@@ -241,7 +241,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
         var run = selected.Snapshot;
         try
         {
-            if (!await this.workspace.InspectAsync(run).ConfigureAwait(true) && this.SelectedRun?.Snapshot.OperationId == run.OperationId)
+            if (!await this.recovery.InspectAsync(run).ConfigureAwait(true) && this.SelectedRun?.Snapshot.OperationId == run.OperationId)
             {
                 this.ActionError = "The inspection document could not be opened.";
             }
@@ -269,7 +269,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
         this.ActionError = string.Empty;
         try
         {
-            if (!await this.workspace.ShowImportedAssetsAsync(run).ConfigureAwait(true) && this.SelectedRun?.Snapshot.OperationId == run.OperationId)
+            if (!await this.recovery.ShowImportedAssetsAsync(run).ConfigureAwait(true) && this.SelectedRun?.Snapshot.OperationId == run.OperationId)
             {
                 this.ActionError = "The imported assets are no longer available in this project.";
             }
@@ -296,7 +296,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
     private async Task GoToPropertyAsync(CookingIssueViewModel? issue)
     {
         if (issue is not null && this.SelectedRun is { } selected
-            && !await this.workspace.GoToPropertyAsync(selected.Snapshot, issue.Diagnostic).ConfigureAwait(true))
+            && !await this.recovery.GoToPropertyAsync(selected.Snapshot, issue.Diagnostic).ConfigureAwait(true))
         {
             this.ActionError = "The affected property is no longer available.";
         }
@@ -320,7 +320,7 @@ public sealed partial class CookingPanelViewModel : ObservableObject, IDisposabl
                 return;
             }
 
-            if (!await this.workspace.SaveInputsAsync(request).ConfigureAwait(true))
+            if (!await this.recovery.SaveInputsAsync(request).ConfigureAwait(true))
             {
                 return;
             }

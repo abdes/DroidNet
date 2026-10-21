@@ -11,10 +11,10 @@ using Microsoft.UI.Xaml.Automation.Provider;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.World.Cooking;
+using Oxygen.Editor.Cooking;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Cooking;
+namespace Oxygen.Editor.Cooking.Unit.UI.Tests;
 
 /// <summary>Checks the reader's position and selection through incoming messages and run switches.</summary>
 public sealed partial class CookingPanelControlTests

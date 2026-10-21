@@ -14,7 +14,7 @@ using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Status;
-using Oxygen.Editor.World.Cooking;
+using Oxygen.Editor.Cooking;
 using Oxygen.Editor.World.Inspector;
 using Oxygen.Editor.WorldEditor.TestSupport;
 using Oxygen.Managed.Core;
@@ -99,9 +99,9 @@ public sealed partial class MainCookRepairTests : DroidNet.Tests.VisualUserInter
         return root;
     }
 
-    private static Mock<ICookingWorkspaceActions> CreateMainRepairActions(NativeSceneFixture fixture)
+    private static Mock<ICookRecovery> CreateMainRepairActions(NativeSceneFixture fixture)
     {
-        var actions = new Mock<ICookingWorkspaceActions>();
+        var actions = new Mock<ICookRecovery>();
         _ = actions.Setup(value => value.GoToPropertyAsync(It.IsAny<CookRunSnapshot>(), It.IsAny<DiagnosticRecord>())).Returns<CookRunSnapshot, DiagnosticRecord>((run, issue) =>
         {
             _ = run.ProjectId.Should().Be(fixture.Projects.ActiveProject!.ProjectId);

@@ -108,10 +108,6 @@ PENDING_REFERENCES: dict[tuple[str, str], str] = {
     ): DISSOLVE_WORLD_EDITOR,
     (
         "Oxygen.Editor.WorldEditor",
-        "Oxygen.Editor.Cooking",
-    ): DISSOLVE_WORLD_EDITOR,
-    (
-        "Oxygen.Editor.WorldEditor",
         "Oxygen.Editor.MaterialEditor",
     ): DISSOLVE_WORLD_EDITOR,
     ("Oxygen.Editor.WorldEditor", "Oxygen.Editor.Runtime"): DISSOLVE_WORLD_EDITOR,

@@ -23,6 +23,9 @@ public sealed class SceneSelectionService : ISceneSelectionService
     public event EventHandler<SceneSelectionChangedEventArgs>? SelectionChanged;
 
     /// <inheritdoc />
+    public event EventHandler<ScenePropertyFocusEventArgs>? PropertyFocusRequested;
+
+    /// <inheritdoc />
     public void SetSelection(DocumentId documentId, IReadOnlyList<SceneNode> nodes, string source)
     {
         ArgumentNullException.ThrowIfNull(nodes);
@@ -144,6 +147,14 @@ public sealed class SceneSelectionService : ISceneSelectionService
     /// <inheritdoc />
     public SceneSelectionContext GetContext(DocumentId documentId)
         => this.contexts.TryGetValue(documentId, out var context) ? context : SceneSelectionContext.Empty;
+
+    /// <inheritdoc />
+    public void RequestPropertyFocus(DocumentId documentId, string propertyPath, string source)
+    {
+        ArgumentException.ThrowIfNullOrEmpty(propertyPath);
+        ArgumentException.ThrowIfNullOrEmpty(source);
+        this.PropertyFocusRequested?.Invoke(this, new ScenePropertyFocusEventArgs(documentId, propertyPath, source));
+    }
 
     private static HashSet<FolderId> GetFolderIds(IList<ExplorerEntryData> layout)
     {

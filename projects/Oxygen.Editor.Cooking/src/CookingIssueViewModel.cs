@@ -6,7 +6,7 @@ using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Managed.Core.Diagnostics;
 
-namespace Oxygen.Editor.World.Cooking;
+namespace Oxygen.Editor.Cooking;
 
 /// <summary>Presents a short issue and its scoped recovery action.</summary>
 /// <param name="diagnostic">The immutable diagnostic, including its navigation identity.</param>

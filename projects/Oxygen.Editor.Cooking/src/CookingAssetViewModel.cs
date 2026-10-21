@@ -5,7 +5,7 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.ContentPipeline.Cooking;
 
-namespace Oxygen.Editor.World.Cooking;
+namespace Oxygen.Editor.Cooking;
 
 /// <summary>Places an asset's status next to its name and type.</summary>
 /// <param name="asset">The identified asset and execution state.</param>

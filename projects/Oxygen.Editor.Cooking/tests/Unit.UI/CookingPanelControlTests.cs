@@ -20,12 +20,12 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
-using Oxygen.Editor.World.Cooking;
+using Oxygen.Editor.Cooking;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
-namespace Oxygen.Editor.WorldEditor.Unit.UI.Tests.Cooking;
+namespace Oxygen.Editor.Cooking.Unit.UI.Tests;
 
 /// <summary>Exercises the real cooking panel's compact layout, native feedback, and scrolling.</summary>
 [TestClass]
@@ -134,7 +134,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     [DataRow(960d)]
     public Task InspectButtonBelongsToTheSelectedRunHeader(double width) => EnqueueAsync(async () =>
     {
-        var actions = new Mock<ICookingWorkspaceActions>();
+        var actions = new Mock<ICookRecovery>();
         _ = actions.Setup(value => value.InspectAsync(It.IsAny<CookRunSnapshot>())).ReturnsAsync(value: true);
         using var model = CreateModel(actions.Object);
         var selected = model.SelectedRun!;
@@ -170,7 +170,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
     [DataRow(960d)]
     public Task ImportedAssetsNavigationIsCompactAndExplicit(double width) => EnqueueAsync(async () =>
     {
-        var actions = new Mock<ICookingWorkspaceActions>();
+        var actions = new Mock<ICookRecovery>();
         _ = actions.Setup(value => value.ShowImportedAssetsAsync(It.IsAny<CookRunSnapshot>())).ReturnsAsync(value: true);
         var source = AssetPath.Parse("/Content/Models/Model/model.gltf");
         var output = AssetPath.Parse("/Content/Models/Model/model.gltf/Mesh.ogeo");
@@ -501,7 +501,7 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         }
     }
 
-    private static CookingPanelViewModel CreateModel(ICookingWorkspaceActions? actions = null, Mock<ICookRunService>? runService = null, Func<CookRunSnapshot, CookRunSnapshot>? configure = null)
+    private static CookingPanelViewModel CreateModel(ICookRecovery? actions = null, Mock<ICookRunService>? runService = null, Func<CookRunSnapshot, CookRunSnapshot>? configure = null)
     {
         var projects = new ProjectContextService();
         var projectId = Guid.NewGuid();
@@ -541,6 +541,6 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         _ = runs.SetupGet(service => service.Runs).Returns(new[] { run });
         var dispatcher = DispatcherQueue.GetForCurrentThread();
         var hosting = new HostingContext { Application = Application.Current, Dispatcher = dispatcher, DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher) };
-        return new(runs.Object, Mock.Of<IContentPipelineService>(), projects, actions ?? Mock.Of<ICookingWorkspaceActions>(), hosting);
+        return new(runs.Object, Mock.Of<IContentPipelineService>(), projects, actions ?? Mock.Of<ICookRecovery>(), hosting);
     }
 }

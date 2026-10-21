@@ -8,7 +8,7 @@ using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
-namespace Oxygen.Editor.World.Cooking;
+namespace Oxygen.Editor.Cooking;
 
 /// <summary>Preserves each run's reading position and follows output through the shared details scroller.</summary>
 public sealed partial class CookingPanelView

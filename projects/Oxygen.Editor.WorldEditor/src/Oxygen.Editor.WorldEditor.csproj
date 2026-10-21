@@ -50,7 +50,6 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Input\src\Oxygen.Editor.Input.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Shell\src\Oxygen.Editor.Shell.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Documents\src\Oxygen.Editor.Documents.csproj" />
-        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Cooking\src\Oxygen.Editor.Cooking.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.MaterialEditor\src\Oxygen.Editor.MaterialEditor.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Pickers\src\Oxygen.Editor.Pickers.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Interop\src\Oxygen.Editor.Interop.vcxproj" />
