@@ -89,13 +89,13 @@ A guideline for the implementation is to think `Strategy` pattern, and automatic
 
 ### Esc or Errors during drag/drop
 
-  From the control's perspective, a drag or a drop is always completed — the gesture ends, and the
-  pointer is captured/released. `Esc` does not cancel the operation, but instead is interpreted as a
-  drop. It is the application's responsibility to handle errors appropriately when they occur inside
-  the application. Unrecoverable errors inside the control will abort the operation, the pointer
-  will be released, if captured, and the `TabDragComplete` will be triggered even with no target
-  `TabStrip` or `NewIndex`. Whenever possible, the control will try to leave its items in a
-  consistent state, but does not guarantee that.
+From the control's perspective, a drag or a drop is always completed — the gesture ends, and the
+pointer is captured/released. `Esc` does not cancel the operation, but instead is interpreted as a
+drop. It is the application's responsibility to handle errors appropriately when they occur inside
+the application. Unrecoverable errors inside the control will abort the operation, the pointer
+will be released, if captured, and the `TabDragComplete` will be triggered even with no target
+`TabStrip` or `NewIndex`. Whenever possible, the control will try to leave its items in a
+consistent state, but does not guarantee that.
 
 ### Reordering Flow
 
@@ -160,7 +160,7 @@ From a user experience point of view, here is what happens during a "TearOut" dr
   of actions:
   - Make a `HeaderImage` snapshot of how the `TabStripItem` would render,
   - Raise a `TabDragImageRequest`event to request a `PreviewImage` of the tab content. The
-     application may provide a preview via the event args; this is used to enhance the drag visual.
+    application may provide a preview via the event args; this is used to enhance the drag visual.
   - Start a new drag session with the `DragVisualService` and keep the `DragSessionToken`.
 
 - **Drag over the Unpinned Bucket of a `TabStrip`**: at any point in time during the drag operation,
@@ -202,6 +202,11 @@ From a user experience point of view, here is what happens during a "TearOut" dr
 - **Pointer Delivery Resilience**: Do not assume continuous `PointerMoved` events during
   cross-window drag operations. The coordinator polls the cursor to drive the visual overlay,
   ensuring smooth visual feedback even after pointer capture loss.
+- **Release and Esc**: a release, or Esc, over another window reaches that window rather than the
+  strip that started the drag. The coordinator polls the primary button and Esc with the cursor:
+  the button going up ends the drag where the pointer is, and Esc cancels it, which gives the tab
+  back to the strip it was dragged out of. A drag that reorders in a strip drops there, whatever
+  strip the release point hit-tests.
 
 ## Application Recommendations on TearOut
 
@@ -218,12 +223,12 @@ From a user experience point of view, here is what happens during a "TearOut" dr
 The following table lists the key events raised by `TabStrip` during drag/drop operations, when they are raised, the
 suggested EventArgs class name, and the important properties each EventArgs should carry.
 
-| Event | When raised | Suggested EventArgs type | Key EventArgs properties |
-|---|---|---:|---|
-| `TabDragImageRequest` | When the drag crosses the TearOut threshold and enters TearOut mode. The control requests a document preview to enhance the drag visual. | `TabDragImageRequestEventArgs` | `TabItem Item` · `Windows.Foundation.Size RequestedSize` · `Microsoft.UI.Xaml.Media.ImageSource? PreviewImage` (set by handler) |
-| `TabCloseRequested` | When the drag crosses the TearOut threshold (switching from Reordering to TearOut mode). The application is expected to remove the tab from its model/collection. | `TabCloseRequestedEventArgs` | `TabItem Item` |
-| `TabDragComplete` | After a drop into a `TabStrip`, or out completes successfully or not — indicates the drag operation finished and the item is "eventually" attached to the destination. | `TabDragCompleteEventArgs` | `TabItem Item` · `TabStrip? DestinationStrip` · `int? NewIndex` |
-| `TabTearOutRequested` | When a tab is dropped outside any `TabStrip` — the application should create a new window and host the tab there. | `TabTearOutRequestedEventArgs` | `TabItem Item` · `Windows.Foundation.Point ScreenDropPoint` |
+| Event                 | When raised                                                                                                                                                            |       Suggested EventArgs type | Key EventArgs properties                                                                                                        |
+| --------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -----------------------------: | ------------------------------------------------------------------------------------------------------------------------------- |
+| `TabDragImageRequest` | When the drag crosses the TearOut threshold and enters TearOut mode. The control requests a document preview to enhance the drag visual.                               | `TabDragImageRequestEventArgs` | `TabItem Item` · `Windows.Foundation.Size RequestedSize` · `Microsoft.UI.Xaml.Media.ImageSource? PreviewImage` (set by handler) |
+| `TabCloseRequested`   | When the drag crosses the TearOut threshold (switching from Reordering to TearOut mode). The application is expected to remove the tab from its model/collection.      |   `TabCloseRequestedEventArgs` | `TabItem Item`                                                                                                                  |
+| `TabDragComplete`     | After a drop into a `TabStrip`, or out completes successfully or not — indicates the drag operation finished and the item is "eventually" attached to the destination. |     `TabDragCompleteEventArgs` | `TabItem Item` · `TabStrip? DestinationStrip` · `int? NewIndex`                                                                 |
+| `TabTearOutRequested` | When a tab is dropped outside any `TabStrip` — the application should create a new window and host the tab there.                                                      | `TabTearOutRequestedEventArgs` | `TabItem Item` · `Windows.Foundation.Point ScreenDropPoint`                                                                     |
 
 Notes:
 
@@ -258,6 +263,24 @@ dropped `TabItem` there.
   from its source `TabStrip` (via `TabCloseRequested`). The application must not re-add it to the
   source strip after TearOut failure; instead, create a new `TabItem` or implement a recovery
   strategy suitable for the application.
+
+## Documents Across Windows
+
+Applications that show documents through `IDocumentTabSource` do not handle these events themselves:
+each window's `DocumentTabPresenter` does, with the application's `DocumentTransfers`, which
+`WithDrag()` registers.
+
+- A tab dragged out of a strip detaches its document (`DetachDocumentAsync`); the transfers hold it
+  for the drag. A tab that a drag inserted in a strip it only passed over is removed from that strip.
+- The strip a tab is dropped on attaches its document (`AttachDocumentAsync`) where it was dropped,
+  keeping the tab the drag inserted.
+- A tab dropped outside every strip goes to the window the application's `IDocumentWindowFactory`
+  creates at the drop point, which the presenter's `SpatialMapper` converts to physical screen pixels.
+- A tab that a drag inserted in a strip it passed over, and that another window's strip attached, is
+  removed from the strip it passed over.
+- A document that no window takes, because there is no factory, the window was not created, or the
+  window refused it, goes back to the window it came from. Without `DocumentTransfers`, a tab
+  dragged out of a strip keeps its document.
 
 ## State machine diagram
 
@@ -449,18 +472,18 @@ session lifetime management and disposal.
 
 ### Requirements
 
-| # | Requirement | Notes |
-|---|---|---|
-| 1 | **Single Active Session** | Only one session per process. `StartSession` throws `InvalidOperationException` if a session exists. |
-| 2 | **Session Ownership & Lifecycle** | Service owns all resources; caller holds only the token. Call `EndSession(token)` to complete. Service disposal terminates any active session. |
-| 3 | **UI-Thread Affinity** | All API calls must be from the UI thread. Implementations may assume this and avoid internal marshalling. |
-| 4 | **Pointer Tracking & Coordinate Contract** | Caller drives overlay via `UpdatePosition(token, screenPoint)` as pointer moves. `screenPoint` is always in **physical screen pixels** (from `GetCursorPos`). Service performs all DPI conversions internally using `GetDpiForPoint(screenPoint)` to detect current monitor DPI, ensuring correct behavior when cursor crosses monitors with different scaling. |
-| 5 | **Descriptor Mutability** | Live descriptor obtained via `GetDescriptor(token)` is valid only for session lifetime. Mutations from UI thread auto-update the overlay. |
-| 6 | **Click-Through Overlay** | Set `WS_EX_NOACTIVATE` and `WS_EX_TRANSPARENT` on the overlay HWND (via P/Invoke to `SetWindowLongPtr`). Alternatively, set XAML root's `IsHitTestVisible = false` (but may not provide full OS-level click-through). |
-| 7 | **Pointer Delivery Resilience** | Do not rely on originating window for pointer events. If events stop (e.g., source window closes), poll global cursor and continue calling `UpdatePosition` until drag completes. |
-| 8 | **DPI & Placement** | Service handles mapping physical pixels to AppWindow placement and per-monitor DPI for correct on-screen positioning. |
-| 9 | **Layout** | Service measures and arranges overlay: `Width = max(header width, preview width)`, `Height = header height + preview height` (or implementer's choice). |
-| 10 | **Cleanup & Resource Management** | Unsubscribe from descriptor notifications and free all resources when `EndSession(token)` is called or service is disposed. |
+| #   | Requirement                                | Notes                                                                                                                                                                                                                                                                                                                                                           |
+| --- | ------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| 1   | **Single Active Session**                  | Only one session per process. `StartSession` throws `InvalidOperationException` if a session exists.                                                                                                                                                                                                                                                            |
+| 2   | **Session Ownership & Lifecycle**          | Service owns all resources; caller holds only the token. Call `EndSession(token)` to complete. Service disposal terminates any active session.                                                                                                                                                                                                                  |
+| 3   | **UI-Thread Affinity**                     | All API calls must be from the UI thread. Implementations may assume this and avoid internal marshalling.                                                                                                                                                                                                                                                       |
+| 4   | **Pointer Tracking & Coordinate Contract** | Caller drives overlay via `UpdatePosition(token, screenPoint)` as pointer moves. `screenPoint` is always in **physical screen pixels** (from `GetCursorPos`). Service performs all DPI conversions internally using `GetDpiForPoint(screenPoint)` to detect current monitor DPI, ensuring correct behavior when cursor crosses monitors with different scaling. |
+| 5   | **Descriptor Mutability**                  | Live descriptor obtained via `GetDescriptor(token)` is valid only for session lifetime. Mutations from UI thread auto-update the overlay.                                                                                                                                                                                                                       |
+| 6   | **Click-Through Overlay**                  | Set `WS_EX_NOACTIVATE` and `WS_EX_TRANSPARENT` on the overlay HWND (via P/Invoke to `SetWindowLongPtr`). Alternatively, set XAML root's `IsHitTestVisible = false` (but may not provide full OS-level click-through).                                                                                                                                           |
+| 7   | **Pointer Delivery Resilience**            | Do not rely on originating window for pointer events. If events stop (e.g., source window closes), poll global cursor and continue calling `UpdatePosition` until drag completes.                                                                                                                                                                               |
+| 8   | **DPI & Placement**                        | Service handles mapping physical pixels to AppWindow placement and per-monitor DPI for correct on-screen positioning.                                                                                                                                                                                                                                           |
+| 9   | **Layout**                                 | Service measures and arranges overlay: `Width = max(header width, preview width)`, `Height = header height + preview height` (or implementer's choice).                                                                                                                                                                                                         |
+| 10  | **Cleanup & Resource Management**          | Unsubscribe from descriptor notifications and free all resources when `EndSession(token)` is called or service is disposed.                                                                                                                                                                                                                                     |
 
 ### Coordinate System & DPI Scaling Architecture
 
@@ -584,11 +607,11 @@ graph TD
 
 #### Critical Conversion Points
 
-| Location | Input | Output | Method | Notes |
-|----------|-------|--------|--------|-------|
-| `TabStrip.OnPreviewPointerReleased` | Screen logical (from `GetCurrentPoint(null)`) | Screen physical | `Native.LogicalToPhysicalPoint(point, dpi)` | **MUST** convert before calling `EndDrag`. Use `GetDpiForPoint` on logical point to detect monitor DPI. |
-| `TabDragCoordinator.IsWithinTearOutThreshold` | Screen logical strip bounds (from `TransformToVisual(null)`) | Screen physical | `Native.LogicalToPhysicalPoint(point, cursorDpi)` | **HEURISTIC**: Uses cursor DPI to convert strip bounds. Works when strip and cursor are on same monitor. |
-| `DragVisualService.UpdatePosition` | Screen physical cursor (from `GetCursorPos`) | Screen physical overlay position | Internal: `PhysicalToLogical` → compute → `LogicalToPhysical` | Service detects current monitor DPI via `GetDpiForPoint(physicalCursor)` and performs all conversions. |
+| Location                                      | Input                                                        | Output                           | Method                                                        | Notes                                                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------ | -------------------------------- | ------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `TabStrip.OnPreviewPointerReleased`           | Screen logical (from `GetCurrentPoint(null)`)                | Screen physical                  | `Native.LogicalToPhysicalPoint(point, dpi)`                   | **MUST** convert before calling `EndDrag`. Use `GetDpiForPoint` on logical point to detect monitor DPI.  |
+| `TabDragCoordinator.IsWithinTearOutThreshold` | Screen logical strip bounds (from `TransformToVisual(null)`) | Screen physical                  | `Native.LogicalToPhysicalPoint(point, cursorDpi)`             | **HEURISTIC**: Uses cursor DPI to convert strip bounds. Works when strip and cursor are on same monitor. |
+| `DragVisualService.UpdatePosition`            | Screen physical cursor (from `GetCursorPos`)                 | Screen physical overlay position | Internal: `PhysicalToLogical` → compute → `LogicalToPhysical` | Service detects current monitor DPI via `GetDpiForPoint(physicalCursor)` and performs all conversions.   |
 
 #### Multi-Monitor Behavior & Limitations
 

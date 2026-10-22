@@ -149,12 +149,16 @@ public partial class TabDragCoordinatorTests : VisualUserInterfaceTests
             DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher),
         };
 
+        // The test drives the drag: the primary button stays down until a test releases it.
         return new TabDragCoordinator(
             hosting,
             windowManager,
             mapperFactory ?? ((w, e) => Mock.Of<ISpatialMapper>()),
             dragService ?? Mock.Of<IDragVisualService>(),
-            this.LoggerFactory);
+            this.LoggerFactory)
+        {
+            ReadButtons = static () => new DragButtons(IsPrimaryDown: true, IsEscapeDown: false),
+        };
     }
 
     private sealed class StubDragStrategy : IDragStrategy

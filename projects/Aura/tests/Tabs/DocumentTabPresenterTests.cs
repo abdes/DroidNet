@@ -21,7 +21,7 @@ namespace DroidNet.Aura.Controls.Tests;
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory("UITest")]
-public class DocumentTabPresenterTests : TabStripTestsBase
+public partial class DocumentTabPresenterTests : TabStripTestsBase
 {
     private Mock<ILoggerFactory> mockLoggerFactory = null!;
 
@@ -506,7 +506,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var window = VisualUserInterfaceTestsApp.MainWindow;
         var ds = new TestDocumentTabSource { RefusesDetach = true };
         var ctx = ManagedWindowFactory.CreateForWindow(window);
-        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>(), new DocumentTransfers());
         var meta = new TestDocumentMetadata { Title = "Stays" };
         _ = await ds.OpenDocumentAsync(ctx.Id, meta, -1, shouldSelect: true).ConfigureAwait(true);
         await WaitForRenderCompletion().ConfigureAwait(true);
@@ -531,7 +531,7 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         var window = VisualUserInterfaceTestsApp.MainWindow;
         var ds = new TestDocumentTabSource();
         var ctx = ManagedWindowFactory.CreateForWindow(window);
-        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>());
+        using var presenter = new DocumentTabPresenter(tabStrip, ds, ctx, DispatcherQueue.GetForCurrentThread(), this.mockLoggerFactory.Object.CreateLogger<DocumentTabPresenter>(), new DocumentTransfers());
         var meta = new TestDocumentMetadata { Title = "Doc 2" };
         _ = await ds.OpenDocumentAsync(ctx.Id, meta, -1, shouldSelect: true).ConfigureAwait(false);
         var id = meta.DocumentId;
@@ -626,10 +626,10 @@ public class DocumentTabPresenterTests : TabStripTestsBase
     /// </summary>
     private static class ManagedWindowFactory
     {
-        public static ManagedWindow CreateForWindow(Window window) => new()
+        public static ManagedWindow CreateForWindow(Window window, ulong? id = null) => new()
         {
             DispatcherQueue = VisualUserInterfaceTestsApp.DispatcherQueue,
-            Id = new Microsoft.UI.WindowId((ulong)window.GetHashCode()),
+            Id = new Microsoft.UI.WindowId(id ?? (ulong)window.GetHashCode()),
             Window = window,
             Category = new WindowCategory("Test"),
             CreatedAt = DateTimeOffset.UtcNow,
@@ -661,6 +661,10 @@ public class DocumentTabPresenterTests : TabStripTestsBase
         public int CloseCallCount { get; private set; }
 
         public bool RefusesDetach { get; init; }
+
+        public List<(WindowId Window, DocumentId Document, int Index)> Attached { get; } = [];
+
+        public HashSet<WindowId> RefusesAttach { get; } = [];
 
         public Task<bool> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
         {
@@ -711,6 +715,12 @@ public class DocumentTabPresenterTests : TabStripTestsBase
 
         public Task<bool> AttachDocumentAsync(WindowId targetWindowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
         {
+            if (this.RefusesAttach.Contains(targetWindowId))
+            {
+                return Task.FromResult(false);
+            }
+
+            this.Attached.Add((targetWindowId, metadata.DocumentId, indexHint));
             this.store[metadata.DocumentId] = metadata;
             this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindowId, metadata, indexHint));
             return Task.FromResult(true);

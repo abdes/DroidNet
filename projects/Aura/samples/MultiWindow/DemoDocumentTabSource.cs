@@ -10,15 +10,22 @@ using Microsoft.UI;
 namespace DroidNet.Samples.Aura.MultiWindow;
 
 /// <summary>
-///     Minimal in-sample document tab source for the MultiWindow demo. Implements enough of the
-///     IDocumentTabSource contract to support opening, selecting and closing documents;
-///     it's intentionally small and not intended for production.
+///     The sample's documents, as the tabs of every window that shows them. A document has one tab, in one window: a
+///     drag detaches it from its window and the window it is dropped on attaches it.
 /// </summary>
-[SuppressMessage("Usage", "CA1812:AvoidUninstantiatedInternalClasses", Justification = "Instantiated via DI")]
-internal sealed class DemoDocumentTabSource : IDocumentTabSource, IDocumentServiceState
+/// <remarks>
+///     Closing a tab asks the application first (<see cref="DocumentClosing"/>), unless forced. The source reports a
+///     window whose last tab was closed by itself or moved to another window (<see cref="WindowEmptied"/>), so that the
+///     sample closes an emptied document window. Every member runs on the UI thread.
+/// </remarks>
+[SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "The sample's view models take it")]
+public sealed class DemoDocumentTabSource : IDocumentTabSource, IDocumentServiceState
 {
     private readonly Dictionary<WindowId, Dictionary<DocumentId, IDocumentMetadata>> windowDocs = [];
     private readonly Dictionary<WindowId, DocumentId> activeDocuments = [];
+
+    // The window each detached document left, until a window attaches it.
+    private readonly Dictionary<DocumentId, WindowId> detachedFrom = [];
 
     /// <inheritdoc/>
     public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
@@ -38,100 +45,99 @@ internal sealed class DemoDocumentTabSource : IDocumentTabSource, IDocumentServi
     /// <inheritdoc/>
     public event EventHandler<DocumentActivatedEventArgs>? DocumentActivated;
 
+    /// <summary>
+    ///     Raised when the last tab of a window has left it: the tab was closed by itself, or a drag moved it to another
+    ///     window. Closing all of a window's documents, as its own close does, does not raise it.
+    /// </summary>
+    public event EventHandler<WindowEmptiedEventArgs>? WindowEmptied;
+
     /// <inheritdoc/>
+    /// <remarks>A document has one tab: opening a tab for a document that has one, in any window, is refused.</remarks>
     public Task<bool> OpenDocumentAsync(WindowId windowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
         ArgumentNullException.ThrowIfNull(metadata);
-        var id = metadata.DocumentId;
-        var docs = this.GetOrCreateWindowDocuments(windowId);
-        docs[id] = metadata;
+        if (this.FindWindow(metadata.DocumentId) is not null)
+        {
+            return Task.FromResult(false);
+        }
 
-        Debug.WriteLine($"DemoDocumentTabSource.OpenDocumentAsync: window={windowId.Value}, DocumentId={id}, Title='{metadata.Title}', ShouldSelect={shouldSelect}");
+        this.Documents(windowId)[metadata.DocumentId] = metadata;
+        Debug.WriteLine($"DemoDocumentTabSource: opened '{metadata.Title}' in window {windowId.Value}");
         this.DocumentOpened?.Invoke(this, new DocumentOpenedEventArgs(windowId, metadata, indexHint, shouldSelect));
         if (shouldSelect)
         {
-            this.activeDocuments[windowId] = id;
+            this.Activate(windowId, metadata.DocumentId);
         }
 
         return Task.FromResult(true);
     }
 
     /// <inheritdoc/>
-    public async Task<bool> CloseDocumentAsync(WindowId windowId, DocumentId documentId, bool force = false)
+    public Task<bool> CloseDocumentAsync(WindowId windowId, DocumentId documentId, bool force = false)
+        => this.CloseAsync(windowId, documentId, force, emptiesWindow: true);
+
+    /// <summary>
+    ///     Closes the documents of a window that closes, asking about each one in that window.
+    /// </summary>
+    /// <param name="windowId">The window that closes.</param>
+    /// <returns><see langword="true"/> when every document closed; <see langword="false"/> when the user kept one.</returns>
+    public async Task<bool> CloseWindowDocumentsAsync(WindowId windowId)
     {
-        Debug.WriteLine($"DemoDocumentTabSource.CloseDocumentAsync: DocumentId={documentId}, Force={force}");
-
-        if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.TryGetValue(documentId, out var metadata))
+        foreach (var metadata in this.GetOpenDocuments(windowId))
         {
-            Debug.WriteLine($"DemoDocumentTabSource.CloseDocumentAsync: DocumentId={documentId} not found");
-            return false;
-        }
-
-        // Fire DocumentClosing and await veto if not forced
-        var closingArgs = new DocumentClosingEventArgs(windowId, metadata, force);
-        this.DocumentClosing?.Invoke(this, closingArgs);
-
-        if (!force)
-        {
-            var allowed = await closingArgs.WaitForVetoResultAsync().ConfigureAwait(false);
-            if (!allowed)
+            if (!await this.CloseAsync(windowId, metadata.DocumentId, force: false, emptiesWindow: false).ConfigureAwait(true))
             {
-                Debug.WriteLine($"DemoDocumentTabSource.CloseDocumentAsync: DocumentId={documentId} vetoed");
                 return false;
             }
         }
 
-        // Proceed with close
-        _ = docs.Remove(documentId);
-        if (docs.Count == 0)
-        {
-            _ = this.windowDocs.Remove(windowId);
-        }
-
-        if (this.activeDocuments.TryGetValue(windowId, out var activeId) && activeId == documentId)
-        {
-            _ = this.activeDocuments.Remove(windowId);
-        }
-
-        Debug.WriteLine($"DemoDocumentTabSource.CloseDocumentAsync: DocumentId={documentId} - closed, raising DocumentClosed");
-        this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
         return true;
     }
 
     /// <inheritdoc/>
+    /// <remarks>The document stays open without a tab until a window attaches it.</remarks>
     public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, DocumentId documentId)
     {
-        if (this.windowDocs.TryGetValue(windowId, out var docs) && docs.TryGetValue(documentId, out var metadata))
+        if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.TryGetValue(documentId, out var metadata))
         {
-            _ = docs.Remove(documentId);
-            if (docs.Count == 0)
-            {
-                _ = this.windowDocs.Remove(windowId);
-            }
-
-            if (this.activeDocuments.TryGetValue(windowId, out var activeId) && activeId == documentId)
-            {
-                _ = this.activeDocuments.Remove(windowId);
-            }
-
-            this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(windowId, metadata));
-            return Task.FromResult<IDocumentMetadata?>(metadata);
+            return Task.FromResult<IDocumentMetadata?>(null);
         }
 
-        return Task.FromResult<IDocumentMetadata?>(null);
+        this.RemoveTab(windowId, documentId);
+        this.detachedFrom[documentId] = windowId;
+        Debug.WriteLine($"DemoDocumentTabSource: detached '{metadata.Title}' from window {windowId.Value}");
+        this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(windowId, metadata));
+        return Task.FromResult<IDocumentMetadata?>(metadata);
     }
 
     /// <inheritdoc/>
+    /// <remarks>
+    ///     A document has one tab: attaching a document that has one, in any window, is refused. The window has the tab
+    ///     before it is selected.
+    /// </remarks>
     public Task<bool> AttachDocumentAsync(WindowId targetWindowId, IDocumentMetadata metadata, int indexHint = -1, bool shouldSelect = true)
     {
-        var docs = this.GetOrCreateWindowDocuments(targetWindowId);
-        docs[metadata.DocumentId] = metadata;
-        if (shouldSelect)
+        ArgumentNullException.ThrowIfNull(metadata);
+        if (this.FindWindow(metadata.DocumentId) is not null)
         {
-            this.activeDocuments[targetWindowId] = metadata.DocumentId;
+            return Task.FromResult(false);
         }
 
+        this.Documents(targetWindowId)[metadata.DocumentId] = metadata;
+        Debug.WriteLine($"DemoDocumentTabSource: attached '{metadata.Title}' to window {targetWindowId.Value}");
         this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindowId, metadata, indexHint));
+        if (shouldSelect)
+        {
+            this.Activate(targetWindowId, metadata.DocumentId);
+        }
+
+        // A drag that moved the last tab of its window leaves that window empty.
+        if (this.detachedFrom.Remove(metadata.DocumentId, out var source) && source != targetWindowId
+            && !this.windowDocs.ContainsKey(source))
+        {
+            this.WindowEmptied?.Invoke(this, new WindowEmptiedEventArgs(source));
+        }
+
         return Task.FromResult(true);
     }
 
@@ -143,24 +149,76 @@ internal sealed class DemoDocumentTabSource : IDocumentTabSource, IDocumentServi
             return Task.FromResult(false);
         }
 
-        this.activeDocuments[windowId] = documentId;
-        this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(windowId, documentId));
+        this.Activate(windowId, documentId);
         return Task.FromResult(true);
     }
 
     /// <inheritdoc/>
     public IReadOnlyList<IDocumentMetadata> GetOpenDocuments(WindowId windowId)
-        => !this.windowDocs.TryGetValue(windowId, out var docs) || docs.Count == 0
-            ? Array.Empty<IDocumentMetadata>()
-            : docs.Values.ToList();
+        => this.windowDocs.TryGetValue(windowId, out var docs) ? [.. docs.Values] : [];
 
     /// <inheritdoc/>
     public DocumentId? GetActiveDocumentId(WindowId windowId)
-        => this.activeDocuments.TryGetValue(windowId, out var documentId) && !documentId.IsEmpty
-            ? documentId
-            : null;
+        => this.activeDocuments.TryGetValue(windowId, out var documentId) ? documentId : null;
 
-    private Dictionary<DocumentId, IDocumentMetadata> GetOrCreateWindowDocuments(WindowId windowId)
+    private async Task<bool> CloseAsync(WindowId windowId, DocumentId documentId, bool force, bool emptiesWindow)
+    {
+        if (!this.windowDocs.TryGetValue(windowId, out var docs) || !docs.TryGetValue(documentId, out var metadata))
+        {
+            return false;
+        }
+
+        // The application may refuse a close that is not forced, such as by asking the user.
+        var closing = new DocumentClosingEventArgs(windowId, metadata, force);
+        this.DocumentClosing?.Invoke(this, closing);
+        if (!force && !await closing.WaitForVetoResultAsync().ConfigureAwait(true))
+        {
+            Debug.WriteLine($"DemoDocumentTabSource: the close of '{metadata.Title}' was refused");
+            return false;
+        }
+
+        // The answer may have taken a while: the tab may have closed or moved meanwhile.
+        if (!this.windowDocs.TryGetValue(windowId, out docs) || !docs.ContainsKey(documentId))
+        {
+            return false;
+        }
+
+        this.RemoveTab(windowId, documentId);
+        Debug.WriteLine($"DemoDocumentTabSource: closed '{metadata.Title}' in window {windowId.Value}");
+        this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
+        if (emptiesWindow && !this.windowDocs.ContainsKey(windowId))
+        {
+            this.WindowEmptied?.Invoke(this, new WindowEmptiedEventArgs(windowId));
+        }
+
+        return true;
+    }
+
+    private void Activate(WindowId windowId, DocumentId documentId)
+    {
+        this.activeDocuments[windowId] = documentId;
+        this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(windowId, documentId));
+    }
+
+    private WindowId? FindWindow(DocumentId documentId)
+        => this.windowDocs.Where(entry => entry.Value.ContainsKey(documentId)).Select(static entry => (WindowId?)entry.Key).FirstOrDefault();
+
+    private void RemoveTab(WindowId windowId, DocumentId documentId)
+    {
+        var docs = this.windowDocs[windowId];
+        _ = docs.Remove(documentId);
+        if (docs.Count == 0)
+        {
+            _ = this.windowDocs.Remove(windowId);
+        }
+
+        if (this.activeDocuments.TryGetValue(windowId, out var active) && active == documentId)
+        {
+            _ = this.activeDocuments.Remove(windowId);
+        }
+    }
+
+    private Dictionary<DocumentId, IDocumentMetadata> Documents(WindowId windowId)
     {
         if (!this.windowDocs.TryGetValue(windowId, out var docs))
         {

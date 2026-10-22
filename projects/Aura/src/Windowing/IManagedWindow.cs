@@ -5,6 +5,7 @@
 using System.ComponentModel;
 using DroidNet.Aura.Decoration;
 using DroidNet.Controls.Menus;
+using DroidNet.Documents;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Xaml;
@@ -54,6 +55,12 @@ public interface IManagedWindow : INotifyPropertyChanged, INotifyPropertyChangin
     ///     Gets or sets the optional decoration options for the window.
     /// </summary>
     public WindowDecorationOptions? Decorations { get; set; }
+
+    /// <summary>
+    ///     Gets or sets the source of the window's document tabs, which the application binds once it knows what the
+    ///     window shows, and may change while the window is open. A window without one shows no document tabs.
+    /// </summary>
+    public IDocumentTabSource? DocumentTabSource { get; set; }
 
     /// <summary>
     ///     Gets the menu source for this window, if one was created from a menu provider.

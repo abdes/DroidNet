@@ -4,8 +4,10 @@
 
 using System.Reflection;
 using AwesomeAssertions;
+using DroidNet.Aura.Windowing;
 using DroidNet.Coordinates;
 using DroidNet.Tests;
+using Microsoft.UI;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Windows.Foundation;
@@ -80,19 +82,24 @@ public partial class TabDragCoordinatorTests
     [TestMethod]
     public Task HitTest_SkipsStaleTabStrips_Async() => EnqueueAsync(async () =>
     {
-        // Arrange
-        // Simulate failure for stale element
-        var coordinator = this.CreateCoordinator(
-            mapperFactory: (window, element) =>
-                element is Border b && string.Equals(b.Tag as string, "stale", StringComparison.Ordinal)
-                    ? throw new InvalidOperationException("Stale element")
-                    : (ISpatialMapper)new SpatialMapper(window, element));
+        // Arrange: the stale strip belongs to a window that has closed, which the window manager no longer has.
+        var mainWindowId = VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id;
+        var closedWindowId = new WindowId(mainWindowId.Value + 1);
+        var windows = new Mock<IWindowManagerService>();
+        _ = windows.Setup(wm => wm.GetWindow(mainWindowId)).Returns(new ManagedWindow
+        {
+            DispatcherQueue = VisualUserInterfaceTestsApp.DispatcherQueue,
+            Id = mainWindowId,
+            Window = VisualUserInterfaceTestsApp.MainWindow,
+            Category = WindowCategory.System,
+            CreatedAt = DateTimeOffset.UtcNow,
+        });
+        var coordinator = this.CreateCoordinator(windowManager: windows.Object);
 
         // 1. Create a "stale" strip
         var staleStripMock = new Mock<ITabStrip>();
-        var staleContainer = new Border { Tag = "stale" };
-        _ = staleStripMock.Setup(s => s.GetContainerElement()).Returns(staleContainer);
-        _ = staleStripMock.SetupGet(s => s.WindowId).Returns(VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id);
+        _ = staleStripMock.Setup(s => s.GetContainerElement()).Returns(new Border());
+        _ = staleStripMock.SetupGet(s => s.WindowId).Returns(closedWindowId);
 
         // 2. Create a "valid" strip
         var validStripMock = new Mock<ITabStrip>();
@@ -126,7 +133,7 @@ public partial class TabDragCoordinatorTests
         // Verify valid strip was checked
         validStripMock.Verify(s => s.HitTestWithThreshold(It.IsAny<SpatialPoint<ElementSpace>>(), It.IsAny<double>()), Times.AtLeastOnce, "Valid strip should be hit-tested");
 
-        // Verify stale strip was NOT checked (because mapper creation failed)
+        // Verify stale strip was NOT checked (because its window has closed)
         staleStripMock.Verify(s => s.HitTestWithThreshold(It.IsAny<SpatialPoint<ElementSpace>>(), It.IsAny<double>()), Times.Never, "Stale strip should be skipped before hit-test");
 
         coordinator.Abort();

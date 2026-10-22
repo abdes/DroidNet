@@ -48,6 +48,74 @@ public partial class TabDragCoordinatorTests
         await Task.CompletedTask.ConfigureAwait(true);
     });
 
+    /// <summary>
+    ///     A drag that reorders in a strip drops there, even when the release point hit-tests outside every strip, as
+    ///     the release point of a drag that started in another window can.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public Task EndDrag_InReorderMode_WithoutHitStrip_DropsIntoTheReorderedStrip_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        const int draggedIndex = 0;
+        var coordinator = this.CreateCoordinator();
+        var builder = new TabStripMockBuilder()
+            .WithWindowId(VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id)
+            .WithItemSnapshot(draggedIndex, "Item", new Point(0, 0), 120);
+        var tabStripMock = builder.Build();
+        var draggedItem = builder.GetItem(0)!;
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
+        coordinator.StartDrag(draggedItem, draggedIndex, tabStripMock.Object, visualElement, visualElement, new Point(120, 30).AsElement(), new Point(0, 0));
+        var strategy = new StubDragStrategy { ReturnIndexOverride = 2 };
+        SetPrivateField(coordinator, "currentStrategy", strategy);
+
+        // Act: no strip is registered, so the release point hits none.
+        coordinator.EndDrag(this.ToScreen(5000, 5000));
+
+        // Assert
+        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, tabStripMock.Object, 2), Times.Once());
+        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, null, null), Times.Never());
+
+        await Task.CompletedTask.ConfigureAwait(true);
+    });
+
+    /// <summary>
+    ///     A release over another window reaches that window, not the strip that started the drag: the coordinator sees
+    ///     the button go up itself, and ends the drag where the pointer is.
+    /// </summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public Task ReleasingTheButtonAnywhere_EndsTheDrag_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var (coordinator, tabStripMock, draggedItem) = await this.StartReorderAsync().ConfigureAwait(true);
+
+        // Act
+        coordinator.ReadButtons = static () => new DragButtons(IsPrimaryDown: false, IsEscapeDown: false);
+        await WaitUntilAsync(() => !GetPrivateField<bool>(coordinator, "isActive")).ConfigureAwait(true);
+
+        // Assert: the drag reordered in its strip, so it drops there.
+        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, tabStripMock.Object, It.IsAny<int?>()), Times.Once());
+    });
+
+    /// <summary>Esc cancels the drag wherever the pointer is: the tab goes back to the strip it came from.</summary>
+    /// <returns>A task for the test.</returns>
+    [TestMethod]
+    public Task Escape_CancelsTheDrag_Async() => EnqueueAsync(async () =>
+    {
+        // Arrange
+        var (coordinator, tabStripMock, draggedItem) = await this.StartReorderAsync().ConfigureAwait(true);
+
+        // Act
+        coordinator.ReadButtons = static () => new DragButtons(IsPrimaryDown: true, IsEscapeDown: true);
+        await WaitUntilAsync(() => !GetPrivateField<bool>(coordinator, "isActive")).ConfigureAwait(true);
+
+        // Assert
+        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, null, null), Times.Once());
+        tabStripMock.Verify(s => s.TryCompleteDrag(draggedItem, It.IsNotNull<ITabStrip>(), It.IsAny<int?>()), Times.Never());
+    });
+
     [TestMethod]
     public Task EndDrag_WhenInactive_DoesNotInvokeStrategy_Async() => EnqueueAsync(async () =>
     {
@@ -195,4 +263,30 @@ public partial class TabDragCoordinatorTests
 
         await Task.CompletedTask.ConfigureAwait(true);
     });
+
+    private static async Task WaitUntilAsync(Func<bool> condition)
+    {
+        for (var attempt = 0; !condition() && attempt < 100; attempt++)
+        {
+            await Task.Delay(10).ConfigureAwait(true);
+        }
+
+        _ = condition().Should().BeTrue("the coordinator polls the buttons while the drag is active");
+    }
+
+    // A drag reordering in its own strip, with the primary button down.
+    private async Task<(TabDragCoordinator Coordinator, Mock<ITabStrip> Strip, IDragPayload Item)> StartReorderAsync()
+    {
+        var coordinator = this.CreateCoordinator();
+        var builder = new TabStripMockBuilder()
+            .WithWindowId(VisualUserInterfaceTestsApp.MainWindow.AppWindow.Id)
+            .WithItemSnapshot(0, "Item", new Point(0, 0), 120);
+        var tabStripMock = builder.Build();
+        var draggedItem = builder.GetItem(0)!;
+        var visualElement = await CreateLoadedVisualElementAsync().ConfigureAwait(true);
+        this.mapper = new SpatialMapper(VisualUserInterfaceTestsApp.MainWindow, visualElement);
+        coordinator.StartDrag(draggedItem, 0, tabStripMock.Object, visualElement, visualElement, new Point(120, 30).AsElement(), new Point(0, 0));
+        SetPrivateField(coordinator, "currentStrategy", new StubDragStrategy { ReturnIndexOverride = 0 });
+        return (coordinator, tabStripMock, draggedItem);
+    }
 }

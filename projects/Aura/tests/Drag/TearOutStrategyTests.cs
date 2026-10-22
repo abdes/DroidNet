@@ -332,7 +332,11 @@ public class TearOutStrategyTests : VisualUserInterfaceTests
             DispatcherScheduler = new System.Reactive.Concurrency.DispatcherQueueScheduler(dispatcher),
         };
 
-        return new TabDragCoordinator(hosting, windowManager, MapperFactory, dragService, this.LoggerFactory);
+        // The test drives the drag: the primary button stays down.
+        return new TabDragCoordinator(hosting, windowManager, MapperFactory, dragService, this.LoggerFactory)
+        {
+            ReadButtons = static () => new DragButtons(IsPrimaryDown: true, IsEscapeDown: false),
+        };
     }
 
     private sealed record TearOutTestSetup(

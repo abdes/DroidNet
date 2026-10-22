@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Documents;
 using DroidNet.Aura.Drag;
 using DroidNet.Aura.Settings;
 using DroidNet.Aura.Theming;
@@ -30,6 +31,7 @@ public class DependencyInjectionExtensionsTests
         // Assert
         _ = container.IsRegistered<IDragVisualService>().Should().BeTrue();
         _ = container.IsRegistered<ITabDragCoordinator>().Should().BeTrue();
+        _ = container.IsRegistered<DocumentTransfers>().Should().BeTrue();
     }
 
     [TestMethod]
@@ -46,6 +48,7 @@ public class DependencyInjectionExtensionsTests
         // Assert
         _ = container.IsRegistered<IDragVisualService>().Should().BeFalse();
         _ = container.IsRegistered<ITabDragCoordinator>().Should().BeFalse();
+        _ = container.IsRegistered<DocumentTransfers>().Should().BeFalse();
     }
 
     [TestMethod]

@@ -106,7 +106,7 @@ public sealed class WindowDecorationBuilder
     ///     <list type="bullet">
     ///     <item><description>Category: "Document"</description></item>
     ///     <item><description>Chrome: Enabled</description></item>
-    ///     <item><description>Title bar: Standard height (32px)</description></item>
+    ///     <item><description>Title bar: Standard height (32px), with the window's document tabs</description></item>
     ///     <item><description>All buttons: Visible</description></item>
     ///     <item><description>Backdrop: Mica for subtle appearance</description></item>
     ///     </list>
@@ -123,7 +123,7 @@ public sealed class WindowDecorationBuilder
         {
             category = WindowCategory.Document,
             chromeEnabled = true,
-            titleBar = TitleBarOptions.Default,
+            titleBar = TitleBarOptions.Default with { WithDocumentTabs = true },
             buttons = WindowButtonsOptions.Default,
             backdrop = DefaultBackdrops[WindowCategory.Document],
         };

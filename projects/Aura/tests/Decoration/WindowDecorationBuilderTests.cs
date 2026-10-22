@@ -42,6 +42,7 @@ public class WindowDecorationBuilderTests
         _ = options.Category.Should().Be(WindowCategory.Document);
         _ = options.ChromeEnabled.Should().BeTrue();
         _ = options.TitleBar?.Height.Should().Be(32.0);
+        _ = options.TitleBar?.WithDocumentTabs.Should().BeTrue();
         _ = options.Buttons.ShowMinimize.Should().BeTrue();
         _ = options.Buttons.ShowMaximize.Should().BeTrue();
         _ = options.Backdrop.Should().Be(BackdropKind.Mica);

@@ -43,4 +43,40 @@ public partial class DocumentTabPresenter
     [Conditional("DEBUG")]
     private void LogDocumentDetachRequested(DocumentId documentId)
         => LogDocumentDetachRequested(this.logger, documentId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Document with Id={DocumentId} keeps its tab: no document transfers move it to another window.")]
+    private static partial void LogDocumentDetachUnavailable(ILogger logger, DocumentId documentId);
+
+    [Conditional("DEBUG")]
+    private void LogDocumentDetachUnavailable(DocumentId documentId)
+        => LogDocumentDetachUnavailable(this.logger, documentId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "Requesting the document tab source to attach document with Id={DocumentId} to window {WindowId}.")]
+    private static partial void LogDocumentAttachRequested(ILogger logger, DocumentId documentId, ulong windowId);
+
+    [Conditional("DEBUG")]
+    private void LogDocumentAttachRequested(DocumentId documentId, ulong windowId)
+        => LogDocumentAttachRequested(this.logger, documentId, windowId);
+
+    [LoggerMessage(
+        Level = LogLevel.Warning,
+        Message = "Document with Id={DocumentId} was refused where it was dropped and goes back to window {WindowId}.")]
+    private static partial void LogDocumentReturned(ILogger logger, DocumentId documentId, ulong windowId);
+
+    private void LogDocumentReturned(DocumentId documentId, ulong windowId)
+        => LogDocumentReturned(this.logger, documentId, windowId);
+
+    [LoggerMessage(
+        Level = LogLevel.Error,
+        Message = "The window for torn-out document with Id={DocumentId} could not be created; the document goes back where it came from.")]
+    private static partial void LogDocumentWindowFailed(ILogger logger, DocumentId documentId, Exception exception);
+
+    private void LogDocumentWindowFailed(DocumentId documentId, Exception exception)
+        => LogDocumentWindowFailed(this.logger, documentId, exception);
 }

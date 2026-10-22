@@ -17,11 +17,34 @@ namespace DroidNet.Aura.Drag;
 public partial class TabDragCoordinator
 {
     private const string User32 = "user32.dll";
+    private const int VirtualKeyLeftButton = 0x01;
+    private const int VirtualKeyRightButton = 0x02;
+    private const int VirtualKeyEscape = 0x1B;
+    private const int SystemMetricSwapButton = 23;
+
+    /// <summary>Gets or sets how the coordinator reads the keys that end a drag; tests replace it.</summary>
+    internal Func<DragButtons> ReadButtons { get; set; } = ReadSystemButtons;
 
     [LibraryImport(User32, SetLastError = true)]
     [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
     [return: MarshalAs(UnmanagedType.Bool)]
     public static partial bool GetCursorPos(out POINT lpPoint);
+
+    [LibraryImport(User32)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial short GetAsyncKeyState(int vKey);
+
+    [LibraryImport(User32)]
+    [DefaultDllImportSearchPaths(DllImportSearchPath.System32)]
+    private static partial int GetSystemMetrics(int nIndex);
+
+    // The primary button is the right one when the user swapped the mouse buttons.
+    private static DragButtons ReadSystemButtons()
+        => new(
+            IsPrimaryDown: IsKeyDown(GetSystemMetrics(SystemMetricSwapButton) != 0 ? VirtualKeyRightButton : VirtualKeyLeftButton),
+            IsEscapeDown: IsKeyDown(VirtualKeyEscape));
+
+    private static bool IsKeyDown(int virtualKey) => (GetAsyncKeyState(virtualKey) & 0x8000) != 0;
 
     /// <summary>POINT structure for screen coordinates.</summary>
     /// <remarks>

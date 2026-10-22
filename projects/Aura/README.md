@@ -287,7 +287,7 @@ Aura/
 
 ### Documents & TabStrip Drag
 
-- **Document integration** - Aura expects the host application to implement `IDocumentTabSource` (see `projects/Documents/src/IDocumentTabSource.cs`). Aura's `DocumentTabPresenter` wires the document events to the `TabStrip` control and forwards user interactions (selection, close, detach) back to the application's tab source.
+- **Document integration** - Aura expects the host application to implement `IDocumentTabSource` (see `projects/Documents/src/IDocumentTabSource.cs`) and to bind it to each window that shows document tabs (`IManagedWindow.DocumentTabSource`); the window's shell presents the tabs of the bound source, and follows it when it changes. Aura's `DocumentTabPresenter` wires the document events to the `TabStrip` control and forwards user interactions (selection, close, detach) back to the application's tab source. With the drag services, it also moves documents between windows: a dropped tab attaches its document where it lands, and a tab dropped outside every strip goes to the window the application's `IDocumentWindowFactory` creates, and a strip bound to another source never takes it (see `src/Drag/README.md`).
 - **Tab tear-out & drag** - The `TabStrip` control supports reordering, tear-out (creating a new host window), cross-window drag and drop, and a coordinated `ITabDragCoordinator`/`IDragVisualService` pair for rich visuals and resilient cross-window dragging. See `src/Drag/README.md` for the full specification and event contract (e.g. `TabCloseRequested`, `TabDragImageRequest`, `TabTearOutRequested`, `TabDragComplete`).
 
 ## Development Workflow

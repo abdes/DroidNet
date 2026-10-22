@@ -42,12 +42,14 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     private readonly IWindowFactory windowFactory;
     private readonly IWindowManagerService windowManager;
     private readonly DispatcherQueue dispatcherQueue;
-    private readonly IDocumentTabSource? tabSource;
+    private readonly DemoDocumentTabSource tabSource;
+    private readonly DemoDocumentWindows documentWindows;
     private readonly Dictionary<DocumentId, IDocumentMetadata> documents = [];
     private readonly Dictionary<WindowId, DocumentId> windowActiveDocument = [];
     private readonly IDisposable windowEventsSubscription;
 
     private bool isDisposed;
+    private int documentCount;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="WindowManagerShellViewModel"/> class.
@@ -56,13 +58,15 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     /// <param name="hostingContext">The hosting context containing dispatcher information.</param>
     /// <param name="windowFactory">The window factory for creating new windows.</param>
     /// <param name="windowManager">The window manager service.</param>
-    /// <param name="tabSource">Optional document tab source for demo scenarios.</param>
+    /// <param name="tabSource">The sample's documents, whose tabs every window that shows documents binds.</param>
+    /// <param name="documentWindows">Opens the sample's document windows.</param>
     public WindowManagerShellViewModel(
         IRouter router,
         HostingContext hostingContext,
         IWindowFactory windowFactory,
         IWindowManagerService windowManager,
-        IDocumentTabSource? tabSource = null)
+        DemoDocumentTabSource tabSource,
+        DemoDocumentWindows documentWindows)
     {
         ArgumentNullException.ThrowIfNull(hostingContext.Dispatcher, nameof(hostingContext));
 
@@ -70,26 +74,38 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         this.windowManager = windowManager;
         this.dispatcherQueue = hostingContext.Dispatcher;
         this.tabSource = tabSource;
+        this.documentWindows = documentWindows;
 
         this.Outlets.Add(OutletName.Primary, (nameof(this.ContentViewModel), null));
 
         _ = router.Events.OfType<ActivationComplete>()
             .Take(1)
-            .Subscribe(@event => this.Window = (Window)@event.Context.NavigationTarget);
+            .Subscribe(@event =>
+            {
+                this.Window = (Window)@event.Context.NavigationTarget;
+
+                // The main window shows the demo's document tabs.
+                if (this.windowManager.GetWindow(this.Window.AppWindow.Id) is { } main)
+                {
+                    main.DocumentTabSource = this.tabSource;
+                }
+            });
+
+        // A window that closes closes its documents first, which the user may refuse.
+        this.windowManager.WindowClosing += this.OnWindowClosingAsync;
 
         // Subscribe to window lifecycle events to update the window list
         this.windowEventsSubscription = this.windowManager.WindowEvents
             .Subscribe(evt =>
                 _ = this.dispatcherQueue.TryEnqueue(() => this.OnWindowLifecycleEvent(evt)));
 
-        // Subscribe to document tab source events (if present) to update document metadata display
-        if (this.tabSource is not null)
-        {
-            this.tabSource.DocumentOpened += this.OnDocOpened;
-            this.tabSource.DocumentClosing += this.OnDocClosing;
-            this.tabSource.DocumentActivated += this.OnDocActivated;
-            this.tabSource.DocumentClosed += this.OnDocClosed;
-        }
+        // Follow the documents to show the active one, ask before a document closes, and close an emptied document
+        // window.
+        this.tabSource.DocumentOpened += this.OnDocOpened;
+        this.tabSource.DocumentClosing += this.OnDocClosing;
+        this.tabSource.DocumentActivated += this.OnDocActivated;
+        this.tabSource.DocumentClosed += this.OnDocClosed;
+        this.tabSource.WindowEmptied += this.OnWindowEmptied;
 
         // Initialize the window list
         this.UpdateWindowList();
@@ -168,13 +184,13 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         if (disposing)
         {
             this.windowEventsSubscription.Dispose();
-            if (this.tabSource is not null)
-            {
-                this.tabSource.DocumentOpened -= this.OnDocOpened;
-                this.tabSource.DocumentClosing -= this.OnDocClosing;
-                this.tabSource.DocumentActivated -= this.OnDocActivated;
-                this.tabSource.DocumentClosed -= this.OnDocClosed;
-            }
+            this.tabSource.DocumentOpened -= this.OnDocOpened;
+            this.tabSource.DocumentClosing -= this.OnDocClosing;
+            this.tabSource.DocumentActivated -= this.OnDocActivated;
+            this.tabSource.DocumentClosed -= this.OnDocClosed;
+            this.tabSource.WindowEmptied -= this.OnWindowEmptied;
+
+            this.windowManager.WindowClosing -= this.OnWindowClosingAsync;
 
             foreach (var metadata in this.documents.Values)
             {
@@ -208,37 +224,28 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     }
 
     /// <summary>
-    ///     Command to create a new document window with the selected backdrop.
+    ///     Command to open a new document in the main window.
+    /// </summary>
+    [RelayCommand]
+    private async Task CreateDocumentAsync()
+    {
+        if (this.MainWindowId() is { } main)
+        {
+            _ = await this.tabSource.OpenDocumentAsync(main, this.NewDocument()).ConfigureAwait(true);
+        }
+    }
+
+    /// <summary>
+    ///     Command to open a new document in a new document window.
     /// </summary>
     [RelayCommand]
     private async Task CreateDocumentWindowAsync()
     {
         try
         {
-            var window = await this.windowFactory.CreateDecoratedWindow<DocumentWindow>(
-                category: WindowCategory.Document).ConfigureAwait(true);
-            window.AppWindow.Title = string.Create(CultureInfo.InvariantCulture, $"Document Window {window.AppWindow.Id.Value}");
-            window.Activate();
-
-            // Also create a document metadata entry for the document window and the main window
-            // using the same DocumentId so the document tab in the main shell and the document
-            // window represent the same document instance.
-            if (this.tabSource is not null)
+            if (await this.documentWindows.OpenAsync().ConfigureAwait(true) is { } window)
             {
-                var docCtx = this.windowManager.GetWindow(window.AppWindow.Id);
-                var mainCtx = this.windowManager.OpenWindows.FirstOrDefault(wc => wc.Category == WindowCategory.Main);
-                if (docCtx is not null && mainCtx is not null)
-                {
-                    var md = new SampleDocumentMetadata
-                    {
-                        Title = $"Document {window.AppWindow.Id.Value}",
-                        IsDirty = false,
-                    };
-
-                    // Open the document for the document window first, then add a tab to the main window
-                    _ = await this.tabSource.OpenDocumentAsync(docCtx.Id, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
-                    _ = await this.tabSource.OpenDocumentAsync(mainCtx.Id, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
-                }
+                _ = await this.tabSource.OpenDocumentAsync(window, this.NewDocument()).ConfigureAwait(true);
             }
         }
         catch (Exception ex)
@@ -256,8 +263,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
     {
         try
         {
-            var mainCtx = this.windowManager.OpenWindows.FirstOrDefault(wc => wc.Category == WindowCategory.Main);
-            if (this.tabSource is null || mainCtx is null)
+            if (this.MainWindowId() is not { } main)
             {
                 return;
             }
@@ -268,7 +274,7 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                 IsPinnedHint = true,
                 IsPinLockedHint = true,
             };
-            _ = await this.tabSource.OpenDocumentAsync(mainCtx.Id, md, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
+            _ = await this.tabSource.OpenDocumentAsync(main, md).ConfigureAwait(true);
         }
         catch (Exception ex)
         {
@@ -525,8 +531,9 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         var tcs = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
         e.AddVetoTask(tcs.Task);
 
-        // Respect the demo toggle; if confirmation is disabled, allow the close immediately.
-        if (!this.ConfirmBeforeClose)
+        // Respect the demo toggle; if confirmation is disabled, allow the close immediately. A forced close asks
+        // nothing.
+        if (!this.ConfirmBeforeClose || e.Force)
         {
             _ = tcs.TrySetResult(true);
             return;
@@ -578,6 +585,30 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         }
     }
 
+    // Closing a window closes its documents first, asking about each one in that window: Cancel keeps the window open.
+    private async Task OnWindowClosingAsync(object? sender, WindowClosingEventArgs args)
+    {
+        if (!args.Cancel)
+        {
+            args.Cancel = !await this.tabSource.CloseWindowDocumentsAsync(args.WindowId).ConfigureAwait(true);
+        }
+    }
+
+    // A document window exists to show its tabs: it closes once its last tab was closed or moved to another window.
+    private async void OnWindowEmptied(object? sender, WindowEmptiedEventArgs args)
+    {
+        if (this.windowManager.GetWindow(args.Window)?.Category == WindowCategory.Document)
+        {
+            _ = await this.windowManager.CloseWindowAsync(args.Window).ConfigureAwait(true);
+        }
+    }
+
+    private WindowId? MainWindowId()
+        => this.windowManager.OpenWindows.FirstOrDefault(static window => window.Category == WindowCategory.Main)?.Id;
+
+    private SampleDocumentMetadata NewDocument()
+        => new() { Title = string.Create(CultureInfo.InvariantCulture, $"Document {++this.documentCount}") };
+
     private void OnDocClosed(object? sender, DocumentClosedEventArgs e)
     {
         if (e is null || e.Metadata is null)
@@ -586,9 +617,9 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
         }
 
         var dq = this.windowManager.GetWindow(e.WindowId)?.Window?.DispatcherQueue ?? this.dispatcherQueue;
-        _ = dq.TryEnqueue(() => _ = HandleDocClosedAsync(e));
+        _ = dq.TryEnqueue(() => HandleDocClosed(e));
 
-        async Task HandleDocClosedAsync(DocumentClosedEventArgs args)
+        void HandleDocClosed(DocumentClosedEventArgs args)
         {
             Debug.WriteLine($"OnDocClosed: DocId={args.Metadata.DocumentId}, Title='{args.Metadata.Title}', Window={args.WindowId.Value}");
 
@@ -597,40 +628,15 @@ public sealed partial class WindowManagerShellViewModel : AbstractOutletContaine
                 closed.PropertyChanged -= this.OnDocPropertyChanged;
             }
 
+            if (this.windowActiveDocument.TryGetValue(args.WindowId, out var active) && active == args.Metadata.DocumentId)
+            {
+                _ = this.windowActiveDocument.Remove(args.WindowId);
+            }
+
             if (args.WindowId == this.windowManager.ActiveWindow?.Id)
             {
                 this.ActiveDocumentTitle = null;
                 this.ActiveDocumentIsDirty = false;
-            }
-
-            // If the document was open in any secondary/document windows (not the main window),
-            // close those windows. The app owns window lifecycles and should decide how to
-            // handle document removal; in the demo we close any document window hosting this doc.
-            var docId = args.Metadata.DocumentId;
-            var windowIds = this.windowActiveDocument
-                .Where(kvp => kvp.Value == docId)
-                .Select(kvp => kvp.Key)
-                .ToList();
-
-            foreach (var windowId in windowIds)
-            {
-                // Remove the mapping for the window regardless of the result.
-                _ = this.windowActiveDocument.Remove(windowId);
-
-                try
-                {
-                    Debug.WriteLine($"Attempting to close window {windowId.Value} for document {docId}");
-                    var ctx = this.windowManager.GetWindow(windowId);
-                    if (ctx is not null && ctx.Category != WindowCategory.Main)
-                    {
-                        _ = await this.windowManager.CloseWindowAsync(windowId).ConfigureAwait(true);
-                        Debug.WriteLine($"Closed window {windowId.Value} for document {docId}");
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Debug.WriteLine($"Failed to close window {windowId.Value}: {ex.Message}");
-                }
             }
         }
     }

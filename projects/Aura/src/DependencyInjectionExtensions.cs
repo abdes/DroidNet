@@ -4,6 +4,7 @@
 
 using DroidNet.Aura.Decoration;
 using DroidNet.Aura.Dialogs;
+using DroidNet.Aura.Documents;
 using DroidNet.Aura.Drag;
 using DroidNet.Aura.Settings;
 using DroidNet.Aura.Theming;
@@ -180,6 +181,7 @@ public static class DependencyInjectionExtensions
             // Drag components are singletons for the application.
             container.Register<IDragVisualService, DragVisualService>(Reuse.Singleton);
             container.Register<ITabDragCoordinator, TabDragCoordinator>(Reuse.Singleton);
+            container.Register<DocumentTransfers>(Reuse.Singleton);
         }
     }
 }

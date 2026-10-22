@@ -143,6 +143,11 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         {
             this.UpdateTitleBarHost();
         }
+        else if (args.PropertyName == nameof(MainShellViewModel.DocumentTabSource))
+        {
+            // The application may bind the window's tabs from any thread.
+            _ = this.DispatcherQueue.TryEnqueue(this.AttachDocumentServiceHandlers);
+        }
     }
 
     private void UpdateTitleBarHost()
@@ -282,7 +287,7 @@ public sealed partial class MainShellView : INotifyPropertyChanged
         this.cachedTabSource = ds;
         if (this.ViewModel?.Context is not null)
         {
-            this.documentTabPresenter = new DocumentTabPresenter(this.DocumentTabStrip, ds, this.ViewModel.Context, this.DispatcherQueue, this.logger);
+            this.documentTabPresenter = new DocumentTabPresenter(this.DocumentTabStrip, ds, this.ViewModel.Context, this.DispatcherQueue, this.logger, this.ViewModel.DocumentTransfers);
         }
     }
 

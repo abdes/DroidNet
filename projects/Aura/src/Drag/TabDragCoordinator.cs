@@ -214,6 +214,24 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         }
     }
 
+    // Ends the drag without a drop: the tab goes back to the strip it was dragged out of.
+    private void CancelDrag()
+    {
+        lock (this.syncLock)
+        {
+            if (!this.isActive || this.dragContext is not { } context)
+            {
+                return;
+            }
+
+            this.StopPollingTimer();
+            this.LogDragCancelled();
+            _ = this.currentStrategy?.CompleteDrag(drop: false);
+            context.SourceTabStrip?.TryCompleteDrag(context.DraggedItemData, destinationStrip: null, newIndex: null);
+            this.CleanupState();
+        }
+    }
+
     private static int GetDraggedItemIndex(DragContext context)
         => context.TabStrip is null ? -1 : context.TabStrip.IndexOf(context.DraggedItemData);
 
@@ -238,6 +256,14 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
             hitStrip = this.GetHitTestTabStrip(screenPoint);
             isTearOutMode = this.currentStrategy == this.tearOutStrategy;
+
+            // A drag that reorders in a strip drops there. The reorder follows the pointer over that strip, while the
+            // release point comes from the strip the drag started in, which can be in another window, on another
+            // screen, and hit-test outside the strip it is over.
+            if (hitStrip is null && !isTearOutMode)
+            {
+                hitStrip = context.TabStrip;
+            }
         }
 
         return true;
@@ -283,23 +309,20 @@ public partial class TabDragCoordinator : ITabDragCoordinator
         return this.spatialMapperFactory(window, element);
     }
 
+    // A strip whose window has closed can stay registered until it is collected: WinUI does not unload the content of a
+    // closed window. The drag passes over it.
     private bool TryCreateMapperForStrip(ITabStrip strip, out ISpatialMapper mapper, out FrameworkElement container)
     {
         container = strip.GetContainerElement();
-
-        try
+        if (this.windowManager.GetWindow(strip.WindowId)?.Window is not { } window)
         {
-            mapper = this.CreateSpatialMapper(strip, container);
-            return true;
-        }
-        catch (InvalidOperationException ex)
-        {
-            // Log as warning instead of error, as this is expected for stale strips (e.g. closed windows)
-            // that haven't been garbage collected yet.
-            this.LogStaleTabStripSkipped(ex, System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(strip));
+            this.LogStaleTabStripSkipped(System.Runtime.CompilerServices.RuntimeHelpers.GetHashCode(strip), strip.WindowId.Value);
             mapper = default!;
             return false;
         }
+
+        mapper = this.spatialMapperFactory(window, container);
+        return true;
     }
 
     private (ITabStrip strip, ISpatialMapper mapper, FrameworkElement container)? FindStripUnderCursor(SpatialPoint<PhysicalScreenSpace> cursor)
@@ -508,6 +531,8 @@ public partial class TabDragCoordinator : ITabDragCoordinator
     {
         SpatialPoint<PhysicalScreenSpace> newPosition = default;
         SpatialPoint<PhysicalScreenSpace> previousPosition = default;
+        SpatialPoint<ScreenSpace>? released = null;
+        var cancelled = false;
         var shouldProcess = false;
 
         lock (this.syncLock)
@@ -527,6 +552,18 @@ public partial class TabDragCoordinator : ITabDragCoordinator
 
             var candidate = new Point(cursorPos.X, cursorPos.Y).AsPhysicalScreen();
 
+            // The release of the button and Esc reach only the window under the pointer, which is often not the one
+            // whose strip started the drag: the coordinator reads them itself, wherever the pointer is.
+            var buttons = this.ReadButtons();
+            if (buttons.IsEscapeDown)
+            {
+                cancelled = true;
+            }
+            else if (!buttons.IsPrimaryDown)
+            {
+                released = this.dragContext.SpatialMapper.Convert<PhysicalScreenSpace, ScreenSpace>(candidate);
+            }
+
             // Check if position changed (compare physical pixels)
             if (Math.Abs(candidate.Point.X - this.lastCursorPosition.Point.X) > 0.5
                 || Math.Abs(candidate.Point.Y - this.lastCursorPosition.Point.Y) > 0.5)
@@ -536,6 +573,19 @@ public partial class TabDragCoordinator : ITabDragCoordinator
                 newPosition = candidate;
                 shouldProcess = true;
             }
+        }
+
+        if (cancelled)
+        {
+            this.CancelDrag();
+            return;
+        }
+
+        if (released is { } dropPoint)
+        {
+            this.LogReleaseDetected(dropPoint);
+            this.EndDrag(dropPoint);
+            return;
         }
 
         if (!shouldProcess)

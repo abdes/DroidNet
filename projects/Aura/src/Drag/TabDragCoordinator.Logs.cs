@@ -266,6 +266,30 @@ public partial class TabDragCoordinator
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Drag cancelled with Esc: the tab goes back where it came from")]
+    private static partial void LogDragCancelled(ILogger logger);
+
+    private void LogDragCancelled() => LogDragCancelled(this.logger);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Debug,
+        Message = "The button was released at {Point} (screen), away from the strip that started the drag")]
+    private static partial void LogReleaseDetected(ILogger logger, Windows.Foundation.Point point);
+
+    private void LogReleaseDetected(SpatialPoint<ScreenSpace> point)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        LogReleaseDetected(this.logger, point.Point);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Trace,
         Message = "Drag abort ignored: Not active")]
     private static partial void LogDragAbortIgnored(ILogger logger);
@@ -606,15 +630,15 @@ public partial class TabDragCoordinator
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "Skipping stale TabStrip (Hash={Hash}) during hit test.")]
-    private static partial void LogStaleTabStripSkipped(ILogger logger, Exception ex, int Hash);
+        Level = LogLevel.Debug,
+        Message = "Skipping stale TabStrip (Hash={Hash}) of closed window {WindowId} during hit test.")]
+    private static partial void LogStaleTabStripSkipped(ILogger logger, int Hash, ulong WindowId);
 
-    private void LogStaleTabStripSkipped(Exception ex, int hash)
+    private void LogStaleTabStripSkipped(int hash, ulong windowId)
     {
         if (this.logger is ILogger logger)
         {
-            LogStaleTabStripSkipped(logger, ex, hash);
+            LogStaleTabStripSkipped(logger, hash, windowId);
         }
     }
 }

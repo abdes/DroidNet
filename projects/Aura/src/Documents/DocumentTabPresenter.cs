@@ -5,10 +5,13 @@
 using System.Collections.Concurrent;
 using System.ComponentModel;
 using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Aura.Windowing;
+using DroidNet.Coordinates;
 using DroidNet.Documents;
 using Microsoft.Extensions.Logging;
+using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 
 namespace DroidNet.Aura.Documents;
@@ -21,6 +24,14 @@ namespace DroidNet.Aura.Documents;
 ///     closes or detaches or the presenter is disposed. It optionally hydrates existing documents when the service also
 ///     implements <see cref="IDocumentServiceState"/>, otherwise it starts empty and waits for new events.
 /// </summary>
+/// <remarks>
+///     With the application's <see cref="DocumentTransfers"/>, a tab dragged out of the strip detaches its document,
+///     which the strip it is dropped on attaches, in this window or another; a tab dropped outside every strip attaches
+///     its document to the window <see cref="IDocumentWindowFactory"/> creates for it. Only the tab source that detached
+///     a document attaches it again: a strip whose tabs come from another source does not take it. A document that no
+///     window takes goes back to the window it came from. The presenter owns the strip's items: it removes the tab a drag inserted
+///     while passing over the strip, and adopts the one it dropped.
+/// </remarks>
 public sealed partial class DocumentTabPresenter : IDisposable
 {
     private readonly Controls.TabStrip tabStrip;
@@ -28,6 +39,7 @@ public sealed partial class DocumentTabPresenter : IDisposable
     private readonly IManagedWindow hostWindow;
     private readonly DispatcherQueue dispatcher;
     private readonly ILogger logger;
+    private readonly DocumentTransfers? transfers;
     private readonly Dictionary<DocumentId, Controls.TabItem> tabMap = [];
     private readonly Dictionary<DocumentId, IDocumentMetadata> observed = [];
 
@@ -46,13 +58,17 @@ public sealed partial class DocumentTabPresenter : IDisposable
     /// <param name="hostWindow">The host window context that owns the presented tabs.</param>
     /// <param name="dispatcher">The dispatcher used to marshal UI updates.</param>
     /// <param name="logger">Optional logger.</param>
-    public DocumentTabPresenter(Controls.TabStrip tabStrip, IDocumentTabSource tabSource, IManagedWindow hostWindow, DispatcherQueue dispatcher, ILogger? logger = null)
+    /// <param name="transfers">
+    ///     The documents tab drags move between windows; without them, a tab dragged out of the strip keeps its document.
+    /// </param>
+    public DocumentTabPresenter(Controls.TabStrip tabStrip, IDocumentTabSource tabSource, IManagedWindow hostWindow, DispatcherQueue dispatcher, ILogger? logger = null, DocumentTransfers? transfers = null)
     {
         this.tabStrip = tabStrip ?? throw new ArgumentNullException(nameof(tabStrip));
         this.tabSource = tabSource ?? throw new ArgumentNullException(nameof(tabSource));
         this.hostWindow = hostWindow ?? throw new ArgumentNullException(nameof(hostWindow));
         this.dispatcher = dispatcher ?? throw new ArgumentNullException(nameof(dispatcher));
         this.logger = logger ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<DocumentTabPresenter>.Instance;
+        this.transfers = transfers;
 
         // Ensure WindowId is set (redundant if MainShellView sets it, but safe)
         if (this.tabStrip.WindowId.Value == 0)
@@ -68,6 +84,8 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         this.tabStrip.TabCloseRequested += this.TabStrip_TabCloseRequested;
         this.tabStrip.TabDetachRequested += this.TabStrip_TabDetachRequested;
+        this.tabStrip.TabDragComplete += this.TabStrip_TabDragComplete;
+        this.tabStrip.TabTearOutRequested += this.TabStrip_TabTearOutRequested;
         this.tabStrip.SelectionChanged += this.TabStrip_SelectionChanged;
 
         this.InitializeFromServiceSnapshot();
@@ -84,6 +102,8 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         this.tabStrip.TabCloseRequested -= this.TabStrip_TabCloseRequested;
         this.tabStrip.TabDetachRequested -= this.TabStrip_TabDetachRequested;
+        this.tabStrip.TabDragComplete -= this.TabStrip_TabDragComplete;
+        this.tabStrip.TabTearOutRequested -= this.TabStrip_TabTearOutRequested;
         this.tabStrip.SelectionChanged -= this.TabStrip_SelectionChanged;
 
         foreach (var metadata in this.observed.Values)
@@ -110,8 +130,9 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
         // Removing a tab selects a neighbor, which may belong to a document the service has already closed (closing a
         // window closes all its documents before their tabs go); that document cannot be activated.
+        // A tab that a drag passing over the strip inserted has no document here yet.
         var documentId = DocumentId.FromValue(newItem.ContentId);
-        if (this.leaving.ContainsKey(documentId))
+        if (this.leaving.ContainsKey(documentId) || !this.tabMap.ContainsKey(documentId))
         {
             return;
         }
@@ -139,20 +160,109 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
     private async void TabStrip_TabDetachRequested(object? sender, Controls.TabDetachRequestedEventArgs e)
     {
-        if (e is null || e.Item is null)
+        if (e?.Item is not Controls.TabItem item)
         {
             return;
         }
 
-        if (e.Item is not Controls.TabItem item)
-        {
-            return;
-        }
-
-        // A refused detach raises no event, so the tab stays where it is.
+        // The drag leaves a strip it was passing over with the tab it inserted there, which has no document here.
         var id = DocumentId.FromValue(item.ContentId);
+        if (!this.tabMap.ContainsKey(id))
+        {
+            this.RemoveDroppedTab(id);
+            return;
+        }
+
+        // Nobody could attach the document, so it keeps its tab. A refused detach raises no event either.
+        if (this.transfers is null)
+        {
+            this.LogDocumentDetachUnavailable(id);
+            return;
+        }
+
         this.LogDocumentDetachRequested(id);
-        _ = await this.tabSource.DetachDocumentAsync(this.hostWindow.Id, id).ConfigureAwait(true);
+        if (await this.tabSource.DetachDocumentAsync(this.hostWindow.Id, id).ConfigureAwait(true) is { } document)
+        {
+            this.transfers.Hold(document, this.hostWindow.Id, this.tabSource);
+        }
+    }
+
+    // A drag ends on the strip it was dropped on, or on its source strip when it was dropped elsewhere. A document the
+    // drag moved is attached here when it was dropped here, and goes back where it came from otherwise; a tab that only
+    // moved within the strip moved no document.
+    private async void TabStrip_TabDragComplete(object? sender, Controls.TabDragCompleteEventArgs e)
+    {
+        if (e?.Item is not Controls.TabItem item
+            || this.transfers is not { } transfers
+            || transfers.Take(DocumentId.FromValue(item.ContentId)) is not { } transfer)
+        {
+            return;
+        }
+
+        var dropped = ReferenceEquals(e.DestinationStrip, this.tabStrip);
+        await this.AttachAsync(transfer, dropped ? this.hostWindow.Id : transfer.Source, dropped ? (e.NewIndex ?? -1) : -1)
+            .ConfigureAwait(true);
+    }
+
+    [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A window that fails to open leaves the document where it came from.")]
+    private async void TabStrip_TabTearOutRequested(object? sender, Controls.TabTearOutRequestedEventArgs e)
+    {
+        if (e?.Item is not Controls.TabItem item
+            || this.transfers is not { } transfers
+            || transfers.Take(DocumentId.FromValue(item.ContentId)) is not { } transfer)
+        {
+            return;
+        }
+
+        WindowId? window = null;
+        try
+        {
+            var position = new SpatialMapper(this.hostWindow.Window, this.tabStrip).ToPhysicalScreen(e.ScreenDropPoint.AsScreen());
+            window = await transfers.CreateWindowAsync(transfer.Document, position).ConfigureAwait(true);
+        }
+        catch (Exception exception)
+        {
+            this.LogDocumentWindowFailed(transfer.Document.DocumentId, exception);
+        }
+
+        await this.AttachAsync(transfer, window ?? transfer.Source, indexHint: -1).ConfigureAwait(true);
+    }
+
+    // Attaches a moved document to a window through the tab source that detached it; a document that the window refuses,
+    // or that this strip's tabs cannot take because they come from another source, goes back where it came from.
+    private async Task AttachAsync(DocumentTransfer transfer, WindowId target, int indexHint)
+    {
+        var document = transfer.Document;
+        var accepted = target != this.hostWindow.Id || ReferenceEquals(transfer.Tabs, this.tabSource);
+        if (accepted)
+        {
+            this.LogDocumentAttachRequested(document.DocumentId, target.Value);
+            if (await transfer.Tabs.AttachDocumentAsync(target, document, indexHint, shouldSelect: true).ConfigureAwait(true))
+            {
+                return;
+            }
+        }
+
+        if (target == this.hostWindow.Id)
+        {
+            this.RemoveDroppedTab(document.DocumentId);
+        }
+
+        if (target != transfer.Source)
+        {
+            this.LogDocumentReturned(document.DocumentId, transfer.Source.Value);
+            _ = await transfer.Tabs.AttachDocumentAsync(transfer.Source, document, indexHint: -1, shouldSelect: true).ConfigureAwait(true);
+        }
+    }
+
+    // Removes a tab that a drag inserted in the strip without a document of this window behind it.
+    private void RemoveDroppedTab(DocumentId documentId)
+    {
+        if (!this.tabMap.ContainsKey(documentId)
+            && this.tabStrip.Items.FirstOrDefault(tab => tab.ContentId == documentId.Value) is { } dropped)
+        {
+            _ = this.tabStrip.Items.Remove(dropped);
+        }
     }
 
     private void OnDocumentOpened(object? sender, DocumentOpenedEventArgs e)
@@ -175,8 +285,10 @@ public sealed partial class DocumentTabPresenter : IDisposable
 
     private void OnDocumentAttached(object? sender, DocumentAttachedEventArgs e)
     {
+        // A drag that ended in another window can leave here the tab it inserted while passing over this strip.
         if (e.WindowId != this.hostWindow.Id)
         {
+            _ = this.dispatcher.TryEnqueue(() => this.RemoveDroppedTab(e.Metadata.DocumentId));
             return;
         }
 
@@ -272,12 +384,28 @@ public sealed partial class DocumentTabPresenter : IDisposable
             return;
         }
 
-        var tab = TabItemExtensions.CreateTabItemFromMetadata(docId, metadata);
-        tab.Command = new AsyncRelayCommand(async ()
-            => await this.tabSource.SelectDocumentAsync(this.hostWindow.Id, docId)
-            .ConfigureAwait(true));
-        var index = this.ClampInsertIndex(insertAt);
-        this.tabStrip.Items.Insert(index, tab);
+        // A document a drag dropped here keeps the tab the drag inserted where it was dropped.
+        var dropped = this.tabStrip.Items.FirstOrDefault(item => item.ContentId == docId.Value);
+        var tab = dropped ?? TabItemExtensions.CreateTabItemFromMetadata(docId, metadata);
+        if (dropped is not null)
+        {
+            TabItemExtensions.ApplyMetadataToTab(dropped, metadata);
+        }
+
+        // A drag copies the tab with its command into the strips it passes over; there, the document is not this
+        // window's.
+        tab.Command = new AsyncRelayCommand(async () =>
+        {
+            if (this.tabMap.ContainsKey(docId))
+            {
+                _ = await this.tabSource.SelectDocumentAsync(this.hostWindow.Id, docId).ConfigureAwait(true);
+            }
+        });
+        if (dropped is null)
+        {
+            this.tabStrip.Items.Insert(this.ClampInsertIndex(insertAt), tab);
+        }
+
         this.tabMap[docId] = tab;
     }
 

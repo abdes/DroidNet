@@ -6,6 +6,7 @@ using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Aura.Documents;
 using DroidNet.Aura.Drag;
 using DroidNet.Aura.Settings;
 using DroidNet.Aura.Windowing;
@@ -48,7 +49,6 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
     private readonly DispatcherQueue dispatcherQueue;
     private readonly ISettingsService<IAppearanceSettings> appearanceSettingsService;
     private readonly IWindowManagerService? windowManagerService;
-    private readonly IDocumentTabSource? tabSource;
     private readonly AssetResolverService assets;
     private MenuItemData? themesMenuItem;
 
@@ -64,8 +64,8 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
     /// <param name="assets">The asset resolver service used to resolve asset URIs for icons and images.</param>
     /// <param name="appearanceSettingsService">The appearance settings service used to manage theme settings.</param>
     /// <param name="windowManagerService">Optional window manager service for accessing window context and menu.</param>
-    /// <param name="tabSource">Optional document tab source implemented by the host application.</param>
     /// <param name="tabDragCoordinator">Optional tab drag coordinator used for cross-window tab drag operations.</param>
+    /// <param name="documentTransfers">Optional documents that tab drags move between windows.</param>
     /// <param name="loggerFactory">
     ///     The <see cref="ILoggerFactory" /> used to obtain an <see cref="ILogger" />. If the logger
     ///     cannot be obtained, a <see cref="NullLogger" /> is used silently.
@@ -75,8 +75,8 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
         AssetResolverService assets,
         ISettingsService<IAppearanceSettings> appearanceSettingsService,
         IWindowManagerService? windowManagerService = null,
-        IDocumentTabSource? tabSource = null,
         ITabDragCoordinator? tabDragCoordinator = null,
+        DocumentTransfers? documentTransfers = null,
         ILoggerFactory? loggerFactory = null)
     {
         Debug.Assert(
@@ -89,8 +89,8 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
 
         this.appearanceSettingsService = appearanceSettingsService;
         this.windowManagerService = windowManagerService;
-        this.tabSource = tabSource;
         this.DragCoordinator = tabDragCoordinator;
+        this.DocumentTransfers = documentTransfers;
         appearanceSettingsService.PropertyChanged += this.AppearanceSettings_PropertyChanged;
 
         // Initialize fallback settings menu (used if window context has no menu)
@@ -102,10 +102,10 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
     }
 
     /// <summary>
-    ///     Gets the optional document tab source implemented by the host application. This property
-    ///     may be null when the application does not register an IDocumentTabSource implementation.
+    ///     Gets the source of the window's document tabs, which the application binds to the window
+    ///     (<see cref="IManagedWindow.DocumentTabSource"/>); <see langword="null"/> while it has none.
     /// </summary>
-    public IDocumentTabSource? DocumentTabSource => this.tabSource;
+    public IDocumentTabSource? DocumentTabSource => this.Context?.DocumentTabSource;
 
     /// <summary>
     /// Gets the optional window manager service used for multi-window coordination. Exposed
@@ -119,6 +119,12 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
     ///     drag coordinator for cross-window drag behaviors.
     /// </summary>
     public ITabDragCoordinator? DragCoordinator { get; }
+
+    /// <summary>
+    ///     Gets the documents that tab drags move between windows, registered with the drag services. Without them, a tab
+    ///     dragged out of the window's strip keeps its document.
+    /// </summary>
+    public DocumentTransfers? DocumentTransfers { get; }
 
     /// <summary>
     /// Gets the menu builder for creating the settings menu.
@@ -324,6 +330,10 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
                 {
                     this.UpdateShowCustomTitleBar(this.currentContext);
                 }
+                else if (string.Equals(e.PropertyName, nameof(IManagedWindow.DocumentTabSource), StringComparison.Ordinal))
+                {
+                    this.OnPropertyChanged(nameof(this.DocumentTabSource));
+                }
             };
 
             this.currentContext.PropertyChanged += this.contextPropertyChangedHandler;
@@ -331,6 +341,7 @@ public partial class MainShellViewModel : AbstractOutletContainer, IRoutingAware
 
         // Compute initial value now
         this.UpdateShowCustomTitleBar(this.currentContext);
+        this.OnPropertyChanged(nameof(this.DocumentTabSource));
     }
 
     private void UpdateShowCustomTitleBar(IManagedWindow? context)

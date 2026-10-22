@@ -38,7 +38,7 @@
           "height": 32,
           "showTitle": true,
           "showIcon": true,
-          "withDocumentTabs": false,
+          "withDocumentTabs": true,
           "iconPath": "DroidNet.png",
           "dragBehavior": "Default"
         },

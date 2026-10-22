@@ -12,7 +12,8 @@ namespace DroidNet.Samples.Aura.MultiWindow;
 ///     Represents metadata for a sample document, including its ID, title, icon, and state flags. Its tabs follow
 ///     every change through <see cref="PropertyChanged"/>.
 /// </summary>
-internal sealed class SampleDocumentMetadata : IDocumentMetadata
+[System.Diagnostics.CodeAnalysis.SuppressMessage("Maintainability", "CA1515:Consider making public types internal", Justification = "The sample's view models expose it")]
+public sealed class SampleDocumentMetadata : IDocumentMetadata
 {
     /// <inheritdoc/>
     public event PropertyChangedEventHandler? PropertyChanged;

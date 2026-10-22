@@ -33,7 +33,7 @@
             <TextBlock
                 Margin="0,6,0,0"
                 Foreground="{ThemeResource TextFillColorSecondaryBrush}"
-                Text="Detach (drag out) will move a document into a new window. Close will request the app close the document and may be vetoed by the app."
+                Text="A document has one tab. Drag it onto another window's tab strip to move it there, or outside every window to open it in a new document window. Closing a tab, or a window with its tabs, asks first; a document window closes with its last tab."
                 TextWrapping="Wrap" />
             <StackPanel
                 Margin="0,8,0,0"
@@ -135,11 +135,13 @@
                     </Button.KeyboardAccelerators>
                 </Button>
 
-                <Button Command="{x:Bind ViewModel.CreateDocumentWindowCommand}" Content="New Document">
+                <Button Command="{x:Bind ViewModel.CreateDocumentCommand}" Content="New Document">
                     <Button.KeyboardAccelerators>
                         <KeyboardAccelerator Key="D" Modifiers="Control,Shift" />
                     </Button.KeyboardAccelerators>
                 </Button>
+
+                <Button Command="{x:Bind ViewModel.CreateDocumentWindowCommand}" Content="New Document Window" />
 
                 <Button Command="{x:Bind ViewModel.CreatePinLockedDocumentCommand}" Content="New Pinned Document" />
 

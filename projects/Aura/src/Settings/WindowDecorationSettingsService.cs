@@ -53,7 +53,7 @@ public sealed partial class WindowDecorationSettingsService(SettingsManager mana
         {
             Category = WindowCategory.Document,
             ChromeEnabled = true,
-            TitleBar = TitleBarOptions.Default,
+            TitleBar = TitleBarOptions.Default with { WithDocumentTabs = true },
             Buttons = WindowButtonsOptions.Default,
             Backdrop = BackdropKind.Mica,
         },

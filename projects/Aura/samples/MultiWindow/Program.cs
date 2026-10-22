@@ -7,11 +7,12 @@ using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 using DroidNet.Aura;
 using DroidNet.Aura.Decoration;
+using DroidNet.Aura.Documents;
 using DroidNet.Aura.Settings;
+using DroidNet.Aura.Windowing;
 using DroidNet.Bootstrap;
 using DroidNet.Config;
 using DroidNet.Coordinates;
-using DroidNet.Documents;
 using DroidNet.Routing;
 using DroidNet.Samples.WinPackagedApp;
 using DryIoc;
@@ -132,6 +133,11 @@ public static partial class Program
                     Path = "demo",
                     ViewModelType = typeof(WindowManagerShellViewModel),
                 },
+                new Route
+                {
+                    Path = "doc",
+                    ViewModelType = typeof(DocumentPageViewModel),
+                },
             ]),
         },
     ]);
@@ -152,13 +158,15 @@ public static partial class Program
         // Register menu providers using standard DI patterns
         _ = container.RegisterMenus();
 
-        // Register a minimal in-demo document tab source for the sample
-        container.Register<IDocumentTabSource, DemoDocumentTabSource>(Reuse.Singleton);
+        // The sample's documents, whose tabs the windows bind, and the document windows a torn-out tab opens.
+        container.Register<DemoDocumentTabSource>(Reuse.Singleton);
+        container.Register<DemoDocumentWindows>(Reuse.Singleton);
+        container.RegisterMapping<IDocumentWindowFactory, DemoDocumentWindows>();
 
         // Register secondary window types as transient (Main window is singleton)
         _ = container.AddWindow<Window>();
         _ = container.AddWindow<ToolWindow>();
-        _ = container.AddWindow<DocumentWindow>();
+        _ = container.AddWindow<RoutedWindow>();
 
         /*
          * Configure the Application's Windows.
@@ -169,13 +177,21 @@ public static partial class Program
         // The Main Window is a singleton registered for the special Target.Main
         container.Register<Window, RoutedWindow>(Reuse.Singleton, serviceKey: Target.Main);
 
-        // Views and ViewModels
-        container.Register<MainShellView>(Reuse.Singleton);
-        container.Register<MainShellViewModel>(Reuse.Singleton);
+        // A document window opens for each navigation to its target, as a routed window whose shell shows tabs.
+        container.RegisterDelegate<Window>(
+            resolver => resolver.Resolve<IWindowFactory>().CreateDecoratedWindow<RoutedWindow>(WindowCategory.Document).GetAwaiter().GetResult(),
+            Reuse.Transient,
+            serviceKey: DemoDocumentWindows.Target);
+
+        // Views and ViewModels: every routed window has its own shell
+        container.Register<MainShellView>(Reuse.Transient);
+        container.Register<MainShellViewModel>(Reuse.Transient);
 
         // Multi-window demo ViewModels
         container.Register<WindowManagerShellViewModel>(Reuse.Singleton);
         container.Register<WindowManagerShellView>(Reuse.Singleton);
+        container.Register<DocumentPageViewModel>(Reuse.Transient);
+        container.Register<DocumentPageView>(Reuse.Transient);
     }
 
     /// <summary>

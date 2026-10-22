@@ -29,24 +29,29 @@ This sample demonstrates Aura's comprehensive multi-window management capabiliti
 
 - **Main Windows** - Full-featured application windows
 - **Tool Windows** - Lightweight utility windows
-- **Document Windows** - Content editing windows with toolbars
+- **Document Windows** - Routed windows that show document tabs
 
-### Detach vs Close
+### Documents Across Windows
 
+The sample's documents (`DemoDocumentTabSource`) have one tab each, in one
+window. Every window that shows documents is a routed window whose shell binds
+the sample's tab source (`IManagedWindow.DocumentTabSource`).
+
+- **New Document** opens a tab in the main window; **New Document Window** opens
+  a document window with a new document. **Edit / Save** in a document window
+  marks its document unsaved and back, and its tab follows.
+- **Move** - Drag a tab onto another window's tab strip to move its document
+  there, or outside every window: `DemoDocumentWindows`, the sample's
+  `IDocumentWindowFactory`, opens a document window where the tab was dropped.
+  Esc cancels the drag, and the tab goes back.
 - **Pin lock** - "New Pinned Document" opens a tab in the main window whose
   metadata sets `IsPinnedHint` and `IsPinLockedHint`: it has no pin button, the
   user cannot unpin it, and it cannot be dragged out.
-- **Detach** - Dragging (tear-out) a document tab starts a non-blocking detach
-  operation: the UI immediately removes a tab and the app receives a
-  DocumentDetached event to take ownership (for example creating a dedicated
-  document window). This flow intentionally does not allow vetoes from the app
-  so the UI remains responsive.
-- **Close** - Explicit close requests (clicking a tab's close button) call into
-  the app via the IDocumentTabSource.CloseDocumentAsync API, which raises a
-  DocumentClosing event. The app can return a veto by adding a Task to the event
-  args which returns false (e.g., to block close while saving or when the
-  document is dirty). CloseDocumentAsync will await veto tasks unless forced
-  (force==true) which bypasses vetos.
+- **Close** - Closing a tab raises `DocumentClosing`, whose veto the sample
+  turns into a confirmation in that window (unless the close is forced, or
+  "Ask before closing documents" is off). Closing a window closes its documents
+  first, asking about each one there; Cancel keeps the window open. A document
+  window closes by itself once its last tab was closed or moved away.
 
 ### ⚡ Reactive Events
 
@@ -118,7 +123,7 @@ serviceCollection.RegisterMenus();
 // Register window types
 serviceCollection.AddWindow<MainWindow>();
 serviceCollection.AddWindow<ToolWindow>();
-serviceCollection.AddWindow<DocumentWindow>();
+serviceCollection.AddWindow<RoutedWindow>();
 ```
 
 ### Menu System
@@ -201,7 +206,7 @@ var decoration = WindowDecorationBuilder.ForDocumentWindow()
     .WithMenu(MenuConfiguration.MainMenuId, isCompact: false)
     .Build();
 
-var context = await windowManager.CreateWindowAsync<DocumentWindow>(
+var context = await windowManager.CreateWindowAsync<RoutedWindow>(
     category: WindowCategory.Document,
     title: "My Document",
     decoration: decoration);

@@ -6,6 +6,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.WinUI;
 using DroidNet.Aura.Decoration;
 using DroidNet.Controls.Menus;
+using DroidNet.Documents;
 using Microsoft.UI;
 using Microsoft.UI.Dispatching;
 using Microsoft.UI.Windowing;
@@ -47,6 +48,10 @@ internal sealed partial class ManagedWindow : ObservableObject, IManagedWindow
     /// <inheritdoc/>
     [ObservableProperty]
     public partial WindowDecorationOptions? Decorations { get; set; }
+
+    /// <inheritdoc/>
+    [ObservableProperty]
+    public partial IDocumentTabSource? DocumentTabSource { get; set; }
 
     /// <inheritdoc/>
     public IMenuSource? MenuSource => this.menuSource;
