@@ -782,10 +782,7 @@ public partial class DynamicTree : Control
         // Remove subscriptions to the ViewModel
         this.ViewModel?.PropertyChanged -= this.ViewModel_OnPropertyChanged;
         this.ViewModel?.BringIntoViewRequested -= this.ViewModel_OnBringIntoViewRequested;
-        if (this.ViewModel is { } viewModel)
-        {
-            viewModel.DisplayedInteractionItems = null;
-        }
+        this.ViewModel?.DetachTree(this);
 
         // Stop listening to the ViewModelChanged event while unloaded
         this.ViewModelChanged -= this.OnViewModelChanged;
@@ -1182,13 +1179,10 @@ public partial class DynamicTree : Control
         // Detach any handlers from the previous ViewModel
         args.OldValue?.PropertyChanged -= this.ViewModel_OnPropertyChanged;
         args.OldValue?.BringIntoViewRequested -= this.ViewModel_OnBringIntoViewRequested;
-        if (args.OldValue is { } oldViewModel)
-        {
-            oldViewModel.DisplayedInteractionItems = null;
-        }
+        args.OldValue?.DetachTree(this);
 
-        // Attach handlers to the new ViewModel
-        if (this.ViewModel is not null)
+        // A view model has one live tree; a tree it rejects shows no rows and follows none of its requests.
+        if (this.ViewModel is not null && this.ViewModel.TryAttachTree(this))
         {
             this.logger = this.ViewModel.LoggerFactory?.CreateLogger<DynamicTree>();
 
@@ -1201,7 +1195,9 @@ public partial class DynamicTree : Control
 
     private void UpdateDisplayedItems()
     {
-        if (this.ViewModel is null)
+        // Only the attached tree shows the rows and supplies the view model's interaction state; an unloaded or rejected
+        // tree changing its scope or filtering leaves both alone.
+        if (this.ViewModel is null || !this.ViewModel.IsAttachedTree(this))
         {
             this.displayed.Attach(rows: null);
             return;

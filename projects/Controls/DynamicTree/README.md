@@ -139,6 +139,24 @@ public class MyTreeItemAdapter : TreeItemAdapter
 > - Use `InitializeRootAsync` to set up the root and build the initial
 >   `ShownItems` collection.
 
+## One Tree per View Model
+
+A `DynamicTreeViewModel` is shown by one live `DynamicTree` at a time. The
+view model's interaction state (logical keyboard focus, the scope and displayed
+source that keyboard navigation and typeahead walk, and bring-into-view
+requests) belongs to the tree that shows it.
+
+- A second tree loaded over the same view model while the first is still
+  loaded is rejected: it shows no rows, the view model logs an error, and Debug
+  builds throw `InvalidOperationException`.
+- A tree lets go when it unloads or moves to another view model; another tree
+  can then attach.
+- Expansion and selection live on the items, so they are the same wherever the
+  items show.
+
+Hosts that keep one view per view model (`DroidNet.Mvvm.HostedViews`) never
+build a second tree by accident.
+
 ## Selection
 
 `DynamicTreeViewModel` exposes a `SelectionMode` property (enum: `None`,

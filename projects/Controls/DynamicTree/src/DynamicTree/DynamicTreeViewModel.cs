@@ -28,6 +28,13 @@ namespace DroidNet.Controls;
 ///     To create a concrete implementation of this view model, derive from <see cref="DynamicTreeViewModel" />
 ///     and implement the necessary logic for your specific tree structure. Below is an example of how
 ///     to derive from this class and create a concrete view model and item adapter.</para>
+///     <para>
+///     A view model is shown by one live <see cref="DynamicTree"/> at a time. Its interaction state, which is the
+///     logical keyboard focus, the scope and displayed source that keyboard navigation and typeahead walk, and the
+///     bring-into-view requests, belongs to the tree that shows it. A second tree loaded over the same view
+///     model while the first is still loaded is rejected: it shows no rows, the view model logs an error, and Debug
+///     builds throw. A tree lets go when it unloads or moves to another view model, and another tree can then attach.
+///     Expansion and selection live on the items, so they are the same wherever the items show.</para>
 /// </remarks>
 public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory = null) : ObservableObject, IDisposable
 {
@@ -36,6 +43,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
 
     private TreeDisplayHelper? displayHelper;
     private FocusedItemInfo? focusedItem;
+    private DynamicTree? attachedTree;
 
     private bool disposed;
 
@@ -90,7 +98,7 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
     /// </summary>
     internal ILoggerFactory? LoggerFactory { get; } = loggerFactory;
 
-    /// <summary>Gets or sets the owning control's displayed source, when one is attached.</summary>
+    /// <summary>Gets or sets the attached tree's displayed source, when a tree is attached.</summary>
     internal IEnumerable<ITreeItem>? DisplayedInteractionItems { get; set; }
 
     /// <summary>
@@ -729,6 +737,49 @@ public abstract partial class DynamicTreeViewModel(ILoggerFactory? loggerFactory
         this.Dispose(disposing: true);
         GC.SuppressFinalize(this);
     }
+
+    /// <summary>
+    ///     Attaches <paramref name="tree"/> as the one live tree of this view model.
+    /// </summary>
+    /// <param name="tree">The tree that is loaded with this view model.</param>
+    /// <returns>
+    ///     <see langword="true"/> when the tree is attached; <see langword="false"/> when another loaded tree already is.
+    /// </returns>
+    /// <exception cref="InvalidOperationException">In Debug builds, when another loaded tree is attached.</exception>
+    internal bool TryAttachTree(DynamicTree tree)
+    {
+        if (this.attachedTree is { IsLoaded: true } current && !ReferenceEquals(current, tree))
+        {
+            this.LogSecondTreeRejected();
+#if DEBUG
+            throw new InvalidOperationException(
+                $"{this.GetType().Name} is already shown by a loaded {nameof(DynamicTree)}; a view model has one live tree at a time.");
+#else
+            return false;
+#endif
+        }
+
+        this.attachedTree = tree;
+        return true;
+    }
+
+    /// <summary>
+    ///     Lets go of <paramref name="tree"/> and of the displayed source it supplied, when it is the attached tree.
+    /// </summary>
+    /// <param name="tree">The tree that unloads or moves to another view model.</param>
+    internal void DetachTree(DynamicTree tree)
+    {
+        if (ReferenceEquals(this.attachedTree, tree))
+        {
+            this.attachedTree = null;
+            this.DisplayedInteractionItems = null;
+        }
+    }
+
+    /// <summary>Gets a value indicating whether <paramref name="tree"/> is the attached tree.</summary>
+    /// <param name="tree">The tree.</param>
+    /// <returns><see langword="true"/> when <paramref name="tree"/> is attached to this view model.</returns>
+    internal bool IsAttachedTree(DynamicTree tree) => ReferenceEquals(this.attachedTree, tree);
 
     /// <summary>
     ///     Updates the currently focused item together with the origin of the request.

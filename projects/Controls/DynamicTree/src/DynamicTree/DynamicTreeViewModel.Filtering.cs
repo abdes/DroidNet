@@ -5,9 +5,7 @@
 using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
-using System.Text;
 using DroidNet.Collections;
-using Microsoft.Extensions.Logging;
 
 namespace DroidNet.Controls;
 
@@ -521,53 +519,7 @@ public abstract partial class DynamicTreeViewModel
     }
 
     private void OnFilteredItemsCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
-    {
-        if (!this.logger.IsEnabled(LogLevel.Trace))
-        {
-            return;
-        }
-
-        static string? FormatItems(System.Collections.IList? items)
-        {
-            if (items is null || items.Count == 0)
-            {
-                return null;
-            }
-
-            const int maxItemsToLog = 6;
-            var max = items.Count < maxItemsToLog ? items.Count : maxItemsToLog;
-
-            var sb = new StringBuilder();
-            _ = sb.Append('[');
-            for (var i = 0; i < max; i++)
-            {
-                if (i > 0)
-                {
-                    _ = sb.Append(", ");
-                }
-
-                if (items[i] is ITreeItem item)
-                {
-                    _ = sb.Append(item.Label);
-                }
-                else
-                {
-                    _ = sb.Append(items[i]?.ToString() ?? "<null>");
-                }
-            }
-
-            if (items.Count > max)
-            {
-                _ = sb.Append(", …+");
-                _ = sb.Append(items.Count - max);
-            }
-
-            _ = sb.Append(']');
-            return sb.ToString();
-        }
-
-        this.LogFilteredItemsChanged(e, FormatItems(e.NewItems), FormatItems(e.OldItems));
-    }
+        => this.LogFilteredItemsChanged(e);
 
     private sealed class HierarchicalFilterBuilder : IFilteredViewBuilder<ITreeItem>
     {
