@@ -141,6 +141,12 @@ internal sealed partial class ProjectInputFacts(ProjectContext project, Action<I
     // read now, as while the editor that saved it still holds it, since its next change reads it again.
     private InputSourceEntry? Read(AssetPath identity, FileSystemPath file)
     {
+        // A deleted file is gone; reading it only fails when it goes while it is read.
+        if (!project.FileSystem.File.Exists(file.FullPath))
+        {
+            return null;
+        }
+
         try
         {
             var bytes = project.FileSystem.File.ReadAllBytes(file.FullPath);

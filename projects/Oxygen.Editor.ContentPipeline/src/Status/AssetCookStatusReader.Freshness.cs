@@ -42,7 +42,7 @@ public sealed partial class AssetCookStatusReader
                 }
 
                 // These are availability facts, not a second managed integrity validator.
-                if (current.Index.Files.Any(file => !IsPresentFile(Path.Combine(path, file.RelativePath))))
+                if (current.Index.Files.Any(file => !File.Exists(Path.Combine(path, file.RelativePath))))
                 {
                     continue;
                 }
@@ -51,7 +51,7 @@ public sealed partial class AssetCookStatusReader
                     .Concat(current.Index.Files.Select(static file => file.RelativePath)).ToHashSet(StringComparer.Ordinal);
                 foreach (var output in previous.Products.SelectMany(static product => product.Outputs).Where(output => string.Equals(output.RootMount, root.Mount, StringComparison.Ordinal)))
                 {
-                    if (output.Asset.DescriptorRelativePath is { } descriptor && members.Contains(descriptor) && IsPresentFile(Path.Combine(path, descriptor)))
+                    if (output.Asset.DescriptorRelativePath is { } descriptor && members.Contains(descriptor) && File.Exists(Path.Combine(path, descriptor)))
                     {
                         _ = available.Add((root.Mount, output.Asset.VirtualPath));
                     }
@@ -74,18 +74,6 @@ public sealed partial class AssetCookStatusReader
             && string.Equals(fingerprint, product.ReuseFingerprint, StringComparison.Ordinal))
             .Select(static product => product.SourceUri).ToImmutableHashSet();
         return new(currentProducts, available.ToImmutable(), unknown.ToImmutable());
-    }
-
-    private static bool IsPresentFile(string path)
-    {
-        try
-        {
-            return (File.GetAttributes(path) & FileAttributes.Directory) == 0;
-        }
-        catch (Exception error) when (error is FileNotFoundException or DirectoryNotFoundException)
-        {
-            return false;
-        }
     }
 
     private static CookedOutputAvailability ReadOutputAvailability(AssetPath source,

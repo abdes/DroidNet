@@ -198,6 +198,14 @@ internal sealed partial class ProjectScriptFacts : IDisposable
     private async Task AnalyzeAsync(AssetPath identity, FileSystemPath file, bool force, CancellationToken cancellationToken)
     {
         var version = this.versions.AddOrUpdate(identity, 1, static (_, current) => current + 1);
+
+        // A deleted script is forgotten; reading it only fails when it goes while it is read.
+        if (!this.Project.FileSystem.File.Exists(file.FullPath))
+        {
+            this.Commit(identity, version, entry: null);
+            return;
+        }
+
         byte[] bytes;
         try
         {
