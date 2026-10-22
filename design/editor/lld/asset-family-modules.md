@@ -87,9 +87,7 @@ editor.
 
 ## 4. Current Baseline
 
-The [issue-069 plan](../plan/issue-069-di-topology-and-decomposition.md), slice
-S1.8, tracks the work that builds this design, its file inventory and its commit
-order.
+The code follows this design.
 
 ## 5. Target Design
 

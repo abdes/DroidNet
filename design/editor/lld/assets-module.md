@@ -2,7 +2,7 @@
 
 Status: `agreed`
 
-Last Updated: 2026-10-20 01:32
+Last Updated: 2026-10-22 12:17
 
 ## 1. Purpose
 
@@ -15,6 +15,14 @@ Assets answers "what assets can this project use, what state is each one in, and
 which asset does a given reference denote", for every feature that shows or
 picks an asset: the content explorer, the scene inspector, the material editor,
 the cooked inspector and the problems panel.
+
+It is not `Oxygen.Managed.Assets`, which holds what the editor shares with the
+engine and the tools outside it: the asset formats (authoring descriptors, the
+loose cooked index, pak files, asset keys), the file types (`AssetFileTypes`)
+and the catalog primitives (`IAssetCatalog`, `IAssetFolderSource`,
+`FileSystemAssetCatalog`). Oxygen.Editor.Assets is the editor's live view of
+one project's assets over the content pipeline: the catalog of that project,
+the feed, the identity rules and the rules of properties that reference assets.
 
 ## 2. PRD Traceability
 
@@ -48,9 +56,12 @@ the cooked inspector and the problems panel.
 
 ## 4. Current Baseline
 
-The steps that bring the code to this design, and what each has done, are
-tracked in the
-[issue-069 plan](../plan/issue-069-di-topology-and-decomposition.md).
+The code implements this design, with `AssetsSessionModule` as its registration
+module, except for decision 4: `AssetEntry` carries its badge text itself
+(`PrimaryBadge`, `PrimaryBadgeTooltip`, `PackagedBadge`, `GetBadge`), which the
+explorer's rows and details, the cooked inspector, `AssetInformation` and
+`AssetStatusText.ForEntry` read
+([#93](https://github.com/abdes/DroidNet/issues/93)).
 
 ## 5. Target Design
 
@@ -201,18 +212,19 @@ The content explorer (`Oxygen.Editor.ContentExplorer`) owns browsing:
 `AssetBrowserRow`, `AssetFileFacts`, `CookedLibraryFolders` (the rows a browsed
 library folder shows) and `ProjectCookedFolders`, in its `Panes.Assets`
 namespace beside the pane that uses them; the query and layouts; the import
-dialogs; the presentation of entry badges (decision 4); and the relocation
-and creation dialogs: the rename, delete and New asset dialogs and the outcomes
-they show. The rules behind those dialogs are ContentPipeline's:
-`IAssetRelocationService` owns a relocation's plan, transaction and history,
-the moves a paste of cut items makes and the replay of undo and redo, and
+dialogs; the presentation of entry badges (decision 4); and the relocation and
+creation dialogs: the rename, delete and New asset dialogs and the outcomes they
+show. The rules behind those dialogs are ContentPipeline's:
+`IAssetRelocationService` owns a relocation's plan and transaction, records it
+in the history its caller gives, makes the moves a paste of cut items needs,
+replays undo and redo, and reviews a delete (`FindReferrersOutsideAsync`);
 `IAssetAuthoring` creates an asset from its family's template. The explorer
 sends no messages: it inspects cooked output through the Shell's
 `ICookedInspections`, applies a mount change through ContentPipeline's
-`IContentMountChanges` and calls between its own panes. Desktop integration,
-such as revealing a file or launching the code editor, is the Shell's
-(`IDesktopIntegration`, `ICodeEditorService`). MaterialEditor depends on Assets,
-not on the explorer.
+`IContentMountChanges` and calls between its own panes through
+`IContentFoldersPane`. Desktop integration, such as revealing a file or
+launching the code editor, is the Shell's (`IDesktopIntegration`,
+`ICodeEditorService`). MaterialEditor depends on Assets, not on the explorer.
 
 ### 5.6 The preview port
 
@@ -273,6 +285,36 @@ through `IAssetPublicationTarget.UsePublicationAsync`. A handed-over publication
 is shown exactly: its owner may hold the project's writer, so the catalog never
 republishes it.
 
+The catalog lists each authored folder through a `FileSystemAssetCatalog`, and
+reports through `IAssetCatalog.Changes`:
+
+- **Listed, not changed.** A record the catalog starts listing, when a project
+  opens or a folder or publication is added, is reported as
+  `AssetChangeKind.Listed`, not `Added`: the file did not change. The automatic
+  cook ignores it, so opening a project cooks nothing.
+- **Atomic saves.** A file replaced by an atomic save (a temporary file renamed
+  over a known one) is reported as updated.
+- **Lost events.** After a watcher overflow the catalog reads its root again,
+  reports what appeared and disappeared, and reports every file it still knows
+  as updated, since any of them may have changed unseen.
+- **Folders.** The catalog knows the folders of its roots. A folder created,
+  deleted or renamed outside the editor reaches the watcher as one event, so the
+  catalog reads the root again and the files inside follow; it then reports the
+  folder through `IAssetFolderSource.FolderChanges` (a rename reports the old
+  folder and the new one), after its files. The explorer's Content Folders pane
+  reloads its tree on it.
+- **One catalog per file.** The project folder's catalog lists the project's
+  files outside its mounts, so it leaves out every mount folder inside the
+  project (the authoring mounts and the local folders mounted from inside it),
+  and no change is reported twice.
+- **Another publication.** Showing another publication keeps the catalog and
+  watcher of every authored folder it already watches, so no change made while
+  the catalogs are replaced goes unseen. Installing the new catalogs reports
+  only the differences: records that appear are listed, records that disappear
+  are removed, and every cooked record that stays is updated, since the
+  publication may have changed it; an authored file that did not change reports
+  nothing.
+
 The lease is an opaque handle. It holds the read lock on the cooked output, so
 it stays an object whose lifetime the holder controls with `Retain` and
 `Dispose`. Pipeline operations that take a lease back, such as
@@ -286,15 +328,33 @@ composition root maps `ICookPublicationReader` to `CookPublicationService`.
 Assets publishes no messages. Every change to asset files reaches the editor
 through one of three channels, each with one owner:
 
-| Change                                           | Channel                                                                                                                                                                         | Consumers                                                                                                            |
-| ------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
-| Any file added, changed, removed or renamed      | File watching in the catalogs, surfaced as `IAssetCatalog.Changes`; the feed refreshes from it, and from saves, cooks, cook status and the preview port, then publishes `Items` | Every view of assets observes `IAssetFeed.Items`                                                                     |
-| A different cook publication shown               | The catalog reports the publication's cooked records as added and removed through `IAssetCatalog.Changes`                                                                       | The explorer's sources tree, which reloads its cooked folders only when the project's cooked outputs differ          |
-| A move, rename, delete or creation in the editor | `IAssetRelocationService.FilesChanged` and `IAssetAuthoring.FilesChanged`, raised on the caller's context with the exact moves, rewritten, recycled and created files           | The feed; the sources tree follows moved folders; the document host closes deleted materials and retitles moved ones |
+| Change                                           | Channel                                                                                                                                                                                             | Consumers                                                                                                            |
+| ------------------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| Any file added, changed, removed or renamed      | File watching in the catalogs, surfaced as `IAssetCatalog.Changes` (5.7); the feed reads again on it, and on unsaved documents, cook runs, cook status and the preview port, then publishes `Items` | Every view of assets observes `IAssetFeed.Items`                                                                     |
+| A different cook publication shown               | The catalog reports the differences of the publication's cooked records (listed, updated, removed) through `IAssetCatalog.Changes` (5.7)                                                            | The explorer's sources tree, which reloads its cooked folders only when the project's cooked outputs differ          |
+| A move, rename, delete or creation in the editor | `IAssetRelocationService.FilesChanged` and `IAssetAuthoring.FilesChanged`, raised on the caller's context with the exact moves, rewritten, recycled and created files                               | The feed; the sources tree follows moved folders; the document host closes deleted materials and retitles moved ones |
 
-An operation that creates a file and selects or reveals it at once (a new scene,
-script, material or saved copy) awaits `IAssetFeed.RefreshAsync()` first, so the
-entry exists before it is shown. Nothing else asks the feed to refresh.
+The feed follows its own inputs: the catalog's changes, the content mounts of
+the project session, the unsaved documents (`IUnsavedDocuments`, from the
+document service), cook runs (`ICookRunService`), cook status
+(`IAssetCookStatusReader`), the preview port and the two editor reports. No
+caller tells it that something changed.
+
+The editor reports are exact and early. The relocation service reports the
+files a relocation moves and rewrites, the files and folders a copy creates and
+the files a delete recycles; asset authoring reports each file it creates, on
+the caller's context, before `CreateAsync` returns. The feed reads the catalog
+again at once on either report, whoever asked for the change, so an undo from
+anywhere and a new script's reveal see the change before the file watcher
+reports it.
+
+`IAssetFeed.RefreshAsync()` reads nothing new by itself: it completes once the
+feed has published entries for every change it has been told about, at once
+when they are current. Callers await it where they show an entry or a list
+they must find complete: a reveal before it selects assets
+(`IAssetReveal`), an import before it shows its result, the explorer's Refresh
+command, and the scene inspector's asset properties and the material editor
+before they read the entries.
 
 File watching cannot tell a move from a removal followed by an addition, so a
 file deleted or moved outside the editor reaches its open document as a missing
@@ -312,15 +372,15 @@ the catalog reports a change to it
 
 ## 6. Ownership
 
-| Owner                           | Owns                                                                                                          |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor.Assets`          | The catalog and its file watching, the feed, identity rules, `AssetRule`, `AssetStatusText`, the preview port |
-| `Oxygen.Editor.ContentPipeline` | Publication format and read contract, cook status and runs, relocation, creation, texture descriptor facts    |
-| `Oxygen.Editor.Projects`        | `ProjectContext`, `ProjectOutputFolders`                                                                      |
-| `Oxygen.Managed.Assets`         | `IAssetCatalog`, `IAssetFolderSource`, catalog records, `AssetFileTypes`, `TextureSourceReader`               |
-| `Oxygen.Editor.LivePreview`     | `AssetRuntimeStatusSource`, the preview port's implementation                                                 |
-| Content explorer                | Browsing, query, layouts, rows, import dialogs, badge presentation                                            |
-| `Oxygen.Editor.Pickers`         | The shared `AssetPicker` and its grouping                                                                     |
+| Owner                           | Owns                                                                                                                                                                                                              |
+| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor.Assets`          | The project's catalog and its file watching, the feed, identity rules, `AssetRule`, `AssetStatusText`, the preview port                                                                                           |
+| `Oxygen.Editor.ContentPipeline` | Publication format and read contract, cook status and runs, relocation, creation, texture descriptor facts                                                                                                        |
+| `Oxygen.Editor.Projects`        | `ProjectContext`, `ProjectOutputFolders`                                                                                                                                                                          |
+| `Oxygen.Managed.Assets`         | What the editor shares with the engine and its tools: `IAssetCatalog`, `IAssetFolderSource`, `FileSystemAssetCatalog`, catalog records, `AssetFileTypes`, `TextureSourceReader`, the loose cooked and pak formats |
+| `Oxygen.Editor.LivePreview`     | `AssetRuntimeStatusSource`, the preview port's implementation                                                                                                                                                     |
+| Content explorer                | Browsing, query, layouts, rows, import dialogs, badge presentation                                                                                                                                                |
+| `Oxygen.Editor.Pickers`         | The shared `AssetPicker` and its grouping                                                                                                                                                                         |
 
 ## 7. Data Contracts
 
@@ -332,7 +392,7 @@ the catalog reports a change to it
   the copies it overrides or that override it, cook status and activity, and
   what the surfaces derive from them: origin (`Engine`, `Package`, `Content`),
   `PrimaryBadge` and its tooltip, `TypeDisplayName`, `CanCook`, `CanReimport`
-  and `Information`.
+  and `Information` (see 4 for the badges).
 - `AssetKind`: `Folder`, `Material`, `Geometry`, `Scene`, `Texture`, `Image`,
   `ImportSettings`, `ForeignSource` (a model to import), `CookedData`,
   `CookedTable`, `Script`, `InputAction`, `InputMappingContext`, `InputFile`,
@@ -392,9 +452,10 @@ diagnostics ([asset identity](asset-identity.md#56-collisions)).
 Oxygen.Editor.Assets
   -> Oxygen.Editor.ContentPipeline   publication read side, cook status, cook runs, relocation and authoring events, engine content pak
   -> Oxygen.Editor.Projects          ProjectContext, IProjectSession, ProjectOutputFolders
+  -> Oxygen.Editor.Documents         IUnsavedDocuments, through ContentPipeline
   -> Oxygen.Managed.Assets           catalogs, records, file types, material authoring
   -> Oxygen.Managed.Core             AssetPath, FileSystemPath, diagnostics
-  -> Storage, System.Reactive, logging
+  -> Composition, Storage, System.Reactive, logging
 ```
 
 No WinUI, Runtime, Interop, Routing, Aura or World types. Dependents: the

@@ -52,7 +52,7 @@ namespace Oxygen.Editor.Composition.UI.Tests;
 /// <summary>
 ///     The editor's scope chain as the application composes it: the editor scope, a project session's scope, a workspace
 ///     window's scope, a document window's scope and the Content Explorer's scope. Each scope registers only what it owns and resolves the rest from
-///     its parent, so shared identity does not depend on which scope resolves first (spec 6.3).
+///     its parent, so shared identity does not depend on which scope resolves first (scope-topology.md 5.4).
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]

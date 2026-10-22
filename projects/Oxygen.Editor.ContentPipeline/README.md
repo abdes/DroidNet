@@ -20,8 +20,8 @@ successful cook does not itself prove mounting, presentation, or standalone
 runtime parity.
 
 The ownership contracts are defined in the
-[content pipeline LLD](../../../design/editor/lld/content-pipeline.md) and
-[editor architecture](../../../design/editor/ARCHITECTURE.md).
+[content pipeline LLD](../../design/editor/lld/content-pipeline.md) and
+[editor architecture](../../design/editor/ARCHITECTURE.md).
 
 ## Explicit workflow stages
 
@@ -68,6 +68,21 @@ source-owned auxiliary files; the native index owns their sizes and digests.
 Named texture outputs use the descriptor's `virtual_path` and participate in the
 same cooking, reuse and reference-resolution workflow.
 
+## Cook on change
+
+[AutomaticCookService](src/Cooking/AutomaticCookService.cs) turns the asset
+catalog's changes (`IAssetCatalog.Changes`) into automatic runs while the
+project's **Cook on change** setting is on. Changes collect over a quiet
+window; the run starts once the project writer is idle
+(`ICookRunService.WhenWriterIdleAsync`) and cooks only the changed sources
+whose published output does not match what is on disk.
+[ContentCookCoordinator](src/ContentCookCoordinator.cs) holds the one project
+writer. Its [Automatic](src/ContentCookCoordinator.Automatic.cs) part stops a
+running cook on change when foreground work waits (`CookPreemptedException`),
+and its [Shared](src/ContentCookCoordinator.Shared.cs) part lets a request join
+a pending cook of the same or a covering scope. The rules are in
+[editor documents §5.3](../../design/editor/lld/editor-documents.md#53-behavior).
+
 ## Freshness and validation
 
 Browser badges compare saved inputs and observed producer identity against the
@@ -109,5 +124,5 @@ ownership.
 
 Keep source-level tests, real tool execution, cooked-root validation, and
 standalone/visual validation distinct. Current workflow evidence belongs in
-[IMPLEMENTATION_STATUS.md](../../../design/editor/IMPLEMENTATION_STATUS.md);
+[IMPLEMENTATION_STATUS.md](../../design/editor/IMPLEMENTATION_STATUS.md);
 test files alone do not close those gates.

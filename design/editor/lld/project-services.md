@@ -126,14 +126,14 @@ Target invariants:
 
 ## 6. Ownership
 
-| Owner                           | Responsibility                                                                                                                            |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor.Projects`        | project metadata, project validation, active project context, future project settings ownership, authoring/local roots, cook scope policy |
-| `Oxygen.Editor.ProjectExplorer` | project discovery UX, create/open request UI, recent-project presentation                                                                 |
-| `Oxygen.Editor.Data`            | persistent recent usage, per-project restoration hints, settings storage                                                                  |
-| `Oxygen.Editor.World`           | shared project and scene-domain abstractions consumed by authoring features                                                               |
-| `Oxygen.Editor.ContentPipeline` | descriptor generation, import/cook execution, cooked validation                                                                           |
-| `Oxygen.Editor.Runtime`         | engine lifecycle and cooked-root mounts based on project policy                                                                           |
+| Owner                           | Responsibility                                                                                                           |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `Oxygen.Editor.Projects`        | project metadata, project validation, active project context, project settings, authoring/local roots, cook scope policy |
+| `Oxygen.Editor.ProjectExplorer` | project discovery UX, create/open request UI, recent-project presentation                                                |
+| `Oxygen.Editor.Data`            | persistent recent usage, per-project restoration hints, settings storage                                                 |
+| `Oxygen.Editor.World`           | shared project and scene-domain abstractions consumed by authoring features                                              |
+| `Oxygen.Editor.ContentPipeline` | descriptor generation, import/cook execution, cooked validation                                                          |
+| `Oxygen.Editor.Runtime`         | engine lifecycle and cooked-root mounts based on project policy                                                          |
 
 Service split:
 
@@ -169,6 +169,19 @@ Optional `DefaultSceneId : Guid?` is the stable configured scene identity,
 persisted in the manifest and propagated through `ProjectContext`. Creation
 reads the copied starter scene's serialized ID and records it as the default;
 absent or unparseable IDs leave the default unset, never guessed.
+
+Optional `Settings` holds the project's settings (`ProjectSettings`), shared by
+everyone who opens the project. `CookOnChange` (default `true`) tells whether a
+changed source file is cooked without being asked
+([editor documents §5.3.2](editor-documents.md#532-cook-on-change)). A manifest
+without `Settings`, or with `"Settings": null`, uses the defaults.
+`IProjectManagerService.SaveProjectSettingsAsync` writes them into
+`Project.oxy` against the version it read, keeping the rest of the manifest.
+Settings change without reactivating the project:
+`IProjectSession.UpdateSettings` replaces `IProjectSession.Settings` once they
+are saved and raises `SettingsChanged`; a change of the content mounts keeps
+them. The Content Explorer's **Cook on change** toggle edits `CookOnChange`
+through `IAutomaticCookService.SetCookOnChangeAsync`.
 
 Workspace startup honors an explicit activation scene request before the
 configured default. The approved legacy recovery path may migrate a resolvable

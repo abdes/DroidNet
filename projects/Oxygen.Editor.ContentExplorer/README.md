@@ -15,7 +15,10 @@ so it references none of the panels that do those.
 
 For the window's other parts it implements the Shell's `IAssetReveal`, which
 shows and selects assets, and Scripting's `IScriptCreation`, which creates a
-script in the folder the user picks.
+script in the folder the user picks. Its panes call each other through
+`IContentFoldersPane`, which the Content Folders pane implements: the assets
+pane asks it to show a folder or to create one. The explorer sends and receives
+no messages.
 
 ## Layout
 

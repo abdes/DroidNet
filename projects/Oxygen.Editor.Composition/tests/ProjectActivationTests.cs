@@ -24,7 +24,7 @@ namespace Oxygen.Editor.Composition.UI.Tests;
 
 /// <summary>
 ///     Activating a project replaces the open session only once every window's documents agreed to close, and a
-///     workspace navigation that reports a failure closes the session it opened (spec 6.5).
+///     workspace navigation that reports a failure closes the session it opened (scope-topology.md 5.6).
 /// </summary>
 /// <remarks>
 ///     The coordinator runs with the editor's own services. The ports it reads the project and the user's answer from

@@ -444,16 +444,26 @@ flowchart LR
     Start[Process start]
     Xaml[XAML requirements]
     Native[Process-local native runtime discovery]
-    Root[Root DI and settings]
+    Root[Editor scope and settings]
     Browser[Project Explorer]
     Open[Open or create project]
+    Session[Project session scope]
     Workspace[Workspace route]
-    Child[Workspace child container]
+    Window[Workspace window scope]
     Restore[Restore layout and documents]
-    Mount[Refresh cooked roots]
+    Mount[Start preview, mount cooked roots]
 
-    Start --> Xaml --> Native --> Root --> Browser --> Open --> Workspace --> Child --> Restore --> Mount
+    Start --> Xaml --> Native --> Root --> Browser --> Open --> Session --> Workspace --> Window --> Restore --> Mount
 ```
+
+Services live in a chain of scopes
+([scope-topology.md](lld/scope-topology.md)): the editor scope for the
+process, one project session scope while a project is open, and a scope per
+window under the session. Opening a project stages it, closes the open
+session's documents (a cancelled close keeps that session), closes the previous
+session, opens the new one and navigates the workspace window into it; the
+window then creates its scope under the session's. A failed workspace
+navigation closes the session it opened.
 
 Architectural requirements:
 
@@ -734,8 +744,10 @@ defined only in [6. Module Ownership](#6-module-ownership).
 
 The project/workspace contract:
 
-- open/create project establishes active project context
-- workspace activation follows successful project selection
+- open/create project opens the project's session; every project-bound
+  service is created for that session and disposed when it closes
+- workspace activation follows successful project selection, and closing the
+  session's last workspace window returns to the Project Explorer
 - workspace layout and recent documents are restored where possible
 - project-level cook scope and content root policy come from project services
 - partial restoration and project-policy failures produce visible results

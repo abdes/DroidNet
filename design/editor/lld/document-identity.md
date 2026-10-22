@@ -9,7 +9,7 @@ Last Updated: 2026-10-20 01:32
 Define how an open document is identified, shown as a tab, found, and reached by
 the parts that work on it. It sits between
 [document-kinds.md](document-kinds.md) (what a document is, without windows) and
-[editor-shell.md](../review/editor-shell.md) (the frame that places documents).
+[editor-shell.md](editor-shell.md) (the frame that places documents).
 Who owns a document and its history is in
 [editor-documents.md](editor-documents.md).
 
@@ -34,7 +34,7 @@ changes nothing else.
   and content contracts.
 - [editor-documents.md](editor-documents.md): the three document layers, the
   Shell's document service, `IUnsavedDocuments`.
-- [editor-shell.md](../review/editor-shell.md): scopes, window kinds,
+- [editor-shell.md](editor-shell.md): scopes, window kinds,
   contributions and the context service.
 - [asset-family-modules.md](asset-family-modules.md): the `Material` model.
 - [editor-module-architecture.md](editor-module-architecture.md): module
@@ -43,8 +43,7 @@ changes nothing else.
 
 ## 4. Current Baseline
 
-The work that brings the code to this design is tracked in the
-[issue-069 plan](../plan/issue-069-di-topology-and-decomposition.md).
+The code follows this design.
 
 ## 5. Target Design
 
@@ -188,7 +187,7 @@ because every `DocumentFile` is resolved through Projects
 
 There is one `OpenDocuments` per project session, so a file opens once across
 the session's windows; it is registered in the session scope of
-[editor-shell.md](../review/editor-shell.md#21-scopes).
+[scope-topology.md](scope-topology.md#53-scope-chain).
 
 ### 5.7 The document area
 
@@ -211,7 +210,7 @@ between areas is Aura's detach and attach, which Aura's document transfers drive
 A tab dragged out of its window detaches its document, which stays open with its
 editor and history. The strip the tab is dropped on attaches it; a tab dropped
 outside every strip goes to a new document window
-([editor-shell.md](../review/editor-shell.md#22-window-kinds)), and a document
+([editor-shell.md](editor-shell.md#52-window-kinds)), and a document
 that no window takes goes back where it came from. Only the editor's view is
 created again, in the window that shows the tab. A pinned tab never moves, so the
 scene stays in the workspace window. A document window closes once its last tab
@@ -242,7 +241,7 @@ file changed on disk is resolved by the document service for every kind
 close prompt; editors have no conflict handling of their own.
 
 `IDocumentArea` is the first part of the Shell's context service
-([editor-shell.md](../review/editor-shell.md#4-services-offered-to-parts)),
+([editor-shell.md](editor-shell.md#55-services-offered-to-parts)),
 beside the active part and the active window.
 
 ### 5.8 Editors per kind
@@ -250,7 +249,7 @@ beside the active part and the active window.
 Each kind has a
 `DocumentEditorDescriptor(IDocumentKind kind, Func<DocumentTab, object> createEditor)`,
 the editor contribution of
-[editor-shell.md](../review/editor-shell.md#3-contributions), keyed by the kind:
+[editor-shell.md](editor-shell.md#54-contributions), keyed by the kind:
 
 - the kind it edits;
 - `IsClosable` (the scene's tab is not) and `IconUri`;

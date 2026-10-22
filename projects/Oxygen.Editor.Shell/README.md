@@ -4,7 +4,7 @@ The editor's application frame: the services every editor part shares. Features
 plug into it and never reference Aura windowing, Docking, window routing or a
 `WindowId` themselves. The Shell references foundation modules only.
 
-Design: [editor-shell.md](../../design/editor/review/editor-shell.md),
+Design: [editor-shell.md](../../design/editor/lld/editor-shell.md),
 [document-identity.md](../../design/editor/lld/document-identity.md) and
 [editor-documents.md](../../design/editor/lld/editor-documents.md).
 
@@ -126,11 +126,24 @@ A close is a transaction: it is prepared, then committed or dropped.
 
 ## Commands
 
-The window's frame binds the key gestures of each `CommandDescriptor`: Undo,
-Redo, Cut, Copy and Paste. A command goes to the first part around the control
+Commands are the editor's automation surface. A command takes no arguments: it
+acts on the window's active document and its selection, so a script runs it by
+id without focus, as a key does. Behavior that needs arguments is a service
+call on a port, never a command.
+
+Each feature contributes its commands, with stable ids and key gestures, through
+`IFeatureModule.Commands` (the scene editor's `Scene.FrameAll`, the Scene
+Explorer's `Scene.Rename`). The Shell's own are `ShellCommands`: `Edit.Undo`,
+`Edit.Redo`, `Edit.Cut`, `Edit.Copy`, `Edit.Paste` and `Edit.Delete`, which has
+no key gesture. The viewport's Delete, Undo and Redo run the Shell's commands.
+
+The window's frame binds the key gestures of each `CommandDescriptor`. The
+window's `ICommandService` sends a command to the first part around the control
 the user last pressed or focused whose view model is an `ICommandHandler` that
-runs it, then to the active document's editor. When that control has left the
-window, such as a list's row, the views around it still name the part. Undo and Redo that no part runs go to the active
+runs it, then to the active document's editor, then to the handlers that parts
+registered with `Register` while they live, in the order they registered. When
+that control has left the window, such as a list's row, the views around it
+still name the part. Undo and Redo that no part runs go to the active
 document's history, or to the global history when no document is active. A
 control that handles a key itself keeps it, text entry keeps its own Undo, and a
 menu or flyout with the focus keeps the keys while it is open.

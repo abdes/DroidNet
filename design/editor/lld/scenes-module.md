@@ -2,7 +2,7 @@
 
 Status: `agreed`
 
-Last Updated: 2026-10-20 01:32
+Last Updated: 2026-10-22
 
 ## 1. Purpose
 
@@ -42,8 +42,8 @@ document's `SceneAuthoring`. The module works within
 
 ## 4. Current Baseline
 
-The remaining work is tracked in the
-[issue-069 plan](../plan/issue-069-di-topology-and-decomposition.md).
+`Oxygen.Editor.Scenes` holds what this design gives it, and the scene editor,
+Scene Explorer and Inspector reach it through the ports of decision 6.
 
 ## 5. Target Design
 
@@ -94,9 +94,9 @@ Actors:
 ### 5.2 The module
 
 `Oxygen.Editor.Scenes` is a class library with no WinUI. It references World,
-Schemas, `Oxygen.Editor.Documents`, Projects, ContentPipeline,
-`Oxygen.Managed.Core`, `Oxygen.Managed.Assets`, TimeMachine and Storage
-(decision 13). It holds:
+Schemas, Data, `Oxygen.Editor.Documents`, Projects, Scripting, ContentPipeline,
+`Oxygen.Managed.Core`, `Oxygen.Managed.Assets`, TimeMachine, Storage and
+Composition (decision 13). It holds:
 
 - **The scene document kind** (`.oscene.json`, `SceneDocumentKind`): decode,
   capture, capture for a copy, finish edits, apply a relocation. Its content
@@ -116,6 +116,9 @@ Schemas, `Oxygen.Editor.Documents`, Projects, ContentPipeline,
   (`SceneCategories`).
 - **The explorer layout** data (`ExplorerEntryData`, `FolderId`) and the
   clipboard model.
+- **The ports between the scene parts** (`ISceneViews`, `ISceneAvailability`),
+  `SceneOperationResults` and the scene-node drag payload `SceneNodeDragData`
+  (decision 6).
 - **The scene files** (`SceneFiles`): the project's scenes as the asset catalog
   lists them (5.5).
 
@@ -210,15 +213,42 @@ edit:
    reports and followers.
 4. **The project has no scene list (5.5),** and the open scene is the open
    document.
-5. **Scenes are documents (5.3).** The World Editor opens scenes through
-   `OpenDocuments`, and the scene editor saves, reloads and follows through the
-   scene's document. The Shell's document service places and draws the scene's
-   tab from the document's title and state, as for every document
+5. **Scenes are documents (5.3).** A window opens scenes through its document
+   area, as it opens every document, and the scene editor saves, reloads and
+   follows through the scene's document. The Shell's document service places
+   and draws the scene's tab from the document's title and state, as for every
+   document
    ([editor-documents.md](editor-documents.md#51-decisions) decision 2).
 6. **Scenes reports through events, not messages.** Scene changes come from
    `SceneAuthoring.Changed` and selection changes from the selection service's
    event. The views follow the documents and these events; they exchange no
-   window messages about scenes, selection or loading.
+   messages, and each request of one scene part to another is a call on a port
+   of Scenes:
+   - **Selection.** Every part selects and reads the selection through
+     `ISceneSelectionService` (`SetSelection`, `GetSelectedNodes`) and follows
+     it through `SelectionChanged`. The Scene Explorer reveals what another
+     part selects.
+   - **Loading.** The Inspector follows the documents of its window's document
+     area: it shows the active scene document and clears one that closed.
+   - **Shortcuts.** Scene shortcuts are commands with stable ids and key
+     gestures, contributed by the feature that runs them
+     (`IFeatureModule.Commands`, such as the scene editor's `Scene.FrameAll` and
+     the Scene Explorer's `Scene.Rename`). `Edit.Delete`, Undo and Redo are the
+     Shell's, the viewport's included.
+   - **Views.** `ISceneViews` frames nodes, runs camera commands and reports
+     the camera state of the active viewport of the editor that shows a scene
+     document, keyed by `DocumentId`. The scene editor implements it
+     (`SceneEditorViews`).
+   - **Availability.** `ISceneAvailability` reports that the scene a window was
+     asked to show did not open (`SceneUnavailable`) and reopens the one it
+     showed before (`ReloadPreviousAsync`). The window's scene document
+     lifetime, `SceneDocumentLifetime` in the scene editor, implements it.
+   - **Node lock and visibility** are `ISceneNodeInteraction`, implemented in
+     Scenes by `SceneNodeInteraction` (decision 8), which publishes its
+     failures through Scenes' `SceneOperationResults`.
+   - **Drag and drop.** `SceneNodeDragData` is Scenes' scene-node drag
+     payload: the Scene Explorer writes the dragged nodes, and the Inspector's
+     script slots read them.
 7. **Scenes knows no engine.** The engine port and its value types are not in
    Scenes. LivePreview previews the open scene documents by following
    `OpenDocuments` and each document's `SceneAuthoring.Changed`, and publishes
@@ -239,17 +269,18 @@ edit:
     ([scene-edits.md](scene-edits.md#56-atomic-batches)), including the
     atmosphere lights reset and the camera move in the views.
 12. **Scenes' behavior is tested in `Oxygen.Editor.Scenes.Tests`,** through its
-    public API and without the WinUI host. The World Editor's tests keep the
-    views, over a real `SceneAuthoring`; LivePreview's tests keep the engine
-    projection.
+    public API and without the WinUI host. The tests of the scene editor, the
+    Scene Explorer and the Inspector keep the views, over a real
+    `SceneAuthoring`; LivePreview's tests keep the engine projection.
 13. **Scenes sits downstream of ContentPipeline.** ContentPipeline does not
     reference Scenes. Scenes uses its rules, not a port of them: the cook's
     post-process validation and canonical virtual paths (one rule for authoring
     and cooking), the relocation redirects contract (`IAssetRedirects`), and the
     cooked geometry's material slot inventory.
-14. **A scene document kind belongs to one project.** The workspace creates it
-    with its project, its node-interaction state and its asset redirects;
-    activating another project closes every window first.
+14. **A scene document kind belongs to one project session.**
+    `ScenesSessionModule` registers it in the session's scope, with the
+    session's node-interaction state and asset redirects, and it ends with the
+    session ([scope-topology.md](scope-topology.md)).
 15. **The scene list is the asset catalog's scene files (5.5).** A scene's id is
     read from its file, as the cook reads it.
 
@@ -260,7 +291,9 @@ edit:
 | Scene document kind, `SceneContent`, `SceneFiles` | Scenes                                         |
 | `SceneAuthoring`, edits, results, change stream   | Scenes ([scene-edits.md](scene-edits.md))      |
 | Selection, explorer layout data, clipboard model  | Scenes                                         |
-| `ISceneNodeInteraction`                           | Scenes (port); the workspace implements it     |
+| `ISceneNodeInteraction`, `SceneNodeInteraction`   | Scenes                                         |
+| `ISceneViews`, `ISceneAvailability`               | Scenes (ports); the scene editor implements    |
+| `SceneOperationResults`, `SceneNodeDragData`      | Scenes                                         |
 | Script slot edits                                 | Scenes; slot rules in Scripting                |
 | Scene relocation rules, New Scene                 | ContentPipeline                                |
 | Engine preview of open scenes, content demand     | LivePreview                                    |
@@ -275,10 +308,14 @@ edit:
   [scene-edits.md](scene-edits.md).
 - `ISceneSelectionService` and its event, keyed by `DocumentId`.
 - `ISceneNodeInteraction` (5.2).
+- `ISceneViews`, a session service keyed by `DocumentId`, and
+  `ISceneAvailability`, a service of the workspace window (decision 6).
+- `SceneNodeDragData.Format` (`application/vnd.oxygen.scene-nodes`): the
+  dragged node ids, separated by semicolons.
 
 ## 8. Commands, Services, Or Adapters
 
-- `SceneDocumentKind`, created per project (decision 14).
+- `SceneDocumentKind`, one per project session (decision 14).
 - `SceneAuthoring`, one per open scene document.
 - `ISceneSelectionService`.
 - `SceneFiles`, over the asset catalog.
@@ -302,9 +339,12 @@ file name (5.5).
 
 ## 12. Operation Results And Diagnostics
 
-Scenes reports through `SceneEditResult` and coded diagnostics; it posts no
-notifications. The views publish operation results
-([scene-edits.md](scene-edits.md#59-results)).
+Scene edits report through `SceneEditResult` and coded diagnostics; they post
+no notifications. The views publish operation results
+([scene-edits.md](scene-edits.md#59-results)) through Scenes'
+`SceneOperationResults`. The one service of Scenes that publishes results is
+`SceneNodeInteraction`: a failure to load or save the lock and visibility state
+is an operation result of the settings domain.
 
 ## 13. Dependency Rules
 
@@ -316,8 +356,9 @@ notifications. The views publish operation results
 ## 14. Validation Gates
 
 - `Oxygen.Editor.Scenes.Tests`, without the WinUI host.
-- The World Editor, Content Explorer, ContentPipeline, Projects, Documents and
-  LivePreview tests that cover the callers.
+- The scene editor, Scene Explorer, Scene Inspector, Content Explorer,
+  ContentPipeline, Projects, Documents and LivePreview tests that cover the
+  callers.
 
 ## 15. Open Issues
 

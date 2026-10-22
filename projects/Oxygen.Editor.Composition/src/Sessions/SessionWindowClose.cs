@@ -21,8 +21,8 @@ namespace Oxygen.Editor.Sessions;
 /// </summary>
 /// <remarks>
 ///     <para>
-///     Closing the session's last workspace window returns to the Start window instead of exiting the editor (shell
-///     design section 6). The closing window's own documents take part in its close as every window's do; the documents
+///     Closing the session's last workspace window returns to the Start window instead of exiting the editor
+///     (editor-shell.md 5.6). The closing window's own documents take part in its close as every window's do; the documents
 ///     of the session's other windows are prepared with them, then committed with them. When one of them is kept, or the
 ///     Start window does not open, every window of the session stays open. A Start window that does not open once the
 ///     documents closed is published as a failed operation, so the user knows why the workspace stayed open without

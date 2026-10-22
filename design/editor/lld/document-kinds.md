@@ -34,7 +34,7 @@ behavior, so they cannot differ between kinds.
   three document layers, and saving and cooking.
 - [document-identity.md](document-identity.md): the document's id, its tab, the
   document area, editor descriptors and the material kind.
-- [editor-shell.md](../review/editor-shell.md): the Shell's document service,
+- [editor-shell.md](editor-shell.md): the Shell's document service,
   placement, prompts and editor contributions.
 - [asset-identity.md](asset-identity.md): `AssetPath` and the rules of a virtual
   path.
@@ -45,8 +45,7 @@ behavior, so they cannot differ between kinds.
 
 ## 4. Current Baseline
 
-The work that brings the code to this design is tracked in the
-[issue-069 plan](../plan/issue-069-di-topology-and-decomposition.md).
+The code follows this design.
 
 ## 5. Target Design
 
@@ -257,7 +256,7 @@ through Projects (5.7), keeping only files on an authoring mount, and asks
 
 The Shell then places the document and creates its editor from the editor
 contribution for that kind
-([editor-shell.md](../review/editor-shell.md#3-contributions),
+([editor-shell.md](editor-shell.md#54-contributions),
 [document-identity.md](document-identity.md), section 5.8).
 
 The kind's contract is in `Oxygen.Editor.Documents`, so a domain module

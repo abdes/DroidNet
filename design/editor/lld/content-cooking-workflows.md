@@ -199,9 +199,9 @@ implies the current material is rendered.
 
 ## 4. Cooking triggers
 
-Import, Save and preview demand request incremental production; explicit Cook
-actions remain available. Section 6 defines Save listed and Cook recovery.
-Source saving remains an independent, explicit user operation.
+Import, cook on change and preview demand request incremental production;
+explicit Cook actions remain available. Section 6 defines Save listed and Cook
+recovery. Source saving remains an independent, explicit user operation.
 
 Rationale: Import and Save express intent to produce usable content. Assignment
 and scene opening express demand for preview. Browsing expresses discovery only.
@@ -209,30 +209,30 @@ Automatic work should follow those intents and rebuild only affected products.
 Saving a shared material updates all its scene uses after publication; Save
 completes independently of subsequent cook success.
 
-| User interaction                                                                                          | Cooking behavior                                                                                                                                                                                                                      |
-| --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Import / explicit Reimport                                                                                | After supported inputs/settings are accepted and retained, cook changed outputs and required dependencies automatically, then publish. One visible workflow with separate source-import and publication outcomes.                     |
-| Successful Save of a material, scene, or supported authored import settings                               | Queue incremental cooking for that saved scope. Save failure/conflict queues nothing. New document creation that successfully saves uses the same trigger once. Saving unchanged content is a no-op for cooking.                      |
-| Choose a known uncooked/out-of-date asset in an inspector picker                                          | Record the undoable identity assignment immediately and request its saved dependency closure. Show pending/previous content while it cooks. Do not require saving the consuming scene for an asset-only cook.                         |
-| Open/activate a scene whose preview needs uncooked/out-of-date assets                                     | Make the document usable immediately and request only the saved assets required by that active scene. Do not cook the scene itself merely to show its live authoring state.                                                           |
-| Select a built-in geometry, None, or Default                                                              | Use the existing immediate engine capability. No cook is needed to preview a built-in; scene publication includes its required generated products.                                                                                    |
-| Open a project, browse/select a row, search/filter, hover, refresh catalog, open a material source editor | Update metadata and display state; no cooking. Restored scene activation follows the scene-demand rule, not a whole-project cook.                                                                                                     |
-| Drag/type a property, Undo/Redo, or cancel an edit                                                        | Preserve existing live authoring behavior and mark cooked freshness as needed; never cook transient values. A subsequent explicit Save can trigger cooking.                                                                           |
-| External file changes or version-control updates                                                          | Reconcile catalog/dependencies and mark affected content out of date. Offer Reimport/Update; no unsolicited source reimport or generated-source replacement. Unacknowledged external changes block automatic requests until reviewed. |
-| Explicit Cook Selected Asset / Folder / Current Scene / Project                                           | Incrementally bring that scope and its required dependencies up to date. Show scope and affected dependencies; skip current products. Project cooking remains an explicit action.                                                     |
-| Inspect / Validate Cooked Output                                                                          | Read the published generation under a lease; do not start cooking or silently replace the generation being inspected.                                                                                                                 |
+| User interaction                                                                                          | Cooking behavior                                                                                                                                                                                                                                                                                                                                                     |
+| --------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Import / explicit Reimport                                                                                | After supported inputs/settings are accepted and retained, cook changed outputs and required dependencies automatically, then publish. One visible workflow with separate source-import and publication outcomes.                                                                                                                                                    |
+| A changed source file: a Save, a new file, an external edit, a checkout or a relocation                   | While Cook on change is on, cook on change hears the change from `IAssetCatalog.Changes` and, after a quiet window, cooks the changed sources whose published output does not match disk. A save is a file change like any other; a failed save changes no file and cooks nothing. Unchanged content cooks nothing. While it is off, the source shows needs cooking. |
+| Choose a known uncooked/out-of-date asset in an inspector picker                                          | Record the undoable identity assignment immediately and request its saved dependency closure. Show pending/previous content while it cooks. Do not require saving the consuming scene for an asset-only cook.                                                                                                                                                        |
+| Open/activate a scene whose preview needs uncooked/out-of-date assets                                     | Make the document usable immediately and request only the saved assets required by that active scene. Do not cook the scene itself merely to show its live authoring state.                                                                                                                                                                                          |
+| Select a built-in geometry, None, or Default                                                              | Use the existing immediate engine capability. No cook is needed to preview a built-in; scene publication includes its required generated products.                                                                                                                                                                                                                   |
+| Open a project, browse/select a row, search/filter, hover, refresh catalog, open a material source editor | Update metadata and display state; no cooking. Restored scene activation follows the scene-demand rule, not a whole-project cook.                                                                                                                                                                                                                                    |
+| Drag/type a property, Undo/Redo, or cancel an edit                                                        | Preserve existing live authoring behavior and mark cooked freshness as needed; never cook transient values. A subsequent explicit Save can trigger cooking.                                                                                                                                                                                                          |
+| Changes to external import sources                                                                        | Reconcile catalog/dependencies and mark affected content out of date. Offer Reimport/Update; no unsolicited source reimport or generated-source replacement. Authored files changed outside the editor follow the changed-source row.                                                                                                                                |
+| Explicit Cook Selected Asset / Folder / Current Scene / Project                                           | Incrementally bring that scope and its required dependencies up to date. Show scope and affected dependencies; skip current products. Project cooking remains an explicit action.                                                                                                                                                                                    |
+| Inspect / Validate Cooked Output                                                                          | Read the published generation under a lease; do not start cooking or silently replace the generation being inspected.                                                                                                                                                                                                                                                |
 
-No autosave, automatic broad project scan-and-cook, or automatic external-source
-reimport is introduced. Scene live transforms/lights/environment keep their
+There is no autosave, automatic broad project scan-and-cook, or automatic
+external-source reimport. Scene live transforms/lights/environment keep their
 existing immediate sync; they do not wait for scene cooking. M08 continues to
 require an explicitly identified published generation for standalone validation.
 
-For batch work, add Pause automatic cooking / Resume to the existing Cook menu
-and show a persistent paused indicator. This is session state owned by the
-coordinator, reset on project close; no new durable preference/settings panel.
-Pause prevents automatic jobs starting, does not interrupt an active
-transaction, and coalesces saved/demand changes for Resume. Explicit Cook
-remains available.
+**Cook on change** is a project setting (`ProjectSettings.CookOnChange`), saved
+in the project manifest and on by default; the Content Explorer's **Cook on
+change** toggle edits it, without reactivating the project. Turned off, it
+starts no automatic run and does not interrupt a running cook; changed sources
+show needs cooking until they are cooked. Explicit Cook remains available
+([editor documents §5.3.2](editor-documents.md#532-cook-on-change)).
 
 ### One Completion Path For Every Trigger
 
@@ -245,17 +245,17 @@ tracks dependencies, imports changed data and hot-reloads assets. Unreal's
 [platform cooking](https://dev.epicgames.com/documentation/en-us/unreal-engine/cooking-content-in-unreal-engine)
 is a separate concern from applying material edits in the editor.
 
-Oxygen's embedded runtime consumes cooked assets. Successful Save is the
-material's automatic cook trigger; it does not require another Apply button.
-Existing direct scene-property previews remain immediate. Transient gestures and
-Undo/Redo never launch cooks. External reimport stays explicit under the
-accepted policy. The supported asset formats remain the PRD's V0.1 set.
+Oxygen's embedded runtime consumes cooked assets. The saved file's change is
+the material's automatic cook trigger; it does not require another Apply button.
+Existing direct scene-property previews remain immediate. Transient gestures
+and a document's Undo/Redo never launch cooks. External reimport stays explicit
+under the accepted policy. The supported asset formats remain the PRD's V0.1 set.
 
 All triggers converge on one asynchronous project-owned workflow:
 
-1. Successful Save, accepted Import/Reimport, preview demand, or explicit Cook
-   submits the logical source scope. Save success is independent of cook
-   success.
+1. A file change that cook on change hears, accepted Import/Reimport, preview
+   demand, or explicit Cook submits the logical source scope. Save success is
+   independent of cook success.
 2. The coordinator coalesces requests, captures saved dependencies, and reuses
    verified products. Browsing and catalog refresh cannot submit work.
 3. Changed products cook and validate in private staging while the previous
@@ -314,11 +314,11 @@ directly from a save, watcher, picker, or catalog callback.
 - User-demand and explicit requests run ahead of pending background-save work;
   do not preempt a running publication. Results expose queued reason and scope.
   Burst coalescing must not introduce an arbitrary long idle wait.
-- Pause/cancel is respected: reopening a picker or receiving catalog events
-  cannot immediately recreate cancelled work for the same revision. Retry, a new
-  explicit request, or a new successful Save can request work again. Failure
-  does not create an automatic retry loop. Resume releases paused work, not
-  previously cancelled/failed work without a new request.
+- Cancel is respected: reopening a picker or receiving catalog events cannot
+  immediately recreate cancelled work for the same revision. Retry, a new
+  explicit request, or a new change to the file can request work again. Failure
+  does not create an automatic retry loop. Turning Cook on change on does not
+  cook changes made while it was off.
 - Cancelling one observer of shared work detaches its request. Stop the worker
   only when no remaining request owns it, or when the user cancels the displayed
   operation. Project close drains all project-owned work under section 18.
@@ -462,7 +462,7 @@ including the trigger policy in section 4.
 | Uncooked vs missing vs stale vs cooked-only assets                                            | Distinct actions and state; typed identity survives Save/reopen; cooked-only editing stays read-only.                                                                                     |
 | Save shared material used on several nodes                                                    | Exactly the affected products rebuild; all current uses update after publication, with no additional history entry.                                                                       |
 | Assign uncooked material into a dirty scene                                                   | Asset-only cook can run when its own inputs are saved; consuming scene need not be saved.                                                                                                 |
-| Repeated saves, later unsaved edit, pause/resume, cancel/retry                                | Work coalesces; newer edits stay dirty; cancelled/failed revisions do not restart themselves; no false Ready.                                                                             |
+| Repeated saves, later unsaved edit, Cook on change off/on, cancel/retry                       | Work coalesces; newer edits stay dirty; cancelled/failed revisions do not restart themselves; no false Ready.                                                                             |
 | Undo assignment or switch/close scene during cooking                                          | Completion never revives old assignment or applies to a different lifetime.                                                                                                               |
 | Asset/folder/scene/project Cook twice, then change one dependency                             | Second unchanged request performs no worker/output/pause work; next request rebuilds affected products and preserves unrelated entries.                                                   |
 | Dirty dependency -> Save listed and Cook -> save conflict                                     | Only named documents are offered; ordinary conflict recovery applies; no cook before successful saved capture.                                                                            |
@@ -477,13 +477,13 @@ parity.
 
 ## 8. Design rationale and eliminated alternatives
 
-The trigger table and session pause control in section 4 include explicit Save
-listed and Cook. A successful saved revision schedules cooking and can refresh
-every shared use. Source saving stays explicit and independent. PRD
-`REQ-014/026`, section 8, and the material/pipeline contracts use this policy.
-Explicit-only cooking adds a second routine action after every Save; automatic
-cooking on transient edits or browsing produces work without a saved authoring
-or preview need. Neither fits this workflow.
+The trigger table and the Cook on change setting in section 4 include explicit
+Save listed and Cook. Cook on change hears changes from `IAssetCatalog.Changes`;
+a save is a file change like any other, and its cook can refresh every shared
+use. Source saving stays explicit and independent. PRD `REQ-014/026`, section
+8, and the material/pipeline contracts use this policy. Explicit-only cooking
+adds a second routine action after every Save; automatic cooking on transient
+edits or browsing produces work without a saved authoring or preview need. Neither fits this workflow.
 
 Dependency-aware incremental processing is established in
 [Unity's asset database workflow](https://docs.unity3d.com/6000.0/Documentation/Manual/AssetDatabaseRefreshing.html),

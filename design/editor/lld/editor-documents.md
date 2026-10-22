@@ -11,7 +11,7 @@ and how saving and cooking meet. An open document is owned once, by the Shell;
 it has one undo history; and the cook sees every change on disk the same way and
 reads saved files only. Module boundaries are in
 [editor module architecture](editor-module-architecture.md); the Shell's frame
-is in [editor-shell.md](../review/editor-shell.md); the common behavior of a
+is in [editor-shell.md](editor-shell.md); the common behavior of a
 document and the document kinds are in [document-kinds.md](document-kinds.md).
 
 ## 2. PRD Traceability
@@ -31,7 +31,7 @@ document and the document kinds are in [document-kinds.md](document-kinds.md).
 - [document-kinds.md](document-kinds.md),
   [document-identity.md](document-identity.md): a document's common behavior,
   its kinds and its identity.
-- [editor-shell.md](../review/editor-shell.md): the document service, prompts,
+- [editor-shell.md](editor-shell.md): the document service, prompts,
   commands and placement in the Shell.
 - [asset-family-modules.md](asset-family-modules.md): the models each document
   kind edits and the checks the cook relies on.
@@ -40,9 +40,7 @@ document and the document kinds are in [document-kinds.md](document-kinds.md).
 
 ## 4. Current Baseline
 
-The steps that bring the code to this design, and what each has done, are S1.9
-to S1.12 and S4.2 of the
-[issue-069 plan](../plan/issue-069-di-topology-and-decomposition.md).
+The code follows this design.
 
 ## 5. Target Design
 
@@ -268,10 +266,13 @@ into cook inputs (5.3.2, 5.3.6); and the Shell's document service, which keeps
 open documents in step with their files (5.3.4). None of them watches files
 itself, and the cook never reads the feed.
 
-A Save, an external edit, a checkout and a relocation all arrive the same way.
-`IAutomaticCookService.NotifySaved` and `NotifyRenamed` go, and document
-services stop calling the pipeline. A change whose bytes match the last cooked
-input (by content hash) cooks nothing, so a Save that changes nothing is free.
+A Save, an external edit, a checkout and a relocation all arrive the same way;
+nothing that changes files calls the cook. A change whose bytes match the last
+cooked input (by content hash) cooks nothing, so a Save that changes nothing is
+free. A moved or deleted source is a change too: the catalog reports
+it as removed, or as relocated with its previous identity, and the cook checks
+the source it left. Opening a project cooks nothing: the catalog reports the
+files it starts listing as `AssetChangeKind.Listed`, which is not a change.
 
 #### 5.3.2 Cook on change
 
@@ -279,8 +280,25 @@ A project setting, **Cook on change**, on by default. When on, the cook turns
 the catalog's changes (5.3.1) into automatic runs, batched as 5.3.6 describes,
 and cooks the changed inputs and their dependents, reading saved files only. It
 never prompts and never waits for a Save: it cooks what is on disk (5.2.6). When
-off, changed inputs show "needs cooking" and nothing runs (5.2.2). The setting
-replaces the in-memory pause.
+off, changed inputs show "needs cooking" and nothing runs (5.2.2).
+
+The setting is `ProjectSettings.CookOnChange`, saved in the project manifest
+and edited by the Content Explorer's **Cook on change** toggle. It changes
+without reactivating the project: `AutomaticCookService` saves the settings,
+then `IProjectSession.UpdateSettings` replaces them and raises
+`SettingsChanged`. A running cook finishes; the changes waiting for the next
+run are not cooked while the setting is off.
+
+An automatic run starts only once the project writer is idle
+(`ICookRunService.WhenWriterIdleAsync`), so no cook, import or relocation is
+half done when it reads the statuses of its changed sources. It cooks only the
+sources whose published output does not match what is on disk, so content
+another cook already covered, such as Play's, is not cooked again. A source
+whose file is gone and that has published output is cooked to publish the
+content again without it; one whose file is gone and that was never cooked is
+skipped, and so is one that cannot be a cook input, such as a deleted script. A
+source moved or deleted after the run is chosen and before it starts leaves the
+run, and the cook's repair removes its products.
 
 The family modules check their sources (scripts, input sources) and publish the
 problems in their facts ([asset family modules](asset-family-modules.md)). Cook
@@ -308,8 +326,8 @@ ContentPipeline consumes it through a new reference to
 `Oxygen.Editor.Documents`, which is foundation; neither references the other.
 When there are any, the Shell shows one confirmation where the user acted
 (5.2.4, 5.2.5). Save and continue commits edits in progress, saves those
-documents and runs; Cancel does nothing. The parked `NeedsSave` state, the read
-leases, the save gates and `CookDocumentRegistry` go.
+documents and runs; Cancel does nothing. No cook waits for a save or holds
+anything of an open document.
 
 #### 5.3.4 External changes to open documents
 
@@ -324,7 +342,10 @@ The asset feed remains the one source of an asset's status: needs cooking,
 cooking, cooked, failed, plus "unsaved changes" when an open document edits it.
 Every place that shows an asset shows that status. A status compares the files
 on disk with the published content; it reads them without waiting for any
-document or writer.
+document or writer, sharing them with any writer (`CookSavedSourceReader`), so
+it never blocks a save's atomic replace or a tool writing in place. The status
+holds no document; the asset feed adds the unsaved documents that edit an asset
+from `IUnsavedDocuments`.
 
 #### 5.3.6 Bursts of changes and requests
 
@@ -342,20 +363,44 @@ and preview work goes ahead of automatic work.
    arrive while it runs collect into the next run, which starts when it ends.
    Incremental cooking reuses outputs whose inputs did not change, so the
    follow-up run only cooks what changed again.
-4. **Foreground work goes first.** When the user cooks or plays while an
-   automatic run is running, the automatic run stops at its next point where it
-   can stop without publishing a partial result, and the foreground run takes
-   the writer. After it, the stopped inputs that are still stale return to the
-   waiting automatic run; those the foreground run covered are not cooked again.
+4. **Foreground work goes first.** When any foreground work waits for the
+   writer (a cook the user asked for, Play, the preview's cook, or a relocation,
+   copy or delete) while an automatic run is running, the automatic run is
+   cancelled. It stops at its next cancellation point, which never publishes a
+   partial result, ends as stopped (a cancelled run whose message names the work
+   it stopped for) and reports `CookPreemptedException`. A run already
+   publishing, or already cancelling, finishes. The stopped run is not run
+   again: its operation folder (`.build/cook/<operation id>`) holds the stopped
+   attempt's snapshots and journal. Its inputs return to the waiting automatic
+   run, which reads their statuses again after the foreground work, so those
+   the foreground run covered are not cooked again.
 5. **Repeated requests.** A request identical to a pending one joins it, and a
    request whose inputs a pending request already covers (cook an asset inside a
-   folder already queued) joins that one. Neither joins a run that has started;
-   it queues once behind it. When a request joins a pending automatic run, that
-   run does the request's work.
+   folder already queued, or anything inside a queued project cook) joins that
+   one. A reimport never joins and is never joined. No request joins a run that
+   has started; it queues once behind it. When a foreground request joins a
+   pending automatic run of the same scope, that run does the foreground
+   request's work, which includes all of the automatic work. Every stop and
+   join is logged.
 6. **Play** is foreground and needs only the scene's inputs. Behind a running
    cook it queues like any request: that cook read its inputs before Play's
    save, so Play cooks after it, and incremental cooking reuses everything the
    running cook already produced.
+
+#### 5.3.7 Relocations, copies and deletes
+
+The global history (`IHistoryService.GlobalHistory`) lives as long as the
+project's session and is cleared only when it ends. A copy, delete or scene
+command does not clear it. `IAssetRelocationService` records each relocation
+into the history its caller gives it, as one change whose undo runs the reverse
+relocation and records the reverse of that for redo. An undo that a later change
+made invalid is rejected like any request: it changes nothing and its entry
+stays in the history.
+
+A relocation, copy, delete or scene command cooks nothing. The files it changes
+reach cook on change through the catalog (5.3.1), and cook on change or the user
+cooks them. An open scene shows its relocated nodes again in the runtime once
+the asset feed reports their new assets mounted, whoever cooked them.
 
 ## 6. Ownership
 

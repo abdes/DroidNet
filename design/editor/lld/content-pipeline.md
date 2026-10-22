@@ -78,7 +78,7 @@ rendering behavior.
 ## 5. Target Design
 
 ```text
-Explicit Cook / successful Save or import / saved-dependency demand
+Explicit Cook / cook on change / import / saved-dependency demand
   -> project coordinator and saved scope
   -> coherent input snapshot and native descriptor/manifest generation
   -> native cook into staging
@@ -425,6 +425,43 @@ normal Runtime/SceneEngineSync boundary; document saves and catalog-only
 refreshes cannot publish or remount roots independently. Inspect-only operations
 never mount.
 
+### 8.4 Asset Relocation
+
+`IAssetRelocationService` renames, moves, copies and deletes authored assets
+while keeping every authored reference to them valid, as the project writer, so
+it never overlaps a cook. It cooks nothing: the changed files reach cook on
+change through the asset catalog like any other change.
+
+- It keeps its reference index current itself: any asset catalog change,
+  including one made outside the editor, makes the next search read the files
+  again, so no caller invalidates it.
+- `FindReferrersOutsideAsync` reviews a delete: the files outside the deleted
+  items that reference any of them, read again first, so the review is never
+  stale.
+- `FilesChanged` reports the exact files the editor moved, rewrote, created or
+  deleted, including the files and folders a copy creates, on the caller's
+  synchronization context after open documents followed the change.
+- `RelocateAsync` records the relocation into the history its caller gives it,
+  as one change whose undo runs the reverse relocation and records the reverse
+  of that for redo. An undo that later changes made impossible is rejected like
+  any request, changes nothing and stays in the history.
+- A relocation refuses to run over open documents with unsaved changes
+  (`IUnsavedDocuments`), because a document follows a relocation only from its
+  saved file: its caller asks to save them first, and an undo, a redo or an edit
+  made since is refused.
+
+### 8.5 Asset Authoring
+
+`IAssetAuthoring` (`Authoring/`) creates new files from their asset family's
+template (`AuthoredAssetTemplate`), such as a script or an input file. It
+proposes the folder and the first free name, and checks a chosen name against
+the asset catalog: a name collides with any file of the same name in the folder
+that has one of the template's suffixes, because both would cook to the same
+asset. `CreateAsync` checks the name again and writes the template through
+`IAtomicFileStore` only where no file exists, so a file the catalog has not seen
+yet is never overwritten. It reports each created file as `FilesChanged` before
+`CreateAsync` returns.
+
 ## 9. UI Surfaces
 
 Use the existing UI surfaces:
@@ -587,10 +624,11 @@ The following production paths require regression coverage:
 ## 15. Scheduling And Product Scope
 
 The [content workflow contract](content-cooking-workflows.md) specifies shared
-status, incremental reuse, browser/picker behavior and recovery. Schedule
-cooking after successful Save/import and on asset/active-scene demand, with
-session pause. Browse and transient-edit events do not cook; external-source
-reimport stays explicit.
+status, incremental reuse, browser/picker behavior and recovery. Cooking runs
+on import, on asset/active-scene demand and, while the **Cook on change**
+project setting is on, on the file changes the asset catalog reports
+([editor documents §5.3](editor-documents.md#53-behavior)). Browse and
+transient-edit events do not cook; external-source reimport stays explicit.
 
 V0.1 retains existing Cook Asset/Folder/Scene/Project actions to rebuild stale
 content explicitly through the same coordinator. No separate stale-only
@@ -620,8 +658,8 @@ qualification borrows its normal publication and read APIs.
   (Save and Cook, or Cancel); a cook never waits for a save and never saves
   implicitly. Automatic requests cook what is saved.
 - Resolve the saved dependency closure, including importer settings and source
-  media, then capture a coherent byte snapshot under document/read coordination.
-  Read participating files through handles that exclude concurrent writes while
+  media, then capture a coherent byte snapshot of the files on disk. Read
+  participating files through handles that exclude concurrent writes while
   their bytes are copied. If the set changes while dependencies are resolved,
   retry capture at most three times, then fail visibly. Do not guess a mixture
   of revisions. External inaccessible/conflicting files fail before cooking.
@@ -631,10 +669,9 @@ qualification borrows its normal publication and read APIs.
   inputs. Cooked-only references require publication validation and output
   leases before reuse; their presence in the graph does not establish freshness.
 - Normal cooking copies inputs to `.build/cook/<OperationId>/inputs`, preserving
-  their logical mount-relative relationships. Record document saved revisions
-  where known, source hashes, import settings, schema/build fingerprint, project
-  lifetime, target scope, and operation identity. Native jobs read this private
-  snapshot. `ContentImportExecution` supplies the input root, operation
+  their logical mount-relative relationships. Record source hashes, import
+  settings, schema/build fingerprint, project lifetime, target scope, and
+  operation identity. Native jobs read this private snapshot. `ContentImportExecution` supplies the input root, operation
   directory and coordinator operation ID separately from the native manifest's
   output root. The adapter must not infer input paths from the published
   directory layout. Temporary manifests remain in the operation directory until
@@ -644,8 +681,8 @@ qualification borrows its normal publication and read APIs.
   captured input remains a successful, identifiable historical result.
 
 The saved-snapshot core accepts a caller-owned canonical private input directory
-and the existing input registry/read gates. `CookInputSnapshotCapture` keeps the
-normal cooking destination above; development preparation supplies
+and reads the files on disk. `CookInputSnapshotCapture` keeps the normal
+cooking destination above; development preparation supplies
 `<EvidenceRoot>/<OperationId>/inputs`. Both use the same closure discovery,
 coherent copy and hash implementation. Validate directory ownership, reparse
 boundaries and non-overlap with authored/published roots before writing. This is
@@ -671,6 +708,30 @@ production API.
 - Before publication, ensure the operation still owns the project lifetime and
   publication gate. A closed/replaced project invalidates the operation. Failure
   or cancellation here leaves published output and preview untouched.
+
+### Removing Retired Products
+
+A deleted or moved source retires its prior products without rebuilding their
+mount. The cook repair (`CookRootRepair`) lists each inherited root's retired
+outputs: the asset entries and the path-keyed auxiliary files no remaining
+product keeps. The cook removes them from the staged copy of the root, under
+its fresh generation identity, before it cooks anything into it
+(`ContentPipelineService.RemoveRetiredOutputsAsync`), then verifies the root
+that is left. The removal runs the ImportTool's `remove-cooked` command from a
+JSON request in the operation folder (`ImportToolContentPipelineApi`), which
+calls the engine's `LooseCookedWriter.RemoveAssetDescriptor` and
+`RemoveAuxiliaryFile`: the writer publishes the index without them, then
+deletes their files. Resource table entries stay, as they do when a cook
+replaces an asset; only a rebuild of the root compacts the tables. The other
+products of the mount are reused. A product that used a removed one is cooked
+again, so a scene that lost its material reports it instead of keeping a
+reference to cooked content that is gone.
+
+A mount whose every product was retired, and that nothing in the cook goes
+into, leaves the publication as if it was never cooked: the preview mounts the
+publication without its root, and maintenance reclaims its generation. A root
+that still holds assets without source ownership cannot be vacated and fails
+the cook with a diagnostic.
 
 ### Publication And Rollback
 
@@ -743,6 +804,13 @@ happened. The UI may show Cancelling, but a cancellation token alone is not
 proof that native I/O stopped. Publication is also valid when preview is
 unavailable; no engine startup is required merely to cook saved source.
 
+A cook on change that foreground work stops ends the same way, before
+publication, and reports `CookPreemptedException`; one already publishing
+finishes ([editor documents §5.3.6](editor-documents.md#536-bursts-of-changes-and-requests)).
+A stopped run is not run again: its operation folder holds the stopped
+attempt's snapshots and journal. Cook on change cooks the sources that are
+still stale in a new run.
+
 ### Open Documents
 
 The cook reads files only and holds nothing of an open document. It knows open
@@ -753,6 +821,13 @@ descriptors reference, and the caller asks the Shell to save them before the
 cook starts. The cook opens the files it reads with
 `FileShare.Read | FileShare.Delete`: in-place writes stay excluded, and a save's
 atomic replace proceeds; the save is a change of its own that is cooked again.
+
+A status (`AssetCookStatusReader`) reads source files from disk through
+`CookSavedSourceReader`, sharing them with any writer
+(`FileShare.ReadWrite | FileShare.Delete`), so it never blocks a save or a tool
+writing in place; a write during the read changes the hash, which reads as
+changed. It waits for no document or writer and holds no document: the asset
+feed adds the unsaved documents that edit an asset from `IUnsavedDocuments`.
 
 ### Result And UI Contract
 
@@ -870,11 +945,14 @@ content because native asset keys derive from virtual paths; output groups move
 only through the reference-aware relocation in
 [Content Explorer §9.5](content-explorer-asset-identity.md#95-asset-relocation),
 which rewrites the sidecar with the files. After a relocation or delete, a prior
-product whose authored source no longer exists is retired for every asset kind,
-and an imported product whose outputs fall outside its sidecar's current group
-is rebuilt into the new group: the affected root is rebuilt from its remaining
-owners, so old native keys leave the index, and neither case is treated as a
-forbidden identity change or as a namespace overlap with the retired owner.
+product whose authored source is gone is retired for every asset kind (a model
+only when its import settings went with it), and only its outputs leave the
+root, so its old native keys leave the index; this is not a forbidden identity
+change or a namespace overlap with the retired owner. Whether moving a model's
+outputs to another group retires its old outputs is to be verified
+([#97](https://github.com/abdes/DroidNet/issues/97)). Section 16
+([Removing retired products](#removing-retired-products)) describes the
+removal.
 Ownership, collision checks, folder cooking and source inspection cover every
 disjoint output namespace, without claiming the whole mount for one imported
 model.

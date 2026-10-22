@@ -27,3 +27,14 @@ Oxygen.Editor.Pickers'.
 
 The views merge `SceneInspectorStyles.xaml`. The shared inspector controls'
 theme is `Oxygen.Editor.Controls`', which the application merges.
+
+## Testing
+
+The UI tests drive the shared controls through their public API where it
+exists: `NumberBox` starts and cancels a text edit with `BeginTextEdit` and
+`CancelEdit`. Tests of an inspector's drag and wheel sessions call its
+`IInspectorEditSessionOwner` (`BeginNumberSession` and `CompleteNumberSession`
+in `testsupport/UI/InspectorControls.cs`). Tests of how a view wires its
+controls (late callbacks from recycled controls, vector boxes, filter changes)
+raise the control's session events by reflection (`RaiseNumberEvent`), because
+`NumberBox` has no public way to drive a drag.

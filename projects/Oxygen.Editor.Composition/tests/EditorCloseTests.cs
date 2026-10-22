@@ -36,7 +36,7 @@ using Testably.Abstractions.Testing;
 namespace Oxygen.Editor.Composition.UI.Tests;
 
 /// <summary>
-///     The editor's own parts of closing a window (shell design section 6): closing a project session's last workspace
+///     The editor's own parts of closing a window (editor-shell.md 5.6): closing a project session's last workspace
 ///     window opens the Start window before the workspace window closes, then closes the session; closing the editor's
 ///     last window otherwise exits it, closing any session before the engine shuts down.
 /// </summary>

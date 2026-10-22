@@ -7,12 +7,14 @@ This framework provides a comprehensive solution for applications requiring soph
 ## Features
 
 ### Docking Management
+
 - Managed through the `Docker` class
 - Supports multiple docking positions and orientations
 - Tree-based layout management system
 - Flexible docking operations (dock, undock, float, minimize)
 
 ### Dockable Panels
+
 - Two main types:
   - `CenterDock` - For main application content
   - `ToolDock` - For tool windows/panels
@@ -20,12 +22,14 @@ This framework provides a comprehensive solution for applications requiring soph
 - Tab-based interface for multiple items
 
 ### Layout Features
+
 - Resizable panels using `ResizableVectorGrid`
 - Grid-based flow layout system
 - Support for both horizontal and vertical orientations
 - Stretch-to-fill capability
 
 ### UI Components
+
 - `DockPanel` - Main docking panel control
 - `DockTray` - For minimized panels
 - Custom styled buttons and controls
@@ -33,16 +37,25 @@ This framework provides a comprehensive solution for applications requiring soph
 ## Architecture
 
 ### MVVM Pattern
+
 - View models for panels (`DockPanelViewModel`)
 - Observable collections for dockable items
 - Command-based interactions
 
 ### Core Interfaces
+
 - `IDock` - Dockable panel interface
 - `IDockable` - Dockable item interface
 - `IDocker` - Main docking manager interface
 
+All docking state belongs to one `IDocker`: each docker creates and finds its
+own docks and dockables (`FindDockable`, `Dockables`), numbers its own docks
+and runs its own docking maneuver, so only its own dock panels offer targets.
+Nothing is process-wide, so two dockers, for example the workspaces of two
+windows, can use the same dockable ids.
+
 ### Layout Management
+
 - Tree-based layout structure
 - Binary tree nodes for layout management
 - Support for complex docking arrangements
@@ -50,6 +63,7 @@ This framework provides a comprehensive solution for applications requiring soph
 ## Operations
 
 ### Panel Operations
+
 - Docking/Undocking
 - Floating windows
 - Minimizing/Restoring
@@ -57,11 +71,13 @@ This framework provides a comprehensive solution for applications requiring soph
 - Tab management
 
 ### Layout Control
+
 - Dynamic layout updates
 - Automatic layout optimization
 - Layout persistence support
 
 ### View Management
+
 - Active view tracking
 - View state management
 - Multiple view support within docks

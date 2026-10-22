@@ -24,7 +24,7 @@ namespace Oxygen.Editor.Composition.UI.Tests;
 
 /// <summary>
 ///     The project session as its host opens and closes it: one session at a time, created for one project, whose close
-///     cancels its lifetime and disposes its windows and its own services (spec 6.5).
+///     cancels its lifetime and disposes its windows and its own services (scope-topology.md 5.6).
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]

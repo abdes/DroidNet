@@ -21,7 +21,7 @@ namespace Oxygen.Editor.Composition.UI.Tests;
 /// <summary>
 ///     Switching projects closes the project's session, with its workspace window, and opens another session and window.
 ///     The session's global history and the preferences stored per project are the next project's own, and the session's
-///     state database contexts end with it; the gizmo preferences, kept across projects, are the editor's (spec 6.2).
+///     state database contexts end with it; the gizmo preferences, kept across projects, are the editor's (scope-topology.md 5.3).
 ///     The previous and the next workspace windows, open together during the switch, each have their own panels.
 /// </summary>
 [TestClass]

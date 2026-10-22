@@ -25,8 +25,12 @@ shows them. It holds no view, view model or dialog.
 - `InputTemplates.New` is the text of a new input source, and
   `InputTemplates.Asset` the template New Input File creates it from.
 
-A project's input sources are read through the project's file system
-(`ProjectContext.FileSystem`), so the tests run on an in-memory file system. `Oxygen.Editor.Input.Testing` gives other modules' tests
-`FakeInputSources`.
+A source's file is resolved from its identity with `ProjectContext.Find`, and a
+file found under an authoring mount maps back to its identity with
+`ProjectContext.FindByFilePath` (both in `ProjectAssetFiles`); only sources in
+the project's authoring mounts count (`InputSourceFiles.IsAuthored`). Files are
+read through the project's file system (`ProjectContext.FileSystem`), so the
+tests run on an in-memory file system. `Oxygen.Editor.Input.Testing` gives other
+modules' tests `FakeInputSources`.
 
 The Input Editor's document kind comes with that editor.

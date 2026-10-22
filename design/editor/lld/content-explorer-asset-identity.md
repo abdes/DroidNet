@@ -122,7 +122,7 @@ explorer adds the presentation of entries.
 snapshot changes, so a status update never replaces a row or its selection.
 
 - `Item` is the current `AssetEntry`; `Update` replaces it in place.
-- `StatusText` and `StatusTone` are the entry's status (`AssetStatusText`), or,
+- `StatusText` and `StatusTone` are the entry's badge and its tone (7.2), or,
   for a script with problems, its error and warning counts.
 - `Location`, `SizeText` and `ModifiedText` come from `AssetFileFacts`, read
   once per snapshot.
@@ -132,7 +132,8 @@ snapshot changes, so a status update never replaces a row or its selection.
 ### 7.2 Badges
 
 A row's badge is `AssetEntry.PrimaryBadge` with its tooltip, and its tone is one
-of `Neutral`, `Caution`, `Critical` and `Success` (`AssetStatusText.GetTone`).
+of `Neutral`, `Caution`, `Critical` and `Success`
+(`AssetStatusText.GetToneForText`).
 The explorer only paints the tone: `StatusToneToBrushConverter` maps it to the
 WinUI success, caution and critical fills. The wording and the tone are Assets'.
 
@@ -168,6 +169,19 @@ orders rows by the field, then by name and identity.
 `ContentExplorerState` holds what the panes share: the selected folders, the
 query and presentation, the selected assets, the result and scope counts the
 footer shows, and the clipboard of cut or copied items.
+
+The Content Folders pane and the asset list share that one clipboard, so a
+folder cut or copied in the tree pastes as a folder, in the tree or the list.
+The tree cuts, copies, pastes and deletes folders from its context menu, pastes
+into its focused folder with Ctrl+V and deletes its selected folders with
+Delete, through the same relocation workflow (`IAssetRelocationWorkflow`) as
+the asset list. Ctrl+X and Ctrl+C cut and copy the asset list's selection
+wherever the user works in the explorer. The assets pane asks the Content
+Folders pane to show a folder or create one through `IContentFoldersPane`.
+
+A selected folder that does not exist, because it was deleted or is reached
+again through Back or Forward, shows its nearest existing folder; when none of
+its parents exists, the explorer shows the whole project.
 
 ### 8.4 Picker
 
@@ -232,9 +246,14 @@ Rules:
   then asset commands, then Cook; New and Import stay longest. Item context
   menus mirror the row. Unavailable commands stay visible, disabled, and explain
   why.
-- New Folder creates "New folder" in the current authoring folder and names it
-  in place in the sources tree. Folder rename and drag-move relocate every asset
-  inside and update their referrers (§9.5).
+- New Folder creates "New folder", or the first free "New folder (2)", "New
+  folder (3)" and so on, in the current authoring folder and names it in place
+  in the sources tree. Folder rename and drag-move relocate every asset inside
+  and update their referrers (§9.5).
+- the editor accepts in an asset or folder name exactly the characters the
+  engine's virtual path accepts, checked with the same rules
+  ([asset identity §5.7](asset-identity.md#57-names-and-virtual-paths)); spaces
+  and parentheses are valid, so `New folder (2)` cooks.
 - the optional details pane shows identity facts, referrers and copy/locate
   actions; multi-selection shows aggregated counts. No hover tooltip carries
   information that is unavailable elsewhere.
@@ -318,8 +337,9 @@ identity and must update every authored referrer in one transaction.
   authoring mounts or into the moved folder, renaming or moving a mount root or
   the importer's fixed type folders (`Materials`, `Geometry`, `Scenes`), moving
   a model file out of its bundle folder, and cooked-only imported outputs.
-  Rename and move ask no confirmation; the result reports what moved and how
-  many referrers were updated, and offers Undo.
+  Rename and move ask no confirmation, only to save unsaved documents first
+  (Transaction); the result reports what moved and how many referrers were
+  updated, and offers Undo and Redo.
 - **Imported outputs.** A model import owns one output group in its mount,
   `Materials/<group>`, `Geometry/<group>` and `Scenes/<group>`, where the group
   is the sidecar's `OutputDirectory` and may be nested. Import creates no
@@ -332,43 +352,69 @@ identity and must update every authored referrer in one transaction.
   destination changes. Moving a group to another mount is rejected. Renaming or
   moving the bundle folder rewrites `BundleRoot`; renaming the model file
   renames its sidecar and rewrites `PrimaryRelativePath` and `Files`.
-- **Scenes.** Editor scenes live in `Content/Scenes` and are identified by name:
-  they can be renamed (through the scene rename operation) and duplicated, not
-  moved. Deleting the open scene is rejected.
-- **Transaction.** Runs as the content cook coordinator's project writer. Any
-  open document with unsaved changes rejects the operation with the names of the
-  documents to save. A journal under `.build/relocation/<operation>/` records
-  each move and edit with before/after hashes; files move and referrers are
-  written through the atomic file store against their baselines; any failure
-  restores every file, and project activation recovers an interrupted journal.
-  After the commit, and before the writer is released, registered document
-  participants bring open documents in step; then an explicit cook republishes
-  the moved assets and their referrers. Every move, rewrite, restore, delete and
+- **Scenes.** A scene is renamed, moved and duplicated like any asset. Deleting
+  the project's start scene, or a folder that holds it, is rejected until
+  another scene is the start scene.
+- **Transaction.** Runs as the content cook coordinator's project writer. Open
+  documents follow a relocation from their saved files, and an unsaved edit may
+  reference what moves, so before a rename or move the explorer's
+  `AssetRelocationWorkflow` asks the user to save every unsaved document of the
+  project (`IDocumentArea.SaveBeforeAsync` over
+  `IAssetRelocationService.FindUnsavedDocuments`); when they are not saved,
+  nothing runs. The relocation service itself refuses a relocation, an undo or a
+  redo while any document of the project is unsaved (`IUnsavedDocuments`),
+  naming the documents to save. A journal under
+  `.build/relocation/<operation>/` records each move and edit with before/after
+  hashes; files move and referrers are written through the atomic file store
+  against their baselines; any failure restores every file, and project
+  activation recovers an interrupted journal. After the commit, and before the
+  writer is released, registered document participants bring open documents in
+  step. Nothing cooks: the changed files reach cook on change through the asset
+  catalog like any other change. Every move, rewrite, restore, delete and
   document change is logged.
 - **Open documents.** Nothing reloads or closes on a rename or move. A scene
   re-points the references of the affected nodes, slot targets, environment mask
   and `ExtraAssets` in memory; a material re-points its texture paths; a moved
   material document re-points its own path and keeps its history. These changes
   are outside undo history and leave the document clean: the owner records the
-  transaction's written version as its saved state, so cooking accepts it. After
-  the follow-up cook publishes, the runtime refreshes only the affected nodes
-  and the environment. A deleted asset's open document closes.
-- **Identity redirects.** A session-wide, in-memory table composes every
-  committed relocation's old-to-new identities and resets when the project
-  closes. Undo, redo and paste resolve restored asset references through it, so
-  history is never rewritten or cleared. Restoring a deleted asset completes as
-  a missing reference with the existing diagnostic and a warning, never blocking
-  older undo steps.
-- **Undo.** The operation result offers Undo, which plans and runs the reverse
-  relocation. It is not part of scene history.
+  transaction's written version as its saved state, so cooking accepts it. The
+  preview shows the affected nodes and the environment again once the asset
+  feed reports their new assets mounted, whoever cooked them. A deleted asset's
+  open document closes.
+- **Identity redirects.** `AssetRedirects`, the project session's in-memory
+  record, composes every committed relocation's old-to-new identities in order
+  (A to B then B to C resolves A to C) and records deleted assets; it ends with
+  the session. An asset that still exists at a captured path is never
+  redirected. Scene and material documents resolve the asset references their
+  undo and redo steps and pasted content restore through it
+  (`IAssetRedirects`), so history is never rewritten or cleared. A restored
+  reference to a deleted asset completes as a missing reference with the
+  existing diagnostic and a warning, never blocking older undo steps.
+- **Undo.** A rename or move is one change of the session's global history
+  (`IHistoryService.GlobalHistory`), which `IAssetRelocationService` records
+  through the history the workflow gives it: its undo runs the reverse
+  relocation, which records its own reverse for redo. The result bar offers
+  Undo and Redo, and Ctrl+Z, Ctrl+Y and Ctrl+Shift+Z reach them wherever the
+  user works in the explorer, even while a document is active. Copies and
+  deletes are not recorded and leave the history as it is. An undo that later
+  changes made impossible is rejected without changing anything and stays in
+  the history.
 - Copy/Paste and Duplicate create unique new paths, give copied descriptors
   their new identity and rewrite no referrers; model sources and cooked-only
-  outputs are not copied. Delete lists referrers, confirms when any exist and
-  moves files and companions to the Recycle Bin, keeping an image another
-  texture still uses; remaining referrers report the existing missing-reference
-  diagnostics. The cooker treats a deleted texture as a warning: a material
-  cooks with that slot unbound and a scene without its metering mask, so the
-  rest of the project still cooks.
+  outputs are not copied. Delete reviews what it breaks:
+  `IAssetRelocationService.FindReferrersOutsideAsync` lists the files outside
+  the deleted items that use them, read again first, and the review names the
+  open documents that close. It confirms when either exists, then moves files
+  and companions to the Recycle Bin, keeping an image another texture still
+  uses; remaining referrers report the existing missing-reference diagnostics.
+  The cooker treats a deleted texture as a warning: a material cooks with that
+  slot unbound and a scene without its metering mask, so the rest of the project
+  still cooks.
+- The explorer refreshes no rows after a change it asked for: the feed and the
+  sources tree follow the relocation service's and asset authoring's reports of
+  the changed files
+  ([assets module §5.8](assets-module.md#58-how-changes-reach-the-editor)). Only
+  an import waits for the feed before it shows its result.
 
 ## 10. Persistence And Round Trip
 
@@ -389,9 +435,8 @@ Allowed:
 - query loose cooked indexes.
 - display stale/cooked/missing/broken state.
 - show actions that navigate to Material Editor or diagnostics.
-- refresh browser rows after `AssetsChangedMessage` or validated content
-  pipeline completion events. ED-M06 must not depend on save-time cooked-root
-  refresh messages.
+- show the feed's entries as it publishes them; the explorer sends and receives
+  no messages.
 
 Forbidden in ED-M06:
 
@@ -440,7 +485,8 @@ also carry `AffectedPath` for source/cooked filesystem paths.
 Allowed:
 
 - Content Explorer depends on `Oxygen.Managed.Assets`, `Oxygen.Editor.Projects`,
-  `Oxygen.Managed.Core.Diagnostics`, and editor messaging.
+  `Oxygen.Editor.Assets`, `Oxygen.Editor.ContentPipeline`, the Shell's ports
+  and `Oxygen.Managed.Core.Diagnostics`; it sends and receives no messages.
 - Material Editor opens material identities supplied by Content Explorer.
 - WorldEditor consumes picker contracts and persists asset URIs.
 

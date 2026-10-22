@@ -29,7 +29,7 @@ is decision 1 of [editor-documents.md](editor-documents.md), and the module
 - [editor-module-architecture.md](editor-module-architecture.md): section 6,
   the Shell's ownership of the panel registry, placement and command routing.
   No live LLD details them yet; the Shell's design is the review record
-  [editor-shell.md](../review/editor-shell.md).
+  [editor-shell.md](editor-shell.md).
 - [diagnostics-operation-results.md](diagnostics-operation-results.md): how a
   failed operation reaches the user.
 - [workspace-title-bar.md](workspace-title-bar.md): the workspace title bar and its menu bar, whose View menu lists

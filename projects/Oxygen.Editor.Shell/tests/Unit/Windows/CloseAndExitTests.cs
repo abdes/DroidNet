@@ -11,7 +11,7 @@ using Oxygen.Editor.Shell.Windows;
 namespace Oxygen.Editor.Shell.Unit.Tests.Windows;
 
 /// <summary>
-/// Closing a window is one negotiation (shell design section 6): every participant prepares it in level order, documents
+/// Closing a window is one negotiation (editor-shell.md 5.6): every participant prepares it in level order, documents
 /// first; then every step commits; then every step finalizes, before the window is destroyed. A participant that refuses
 /// to prepare or to commit keeps the window open.
 /// </summary>

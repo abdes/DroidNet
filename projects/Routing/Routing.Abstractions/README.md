@@ -230,6 +230,30 @@ Rich event system for monitoring and controlling the navigation lifecycle:
 - `NavigationEnd`: Navigation complete
 - `NavigationError`: Navigation error occurred
 
+The router reports a failed navigation as a `NavigationError` event, not as an
+exception from `NavigateAsync`. A caller that must know whether its own
+navigation succeeded watches the events whose options are the ones it passed.
+
+### View Model Lifetime
+
+Routing disposes the view models it shows when they go away: when a change-set
+navigation deletes their route (after the navigation ends, once their views are
+gone), when their navigation context is destroyed, or when an outlet shows
+another view model in their place. The router, the WinUI outlet containers and
+Aura's `RoutedWindow` all apply one rule, `RoutedViewModels.Release`: dispose
+the view model unless it is retained.
+
+A view model whose owner keeps it, such as a panel whose state must survive the
+panel being closed and shown again, carries `[RetainedViewModel]`. Routing then
+only lets go of it, the next route that shows it gets the same instance from
+its container, and its owner (usually the container that registers it as a
+singleton) disposes it. It is an attribute, not a marker interface, because an
+empty interface is a design smell (CA1040).
+
+A change-set navigation that adds a route finds that route's configuration by
+its outlet, searching through the children of empty-path routes that only group
+their children.
+
 ## Example Usage
 
 ### Route Configuration

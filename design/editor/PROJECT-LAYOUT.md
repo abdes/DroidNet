@@ -405,6 +405,64 @@ Tests live with the owner they validate:
 A lower-layer test must not reference a higher-layer project just to validate a
 workflow. Move the workflow test upward.
 
+### 13.1 Module tests
+
+- Each module is `README.md`, `src` and `tests`, with `tests/Unit`,
+  `tests/Integration` and `tests/Benchmarks` projects as needed (`Unit.UI`,
+  `Integration.UI` and `Benchmarks.UI` where the tests need the WinUI host).
+  Its fixtures are its own, in `tests/TestSupport`, or in the module's
+  `testsupport` folder for fixtures and probes that several of its test
+  projects share.
+- A test lives with the module whose behavior it checks. Other modules fake its
+  public ports or use the real ones, and never share its fixtures: no test
+  project links another module's fixture files.
+- Internals are visible only to the module's own tests
+  ([editor-module-architecture.md](lld/editor-module-architecture.md) decision
+  4).
+
+### 13.2 Module test kits
+
+A module that other modules test against publishes a test kit,
+`projects/<Module>/testing/<Module>.Testing.csproj`, referenced only by test
+projects, as `TestHelpers` is. A kit holds builders of the module's public
+types and in-memory fakes of its ports; the module maintains it and checks its
+fakes against the real service. Other tests use the kit: they do not hand-build
+the module's types, re-mock its ports in each test or link its `testsupport`
+files.
+
+| Kit                                     | Holds                                                                                                                                                                                       |
+| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor.Projects.Testing`        | `TestProject` (a project and its mount folders on any `IFileSystem`), `TestSession`, `TestSessionHost`                                                                                      |
+| `Oxygen.Editor.Scripting.Testing`       | `FakeScripts`, `FakeScriptAnalyzer`, `FakeScriptLibrary`, `AnalysisHold`                                                                                                                    |
+| `Oxygen.Editor.Input.Testing`           | `FakeInputSources`                                                                                                                                                                          |
+| `Oxygen.Editor.Scenes.Testing`          | `TestSceneDocuments`, `TestScene`, `TestScenes`, `FakeNodeInteraction`                                                                                                                      |
+| `Oxygen.Editor.Assets.Testing`          | `TestAssetEntries`                                                                                                                                                                          |
+| `Oxygen.Editor.ContentPipeline.Testing` | Fakes of its ports (`FakeAssetRedirects`, `FakeContentCookCoordinator`, `FakeCookPublicationReader`, `FakeMaterialSlotProvider`), `NativeContentPipelineFixture`, `EngineContentPakFixture` |
+| `Oxygen.Editor.Shell.Testing`           | `TestDocumentArea`                                                                                                                                                                          |
+| `Oxygen.Editor.Interop.Testing`         | `NativeDllSearchPath`                                                                                                                                                                       |
+| `Oxygen.Managed.Assets.Testing`         | `LooseCookedIndexFixture`, `PakFixture`                                                                                                                                                     |
+| `Oxygen.Managed.Core.Testing`           | `TemporaryNativeArtifacts`                                                                                                                                                                  |
+
+### 13.3 Test rules
+
+- **Moq.** A test mocks a port with Moq only when its owner's kit has no fake
+  for it and the test needs a few canned answers, a thrown failure or a check
+  that a call was made. A port whose kit has a fake is used through the fake. A
+  port that tests mock again and again with the same setups, or that needs
+  state across calls (a store, events, holds), gets a fake in its owner's kit.
+  Moq mocks ports only, never models or the module under test.
+- **File system.** Unit tests of logic over files run on Testably's
+  `MockFileSystem`; the real disk is for integration tests (atomic replace,
+  watcher timing, locking, native tools). Code takes `IFileSystem`, and a
+  project's files are read through `ProjectContext.FileSystem`.
+- **Models** take required identity members and optional `init` members, not
+  long positional constructors.
+- **Codes, not text.** Every refusal carries a contract code (such as
+  `TextureImportCodes`, through `TextureImportException.Code`), and tests assert
+  the code, not the message text.
+- **Containers.** A test that composes editor modules over a hand-built host
+  container uses the host-equivalent `HostContainer` of `TestHelpers`.
+
 ## 14. Anti-Placement Rules
 
 - Do not put authoring defaults in interop.

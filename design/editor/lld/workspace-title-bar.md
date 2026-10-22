@@ -118,10 +118,10 @@ context)` route to the handlers of the view models around the context
   button; New scene, Import and Cook project are Content Explorer buttons and
   menus; Cook scene is a Scene Editor button. Save all, Close all and Exit do
   not exist as user actions.
-- **Panels.** `IPlacementService.ShowPanelAsync` pins and activates a panel that
-  exists. Closing a panel destroys it, so `ShowPanelAsync` returns false
-  afterwards. Panels are created from their workspace routes by the initial
-  layout only.
+- **Panels.** `IPlacementService.ShowPanelAsync` pins and activates a panel. A
+  closed panel keeps its view model in the window's scope, and `ShowPanelAsync`
+  recreates its dockable from its route, docked where `ClosedPanels` remembers
+  it was ([scope-topology.md](scope-topology.md) 5.8).
 - **Projects.** `IProjectActivationCoordinator.ActivateAsync` opens or creates
   a project: it validates and stages it, asks to save the unsaved documents of
   every window (a refusal cancels), activates it and navigates the workspace

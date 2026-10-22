@@ -41,8 +41,7 @@ mandatory edit rules it implements, are in
 
 ## 4. Current Baseline
 
-The remaining work is tracked in the
-[issue-069 plan](../plan/issue-069-di-topology-and-decomposition.md).
+The code follows this design.
 
 ## 5. Target Design
 

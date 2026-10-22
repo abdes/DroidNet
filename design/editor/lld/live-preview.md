@@ -57,8 +57,7 @@ Play.
 
 ## 4. Current Baseline
 
-The remaining work that brings the code to this design is tracked in the
-[issue-069 plan](../plan/issue-069-di-topology-and-decomposition.md).
+The code follows this design.
 
 ## 5. Target Design
 

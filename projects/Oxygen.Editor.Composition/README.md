@@ -16,8 +16,7 @@ of every module and scope. The application host, `Oxygen.Editor`, is the only
 project that references it; it is a library so that tests can compose the same
 registrations.
 
-Design: [di-container-topology.md](../../design/editor/review/di-container-topology.md)
-(sections 6.1 to 6.7 and 6.10) and
+Design: [scope-topology.md](../../design/editor/lld/scope-topology.md) and
 [editor-module-architecture.md](../../design/editor/lld/editor-module-architecture.md).
 
 ## Layout
