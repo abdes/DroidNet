@@ -14,8 +14,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Oxygen.Editor.Data;
+using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core.Services;
 using Serilog;
+using Serilog.Events;
 
 namespace Oxygen.Editor;
 
@@ -69,7 +71,11 @@ public static partial class Program
         {
             // Configure aned Build the host so the final container is available.
             _ = bootstrap
-                .Configure(options => options.WithOutputConsole())
+                .Configure(options => options
+                    .WithOutputConsole()
+
+                    // The engine's logging verbosity, which the user sets, alone decides which engine messages show.
+                    .WithMinimumLevel(EngineConstants.LogCategory, LogEventLevel.Verbose))
                 .WithMvvm()
                 .WithRouting(EditorModule.CreateRoutes())
                 .WithWinUI<App>()

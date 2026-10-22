@@ -147,7 +147,7 @@ public sealed partial class EngineService
         try
         {
             this.session = await this.sessionFactory(cancellationToken).ConfigureAwait(true);
-            this.session.Initialize(this.engineSettings, this.pathFinder?.GetConfigFilePath(EditorCVarsArchiveFileName), loggerFactory?.CreateLogger("Oxygen.Engine"));
+            this.session.Initialize(this.engineSettings, this.pathFinder?.GetConfigFilePath(EditorCVarsArchiveFileName), loggerFactory?.CreateLogger(EngineConstants.LogCategory));
             this.ChangeState(EngineServiceState.Ready);
             this.WatchEngineSettings();
             this.LogContextReady();

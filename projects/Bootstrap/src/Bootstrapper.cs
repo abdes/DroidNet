@@ -724,6 +724,13 @@ public sealed partial class Bootstrapper(string[] args) : IDisposable
         var loggerConfig = new LoggerConfiguration();
 
         this.ConfigureBaseLogging(loggerConfig);
+        if (options is not null)
+        {
+            foreach (var (source, level) in options.MinimumLevels)
+            {
+                _ = loggerConfig.MinimumLevel.Override(source, level);
+            }
+        }
 
         // At this stage the early logger is configured.
         // Continue only if we are at the second stage with a non-null final container

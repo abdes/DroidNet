@@ -15,6 +15,12 @@ public static class EngineConstants
     /// <summary>The frame-rate cap offered when the user first turns the cap on.</summary>
     public const int DefaultFrameRateCap = 60;
 
+    /// <summary>
+    /// The logging category of the native engine's messages. The engine's logging verbosity decides which of them it
+    /// sends, so the host passes all of them through.
+    /// </summary>
+    public const string LogCategory = "Oxygen.Engine";
+
     /// <summary>The default native logging threshold (Warning): errors and warnings, nothing below.</summary>
     public const int DefaultLoggingVerbosity = -1;
 

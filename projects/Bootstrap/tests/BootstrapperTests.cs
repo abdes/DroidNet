@@ -11,6 +11,9 @@ using DroidNet.Routing;
 using DryIoc;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.UI.Xaml.Data;
+using Serilog;
+using Serilog.Core;
+using Serilog.Events;
 
 namespace DroidNet.Bootstrap.Tests;
 
@@ -127,6 +130,23 @@ public sealed partial class BootstrapperTests : IDisposable
      * NOTE: We cannot test WithWinUI() here because it requires an Application instance to be
      * created and initialized. This is not possible in a unit test environment.
      */
+
+    [TestMethod]
+    [DisplayName("WithMinimumLevel should let one source log below the configured minimum level")]
+    public void WithMinimumLevel_VerboseSource_LogsBelowTheConfiguredMinimum()
+    {
+        // Arrange
+        const string source = "DroidNet.Bootstrap.Tests.OwnLevel";
+        using var bootstrapper = new Bootstrapper([]);
+
+        // Act
+        _ = bootstrapper.Configure(options => options.WithMinimumLevel(source, LogEventLevel.Verbose)).Build();
+
+        // Assert
+        _ = Log.Logger.ForContext(Constants.SourceContextPropertyName, source).IsEnabled(LogEventLevel.Verbose).Should().BeTrue();
+        _ = Log.Logger.ForContext(Constants.SourceContextPropertyName, "DroidNet.Bootstrap.Tests.Other").IsEnabled(LogEventLevel.Verbose)
+            .Should().BeFalse("the other sources keep the configured minimum level");
+    }
 
     [TestMethod]
     [DisplayName("Dispose should reset bootstrapper state and dispose container")]

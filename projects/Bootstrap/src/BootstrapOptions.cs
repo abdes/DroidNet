@@ -12,6 +12,8 @@ namespace DroidNet.Bootstrap;
 /// </summary>
 public sealed class BootstrapOptions
 {
+    private readonly Dictionary<string, LogEventLevel> minimumLevels = new(StringComparer.Ordinal);
+
     /// <summary>
     ///     Gets a value indicating whether the `Serilog` should be hooked into <c>Microsoft.Extensions.Logging</c>.
     /// </summary>
@@ -68,6 +70,11 @@ public sealed class BootstrapOptions
     internal LoggingLevelSwitch? OutputConsoleLevelSwitch { get; private set; }
 
     /// <summary>
+    ///     Gets the minimum levels of the sources that set their own, applied over the logging configuration.
+    /// </summary>
+    internal IReadOnlyDictionary<string, LogEventLevel> MinimumLevels => this.minimumLevels;
+
+    /// <summary>
     ///     Enables integration of Serilog with <c>Microsoft.Extensions.Logging</c> abstraction.
     /// </summary>
     /// <returns>This <see cref="BootstrapOptions"/> instance for method chaining.</returns>
@@ -103,6 +110,21 @@ public sealed class BootstrapOptions
         this.OutputLogMinimumLevel = restrictedToMinimumLevel;
         this.OutputLogLevelSwitch = levelSwitch;
         this.OutputLogThemeId = themeId;
+        return this;
+    }
+
+    /// <summary>
+    ///     Sets the minimum level of the events of one source, over what the logging configuration says. A source
+    ///     with its own level control, such as a native library's verbosity, takes <see cref="LogEventLevel.Verbose" />
+    ///     so that its own control alone decides what it logs.
+    /// </summary>
+    /// <param name="source">The source context, or the prefix of the source contexts, the level applies to.</param>
+    /// <param name="level">The minimum level of the source's events.</param>
+    /// <returns>This <see cref="BootstrapOptions"/> instance for method chaining.</returns>
+    public BootstrapOptions WithMinimumLevel(string source, LogEventLevel level)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(source);
+        this.minimumLevels[source] = level;
         return this;
     }
 
