@@ -24,28 +24,26 @@ public sealed class OrthographicCameraRulesTests
 {
     public static IEnumerable<TestDataRow<PropertyCase>> InRange =>
     [
-        PropertyCase.Of("Size_Tiny", SampleScene.Ortho, Camera.OrthographicSize, 1e-4f),
-        PropertyCase.Of("NearPlane_Tiny", SampleScene.Ortho, Camera.NearPlane, 1e-4f),
-        PropertyCase.Of("AspectRatio_Small", SampleScene.Ortho, Camera.AspectRatio, 0.01f),
+        PropertyCase.Of("Size_Tiny", SampleScene.Ortho, SceneSchema.OrthographicCamera.OrthographicSize, 1e-4f),
+        PropertyCase.Of("NearPlane_Tiny", SampleScene.Ortho, SceneSchema.OrthographicCamera.NearPlane, 1e-4f),
+        PropertyCase.Of("AspectRatio_Small", SampleScene.Ortho, SceneSchema.OrthographicCamera.AspectRatio, 0.01f),
     ];
 
     public static IEnumerable<TestDataRow<PropertyCase>> OutOfRange =>
     [
-        PropertyCase.Of("Size_Zero", SampleScene.Ortho, Camera.OrthographicSize, 0f),
-        PropertyCase.Of("Size_Negative", SampleScene.Ortho, Camera.OrthographicSize, -1f),
-        PropertyCase.Of("NearPlane_Zero", SampleScene.Ortho, Camera.NearPlane, 0f),
-        PropertyCase.Of("AspectRatio_Zero", SampleScene.Ortho, Camera.AspectRatio, 0f),
-        PropertyCase.Of("ApertureF_Zero", SampleScene.Ortho, Camera.ApertureF, 0f),
-        PropertyCase.Of("Size_NaN", SampleScene.Ortho, Camera.OrthographicSize, float.NaN),
+        PropertyCase.Of("Size_Zero", SampleScene.Ortho, SceneSchema.OrthographicCamera.OrthographicSize, 0f),
+        PropertyCase.Of("Size_Negative", SampleScene.Ortho, SceneSchema.OrthographicCamera.OrthographicSize, -1f),
+        PropertyCase.Of("NearPlane_Zero", SampleScene.Ortho, SceneSchema.OrthographicCamera.NearPlane, 0f),
+        PropertyCase.Of("AspectRatio_Zero", SampleScene.Ortho, SceneSchema.OrthographicCamera.AspectRatio, 0f),
+        PropertyCase.Of("ApertureF_Zero", SampleScene.Ortho, SceneSchema.OrthographicCamera.ApertureF, 0f),
+        PropertyCase.Of("Size_NaN", SampleScene.Ortho, SceneSchema.OrthographicCamera.OrthographicSize, float.NaN),
     ];
 
     public static IEnumerable<TestDataRow<PropertyCase>> NearNotBelowFar =>
     [
-        PropertyCase.Of("NearEqualsFar", SampleScene.Ortho, Camera.NearPlane, 100f),
-        PropertyCase.Of("FarBelowNear", SampleScene.Ortho, Camera.FarPlane, 0.05f),
+        PropertyCase.Of("NearEqualsFar", SampleScene.Ortho, SceneSchema.OrthographicCamera.NearPlane, 100f),
+        PropertyCase.Of("FarBelowNear", SampleScene.Ortho, SceneSchema.OrthographicCamera.FarPlane, 0.05f),
     ];
-
-    private static OrthographicCameraDescriptors Camera => SceneProperties.OrthographicCamera;
 
     [TestMethod]
     [DynamicData(nameof(InRange))]

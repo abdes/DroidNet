@@ -13,7 +13,6 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
-using Oxygen.Interop;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
 
@@ -42,7 +41,7 @@ public sealed class ScenePreviewEngineTests : DroidNet.Tests.VisualUserInterface
             await PreviewWaits.UntilReadyAsync(preview, document.Id, timeout.Token).ConfigureAwait(true);
             var node = SceneContent.Of(document).Scene.RootNodes.Single();
 
-            var move = new PropertyEdit.Builder().Set(SceneProperties.Transform.PositionX, 7f).Build();
+            var move = new PropertyEdit.Builder().Set(SceneSchema.Transform.PositionX, 7f).Build();
             var result = await SceneContent.Of(document).Authoring.ExecuteAsync(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [node.Id] = move }, "Move")).ConfigureAwait(true);
 
             _ = result.Succeeded.Should().BeTrue();

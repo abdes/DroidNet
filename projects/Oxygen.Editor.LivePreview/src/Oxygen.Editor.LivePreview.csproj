@@ -37,4 +37,10 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Assets\src\Oxygen.Managed.Assets.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
     </ItemGroup>
+
+    <!-- Each property's engine component, fields and encoding are generated from the engine's scene components schema. -->
+    <PropertyGroup>
+        <SceneComponentsOutput>WireTable</SceneComponentsOutput>
+    </PropertyGroup>
+    <Import Project="$(ProjectsRoot)\Oxygen.Editor.Schemas\Generators\SceneComponents.targets" />
 </Project>

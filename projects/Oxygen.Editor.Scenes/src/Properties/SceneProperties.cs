@@ -10,33 +10,6 @@ namespace Oxygen.Editor.Scenes.Properties;
 /// <summary>Every scene property: its component kind, its descriptor and its kind's rules.</summary>
 public static class SceneProperties
 {
-    /// <summary>The component kind of a node's transform.</summary>
-    public const string TransformKind = "transform";
-
-    /// <summary>The component kind of a node's geometry.</summary>
-    public const string GeometryKind = "geometry";
-
-    /// <summary>The component kind of a perspective camera.</summary>
-    public const string PerspectiveCameraKind = "perspective-camera";
-
-    /// <summary>The component kind of an orthographic camera.</summary>
-    public const string OrthographicCameraKind = "orthographic-camera";
-
-    /// <summary>The component kind of a directional light.</summary>
-    public const string DirectionalLightKind = "directional-light";
-
-    /// <summary>The component kind of a point light.</summary>
-    public const string PointLightKind = "point-light";
-
-    /// <summary>The component kind of a spot light.</summary>
-    public const string SpotLightKind = "spot-light";
-
-    /// <summary>The component kind of a local fog volume.</summary>
-    public const string LocalFogVolumeKind = "local-fog-volume";
-
-    /// <summary>The kind of a node's authored rendering flags.</summary>
-    public const string NodeRenderingKind = "node-rendering";
-
     /// <summary>The kind of the scene's environment.</summary>
     public const string SceneEnvironmentKind = "scene-environment";
 
@@ -46,8 +19,8 @@ public static class SceneProperties
         new PerspectiveCameraRules(),
         new OrthographicCameraRules(),
         new DirectionalLightRules(),
-        new LocalLightRules(PointLightKind),
-        new LocalLightRules(SpotLightKind),
+        new LocalLightRules(SceneSchema.PointLight.Kind),
+        new LocalLightRules(SceneSchema.SpotLight.Kind),
         new LocalFogVolumeRules(),
         new NodeRenderingRules(),
         new SceneEnvironmentRules(),

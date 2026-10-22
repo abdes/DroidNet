@@ -293,7 +293,7 @@ internal sealed partial class ScenePreview
         else if (FindNode(scene, id) is { } node)
         {
             target = id.Value;
-            var transform = change.Properties.Any(static property => string.Equals(property.ComponentKind, SceneProperties.TransformKind, StringComparison.Ordinal));
+            var transform = change.Properties.Any(static property => string.Equals(property.ComponentKind, SceneSchema.Transform.Kind, StringComparison.Ordinal));
             var entries = EngineEntries(scene, node, change.Properties);
             if (!transform && entries.Count == 0)
             {

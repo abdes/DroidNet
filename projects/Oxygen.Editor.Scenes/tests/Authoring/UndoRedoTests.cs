@@ -164,7 +164,7 @@ public sealed class UndoRedoTests
             new ReparentNodes([SampleScene.Cam], SampleScene.A, preserveWorld: false),
             new CreateFolder(FolderId.New(), LayoutPosition.AtRoot(0), "New"),
             new SetProperties(
-                new Dictionary<NodeId, PropertyEdit> { [SampleScene.A] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionX, 7f) },
+                new Dictionary<NodeId, PropertyEdit> { [SampleScene.A] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, 7f) },
                 "Move"),
             new SetEditorHidden([SampleScene.Sun], hidden: true),
         };

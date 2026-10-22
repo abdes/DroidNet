@@ -168,11 +168,6 @@
       <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
       <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
     </ClCompile>
-    <ClCompile Include="World\WireVocabulary.cpp">
-      <PrecompiledHeader>Use</PrecompiledHeader>
-      <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
-      <PrecompiledHeaderOutputFile>$(IntDir)pch_clr.pch</PrecompiledHeaderOutputFile>
-    </ClCompile>
     <ClCompile Include="Scripting\ScriptAnalysis.cpp">
       <PrecompiledHeader>Use</PrecompiledHeader>
       <PrecompiledHeaderFile>pch_clr.h</PrecompiledHeaderFile>
@@ -285,7 +280,6 @@
     <ClInclude Include="RenderThreadContext.h" />
     <ClInclude Include="UiThreadDispatcher.h" />
     <ClInclude Include="World\OxygenWorld.h" />
-    <ClInclude Include="World\WireVocabulary.h" />
   </ItemGroup>
   <PropertyGroup Label="Globals">
     <VCProjectVersion>17.0</VCProjectVersion>

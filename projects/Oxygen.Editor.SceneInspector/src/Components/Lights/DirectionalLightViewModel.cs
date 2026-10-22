@@ -221,10 +221,10 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
     public InspectorFieldDiagnostic ColorBDiagnostic => this.edits?.Diagnostics.Get(this.colorBinding.Id.Id) ?? this.unboundDiagnostic;
 
     /// <summary>Gets current diagnostics for SunAzimuth.</summary>
-    public InspectorFieldDiagnostic SunAzimuthDiagnostic => this.edits?.Diagnostics.Get(SceneProperties.Transform.RotationX.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic SunAzimuthDiagnostic => this.edits?.Diagnostics.Get(SceneSchema.Transform.RotationX.Id) ?? this.unboundDiagnostic;
 
     /// <summary>Gets current diagnostics for SunElevation.</summary>
-    public InspectorFieldDiagnostic SunElevationDiagnostic => this.edits?.Diagnostics.Get(SceneProperties.Transform.RotationX.Id) ?? this.unboundDiagnostic;
+    public InspectorFieldDiagnostic SunElevationDiagnostic => this.edits?.Diagnostics.Get(SceneSchema.Transform.RotationX.Id) ?? this.unboundDiagnostic;
 
     /// <summary>Gets current diagnostics for IntensityLux.</summary>
     public InspectorFieldDiagnostic IntensityLuxDiagnostic => this.edits?.Diagnostics.Get(this.intensityLuxBinding.Id.Id) ?? this.unboundDiagnostic;
@@ -479,7 +479,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
             var color = light.Color;
             color[axis] = (float)value;
-            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.Color, color);
+            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.Color, color);
         }
 
         this.edits?.Submit(perTarget);
@@ -540,7 +540,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
             var scale = light.AtmosphereDiskLuminanceScaleRgb;
             scale[axis] = (float)value;
-            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, scale);
+            perTarget[node.Id] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, scale);
         }
 
         this.edits?.Submit(perTarget);
@@ -590,9 +590,9 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
         {
             var angles = TransformConverter.QuaternionToEulerDegrees(DirectionalLightOrientation.LocalRotation(node, (float)azimuth, (float)elevation));
             perTarget[node.Id] = new PropertyEdit.Builder()
-                .Set(SceneProperties.Transform.RotationX, angles.X)
-                .Set(SceneProperties.Transform.RotationY, angles.Y)
-                .Set(SceneProperties.Transform.RotationZ, angles.Z)
+                .Set(SceneSchema.Transform.RotationX, angles.X)
+                .Set(SceneSchema.Transform.RotationY, angles.Y)
+                .Set(SceneSchema.Transform.RotationZ, angles.Z)
                 .Build();
         }
 

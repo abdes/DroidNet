@@ -48,4 +48,10 @@
         <ProjectReference Include="$(ProjectsRoot)\Routing\Routing.WinUI\src\Routing.WinUI.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" /> -->
     </ItemGroup>
+
+    <!-- The runtime's component and field ids are generated from the engine's scene components schema. -->
+    <PropertyGroup>
+        <SceneComponentsOutput>WireIds</SceneComponentsOutput>
+    </PropertyGroup>
+    <Import Project="$(ProjectsRoot)\Oxygen.Editor.Schemas\Generators\SceneComponents.targets" />
 </Project>

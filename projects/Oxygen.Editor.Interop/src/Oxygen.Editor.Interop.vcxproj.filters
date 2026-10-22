@@ -42,9 +42,6 @@
     <ClCompile Include="World\NodeObservation.cpp">
       <Filter>World</Filter>
     </ClCompile>
-    <ClCompile Include="World\WireVocabulary.cpp">
-      <Filter>World</Filter>
-    </ClCompile>
     <ClCompile Include="EngineRunner_logging.cpp" />
     <ClCompile Include="pch.cpp" />
     <ClCompile Include="pch_clr.cpp" />
@@ -171,9 +168,6 @@
       <Filter>EditorModule</Filter>
     </ClInclude>
     <ClInclude Include="World\OxygenWorld.h">
-      <Filter>World</Filter>
-    </ClInclude>
-    <ClInclude Include="World\WireVocabulary.h">
       <Filter>World</Filter>
     </ClInclude>
     <ClInclude Include="EditorModule\SurfaceRegistry.h">

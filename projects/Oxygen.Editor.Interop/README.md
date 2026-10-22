@@ -202,8 +202,8 @@ severely degrade compile and link times or trigger CLR linker metadata errors.
   wire/property constants needed by both native and managed code in pure C++
   headers such as [Commands/PropertyKeys.h](src/Commands/PropertyKeys.h).
 - **DON'T** include C++/CLI headers (such as
-  [World/WireVocabulary.h](src/World/WireVocabulary.h) or
-  [Config.h](src/Config.h)) from native headers or native `.cpp` files.
+  [World/OxygenWorld.h](src/World/OxygenWorld.h) or [Config.h](src/Config.h))
+  from native headers or native `.cpp` files.
   - _Why:_ Pulling C++/CLI headers into native headers forces transitive
     consumers to compile with `/clr:netcore`, defeating native PCH reuse and
     native `/MP` parallelism.

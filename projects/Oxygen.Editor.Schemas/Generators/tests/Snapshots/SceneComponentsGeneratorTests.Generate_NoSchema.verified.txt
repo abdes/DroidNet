@@ -1,0 +1,16 @@
+﻿{
+  Diagnostics: [
+    {
+      Message: The scene components outputs need exactly one SceneComponents.yaml additional file; found 0,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC002,
+        Title: Scene components schema missing,
+        MessageFormat: The scene components outputs need exactly one SceneComponents.yaml additional file; found {0},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

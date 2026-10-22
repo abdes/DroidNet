@@ -1,0 +1,30 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (12,16)-(12,20),
+      Message: Lamp.wire.id must be a non-negative integer, not 'nine',
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC004,
+        Title: Scene components schema has an invalid entry,
+        MessageFormat: {0},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    },
+    {
+      Location: Schema\SceneComponents.yaml: (18,14)-(18,19),
+      Message: Lamp property has no 'key',
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC004,
+        Title: Scene components schema has an invalid entry,
+        MessageFormat: {0},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

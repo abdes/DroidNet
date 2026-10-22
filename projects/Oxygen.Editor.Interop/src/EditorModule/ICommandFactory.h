@@ -30,7 +30,6 @@ class RenameSceneNodeCommand;
 class SetLocalTransformCommand;
 class SetPropertiesCommand;
 struct PropertyEntry;
-enum class ComponentId : std::uint16_t;
 class SetGeometryCommand;
 class SetMaterialOverrideCommand;
 struct SurfaceTarget;

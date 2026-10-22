@@ -155,12 +155,12 @@ public partial class SceneEditorViewModel
             || !HasPose(transform, pose))
         {
             var values = new PropertyEdit.Builder()
-                .Set(SceneProperties.Transform.PositionX, pose.Position.X)
-                .Set(SceneProperties.Transform.PositionY, pose.Position.Y)
-                .Set(SceneProperties.Transform.PositionZ, pose.Position.Z)
-                .Set(SceneProperties.Transform.RotationX, pose.RotationEulerDegrees.X)
-                .Set(SceneProperties.Transform.RotationY, pose.RotationEulerDegrees.Y)
-                .Set(SceneProperties.Transform.RotationZ, pose.RotationEulerDegrees.Z)
+                .Set(SceneSchema.Transform.PositionX, pose.Position.X)
+                .Set(SceneSchema.Transform.PositionY, pose.Position.Y)
+                .Set(SceneSchema.Transform.PositionZ, pose.Position.Z)
+                .Set(SceneSchema.Transform.RotationX, pose.RotationEulerDegrees.X)
+                .Set(SceneSchema.Transform.RotationY, pose.RotationEulerDegrees.Y)
+                .Set(SceneSchema.Transform.RotationZ, pose.RotationEulerDegrees.Z)
                 .Build();
             edits.Add(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [nodeId] = values }, "Move Camera"));
         }
@@ -169,7 +169,7 @@ public partial class SceneEditorViewModel
             && node.Components.OfType<OrthographicCamera>().FirstOrDefault() is { } orthographic
             && Math.Abs(orthographic.OrthographicSize - size) > SizeTolerance)
         {
-            var values = PropertyEdit.SingleEdit(SceneProperties.OrthographicCamera.OrthographicSize, size);
+            var values = PropertyEdit.SingleEdit(SceneSchema.OrthographicCamera.OrthographicSize, size);
             edits.Add(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [nodeId] = values }, "Edit Orthographic Size"));
         }
 
@@ -177,7 +177,7 @@ public partial class SceneEditorViewModel
             && node.Components.OfType<PerspectiveCamera>().FirstOrDefault() is { } perspective
             && Math.Abs(perspective.FieldOfView - fieldOfView) > FieldOfViewTolerance)
         {
-            var values = PropertyEdit.SingleEdit(SceneProperties.PerspectiveCamera.FieldOfViewDegrees, fieldOfView);
+            var values = PropertyEdit.SingleEdit(SceneSchema.PerspectiveCamera.FieldOfViewDegrees, fieldOfView);
             edits.Add(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [nodeId] = values }, "Edit Field of View"));
         }
 

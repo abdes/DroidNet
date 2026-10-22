@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (26,18)-(26,34),
+      Message: Lamp.FovDegrees: the editor implements no encoding 'turns-to-radians',
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC008,
+        Title: Unknown encoding,
+        MessageFormat: {0}: the editor implements no encoding '{1}',
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

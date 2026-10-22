@@ -35,40 +35,38 @@ public sealed class DirectionalLightRulesTests
     // Each in-range row is the boundary value of its rule; Moon starts with two cascades, so four is a change.
     public static IEnumerable<TestDataRow<PropertyCase>> InRange =>
     [
-        PropertyCase.Of("CascadeCount_1", SampleScene.Sun, Light.CascadeCount, 1),
-        PropertyCase.Of("CascadeCount_4", SampleScene.Moon, Light.CascadeCount, 4),
-        PropertyCase.Of("DistributionExponent_1", SampleScene.Sun, Light.DistributionExponent, 1f),
-        PropertyCase.Of("TransitionFraction_0", SampleScene.Sun, Light.TransitionFraction, 0f),
-        PropertyCase.Of("TransitionFraction_1", SampleScene.Sun, Light.TransitionFraction, 1f),
-        PropertyCase.Of("AngularSize_0", SampleScene.Sun, Light.AngularSizeRadians, 0f),
-        PropertyCase.Of("AngularSize_Pi", SampleScene.Sun, Light.AngularSizeRadians, MathF.PI),
-        PropertyCase.Of("Color_Black", SampleScene.Sun, Light.Color, Vector3.Zero),
-        PropertyCase.Of("DiskScale_Zero", SampleScene.Sun, Light.AtmosphereDiskLuminanceScaleRgb, Vector3.Zero),
-        PropertyCase.Of("IntensityLux_Zero", SampleScene.Sun, Light.IntensityLux, 0f),
+        PropertyCase.Of("CascadeCount_1", SampleScene.Sun, SceneSchema.DirectionalLight.CascadeCount, 1),
+        PropertyCase.Of("CascadeCount_4", SampleScene.Moon, SceneSchema.DirectionalLight.CascadeCount, 4),
+        PropertyCase.Of("DistributionExponent_1", SampleScene.Sun, SceneSchema.DirectionalLight.DistributionExponent, 1f),
+        PropertyCase.Of("TransitionFraction_0", SampleScene.Sun, SceneSchema.DirectionalLight.TransitionFraction, 0f),
+        PropertyCase.Of("TransitionFraction_1", SampleScene.Sun, SceneSchema.DirectionalLight.TransitionFraction, 1f),
+        PropertyCase.Of("AngularSize_0", SampleScene.Sun, SceneSchema.DirectionalLight.AngularSizeRadians, 0f),
+        PropertyCase.Of("AngularSize_Pi", SampleScene.Sun, SceneSchema.DirectionalLight.AngularSizeRadians, MathF.PI),
+        PropertyCase.Of("Color_Black", SampleScene.Sun, SceneSchema.DirectionalLight.Color, Vector3.Zero),
+        PropertyCase.Of("DiskScale_Zero", SampleScene.Sun, SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, Vector3.Zero),
+        PropertyCase.Of("IntensityLux_Zero", SampleScene.Sun, SceneSchema.DirectionalLight.IntensityLux, 0f),
     ];
 
     // Each out-of-range row is the first value past the boundary of its rule, or a value no rule accepts.
     public static IEnumerable<TestDataRow<PropertyCase>> OutOfRange =>
     [
-        PropertyCase.Of("CascadeCount_0", SampleScene.Sun, Light.CascadeCount, 0),
-        PropertyCase.Of("CascadeCount_5", SampleScene.Sun, Light.CascadeCount, 5),
-        PropertyCase.Of("DistributionExponent_BelowOne", SampleScene.Sun, Light.DistributionExponent, 0.99f),
-        PropertyCase.Of("TransitionFraction_Negative", SampleScene.Sun, Light.TransitionFraction, -0.01f),
-        PropertyCase.Of("DistanceFadeoutFraction_AboveOne", SampleScene.Sun, Light.DistanceFadeoutFraction, 1.01f),
-        PropertyCase.Of("MaxShadowDistance_Zero", SampleScene.Sun, Light.MaxShadowDistance, 0f),
-        PropertyCase.Of("AngularSize_AbovePi", SampleScene.Sun, Light.AngularSizeRadians, MathF.PI + 0.01f),
-        PropertyCase.Of("Color_NegativeRed", SampleScene.Sun, Light.Color, new Vector3(-0.1f, 1, 1)),
-        PropertyCase.Of("ExposureCompensation_NaN", SampleScene.Sun, Light.ExposureCompensation, float.NaN),
-        PropertyCase.Of("ShadowBias_Negative", SampleScene.Sun, Light.ShadowBias, -1f),
-        PropertyCase.Of("ShadowNormalBias_Negative", SampleScene.Sun, Light.ShadowNormalBias, -1f),
-        PropertyCase.Of("DiskScale_Negative", SampleScene.Sun, Light.AtmosphereDiskLuminanceScaleRgb, new Vector3(-1, 1, 1)),
-        PropertyCase.Of("IntensityLux_Negative", SampleScene.Sun, Light.IntensityLux, -1f),
-        PropertyCase.Of("ShadowResolutionHint_Undefined", SampleScene.Sun, Light.ShadowResolutionHint, (ShadowResolutionHint)99),
-        PropertyCase.Of("SplitMode_Undefined", SampleScene.Sun, Light.SplitMode, (DirectionalCsmSplitMode)99),
-        PropertyCase.Of("AtmosphereSlot_Undefined", SampleScene.Sun, Light.AtmosphereSlot, (AtmosphereLightSlot)99),
+        PropertyCase.Of("CascadeCount_0", SampleScene.Sun, SceneSchema.DirectionalLight.CascadeCount, 0),
+        PropertyCase.Of("CascadeCount_5", SampleScene.Sun, SceneSchema.DirectionalLight.CascadeCount, 5),
+        PropertyCase.Of("DistributionExponent_BelowOne", SampleScene.Sun, SceneSchema.DirectionalLight.DistributionExponent, 0.99f),
+        PropertyCase.Of("TransitionFraction_Negative", SampleScene.Sun, SceneSchema.DirectionalLight.TransitionFraction, -0.01f),
+        PropertyCase.Of("DistanceFadeoutFraction_AboveOne", SampleScene.Sun, SceneSchema.DirectionalLight.DistanceFadeoutFraction, 1.01f),
+        PropertyCase.Of("MaxShadowDistance_Zero", SampleScene.Sun, SceneSchema.DirectionalLight.MaxShadowDistance, 0f),
+        PropertyCase.Of("AngularSize_AbovePi", SampleScene.Sun, SceneSchema.DirectionalLight.AngularSizeRadians, MathF.PI + 0.01f),
+        PropertyCase.Of("Color_NegativeRed", SampleScene.Sun, SceneSchema.DirectionalLight.Color, new Vector3(-0.1f, 1, 1)),
+        PropertyCase.Of("ExposureCompensation_NaN", SampleScene.Sun, SceneSchema.DirectionalLight.ExposureCompensation, float.NaN),
+        PropertyCase.Of("ShadowBias_Negative", SampleScene.Sun, SceneSchema.DirectionalLight.ShadowBias, -1f),
+        PropertyCase.Of("ShadowNormalBias_Negative", SampleScene.Sun, SceneSchema.DirectionalLight.ShadowNormalBias, -1f),
+        PropertyCase.Of("DiskScale_Negative", SampleScene.Sun, SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, new Vector3(-1, 1, 1)),
+        PropertyCase.Of("IntensityLux_Negative", SampleScene.Sun, SceneSchema.DirectionalLight.IntensityLux, -1f),
+        PropertyCase.Of("ShadowResolutionHint_Undefined", SampleScene.Sun, SceneSchema.DirectionalLight.ShadowResolutionHint, (ShadowResolutionHint)99),
+        PropertyCase.Of("SplitMode_Undefined", SampleScene.Sun, SceneSchema.DirectionalLight.SplitMode, (DirectionalCsmSplitMode)99),
+        PropertyCase.Of("AtmosphereSlot_Undefined", SampleScene.Sun, SceneSchema.DirectionalLight.AtmosphereSlot, (AtmosphereLightSlot)99),
     ];
-
-    private static DirectionalLightDescriptors Light => SceneProperties.DirectionalLight;
 
     [TestMethod]
     [DynamicData(nameof(InRange))]
@@ -103,7 +101,7 @@ public sealed class DirectionalLightRulesTests
     public async Task ActiveCascadeDistancesNotIncreasing_IsInconsistent(int cascadeCount, int distanceIndex, float distance)
     {
         using var fixture = await AuthoringFixture.CreateAsync(LightScene()).ConfigureAwait(false);
-        var edit = new PropertyEdit.Builder().Set(Light.CascadeCount, cascadeCount).Set(Distance(distanceIndex), distance).Build();
+        var edit = new PropertyEdit.Builder().Set(SceneSchema.DirectionalLight.CascadeCount, cascadeCount).Set(Distance(distanceIndex), distance).Build();
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(Edit(SampleScene.Sun, edit)).ConfigureAwait(false);
@@ -116,7 +114,7 @@ public sealed class DirectionalLightRulesTests
     public async Task InactiveCascadeDistanceOutOfOrder_Applies()
     {
         using var fixture = await AuthoringFixture.CreateAsync(LightScene()).ConfigureAwait(false);
-        var edit = new PropertyEdit.Builder().Set(Light.CascadeCount, 2).Set(Light.CascadeDistance3, 5f).Build();
+        var edit = new PropertyEdit.Builder().Set(SceneSchema.DirectionalLight.CascadeCount, 2).Set(SceneSchema.DirectionalLight.CascadeDistance3, 5f).Build();
 
         var result = await fixture.Authoring.ExecuteAsync(Edit(SampleScene.Sun, edit)).ConfigureAwait(false);
 
@@ -130,7 +128,7 @@ public sealed class DirectionalLightRulesTests
     public async Task IntensityWithBreakingCascadeDistance_ChangesNeither()
     {
         using var fixture = await AuthoringFixture.CreateAsync(LightScene()).ConfigureAwait(false);
-        var edit = new PropertyEdit.Builder().Set(Light.IntensityLux, 5_000f).Set(Light.CascadeDistance0, 500f).Build();
+        var edit = new PropertyEdit.Builder().Set(SceneSchema.DirectionalLight.IntensityLux, 5_000f).Set(SceneSchema.DirectionalLight.CascadeDistance0, 500f).Build();
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(Edit(SampleScene.Sun, edit)).ConfigureAwait(false);
@@ -187,7 +185,7 @@ public sealed class DirectionalLightRulesTests
     public async Task OtherPropertyOfTheSun_KeepsItsSlot()
     {
         using var fixture = await AuthoringFixture.CreateAsync(LightScene()).ConfigureAwait(false);
-        var edit = new PropertyEdit.Builder().Set(Light.IntensityLux, 5f).Build();
+        var edit = new PropertyEdit.Builder().Set(SceneSchema.DirectionalLight.IntensityLux, 5f).Build();
 
         var result = await fixture.Authoring.ExecuteAsync(Edit(SampleScene.Sun, edit)).ConfigureAwait(false);
 
@@ -208,7 +206,7 @@ public sealed class DirectionalLightRulesTests
             1 => new Vector3(SunColor.X, 0.9f, SunColor.Z),
             _ => new Vector3(SunColor.X, SunColor.Y, 0.9f),
         };
-        var edit = new PropertyEdit.Builder().Set(Light.Color, edited).Build();
+        var edit = new PropertyEdit.Builder().Set(SceneSchema.DirectionalLight.Color, edited).Build();
 
         var result = await fixture.Authoring.ExecuteAsync(Edit(SampleScene.Sun, edit)).ConfigureAwait(false);
         var applied = LightOf(fixture, SampleScene.Sun).Color;
@@ -268,10 +266,10 @@ public sealed class DirectionalLightRulesTests
     private static PropertyId<float> Distance(int index)
         => index switch
         {
-            0 => Light.CascadeDistance0,
-            1 => Light.CascadeDistance1,
-            2 => Light.CascadeDistance2,
-            _ => Light.CascadeDistance3,
+            0 => SceneSchema.DirectionalLight.CascadeDistance0,
+            1 => SceneSchema.DirectionalLight.CascadeDistance1,
+            2 => SceneSchema.DirectionalLight.CascadeDistance2,
+            _ => SceneSchema.DirectionalLight.CascadeDistance3,
         };
 
     private static DirectionalLightComponent LightOf(AuthoringFixture fixture, NodeId node)
@@ -281,5 +279,5 @@ public sealed class DirectionalLightRulesTests
         => new(new Dictionary<NodeId, PropertyEdit> { [node] = edit }, "Light");
 
     private static SetProperties SetSlot(NodeId node, AtmosphereLightSlot slot)
-        => Edit(node, new PropertyEdit.Builder().Set(Light.AtmosphereSlot, slot).Build());
+        => Edit(node, new PropertyEdit.Builder().Set(SceneSchema.DirectionalLight.AtmosphereSlot, slot).Build());
 }

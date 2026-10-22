@@ -12,7 +12,7 @@ namespace Oxygen.Editor.Scenes.Properties;
 internal sealed class LocalFogVolumeRules : IComponentRules
 {
     /// <inheritdoc/>
-    public string Kind => SceneProperties.LocalFogVolumeKind;
+    public string Kind => SceneSchema.LocalFogVolume.Kind;
 
     /// <inheritdoc/>
     public IReadOnlyDictionary<PropertyId, PropertyDescriptor> Descriptors => SceneProperties.LocalFogVolume.ById;

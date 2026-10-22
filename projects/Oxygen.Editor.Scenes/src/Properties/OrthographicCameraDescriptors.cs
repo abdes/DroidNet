@@ -45,30 +45,6 @@ public sealed class OrthographicCameraDescriptors
         };
     }
 
-    /// <summary>Gets the typed property id for the orthographic size.</summary>
-    public PropertyId<float> OrthographicSize => new(this.OrthographicSizeDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the framing policy.</summary>
-    public PropertyId<CameraAspectMode> AspectMode => new(this.AspectModeDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the retained Fixed aspect ratio.</summary>
-    public PropertyId<float> AspectRatio => new(this.AspectRatioDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the near clipping plane.</summary>
-    public PropertyId<float> NearPlane => new(this.NearPlaneDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the far clipping plane.</summary>
-    public PropertyId<float> FarPlane => new(this.FarPlaneDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the aperture f-number.</summary>
-    public PropertyId<float> ApertureF => new(this.ApertureFDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the shutter rate.</summary>
-    public PropertyId<float> ShutterRate => new(this.ShutterRateDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the ISO sensitivity.</summary>
-    public PropertyId<float> Iso => new(this.IsoDescriptor.Id);
-
     /// <summary>Gets the descriptor for the orthographic size.</summary>
     public PropertyDescriptor<float> OrthographicSizeDescriptor { get; }
 
@@ -101,13 +77,13 @@ public sealed class OrthographicCameraDescriptors
     public static OrthographicCameraDescriptors Build()
         => new(
             orthographicSize: FloatDescriptor(
-                "/orthographic_size",
+                SceneSchema.OrthographicCamera.OrthographicSize,
                 "Orthographic Size",
                 static camera => camera.OrthographicSize,
                 static (camera, value) => camera.OrthographicSize = value,
                 Positive(SceneDiagnosticCodes.OrthographicCameraSizeNonPositive, "Orthographic size must be greater than zero.")),
             aspectMode: new(
-                id: new PropertyId<CameraAspectMode>(SceneProperties.OrthographicCameraKind, "/aspect_mode"),
+                id: SceneSchema.OrthographicCamera.AspectMode,
                 reader: static target => ((OrthographicCamera)target).AspectMode,
                 writer: static (target, value) => ((OrthographicCamera)target).AspectMode = value,
                 validator: static value => Enum.IsDefined(value)
@@ -115,19 +91,19 @@ public sealed class OrthographicCameraDescriptors
                     : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Unknown camera aspect mode."),
                 annotation: Annotation("aspect_mode", new EditorAnnotation { Group = "Projection", Label = "Aspect Mode", Renderer = "combobox" })),
             aspectRatio: FloatDescriptor(
-                "/aspect_ratio",
+                SceneSchema.OrthographicCamera.AspectRatio,
                 "Fixed Aspect Ratio",
                 static camera => camera.AspectRatio,
                 static (camera, value) => camera.AspectRatio = value,
                 Positive(SceneDiagnosticCodes.OrthographicCameraAspectRatioNonPositive, "Aspect ratio must be greater than zero.")),
             nearPlane: FloatDescriptor(
-                "/near_plane",
+                SceneSchema.OrthographicCamera.NearPlane,
                 "Near Plane",
                 static camera => camera.NearPlane,
                 static (camera, value) => camera.NearPlane = value,
                 Positive(SceneDiagnosticCodes.OrthographicCameraNearPlaneNonPositive, "Near plane must be greater than zero.")),
             farPlane: FloatDescriptor(
-                "/far_plane",
+                SceneSchema.OrthographicCamera.FarPlane,
                 "Far Plane",
                 static camera => camera.FarPlane,
                 static (camera, value) => camera.FarPlane = value,
@@ -135,19 +111,19 @@ public sealed class OrthographicCameraDescriptors
                     ? ValidationResult.Ok
                     : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")),
             apertureF: FloatDescriptor(
-                "/aperture_f",
+                SceneSchema.OrthographicCamera.ApertureF,
                 "Aperture",
                 static camera => camera.ApertureF,
                 static (camera, value) => camera.ApertureF = value,
                 Positive(SceneDiagnosticCodes.CameraExposureNonPositive, "Aperture must be greater than zero.")),
             shutterRate: FloatDescriptor(
-                "/shutter_rate",
+                SceneSchema.OrthographicCamera.ShutterRate,
                 "Shutter Speed",
                 static camera => camera.ShutterRate,
                 static (camera, value) => camera.ShutterRate = value,
                 Positive(SceneDiagnosticCodes.CameraExposureNonPositive, "Shutter speed must be greater than zero.")),
             iso: FloatDescriptor(
-                "/iso",
+                SceneSchema.OrthographicCamera.Iso,
                 "ISO",
                 static camera => camera.Iso,
                 static (camera, value) => camera.Iso = value,
@@ -161,17 +137,17 @@ public sealed class OrthographicCameraDescriptors
                 : ValidationResult.Ok;
 
     private static PropertyDescriptor<float> FloatDescriptor(
-        string pointer,
+        PropertyId<float> id,
         string label,
         Func<OrthographicCamera, float> read,
         Action<OrthographicCamera, float> write,
         Func<float, ValidationResult> validate)
         => new(
-            id: new PropertyId<float>(SceneProperties.OrthographicCameraKind, pointer),
+            id: id,
             reader: target => read((OrthographicCamera)target),
             writer: (target, value) => write((OrthographicCamera)target, value),
             validator: validate,
-            annotation: Annotation(pointer.TrimStart('/'), new EditorAnnotation { Group = "Projection", Label = label, Renderer = "numberbox", Step = 0.01 }));
+            annotation: Annotation(id.Id.JsonPointer.TrimStart('/'), new EditorAnnotation { Group = "Projection", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static EditorAnnotation Annotation(string property, EditorAnnotation fallback)
         => SceneEditorSchemaAnnotations.Get("#/definitions/orthographic_camera/" + property, fallback);

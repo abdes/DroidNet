@@ -31,4 +31,10 @@
         <ProjectReference Include="$(ProjectsRoot)\Storage\src\Storage.csproj" />
         <ProjectReference Include="$(ProjectsRoot)\TimeMachine\src\TimeMachine.csproj" />
     </ItemGroup>
+
+    <!-- The scene component kinds and typed property ids are generated from the engine's scene components schema. -->
+    <PropertyGroup>
+        <SceneComponentsOutput>PropertyIds</SceneComponentsOutput>
+    </PropertyGroup>
+    <Import Project="$(ProjectsRoot)\Oxygen.Editor.Schemas\Generators\SceneComponents.targets" />
 </Project>

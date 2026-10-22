@@ -63,7 +63,7 @@ internal static class EnvironmentFieldCatalog
             Fog("Holdout", "/fog/holdout", "Holdout", "Rendering", "holdout"),
             Fog("VisibleInReflectionCaptures", "/fog/visible_in_reflection_captures", "Reflection Captures", "Rendering", "visible_in_reflection_captures"),
             Fog("VisibleInRealTimeSkyCaptures", "/fog/visible_in_real_time_sky_captures", "Sky Captures", "Rendering", "visible_in_real_time_sky_captures"),
-            new("Sources", SceneProperties.DirectionalLight.AtmosphereSlot.Id, InspectorPropertyScope.Environment, "AtmosphereLights", group: null, "Sources", "Atmosphere Lights Primary and secondary directional light sources.", $"Sun Binding Sun Reference atmosphere_light_slot azimuth elevation direction angular diameter disk luminance transmittance primary secondary SunAzimuth SunElevation AngularSizeRadians DiskScale {string.Join(' ', SourceFields.SelectMany(static entry => entry.Properties).Select(static property => property.JsonPointer))}"),
+            new("Sources", SceneSchema.DirectionalLight.AtmosphereSlot.Id, InspectorPropertyScope.Environment, "AtmosphereLights", group: null, "Sources", "Atmosphere Lights Primary and secondary directional light sources.", $"Sun Binding Sun Reference atmosphere_light_slot azimuth elevation direction angular diameter disk luminance transmittance primary secondary SunAzimuth SunElevation AngularSizeRadians DiskScale {string.Join(' ', SourceFields.SelectMany(static entry => entry.Properties).Select(static property => property.JsonPointer))}"),
             Exposure("ExposureEnabled", "exposure_enabled", "Enabled"),
             Exposure("ExposureMode", "exposure_mode", "Mode", aliases: "Manual ManualCamera Auto"),
             Exposure("ManualExposureEv", "manual_exposure_ev", "Manual EV", applicability: InspectorFieldApplicability.ManualExposure, aliases: "ManualExposure EV100"),
@@ -122,15 +122,15 @@ internal static class EnvironmentFieldCatalog
         {
             ImmutableArray<PropertyId> rotation =
             [
-                SceneProperties.Transform.RotationX.Id,
-                SceneProperties.Transform.RotationY.Id,
-                SceneProperties.Transform.RotationZ.Id,
+                SceneSchema.Transform.RotationX.Id,
+                SceneSchema.Transform.RotationY.Id,
+                SceneSchema.Transform.RotationZ.Id,
             ];
             fields.Add(new(role, "SunAzimuth", rotation));
             fields.Add(new(role, "SunElevation", rotation));
-            fields.Add(new(role, "AngularSizeRadians", [SceneProperties.DirectionalLight.AngularSizeRadians.Id]));
-            fields.Add(new(role, "DiskScale", [SceneProperties.DirectionalLight.AtmosphereDiskLuminanceScaleRgb.Id]));
-            fields.Add(new(role, "UsePerPixelAtmosphereTransmittance", [SceneProperties.DirectionalLight.UsePerPixelAtmosphereTransmittance.Id]));
+            fields.Add(new(role, "AngularSizeRadians", [SceneSchema.DirectionalLight.AngularSizeRadians.Id]));
+            fields.Add(new(role, "DiskScale", [SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb.Id]));
+            fields.Add(new(role, "UsePerPixelAtmosphereTransmittance", [SceneSchema.DirectionalLight.UsePerPixelAtmosphereTransmittance.Id]));
         }
 
         return fields.AsReadOnly();

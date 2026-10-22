@@ -13,7 +13,7 @@ namespace Oxygen.Editor.Scenes.Properties;
 internal sealed class PerspectiveCameraRules : IComponentRules
 {
     /// <inheritdoc/>
-    public string Kind => SceneProperties.PerspectiveCameraKind;
+    public string Kind => SceneSchema.PerspectiveCamera.Kind;
 
     /// <inheritdoc/>
     public IReadOnlyDictionary<PropertyId, PropertyDescriptor> Descriptors => SceneProperties.PerspectiveCamera.ById;

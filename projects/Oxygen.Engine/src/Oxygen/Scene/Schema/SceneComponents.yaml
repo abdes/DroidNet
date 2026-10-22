@@ -1,0 +1,522 @@
+# ===-----------------------------------------------------------------------===#
+# Distributed under the 3-Clause BSD License. See accompanying file LICENSE or
+# copy at https://opensource.org/licenses/BSD-3-Clause.
+# SPDX-License-Identifier: BSD-3-Clause
+# ===-----------------------------------------------------------------------===#
+
+# The authored scene node components and their properties, declared once.
+#
+# SceneComponents.schema.json validates this file. The Scene build generates
+# Generated.SceneComponents.h from it: the component ids and the field ids that
+# property edits address. Other consumers generate their own code from it.
+#
+# Field sets are the component-local field ids. A component names its field
+# set; point and spot lights share one. Ids are stable: never renumber or reuse
+# one. A property is addressed by its component kind and key (a JSON pointer
+# into the component's authored record) and has one value type. The fields of
+# a property receive its value in order, one float each; `encoding` names a
+# unit conversion applied before the value goes to its fields.
+
+version: 1
+
+field_sets:
+  - name: Transform
+    fields:
+      - { name: PositionX, id: 0 }
+      - { name: PositionY, id: 1 }
+      - { name: PositionZ, id: 2 }
+      - { name: RotationXDegrees, id: 3 }
+      - { name: RotationYDegrees, id: 4 }
+      - { name: RotationZDegrees, id: 5 }
+      - { name: ScaleX, id: 6 }
+      - { name: ScaleY, id: 7 }
+      - { name: ScaleZ, id: 8 }
+
+  - name: Node
+    fields:
+      - { name: Visible, id: 0 }
+      - { name: CastsShadows, id: 1 }
+      - { name: ReceivesShadows, id: 2 }
+
+  - name: PerspectiveCamera
+    fields:
+      - { name: FieldOfViewYRadians, id: 0 }
+      - { name: AspectRatio, id: 1 }
+      - { name: NearPlane, id: 2 }
+      - { name: FarPlane, id: 3 }
+      - { name: ApertureF, id: 4 }
+      - { name: ShutterRate, id: 5 }
+      - { name: Iso, id: 6 }
+      - { name: AspectMode, id: 7 }
+
+  - name: OrthographicCamera
+    fields:
+      - { name: OrthographicSize, id: 0 }
+      - { name: AspectRatio, id: 1 }
+      - { name: NearPlane, id: 2 }
+      - { name: FarPlane, id: 3 }
+      - { name: ApertureF, id: 4 }
+      - { name: ShutterRate, id: 5 }
+      - { name: Iso, id: 6 }
+      - { name: AspectMode, id: 7 }
+
+  # The light fields common to every light keep the same ids in
+  # DirectionalLight and LocalLight.
+  - name: DirectionalLight
+    fields:
+      - { name: ColorR, id: 0 }
+      - { name: ColorG, id: 1 }
+      - { name: ColorB, id: 2 }
+      - { name: AffectsWorld, id: 3 }
+      - { name: CastsShadows, id: 5 }
+      - { name: ShadowBias, id: 6 }
+      - { name: ShadowNormalBias, id: 7 }
+      - { name: ContactShadows, id: 8 }
+      - { name: ShadowResolutionHint, id: 9 }
+      - { name: ExposureCompensation, id: 10 }
+      - { name: IntensityLux, id: 11 }
+      - { name: AngularSizeRadians, id: 12 }
+      - { name: CascadeCount, id: 15 }
+      - { name: SplitMode, id: 16 }
+      - { name: MaxShadowDistance, id: 17 }
+      - { name: CascadeDistance0, id: 18 }
+      - { name: CascadeDistance1, id: 19 }
+      - { name: CascadeDistance2, id: 20 }
+      - { name: CascadeDistance3, id: 21 }
+      - { name: DistributionExponent, id: 22 }
+      - { name: TransitionFraction, id: 23 }
+      - { name: DistanceFadeoutFraction, id: 24 }
+      - { name: AtmosphereLightSlot, id: 25 }
+      - { name: UsePerPixelAtmosphereTransmittance, id: 26 }
+      - { name: DiskScaleR, id: 27 }
+      - { name: DiskScaleG, id: 28 }
+      - { name: DiskScaleB, id: 29 }
+
+  - name: LocalLight
+    fields:
+      - { name: ColorR, id: 0 }
+      - { name: ColorG, id: 1 }
+      - { name: ColorB, id: 2 }
+      - { name: AffectsWorld, id: 3 }
+      - { name: CastsShadows, id: 5 }
+      - { name: ShadowBias, id: 6 }
+      - { name: ShadowNormalBias, id: 7 }
+      - { name: ContactShadows, id: 8 }
+      - { name: ShadowResolutionHint, id: 9 }
+      - { name: ExposureCompensation, id: 10 }
+      - { name: LuminousFluxLm, id: 11 }
+      - { name: Range, id: 12 }
+      - { name: SourceRadius, id: 13 }
+      - { name: InnerConeAngleRadians, id: 14 }
+      - { name: OuterConeAngleRadians, id: 15 }
+
+  - name: LocalFogVolume
+    fields:
+      - { name: Enabled, id: 0 }
+      - { name: RadialFogExtinction, id: 1 }
+      - { name: HeightFogExtinction, id: 2 }
+      - { name: HeightFogFalloff, id: 3 }
+      - { name: HeightFogOffset, id: 4 }
+      - { name: FogPhaseG, id: 5 }
+      - { name: FogAlbedoR, id: 6 }
+      - { name: FogAlbedoG, id: 7 }
+      - { name: FogAlbedoB, id: 8 }
+      - { name: FogEmissiveR, id: 9 }
+      - { name: FogEmissiveG, id: 10 }
+      - { name: FogEmissiveB, id: 11 }
+      - { name: SortPriority, id: 12 }
+
+# A component with `wire` is applied to the engine node field by field; its id
+# is the component id. A component without one is applied whole.
+components:
+  - name: Transform
+    kind: transform
+    wire: { id: 1, field_set: Transform }
+    properties:
+      - name: PositionX
+        key: /local_position/0
+        type: float
+        fields: [PositionX]
+      - name: PositionY
+        key: /local_position/1
+        type: float
+        fields: [PositionY]
+      - name: PositionZ
+        key: /local_position/2
+        type: float
+        fields: [PositionZ]
+      - name: RotationX
+        key: /local_rotation_euler_degrees/0
+        type: float
+        fields: [RotationXDegrees]
+      - name: RotationY
+        key: /local_rotation_euler_degrees/1
+        type: float
+        fields: [RotationYDegrees]
+      - name: RotationZ
+        key: /local_rotation_euler_degrees/2
+        type: float
+        fields: [RotationZDegrees]
+      - name: ScaleX
+        key: /local_scale/0
+        type: float
+        fields: [ScaleX]
+      - name: ScaleY
+        key: /local_scale/1
+        type: float
+        fields: [ScaleY]
+      - name: ScaleZ
+        key: /local_scale/2
+        type: float
+        fields: [ScaleZ]
+
+  # The authored rendering flags of every node, applied as local values.
+  - name: Node
+    kind: node-rendering
+    wire: { id: 7, field_set: Node }
+    properties:
+      - name: IsVisible
+        key: /visible
+        type: bool
+        fields: [Visible]
+      - name: CastsShadows
+        key: /casts_shadows
+        type: bool
+        fields: [CastsShadows]
+      - name: ReceivesShadows
+        key: /receives_shadows
+        type: bool
+        fields: [ReceivesShadows]
+
+  - name: Geometry
+    kind: geometry
+    properties:
+      - name: GeometryUri
+        key: /geometry_uri
+        type: asset
+
+  - name: PerspectiveCamera
+    kind: perspective-camera
+    wire: { id: 2, field_set: PerspectiveCamera }
+    properties:
+      - name: FieldOfViewDegrees
+        key: /field_of_view_degrees
+        type: float
+        fields: [FieldOfViewYRadians]
+        encoding: degrees-to-radians
+      - name: AspectRatio
+        key: /aspect_ratio
+        type: float
+        fields: [AspectRatio]
+      - name: NearPlane
+        key: /near_plane
+        type: float
+        fields: [NearPlane]
+      - name: FarPlane
+        key: /far_plane
+        type: float
+        fields: [FarPlane]
+      - name: ApertureF
+        key: /aperture_f
+        type: float
+        fields: [ApertureF]
+      - name: ShutterRate
+        key: /shutter_rate
+        type: float
+        fields: [ShutterRate]
+      - name: Iso
+        key: /iso
+        type: float
+        fields: [Iso]
+      - name: AspectMode
+        key: /aspect_mode
+        type: enum
+        enum: CameraAspectMode
+        fields: [AspectMode]
+
+  - name: OrthographicCamera
+    kind: orthographic-camera
+    wire: { id: 4, field_set: OrthographicCamera }
+    properties:
+      - name: OrthographicSize
+        key: /orthographic_size
+        type: float
+        fields: [OrthographicSize]
+      - name: AspectMode
+        key: /aspect_mode
+        type: enum
+        enum: CameraAspectMode
+        fields: [AspectMode]
+      - name: AspectRatio
+        key: /aspect_ratio
+        type: float
+        fields: [AspectRatio]
+      - name: NearPlane
+        key: /near_plane
+        type: float
+        fields: [NearPlane]
+      - name: FarPlane
+        key: /far_plane
+        type: float
+        fields: [FarPlane]
+      - name: ApertureF
+        key: /aperture_f
+        type: float
+        fields: [ApertureF]
+      - name: ShutterRate
+        key: /shutter_rate
+        type: float
+        fields: [ShutterRate]
+      - name: Iso
+        key: /iso
+        type: float
+        fields: [Iso]
+
+  - name: DirectionalLight
+    kind: directional-light
+    wire: { id: 3, field_set: DirectionalLight }
+    properties:
+      - name: Color
+        key: /color
+        type: vec3
+        fields: [ColorR, ColorG, ColorB]
+      - name: IntensityLux
+        key: /intensity_lux
+        type: float
+        fields: [IntensityLux]
+      - name: AtmosphereSlot
+        key: /atmosphere_light_slot
+        type: enum
+        enum: AtmosphereLightSlot
+        fields: [AtmosphereLightSlot]
+      - name: UsePerPixelAtmosphereTransmittance
+        key: /use_per_pixel_atmosphere_transmittance
+        type: bool
+        fields: [UsePerPixelAtmosphereTransmittance]
+      - name: CastsShadows
+        key: /casts_shadows
+        type: bool
+        fields: [CastsShadows]
+      - name: AffectsWorld
+        key: /affects_world
+        type: bool
+        fields: [AffectsWorld]
+      - name: AngularSizeRadians
+        key: /angular_size_radians
+        type: float
+        fields: [AngularSizeRadians]
+      - name: ExposureCompensation
+        key: /exposure_compensation
+        type: float
+        fields: [ExposureCompensation]
+      - name: AtmosphereDiskLuminanceScaleRgb
+        key: /atmosphere_disk_luminance_scale_rgb
+        type: vec3
+        fields: [DiskScaleR, DiskScaleG, DiskScaleB]
+      - name: ShadowBias
+        key: /shadow/bias
+        type: float
+        fields: [ShadowBias]
+      - name: ShadowNormalBias
+        key: /shadow/normal_bias
+        type: float
+        fields: [ShadowNormalBias]
+      - name: ContactShadows
+        key: /shadow/contact_shadows
+        type: bool
+        fields: [ContactShadows]
+      - name: ShadowResolutionHint
+        key: /shadow/resolution_hint
+        type: enum
+        enum: ShadowResolutionHint
+        fields: [ShadowResolutionHint]
+      - name: CascadeCount
+        key: /csm/cascade_count
+        type: int
+        fields: [CascadeCount]
+      - name: SplitMode
+        key: /csm/split_mode
+        type: enum
+        enum: DirectionalCsmSplitMode
+        fields: [SplitMode]
+      - name: MaxShadowDistance
+        key: /csm/max_shadow_distance
+        type: float
+        fields: [MaxShadowDistance]
+      - name: CascadeDistance0
+        key: /csm/cascade_distances/0
+        type: float
+        fields: [CascadeDistance0]
+      - name: CascadeDistance1
+        key: /csm/cascade_distances/1
+        type: float
+        fields: [CascadeDistance1]
+      - name: CascadeDistance2
+        key: /csm/cascade_distances/2
+        type: float
+        fields: [CascadeDistance2]
+      - name: CascadeDistance3
+        key: /csm/cascade_distances/3
+        type: float
+        fields: [CascadeDistance3]
+      - name: DistributionExponent
+        key: /csm/distribution_exponent
+        type: float
+        fields: [DistributionExponent]
+      - name: TransitionFraction
+        key: /csm/transition_fraction
+        type: float
+        fields: [TransitionFraction]
+      - name: DistanceFadeoutFraction
+        key: /csm/distance_fadeout_fraction
+        type: float
+        fields: [DistanceFadeoutFraction]
+
+  - name: PointLight
+    kind: point-light
+    wire: { id: 5, field_set: LocalLight }
+    properties:
+      - name: Color
+        key: /color
+        type: vec3
+        fields: [ColorR, ColorG, ColorB]
+      - name: AffectsWorld
+        key: /affects_world
+        type: bool
+        fields: [AffectsWorld]
+      - name: CastsShadows
+        key: /casts_shadows
+        type: bool
+        fields: [CastsShadows]
+      - name: ExposureCompensation
+        key: /exposure_compensation
+        type: float
+        fields: [ExposureCompensation]
+      - name: ShadowBias
+        key: /shadow/bias
+        type: float
+        fields: [ShadowBias]
+      - name: ShadowNormalBias
+        key: /shadow/normal_bias
+        type: float
+        fields: [ShadowNormalBias]
+      - name: ContactShadows
+        key: /shadow/contact_shadows
+        type: bool
+        fields: [ContactShadows]
+      - name: ShadowResolutionHint
+        key: /shadow/resolution_hint
+        type: enum
+        enum: ShadowResolutionHint
+        fields: [ShadowResolutionHint]
+      - name: LuminousFluxLumens
+        key: /luminous_flux_lm
+        type: float
+        fields: [LuminousFluxLm]
+      - name: Range
+        key: /range
+        type: float
+        fields: [Range]
+      - name: SourceRadius
+        key: /source_radius
+        type: float
+        fields: [SourceRadius]
+
+  - name: SpotLight
+    kind: spot-light
+    wire: { id: 6, field_set: LocalLight }
+    properties:
+      - name: Color
+        key: /color
+        type: vec3
+        fields: [ColorR, ColorG, ColorB]
+      - name: AffectsWorld
+        key: /affects_world
+        type: bool
+        fields: [AffectsWorld]
+      - name: CastsShadows
+        key: /casts_shadows
+        type: bool
+        fields: [CastsShadows]
+      - name: ExposureCompensation
+        key: /exposure_compensation
+        type: float
+        fields: [ExposureCompensation]
+      - name: ShadowBias
+        key: /shadow/bias
+        type: float
+        fields: [ShadowBias]
+      - name: ShadowNormalBias
+        key: /shadow/normal_bias
+        type: float
+        fields: [ShadowNormalBias]
+      - name: ContactShadows
+        key: /shadow/contact_shadows
+        type: bool
+        fields: [ContactShadows]
+      - name: ShadowResolutionHint
+        key: /shadow/resolution_hint
+        type: enum
+        enum: ShadowResolutionHint
+        fields: [ShadowResolutionHint]
+      - name: LuminousFluxLumens
+        key: /luminous_flux_lm
+        type: float
+        fields: [LuminousFluxLm]
+      - name: Range
+        key: /range
+        type: float
+        fields: [Range]
+      - name: SourceRadius
+        key: /source_radius
+        type: float
+        fields: [SourceRadius]
+      - name: InnerConeAngleRadians
+        key: /inner_cone_angle_radians
+        type: float
+        fields: [InnerConeAngleRadians]
+      - name: OuterConeAngleRadians
+        key: /outer_cone_angle_radians
+        type: float
+        fields: [OuterConeAngleRadians]
+
+  - name: LocalFogVolume
+    kind: local-fog-volume
+    wire: { id: 8, field_set: LocalFogVolume }
+    properties:
+      - name: Enabled
+        key: /enabled
+        type: bool
+        fields: [Enabled]
+      - name: RadialFogExtinction
+        key: /radial_fog_extinction
+        type: float
+        fields: [RadialFogExtinction]
+      - name: HeightFogExtinction
+        key: /height_fog_extinction
+        type: float
+        fields: [HeightFogExtinction]
+      - name: HeightFogFalloff
+        key: /height_fog_falloff
+        type: float
+        fields: [HeightFogFalloff]
+      - name: HeightFogOffset
+        key: /height_fog_offset
+        type: float
+        fields: [HeightFogOffset]
+      - name: FogPhaseG
+        key: /fog_phase_g
+        type: float
+        fields: [FogPhaseG]
+      - name: FogAlbedo
+        key: /fog_albedo
+        type: vec3
+        fields: [FogAlbedoR, FogAlbedoG, FogAlbedoB]
+      - name: FogEmissive
+        key: /fog_emissive
+        type: vec3
+        fields: [FogEmissiveR, FogEmissiveG, FogEmissiveB]
+      - name: SortPriority
+        key: /sort_priority
+        type: int
+        fields: [SortPriority]

@@ -102,7 +102,7 @@ public static class SceneComponents
     private static IComponentRules? RulesOf(GameComponent component)
         => component switch
         {
-            DirectionalLightComponent => SceneProperties.RulesOf(SceneProperties.DirectionalLightKind),
+            DirectionalLightComponent => SceneProperties.RulesOf(SceneSchema.DirectionalLight.Kind),
             _ => null,
         };
 }

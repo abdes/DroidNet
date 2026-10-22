@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+    Generates code from the engine's scene components schema. A project sets SceneComponentsOutput to what it owns
+    (WireIds, PropertyIds or WireTable) before importing this file; SceneComponentsGenerator reads the schema the engine
+    keeps in its source tree and reports any problem in it as an error at its line.
+-->
+<Project>
+
+    <PropertyGroup>
+        <SceneComponentsSchema>$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Scene\Schema\SceneComponents.yaml</SceneComponentsSchema>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Editor.Schemas\Generators\src\Oxygen.Editor.Schemas.Generators.csproj"
+            OutputItemType="Analyzer" ReferenceOutputAssembly="false" />
+        <AdditionalFiles Include="$(SceneComponentsSchema)" Link="Schema\%(Filename)%(Extension)" />
+        <CompilerVisibleProperty Include="SceneComponentsOutput" />
+    </ItemGroup>
+
+</Project>

@@ -11,7 +11,7 @@ namespace Oxygen.Editor.Scenes.Properties;
 internal sealed class NodeRenderingRules : IComponentRules
 {
     /// <inheritdoc/>
-    public string Kind => SceneProperties.NodeRenderingKind;
+    public string Kind => SceneSchema.Node.Kind;
 
     /// <inheritdoc/>
     public IReadOnlyDictionary<PropertyId, PropertyDescriptor> Descriptors => SceneProperties.NodeRendering.ById;

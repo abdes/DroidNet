@@ -1,0 +1,47 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<!--
+    Source generators of the editor's scene property vocabulary. They run inside the compiler, so the project targets
+    netstandard2.0 and is referenced as an analyzer, never as an assembly. Consumers import SceneComponents.targets.
+-->
+<Project Sdk="Microsoft.NET.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>netstandard2.0</TargetFramework>
+        <LangVersion>latest</LangVersion>
+
+        <IncludeSymbols>false</IncludeSymbols>
+        <IncludeBuildOutput>false</IncludeBuildOutput>
+        <IsPackable>false</IsPackable>
+
+        <EnforceExtendedAnalyzerRules>true</EnforceExtendedAnalyzerRules>
+        <IsRoslynComponent>true</IsRoslynComponent>
+        <DevelopmentDependency>true</DevelopmentDependency>
+
+        <RootNamespace>Oxygen.Editor.Schemas.Generators</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+        <Title>Oxygen Editor scene schema generators</Title>
+        <Description>Generates the editor's scene component kinds, property ids and engine wire vocabulary from the engine's scene components schema.</Description>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all"
+            IncludeAssets="runtime; build; native; contentfiles; analyzers; buildtransitive" />
+    </ItemGroup>
+
+    <!--
+        YamlDotNet reads the schema. The compiler does not provide it, so the generator embeds its single
+        netstandard2.0 assembly and DependencyLoader loads it on demand; consumers never reference it.
+    -->
+    <ItemGroup>
+        <PackageReference Include="YamlDotNet" GeneratePathProperty="true" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup Condition=" '$(PKGYamlDotNet)' != '' ">
+        <EmbeddedResource Include="$(PKGYamlDotNet)\lib\netstandard2.0\YamlDotNet.dll">
+            <LogicalName>Oxygen.Editor.Schemas.Generators.Dependencies.YamlDotNet.dll</LogicalName>
+        </EmbeddedResource>
+    </ItemGroup>
+
+</Project>

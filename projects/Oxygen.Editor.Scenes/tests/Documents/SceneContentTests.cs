@@ -167,10 +167,10 @@ public sealed class SceneContentTests
     }
 
     private static Task<SceneGesture> BeginMoveOfAAsync(SceneContent content)
-        => content.Authoring.BeginGestureAsync([SampleScene.A], [SceneProperties.Transform.PositionX.Id], "Move");
+        => content.Authoring.BeginGestureAsync([SampleScene.A], [SceneSchema.Transform.PositionX.Id], "Move");
 
     private static SetProperties MoveA(float x)
-        => new(new Dictionary<NodeId, PropertyEdit> { [SampleScene.A] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionX, x) }, "Move");
+        => new(new Dictionary<NodeId, PropertyEdit> { [SampleScene.A] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, x) }, "Move");
 
     private static float PositionXOf(SceneContent content, NodeId node)
         => content.Scene.AllNodes.Single(candidate => candidate.Id == node).Components.OfType<TransformComponent>().Single().LocalPosition.X;

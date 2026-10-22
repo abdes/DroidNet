@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (17,16)-(17,23),
+      Message: Lamp.Color: vec3 values go to 3 fields, not 1,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC007,
+        Title: Fields do not match the value,
+        MessageFormat: {0}: {1},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

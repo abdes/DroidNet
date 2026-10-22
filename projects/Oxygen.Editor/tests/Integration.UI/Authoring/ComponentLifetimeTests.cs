@@ -8,7 +8,6 @@ using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.TestSupport;
 using Oxygen.Editor.World.Components;
-using Oxygen.Interop;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.TestSupport.NativeSceneData;
 

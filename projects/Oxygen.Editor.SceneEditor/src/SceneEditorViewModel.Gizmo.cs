@@ -47,23 +47,22 @@ public partial class SceneEditorViewModel
     /// <returns>One edit per target.</returns>
     internal static Dictionary<NodeId, PropertyEdit> BuildGizmoEdits(RuntimeTransformTool tool, IReadOnlyList<RuntimeGizmoTarget> targets)
     {
-        var transform = SceneProperties.Transform;
         var edits = new Dictionary<NodeId, PropertyEdit>(targets.Count);
         foreach (var target in targets)
         {
             // Every drag moves positions: rotation and scale act about the pivot.
             var edit = new PropertyEdit.Builder()
-                .Set(transform.PositionX, target.Position.X)
-                .Set(transform.PositionY, target.Position.Y)
-                .Set(transform.PositionZ, target.Position.Z);
+                .Set(SceneSchema.Transform.PositionX, target.Position.X)
+                .Set(SceneSchema.Transform.PositionY, target.Position.Y)
+                .Set(SceneSchema.Transform.PositionZ, target.Position.Z);
             if (tool == RuntimeTransformTool.Rotate)
             {
                 var euler = TransformConverter.QuaternionToEulerDegrees(target.Rotation);
-                _ = edit.Set(transform.RotationX, euler.X).Set(transform.RotationY, euler.Y).Set(transform.RotationZ, euler.Z);
+                _ = edit.Set(SceneSchema.Transform.RotationX, euler.X).Set(SceneSchema.Transform.RotationY, euler.Y).Set(SceneSchema.Transform.RotationZ, euler.Z);
             }
             else if (tool == RuntimeTransformTool.Scale)
             {
-                _ = edit.Set(transform.ScaleX, target.Scale.X).Set(transform.ScaleY, target.Scale.Y).Set(transform.ScaleZ, target.Scale.Z);
+                _ = edit.Set(SceneSchema.Transform.ScaleX, target.Scale.X).Set(SceneSchema.Transform.ScaleY, target.Scale.Y).Set(SceneSchema.Transform.ScaleZ, target.Scale.Z);
             }
 
             edits[target.NodeId] = edit.Build();

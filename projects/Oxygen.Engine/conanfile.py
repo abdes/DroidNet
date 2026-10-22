@@ -298,6 +298,8 @@ class OxygenConan(ConanFile):
                 "bindless-codegen",
                 "--package",
                 "unicode-codegen",
+                "--package",
+                "scene-schema-codegen",
             ]
             for name, selection in (
                 ("build-backends.txt", ["--only-group", "build-tools"]),
@@ -412,6 +414,8 @@ class OxygenConan(ConanFile):
                     str(source / "src/Oxygen/Core/Tools/BindlessCodeGen"),
                     "--editable",
                     str(source / "src/Oxygen/Content/Tools/UnicodeCodeGen"),
+                    "--editable",
+                    str(source / "src/Oxygen/Scene/Tools/SceneSchemaCodeGen"),
                 ],
                 check=True,
             )
@@ -432,6 +436,8 @@ class OxygenConan(ConanFile):
                                 / "src/Oxygen/Core/Tools/BindlessCodeGen/pyproject.toml",
                                 source
                                 / "src/Oxygen/Content/Tools/UnicodeCodeGen/pyproject.toml",
+                                source
+                                / "src/Oxygen/Scene/Tools/SceneSchemaCodeGen/pyproject.toml",
                             )
                         },
                     },

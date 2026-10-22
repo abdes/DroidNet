@@ -86,6 +86,7 @@ EDITOR_LAYERS: dict[str, Layer] = {
     "Oxygen.Editor.World": Layer.FOUNDATION,
     "Oxygen.Editor.Documents": Layer.FOUNDATION,
     "Oxygen.Editor.Schemas": Layer.FOUNDATION,
+    "Oxygen.Editor.Schemas.Generators": Layer.FOUNDATION,
     "Oxygen.Editor.Data": Layer.FOUNDATION,
     "Oxygen.Editor.Data.Generators": Layer.FOUNDATION,
     "Oxygen.Editor.Data.Generators.Attributes": Layer.FOUNDATION,

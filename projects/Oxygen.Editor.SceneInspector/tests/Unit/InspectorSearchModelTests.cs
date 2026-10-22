@@ -159,7 +159,7 @@ public sealed class InspectorSearchModelTests
             _ = direction.Should().OnlyContain(entry => entry.Properties.Length == 3);
             _ = direction[0].Properties.Should().Equal(direction[1].Properties);
             _ = fields.Single(entry => entry.Role == role && string.Equals(entry.Key, "AngularSizeRadians", StringComparison.Ordinal))
-                .Properties.Should().Equal(SceneProperties.DirectionalLight.AngularSizeRadians.Id);
+                .Properties.Should().Equal(SceneSchema.DirectionalLight.AngularSizeRadians.Id);
         }
     }
 }

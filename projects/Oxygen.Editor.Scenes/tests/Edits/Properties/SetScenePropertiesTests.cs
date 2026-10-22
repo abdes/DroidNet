@@ -36,7 +36,7 @@ public sealed class SetScenePropertiesTests
     public async Task NodeComponentProperty_IsInvalid()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var edit = new SetSceneProperties(new PropertyEdit.Builder().Set(SceneProperties.Transform.PositionX, 3f).Build(), "Position");
+        var edit = new SetSceneProperties(new PropertyEdit.Builder().Set(SceneSchema.Transform.PositionX, 3f).Build(), "Position");
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(edit).ConfigureAwait(false);

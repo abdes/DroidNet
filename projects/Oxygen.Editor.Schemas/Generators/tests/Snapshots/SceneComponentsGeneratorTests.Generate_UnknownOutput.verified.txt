@@ -1,0 +1,16 @@
+﻿{
+  Diagnostics: [
+    {
+      Message: SceneComponentsOutput 'Everything' is not one of WireIds, PropertyIds, WireTable,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC001,
+        Title: Unknown scene components output,
+        MessageFormat: SceneComponentsOutput '{0}' is not one of {1},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

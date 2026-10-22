@@ -81,7 +81,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
     public bool HasSecondaryAtmosphereSource => this.SelectedSecondarySun?.NodeId is not null;
 
     /// <summary>Gets the shared source-assignment feedback.</summary>
-    public InspectorFieldDiagnostic SunReferenceDiagnostic => this.EditOwner.Diagnostics.Get(SceneProperties.DirectionalLight.AtmosphereSlot.Id);
+    public InspectorFieldDiagnostic SunReferenceDiagnostic => this.EditOwner.Diagnostics.Get(SceneSchema.DirectionalLight.AtmosphereSlot.Id);
 
     /// <summary>Gets completion of source-role edits.</summary>
     internal Task Pending => this.lightAssignments?.Pending ?? Task.CompletedTask;
@@ -132,22 +132,22 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
             }
             else if (light.AtmosphereSlot != AtmosphereLightSlot.None)
             {
-                edits.Add(node.Id, PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None));
+                edits.Add(node.Id, PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None));
             }
         }
 
         var rotationMask = new PropertyEdit.Builder()
-            .Set(SceneProperties.Transform.RotationX, 0f)
-            .Set(SceneProperties.Transform.RotationY, 0f)
-            .Set(SceneProperties.Transform.RotationZ, 0f)
+            .Set(SceneSchema.Transform.RotationX, 0f)
+            .Set(SceneSchema.Transform.RotationY, 0f)
+            .Set(SceneSchema.Transform.RotationZ, 0f)
             .Build();
         var lightMask = new PropertyEdit.Builder()
-            .Set(SceneProperties.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None)
-            .Set(SceneProperties.DirectionalLight.AngularSizeRadians, 0f)
-            .Set(SceneProperties.DirectionalLight.UsePerPixelAtmosphereTransmittance, value: false)
-            .Set(SceneProperties.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, Vector3.One)
+            .Set(SceneSchema.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None)
+            .Set(SceneSchema.DirectionalLight.AngularSizeRadians, 0f)
+            .Set(SceneSchema.DirectionalLight.UsePerPixelAtmosphereTransmittance, value: false)
+            .Set(SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, Vector3.One)
             .Build();
-        var rotations = edits.Where(pair => pair.Value.Contains(SceneProperties.Transform.RotationX.Id))
+        var rotations = edits.Where(pair => pair.Value.Contains(SceneSchema.Transform.RotationX.Id))
             .ToDictionary(pair => pair.Key, pair => pair.Value.IntersectIds(rotationMask));
         List<ISceneEdit> steps = [new SetProperties(edits.ToDictionary(pair => pair.Key, pair => pair.Value.IntersectIds(lightMask)), ResetLabel)];
         if (rotations.Count > 0)
@@ -196,13 +196,13 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
 
             var rotation = TransformConverter.QuaternionToEulerDegrees(node.Components.OfType<TransformComponent>().Single().LocalRotation);
             result.Add(node.Id, new PropertyEdit.Builder()
-                .Set(SceneProperties.DirectionalLight.AtmosphereSlot, light.AtmosphereSlot)
-                .Set(SceneProperties.DirectionalLight.AngularSizeRadians, light.AngularSizeRadians)
-                .Set(SceneProperties.DirectionalLight.UsePerPixelAtmosphereTransmittance, light.UsePerPixelAtmosphereTransmittance)
-                .Set(SceneProperties.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, light.AtmosphereDiskLuminanceScaleRgb)
-                .Set(SceneProperties.Transform.RotationX, rotation.X)
-                .Set(SceneProperties.Transform.RotationY, rotation.Y)
-                .Set(SceneProperties.Transform.RotationZ, rotation.Z)
+                .Set(SceneSchema.DirectionalLight.AtmosphereSlot, light.AtmosphereSlot)
+                .Set(SceneSchema.DirectionalLight.AngularSizeRadians, light.AngularSizeRadians)
+                .Set(SceneSchema.DirectionalLight.UsePerPixelAtmosphereTransmittance, light.UsePerPixelAtmosphereTransmittance)
+                .Set(SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb, light.AtmosphereDiskLuminanceScaleRgb)
+                .Set(SceneSchema.Transform.RotationX, rotation.X)
+                .Set(SceneSchema.Transform.RotationY, rotation.Y)
+                .Set(SceneSchema.Transform.RotationZ, rotation.Z)
                 .Build());
         }
 
@@ -274,12 +274,12 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
         var edits = new Dictionary<NodeId, PropertyEdit>();
         if (current is not null)
         {
-            edits[current.Id] = PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
+            edits[current.Id] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.AtmosphereSlot, AtmosphereLightSlot.None);
         }
 
         if (selected is { } selectedId)
         {
-            edits[selectedId] = PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.AtmosphereSlot, slot);
+            edits[selectedId] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.AtmosphereSlot, slot);
         }
 
         if (edits.Count > 0)

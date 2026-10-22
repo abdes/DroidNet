@@ -25,15 +25,6 @@ public sealed class TransformDescriptors
         PropertyDescriptor<float> scaleY,
         PropertyDescriptor<float> scaleZ)
     {
-        this.PositionX = new PropertyId<float>(positionX.Id);
-        this.PositionY = new PropertyId<float>(positionY.Id);
-        this.PositionZ = new PropertyId<float>(positionZ.Id);
-        this.RotationX = new PropertyId<float>(rotationX.Id);
-        this.RotationY = new PropertyId<float>(rotationY.Id);
-        this.RotationZ = new PropertyId<float>(rotationZ.Id);
-        this.ScaleX = new PropertyId<float>(scaleX.Id);
-        this.ScaleY = new PropertyId<float>(scaleY.Id);
-        this.ScaleZ = new PropertyId<float>(scaleZ.Id);
         this.PositionXDescriptor = positionX;
         this.PositionYDescriptor = positionY;
         this.PositionZDescriptor = positionZ;
@@ -56,33 +47,6 @@ public sealed class TransformDescriptors
             [scaleZ.Id] = scaleZ,
         };
     }
-
-    /// <summary>Gets the typed id for /local_position/0.</summary>
-    public PropertyId<float> PositionX { get; }
-
-    /// <summary>Gets the typed id for /local_position/1.</summary>
-    public PropertyId<float> PositionY { get; }
-
-    /// <summary>Gets the typed id for /local_position/2.</summary>
-    public PropertyId<float> PositionZ { get; }
-
-    /// <summary>Gets the typed id for /local_rotation_euler_degrees/0.</summary>
-    public PropertyId<float> RotationX { get; }
-
-    /// <summary>Gets the typed id for /local_rotation_euler_degrees/1.</summary>
-    public PropertyId<float> RotationY { get; }
-
-    /// <summary>Gets the typed id for /local_rotation_euler_degrees/2.</summary>
-    public PropertyId<float> RotationZ { get; }
-
-    /// <summary>Gets the typed id for /local_scale/0.</summary>
-    public PropertyId<float> ScaleX { get; }
-
-    /// <summary>Gets the typed id for /local_scale/1.</summary>
-    public PropertyId<float> ScaleY { get; }
-
-    /// <summary>Gets the typed id for /local_scale/2.</summary>
-    public PropertyId<float> ScaleZ { get; }
 
     /// <summary>Gets the position X descriptor.</summary>
     public PropertyDescriptor<float> PositionXDescriptor { get; }
@@ -121,22 +85,22 @@ public sealed class TransformDescriptors
     /// <returns>The catalog.</returns>
     public static TransformDescriptors Build()
         => new(
-            positionX: BuildPositionAxis("/local_position/0", static t => t.LocalPosition.X, static (t, v) => t.LocalPosition = new Vector3(v, t.LocalPosition.Y, t.LocalPosition.Z)),
-            positionY: BuildPositionAxis("/local_position/1", static t => t.LocalPosition.Y, static (t, v) => t.LocalPosition = new Vector3(t.LocalPosition.X, v, t.LocalPosition.Z)),
-            positionZ: BuildPositionAxis("/local_position/2", static t => t.LocalPosition.Z, static (t, v) => t.LocalPosition = new Vector3(t.LocalPosition.X, t.LocalPosition.Y, v)),
-            rotationX: BuildRotationAxis("/local_rotation_euler_degrees/0", 0),
-            rotationY: BuildRotationAxis("/local_rotation_euler_degrees/1", 1),
-            rotationZ: BuildRotationAxis("/local_rotation_euler_degrees/2", 2),
-            scaleX: BuildScaleAxis("/local_scale/0", static t => t.LocalScale.X, static (t, v) => t.LocalScale = new Vector3(v, t.LocalScale.Y, t.LocalScale.Z)),
-            scaleY: BuildScaleAxis("/local_scale/1", static t => t.LocalScale.Y, static (t, v) => t.LocalScale = new Vector3(t.LocalScale.X, v, t.LocalScale.Z)),
-            scaleZ: BuildScaleAxis("/local_scale/2", static t => t.LocalScale.Z, static (t, v) => t.LocalScale = new Vector3(t.LocalScale.X, t.LocalScale.Y, v)));
+            positionX: BuildPositionAxis(SceneSchema.Transform.PositionX, static t => t.LocalPosition.X, static (t, v) => t.LocalPosition = new Vector3(v, t.LocalPosition.Y, t.LocalPosition.Z)),
+            positionY: BuildPositionAxis(SceneSchema.Transform.PositionY, static t => t.LocalPosition.Y, static (t, v) => t.LocalPosition = new Vector3(t.LocalPosition.X, v, t.LocalPosition.Z)),
+            positionZ: BuildPositionAxis(SceneSchema.Transform.PositionZ, static t => t.LocalPosition.Z, static (t, v) => t.LocalPosition = new Vector3(t.LocalPosition.X, t.LocalPosition.Y, v)),
+            rotationX: BuildRotationAxis(SceneSchema.Transform.RotationX, 0),
+            rotationY: BuildRotationAxis(SceneSchema.Transform.RotationY, 1),
+            rotationZ: BuildRotationAxis(SceneSchema.Transform.RotationZ, 2),
+            scaleX: BuildScaleAxis(SceneSchema.Transform.ScaleX, static t => t.LocalScale.X, static (t, v) => t.LocalScale = new Vector3(v, t.LocalScale.Y, t.LocalScale.Z)),
+            scaleY: BuildScaleAxis(SceneSchema.Transform.ScaleY, static t => t.LocalScale.Y, static (t, v) => t.LocalScale = new Vector3(t.LocalScale.X, v, t.LocalScale.Z)),
+            scaleZ: BuildScaleAxis(SceneSchema.Transform.ScaleZ, static t => t.LocalScale.Z, static (t, v) => t.LocalScale = new Vector3(t.LocalScale.X, t.LocalScale.Y, v)));
 
     private static PropertyDescriptor<float> BuildPositionAxis(
-        string pointer,
+        PropertyId<float> id,
         Func<TransformComponent, float> read,
         Action<TransformComponent, float> write)
         => new(
-            id: new PropertyId<float>(SceneProperties.TransformKind, pointer),
+            id: id,
             reader: target => read((TransformComponent)target),
             writer: (target, value) => write((TransformComponent)target, value),
             validator: static value => float.IsFinite(value)
@@ -144,9 +108,9 @@ public sealed class TransformDescriptors
                 : ValidationResult.Fail("PROPERTY_NONFINITE", "Position must be finite."),
             annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.01 });
 
-    private static PropertyDescriptor<float> BuildRotationAxis(string pointer, int axisIndex)
+    private static PropertyDescriptor<float> BuildRotationAxis(PropertyId<float> id, int axisIndex)
         => new(
-            id: new PropertyId<float>(SceneProperties.TransformKind, pointer),
+            id: id,
             reader: target => ReadRotationAxis((TransformComponent)target, axisIndex),
             writer: (target, value) => WriteRotationAxis((TransformComponent)target, axisIndex, value),
             validator: static value => float.IsFinite(value)
@@ -155,11 +119,11 @@ public sealed class TransformDescriptors
             annotation: new EditorAnnotation { Group = "Transform", Renderer = "vector3-box", Step = 0.5 });
 
     private static PropertyDescriptor<float> BuildScaleAxis(
-        string pointer,
+        PropertyId<float> id,
         Func<TransformComponent, float> read,
         Action<TransformComponent, float> write)
         => new(
-            id: new PropertyId<float>(SceneProperties.TransformKind, pointer),
+            id: id,
             reader: target => read((TransformComponent)target),
             writer: (target, value) => write((TransformComponent)target, value),
             validator: static value => !float.IsFinite(value)

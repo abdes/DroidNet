@@ -93,75 +93,6 @@ public sealed class DirectionalLightDescriptors
         };
     }
 
-    /// <summary>Gets the typed property id for light color.</summary>
-    public PropertyId<Vector3> Color => new(this.ColorDescriptor.Id);
-
-    /// <summary>Gets the typed property id for intensity in lux.</summary>
-    public PropertyId<float> IntensityLux => new(this.IntensityLuxDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the atmosphere source assignment.</summary>
-    public PropertyId<AtmosphereLightSlot> AtmosphereSlot => new(this.AtmosphereSlotDescriptor.Id);
-
-    /// <summary>Gets the typed property id for per-pixel atmosphere transmittance.</summary>
-    public PropertyId<bool> UsePerPixelAtmosphereTransmittance => new(this.UsePerPixelAtmosphereTransmittanceDescriptor.Id);
-
-    /// <summary>Gets the typed property id for shadow casting.</summary>
-    public PropertyId<bool> CastsShadows => new(this.CastsShadowsDescriptor.Id);
-
-    /// <summary>Gets the typed property id for world lighting contribution.</summary>
-    public PropertyId<bool> AffectsWorld => new(this.AffectsWorldDescriptor.Id);
-
-    /// <summary>Gets the typed property id for angular size in radians.</summary>
-    public PropertyId<float> AngularSizeRadians => new(this.AngularSizeRadiansDescriptor.Id);
-
-    /// <summary>Gets the typed property id for exposure compensation.</summary>
-    public PropertyId<float> ExposureCompensation => new(this.ExposureCompensationDescriptor.Id);
-
-    /// <summary>Gets the typed property id for RGB disk luminance scale.</summary>
-    public PropertyId<Vector3> AtmosphereDiskLuminanceScaleRgb => new(this.AtmosphereDiskLuminanceScaleRgbDescriptor.Id);
-
-    /// <summary>Gets the typed property id for shadow depth bias.</summary>
-    public PropertyId<float> ShadowBias => new(this.ShadowBiasDescriptor.Id);
-
-    /// <summary>Gets the typed property id for shadow normal bias.</summary>
-    public PropertyId<float> ShadowNormalBias => new(this.ShadowNormalBiasDescriptor.Id);
-
-    /// <summary>Gets the typed property id for contact shadows.</summary>
-    public PropertyId<bool> ContactShadows => new(this.ContactShadowsDescriptor.Id);
-
-    /// <summary>Gets the typed property id for shadow resolution hint.</summary>
-    public PropertyId<ShadowResolutionHint> ShadowResolutionHint => new(this.ShadowResolutionHintDescriptor.Id);
-
-    /// <summary>Gets the typed property id for CSM cascade count.</summary>
-    public PropertyId<int> CascadeCount => new(this.CascadeCountDescriptor.Id);
-
-    /// <summary>Gets the typed property id for CSM split mode.</summary>
-    public PropertyId<DirectionalCsmSplitMode> SplitMode => new(this.SplitModeDescriptor.Id);
-
-    /// <summary>Gets the typed property id for max shadow distance.</summary>
-    public PropertyId<float> MaxShadowDistance => new(this.MaxShadowDistanceDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the first cascade distance.</summary>
-    public PropertyId<float> CascadeDistance0 => new(this.CascadeDistance0Descriptor.Id);
-
-    /// <summary>Gets the typed property id for the second cascade distance.</summary>
-    public PropertyId<float> CascadeDistance1 => new(this.CascadeDistance1Descriptor.Id);
-
-    /// <summary>Gets the typed property id for the third cascade distance.</summary>
-    public PropertyId<float> CascadeDistance2 => new(this.CascadeDistance2Descriptor.Id);
-
-    /// <summary>Gets the typed property id for the fourth cascade distance.</summary>
-    public PropertyId<float> CascadeDistance3 => new(this.CascadeDistance3Descriptor.Id);
-
-    /// <summary>Gets the typed property id for generated CSM distribution.</summary>
-    public PropertyId<float> DistributionExponent => new(this.DistributionExponentDescriptor.Id);
-
-    /// <summary>Gets the typed property id for CSM transition fraction.</summary>
-    public PropertyId<float> TransitionFraction => new(this.TransitionFractionDescriptor.Id);
-
-    /// <summary>Gets the typed property id for CSM distance fadeout fraction.</summary>
-    public PropertyId<float> DistanceFadeoutFraction => new(this.DistanceFadeoutFractionDescriptor.Id);
-
     /// <summary>Gets the descriptor for light color.</summary>
     public PropertyDescriptor<Vector3> ColorDescriptor { get; }
 
@@ -272,38 +203,38 @@ public sealed class DirectionalLightDescriptors
     private static DirectionalLightDescriptorGroup BuildLightDescriptors()
         => new(
             BuildColorDescriptor(),
-            FloatDescriptor("/intensity_lux", "Intensity", static light => light.IntensityLux, static (light, value) => light.IntensityLux = value, minimum: 0f),
-            EnumDescriptor("/atmosphere_light_slot", "Atmosphere source", static light => light.AtmosphereSlot, static (light, value) => light.AtmosphereSlot = value),
-            BoolDescriptor("/use_per_pixel_atmosphere_transmittance", "Per-pixel transmittance", static light => light.UsePerPixelAtmosphereTransmittance, static (light, value) => light.UsePerPixelAtmosphereTransmittance = value),
-            BoolDescriptor("/casts_shadows", "Shadows", static light => light.CastsShadows, static (light, value) => light.CastsShadows = value),
-            BoolDescriptor("/affects_world", "Affects World", static light => light.AffectsWorld, static (light, value) => light.AffectsWorld = value),
-            FloatDescriptor("/angular_size_radians", "Angular Size", static light => light.AngularSizeRadians, static (light, value) => light.AngularSizeRadians = value, minimum: 0f, maximum: MathF.PI),
-            FloatDescriptor("/exposure_compensation", "Exposure Compensation", static light => light.ExposureCompensation, static (light, value) => light.ExposureCompensation = value),
+            FloatDescriptor(SceneSchema.DirectionalLight.IntensityLux, "Intensity", static light => light.IntensityLux, static (light, value) => light.IntensityLux = value, minimum: 0f),
+            EnumDescriptor(SceneSchema.DirectionalLight.AtmosphereSlot, "Atmosphere source", static light => light.AtmosphereSlot, static (light, value) => light.AtmosphereSlot = value),
+            BoolDescriptor(SceneSchema.DirectionalLight.UsePerPixelAtmosphereTransmittance, "Per-pixel transmittance", static light => light.UsePerPixelAtmosphereTransmittance, static (light, value) => light.UsePerPixelAtmosphereTransmittance = value),
+            BoolDescriptor(SceneSchema.DirectionalLight.CastsShadows, "Shadows", static light => light.CastsShadows, static (light, value) => light.CastsShadows = value),
+            BoolDescriptor(SceneSchema.DirectionalLight.AffectsWorld, "Affects World", static light => light.AffectsWorld, static (light, value) => light.AffectsWorld = value),
+            FloatDescriptor(SceneSchema.DirectionalLight.AngularSizeRadians, "Angular Size", static light => light.AngularSizeRadians, static (light, value) => light.AngularSizeRadians = value, minimum: 0f, maximum: MathF.PI),
+            FloatDescriptor(SceneSchema.DirectionalLight.ExposureCompensation, "Exposure Compensation", static light => light.ExposureCompensation, static (light, value) => light.ExposureCompensation = value),
             BuildDiskScaleDescriptor());
 
     private static DirectionalShadowDescriptorGroup BuildShadowDescriptors()
         => new(
-            FloatDescriptor("/shadow/bias", "Shadow Bias", static light => light.ShadowBias, static (light, value) => light.ShadowBias = value, minimum: 0f),
-            FloatDescriptor("/shadow/normal_bias", "Normal Bias", static light => light.ShadowNormalBias, static (light, value) => light.ShadowNormalBias = value, minimum: 0f),
-            BoolDescriptor("/shadow/contact_shadows", "Contact Shadows", static light => light.ContactShadows, static (light, value) => light.ContactShadows = value),
-            EnumDescriptor("/shadow/resolution_hint", "Resolution", static light => light.ShadowResolutionHint, static (light, value) => light.ShadowResolutionHint = value));
+            FloatDescriptor(SceneSchema.DirectionalLight.ShadowBias, "Shadow Bias", static light => light.ShadowBias, static (light, value) => light.ShadowBias = value, minimum: 0f),
+            FloatDescriptor(SceneSchema.DirectionalLight.ShadowNormalBias, "Normal Bias", static light => light.ShadowNormalBias, static (light, value) => light.ShadowNormalBias = value, minimum: 0f),
+            BoolDescriptor(SceneSchema.DirectionalLight.ContactShadows, "Contact Shadows", static light => light.ContactShadows, static (light, value) => light.ContactShadows = value),
+            EnumDescriptor(SceneSchema.DirectionalLight.ShadowResolutionHint, "Resolution", static light => light.ShadowResolutionHint, static (light, value) => light.ShadowResolutionHint = value));
 
     private static DirectionalCsmDescriptorGroup BuildCsmDescriptors()
         => new(
-            IntDescriptor("/csm/cascade_count", "Cascade Count", static light => light.CascadeCount, static (light, value) => light.CascadeCount = value),
-            EnumDescriptor("/csm/split_mode", "Split Mode", static light => light.SplitMode, static (light, value) => light.SplitMode = value),
-            PositiveFloatDescriptor("/csm/max_shadow_distance", "Max Distance", static light => light.MaxShadowDistance, static (light, value) => light.MaxShadowDistance = value),
-            CascadeDistanceDescriptor(0, "/csm/cascade_distances/0", "Cascade 1"),
-            CascadeDistanceDescriptor(1, "/csm/cascade_distances/1", "Cascade 2"),
-            CascadeDistanceDescriptor(2, "/csm/cascade_distances/2", "Cascade 3"),
-            CascadeDistanceDescriptor(3, "/csm/cascade_distances/3", "Cascade 4"),
+            IntDescriptor(SceneSchema.DirectionalLight.CascadeCount, "Cascade Count", static light => light.CascadeCount, static (light, value) => light.CascadeCount = value),
+            EnumDescriptor(SceneSchema.DirectionalLight.SplitMode, "Split Mode", static light => light.SplitMode, static (light, value) => light.SplitMode = value),
+            PositiveFloatDescriptor(SceneSchema.DirectionalLight.MaxShadowDistance, "Max Distance", static light => light.MaxShadowDistance, static (light, value) => light.MaxShadowDistance = value),
+            CascadeDistanceDescriptor(0, SceneSchema.DirectionalLight.CascadeDistance0, "Cascade 1"),
+            CascadeDistanceDescriptor(1, SceneSchema.DirectionalLight.CascadeDistance1, "Cascade 2"),
+            CascadeDistanceDescriptor(2, SceneSchema.DirectionalLight.CascadeDistance2, "Cascade 3"),
+            CascadeDistanceDescriptor(3, SceneSchema.DirectionalLight.CascadeDistance3, "Cascade 4"),
             BuildDistributionExponentDescriptor(),
-            FractionDescriptor("/csm/transition_fraction", "Transition", static light => light.TransitionFraction, static (light, value) => light.TransitionFraction = value),
-            FractionDescriptor("/csm/distance_fadeout_fraction", "Fadeout", static light => light.DistanceFadeoutFraction, static (light, value) => light.DistanceFadeoutFraction = value));
+            FractionDescriptor(SceneSchema.DirectionalLight.TransitionFraction, "Transition", static light => light.TransitionFraction, static (light, value) => light.TransitionFraction = value),
+            FractionDescriptor(SceneSchema.DirectionalLight.DistanceFadeoutFraction, "Fadeout", static light => light.DistanceFadeoutFraction, static (light, value) => light.DistanceFadeoutFraction = value));
 
     private static PropertyDescriptor<Vector3> BuildColorDescriptor()
         => new(
-            id: new PropertyId<Vector3>(SceneProperties.DirectionalLightKind, "/color"),
+            id: SceneSchema.DirectionalLight.Color,
             reader: static target => ((DirectionalLightComponent)target).Color,
             writer: static (target, value) => ((DirectionalLightComponent)target).Color = value,
             validator: static value => !IsFinite(value)
@@ -311,44 +242,43 @@ public sealed class DirectionalLightDescriptors
                 : value.X < 0f || value.Y < 0f || value.Z < 0f
                     ? ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Light color must be zero or greater.")
                     : ValidationResult.Ok,
-            annotation: Annotation(
-                "/color",
+            annotation: Annotation(SceneSchema.DirectionalLight.Color.Id.JsonPointer,
                 new EditorAnnotation { Group = "Light", Label = "Color", Renderer = "color-rgb" }));
 
     private static PropertyDescriptor<Vector3> BuildDiskScaleDescriptor()
         => new(
-            id: new PropertyId<Vector3>(SceneProperties.DirectionalLightKind, "/atmosphere_disk_luminance_scale_rgb"),
+            id: SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb,
             reader: static target => ((DirectionalLightComponent)target).AtmosphereDiskLuminanceScaleRgb,
             writer: static (target, value) => ((DirectionalLightComponent)target).AtmosphereDiskLuminanceScaleRgb = value,
             validator: static value => IsFinite(value) && value.X >= 0 && value.Y >= 0 && value.Z >= 0
                 ? ValidationResult.Ok : ValidationResult.Fail("LIGHT_DISK_SCALE_INVALID", "Disk scale must be finite and nonnegative."),
-            annotation: Annotation("/atmosphere_disk_luminance_scale_rgb", new EditorAnnotation { Group = "Atmosphere", Label = "Disk luminance scale", Renderer = "color-rgb" }));
+            annotation: Annotation(SceneSchema.DirectionalLight.AtmosphereDiskLuminanceScaleRgb.Id.JsonPointer, new EditorAnnotation { Group = "Atmosphere", Label = "Disk luminance scale", Renderer = "color-rgb" }));
 
     private static PropertyDescriptor<float> CascadeDistanceDescriptor(
         int index,
-        string pointer,
+        PropertyId<float> id,
         string label)
         => PositiveFloatDescriptor(
-            pointer,
+            id,
             label,
             light => ReadCascadeDistance(light, index),
             (light, value) => WriteCascadeDistance(light, index, value));
 
     private static PropertyDescriptor<float> FloatDescriptor(
-        string pointer,
+        PropertyId<float> id,
         string label,
         Func<DirectionalLightComponent, float> read,
         Action<DirectionalLightComponent, float> write,
         float minimum = float.NegativeInfinity,
         float maximum = float.PositiveInfinity)
         => new(
-            id: new PropertyId<float>(SceneProperties.DirectionalLightKind, pointer),
+            id: id,
             reader: target => read((DirectionalLightComponent)target),
             writer: (target, value) => write((DirectionalLightComponent)target, value),
             validator: value => float.IsFinite(value) && value >= minimum && value <= maximum
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, Range(label, minimum, maximum)),
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
+            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static string Range(string label, float minimum, float maximum)
         => float.IsInfinity(minimum) && float.IsInfinity(maximum) ? $"{label} must be a finite number."
@@ -357,82 +287,82 @@ public sealed class DirectionalLightDescriptors
 
     private static PropertyDescriptor<float> BuildDistributionExponentDescriptor()
         => new(
-            id: new PropertyId<float>(SceneProperties.DirectionalLightKind, "/csm/distribution_exponent"),
+            id: SceneSchema.DirectionalLight.DistributionExponent,
             reader: static target => ((DirectionalLightComponent)target).DistributionExponent,
             writer: static (target, value) => ((DirectionalLightComponent)target).DistributionExponent = value,
             validator: static value => float.IsFinite(value) && value >= 1f
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Distribution must be 1 or greater."),
-            annotation: Annotation("/csm/distribution_exponent", new EditorAnnotation { Group = "Light", Label = "Distribution", Renderer = "numberbox", Step = 0.01 }));
+            annotation: Annotation(SceneSchema.DirectionalLight.DistributionExponent.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = "Distribution", Renderer = "numberbox", Step = 0.01 }));
 
     private static PropertyDescriptor<float> PositiveFloatDescriptor(
-        string pointer,
+        PropertyId<float> id,
         string label,
         Func<DirectionalLightComponent, float> read,
         Action<DirectionalLightComponent, float> write)
         => new(
-            id: new PropertyId<float>(SceneProperties.DirectionalLightKind, pointer),
+            id: id,
             reader: target => read((DirectionalLightComponent)target),
             writer: (target, value) => write((DirectionalLightComponent)target, value),
             validator: static value => float.IsFinite(value) && value > 0f
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light values must be finite positive numbers."),
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
+            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static PropertyDescriptor<float> FractionDescriptor(
-        string pointer,
+        PropertyId<float> id,
         string label,
         Func<DirectionalLightComponent, float> read,
         Action<DirectionalLightComponent, float> write)
         => new(
-            id: new PropertyId<float>(SceneProperties.DirectionalLightKind, pointer),
+            id: id,
             reader: target => read((DirectionalLightComponent)target),
             writer: (target, value) => write((DirectionalLightComponent)target, value),
             validator: static value => float.IsFinite(value) && value is >= 0f and <= 1f
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light fractions must be finite values in [0, 1]."),
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
+            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static PropertyDescriptor<int> IntDescriptor(
-        string pointer,
+        PropertyId<int> id,
         string label,
         Func<DirectionalLightComponent, int> read,
         Action<DirectionalLightComponent, int> write)
         => new(
-            id: new PropertyId<int>(SceneProperties.DirectionalLightKind, pointer),
+            id: id,
             reader: target => read((DirectionalLightComponent)target),
             writer: (target, value) => write((DirectionalLightComponent)target, value),
             validator: static value => value is >= 1 and <= 4
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Cascade count must be between 1 and 4."),
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 1 }));
+            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 1 }));
 
     private static PropertyDescriptor<T> EnumDescriptor<T>(
-        string pointer,
+        PropertyId<T> id,
         string label,
         Func<DirectionalLightComponent, T> read,
         Action<DirectionalLightComponent, T> write)
         where T : struct, Enum
         => new(
-            id: new PropertyId<T>(SceneProperties.DirectionalLightKind, pointer),
+            id: id,
             reader: target => read((DirectionalLightComponent)target),
             writer: (target, value) => write((DirectionalLightComponent)target, value),
             validator: static value => Enum.IsDefined(value)
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.DirectionalLightFieldNotFinite, "Directional light enum value is not valid."),
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "combo" }));
+            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "combo" }));
 
     private static PropertyDescriptor<bool> BoolDescriptor(
-        string pointer,
+        PropertyId<bool> id,
         string label,
         Func<DirectionalLightComponent, bool> read,
         Action<DirectionalLightComponent, bool> write)
         => new(
-            id: new PropertyId<bool>(SceneProperties.DirectionalLightKind, pointer),
+            id: id,
             reader: target => read((DirectionalLightComponent)target),
             writer: (target, value) => write((DirectionalLightComponent)target, value),
             validator: static _ => ValidationResult.Ok,
-            annotation: Annotation(pointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "toggle" }));
+            annotation: Annotation(id.Id.JsonPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "toggle" }));
 
     private static EditorAnnotation Annotation(string pointer, EditorAnnotation fallback)
         => SceneEditorSchemaAnnotations.Get(ToSceneSchemaPointer(pointer), fallback);

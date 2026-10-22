@@ -24,10 +24,6 @@ public sealed class PerspectiveCameraDescriptors
         PropertyDescriptor<float> shutterRate,
         PropertyDescriptor<float> iso)
     {
-        this.FieldOfViewDegrees = new PropertyId<float>(fieldOfViewDegrees.Id);
-        this.AspectRatio = new PropertyId<float>(aspectRatio.Id);
-        this.NearPlane = new PropertyId<float>(nearPlane.Id);
-        this.FarPlane = new PropertyId<float>(farPlane.Id);
         this.FieldOfViewDegreesDescriptor = fieldOfViewDegrees;
         this.AspectRatioDescriptor = aspectRatio;
         this.NearPlaneDescriptor = nearPlane;
@@ -48,30 +44,6 @@ public sealed class PerspectiveCameraDescriptors
             [iso.Id] = iso,
         };
     }
-
-    /// <summary>Gets the typed property id for field of view.</summary>
-    public PropertyId<float> FieldOfViewDegrees { get; }
-
-    /// <summary>Gets the typed property id for aspect ratio.</summary>
-    public PropertyId<float> AspectRatio { get; }
-
-    /// <summary>Gets the typed property id for the near clipping plane.</summary>
-    public PropertyId<float> NearPlane { get; }
-
-    /// <summary>Gets the typed property id for the far clipping plane.</summary>
-    public PropertyId<float> FarPlane { get; }
-
-    /// <summary>Gets the typed property id for the framing policy.</summary>
-    public PropertyId<CameraAspectMode> AspectMode => new(this.AspectModeDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the aperture f-number.</summary>
-    public PropertyId<float> ApertureF => new(this.ApertureFDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the shutter rate.</summary>
-    public PropertyId<float> ShutterRate => new(this.ShutterRateDescriptor.Id);
-
-    /// <summary>Gets the typed property id for the ISO sensitivity.</summary>
-    public PropertyId<float> Iso => new(this.IsoDescriptor.Id);
 
     /// <summary>Gets the descriptor for the framing policy.</summary>
     public PropertyDescriptor<CameraAspectMode> AspectModeDescriptor { get; }
@@ -108,7 +80,7 @@ public sealed class PerspectiveCameraDescriptors
         => new(
             fieldOfViewDegrees: CreateFieldOfView(),
             aspectRatio: FloatDescriptor(
-                "/aspect_ratio",
+                SceneSchema.PerspectiveCamera.AspectRatio,
                 "Aspect Ratio",
                 static camera => camera.AspectRatio,
                 static (camera, value) => camera.AspectRatio = value,
@@ -118,7 +90,7 @@ public sealed class PerspectiveCameraDescriptors
                         ? ValidationResult.Fail(SceneDiagnosticCodes.PerspectiveCameraAspectRatioNonPositive, "Aspect ratio must be greater than zero.")
                         : ValidationResult.Ok),
             nearPlane: FloatDescriptor(
-                "/near_plane",
+                SceneSchema.PerspectiveCamera.NearPlane,
                 "Near Plane",
                 static camera => camera.NearPlane,
                 static (camera, value) => camera.NearPlane = value,
@@ -128,7 +100,7 @@ public sealed class PerspectiveCameraDescriptors
                         ? ValidationResult.Fail(SceneDiagnosticCodes.PerspectiveCameraNearPlaneNonPositive, "Near plane must be greater than zero.")
                         : ValidationResult.Ok),
             farPlane: FloatDescriptor(
-                "/far_plane",
+                SceneSchema.PerspectiveCamera.FarPlane,
                 "Far Plane",
                 static camera => camera.FarPlane,
                 static (camera, value) => camera.FarPlane = value,
@@ -137,19 +109,19 @@ public sealed class PerspectiveCameraDescriptors
                     : ValidationResult.Fail(SceneDiagnosticCodes.TransformFieldNotFinite, "Camera values must be finite numbers.")),
             aspectMode: CreateAspectMode(),
             apertureF: FloatDescriptor(
-                "/aperture_f",
+                SceneSchema.PerspectiveCamera.ApertureF,
                 "Aperture",
                 static camera => camera.ApertureF,
                 static (camera, value) => camera.ApertureF = value,
                 Positive("Aperture must be greater than zero.")),
             shutterRate: FloatDescriptor(
-                "/shutter_rate",
+                SceneSchema.PerspectiveCamera.ShutterRate,
                 "Shutter Speed",
                 static camera => camera.ShutterRate,
                 static (camera, value) => camera.ShutterRate = value,
                 Positive("Shutter speed must be greater than zero.")),
             iso: FloatDescriptor(
-                "/iso",
+                SceneSchema.PerspectiveCamera.Iso,
                 "ISO",
                 static camera => camera.Iso,
                 static (camera, value) => camera.Iso = value,
@@ -157,7 +129,7 @@ public sealed class PerspectiveCameraDescriptors
 
     private static PropertyDescriptor<float> CreateFieldOfView()
         => FloatDescriptor(
-            "/field_of_view_degrees",
+            SceneSchema.PerspectiveCamera.FieldOfViewDegrees,
             "Field of View",
             static camera => camera.FieldOfView,
             static (camera, value) => camera.FieldOfView = value,
@@ -169,7 +141,7 @@ public sealed class PerspectiveCameraDescriptors
 
     private static PropertyDescriptor<CameraAspectMode> CreateAspectMode()
         => new(
-            id: new PropertyId<CameraAspectMode>(SceneProperties.PerspectiveCameraKind, "/aspect_mode"),
+            id: SceneSchema.PerspectiveCamera.AspectMode,
             reader: static target => ((PerspectiveCamera)target).AspectMode,
             writer: static (target, value) => ((PerspectiveCamera)target).AspectMode = value,
             validator: static value => Enum.IsDefined(value)
@@ -187,18 +159,18 @@ public sealed class PerspectiveCameraDescriptors
                 : ValidationResult.Ok;
 
     private static PropertyDescriptor<float> FloatDescriptor(
-        string pointer,
+        PropertyId<float> id,
         string label,
         Func<PerspectiveCamera, float> read,
         Action<PerspectiveCamera, float> write,
         Func<float, ValidationResult> validate)
         => new(
-            id: new PropertyId<float>(SceneProperties.PerspectiveCameraKind, pointer),
+            id: id,
             reader: target => read((PerspectiveCamera)target),
             writer: (target, value) => write((PerspectiveCamera)target, value),
             validator: validate,
             annotation: SceneEditorSchemaAnnotations.Get(
-                ToSceneSchemaPointer(pointer),
+                ToSceneSchemaPointer(id.Id.JsonPointer),
                 new EditorAnnotation { Group = "Projection", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static string ToSceneSchemaPointer(string pointer)

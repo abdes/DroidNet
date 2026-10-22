@@ -29,42 +29,40 @@ public sealed class PerspectiveCameraRulesTests
 {
     public static IEnumerable<TestDataRow<PropertyCase>> InRange =>
     [
-        PropertyCase.Of("FieldOfView_1", SampleScene.Cam, Camera.FieldOfViewDegrees, 1f),
-        PropertyCase.Of("FieldOfView_179", SampleScene.Cam, Camera.FieldOfViewDegrees, 179f),
-        PropertyCase.Of("NearPlane_Tiny", SampleScene.Cam, Camera.NearPlane, 1e-4f),
-        PropertyCase.Of("FarPlane_Large", SampleScene.Cam, Camera.FarPlane, 1e6f),
-        PropertyCase.Of("AspectRatio_Small", SampleScene.Cam, Camera.AspectRatio, 0.01f),
-        PropertyCase.Of("ApertureF_Small", SampleScene.Cam, Camera.ApertureF, 1e-3f),
-        PropertyCase.Of("ShutterRate_Small", SampleScene.Cam, Camera.ShutterRate, 1e-3f),
-        PropertyCase.Of("Iso_Small", SampleScene.Cam, Camera.Iso, 1e-3f),
+        PropertyCase.Of("FieldOfView_1", SampleScene.Cam, SceneSchema.PerspectiveCamera.FieldOfViewDegrees, 1f),
+        PropertyCase.Of("FieldOfView_179", SampleScene.Cam, SceneSchema.PerspectiveCamera.FieldOfViewDegrees, 179f),
+        PropertyCase.Of("NearPlane_Tiny", SampleScene.Cam, SceneSchema.PerspectiveCamera.NearPlane, 1e-4f),
+        PropertyCase.Of("FarPlane_Large", SampleScene.Cam, SceneSchema.PerspectiveCamera.FarPlane, 1e6f),
+        PropertyCase.Of("AspectRatio_Small", SampleScene.Cam, SceneSchema.PerspectiveCamera.AspectRatio, 0.01f),
+        PropertyCase.Of("ApertureF_Small", SampleScene.Cam, SceneSchema.PerspectiveCamera.ApertureF, 1e-3f),
+        PropertyCase.Of("ShutterRate_Small", SampleScene.Cam, SceneSchema.PerspectiveCamera.ShutterRate, 1e-3f),
+        PropertyCase.Of("Iso_Small", SampleScene.Cam, SceneSchema.PerspectiveCamera.Iso, 1e-3f),
     ];
 
     public static IEnumerable<TestDataRow<PropertyCase>> OutOfRange =>
     [
-        PropertyCase.Of("FieldOfView_BelowOne", SampleScene.Cam, Camera.FieldOfViewDegrees, 0.99f),
-        PropertyCase.Of("FieldOfView_Above179", SampleScene.Cam, Camera.FieldOfViewDegrees, 179.01f),
-        PropertyCase.Of("FieldOfView_NaN", SampleScene.Cam, Camera.FieldOfViewDegrees, float.NaN),
-        PropertyCase.Of("NearPlane_Zero", SampleScene.Cam, Camera.NearPlane, 0f),
-        PropertyCase.Of("NearPlane_Negative", SampleScene.Cam, Camera.NearPlane, -1f),
-        PropertyCase.Of("FarPlane_Infinity", SampleScene.Cam, Camera.FarPlane, float.PositiveInfinity),
-        PropertyCase.Of("AspectRatio_Zero", SampleScene.Cam, Camera.AspectRatio, 0f),
-        PropertyCase.Of("ApertureF_Zero", SampleScene.Cam, Camera.ApertureF, 0f),
-        PropertyCase.Of("ShutterRate_Zero", SampleScene.Cam, Camera.ShutterRate, 0f),
-        PropertyCase.Of("Iso_Zero", SampleScene.Cam, Camera.Iso, 0f),
-        PropertyCase.Of("AspectMode_Undefined", SampleScene.Cam, Camera.AspectMode, (CameraAspectMode)99),
+        PropertyCase.Of("FieldOfView_BelowOne", SampleScene.Cam, SceneSchema.PerspectiveCamera.FieldOfViewDegrees, 0.99f),
+        PropertyCase.Of("FieldOfView_Above179", SampleScene.Cam, SceneSchema.PerspectiveCamera.FieldOfViewDegrees, 179.01f),
+        PropertyCase.Of("FieldOfView_NaN", SampleScene.Cam, SceneSchema.PerspectiveCamera.FieldOfViewDegrees, float.NaN),
+        PropertyCase.Of("NearPlane_Zero", SampleScene.Cam, SceneSchema.PerspectiveCamera.NearPlane, 0f),
+        PropertyCase.Of("NearPlane_Negative", SampleScene.Cam, SceneSchema.PerspectiveCamera.NearPlane, -1f),
+        PropertyCase.Of("FarPlane_Infinity", SampleScene.Cam, SceneSchema.PerspectiveCamera.FarPlane, float.PositiveInfinity),
+        PropertyCase.Of("AspectRatio_Zero", SampleScene.Cam, SceneSchema.PerspectiveCamera.AspectRatio, 0f),
+        PropertyCase.Of("ApertureF_Zero", SampleScene.Cam, SceneSchema.PerspectiveCamera.ApertureF, 0f),
+        PropertyCase.Of("ShutterRate_Zero", SampleScene.Cam, SceneSchema.PerspectiveCamera.ShutterRate, 0f),
+        PropertyCase.Of("Iso_Zero", SampleScene.Cam, SceneSchema.PerspectiveCamera.Iso, 0f),
+        PropertyCase.Of("AspectMode_Undefined", SampleScene.Cam, SceneSchema.PerspectiveCamera.AspectMode, (CameraAspectMode)99),
     ];
 
     public static IEnumerable<TestDataRow<PropertyCase>> NearNotBelowFar =>
     [
-        PropertyCase.Of("NearEqualsFar", SampleScene.Cam, Camera.NearPlane, 100f),
-        PropertyCase.Of("NearAboveFar", SampleScene.Cam, Camera.NearPlane, 200f),
-        PropertyCase.Of("FarEqualsNear", SampleScene.Cam, Camera.FarPlane, 0.1f),
-        PropertyCase.Of("FarBelowNear", SampleScene.Cam, Camera.FarPlane, 0.05f),
+        PropertyCase.Of("NearEqualsFar", SampleScene.Cam, SceneSchema.PerspectiveCamera.NearPlane, 100f),
+        PropertyCase.Of("NearAboveFar", SampleScene.Cam, SceneSchema.PerspectiveCamera.NearPlane, 200f),
+        PropertyCase.Of("FarEqualsNear", SampleScene.Cam, SceneSchema.PerspectiveCamera.FarPlane, 0.1f),
+        PropertyCase.Of("FarBelowNear", SampleScene.Cam, SceneSchema.PerspectiveCamera.FarPlane, 0.05f),
     ];
 
     private static NodeId SecondCam { get; } = NodeId.FromValue(SampleScene.Tagged(1, "CB"));
-
-    private static PerspectiveCameraDescriptors Camera => SceneProperties.PerspectiveCamera;
 
     [TestMethod]
     [DynamicData(nameof(InRange))]
@@ -111,7 +109,7 @@ public sealed class PerspectiveCameraRulesTests
     public async Task NearAndFarTogether_ValidatesTheResult()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var edit = new PropertyEdit.Builder().Set(Camera.NearPlane, 150f).Set(Camera.FarPlane, 300f).Build();
+        var edit = new PropertyEdit.Builder().Set(SceneSchema.PerspectiveCamera.NearPlane, 150f).Set(SceneSchema.PerspectiveCamera.FarPlane, 300f).Build();
 
         var result = await fixture.Authoring.ExecuteAsync(Edit((SampleScene.Cam, edit))).ConfigureAwait(false);
 
@@ -131,7 +129,7 @@ public sealed class PerspectiveCameraRulesTests
                 components: [new PerspectiveCameraData { Id = ComponentId.FromValue(SampleScene.Tagged(2, "CB")), Name = "Camera", NearPlane = 0.1f, FarPlane = 5f, AspectMode = CameraAspectMode.Auto }])
             .Build();
         using var fixture = await AuthoringFixture.CreateAsync(scene).ConfigureAwait(false);
-        var near = new PropertyEdit.Builder().Set(Camera.NearPlane, 10f).Build();
+        var near = new PropertyEdit.Builder().Set(SceneSchema.PerspectiveCamera.NearPlane, 10f).Build();
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(Edit((SampleScene.Cam, near), (SecondCam, near))).ConfigureAwait(false);

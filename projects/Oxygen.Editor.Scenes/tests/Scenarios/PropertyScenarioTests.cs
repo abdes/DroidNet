@@ -58,10 +58,10 @@ public sealed class PropertyScenarioTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
         var move = new PropertyEdit.Builder()
-            .Set(SceneProperties.Transform.PositionX, 3f)
-            .Set(SceneProperties.Transform.PositionY, 2f)
-            .Set(SceneProperties.Transform.PositionZ, -5f)
-            .Set(SceneProperties.Transform.RotationY, 30f)
+            .Set(SceneSchema.Transform.PositionX, 3f)
+            .Set(SceneSchema.Transform.PositionY, 2f)
+            .Set(SceneSchema.Transform.PositionZ, -5f)
+            .Set(SceneSchema.Transform.RotationY, 30f)
             .Build();
 
         var result = await fixture.Authoring.ExecuteAsync(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [SampleScene.Cam] = move }, "Move camera")).ConfigureAwait(false);
@@ -78,7 +78,7 @@ public sealed class PropertyScenarioTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
-        var gesture = await fixture.Authoring.BeginGestureAsync([SampleScene.Cam], [SceneProperties.Transform.PositionX.Id], "Drag").ConfigureAwait(false);
+        var gesture = await fixture.Authoring.BeginGestureAsync([SampleScene.Cam], [SceneSchema.Transform.PositionX.Id], "Drag").ConfigureAwait(false);
         for (var step = 1; step <= Previews; step++)
         {
             SceneAssert.Applied(await gesture.PreviewAsync(MoveX(SampleScene.Cam, step / 10f)).ConfigureAwait(false));
@@ -102,7 +102,7 @@ public sealed class PropertyScenarioTests
         using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem()));
         var document = await documents.OpenAsync(SampleScene.Build()).ConfigureAwait(false);
         var authoring = SceneContent.Of(document).Authoring;
-        var gesture = await authoring.BeginGestureAsync([SampleScene.A], [SceneProperties.Transform.PositionX.Id], "Position").ConfigureAwait(false);
+        var gesture = await authoring.BeginGestureAsync([SampleScene.A], [SceneSchema.Transform.PositionX.Id], "Position").ConfigureAwait(false);
         _ = await gesture.PreviewAsync(MoveX(SampleScene.A, 5f)).ConfigureAwait(false);
 
         var saved = await document.SaveAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -122,7 +122,7 @@ public sealed class PropertyScenarioTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var node = SceneNodeTemplates.Empty(fixture.Scene);
         _ = await fixture.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(fixture.Scene, fixture.Layout, node)])).ConfigureAwait(false);
-        var drag = await fixture.Authoring.BeginGestureAsync([node.Id], [SceneProperties.Transform.PositionX.Id], "Drag").ConfigureAwait(false);
+        var drag = await fixture.Authoring.BeginGestureAsync([node.Id], [SceneSchema.Transform.PositionX.Id], "Drag").ConfigureAwait(false);
         _ = await drag.PreviewAsync(MoveX(node.Id, 1f)).ConfigureAwait(false);
 
         // The other view undoes without finishing the drag, which removes the dragged node.
@@ -136,10 +136,10 @@ public sealed class PropertyScenarioTests
     }
 
     private static SetProperties SlotOf(NodeId light, AtmosphereLightSlot slot)
-        => new(new Dictionary<NodeId, PropertyEdit> { [light] = PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.AtmosphereSlot, slot) }, "Atmosphere slot");
+        => new(new Dictionary<NodeId, PropertyEdit> { [light] = PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.AtmosphereSlot, slot) }, "Atmosphere slot");
 
     private static SetProperties MoveX(NodeId node, float x)
-        => new(new Dictionary<NodeId, PropertyEdit> { [node] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionX, x) }, "Move");
+        => new(new Dictionary<NodeId, PropertyEdit> { [node] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, x) }, "Move");
 
     private static AtmosphereLightSlot SlotOf(AuthoringFixture fixture, NodeId light)
         => fixture.Node(light).Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot;

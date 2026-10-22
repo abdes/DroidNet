@@ -35,23 +35,21 @@ public sealed class TransformRulesTests
 
     public static IEnumerable<TestDataRow<PropertyCase>> InRange =>
     [
-        PropertyCase.Of("PositionX_Large", SampleScene.A1, Transform.PositionX, 1e6f),
-        PropertyCase.Of("PositionY_Negative", SampleScene.A1, Transform.PositionY, -1e6f),
-        PropertyCase.Of("RotationZ_FullTurn", SampleScene.A1, Transform.RotationZ, 360f),
-        PropertyCase.Of("ScaleX_Negative", SampleScene.A1, Transform.ScaleX, -2f),
-        PropertyCase.Of("ScaleY_Tiny", SampleScene.A1, Transform.ScaleY, 1e-4f),
+        PropertyCase.Of("PositionX_Large", SampleScene.A1, SceneSchema.Transform.PositionX, 1e6f),
+        PropertyCase.Of("PositionY_Negative", SampleScene.A1, SceneSchema.Transform.PositionY, -1e6f),
+        PropertyCase.Of("RotationZ_FullTurn", SampleScene.A1, SceneSchema.Transform.RotationZ, 360f),
+        PropertyCase.Of("ScaleX_Negative", SampleScene.A1, SceneSchema.Transform.ScaleX, -2f),
+        PropertyCase.Of("ScaleY_Tiny", SampleScene.A1, SceneSchema.Transform.ScaleY, 1e-4f),
     ];
 
     public static IEnumerable<TestDataRow<PropertyCase>> OutOfRange =>
     [
-        PropertyCase.Of("PositionX_NaN", SampleScene.A1, Transform.PositionX, float.NaN),
-        PropertyCase.Of("PositionZ_Infinity", SampleScene.A1, Transform.PositionZ, float.PositiveInfinity),
-        PropertyCase.Of("RotationY_NaN", SampleScene.A1, Transform.RotationY, float.NaN),
-        PropertyCase.Of("ScaleX_Zero", SampleScene.A1, Transform.ScaleX, 0f),
-        PropertyCase.Of("ScaleZ_Infinity", SampleScene.A1, Transform.ScaleZ, float.PositiveInfinity),
+        PropertyCase.Of("PositionX_NaN", SampleScene.A1, SceneSchema.Transform.PositionX, float.NaN),
+        PropertyCase.Of("PositionZ_Infinity", SampleScene.A1, SceneSchema.Transform.PositionZ, float.PositiveInfinity),
+        PropertyCase.Of("RotationY_NaN", SampleScene.A1, SceneSchema.Transform.RotationY, float.NaN),
+        PropertyCase.Of("ScaleX_Zero", SampleScene.A1, SceneSchema.Transform.ScaleX, 0f),
+        PropertyCase.Of("ScaleZ_Infinity", SampleScene.A1, SceneSchema.Transform.ScaleZ, float.PositiveInfinity),
     ];
-
-    private static TransformDescriptors Transform => SceneProperties.Transform;
 
     [TestMethod]
     [DynamicData(nameof(InRange))]
@@ -123,7 +121,7 @@ public sealed class TransformRulesTests
         _ = raised.Node.Should().Be(SampleScene.A1);
 
         // The axes are coupled (3.10): at gimbal lock an edit of one moves the reading of another.
-        _ = raised.Properties.Should().BeEquivalentTo([Transform.RotationX.Id, Transform.RotationY.Id, Transform.RotationZ.Id]);
+        _ = raised.Properties.Should().BeEquivalentTo([SceneSchema.Transform.RotationX.Id, SceneSchema.Transform.RotationY.Id, SceneSchema.Transform.RotationZ.Id]);
     }
 
     private static SceneFileData SceneWithA1(Vector3 eulerDegrees)
@@ -144,9 +142,9 @@ public sealed class TransformRulesTests
     {
         var property = axis switch
         {
-            0 => Transform.RotationX,
-            1 => Transform.RotationY,
-            _ => Transform.RotationZ,
+            0 => SceneSchema.Transform.RotationX,
+            1 => SceneSchema.Transform.RotationY,
+            _ => SceneSchema.Transform.RotationZ,
         };
         var edit = new PropertyEdit.Builder().Set(property, degrees).Build();
         return new SetProperties(new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = edit }, "Rotate A1");

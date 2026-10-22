@@ -125,19 +125,18 @@ public sealed class TransformToolsTests
     public void GizmoEdits_ChangeOnlyWhatTheToolMoves()
     {
         var target = new RuntimeGizmoTarget(TargetNode, new Vector3(1, 2, 3), Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2), new Vector3(2, 3, 4));
-        var transform = SceneProperties.Transform;
 
         var move = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Translate, [target])[TargetNode];
         var rotate = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Rotate, [target])[TargetNode];
         var scale = SceneEditorViewModel.BuildGizmoEdits(RuntimeTransformTool.Scale, [target])[TargetNode];
 
-        _ = move.Ids.Should().BeEquivalentTo([transform.PositionX.Id, transform.PositionY.Id, transform.PositionZ.Id]);
+        _ = move.Ids.Should().BeEquivalentTo([SceneSchema.Transform.PositionX.Id, SceneSchema.Transform.PositionY.Id, SceneSchema.Transform.PositionZ.Id]);
         _ = rotate.Count.Should().Be(6);
-        _ = rotate.GetTyped(transform.RotationZ, out var degrees).Should().BeTrue();
+        _ = rotate.GetTyped(SceneSchema.Transform.RotationZ, out var degrees).Should().BeTrue();
         _ = degrees.Should().BeApproximately(90.0F, 1.0e-3F);
-        _ = scale.GetTyped(transform.ScaleY, out var scaleY).Should().BeTrue();
+        _ = scale.GetTyped(SceneSchema.Transform.ScaleY, out var scaleY).Should().BeTrue();
         _ = scaleY.Should().Be(3.0F);
-        _ = scale.Contains(transform.RotationX.Id).Should().BeFalse();
+        _ = scale.Contains(SceneSchema.Transform.RotationX.Id).Should().BeFalse();
     }
 
     [TestMethod]

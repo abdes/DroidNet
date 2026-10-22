@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "scene-schema-codegen"
+version = "0.1.0"
+description = "Component and field ids of the Oxygen scene components schema"
+authors = [ {name = "Oxygen Dev"} ]
+readme = "README.md"
+license = { text = "BSD-3-Clause" }
+requires-python = ">=3.11"
+dependencies = ["PyYAML>=6.0.2,<7", "jsonschema>=4.23,<5"]
+
+[project.optional-dependencies]
+test = ["pytest>=8,<10"]
+
+[project.scripts]
+scene_schema_codegen = "scene_schema_codegen.cli:main"

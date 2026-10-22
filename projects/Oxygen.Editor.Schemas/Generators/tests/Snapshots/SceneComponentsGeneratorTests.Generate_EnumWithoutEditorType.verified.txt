@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (21,14)-(21,22),
+      Message: Lamp.Range: 'LampMood' has no editor type,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC006,
+        Title: Unknown value type,
+        MessageFormat: {0}: '{1}' has no editor type,
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

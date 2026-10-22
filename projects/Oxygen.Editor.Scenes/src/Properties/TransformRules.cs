@@ -12,7 +12,7 @@ namespace Oxygen.Editor.Scenes.Properties;
 internal sealed class TransformRules : IComponentRules
 {
     /// <inheritdoc/>
-    public string Kind => SceneProperties.TransformKind;
+    public string Kind => SceneSchema.Transform.Kind;
 
     /// <inheritdoc/>
     public IReadOnlyDictionary<PropertyId, PropertyDescriptor> Descriptors => SceneProperties.Transform.ById;
@@ -28,7 +28,7 @@ internal sealed class TransformRules : IComponentRules
     public IReadOnlySet<PropertyId> Coupled(IEnumerable<PropertyId> edited)
     {
         var ids = edited.ToHashSet();
-        PropertyId[] rotation = [SceneProperties.Transform.RotationX.Id, SceneProperties.Transform.RotationY.Id, SceneProperties.Transform.RotationZ.Id];
+        PropertyId[] rotation = [SceneSchema.Transform.RotationX.Id, SceneSchema.Transform.RotationY.Id, SceneSchema.Transform.RotationZ.Id];
         if (ids.Overlaps(rotation))
         {
             ids.UnionWith(rotation);

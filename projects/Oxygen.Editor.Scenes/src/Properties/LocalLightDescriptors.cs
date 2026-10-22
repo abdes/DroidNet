@@ -22,46 +22,42 @@ public sealed class LocalLightDescriptors
 {
     private readonly List<PropertyDescriptor> all = [];
 
-    private LocalLightDescriptors(string kind, bool hasCone)
+    private LocalLightDescriptors(bool hasCone)
     {
-        this.Kind = kind;
         var definition = hasCone ? "spot_light" : "point_light";
         this.ColorDescriptor = this.Add(new PropertyDescriptor<Vector3>(
-            id: new PropertyId<Vector3>(kind, "/color"),
+            id: hasCone ? SceneSchema.SpotLight.Color : SceneSchema.PointLight.Color,
             reader: static target => ((LightComponent)target).Color,
             writer: static (target, value) => ((LightComponent)target).Color = value,
             validator: static value => float.IsFinite(value.X) && float.IsFinite(value.Y) && float.IsFinite(value.Z) && value.X >= 0 && value.Y >= 0 && value.Z >= 0
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.LocalLightInvalid, "Color must be finite and nonnegative."),
             annotation: SceneEditorSchemaAnnotations.Get("#/definitions/light_common/color_rgb", new EditorAnnotation { Group = "Light", Label = "Color", Renderer = "color-rgb" })));
-        this.AffectsWorldDescriptor = this.Add(Bool(kind, "/affects_world", "#/definitions/light_common/affects_world", "Affects World", static light => light.AffectsWorld, static (light, value) => light.AffectsWorld = value));
-        this.CastsShadowsDescriptor = this.Add(Bool(kind, "/casts_shadows", "#/definitions/light_common/casts_shadows", "Cast Shadows", static light => light.CastsShadows, static (light, value) => light.CastsShadows = value));
-        this.ExposureCompensationDescriptor = this.Add(Float(kind, "/exposure_compensation", "#/definitions/light_common/exposure_compensation_ev", "Exposure Compensation", static light => light.ExposureCompensation, static (light, value) => light.ExposureCompensation = value, Finite));
-        this.ShadowBiasDescriptor = this.Add(Float(kind, "/shadow/bias", "#/definitions/light_shadow/bias", "Shadow Bias", static light => light.ShadowBias, static (light, value) => light.ShadowBias = value, Nonnegative));
-        this.ShadowNormalBiasDescriptor = this.Add(Float(kind, "/shadow/normal_bias", "#/definitions/light_shadow/normal_bias", "Normal Bias", static light => light.ShadowNormalBias, static (light, value) => light.ShadowNormalBias = value, Nonnegative));
-        this.ContactShadowsDescriptor = this.Add(Bool(kind, "/shadow/contact_shadows", "#/definitions/light_shadow/contact_shadows", "Contact Shadows", static light => light.ContactShadows, static (light, value) => light.ContactShadows = value));
+        this.AffectsWorldDescriptor = this.Add(Bool(hasCone ? SceneSchema.SpotLight.AffectsWorld : SceneSchema.PointLight.AffectsWorld, "#/definitions/light_common/affects_world", "Affects World", static light => light.AffectsWorld, static (light, value) => light.AffectsWorld = value));
+        this.CastsShadowsDescriptor = this.Add(Bool(hasCone ? SceneSchema.SpotLight.CastsShadows : SceneSchema.PointLight.CastsShadows, "#/definitions/light_common/casts_shadows", "Cast Shadows", static light => light.CastsShadows, static (light, value) => light.CastsShadows = value));
+        this.ExposureCompensationDescriptor = this.Add(Float(hasCone ? SceneSchema.SpotLight.ExposureCompensation : SceneSchema.PointLight.ExposureCompensation, "#/definitions/light_common/exposure_compensation_ev", "Exposure Compensation", static light => light.ExposureCompensation, static (light, value) => light.ExposureCompensation = value, Finite));
+        this.ShadowBiasDescriptor = this.Add(Float(hasCone ? SceneSchema.SpotLight.ShadowBias : SceneSchema.PointLight.ShadowBias, "#/definitions/light_shadow/bias", "Shadow Bias", static light => light.ShadowBias, static (light, value) => light.ShadowBias = value, Nonnegative));
+        this.ShadowNormalBiasDescriptor = this.Add(Float(hasCone ? SceneSchema.SpotLight.ShadowNormalBias : SceneSchema.PointLight.ShadowNormalBias, "#/definitions/light_shadow/normal_bias", "Normal Bias", static light => light.ShadowNormalBias, static (light, value) => light.ShadowNormalBias = value, Nonnegative));
+        this.ContactShadowsDescriptor = this.Add(Bool(hasCone ? SceneSchema.SpotLight.ContactShadows : SceneSchema.PointLight.ContactShadows, "#/definitions/light_shadow/contact_shadows", "Contact Shadows", static light => light.ContactShadows, static (light, value) => light.ContactShadows = value));
         this.ShadowResolutionHintDescriptor = this.Add(new PropertyDescriptor<ShadowResolutionHint>(
-            id: new PropertyId<ShadowResolutionHint>(kind, "/shadow/resolution_hint"),
+            id: hasCone ? SceneSchema.SpotLight.ShadowResolutionHint : SceneSchema.PointLight.ShadowResolutionHint,
             reader: static target => ((LightComponent)target).ShadowResolutionHint,
             writer: static (target, value) => ((LightComponent)target).ShadowResolutionHint = value,
             validator: static value => Enum.IsDefined(value)
                 ? ValidationResult.Ok
                 : ValidationResult.Fail(SceneDiagnosticCodes.LocalLightInvalid, "Unknown shadow resolution hint."),
             annotation: SceneEditorSchemaAnnotations.Get("#/definitions/light_shadow/resolution_hint", new EditorAnnotation { Group = "Shadows", Label = "Resolution", Renderer = "combo" })));
-        this.LuminousFluxLumensDescriptor = this.Add(Float(kind, "/luminous_flux_lm", $"#/definitions/{definition}/luminous_flux_lm", "Luminous Flux", ReadFlux, WriteFlux, Nonnegative));
-        this.RangeDescriptor = this.Add(Float(kind, "/range", $"#/definitions/{definition}/range", "Range", ReadRange, WriteRange, Positive));
-        this.SourceRadiusDescriptor = this.Add(Float(kind, "/source_radius", $"#/definitions/{definition}/source_radius", "Source Radius", ReadSourceRadius, WriteSourceRadius, Nonnegative));
+        this.LuminousFluxLumensDescriptor = this.Add(Float(hasCone ? SceneSchema.SpotLight.LuminousFluxLumens : SceneSchema.PointLight.LuminousFluxLumens, $"#/definitions/{definition}/luminous_flux_lm", "Luminous Flux", ReadFlux, WriteFlux, Nonnegative));
+        this.RangeDescriptor = this.Add(Float(hasCone ? SceneSchema.SpotLight.Range : SceneSchema.PointLight.Range, $"#/definitions/{definition}/range", "Range", ReadRange, WriteRange, Positive));
+        this.SourceRadiusDescriptor = this.Add(Float(hasCone ? SceneSchema.SpotLight.SourceRadius : SceneSchema.PointLight.SourceRadius, $"#/definitions/{definition}/source_radius", "Source Radius", ReadSourceRadius, WriteSourceRadius, Nonnegative));
         if (hasCone)
         {
-            this.InnerConeAngleRadiansDescriptor = this.Add(Float(kind, "/inner_cone_angle_radians", "#/definitions/spot_light/inner_cone_angle_radians", "Inner Cone Angle", static light => ((SpotLightComponent)light).InnerConeAngleRadians, static (light, value) => ((SpotLightComponent)light).InnerConeAngleRadians = value, ConeAngle));
-            this.OuterConeAngleRadiansDescriptor = this.Add(Float(kind, "/outer_cone_angle_radians", "#/definitions/spot_light/outer_cone_angle_radians", "Outer Cone Angle", static light => ((SpotLightComponent)light).OuterConeAngleRadians, static (light, value) => ((SpotLightComponent)light).OuterConeAngleRadians = value, ConeAngle));
+            this.InnerConeAngleRadiansDescriptor = this.Add(Float(SceneSchema.SpotLight.InnerConeAngleRadians, "#/definitions/spot_light/inner_cone_angle_radians", "Inner Cone Angle", static light => ((SpotLightComponent)light).InnerConeAngleRadians, static (light, value) => ((SpotLightComponent)light).InnerConeAngleRadians = value, ConeAngle));
+            this.OuterConeAngleRadiansDescriptor = this.Add(Float(SceneSchema.SpotLight.OuterConeAngleRadians, "#/definitions/spot_light/outer_cone_angle_radians", "Outer Cone Angle", static light => ((SpotLightComponent)light).OuterConeAngleRadians, static (light, value) => ((SpotLightComponent)light).OuterConeAngleRadians = value, ConeAngle));
         }
 
         this.ById = this.all.ToDictionary(static descriptor => descriptor.Id);
     }
-
-    /// <summary>Gets the component kind that qualifies every property id.</summary>
-    public string Kind { get; }
 
     /// <summary>Gets the light color descriptor.</summary>
     public PropertyDescriptor<Vector3> ColorDescriptor { get; }
@@ -107,11 +103,11 @@ public sealed class LocalLightDescriptors
 
     /// <summary>Builds the point light descriptor catalog.</summary>
     /// <returns>The descriptor catalog.</returns>
-    public static LocalLightDescriptors BuildPoint() => new(SceneProperties.PointLightKind, hasCone: false);
+    public static LocalLightDescriptors BuildPoint() => new(hasCone: false);
 
     /// <summary>Builds the spot light descriptor catalog.</summary>
     /// <returns>The descriptor catalog.</returns>
-    public static LocalLightDescriptors BuildSpot() => new(SceneProperties.SpotLightKind, hasCone: true);
+    public static LocalLightDescriptors BuildSpot() => new(hasCone: true);
 
     private static ValidationResult Finite(float value)
         => float.IsFinite(value)
@@ -188,29 +184,27 @@ public sealed class LocalLightDescriptors
     }
 
     private static PropertyDescriptor<float> Float(
-        string kind,
-        string pointer,
+        PropertyId<float> id,
         string schemaPointer,
         string label,
         Func<LightComponent, float> read,
         Action<LightComponent, float> write,
         Func<float, ValidationResult> validate)
         => new(
-            id: new PropertyId<float>(kind, pointer),
+            id: id,
             reader: target => read((LightComponent)target),
             writer: (target, value) => write((LightComponent)target, value),
             validator: validate,
             annotation: SceneEditorSchemaAnnotations.Get(schemaPointer, new EditorAnnotation { Group = "Light", Label = label, Renderer = "numberbox", Step = 0.01 }));
 
     private static PropertyDescriptor<bool> Bool(
-        string kind,
-        string pointer,
+        PropertyId<bool> id,
         string schemaPointer,
         string label,
         Func<LightComponent, bool> read,
         Action<LightComponent, bool> write)
         => new(
-            id: new PropertyId<bool>(kind, pointer),
+            id: id,
             reader: target => read((LightComponent)target),
             writer: (target, value) => write((LightComponent)target, value),
             validator: static _ => ValidationResult.Ok,

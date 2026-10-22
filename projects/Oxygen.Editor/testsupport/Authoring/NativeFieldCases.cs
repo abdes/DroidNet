@@ -63,14 +63,14 @@ internal static class NativeFieldCases
     /// <summary>The node fields an edit writes, with the native field it reaches and the value the engine reports.</summary>
     internal static readonly NodeFieldCase[] NativeNodeFields =
     [
-        new("Transform", "PositionX", 1, 0, Set(SceneProperties.Transform.PositionX, 12f), 12f),
-        new("Transform", "RotationY", 1, 4, Set(SceneProperties.Transform.RotationY, 30f), 30f),
-        new("Camera", "FieldOfView", 2, 0, Set(SceneProperties.PerspectiveCamera.FieldOfViewDegrees, 75f), 75f * MathF.PI / 180f),
-        new("Light", "ColorR", 3, 0, static node => PropertyEdit.SingleEdit(SceneProperties.DirectionalLight.Color, LightOf(node).Color with { X = 0.2f }), 0.2f),
-        new("Light", "CastsShadows", 3, 5, Set(SceneProperties.DirectionalLight.CastsShadows, value: false), 0),
-        new("Light", "IntensityLux", 3, 11, Set(SceneProperties.DirectionalLight.IntensityLux, 80000f), 80000f),
-        new("Light", "CascadeCount", 3, 15, Set(SceneProperties.DirectionalLight.CascadeCount, 3), 3),
-        new("Light", "SplitMode", 3, 16, Set(SceneProperties.DirectionalLight.SplitMode, DirectionalCsmSplitMode.ManualDistances), 1),
+        new("Transform", "PositionX", 1, 0, Set(SceneSchema.Transform.PositionX, 12f), 12f),
+        new("Transform", "RotationY", 1, 4, Set(SceneSchema.Transform.RotationY, 30f), 30f),
+        new("Camera", "FieldOfView", 2, 0, Set(SceneSchema.PerspectiveCamera.FieldOfViewDegrees, 75f), 75f * MathF.PI / 180f),
+        new("Light", "ColorR", 3, 0, static node => PropertyEdit.SingleEdit(SceneSchema.DirectionalLight.Color, LightOf(node).Color with { X = 0.2f }), 0.2f),
+        new("Light", "CastsShadows", 3, 5, Set(SceneSchema.DirectionalLight.CastsShadows, value: false), 0),
+        new("Light", "IntensityLux", 3, 11, Set(SceneSchema.DirectionalLight.IntensityLux, 80000f), 80000f),
+        new("Light", "CascadeCount", 3, 15, Set(SceneSchema.DirectionalLight.CascadeCount, 3), 3),
+        new("Light", "SplitMode", 3, 16, Set(SceneSchema.DirectionalLight.SplitMode, DirectionalCsmSplitMode.ManualDistances), 1),
     ];
 
     /// <summary>Reads a node's properties as the engine observes them: by component and field, as numbers.</summary>

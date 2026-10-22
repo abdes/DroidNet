@@ -13,7 +13,7 @@ namespace Oxygen.Editor.Scenes.Properties;
 internal sealed class OrthographicCameraRules : IComponentRules
 {
     /// <inheritdoc/>
-    public string Kind => SceneProperties.OrthographicCameraKind;
+    public string Kind => SceneSchema.OrthographicCamera.Kind;
 
     /// <inheritdoc/>
     public IReadOnlyDictionary<PropertyId, PropertyDescriptor> Descriptors => SceneProperties.OrthographicCamera.ById;

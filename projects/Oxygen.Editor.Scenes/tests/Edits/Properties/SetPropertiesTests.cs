@@ -25,8 +25,6 @@ public sealed class SetPropertiesTests
 {
     private static NodeId SecondCam { get; } = NodeId.FromValue(SampleScene.Tagged(1, "CB"));
 
-    private static TransformDescriptors Transform => SceneProperties.Transform;
-
     [TestMethod]
     public async Task OneNode_WritesTheValuesAndRaisesCommit()
     {
@@ -36,7 +34,7 @@ public sealed class SetPropertiesTests
 
         SceneAssert.Applied(result);
         _ = PositionX(fixture, SampleScene.A).Should().Be(3f);
-        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.PropertiesChanged(SampleScene.A, [Transform.PositionX.Id], EditPhase.Commit));
+        SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.PropertiesChanged(SampleScene.A, [SceneSchema.Transform.PositionX.Id], EditPhase.Commit));
     }
 
     [TestMethod]
@@ -52,8 +50,8 @@ public sealed class SetPropertiesTests
         _ = fixture.Changes.Only().Should().BeEquivalentTo(
             new SceneChange[]
             {
-                new SceneChange.PropertiesChanged(SampleScene.A, [Transform.PositionX.Id], EditPhase.Commit),
-                new SceneChange.PropertiesChanged(SampleScene.B, [Transform.PositionX.Id], EditPhase.Commit),
+                new SceneChange.PropertiesChanged(SampleScene.A, [SceneSchema.Transform.PositionX.Id], EditPhase.Commit),
+                new SceneChange.PropertiesChanged(SampleScene.B, [SceneSchema.Transform.PositionX.Id], EditPhase.Commit),
             },
             static options => options.PreferringRuntimeMemberTypes());
     }
@@ -105,7 +103,7 @@ public sealed class SetPropertiesTests
     public async Task MixedComponentKinds_IsInvalid()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var edit = new PropertyEdit.Builder().Set(Transform.PositionX, 3f).Set(SceneProperties.PerspectiveCamera.NearPlane, 0.2f).Build();
+        var edit = new PropertyEdit.Builder().Set(SceneSchema.Transform.PositionX, 3f).Set(SceneSchema.PerspectiveCamera.NearPlane, 0.2f).Build();
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(Edit((SampleScene.Cam, edit))).ConfigureAwait(false);
@@ -118,7 +116,7 @@ public sealed class SetPropertiesTests
     public async Task NodeWithoutTheComponent_IsInvalid()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var edit = new PropertyEdit.Builder().Set(SceneProperties.PerspectiveCamera.NearPlane, 0.2f).Build();
+        var edit = new PropertyEdit.Builder().Set(SceneSchema.PerspectiveCamera.NearPlane, 0.2f).Build();
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(Edit((SampleScene.B, edit))).ConfigureAwait(false);
@@ -137,7 +135,7 @@ public sealed class SetPropertiesTests
                 components: [new PerspectiveCameraData { Id = ComponentId.FromValue(SampleScene.Tagged(2, "CB")), Name = "Camera", NearPlane = 0.1f, FarPlane = 5f, AspectMode = CameraAspectMode.Auto }])
             .Build();
         using var fixture = await AuthoringFixture.CreateAsync(scene).ConfigureAwait(false);
-        var near = new PropertyEdit.Builder().Set(SceneProperties.PerspectiveCamera.NearPlane, 10f).Build();
+        var near = new PropertyEdit.Builder().Set(SceneSchema.PerspectiveCamera.NearPlane, 10f).Build();
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(Edit((SampleScene.Cam, near), (SecondCam, near))).ConfigureAwait(false);
@@ -166,5 +164,5 @@ public sealed class SetPropertiesTests
         => new(edits.ToDictionary(static pair => pair.Node, static pair => pair.Edit), "Edit");
 
     private static SetProperties SetX(params (NodeId Node, float Value)[] values)
-        => Edit([.. values.Select(static pair => (pair.Node, new PropertyEdit.Builder().Set(Transform.PositionX, pair.Value).Build()))]);
+        => Edit([.. values.Select(static pair => (pair.Node, new PropertyEdit.Builder().Set(SceneSchema.Transform.PositionX, pair.Value).Build()))]);
 }

@@ -28,6 +28,12 @@ and exclusion from the cooker's embedded schema blocks. Material validation
 also checks agreement between engine and merged schemas. These checks protect
 the engine's validation authority while allowing editor-specific presentation.
 
+## Scene components generator
+
+[Generators](Generators/README.md) holds `SceneComponentsGenerator`, which
+generates the editor's scene component kinds, typed property ids and engine
+wire vocabulary from the engine's scene components schema.
+
 ## Shared editing mechanisms
 
 | Type                              | Responsibility                                                      |

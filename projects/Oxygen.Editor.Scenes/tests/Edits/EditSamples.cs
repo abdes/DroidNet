@@ -309,13 +309,13 @@ public static class EditSamples
         new(
             nameof(SetProperties),
             static _ => MovingA1(),
-            [new SceneChange.PropertiesChanged(SampleScene.A1, [SceneProperties.Transform.PositionX.Id], EditPhase.Commit)],
-            [new SceneChange.PropertiesChanged(SampleScene.A1, [SceneProperties.Transform.PositionX.Id], EditPhase.Commit)])
+            [new SceneChange.PropertiesChanged(SampleScene.A1, [SceneSchema.Transform.PositionX.Id], EditPhase.Commit)],
+            [new SceneChange.PropertiesChanged(SampleScene.A1, [SceneSchema.Transform.PositionX.Id], EditPhase.Commit)])
         {
             HasTargets = true,
             Tamper = static _ =>
             {
-                var edits = new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionX, 5f) };
+                var edits = new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, 5f) };
                 return new TamperedEdit(new SetProperties(edits, "Move"), edits.Clear);
             },
         };
@@ -610,6 +610,6 @@ public static class EditSamples
 
     private static SetProperties MovingA1()
         => new(
-            new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionX, 5f) },
+            new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, 5f) },
             "Move");
 }

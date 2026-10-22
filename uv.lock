@@ -16,6 +16,7 @@ members = [
     "oxygen-engine-tools",
     "oxygen-tools",
     "oxygen-vortex-tools",
+    "scene-schema-codegen",
     "unicode-codegen",
 ]
 
@@ -105,6 +106,7 @@ dependencies = [
     { name = "droidnet-tooling-scripts" },
     { name = "oxygen-engine-tools" },
     { name = "oxygen-tools", extra = ["codemod"] },
+    { name = "scene-schema-codegen" },
     { name = "unicode-codegen" },
 ]
 
@@ -118,6 +120,7 @@ dev = [
     { name = "pre-commit" },
     { name = "pyright", extra = ["nodejs"] },
     { name = "ruff" },
+    { name = "scene-schema-codegen", extra = ["test"] },
     { name = "unicode-codegen", extra = ["test"] },
 ]
 graphics = [
@@ -131,6 +134,7 @@ requires-dist = [
     { name = "droidnet-tooling-scripts", editable = "tooling/scripts" },
     { name = "oxygen-engine-tools", virtual = "projects/Oxygen.Engine" },
     { name = "oxygen-tools", extras = ["codemod"], editable = "projects/Oxygen.Engine/tools/oxytools" },
+    { name = "scene-schema-codegen", editable = "projects/Oxygen.Engine/src/Oxygen/Scene/Tools/SceneSchemaCodeGen" },
     { name = "unicode-codegen", editable = "projects/Oxygen.Engine/src/Oxygen/Content/Tools/UnicodeCodeGen" },
 ]
 
@@ -144,6 +148,7 @@ dev = [
     { name = "pre-commit", specifier = ">=4.5,<5" },
     { name = "pyright", extras = ["nodejs"], specifier = ">=1.1.400,<2" },
     { name = "ruff", specifier = ">=0.15,<0.16" },
+    { name = "scene-schema-codegen", extras = ["test"], editable = "projects/Oxygen.Engine/src/Oxygen/Scene/Tools/SceneSchemaCodeGen" },
     { name = "unicode-codegen", extras = ["test"], editable = "projects/Oxygen.Engine/src/Oxygen/Content/Tools/UnicodeCodeGen" },
 ]
 graphics = [
@@ -1036,6 +1041,28 @@ wheels = [
     { url = "https://files.pythonhosted.org/packages/cb/46/4965251734c2b6fcdca1b1b187d20bcac3af0ee5b083b89c910bb961ce3a/ruff-0.15.22-py3-none-win_amd64.whl", hash = "sha256:9be63ba1eb936acd2d1342fb8337c356353706fce233b2a15a09a97037e6acde", size = 11938297, upload-time = "2026-07-16T15:14:07.316Z" },
     { url = "https://files.pythonhosted.org/packages/57/c9/e69b1ff4c8b69093ef08b8919ab767af0569666865b39c30a8795d88d3c6/ruff-0.15.22-py3-none-win_arm64.whl", hash = "sha256:e1168075b72158510839f250027659cdd78476f40507dd517892304c41318661", size = 11298172, upload-time = "2026-07-16T15:14:10.51Z" },
 ]
+
+[[package]]
+name = "scene-schema-codegen"
+version = "0.1.0"
+source = { editable = "projects/Oxygen.Engine/src/Oxygen/Scene/Tools/SceneSchemaCodeGen" }
+dependencies = [
+    { name = "jsonschema" },
+    { name = "pyyaml" },
+]
+
+[package.optional-dependencies]
+test = [
+    { name = "pytest" },
+]
+
+[package.metadata]
+requires-dist = [
+    { name = "jsonschema", specifier = ">=4.23,<5" },
+    { name = "pytest", marker = "extra == 'test'", specifier = ">=8,<10" },
+    { name = "pyyaml", specifier = ">=6.0.2,<7" },
+]
+provides-extras = ["test"]
 
 [[package]]
 name = "setuptools"

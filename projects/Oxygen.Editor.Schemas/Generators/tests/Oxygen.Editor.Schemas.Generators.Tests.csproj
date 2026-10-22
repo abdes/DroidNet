@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="utf-8"?>
+
+<Project Sdk="MSTest.Sdk">
+
+    <PropertyGroup>
+        <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
+        <RootNamespace>Oxygen.Editor.Schemas.Generators.Tests</RootNamespace>
+        <AssemblyName>$(MSBuildProjectName)</AssemblyName>
+    </PropertyGroup>
+
+    <ItemGroup>
+        <PackageReference Include="Basic.Reference.Assemblies.Net80" />
+        <PackageReference Include="Verify.MSTest" />
+        <PackageReference Include="Verify.SourceGenerators" />
+        <PackageReference Include="Microsoft.CodeAnalysis.CSharp" PrivateAssets="all" />
+        <PackageReference Include="Microsoft.CodeAnalysis.Analyzers" PrivateAssets="all" />
+    </ItemGroup>
+
+    <ItemGroup>
+        <ProjectReference Include="..\src\Oxygen.Editor.Schemas.Generators.csproj" />
+    </ItemGroup>
+
+    <!-- The engine's schema, to check that the generator reads it without problems. -->
+    <ItemGroup>
+        <Content Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Scene\Schema\SceneComponents.yaml"
+            Link="Schema\SceneComponents.yaml" CopyToOutputDirectory="PreserveNewest" />
+    </ItemGroup>
+
+</Project>

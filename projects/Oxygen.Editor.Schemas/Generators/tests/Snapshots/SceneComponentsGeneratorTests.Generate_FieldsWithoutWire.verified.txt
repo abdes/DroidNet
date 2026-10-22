@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (33,16)-(33,22),
+      Message: Geometry.GeometryUri: a component without a wire has no fields,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC007,
+        Title: Fields do not match the value,
+        MessageFormat: {0}: {1},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

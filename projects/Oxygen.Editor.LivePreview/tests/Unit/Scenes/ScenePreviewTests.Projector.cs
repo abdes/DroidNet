@@ -123,5 +123,5 @@ public sealed partial class ScenePreviewTests
     }
 
     private static SetProperties Move(NodeId node, float x)
-        => new(new Dictionary<NodeId, PropertyEdit> { [node] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionX, x) }, "Move");
+        => new(new Dictionary<NodeId, PropertyEdit> { [node] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, x) }, "Move");
 }

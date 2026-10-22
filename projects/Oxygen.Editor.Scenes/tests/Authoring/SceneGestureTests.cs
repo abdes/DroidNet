@@ -64,7 +64,7 @@ public sealed class SceneGestureTests
         PreviewAfterCancel,
     }
 
-    private static PropertyId PositionX => SceneProperties.Transform.PositionX.Id;
+    private static PropertyId PositionX => SceneSchema.Transform.PositionX.Id;
 
     [TestMethod]
     public async Task Begin_AppliesAndRaisesNothing()
@@ -127,7 +127,7 @@ public sealed class SceneGestureTests
         var values = mismatch == Mismatch.OtherNode
             ? SetX(SampleScene.B, 5f)
             : new SetProperties(
-                new Dictionary<NodeId, PropertyEdit> { [SampleScene.A] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionY, 5f) },
+                new Dictionary<NodeId, PropertyEdit> { [SampleScene.A] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionY, 5f) },
                 "Move");
         var before = fixture.Snapshot();
 
@@ -293,14 +293,14 @@ public sealed class SceneGestureTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var orient = new PropertyEdit.Builder()
-            .Set(SceneProperties.Transform.RotationX, 90f)
-            .Set(SceneProperties.Transform.RotationY, 25f)
-            .Set(SceneProperties.Transform.RotationZ, 0f)
+            .Set(SceneSchema.Transform.RotationX, 90f)
+            .Set(SceneSchema.Transform.RotationY, 25f)
+            .Set(SceneSchema.Transform.RotationZ, 0f)
             .Build();
         _ = await fixture.Authoring.ExecuteAsync(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = orient }, "Orient")).ConfigureAwait(false);
         var start = RotationOf(fixture, SampleScene.A1);
-        var gesture = await fixture.Authoring.BeginGestureAsync([SampleScene.A1], [SceneProperties.Transform.RotationX.Id], "Rotate").ConfigureAwait(false);
-        _ = await gesture.PreviewAsync(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = PropertyEdit.SingleEdit(SceneProperties.Transform.RotationX, 15f) }, "Rotate")).ConfigureAwait(false);
+        var gesture = await fixture.Authoring.BeginGestureAsync([SampleScene.A1], [SceneSchema.Transform.RotationX.Id], "Rotate").ConfigureAwait(false);
+        _ = await gesture.PreviewAsync(new SetProperties(new Dictionary<NodeId, PropertyEdit> { [SampleScene.A1] = PropertyEdit.SingleEdit(SceneSchema.Transform.RotationX, 15f) }, "Rotate")).ConfigureAwait(false);
         _ = await gesture.CommitAsync().ConfigureAwait(false);
 
         _ = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
@@ -405,7 +405,7 @@ public sealed class SceneGestureTests
         var gesture = await BeginOnAAsync(fixture).ConfigureAwait(false);
         _ = await gesture.PreviewAsync(SetX(SampleScene.A, 5f)).ConfigureAwait(false);
         var oneShot = new SetProperties(
-            new Dictionary<NodeId, PropertyEdit> { [SampleScene.A] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionY, 3f) },
+            new Dictionary<NodeId, PropertyEdit> { [SampleScene.A] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionY, 3f) },
             "Lift");
         var applied = await fixture.Authoring.ExecuteAsync(oneShot).ConfigureAwait(false);
 
@@ -441,7 +441,7 @@ public sealed class SceneGestureTests
         => fixture.Authoring.BeginGestureAsync([SampleScene.A], [PositionX], "Move");
 
     private static SetProperties SetX(NodeId node, float x)
-        => new(new Dictionary<NodeId, PropertyEdit> { [node] = PropertyEdit.SingleEdit(SceneProperties.Transform.PositionX, x) }, "Move");
+        => new(new Dictionary<NodeId, PropertyEdit> { [node] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, x) }, "Move");
 
     private static Vector3 PositionOf(AuthoringFixture fixture, NodeId node)
         => fixture.Node(node).Components.OfType<TransformComponent>().Single().LocalPosition;

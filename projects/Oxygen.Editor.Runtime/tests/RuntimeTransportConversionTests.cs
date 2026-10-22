@@ -6,7 +6,6 @@ using System.Collections.Immutable;
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Interop;
 using Oxygen.Interop.Input;
 
 namespace Oxygen.Editor.Runtime.Tests;
@@ -26,16 +25,6 @@ public sealed class RuntimeTransportConversionTests
         _ = Enum.GetValues<RuntimeKey>().Should().HaveCount(Enum.GetValues<PlatformKey>().Length);
         var invalid = () => RuntimeTransportConversion.ToNative((RuntimeKey)int.MaxValue);
         _ = invalid.Should().Throw<ArgumentOutOfRangeException>();
-    }
-
-    [TestMethod]
-    public void EveryComponentId_HasTheNameAndValueOfTheNativeOne()
-    {
-        var managed = Enum.GetValues<RuntimeComponentId>().ToDictionary(static id => id.ToString(), static id => (ushort)id);
-
-        var native = Enum.GetValues<EngineComponentId>().ToDictionary(static id => id.ToString(), static id => (ushort)id);
-
-        _ = managed.Should().Equal(native);
     }
 
     [TestMethod]

@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (12,30)-(12,35),
+      Message: Lamp: field set Torch does not exist,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC005,
+        Title: Unknown field set or field,
+        MessageFormat: {0}: {1},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

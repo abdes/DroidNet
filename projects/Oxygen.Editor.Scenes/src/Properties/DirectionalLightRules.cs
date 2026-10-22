@@ -21,7 +21,7 @@ namespace Oxygen.Editor.Scenes.Properties;
 internal sealed class DirectionalLightRules : IComponentRules
 {
     /// <inheritdoc/>
-    public string Kind => SceneProperties.DirectionalLightKind;
+    public string Kind => SceneSchema.DirectionalLight.Kind;
 
     /// <inheritdoc/>
     public IReadOnlyDictionary<PropertyId, PropertyDescriptor> Descriptors => SceneProperties.DirectionalLight.ById;
@@ -60,9 +60,9 @@ internal sealed class DirectionalLightRules : IComponentRules
 
         var euler = TransformConverter.QuaternionToEulerDegrees(DirectionalLightComponent.DefaultLocalRotation);
         var rotation = new PropertyEdit.Builder()
-            .Set(SceneProperties.Transform.RotationX, euler.X)
-            .Set(SceneProperties.Transform.RotationY, euler.Y)
-            .Set(SceneProperties.Transform.RotationZ, euler.Z)
+            .Set(SceneSchema.Transform.RotationX, euler.X)
+            .Set(SceneSchema.Transform.RotationY, euler.Y)
+            .Set(SceneSchema.Transform.RotationZ, euler.Z)
             .Build();
         return [new SetProperties(new Dictionary<NodeId, PropertyEdit> { [node.Id] = rotation }, "Point Light Down")];
     }

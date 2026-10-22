@@ -1,0 +1,120 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://oxygen.engine/schemas/SceneComponents.schema.json",
+  "title": "Oxygen scene components",
+  "description": "The authored scene node components, their properties and the field ids that property edits address.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["version", "field_sets", "components"],
+  "properties": {
+    "version": { "const": 1 },
+    "field_sets": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/field_set" }
+    },
+    "components": {
+      "type": "array",
+      "minItems": 1,
+      "items": { "$ref": "#/definitions/component" }
+    }
+  },
+  "definitions": {
+    "identifier": {
+      "description": "A PascalCase name, used as is in generated code.",
+      "type": "string",
+      "pattern": "^[A-Z][A-Za-z0-9]*$"
+    },
+    "field_set": {
+      "description": "Component-local field ids, stable across versions.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "fields"],
+      "properties": {
+        "name": { "$ref": "#/definitions/identifier" },
+        "fields": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["name", "id"],
+            "properties": {
+              "name": { "$ref": "#/definitions/identifier" },
+              "id": { "type": "integer", "minimum": 0, "maximum": 65534 }
+            }
+          }
+        }
+      }
+    },
+    "component": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "properties"],
+      "properties": {
+        "name": { "$ref": "#/definitions/identifier" },
+        "kind": {
+          "description": "The component kind that addresses the component's properties.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+        },
+        "wire": {
+          "description": "Present when the component is applied field by field.",
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["id", "field_set"],
+          "properties": {
+            "id": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "field_set": { "$ref": "#/definitions/identifier" }
+          }
+        },
+        "properties": {
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/property" }
+        }
+      }
+    },
+    "property": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "key", "type"],
+      "properties": {
+        "name": { "$ref": "#/definitions/identifier" },
+        "key": {
+          "description": "JSON pointer of the property in the component's authored record.",
+          "type": "string",
+          "pattern": "^(/[a-z0-9_]+)+$"
+        },
+        "type": {
+          "enum": ["bool", "int", "float", "vec3", "enum", "asset"]
+        },
+        "enum": {
+          "description": "The enumeration of an enum property.",
+          "$ref": "#/definitions/identifier"
+        },
+        "fields": {
+          "description": "The fields that receive the value, in order.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/identifier" }
+        },
+        "encoding": {
+          "description": "A unit conversion applied before the value goes to its fields.",
+          "enum": ["degrees-to-radians"]
+        }
+      },
+      "allOf": [
+        {
+          "if": { "properties": { "type": { "const": "enum" } } },
+          "then": { "required": ["enum"] },
+          "else": { "not": { "required": ["enum"] } }
+        },
+        {
+          "if": { "required": ["encoding"] },
+          "then": { "required": ["fields"] }
+        }
+      ]
+    }
+  }
+}

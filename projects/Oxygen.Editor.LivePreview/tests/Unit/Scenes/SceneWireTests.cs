@@ -8,7 +8,6 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Interop;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
 
@@ -18,14 +17,14 @@ public sealed class SceneWireTests
 {
     private static readonly string[] ProjectedKinds =
     [
-        SceneProperties.TransformKind,
-        SceneProperties.PerspectiveCameraKind,
-        SceneProperties.OrthographicCameraKind,
-        SceneProperties.DirectionalLightKind,
-        SceneProperties.PointLightKind,
-        SceneProperties.SpotLightKind,
-        SceneProperties.LocalFogVolumeKind,
-        SceneProperties.NodeRenderingKind,
+        SceneSchema.Transform.Kind,
+        SceneSchema.PerspectiveCamera.Kind,
+        SceneSchema.OrthographicCamera.Kind,
+        SceneSchema.DirectionalLight.Kind,
+        SceneSchema.PointLight.Kind,
+        SceneSchema.SpotLight.Kind,
+        SceneSchema.LocalFogVolume.Kind,
+        SceneSchema.Node.Kind,
     ];
 
     [TestMethod]

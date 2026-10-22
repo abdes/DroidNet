@@ -19,11 +19,11 @@ internal sealed class LocalLightRules(string kind) : IComponentRules
 
     /// <inheritdoc/>
     public IReadOnlyDictionary<PropertyId, PropertyDescriptor> Descriptors
-        => string.Equals(this.Kind, SceneProperties.PointLightKind, StringComparison.Ordinal) ? SceneProperties.PointLight.ById : SceneProperties.SpotLight.ById;
+        => string.Equals(this.Kind, SceneSchema.PointLight.Kind, StringComparison.Ordinal) ? SceneProperties.PointLight.ById : SceneProperties.SpotLight.ById;
 
     /// <inheritdoc/>
     public object? TargetOf(Scene scene, SceneNode? node)
-        => string.Equals(this.Kind, SceneProperties.PointLightKind, StringComparison.Ordinal) ? node?.Components.OfType<PointLightComponent>().FirstOrDefault()
+        => string.Equals(this.Kind, SceneSchema.PointLight.Kind, StringComparison.Ordinal) ? node?.Components.OfType<PointLightComponent>().FirstOrDefault()
             : node?.Components.OfType<SpotLightComponent>().FirstOrDefault();
 
     /// <inheritdoc/>

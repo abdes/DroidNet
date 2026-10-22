@@ -26,9 +26,9 @@ public sealed class NodeRenderingRulesTests
         var mesh = fixture.Node(SampleScene.Mesh);
         var (property, current) = flag switch
         {
-            0 => (SceneProperties.NodeRendering.IsVisible.Id, mesh.IsVisible),
-            1 => (SceneProperties.NodeRendering.CastsShadows.Id, mesh.CastsShadows),
-            _ => (SceneProperties.NodeRendering.ReceivesShadows.Id, mesh.ReceivesShadows),
+            0 => (SceneSchema.Node.IsVisible.Id, mesh.IsVisible),
+            1 => (SceneSchema.Node.CastsShadows.Id, mesh.CastsShadows),
+            _ => (SceneSchema.Node.ReceivesShadows.Id, mesh.ReceivesShadows),
         };
         var edit = new PropertyEdit.Builder().SetRaw(property, !current).Build();
 

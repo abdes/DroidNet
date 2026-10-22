@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (4,22)-(4,23),
+      Message: While parsing a node, did not find expected node content.,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC003,
+        Title: Scene components schema is not valid YAML,
+        MessageFormat: {0},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

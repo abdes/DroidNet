@@ -241,16 +241,25 @@ the same rules as surface IDs ([content-pipeline.md](content-pipeline.md)).
 One engine-owned schema declares every authored scene component once, with
 its cardinality (required or optional), its part kinds, and each property: key,
 value type, creation default, the sources that may supply it, its resolution
-rule and its wire and cooked field. It lives with the engine's
-descriptor schemas (`Cooker/Import/Schemas`). One generator produces from it:
+rule and its wire and cooked field. It is a YAML file of the Scene module,
+`Oxygen/Scene/Schema/SceneComponents.yaml`, validated by its JSON Schema
+(`SceneComponents.schema.json`). Each platform generates its own code from it,
+with its own tools, and none knows the others:
 
-- the engine's field enums, record codecs and default tables;
-- the Interop and managed wire vocabulary, replacing the hand-mirrored
-  `NodeField` and component field enums in `PropertyKeys.h` and
-  `WireVocabulary.h`;
-- the editor's typed `PropertyId`s and descriptor skeletons, so readers,
-  writers and validators attach to generated ids; inspector labels and
-  grouping stay in the `.editor.schema.json` overlays.
+- the engine build runs `SceneSchemaCodeGen` (Python, in the uv workspace)
+  before compiling Scene; it validates the file and generates the component
+  and field enums (`Generated.SceneComponents.h`), the record codecs and the
+  default tables. Interop's property appliers include the header natively;
+- the editor's Roslyn generator `SceneComponentsGenerator`
+  (`Oxygen.Editor.Schemas/Generators`) reads the same file and generates
+  Runtime's component and field enums, the scene component kinds and typed
+  `PropertyId`s with their descriptor skeletons, and LivePreview's
+  property-to-field table. It reports a problem of the file as a compiler error
+  at its line. Readers, writers and validators attach to the generated ids;
+  inspector labels and grouping stay in the `.editor.schema.json` overlays.
+
+The engine never refers to an editor project; the editor reads the engine's
+file.
 
 A property key is valid only on the component or part kind the schema lists,
 so a scope the engine cannot apply cannot be written. Overrides travel on the

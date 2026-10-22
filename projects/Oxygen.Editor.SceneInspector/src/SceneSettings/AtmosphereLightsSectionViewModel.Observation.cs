@@ -125,7 +125,7 @@ public sealed partial class AtmosphereLightsSectionViewModel
         {
             this.observedSunId = this.FindAtmosphereSource(AtmosphereLightSlot.Primary)?.Id;
             this.observedSecondarySunId = this.FindAtmosphereSource(AtmosphereLightSlot.Secondary)?.Id;
-            this.lightAssignments?.ModelChanged(SceneProperties.DirectionalLight.AtmosphereSlot.Id);
+            this.lightAssignments?.ModelChanged(SceneSchema.DirectionalLight.AtmosphereSlot.Id);
             this.RefreshSunDependencies();
         }
         else
@@ -146,7 +146,7 @@ public sealed partial class AtmosphereLightsSectionViewModel
             {
                 this.observedSunId = primaryId;
                 this.observedSecondarySunId = secondaryId;
-                this.lightAssignments?.ModelChanged(SceneProperties.DirectionalLight.AtmosphereSlot.Id);
+                this.lightAssignments?.ModelChanged(SceneSchema.DirectionalLight.AtmosphereSlot.Id);
             }
         }
     }
@@ -241,7 +241,7 @@ public sealed partial class AtmosphereLightsSectionViewModel
             if (!previousPrimaryTargets.SetEquals(this.SunOptions.Select(option => option.NodeId))
                 || !previousSecondaryTargets.SetEquals(this.SecondarySunOptions.Select(option => option.NodeId)))
             {
-                this.lightAssignments?.ModelChanged(SceneProperties.DirectionalLight.AtmosphereSlot.Id);
+                this.lightAssignments?.ModelChanged(SceneSchema.DirectionalLight.AtmosphereSlot.Id);
             }
         }
         finally

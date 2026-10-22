@@ -16,13 +16,9 @@ public sealed class GeometryDescriptors
 {
     private GeometryDescriptors(PropertyDescriptor<AssetPath?> geometryUri)
     {
-        this.GeometryUri = new PropertyId<AssetPath?>(geometryUri.Id);
         this.GeometryUriDescriptor = geometryUri;
         this.ById = new Dictionary<PropertyId, PropertyDescriptor> { [geometryUri.Id] = geometryUri };
     }
-
-    /// <summary>Gets the typed property id for the geometry asset URI.</summary>
-    public PropertyId<AssetPath?> GeometryUri { get; }
 
     /// <summary>Gets the descriptor for the geometry asset URI.</summary>
     public PropertyDescriptor<AssetPath?> GeometryUriDescriptor { get; }
@@ -37,7 +33,7 @@ public sealed class GeometryDescriptors
     public static GeometryDescriptors Build()
         => new(
             geometryUri: new PropertyDescriptor<AssetPath?>(
-                id: new PropertyId<AssetPath?>(SceneProperties.GeometryKind, "/geometry_uri"),
+                id: SceneSchema.Geometry.GeometryUri,
                 reader: static target => ((GeometryComponent)target).Geometry,
                 writer: static (target, value) => ((GeometryComponent)target).Geometry = value ?? throw new ArgumentNullException(nameof(value)),
                 validator: static value => value is null

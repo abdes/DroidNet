@@ -373,25 +373,28 @@ public interface IRuntimeProblemSource
   size, frame rate limit), stored app-wide through `IEditorSettingsManager`; the
   internal settings sync applies changes to a running player.
 
-### 5.8 Interop wire vocabulary
+### 5.8 Wire vocabulary
 
-`Oxygen.Editor.Interop/src/World/WireVocabulary.h` declares one managed enum per
-native field enum (`TransformField`, `NodeField`, `PerspectiveCameraField`,
-`OrthographicCameraField`, `DirectionalLightField`, `LocalLightField`,
-`LocalFogVolumeField`) and `EngineComponentId`, each member initialized from the
-native constant.
+The component and field ids of the property wire are declared once, in the
+engine's scene components schema (`Oxygen/Scene/Schema/SceneComponents.yaml`).
+Each side generates its own code from it: the engine build generates
+`Generated.SceneComponents.h` (`ComponentId` and one field enum per field set),
+which Interop's property appliers include natively, and the editor's
+`SceneComponentsGenerator` (`Oxygen.Editor.Schemas/Generators`) generates the
+managed code. Interop's managed API carries the ids as `UInt16` values.
 
-Runtime keeps one managed copy of the component ids, `RuntimeComponentId`, so
-its public commands load without Interop; the native transport converts between
-the two, and a Runtime test keeps their names and values identical.
+Runtime generates `RuntimeComponentId` and the field enums (`TransformField`,
+`NodeField`, `PerspectiveCameraField`, `OrthographicCameraField`,
+`DirectionalLightField`, `LocalLightField`, `LocalFogVolumeField`), so its
+public commands load without Interop.
 `RuntimePropertyValue(RuntimeComponentId ComponentId, ushort FieldId, float Value)`
-carries a field id as the Interop field enum's value.
+carries a field id as the field enum's value.
 
 LivePreview's internal `SceneWire` maps each `PropertyId` to a
-`RuntimeComponentId`, its field ids (from the Interop field enums) and their
-encoding (the field of view in radians). It drives component-existence checks,
-detach superseding and operation-kind mapping across all eight component ids,
-and is built from `SceneProperties` so it names only real properties. Geometry
+`RuntimeComponentId`, its field ids and their encoding (the field of view in
+radians); the table is generated from the same schema, so it names only real
+properties and real fields. It drives component-existence checks, detach
+superseding and operation-kind mapping across all eight component ids. Geometry
 and the scene environment have no entry: the engine takes a geometry asset with
 its component and the environment as a whole.
 
@@ -499,7 +502,7 @@ compose ContentPipeline's publication with the session use the public
 | Registration   | Opening a scene projects it; reload (`ContentReplaced`) projects the new content; close retires it; changes raised after the snapshot are replayed, none before                                                                                                                                                                                                                                                  |
 | Readiness      | `IsReady` and `ReadyChanged` per document, raised on the owner context; a view created after readiness reads it                                                                                                                                                                                                                                                                                                  |
 | Projection     | Every `SceneChange` kind sends its commands; gesture phases preview, commit and cancel; the directional light role order; relocated assets wait for their mount                                                                                                                                                                                                                                                  |
-| Wire           | Every descriptor of a projected kind has a `SceneWire` entry and every entry names a descriptor; encodings (field of view radians); `RuntimeComponentId` matches `EngineComponentId`                                                                                                                                                                                                                             |
+| Wire           | Every descriptor of a projected kind has a `SceneWire` entry and every entry names a descriptor; encodings (field of view radians)                                                                                                                                                                                                                                                                               |
 | Engine states  | Not running: pending fields across all eight component kinds counted, superseded on component detach, and replayed on Running, without polling; faulted: outcome codes                                                                                                                                                                                                                                           |
 | Content demand | Open and reload demand every stale reference (`OverrideSlots` and `TargetedOverrides`); an assignment, component add or undo, or paste demands its asset; a selection change cancels nothing; removing the component, the last reference or closing cancels                                                                                                                                                      |
 | Session        | Start order, with startup settings applied before the engine starts; engine failure sets `EngineUnavailable` and content failure sets `ContentUnavailable`, with failure code and operation result; `RetryAsync` from both states; `ChangeMountsAsync` validates the candidate and updates the project; the publication preview pauses, mounts, resumes and clears `ContentUnavailable`; disposal releases roots |

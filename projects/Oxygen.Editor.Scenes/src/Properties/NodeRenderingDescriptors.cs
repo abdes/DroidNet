@@ -28,15 +28,6 @@ public sealed class NodeRenderingDescriptors
         };
     }
 
-    /// <summary>Gets the typed property id for scene visibility.</summary>
-    public PropertyId<bool> IsVisible => new(this.IsVisibleDescriptor.Id);
-
-    /// <summary>Gets the typed property id for geometry shadow casting.</summary>
-    public PropertyId<bool> CastsShadows => new(this.CastsShadowsDescriptor.Id);
-
-    /// <summary>Gets the typed property id for geometry shadow receiving.</summary>
-    public PropertyId<bool> ReceivesShadows => new(this.ReceivesShadowsDescriptor.Id);
-
     /// <summary>Gets the scene visibility descriptor.</summary>
     public PropertyDescriptor<bool> IsVisibleDescriptor { get; }
 
@@ -53,21 +44,21 @@ public sealed class NodeRenderingDescriptors
     /// <returns>The descriptor catalog.</returns>
     public static NodeRenderingDescriptors Build()
         => new(
-            Flag("/visible", "Scene Visibility", static node => node.IsVisible, static (node, value) => node.IsVisible = value),
-            Flag("/casts_shadows", "Cast Shadows", static node => node.CastsShadows, static (node, value) => node.CastsShadows = value),
-            Flag("/receives_shadows", "Receive Shadows", static node => node.ReceivesShadows, static (node, value) => node.ReceivesShadows = value));
+            Flag(SceneSchema.Node.IsVisible, "Scene Visibility", static node => node.IsVisible, static (node, value) => node.IsVisible = value),
+            Flag(SceneSchema.Node.CastsShadows, "Cast Shadows", static node => node.CastsShadows, static (node, value) => node.CastsShadows = value),
+            Flag(SceneSchema.Node.ReceivesShadows, "Receive Shadows", static node => node.ReceivesShadows, static (node, value) => node.ReceivesShadows = value));
 
     private static PropertyDescriptor<bool> Flag(
-        string pointer,
+        PropertyId<bool> id,
         string label,
         Func<SceneNode, bool> read,
         Action<SceneNode, bool> write)
         => new(
-            id: new PropertyId<bool>(SceneProperties.NodeRenderingKind, pointer),
+            id: id,
             reader: target => read((SceneNode)target),
             writer: (target, value) => write((SceneNode)target, value),
             validator: static _ => ValidationResult.Ok,
             annotation: SceneEditorSchemaAnnotations.Get(
-                "#/definitions/node_flags" + pointer,
+                "#/definitions/node_flags" + id.Id.JsonPointer,
                 new EditorAnnotation { Group = "Rendering", Label = label, Renderer = "toggle" }));
 }
