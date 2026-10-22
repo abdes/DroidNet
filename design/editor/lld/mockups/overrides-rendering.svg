@@ -1,0 +1,134 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="560" viewBox="0 0 880 560" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
+  <title>Rendering component of a group node inside a placed model (dark theme)</title>
+  <desc>The Properties pane for Wheels, a group node without geometry inside the placed Car model, with the Rendering entry selected in the component list. The selection header names the model and offers a button that selects the instance node; add and remove component are disabled because the model defines the structure. The Rendering section shows three source-mode selectors: Scene visibility overridden to Hidden with the override bar and reset button, Cast shadows on Inherit with its resolved value, and Receive shadows under Advanced, with a note that shadow settings of a node without geometry apply to children that inherit. Annotations on the right explain each element.</desc>
+  <rect width="880" height="560" fill="#1c1c1c"/>
+
+  <!-- Pane -->
+  <rect x="16" y="16" width="400" height="528" fill="#202020" stroke="#2f2f2f"/>
+  <rect x="16" y="16" width="400" height="30" fill="#1b1b1b"/>
+  <text x="26" y="36" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#c5c5c5">&#xE7C3;</text>
+  <text x="44" y="35" font-size="12" fill="#ffffff">Properties</text>
+  <rect x="16" y="44" width="112" height="2" fill="#4cc2ff"/>
+  <text x="352" y="35" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE8A0;</text>
+  <text x="374" y="35" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE921;</text>
+  <text x="396" y="35" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE8BB;</text>
+
+  <!-- Inspector header -->
+  <rect x="20" y="50" width="392" height="150" fill="#2a2a2a"/>
+  <text x="28" y="78" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE9E9;</text>
+  <text x="56" y="77" font-size="16" font-weight="600" fill="#ffffff">Component Inspector</text>
+  <text x="392" y="77" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#c5c5c5">&#xE897;</text>
+
+  <!-- Selection header: group node from a model -->
+  <text x="28" y="110" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="16" fill="#ffffff">&#xE8B7;</text>
+  <text x="54" y="109" fill="#ffffff">Wheels</text>
+  <text x="108" y="109" font-size="12" fill="#c5c5c5">in Car (model)</text>
+  <rect x="236" y="91" width="28" height="28" rx="4" fill="#2a2a2a"/>
+  <text x="243" y="110" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE8A7;</text>
+  <rect x="268" y="91" width="28" height="28" rx="4" fill="#2a2a2a"/>
+  <text x="275" y="110" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE71D;</text>
+  <line x1="304" y1="95" x2="304" y2="115" stroke="#4a4a4a"/>
+  <text x="318" y="110" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#5d5d5d">&#xE710;</text>
+  <text x="352" y="110" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#5d5d5d">&#xE74D;</text>
+
+  <!-- Component list: required components only -->
+  <rect x="28" y="128" width="376" height="32" rx="4" fill="#2d2d2d" stroke="#363636"/>
+  <text x="38" y="149" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE7AD;</text>
+  <text x="62" y="149" fill="#ffffff">Transform</text>
+  <rect x="28" y="162" width="376" height="32" rx="4" fill="#4cc2ff"/>
+  <text x="38" y="183" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#000000">&#xE7B3;</text>
+  <text x="62" y="183" fill="#000000">Rendering</text>
+
+  <!-- Rendering (expanded) -->
+  <rect x="20" y="206" width="392" height="330" rx="8" fill="#272727" stroke="#1d1d1d"/>
+  <path d="M20 258 V214 a8 8 0 0 1 8 -8 H404 a8 8 0 0 1 8 8 V258 Z" fill="#2b2b2b"/>
+  <line x1="20" y1="258" x2="412" y2="258" stroke="#1d1d1d"/>
+  <text x="34" y="238" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE7B3;</text>
+  <text x="66" y="229" font-weight="600" fill="#ffffff">Rendering</text>
+  <text x="66" y="246" font-size="12" fill="#c5c5c5">Scene visibility and geometry shadow participation.</text>
+  <text x="390" y="238" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE70E;</text>
+
+  <!-- Row: Scene visibility (overridden) -->
+  <rect x="32" y="272" width="3" height="32" rx="1" fill="#4cc2ff"/>
+  <text x="44" y="293" fill="#ffffff">Scene visibility</text>
+  <rect x="180" y="273" width="186" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="194" y="293" font-size="13" fill="#c5c5c5">Inherit</text>
+  <text x="252" y="293" font-size="13" fill="#c5c5c5">Shown</text>
+  <rect x="306" y="276" width="58" height="24" rx="3" fill="#3d3d3d"/>
+  <text x="314" y="293" font-size="13" fill="#ffffff">Hidden</text>
+  <rect x="326" y="297" width="18" height="3" rx="1.5" fill="#4cc2ff"/>
+  <rect x="372" y="274" width="28" height="28" rx="4" fill="#272727"/>
+  <text x="380" y="293" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE777;</text>
+  <rect x="196" y="308" width="212" height="28" rx="4" fill="#2c2c2c" stroke="#454545"/>
+  <text x="206" y="326" font-size="12" fill="#ffffff">Reset to the model value (Inherit)</text>
+
+  <!-- Row: Cast shadows (Inherit) -->
+  <text x="44" y="365" fill="#ffffff">Cast shadows</text>
+  <rect x="180" y="345" width="186" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <rect x="183" y="348" width="58" height="24" rx="3" fill="#3d3d3d"/>
+  <text x="192" y="365" font-size="13" fill="#ffffff">Inherit</text>
+  <rect x="203" y="369" width="18" height="3" rx="1.5" fill="#4cc2ff"/>
+  <text x="264" y="365" font-size="13" fill="#c5c5c5">On</text>
+  <text x="321" y="365" font-size="13" fill="#c5c5c5">Off</text>
+  <text x="180" y="394" font-size="12" fill="#c5c5c5">On, inherited from Car</text>
+  <rect x="306" y="380" width="22" height="20" rx="4" fill="#272727"/>
+  <text x="311" y="395" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#ffffff">&#xE8A7;</text>
+
+  <!-- Advanced -->
+  <text x="34" y="426" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="52" y="427" font-size="13" fill="#c5c5c5">Advanced</text>
+
+  <!-- Row: Receive shadows -->
+  <text x="44" y="458" fill="#ffffff">Receive shadows</text>
+  <rect x="180" y="438" width="186" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="194" y="458" font-size="13" fill="#c5c5c5">Inherit</text>
+  <rect x="244" y="441" width="58" height="24" rx="3" fill="#3d3d3d"/>
+  <text x="264" y="458" font-size="13" fill="#ffffff">On</text>
+  <rect x="264" y="462" width="18" height="3" rx="1.5" fill="#4cc2ff"/>
+  <text x="321" y="458" font-size="13" fill="#c5c5c5">Off</text>
+
+  <!-- Notices -->
+  <text x="44" y="494" font-size="12" fill="#c5c5c5">This node has no geometry: its shadow settings apply to</text>
+  <text x="44" y="510" font-size="12" fill="#c5c5c5">children that inherit them.</text>
+  <text x="44" y="528" font-size="12" fill="#c5c5c5">Hidden in the scene: children set to Inherit are hidden too.</text>
+
+  <!-- Annotations -->
+  <g font-size="12" fill="#c5c5c5">
+    <line x1="230" y1="106" x2="440" y2="96" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="80" fill="#ffffff" font-weight="600">Node from a placed model</text>
+    <text x="448" y="96">The selection header names the model. The first</text>
+    <text x="448" y="110">button selects the instance node; add and remove</text>
+    <text x="448" y="124">component are disabled, the model owns the structure.</text>
+    <text x="448" y="138">The name is read-only for the same reason.</text>
+
+    <line x1="404" y1="178" x2="440" y2="176" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="164" fill="#ffffff" font-weight="600">Rendering is a component</text>
+    <text x="448" y="180">The node-flags component, required like Transform:</text>
+    <text x="448" y="194">every node has both, group nodes included, and neither</text>
+    <text x="448" y="208">can be removed. It is listed and filtered like the rest.</text>
+
+    <line x1="35" y1="288" x2="440" y2="284" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="268" fill="#ffffff" font-weight="600">Override bar and reset</text>
+    <text x="448" y="284">The bar and reset button the Scripting section</text>
+    <text x="448" y="298">already uses for script parameters, now provided by</text>
+    <text x="448" y="312">PropertyCard for every overridable row. Reset's</text>
+    <text x="448" y="326">tooltip names the source and its value.</text>
+
+    <line x1="366" y1="360" x2="440" y2="358" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="352" fill="#ffffff" font-weight="600">Source-mode field</text>
+    <text x="448" y="368">The toolkit Segmented control, as in the Sky Light</text>
+    <text x="448" y="382">section. Inherit is a choice like the others, so</text>
+    <text x="448" y="396">choosing it over a model's Hidden is an override.</text>
+
+    <line x1="330" y1="392" x2="440" y2="422" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="418" fill="#ffffff" font-weight="600">Resolved value</text>
+    <text x="448" y="434">Under Inherit, the field's caption gives the value</text>
+    <text x="448" y="448">and the ancestor it comes from; the button selects</text>
+    <text x="448" y="462">that ancestor.</text>
+
+    <line x1="400" y1="502" x2="440" y2="496" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="490" fill="#ffffff" font-weight="600">Notices</text>
+    <text x="448" y="506">Secondary text, as the Scripting notices: what a group</text>
+    <text x="448" y="520">node's shadow settings affect, and what hiding it does.</text>
+  </g>
+</svg>

@@ -1,0 +1,186 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="974" viewBox="0 0 880 974" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
+  <title>Geometry section with the Surfaces list (dark theme)</title>
+  <desc>The Properties pane with the Geometry component selected for Car_Body. The section shows the geometry asset, the level-of-detail policy and the Surfaces list as cards: Paint has a material override; Glass is expanded with Visible overridden to Off; Interior follows the asset, which turns its shadows off; Trim follows the asset. A caution box shows changes kept for a surface the last import no longer has. Annotations on the right explain each element.</desc>
+  <rect width="880" height="974" fill="#1c1c1c"/>
+
+  <!-- Pane -->
+  <rect x="16" y="16" width="400" height="942" fill="#202020" stroke="#2f2f2f"/>
+  <rect x="16" y="16" width="400" height="30" fill="#1b1b1b"/>
+  <text x="26" y="36" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#c5c5c5">&#xE7C3;</text>
+  <text x="44" y="35" font-size="12" fill="#ffffff">Properties</text>
+  <rect x="16" y="44" width="112" height="2" fill="#4cc2ff"/>
+  <text x="352" y="35" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE8A0;</text>
+  <text x="374" y="35" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE921;</text>
+  <text x="396" y="35" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE8BB;</text>
+
+  <!-- Inspector header -->
+  <rect x="20" y="50" width="392" height="184" fill="#2a2a2a"/>
+  <text x="28" y="78" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE9E9;</text>
+  <text x="56" y="77" font-size="16" font-weight="600" fill="#ffffff">Component Inspector</text>
+  <text x="392" y="77" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#c5c5c5">&#xE897;</text>
+  <text x="28" y="110" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="16" fill="#ffffff">&#xF158;</text>
+  <text x="54" y="109" fill="#ffffff">Car_Body</text>
+  <rect x="268" y="91" width="28" height="28" rx="4" fill="#2a2a2a"/>
+  <text x="275" y="110" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE71D;</text>
+  <line x1="304" y1="95" x2="304" y2="115" stroke="#4a4a4a"/>
+  <text x="318" y="110" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE710;</text>
+  <text x="352" y="110" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE74D;</text>
+  <rect x="28" y="128" width="376" height="32" rx="4" fill="#2d2d2d" stroke="#363636"/>
+  <text x="38" y="149" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE7AD;</text>
+  <text x="62" y="149" fill="#ffffff">Transform</text>
+  <rect x="28" y="162" width="376" height="32" rx="4" fill="#2d2d2d" stroke="#363636"/>
+  <text x="38" y="183" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE7B3;</text>
+  <text x="62" y="183" fill="#ffffff">Rendering</text>
+  <rect x="28" y="196" width="376" height="32" rx="4" fill="#4cc2ff"/>
+  <text x="38" y="217" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#000000">&#xF158;</text>
+  <text x="62" y="217" fill="#000000">Geometry</text>
+
+  <g transform="translate(0,34)">
+  <!-- Geometry section -->
+  <rect x="20" y="206" width="392" height="710" rx="8" fill="#272727" stroke="#1d1d1d"/>
+  <path d="M20 258 V214 a8 8 0 0 1 8 -8 H404 a8 8 0 0 1 8 8 V258 Z" fill="#2b2b2b"/>
+  <line x1="20" y1="258" x2="412" y2="258" stroke="#1d1d1d"/>
+  <text x="34" y="238" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xF158;</text>
+  <text x="66" y="229" font-weight="600" fill="#ffffff">Geometry</text>
+  <text x="66" y="246" font-size="12" fill="#c5c5c5">References a geometry asset and overrides its surfaces.</text>
+  <text x="390" y="238" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE70E;</text>
+
+  <!-- Asset row -->
+  <text x="44" y="291" fill="#ffffff">Asset</text>
+  <rect x="180" y="274" width="24" height="24" fill="#1f1f1f" stroke="#3a3a3a"/>
+  <text x="185" y="291" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xF158;</text>
+  <rect x="210" y="271" width="190" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="240" y="291" fill="#ffffff">Car_Body.geom</text>
+  <line x1="370" y1="275" x2="370" y2="297" stroke="#3a3a3a"/>
+  <text x="380" y="290" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+
+  <!-- LOD row -->
+  <text x="44" y="331" fill="#ffffff">Level of detail</text>
+  <rect x="180" y="311" width="220" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="190" y="331" fill="#ffffff">Distance</text>
+  <text x="380" y="330" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="44" y="363" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE76C;</text>
+  <text x="62" y="364" font-size="13" fill="#c5c5c5">Thresholds</text>
+  <text x="180" y="364" font-size="12" fill="#c5c5c5">4 LODs, from the asset</text>
+
+  <!-- Surfaces header -->
+  <line x1="32" y1="380" x2="400" y2="380" stroke="#333333"/>
+  <text x="44" y="405" font-weight="600" fill="#ffffff">Surfaces</text>
+  <text x="112" y="405" font-size="12" fill="#c5c5c5">5</text>
+  <rect x="338" y="388" width="28" height="28" rx="4" fill="#272727"/>
+  <text x="345" y="407" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE72C;</text>
+  <rect x="370" y="388" width="28" height="28" rx="4" fill="#272727"/>
+  <text x="377" y="407" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE894;</text>
+
+  <!-- Paint card (collapsed, overridden) -->
+  <rect x="32" y="424" width="368" height="52" rx="6" fill="#2f2f2f" stroke="#3a3a3a"/>
+  <rect x="38" y="434" width="3" height="32" rx="1" fill="#4cc2ff"/>
+  <text x="50" y="455" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE76C;</text>
+  <rect x="68" y="438" width="24" height="24" fill="#a8232b" stroke="#3a3a3a"/>
+  <text x="102" y="446" font-weight="600" fill="#ffffff">Paint</text>
+  <text x="102" y="464" font-size="12" fill="#c5c5c5">Red_Gloss.mat</text>
+  <rect x="364" y="436" width="28" height="28" rx="4" fill="#2f2f2f"/>
+  <text x="372" y="455" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE777;</text>
+
+  <!-- Glass card (expanded) -->
+  <rect x="32" y="482" width="368" height="176" rx="6" fill="#2f2f2f" stroke="#3a3a3a"/>
+  <rect x="38" y="492" width="3" height="32" rx="1" fill="#4cc2ff"/>
+  <text x="50" y="513" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <rect x="68" y="496" width="24" height="24" fill="#7fb5c9" fill-opacity="0.45" stroke="#3a3a3a"/>
+  <text x="102" y="504" font-weight="600" fill="#ffffff">Glass</text>
+  <text x="102" y="522" font-size="12" fill="#c5c5c5">Glass_Clear.mat · Hidden</text>
+  <rect x="364" y="494" width="28" height="28" rx="4" fill="#2f2f2f"/>
+  <text x="372" y="513" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE777;</text>
+  <!-- Material -->
+  <text x="54" y="557" fill="#ffffff">Material</text>
+  <rect x="184" y="540" width="24" height="24" fill="#7fb5c9" fill-opacity="0.45" stroke="#3a3a3a"/>
+  <rect x="214" y="537" width="178" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="224" y="557" fill="#ffffff">Glass_Clear.mat</text>
+  <line x1="362" y1="541" x2="362" y2="563" stroke="#3a3a3a"/>
+  <text x="372" y="556" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <!-- Visible (overridden) -->
+  <rect x="42" y="577" width="3" height="32" rx="1" fill="#4cc2ff"/>
+  <text x="54" y="598" fill="#ffffff">Visible</text>
+  <rect x="184" y="583" width="40" height="20" rx="10" fill="none" stroke="#c5c5c5"/>
+  <circle cx="195" cy="593" r="5" fill="#c5c5c5"/>
+  <rect x="364" y="579" width="28" height="28" rx="4" fill="#2f2f2f"/>
+  <text x="372" y="598" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE777;</text>
+  <!-- Cast shadows -->
+  <text x="54" y="638" fill="#ffffff">Cast shadows</text>
+  <rect x="184" y="623" width="40" height="20" rx="10" fill="#4cc2ff"/>
+  <circle cx="213" cy="633" r="5" fill="#000000"/>
+
+  <!-- Interior card -->
+  <rect x="32" y="664" width="368" height="52" rx="6" fill="#2f2f2f" stroke="#3a3a3a"/>
+  <text x="50" y="695" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE76C;</text>
+  <rect x="68" y="678" width="24" height="24" fill="#4a3b30" stroke="#3a3a3a"/>
+  <text x="102" y="686" font-weight="600" fill="#ffffff">Interior</text>
+  <text x="102" y="704" font-size="12" fill="#c5c5c5">Leather.mat · No shadows</text>
+
+  <!-- Trim card -->
+  <rect x="32" y="722" width="368" height="52" rx="6" fill="#2f2f2f" stroke="#3a3a3a"/>
+  <text x="50" y="753" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE76C;</text>
+  <rect x="68" y="736" width="24" height="24" fill="#9aa0a6" stroke="#3a3a3a"/>
+  <text x="102" y="744" font-weight="600" fill="#ffffff">Trim</text>
+  <text x="102" y="762" font-size="12" fill="#c5c5c5">Chrome.mat</text>
+
+  <!-- Caution: kept changes for a missing surface -->
+  <rect x="32" y="782" width="368" height="124" rx="4" fill="#433519"/>
+  <text x="44" y="806" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#fce100">&#xE7BA;</text>
+  <text x="66" y="805" font-weight="600" fill="#ffffff">Not in this geometry</text>
+  <text x="66" y="823" font-size="12" fill="#c5c5c5">The cook fails until these changes are applied</text>
+  <text x="66" y="838" font-size="12" fill="#c5c5c5">to a surface or removed.</text>
+  <text x="66" y="866" fill="#ffffff">Glass_Tint</text>
+  <text x="66" y="884" font-size="12" fill="#c5c5c5">Visible Off, Tint.mat</text>
+  <rect x="184" y="851" width="176" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="194" y="871" fill="#c5c5c5">Apply to…</text>
+  <text x="340" y="870" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <rect x="364" y="852" width="28" height="28" rx="4" fill="#433519"/>
+  <text x="372" y="871" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE711;</text>
+
+  <!-- Annotations -->
+  <g font-size="12" fill="#c5c5c5">
+    <line x1="400" y1="326" x2="440" y2="320" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="304" fill="#ffffff" font-weight="600">One policy, one row</text>
+    <text x="448" y="320">The policy kind is a ComboBox; its per-LOD fields sit</text>
+    <text x="448" y="334">in a QuietDisclosure, closed by default, whose summary</text>
+    <text x="448" y="348">says where the policy comes from.</text>
+
+    <line x1="398" y1="402" x2="440" y2="396" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="388" fill="#ffffff" font-weight="600">List actions</text>
+    <text x="448" y="404">The refresh and clear-unresolved buttons that sit</text>
+    <text x="448" y="418">beside today's material picker, moved to the list.</text>
+
+    <line x1="400" y1="450" x2="440" y2="452" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="444" fill="#ffffff" font-weight="600">Surface cards</text>
+    <text x="448" y="460">The script slot card style (secondary card fill, 6 px</text>
+    <text x="448" y="474">corners) with a QuietDisclosure header. The bar marks</text>
+    <text x="448" y="488">a surface with any change; its reset clears them all</text>
+    <text x="448" y="502">in one undo step and its tooltip lists them.</text>
+
+    <line x1="290" y1="522" x2="440" y2="530" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="526" fill="#ffffff" font-weight="600">State in the summary</text>
+    <text x="448" y="542">The collapsed line adds Hidden or No shadows when the</text>
+    <text x="448" y="556">value is Off, from any source. No eye glyph: the eye</text>
+    <text x="448" y="570">is the editor Hide.</text>
+
+    <line x1="392" y1="594" x2="440" y2="600" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="596" fill="#ffffff" font-weight="600">Rows inside a surface</text>
+    <text x="448" y="612">PropertyCard rows with the override bar and reset.</text>
+    <text x="448" y="626">A surface has no hierarchy, so its values are plain</text>
+    <text x="448" y="640">ToggleSwitches, empty On/Off content as in Scripting.</text>
+
+    <line x1="290" y1="704" x2="440" y2="690" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="684" fill="#ffffff" font-weight="600">Asset default, no bar</text>
+    <text x="448" y="700">Interior's shadows are Off in the asset: shown in the</text>
+    <text x="448" y="714">summary, unmarked, because nothing is overridden.</text>
+
+    <line x1="400" y1="820" x2="440" y2="806" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="800" fill="#ffffff" font-weight="600">Kept changes</text>
+    <text x="448" y="816">The caution box Scripting uses for values the script</text>
+    <text x="448" y="830">no longer declares. Apply to lists every current</text>
+    <text x="448" y="844">surface, none preselected: a matching material is not</text>
+    <text x="448" y="858">identity. The trailing button removes the changes.</text>
+  </g>
+</g>
+</svg>

@@ -1,0 +1,163 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="894" viewBox="0 0 880 894" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
+  <title>Inspector with five rocks selected (dark theme)</title>
+  <desc>The Properties pane in All components mode with five nodes selected that share the Rock_A geometry. Scripting is present on two of them and is disabled with 2/5. Sections follow the list order: Transform, Rendering, Geometry. In the Geometry section the Moss surface is expanded and its Visible value is mixed and overridden on some nodes. In the Rendering section Scene visibility is mixed, with no segment chosen and a caption counting the values. Annotations on the right explain each element.</desc>
+  <rect width="880" height="894" fill="#1c1c1c"/>
+
+  <!-- Pane -->
+  <rect x="16" y="16" width="400" height="862" fill="#202020" stroke="#2f2f2f"/>
+  <rect x="16" y="16" width="400" height="30" fill="#1b1b1b"/>
+  <text x="26" y="36" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#c5c5c5">&#xE7C3;</text>
+  <text x="44" y="35" font-size="12" fill="#ffffff">Properties</text>
+  <rect x="16" y="44" width="112" height="2" fill="#4cc2ff"/>
+  <text x="352" y="35" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE8A0;</text>
+  <text x="374" y="35" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE921;</text>
+  <text x="396" y="35" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE8BB;</text>
+
+  <!-- Header -->
+  <rect x="20" y="50" width="392" height="218" fill="#2a2a2a"/>
+  <text x="28" y="78" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE9E9;</text>
+  <text x="56" y="77" font-size="16" font-weight="600" fill="#ffffff">Component Inspector</text>
+  <text x="392" y="77" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#c5c5c5">&#xE897;</text>
+  <text x="28" y="109" font-weight="600" fill="#ffffff">5 objects</text>
+  <rect x="372" y="91" width="28" height="28" rx="4" fill="#3a3a3a"/>
+  <text x="379" y="110" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE71D;</text>
+  <rect x="28" y="128" width="376" height="32" rx="4" fill="#2d2d2d" stroke="#363636"/>
+  <text x="38" y="149" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE7AD;</text>
+  <text x="62" y="149" fill="#ffffff">Transform</text>
+  <rect x="28" y="162" width="376" height="32" rx="4" fill="#2d2d2d" stroke="#363636"/>
+  <text x="38" y="183" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xE7B3;</text>
+  <text x="62" y="183" fill="#ffffff">Rendering</text>
+  <rect x="28" y="196" width="376" height="32" rx="4" fill="#2d2d2d" stroke="#363636"/>
+  <text x="38" y="217" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#ffffff">&#xF158;</text>
+  <text x="62" y="217" fill="#ffffff">Geometry</text>
+  <rect x="28" y="230" width="376" height="32" rx="4" fill="#262626" stroke="#2f2f2f"/>
+  <text x="38" y="251" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="14" fill="#5d5d5d">&#xE943;</text>
+  <text x="62" y="251" fill="#5d5d5d">Scripting</text>
+  <text x="372" y="251" fill="#5d5d5d">2/5</text>
+
+  <g transform="translate(0,34)">
+  <!-- Transform collapsed -->
+  <rect x="20" y="240" width="392" height="52" rx="8" fill="#2b2b2b" stroke="#1d1d1d"/>
+  <text x="34" y="270" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE7AD;</text>
+  <text x="66" y="263" font-weight="600" fill="#ffffff">Transform</text>
+  <text x="66" y="280" font-size="12" fill="#c5c5c5">Position, rotation and scale relative to the parent.</text>
+  <text x="390" y="270" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE70D;</text>
+
+  </g>
+  <g transform="translate(0,222)">
+  <!-- Geometry expanded -->
+  <rect x="20" y="296" width="392" height="352" rx="8" fill="#272727" stroke="#1d1d1d"/>
+  <path d="M20 348 V304 a8 8 0 0 1 8 -8 H404 a8 8 0 0 1 8 8 V348 Z" fill="#2b2b2b"/>
+  <line x1="20" y1="348" x2="412" y2="348" stroke="#1d1d1d"/>
+  <text x="34" y="328" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xF158;</text>
+  <text x="66" y="319" font-weight="600" fill="#ffffff">Geometry</text>
+  <text x="66" y="336" font-size="12" fill="#c5c5c5">References a geometry asset and overrides its surfaces.</text>
+  <text x="390" y="328" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE70E;</text>
+  <text x="44" y="381" fill="#ffffff">Asset</text>
+  <rect x="180" y="364" width="24" height="24" fill="#1f1f1f" stroke="#3a3a3a"/>
+  <text x="185" y="381" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="13" fill="#ffffff">&#xF158;</text>
+  <rect x="210" y="361" width="190" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="240" y="381" fill="#ffffff">Rock_A.geom</text>
+  <line x1="370" y1="365" x2="370" y2="387" stroke="#3a3a3a"/>
+  <text x="380" y="380" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="44" y="421" fill="#ffffff">Level of detail</text>
+  <rect x="180" y="401" width="220" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="190" y="421" fill="#ffffff">Distance</text>
+  <text x="380" y="420" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <line x1="32" y1="442" x2="400" y2="442" stroke="#333333"/>
+  <text x="44" y="467" font-weight="600" fill="#ffffff">Surfaces</text>
+  <text x="112" y="467" font-size="12" fill="#c5c5c5">2</text>
+
+  <!-- Moss card, partially changed -->
+  <rect x="32" y="480" width="368" height="100" rx="6" fill="#2f2f2f" stroke="#3a3a3a"/>
+  <rect x="38" y="490" width="3" height="32" rx="1" fill="#4cc2ff" fill-opacity="0.5"/>
+  <text x="50" y="511" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <rect x="68" y="494" width="24" height="24" fill="#4f6b2f" stroke="#3a3a3a"/>
+  <text x="102" y="502" font-weight="600" fill="#ffffff">Moss</text>
+  <text x="102" y="520" font-size="12" fill="#c5c5c5">Moss.mat · Hidden on 2</text>
+  <rect x="364" y="492" width="28" height="28" rx="4" fill="#2f2f2f"/>
+  <text x="372" y="511" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE777;</text>
+  <rect x="42" y="535" width="3" height="32" rx="1" fill="#4cc2ff" fill-opacity="0.5"/>
+  <text x="54" y="556" fill="#ffffff">Visible</text>
+  <rect x="184" y="541" width="40" height="20" rx="10" fill="none" stroke="#c5c5c5"/>
+  <circle cx="195" cy="551" r="5" fill="#c5c5c5"/>
+  <text x="234" y="556" font-size="13" fill="#c5c5c5">Mixed</text>
+  <rect x="364" y="537" width="28" height="28" rx="4" fill="#2f2f2f"/>
+  <text x="372" y="556" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE777;</text>
+
+  <!-- Stone card -->
+  <rect x="32" y="586" width="368" height="52" rx="6" fill="#2f2f2f" stroke="#3a3a3a"/>
+  <text x="50" y="617" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE76C;</text>
+  <rect x="68" y="600" width="24" height="24" fill="#6b6259" stroke="#3a3a3a"/>
+  <text x="102" y="608" font-weight="600" fill="#ffffff">Stone</text>
+  <text x="102" y="626" font-size="12" fill="#c5c5c5">Granite.mat</text>
+
+  </g>
+  <g transform="translate(0,-322)">
+  <!-- Rendering expanded -->
+  <rect x="20" y="652" width="392" height="184" rx="8" fill="#272727" stroke="#1d1d1d"/>
+  <path d="M20 704 V660 a8 8 0 0 1 8 -8 H404 a8 8 0 0 1 8 8 V704 Z" fill="#2b2b2b"/>
+  <line x1="20" y1="704" x2="412" y2="704" stroke="#1d1d1d"/>
+  <text x="34" y="684" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="18" fill="#ffffff">&#xE7B3;</text>
+  <text x="66" y="675" font-weight="600" fill="#ffffff">Rendering</text>
+  <text x="66" y="692" font-size="12" fill="#c5c5c5">Scene visibility and geometry shadow participation.</text>
+  <text x="390" y="684" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="11" fill="#c5c5c5">&#xE70E;</text>
+  <rect x="32" y="718" width="3" height="32" rx="1" fill="#4cc2ff" fill-opacity="0.5"/>
+  <text x="44" y="739" fill="#ffffff">Scene visibility</text>
+  <rect x="180" y="719" width="186" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="194" y="739" font-size="13" fill="#c5c5c5">Inherit</text>
+  <text x="252" y="739" font-size="13" fill="#c5c5c5">Shown</text>
+  <text x="314" y="739" font-size="13" fill="#c5c5c5">Hidden</text>
+  <rect x="372" y="720" width="28" height="28" rx="4" fill="#272727"/>
+  <text x="380" y="739" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE777;</text>
+  <text x="180" y="768" font-size="12" fill="#c5c5c5">Mixed: 3 Inherit, 2 Hidden</text>
+  <text x="44" y="801" fill="#ffffff">Cast shadows</text>
+  <rect x="180" y="781" width="186" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <rect x="183" y="784" width="58" height="24" rx="3" fill="#3d3d3d"/>
+  <text x="192" y="801" font-size="13" fill="#ffffff">Inherit</text>
+  <rect x="203" y="805" width="18" height="3" rx="1.5" fill="#4cc2ff"/>
+  <text x="264" y="801" font-size="13" fill="#c5c5c5">On</text>
+  <text x="321" y="801" font-size="13" fill="#c5c5c5">Off</text>
+  <text x="180" y="828" font-size="12" fill="#c5c5c5">On, inherited from each parent</text>
+
+  </g>
+  <!-- Annotations -->
+  <g font-size="12" fill="#c5c5c5">
+    <g transform="translate(0,34)">
+  <line x1="404" y1="212" x2="440" y2="204" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="196" fill="#ffffff" font-weight="600">Existing partial presence</text>
+    <text x="448" y="212">Unchanged: a component on only some nodes is a</text>
+    <text x="448" y="226">disabled entry with its count.</text>
+
+    </g>
+  <g transform="translate(0,222)">
+  <line x1="290" y1="472" x2="440" y2="460" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="446" fill="#ffffff" font-weight="600">Surfaces need one geometry</text>
+    <text x="448" y="462">Surface IDs belong to a geometry asset, so the list</text>
+    <text x="448" y="476">shows only when every node shares it. Otherwise the</text>
+    <text x="448" y="490">Asset button shows "--", as today, and the list is</text>
+    <text x="448" y="504">replaced by "Select nodes that share one geometry".</text>
+
+    <line x1="400" y1="546" x2="440" y2="540" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="528" fill="#ffffff" font-weight="600">Partly changed</text>
+    <text x="448" y="544">A half-strength bar on the left: some selected nodes</text>
+    <text x="448" y="558">override this value. Reset clears it on those nodes</text>
+    <text x="448" y="572">only, in one undo step; the tooltip says how many.</text>
+
+    <line x1="292" y1="560" x2="440" y2="600" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="596" fill="#ffffff" font-weight="600">Mixed toggle</text>
+    <text x="448" y="612">The ToggleSwitch shows Off with Mixed as its content;</text>
+    <text x="448" y="626">the first click sets On on every selected node.</text>
+
+    </g>
+  <g transform="translate(0,-322)">
+  <line x1="366" y1="764" x2="440" y2="740" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="724" fill="#ffffff" font-weight="600">Mixed source mode</text>
+    <text x="448" y="740">No segment is selected; the caption counts the values.</text>
+    <text x="448" y="754">Choosing a segment sets it on all five as one undo</text>
+    <text x="448" y="768">step.</text>
+    <text x="448" y="790">When every node inherits but from different parents,</text>
+    <text x="448" y="804">the caption gives the resolved value if it agrees.</text>
+</g>
+    </g>
+</svg>

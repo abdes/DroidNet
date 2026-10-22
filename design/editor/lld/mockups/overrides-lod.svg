@@ -1,0 +1,120 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="880" height="640" viewBox="0 0 880 640" font-family="Segoe UI Variable, Segoe UI, sans-serif" font-size="14">
+  <title>Level-of-detail rows of the Geometry section (dark theme)</title>
+  <desc>Three excerpts of the Geometry section with the Thresholds disclosure open: a Fixed policy this instance overrides, with an LOD number box and its range; the asset's Distance policy with one threshold per LOD transition and a hysteresis ratio; a Screen-space error policy with a finer and a coarser threshold per transition. Annotations on the right explain each element.</desc>
+  <rect width="880" height="640" fill="#1c1c1c"/>
+
+  <!-- Excerpt 1: Fixed, overridden -->
+  <rect x="20" y="16" width="392" height="132" rx="8" fill="#272727" stroke="#1d1d1d"/>
+  <text x="32" y="36" font-size="11" fill="#9e9e9e">Geometry section, excerpt</text>
+  <rect x="32" y="48" width="3" height="32" rx="1" fill="#4cc2ff"/>
+  <text x="44" y="69" fill="#ffffff">Level of detail</text>
+  <rect x="180" y="49" width="186" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="190" y="69" fill="#ffffff">Fixed</text>
+  <text x="346" y="68" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <rect x="372" y="50" width="28" height="28" rx="4" fill="#272727"/>
+  <text x="380" y="69" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="12" fill="#ffffff">&#xE777;</text>
+  <text x="44" y="101" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="62" y="102" font-size="13" fill="#c5c5c5">Thresholds</text>
+  <text x="180" y="102" font-size="12" fill="#c5c5c5">Overridden; the asset uses Distance</text>
+  <text x="62" y="133" fill="#ffffff">LOD</text>
+  <rect x="180" y="114" width="90" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <line x1="181" y1="141" x2="269" y2="141" stroke="#8a8a8a"/>
+  <text x="190" y="133" fill="#ffffff">0</text>
+  <text x="278" y="133" font-size="12" fill="#c5c5c5">of 0 to 3</text>
+
+  <!-- Excerpt 2: Distance from the asset -->
+  <rect x="20" y="164" width="392" height="240" rx="8" fill="#272727" stroke="#1d1d1d"/>
+  <text x="32" y="184" font-size="11" fill="#9e9e9e">Geometry section, excerpt</text>
+  <text x="44" y="217" fill="#ffffff">Level of detail</text>
+  <rect x="180" y="197" width="220" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="190" y="217" fill="#ffffff">Distance</text>
+  <text x="380" y="216" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="44" y="249" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="62" y="250" font-size="13" fill="#c5c5c5">Thresholds</text>
+  <text x="180" y="250" font-size="12" fill="#c5c5c5">4 LODs, from the asset</text>
+  <g>
+    <text x="62" y="281" fill="#ffffff">LOD 0 to 1</text>
+    <rect x="180" y="262" width="110" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <line x1="181" y1="289" x2="289" y2="289" stroke="#8a8a8a"/>
+    <text x="280" y="281" font-size="14" text-anchor="end" fill="#ffffff">0.25</text>
+    <text x="62" y="313" fill="#ffffff">LOD 1 to 2</text>
+    <rect x="180" y="294" width="110" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <line x1="181" y1="321" x2="289" y2="321" stroke="#8a8a8a"/>
+    <text x="280" y="313" text-anchor="end" fill="#ffffff">0.50</text>
+    <text x="62" y="345" fill="#ffffff">LOD 2 to 3</text>
+    <rect x="180" y="326" width="110" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <line x1="181" y1="353" x2="289" y2="353" stroke="#8a8a8a"/>
+    <text x="280" y="345" text-anchor="end" fill="#ffffff">0.80</text>
+  </g>
+  <text x="298" y="281" font-size="12" fill="#c5c5c5">normalized</text>
+
+  <!-- Hysteresis sits under the distance list -->
+  <text x="62" y="385" fill="#ffffff">Hysteresis</text>
+  <rect x="180" y="366" width="110" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <line x1="181" y1="393" x2="289" y2="393" stroke="#8a8a8a"/>
+  <text x="280" y="385" text-anchor="end" fill="#ffffff">0.10</text>
+  <text x="298" y="385" font-size="12" fill="#c5c5c5">ratio</text>
+
+  <!-- Excerpt 3: Screen-space error -->
+  <rect x="20" y="420" width="392" height="200" rx="8" fill="#272727" stroke="#1d1d1d"/>
+  <text x="32" y="440" font-size="11" fill="#9e9e9e">Geometry section, excerpt</text>
+  <text x="44" y="473" fill="#ffffff">Level of detail</text>
+  <rect x="180" y="453" width="220" height="30" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+  <text x="190" y="473" fill="#ffffff">Screen-space error</text>
+  <text x="380" y="472" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="44" y="505" font-family="Segoe Fluent Icons, Segoe MDL2 Assets" font-size="10" fill="#c5c5c5">&#xE70D;</text>
+  <text x="62" y="506" font-size="13" fill="#c5c5c5">Thresholds</text>
+  <text x="180" y="506" font-size="12" fill="#c5c5c5">Finer below</text>
+  <text x="292" y="506" font-size="12" fill="#c5c5c5">Coarser above</text>
+  <g>
+    <text x="62" y="533" fill="#ffffff">LOD 0 to 1</text>
+    <rect x="180" y="514" width="104" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <line x1="181" y1="541" x2="283" y2="541" stroke="#8a8a8a"/>
+    <text x="274" y="533" text-anchor="end" fill="#ffffff">1.0</text>
+    <rect x="292" y="514" width="104" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <line x1="293" y1="541" x2="395" y2="541" stroke="#8a8a8a"/>
+    <text x="386" y="533" text-anchor="end" fill="#ffffff">1.5</text>
+    <text x="62" y="565" fill="#ffffff">LOD 1 to 2</text>
+    <rect x="180" y="546" width="104" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <line x1="181" y1="573" x2="283" y2="573" stroke="#8a8a8a"/>
+    <text x="274" y="565" text-anchor="end" fill="#ffffff">2.0</text>
+    <rect x="292" y="546" width="104" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <line x1="293" y1="573" x2="395" y2="573" stroke="#8a8a8a"/>
+    <text x="386" y="565" text-anchor="end" fill="#ffffff">3.0</text>
+    <text x="62" y="597" fill="#ffffff">LOD 2 to 3</text>
+    <rect x="180" y="578" width="104" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <line x1="181" y1="605" x2="283" y2="605" stroke="#8a8a8a"/>
+    <text x="274" y="597" text-anchor="end" fill="#ffffff">4.0</text>
+    <rect x="292" y="578" width="104" height="28" rx="4" fill="#2d2d2d" stroke="#3a3a3a"/>
+    <line x1="293" y1="605" x2="395" y2="605" stroke="#8a8a8a"/>
+    <text x="386" y="597" text-anchor="end" fill="#ffffff">6.0</text>
+  </g>
+
+  <!-- Annotations -->
+  <g font-size="12" fill="#c5c5c5">
+    <line x1="400" y1="64" x2="440" y2="56" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="40" fill="#ffffff" font-weight="600">Whole-policy override</text>
+    <text x="448" y="56">This instance pins LOD 0. The policy is one property:</text>
+    <text x="448" y="70">reset returns to the asset's Distance policy with its</text>
+    <text x="448" y="84">values. The disclosure summary names the source.</text>
+    <text x="448" y="104">The range comes from the geometry; the engine clamps</text>
+    <text x="448" y="118">the index if a reimport removes LODs.</text>
+
+    <line x1="370" y1="280" x2="440" y2="262" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="232" fill="#ffffff" font-weight="600">One NumberBox per transition</text>
+    <text x="448" y="248">PropertyCard rows with the inspector's NumberBox</text>
+    <text x="448" y="262">style and unit suffix; n LODs give n - 1 rows. Values</text>
+    <text x="448" y="276">must increase: a field that breaks the order is refused</text>
+    <text x="448" y="290">with its code, never reordered.</text>
+    <text x="448" y="310">Editing any field of the asset's policy creates the</text>
+    <text x="448" y="324">instance override of the whole policy, starting from</text>
+    <text x="448" y="338">the asset's values, as one undo step.</text>
+
+    <line x1="396" y1="530" x2="440" y2="508" stroke="#5a5a5a" stroke-dasharray="3 3"/>
+    <text x="448" y="488" fill="#ffffff" font-weight="600">Paired thresholds</text>
+    <text x="448" y="504">The engine moves to the finer LOD below the first value</text>
+    <text x="448" y="518">and back to the coarser one above the second, so each</text>
+    <text x="448" y="532">pair needs coarser above finer; a pair that does not</text>
+    <text x="448" y="546">is refused. Column headings sit on the disclosure row.</text>
+  </g>
+</svg>

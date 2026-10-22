@@ -3,7 +3,7 @@
 Status: **Final V0.1 contract**. Implementation evidence is tracked in
 [IMPLEMENTATION_STATUS.md](../IMPLEMENTATION_STATUS.md).
 
-Last Updated: 2026-10-20 01:32
+Last Updated: 2026-10-22 14:10
 
 ## 1. Purpose and related contracts
 
@@ -34,15 +34,31 @@ native pointers, handles, cache/view indices or current loading status.
 
 ## 3. Scene and node structure
 
+A node is an identity and a container of components; it has no other fields.
+This is the engine's model: every native node is created with its
+`ObjectMetadata`, `NodeData`, `GraphData` and `TransformComponent` components,
+and its name, flags, hierarchy and transform live there. The editor mirrors it
+component for component.
+
 ```text
 Scene: Id, Name, ordered RootNodes, Environment
-  SceneNode: Id, Name, node flags, ordered Children
-    TransformComponent (exactly one)
-    GeometryComponent (zero or one)
-    CameraComponent (zero or one)
-    LightComponent (zero or one)
+  SceneNode: Id, components
+    Required, exactly one each, created with the node and never removed:
+      MetadataComponent     name                      (engine ObjectMetadata)
+      HierarchyComponent    parent, ordered children  (engine GraphData)
+      TransformComponent    local transform           (engine TransformComponent)
+      NodeFlagsComponent    node flags (section 4)    (engine NodeData)
+    Optional, zero or one each:
+      GeometryComponent     asset URI, overrides      (engine RenderableComponent)
+      CameraComponent, LightComponent, ScriptingComponent
+      ModelInstanceComponent  model scene URI, overrides (engine scene instance)
   ExplorerLayout (editor layout, never native nodes)
 ```
+
+`NodeFlagsComponent` stores the authored node flags; the engine flags without
+an authoring workflow (`Static`, `RayCastingSelectable`,
+`IgnoreParentTransform`) take their engine creation defaults until the schema
+declares them. The serializer nests nodes by their hierarchy component.
 
 IDs are nonempty and unique within the document. Names are nonempty after
 trimming; duplicate display names are allowed and never identify native nodes.
@@ -53,7 +69,8 @@ preserve-world operation remains distinct.
 
 Commands, deserialization and migration enforce component cardinality. Malformed
 source does not gain silent duplicate-component selection or synthetic cameras/
-lights. V0.1 authored editors cover Transform, Geometry, basic
+lights. Required components cannot be added, removed or duplicated. V0.1
+authored editors cover Transform, node flags (Rendering), Geometry, basic
 PerspectiveCamera, OrthographicCamera, DirectionalLight, PointLight and
 SpotLight. Existing other component data does not imply a new editor or release
 capability.
@@ -80,7 +97,7 @@ Select cameras by authored ID; hidden camera nodes remain usable.
 
 ### Visibility, participation and shadow source state
 
-Seven controls stay independent; each changes one effect only. General
+Nine controls stay independent; each changes one effect only. General
 activation is a separate lifecycle capability, not a meaning of visibility or of
 runtime-loaded state.
 
@@ -92,9 +109,17 @@ runtime-loaded state.
 | Geometry Cast Shadows    | Inherit / On / Off; Off removes the geometry as an occluder while it stays visible and lit                           |
 | Light Cast Shadows       | Off keeps the light's illumination without shadowing from it                                                         |
 | Geometry Receive Shadows | Inherit / On / Off; Off skips direct-light shadow attenuation, not ambient occlusion or ordinary lighting            |
+| Surface Visible          | Per surface of one geometry instance (section 5); Off removes that surface only                                      |
+| Surface Cast Shadows     | Per surface of one geometry instance (section 5); Off removes that surface as an occluder only                       |
 | Atmosphere assignment    | Per directional light None / Primary / Secondary (section 6)                                                         |
 
-Each flag preserves its source mode independently of its resolved value.
+The node flags are properties of the node's `NodeFlagsComponent` (section 3)
+and the only carriers of node visibility and shadow participation; no surface
+value or renderable record repeats them. Every node has them, including group
+nodes without geometry or light, whose values their Inherit children take. A
+template node's flags come from its model and may be overridden like any other
+property (section 5.2). Each flag preserves its source mode independently of
+its resolved value.
 
 | Node flag                | Source choices           | New root | New child | Root Inherit fallback |
 | ------------------------ | ------------------------ | -------- | --------- | --------------------- |
@@ -146,20 +171,144 @@ composition, not visibility or light participation. Other optimization/selection
 metadata does not automatically gain an inspector control because a DTO/native
 flag exists.
 
-## 5. Geometry, slots and primitives
+## 5. Geometry, surfaces, overrides and primitives
 
-Geometry references an asset URI. Instance material overrides use engine-owned
-`MaterialSlotId`, an opaque 128-bit ID serialized as a canonical UUID. The
-engine inventory supplies IDs, layout revision and per-LOD/submesh bindings; the
-editor does not derive IDs from names/indices. Source retains geometry identity,
-slot ID and the witnessed layout revision.
+### 5.1 Surfaces
 
-Assignment affects one instance/slot only. Clear removes its override and uses
-the mesh-assigned material. Engine Default is a separate explicit assignment. No
-slot/topology creation or deletion is offered. Reimport preserves proven
-continuity; an unproven mapping retains the unresolved override/old context and
-blocks only affected scene cook/qualification until explicit repair or clear.
-The detailed contract is owned by [content-pipeline.md](content-pipeline.md).
+Geometry references an asset URI. A geometry asset owns its surfaces, each
+identified by an engine-owned `SurfaceId`, an opaque 128-bit ID serialized as a
+canonical UUID. Import allocates one surface per distinct source material of
+the geometry, and each surface binds one submesh per LOD; separate source
+objects import as separate nodes. A surface is therefore the finest authored
+part of one geometry. The engine's surface inventory supplies IDs, the layout
+revision and per-LOD/submesh bindings; the editor does not derive IDs from
+names/indices. Each surface carries its asset defaults: Material, Visible and
+Cast Shadows. The geometry asset also carries a default LOD policy.
+[content-pipeline.md](content-pipeline.md) owns the inventory, its provenance
+and the import settings that set these defaults.
+
+### 5.2 Parts, sources and overrides
+
+Every authored property belongs to a component, or to a **part** of one: a
+piece of a component defined by its asset, with a stable ID that asset owns. A
+property's address is node ID, component type, part ID when it has one, and
+property key.
+
+| Owner of the value             | Part ID     | ID owner                       | Value when not changed       |
+| ------------------------------ | ----------- | ------------------------------ | ---------------------------- |
+| A component of an owned node   | -           | The scene that authors it      | Its stored value             |
+| A surface of a geometry        | `SurfaceId` | The geometry asset             | The geometry asset's default |
+| A component of a template node | -           | The model scene (model import) | The model scene's value      |
+
+The schema states, per property, which **sources** may supply it. A property
+with no source stores its value. A property with a source stores only what this
+scene changes: a sparse override, where an absent key means the source's value.
+There are two sources:
+
+- **Asset**: a geometry asset supplies the defaults of its surfaces and of the
+  geometry component's LOD policy to every node that references it.
+- **Model template**: a node with a `ModelInstanceComponent` instances a model
+  scene (engine `kModelScene`, `SceneInstanceRecord`) and brings in its
+  hierarchy as template nodes. They are nodes with components like any other;
+  they follow the model on reimport, the instancing scene stores only its
+  overrides of the properties the schema marks overridable, and a template
+  node's geometry keeps its asset as the next source.
+
+Overrides are stored by the component that brings in the source: a
+`GeometryComponent` stores the overrides of its asset-sourced properties, and a
+`ModelInstanceComponent` stores the overrides of its template nodes. An
+override's address is relative to that component: a surface ID, or a template
+node's source ID followed by component type and, when there is one, part ID.
+Surface addresses carry the geometry's witnessed layout revision.
+
+The authored value of a property is the first present of: this scene's
+override, the model template's value, the asset default, the schema default.
+Node flags keep **Inherit** as a value of their own: an override can set Inherit
+over a template's Hidden, so Inherit is never represented by an absent key.
+After this authored resolution the engine applies hierarchy inheritance
+(section 4). Reset on a property removes its override and shows the source's
+value; it never writes the source's value as an override.
+
+Overrides are retained across geometry replacement and reimport for the same
+part IDs. A part whose ID is no longer proven (a surface or source node lost on
+reimport) keeps its override as unresolved; it blocks only the affected cook
+until the author repairs or removes it, as material assignments do today.
+Model import therefore gives template nodes provenance-backed stable IDs, under
+the same rules as surface IDs ([content-pipeline.md](content-pipeline.md)).
+
+### 5.3 The scene property schema
+
+One engine-owned schema declares every authored scene component once, with
+its cardinality (required or optional), its part kinds, and each property: key,
+value type, creation default, the sources that may supply it, its resolution
+rule and its wire and cooked field. It lives with the engine's
+descriptor schemas (`Cooker/Import/Schemas`). One generator produces from it:
+
+- the engine's field enums, record codecs and default tables;
+- the Interop and managed wire vocabulary, replacing the hand-mirrored
+  `NodeField` and component field enums in `PropertyKeys.h` and
+  `WireVocabulary.h`;
+- the editor's typed `PropertyId`s and descriptor skeletons, so readers,
+  writers and validators attach to generated ids; inspector labels and
+  grouping stay in the `.editor.schema.json` overlays.
+
+A property key is valid only on the component or part kind the schema lists,
+so a scope the engine cannot apply cannot be written. Overrides travel on the
+wire and in the cooked scene as their address (section 5.2) and a typed value, through one override
+command and one cooked override table; a new property adds a schema entry, not a
+command, record type or hand-written mirror. Adding a property keeps existing
+source valid: an absent key means the source's value, so no data migration is
+needed.
+
+V0.1 properties with an asset source:
+
+| Property     | Part               | Asset default                | Resolution in scene preparation                        |
+| ------------ | ------------------ | ---------------------------- | ------------------------------------------------------ |
+| Material     | Surface            | The mesh-assigned material   | Binds to every submesh of the surface                  |
+| Visible      | Surface            | On unless the asset says Off | Draws when the node resolves Shown and this is On      |
+| Cast Shadows | Surface            | On unless the asset says Off | Casts when the node resolves casting On and this is On |
+| LOD policy   | Geometry component | Fixed finest LOD unless set  | Selects the LOD per view                               |
+
+Receive Shadows stays a `NodeFlagsComponent` property; no surface value changes
+receiving. A
+hidden node therefore hides every surface, and a hidden surface never shows
+under a Shown node. The LOD policy is the engine's: Fixed (LOD index, clamped
+to the LOD count), Distance (per-LOD thresholds and a hysteresis ratio) or
+Screen-space error (per-LOD enter-finer and exit-coarser thresholds).
+
+The inspector shows each value with its origin (this scene, model, asset or,
+for Inherit, the parent it resolves from) and a reset for overridden values
+([instance overrides inspector](../ui/instance-overrides-inspector.md)).
+
+### 5.4 Extending the model
+
+| Change                         | Extension                                                             |
+| ------------------------------ | --------------------------------------------------------------------- |
+| A new property                 | A schema entry, its overlay annotation and its engine resolution rule |
+| A new component                | A schema component with its cardinality; its engine counterpart       |
+| A new mesh-rendering component | Reuses the surface part and inventory unchanged                       |
+| A new part kind                | A part kind in the schema, keyed by an ID its defining asset owns     |
+| A new source                   | A link in the source chain; overrides and reset are unchanged         |
+
+Skeletal meshes are the first new part kinds. A skinned-mesh component
+references its skinned geometry and its skeleton; its surfaces are ordinary
+surface parts; a bone is a part keyed by a skeleton-owned bone ID and a morph
+target a part keyed by a geometry-owned morph target ID, never a name or index.
+The engine has neither a skeleton asset nor stable bone IDs yet (joints are
+indices), so these part kinds arrive with them. The animation a node plays is a
+component property, not an override.
+
+### 5.5 Material assignment
+
+Material assignment affects one instance/surface only. Reset removes the
+Material override and uses the source's material. Engine Default is a separate
+explicit assignment. No surface/topology creation or deletion is offered.
+Reimport preserves proven continuity; an unproven mapping retains the
+unresolved override/old context and blocks only affected scene
+cook/qualification until explicit repair or clear. The detailed contract is
+owned by [content-pipeline.md](content-pipeline.md).
+
+### 5.6 Primitives
 
 Creation uses ten native-owned canonical recipes: Cube, Sphere, Capsule,
 Cylinder, Cone, Plane, Quad, IcoSphere, Torus, and SubdividedCube under
@@ -249,6 +398,15 @@ Normal execution keeps no obsolete aliases, fallback readers or dual meanings.
   behavior.
 - Convert single-slot overrides to stable IDs without remapping unresolved
   assignments or substituting engine Default.
+- Convert each material slot assignment into a Material override of its
+  surface part. Remove rendering, lighting and level-of-detail slots,
+  node-scope slots and LOD/submesh-targeted overrides from source; none had an
+  authored or rendered effect.
+- Rename material slots to surfaces in source, descriptors, provenance and
+  cooked data; the owner recooks.
+- Cooked renderable records carry no visibility; the node flags own it.
+- Move each node's name, hierarchy and flags from `SceneNode` fields into its
+  metadata, hierarchy and node-flags components in source.
 - Use the single canonical IcoSphere identity. Migrate useful ArrowGizmo scene
   uses to ordinary geometry; retain tool-internal ArrowGizmo for its own
   purpose.
@@ -257,22 +415,30 @@ Normal execution keeps no obsolete aliases, fallback readers or dual meanings.
 
 ## 10. Alternatives and rationale
 
-| Alternative                                          | Reason not used                                                               |
-| ---------------------------------------------------- | ----------------------------------------------------------------------------- |
-| Ancestor-AND visibility                              | Discards intentional local overrides                                          |
-| One scene Sun selector                               | Cannot express two simultaneous sources without competing state               |
-| Slot mapping by name/index                           | Can silently redirect an override to another surface                          |
-| Activation through IsActive                          | Confuses runtime presence with authored processing                            |
-| Mixed/Baked choices without baking                   | Advertises nonfunctional lighting modes                                       |
-| Editor hide stored as render visibility              | Alters cooked output during a view-only editing action                        |
-| One visibility/activation/contribution/shadow switch | Changes unrelated rendering and lifecycle responsibilities together           |
-| Light-only hidden-ancestor pruning                   | Resolves the same flag differently from geometry collection                   |
-| Receiver flag stored without a GPU consumer          | No rendered effect                                                            |
-| Zero intensity or hidden gizmo as light enablement   | Conflates magnitude, editor representation and participation                  |
-| Binary16 emission with relaxed tolerances            | Changes the precision contract; float32 factors meet it                       |
-| Clear background colour as ambient light             | Mixes display composition with environment radiance                           |
-| Every public engine field as product scope           | A field needs a useful workflow, precise meaning and a complete consumer path |
-| Old formats and aliases kept as compatibility paths  | Multiplies runtime contracts; one migration produces canonical content        |
+| Alternative                                            | Reason not used                                                                    |
+| ------------------------------------------------------ | ---------------------------------------------------------------------------------- |
+| Ancestor-AND visibility                                | Discards intentional local overrides                                               |
+| One scene Sun selector                                 | Cannot express two simultaneous sources without competing state                    |
+| Slot mapping by name/index                             | Can silently redirect an override to another surface                               |
+| Generic override slots at node, geometry, LOD scopes   | Second carrier of node flags; stores defaults; holds states the engine ignores     |
+| Node fields outside components (name, flags, parent)   | Diverges from the engine node; needs special cases in schema, inspector, overrides |
+| Overrides addressed by LOD and submesh index           | Indices move on reimport; a surface already spans every LOD                        |
+| Visibility in the renderable record and node flags     | Second carrier; a hidden node's geometry never loads and cannot be shown           |
+| A typed override record per part kind                  | Each new property is hand-written in every layer; drifts from the engine           |
+| A separate system for model instance overrides         | Two override models with two reset and origin rules                                |
+| Inherit stored as an absent override                   | Cannot override a template's local value back to Inherit                           |
+| "Material slot" for a part carrying more than material | The name hides visibility and shadow overrides of the same part                    |
+| Activation through IsActive                            | Confuses runtime presence with authored processing                                 |
+| Mixed/Baked choices without baking                     | Advertises nonfunctional lighting modes                                            |
+| Editor hide stored as render visibility                | Alters cooked output during a view-only editing action                             |
+| One visibility/activation/contribution/shadow switch   | Changes unrelated rendering and lifecycle responsibilities together                |
+| Light-only hidden-ancestor pruning                     | Resolves the same flag differently from geometry collection                        |
+| Receiver flag stored without a GPU consumer            | No rendered effect                                                                 |
+| Zero intensity or hidden gizmo as light enablement     | Conflates magnitude, editor representation and participation                       |
+| Binary16 emission with relaxed tolerances              | Changes the precision contract; float32 factors meet it                            |
+| Clear background colour as ambient light               | Mixes display composition with environment radiance                                |
+| Every public engine field as product scope             | A field needs a useful workflow, precise meaning and a complete consumer path      |
+| Old formats and aliases kept as compatibility paths    | Multiplies runtime contracts; one migration produces canonical content             |
 
 Industry systems separate these concerns with different inheritance and UI
 models.
@@ -292,11 +458,24 @@ name, not those restrictions.
 and
 [Godot materials](https://docs.godotengine.org/en/4.6/classes/class_basematerial3d.html)
 show receiver controls separately from light shadowing.
+[Unreal's static mesh component](https://dev.epicgames.com/documentation/en-us/unreal-engine/API/Runtime/Engine/Components/UStaticMeshComponent)
+keeps per-slot `OverrideMaterials` over the asset's materials, with an empty
+entry meaning the asset default, and keeps per-section shadow casting on the
+asset; Oxygen uses the same asset-default/instance-override split, keyed by
+`SurfaceId` instead of slot index, and lets the instance override surface
+visibility and casting as well. Unreal's archetype delta (an instance saves only
+properties that differ from its template, with reset to default) is the model
+for template overrides; Oxygen declares which properties a source may supply in
+one schema instead of per class.
 
 ## 11. Qualification
 
 Test identity/cardinality/finite constraints, duplicate names, hierarchy order,
-inherited reparenting, local overrides, all slots and reimport conflicts, camera
+inherited reparenting, local overrides, all slots and reimport conflicts,
+surface Visible/Cast Shadows against node flags, asset-default and instance LOD
+policies, retention across geometry replacement, template overrides through
+model reimport, Inherit over a template's local value, reset to each source,
+camera
 Auto/Fixed projection, and new-object defaults against native recipes/system
 defaults. The qualification fixture's overrides do not redefine creation
 defaults.
@@ -319,7 +498,9 @@ envelope; the LLDs below own exact fields, defaults and conversions.
 | ----------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------- |
 | Hierarchy and transforms      | Stable IDs; create/delete/duplicate/rename/reparent; local position/rotation/scale; mixed selection; explicit handling of unrepresentable transforms                                      | This LLD, [property pipeline](property-pipeline.md)                                           |
 | Primitive creation            | Ten native recipes (section 5); SubdividedCube under Advanced                                                                                                                             | [Inspector](property-inspector.md#primitive-recipes), [content pipeline](content-pipeline.md) |
-| Mesh materials                | Independent instance override per existing slot; Clear restores the mesh default; stable SlotId and explicit repair of lost continuity                                                    | [Content pipeline](content-pipeline.md), [material editor](material-editor.md)                |
+| Mesh surfaces                 | Per-surface instance override of material, Visible and Cast Shadows over asset defaults; Reset restores the source value; stable SurfaceId and explicit repair of lost continuity         | Section 5, [content pipeline](content-pipeline.md), [material editor](material-editor.md)     |
+| Model instances               | A node instances a model scene; template nodes follow reimport; the scene stores only its overrides, with origin and reset per property                                                   | Section 5.2, [content pipeline](content-pipeline.md)                                          |
+| Level of detail               | Fixed, Distance or Screen-space error policy per geometry asset, optionally replaced per instance                                                                                         | Section 5, [content pipeline](content-pipeline.md)                                            |
 | Scalar materials              | Base colour/opacity, metallic, roughness, alpha mode/cutoff, sidedness, emission colour and HDR intensity; texture-dependent controls only when meaningful                                | [Material editor](material-editor.md)                                                         |
 | Node visual state             | Inherit / local source modes; roots resolve Shown and casting/receiving On; children Inherit; explicit child overrides honored                                                            | Section 4, [inspector](property-inspector.md)                                                 |
 | Editor Hide                   | Per-user/project editing-view mask; drops geometry and shadows there only; undoable; no dirty or cook effect                                                                              | Section 7, [settings](settings-architecture.md)                                               |
@@ -356,7 +537,7 @@ The editor exposes what the engine renders. The engine has no generic node
 activation, authored hidden-shadow or Shadows Only mode, blended-material shadow
 casting, more than two atmospheric sources, sky-only light contribution, lunar
 surface/phase/orbit features or material graph, so the editor offers none of
-them. Mesh topology and material-slot creation are modeling tools with no engine
+them. Mesh topology and surface creation are modeling tools with no engine
 counterpart. Physics authoring is post-V0.1. The
 [engine deferred-capability record](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md)
 owns the source-local TODO IDs of engine features not yet authored.
