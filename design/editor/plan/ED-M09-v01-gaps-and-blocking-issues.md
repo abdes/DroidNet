@@ -9,16 +9,16 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: item 3 (slice 77.2)**, the scene component schema and its generator
-([section 2.2](#22-77-implementation-slices)): its first content is exactly
-today's components and properties, so generated code replaces the hand
-mirrors with no behavior change.
+**Next: item 4 (slice 77.3)**, node components in the editor
+([section 2.2](#22-77-implementation-slices)): name, hierarchy and flags move
+into `MetadataComponent`, `HierarchyComponent` and `NodeFlagsComponent`, and
+`SceneNode` keeps only its ID, with no engine change.
 
 | Order | Item                                                 | Needs        | State | Commit    |
 | ----- | ---------------------------------------------------- | ------------ | ----- | --------- |
 | 1     | #77 decision in the scene model LLD and inspector    | -            | done  | 0fd1e1a58 |
 | 2     | #77 slice 77.1: surface rename                       | 1            | done  | 9b1ba890f |
-| 3     | #77 slice 77.2: scene component schema and generator | 2            | open  | -         |
+| 3     | #77 slice 77.2: scene component schema and generator | 2            | done  | 4c4e10dec |
 | 4     | #77 slice 77.3: node components in the editor        | 3            | open  | -         |
 | 5     | #77 slice 77.4: slot model removed                   | 4            | open  | -         |
 | 6     | #94 session services own their project scope         | -            | open  | -         |
