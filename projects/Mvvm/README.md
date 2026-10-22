@@ -29,12 +29,14 @@ DroidNet.Mvvm extends MVVM support for WinUI/.NET applications by:
 - Defining a simple `IViewFor<T>` contract for Views that contain a typed ViewModel
 - Providing `IViewLocator` (DefaultViewLocator) heuristics to locate Views for ViewModels using DI
 - Offering a `ViewModelToView` converter for XAML-friendly runtime view resolution
+- Providing `HostedViews`, which lets a host (a dock, a router outlet) keep one
+  view per view-model instance instead of converting again
 
 Use this package to implement view-first or view-model-first patterns while keeping Views and ViewModels loosely coupled and testable.
 
 ## 2. Technology Stack
 
-- C# / .NET 9 (target: `net9.0-windows10.0.26100.0`)
+- C# / .NET 10 (target: `net10.0-windows10.0.26100.0`)
 - WinUI 3 (Microsoft.WindowsAppSDK)
 - Dependency injection: DryIoc
 - Logging: Microsoft.Extensions.Logging
@@ -46,11 +48,20 @@ Package references are declared in the project file (`src/Mvvm.csproj`).
 
 - Interface-driven: `IViewFor`, `IViewFor<T>`, `IViewLocator`
 - Default view resolution strategy: `DefaultViewLocator` resolves views using a series of heuristics (see code comments):
-   1. Look up `IViewFor<T>` for the runtime ViewModel type or explicit ViewModel type
-   2. Convert ViewModel name to a candidate View type name (default: `ViewModel` → `View`) and look up the view type
-   3. Toggle between interface/class names (e.g., `IMyView` ↔ `MyView`) where appropriate
+  1.  Look up `IViewFor<T>` for the runtime ViewModel type or explicit ViewModel type
+  2.  Convert ViewModel name to a candidate View type name (default: `ViewModel` → `View`) and look up the view type
+  3.  Toggle between interface/class names (e.g., `IMyView` ↔ `MyView`) where appropriate
 - Integration with DI: views should be registered with the DI container (DryIoc) as either `IViewFor<T>` or concrete view types
 - XAML support: `ViewModelToView` converter uses `IViewLocator` to resolve a view and sets its `ViewModel` property before returning it for presentation
+- View lifetime: a host shows **one view per view-model instance, reused for as
+  long as that view model stays in the host**. Every conversion makes a new
+  view, and a view model usually outlives the place that shows it, so a host
+  that converted on every activation would leave discarded views alive through
+  their subscriptions to the view model. Hosts keep their views in a
+  `HostedViews` they own (one per host, never shared: a view has one parent)
+  and call `RetainOnly` when view models leave, which clears the released
+  views' `ViewModel`. They never release from `Unloaded`, which a closing
+  window raises during XAML teardown.
 
 Example of `DefaultViewLocator` heuristics and behavior is implemented in `src/DefaultViewLocator.cs`.
 
@@ -98,10 +109,12 @@ Quick start (register services and converter)
   - `IViewLocator.cs` — defines interface for resolving views
   - `DefaultViewLocator.cs` — default heuristics-based implementation
   - `Converters/ViewModelToView.cs` — XAML converter to resolve a View via `IViewLocator`
+  - `HostedViews.cs` — the views one host keeps, one per view-model instance
   - `Mvvm.csproj` — project file
 - `tests/` — contains unit tests and UI-friendly tests
   - `DefaultViewLocatorTests.cs` — demonstrates the view resolution behavior
   - `Converters/ViewModelToViewTests.cs` — tests for the converter
+  - `HostedViewsTests.cs` — tests for view reuse and release
 
 Refer to the `tests/` folder for example usages and registration patterns.
 
@@ -113,22 +126,18 @@ Refer to the `tests/` folder for example usages and registration patterns.
   - convert `*ViewModel` name to `*View` and lookup the view type
   - toggle between interface/class forms of names (e.g., `IBaseView` ↔ `BaseView`)
 - `ViewModelToView` converter: binds a ViewModel to an appropriate View in XAML and ensures the ViewModel property of the view is set
+- `HostedViews`: one view per view-model instance per host, released when the view model leaves the host
 - DI integration with DryIoc; easily register views and view-locators as typical DI services
 - Logging helpers, leveraging `ILoggerFactory` for diagnostics and resolution logs
 
 ## 7. Development Workflow and Conventions
 
-- Build locally:
+- Build and test with the repository workflows in
+  [tooling/doc/build.md](../../tooling/doc/build.md): generate the solution with
+  `open.cmd -NoLaunch`, build it with 64-bit MSBuild, then run the built tests:
 
 ```pwsh
-pwsh ./projects/Mvvm/scripts/build.ps1 # if present, otherwise
-dotnet build projects/Mvvm/src/Mvvm.csproj
-```
-
-- Run tests:
-
-```pwsh
-dotnet test --project projects/Mvvm/tests/Mvvm.UI.Tests.csproj
+traverse Invoke-Tests --start projects/Mvvm/tests --configuration Debug
 ```
 
 - Follow MVVM patterns: prefer `IViewFor<T>` on Views, keep ViewModel logic free of UI concerns, use converters and view locators for glue code.
@@ -146,11 +155,7 @@ dotnet test --project projects/Mvvm/tests/Mvvm.UI.Tests.csproj
 - Testing frameworks: MSTest with `MSTest` attribute usage
 - Common libs used: `Moq` for mocks, `AwesomeAssertions` for fluent asserts
 - Test naming: `MethodName_Scenario_ExpectedBehavior` (Arrange–Act–Assert)
-- To run tests:
-
-```pwsh
-dotnet test --project projects/Mvvm/tests/Mvvm.UI.Tests.csproj
-```
+- To run tests, see [Development Workflow and Conventions](#7-development-workflow-and-conventions).
 
 See `tests/DefaultViewLocatorTests.cs` for many real-world examples of view resolution and DI service mocking.
 
