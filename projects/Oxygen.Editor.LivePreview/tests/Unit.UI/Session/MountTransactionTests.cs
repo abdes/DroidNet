@@ -199,6 +199,9 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         private void ConfigureEngine()
         {
             _ = this.engine.SetupGet(value => value.State).Returns(EngineServiceState.Running);
+
+            // The engine service always gives world commands; the session follows the run they belong to.
+            _ = this.engine.SetupGet(value => value.WorldCommands).Returns(Mock.Of<IRuntimeWorldCommands>(world => world.RunId == Guid.NewGuid()));
             _ = this.engine.Setup(value => value.SuspendCookedContentAsync()).Returns(() =>
             {
                 this.Paused = true;

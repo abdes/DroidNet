@@ -24,6 +24,10 @@ namespace Oxygen.Editor.LivePreview.Session;
 /// retries the step that failed.
 /// </para>
 /// <para>
+/// An engine run that faults or is shut down after the session started makes the engine unavailable in the same way;
+/// <see cref="RetryAsync"/> then starts a new run and mounts the content again.
+/// </para>
+/// <para>
 /// The session raises its property changes on the thread that created it. Disposing it releases the project's cooked
 /// content; the engine keeps running for the next project.
 /// </para>
@@ -74,6 +78,11 @@ public sealed partial class PreviewSession(
     {
         ObjectDisposedException.ThrowIf(this.disposed, this);
         var project = session.Context;
+        if (this.publicationRegistration is null)
+        {
+            engine.StateChanged += this.OnEngineStateChanged;
+        }
+
         this.publicationRegistration?.Dispose();
         this.publicationRegistration = publication.RegisterPreview(project, () => this.CreatePublicationPreviewAsync(project));
         return await this.StartEngineAndContentAsync(cancellationToken).ConfigureAwait(true);
@@ -113,6 +122,7 @@ public sealed partial class PreviewSession(
         }
 
         this.disposed = true;
+        engine.StateChanged -= this.OnEngineStateChanged;
         this.publicationRegistration?.Dispose();
         this.publicationRegistration = null;
         if (engine.State == EngineServiceState.Running)

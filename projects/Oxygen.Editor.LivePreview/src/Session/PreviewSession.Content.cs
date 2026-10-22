@@ -15,8 +15,6 @@ namespace Oxygen.Editor.LivePreview.Session;
 /// <summary>Starts the engine and mounts the project's cooked content, reporting what fails.</summary>
 public sealed partial class PreviewSession
 {
-    private const string EngineStartFailedCode = DiagnosticCodes.RuntimePrefix + "START_FAILED";
-
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "An engine that cannot start leaves authoring working; the failure is published and can be retried.")]
     private async Task<bool> StartEngineAsync(CancellationToken cancellationToken)
     {
@@ -26,7 +24,7 @@ public sealed partial class PreviewSession
             switch (engine.State)
             {
                 case EngineServiceState.Running:
-                    return true;
+                    break;
 
                 case EngineServiceState.NoEngine:
                 case EngineServiceState.Faulted:
@@ -47,6 +45,7 @@ public sealed partial class PreviewSession
 
             if (engine.State == EngineServiceState.Running)
             {
+                this.FollowRun();
                 return true;
             }
 
@@ -73,14 +72,14 @@ public sealed partial class PreviewSession
     {
         const string title = "Embedded runtime failed to start";
         const string message = "The workspace opened, but the live engine runtime could not start.";
-        this.Failure = new PreviewFailure(EngineStartFailedCode, title, message);
+        this.Failure = new PreviewFailure(RuntimeDiagnosticCodes.StartFailed, title, message);
         this.State = PreviewSessionState.EngineUnavailable;
         RuntimeOperationResults.PublishFailure(
             results,
             status,
             RuntimeOperationKinds.Start,
             FailureDomain.RuntimeDiscovery,
-            EngineStartFailedCode,
+            RuntimeDiagnosticCodes.StartFailed,
             title,
             message,
             this.ProjectScope(),
@@ -90,6 +89,8 @@ public sealed partial class PreviewSession
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Content that cannot be mounted leaves authoring working; the failure is published and can be retried.")]
     private async Task<bool> MountContentAsync()
     {
+        this.State = PreviewSessionState.Starting;
+        this.Failure = null;
         var active = session.Context;
         var stage = "reading the cooked content";
         var mounted = false;
@@ -103,6 +104,11 @@ public sealed partial class PreviewSession
             mounted = true;
             stage = "refreshing the asset catalog";
             await catalog.UsePublicationAsync(reader, CancellationToken.None).ConfigureAwait(true);
+            if (this.ReportEndedRunAfterStart())
+            {
+                return false;
+            }
+
             this.Failure = null;
             this.State = PreviewSessionState.Ready;
             this.LogMountedRoots(set.Roots.Count);
@@ -129,6 +135,11 @@ public sealed partial class PreviewSession
             if (!mounted && !await this.SuspendCookedContentAsync(active).ConfigureAwait(true))
             {
                 message += " Preview suspension also failed; see Details.";
+            }
+
+            if (this.ReportEndedRunAfterStart())
+            {
+                return false;
             }
 
             this.Failure = new PreviewFailure(AssetMountDiagnosticCodes.RefreshFailed, title, message);

@@ -66,8 +66,8 @@ internal sealed partial class PreviewSessionTests
 
         _ = ready.Should().BeFalse();
         _ = fixture.Session.State.Should().Be(PreviewSessionState.EngineUnavailable);
-        _ = fixture.Session.Failure!.Code.Should().Be(DiagnosticCodes.RuntimePrefix + "START_FAILED");
-        _ = fixture.Results.SelectMany(static result => result.Diagnostics).Should().Contain(static diagnostic => diagnostic.Code == DiagnosticCodes.RuntimePrefix + "START_FAILED");
+        _ = fixture.Session.Failure!.Code.Should().Be(RuntimeDiagnosticCodes.StartFailed);
+        _ = fixture.Results.SelectMany(static result => result.Diagnostics).Should().Contain(static diagnostic => diagnostic.Code == RuntimeDiagnosticCodes.StartFailed);
         _ = fixture.Engine.MountedRoots.Should().BeEmpty();
 
         _ = (await fixture.Session.RetryAsync(this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
@@ -126,7 +126,11 @@ internal sealed partial class PreviewSessionTests
             _ = manager.Setup(value => value.LoadProjectInfoAsync(this.directory.FullName)).ReturnsAsync((IProjectInfo?)info);
             var publication = new CookPublicationService(this.coordinator, session, files, manager.Object, new EngineContentPakFixture());
             _ = this.Catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>()))
-                .Returns(() => this.FailCatalog ? Task.FromException(new IOException("The catalog could not read the publication.")) : Task.CompletedTask);
+                .Returns(() =>
+                {
+                    this.WhileMounting?.Invoke();
+                    return this.FailCatalog ? Task.FromException(new IOException("The catalog could not read the publication.")) : Task.CompletedTask;
+                });
             var publisher = new Mock<IOperationResultPublisher>();
             _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Add);
             this.Session = new PreviewSession(this.Engine, publication, new CookedContentMountService(), this.Catalog.Object, this.coordinator, session, this.sessions, publisher.Object, new OperationStatusReducer());
@@ -139,6 +143,8 @@ internal sealed partial class PreviewSessionTests
         public Mock<IAssetPublicationTarget> Catalog { get; } = new();
 
         public bool FailCatalog { get; set; }
+
+        public Action? WhileMounting { get; set; }
 
         public List<OperationResult> Results { get; } = [];
 

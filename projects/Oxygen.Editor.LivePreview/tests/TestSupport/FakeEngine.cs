@@ -5,6 +5,7 @@
 using Microsoft.UI.Xaml.Controls;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.LivePreview.Tests.TestSupport;
 
@@ -109,7 +110,8 @@ internal sealed class FakeEngine(EngineServiceState state = EngineServiceState.R
 
     /// <summary>Moves the engine to a state and raises <see cref="StateChanged"/>, as the engine service does.</summary>
     /// <param name="next">The new state.</param>
-    public void ChangeState(EngineServiceState next)
+    /// <param name="result">The result the engine service publishes with the change, as it does for a run that ends unexpectedly.</param>
+    public void ChangeState(EngineServiceState next, OperationResult? result = null)
     {
         var previous = this.state;
         this.state = next;
@@ -118,7 +120,7 @@ internal sealed class FakeEngine(EngineServiceState state = EngineServiceState.R
             this.World.RunId = Guid.NewGuid();
         }
 
-        this.StateChanged?.Invoke(this, new EngineStateChangedEventArgs(this.World.RunId, previous, next));
+        this.StateChanged?.Invoke(this, new EngineStateChangedEventArgs(this.World.RunId, previous, next, result));
     }
 
     /// <summary>Sets the engine's state without raising <see cref="StateChanged"/>, as a test arranging it does.</summary>

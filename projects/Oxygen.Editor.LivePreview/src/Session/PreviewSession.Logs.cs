@@ -110,4 +110,38 @@ public sealed partial class PreviewSession
 
     private void LogMountsChangeSuperseded(string projectRoot)
         => LogMountsChangeSuperseded(this.logger, projectRoot);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Error,
+        Message = "Engine run {RunId} that previews project {ProjectRoot} faulted ({Code}, engine state {EngineState}); the preview is unavailable until it is retried.")]
+    private static partial void LogEngineRunFaulted(ILogger logger, Guid runId, string projectRoot, string code, EngineServiceState engineState);
+
+    private void LogEngineRunFaulted(Guid runId, EngineServiceState engineState, string code)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Error))
+        {
+            return;
+        }
+
+        var projectRoot = session.Context.ProjectRoot.FullPath;
+        LogEngineRunFaulted(this.logger, runId, projectRoot, code, engineState);
+    }
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Warning,
+        Message = "Engine run {RunId} that previews project {ProjectRoot} was shut down (engine state {EngineState}); the preview is unavailable until it is retried.")]
+    private static partial void LogEngineRunStopped(ILogger logger, Guid runId, string projectRoot, EngineServiceState engineState);
+
+    private void LogEngineRunStopped(Guid runId, EngineServiceState engineState)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Warning))
+        {
+            return;
+        }
+
+        var projectRoot = session.Context.ProjectRoot.FullPath;
+        LogEngineRunStopped(this.logger, runId, projectRoot, engineState);
+    }
 }
