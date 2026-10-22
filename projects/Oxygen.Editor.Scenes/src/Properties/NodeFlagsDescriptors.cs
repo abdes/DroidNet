@@ -5,7 +5,9 @@
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
+using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Scenes.Properties;
 
@@ -15,14 +17,14 @@ namespace Oxygen.Editor.Scenes.Properties;
 public sealed class NodeFlagsDescriptors
 {
     private NodeFlagsDescriptors(
-        PropertyDescriptor<bool> isVisible,
-        PropertyDescriptor<bool> castsShadows,
-        PropertyDescriptor<bool> receivesShadows,
+        PropertyDescriptor<VisibilitySource> visibility,
+        PropertyDescriptor<ShadowSource> castsShadows,
+        PropertyDescriptor<ShadowSource> receivesShadows,
         PropertyDescriptor<bool> isStatic,
         PropertyDescriptor<bool> isRayCastingSelectable,
         PropertyDescriptor<bool> ignoreParentTransform)
     {
-        this.IsVisibleDescriptor = isVisible;
+        this.VisibilityDescriptor = visibility;
         this.CastsShadowsDescriptor = castsShadows;
         this.ReceivesShadowsDescriptor = receivesShadows;
         this.IsStaticDescriptor = isStatic;
@@ -30,7 +32,7 @@ public sealed class NodeFlagsDescriptors
         this.IgnoreParentTransformDescriptor = ignoreParentTransform;
         this.ById = new Dictionary<PropertyId, PropertyDescriptor>
         {
-            [isVisible.Id] = isVisible,
+            [visibility.Id] = visibility,
             [castsShadows.Id] = castsShadows,
             [receivesShadows.Id] = receivesShadows,
             [isStatic.Id] = isStatic,
@@ -39,14 +41,14 @@ public sealed class NodeFlagsDescriptors
         };
     }
 
-    /// <summary>Gets the scene visibility descriptor.</summary>
-    public PropertyDescriptor<bool> IsVisibleDescriptor { get; }
+    /// <summary>Gets the scene visibility source-mode descriptor.</summary>
+    public PropertyDescriptor<VisibilitySource> VisibilityDescriptor { get; }
 
-    /// <summary>Gets the shadow casting descriptor.</summary>
-    public PropertyDescriptor<bool> CastsShadowsDescriptor { get; }
+    /// <summary>Gets the shadow casting source-mode descriptor.</summary>
+    public PropertyDescriptor<ShadowSource> CastsShadowsDescriptor { get; }
 
-    /// <summary>Gets the shadow receiving descriptor.</summary>
-    public PropertyDescriptor<bool> ReceivesShadowsDescriptor { get; }
+    /// <summary>Gets the shadow receiving source-mode descriptor.</summary>
+    public PropertyDescriptor<ShadowSource> ReceivesShadowsDescriptor { get; }
 
     /// <summary>Gets the static hint descriptor.</summary>
     public PropertyDescriptor<bool> IsStaticDescriptor { get; }
@@ -64,12 +66,29 @@ public sealed class NodeFlagsDescriptors
     /// <returns>The descriptor catalog.</returns>
     public static NodeFlagsDescriptors Build()
         => new(
-            Flag(SceneSchema.Node.IsVisible, "Scene Visibility", static flags => flags.IsVisible, static (flags, value) => flags.IsVisible = value),
-            Flag(SceneSchema.Node.CastsShadows, "Cast Shadows", static flags => flags.CastsShadows, static (flags, value) => flags.CastsShadows = value),
-            Flag(SceneSchema.Node.ReceivesShadows, "Receive Shadows", static flags => flags.ReceivesShadows, static (flags, value) => flags.ReceivesShadows = value),
+            Source(SceneSchema.Node.Visibility, "Scene Visibility", static flags => flags.Visibility, static (flags, value) => flags.Visibility = value),
+            Source(SceneSchema.Node.CastsShadows, "Cast Shadows", static flags => flags.CastsShadows, static (flags, value) => flags.CastsShadows = value),
+            Source(SceneSchema.Node.ReceivesShadows, "Receive Shadows", static flags => flags.ReceivesShadows, static (flags, value) => flags.ReceivesShadows = value),
             Flag(SceneSchema.Node.IsStatic, "Static", static flags => flags.IsStatic, static (flags, value) => flags.IsStatic = value),
             Flag(SceneSchema.Node.IsRayCastingSelectable, "Ray-Cast Selectable", static flags => flags.IsRayCastingSelectable, static (flags, value) => flags.IsRayCastingSelectable = value),
             Flag(SceneSchema.Node.IgnoreParentTransform, "Ignore Parent Transform", static flags => flags.IgnoreParentTransform, static (flags, value) => flags.IgnoreParentTransform = value));
+
+    private static PropertyDescriptor<T> Source<T>(
+        PropertyId<T> id,
+        string label,
+        Func<NodeFlagsComponent, T> read,
+        Action<NodeFlagsComponent, T> write)
+        where T : struct, Enum
+        => new(
+            id: id,
+            reader: target => read((NodeFlagsComponent)target),
+            writer: (target, value) => write((NodeFlagsComponent)target, value),
+            validator: static value => Enum.IsDefined(value)
+                ? ValidationResult.Ok
+                : ValidationResult.Fail(SceneDiagnosticCodes.NodeFlagSourceInvalid, "The node flag source mode is not defined."),
+            annotation: SceneEditorSchemaAnnotations.Get(
+                "#/definitions/node_flags" + id.Id.JsonPointer,
+                new EditorAnnotation { Group = "Rendering", Label = label, Renderer = "segmented" }));
 
     private static PropertyDescriptor<bool> Flag(
         PropertyId<bool> id,

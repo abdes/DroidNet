@@ -71,8 +71,7 @@ internal sealed record NativeNodeTransform(
 internal sealed record NativeRenderable(
     [property: JsonPropertyName("node")] int Node,
     [property: JsonPropertyName("geometry_ref")] string GeometryRef,
-    [property: JsonPropertyName("material_overrides")] IReadOnlyList<NativeSurfaceMaterialOverride> MaterialOverrides,
-    [property: JsonPropertyName("visible")] bool Visible);
+    [property: JsonPropertyName("material_overrides")] IReadOnlyList<NativeSurfaceMaterialOverride> MaterialOverrides);
 
 internal sealed record NativeSurfaceMaterialOverride(
     [property: JsonPropertyName("surface_id")] Guid SurfaceId,

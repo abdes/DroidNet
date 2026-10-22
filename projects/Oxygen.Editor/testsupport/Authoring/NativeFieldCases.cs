@@ -71,6 +71,7 @@ internal static class NativeFieldCases
         new("Light", "IntensityLux", 3, 11, Set(SceneSchema.DirectionalLight.IntensityLux, 80000f), 80000f),
         new("Light", "CascadeCount", 3, 15, Set(SceneSchema.DirectionalLight.CascadeCount, 3), 3),
         new("Light", "SplitMode", 3, 16, Set(SceneSchema.DirectionalLight.SplitMode, DirectionalCsmSplitMode.ManualDistances), 1),
+        new("Node", "Visible", 7, 0, Set(SceneSchema.Node.Visibility, VisibilitySource.Hidden), 0f),
         new("Node", "Static", 7, 3, Set(SceneSchema.Node.IsStatic, true), 1f),
         new("Node", "RayCastingSelectable", 7, 4, Set(SceneSchema.Node.IsRayCastingSelectable, false), 0f),
         new("Node", "IgnoreParentTransform", 7, 5, Set(SceneSchema.Node.IgnoreParentTransform, true), 1f),
@@ -88,9 +89,9 @@ internal static class NativeFieldCases
         var scale = transform.LocalScale;
         Add(1, [position.X, position.Y, position.Z, rotation.X, rotation.Y, rotation.Z, scale.X, scale.Y, scale.Z]);
 
-        // Node flags (NodeField order); native observation reports them for every node.
+        // Node flags (NodeField order); native observation reports their resolved values for every node.
         var flags = node.Flags;
-        Add(7, [flags.IsVisible ? 1f : 0f, flags.CastsShadows ? 1f : 0f, flags.ReceivesShadows ? 1f : 0f, flags.IsStatic ? 1f : 0f, flags.IsRayCastingSelectable ? 1f : 0f, flags.IgnoreParentTransform ? 1f : 0f]);
+        Add(7, [flags.ResolveVisibility().Value ? 1f : 0f, flags.ResolveCastsShadows().Value ? 1f : 0f, flags.ResolveReceivesShadows().Value ? 1f : 0f, flags.IsStatic ? 1f : 0f, flags.IsRayCastingSelectable ? 1f : 0f, flags.IgnoreParentTransform ? 1f : 0f]);
         if (node.Components.OfType<PerspectiveCamera>().FirstOrDefault() is { } camera)
         {
             Add(2, [camera.FieldOfView * MathF.PI / 180f, camera.AspectRatio, camera.NearPlane, camera.FarPlane, camera.ApertureF, camera.ShutterRate, camera.Iso, (float)camera.AspectMode]);

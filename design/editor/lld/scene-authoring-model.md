@@ -55,10 +55,14 @@ Scene: Id, Name, ordered RootNodes, Environment
   ExplorerLayout (editor layout, never native nodes)
 ```
 
-`NodeFlagsComponent` stores every engine node flag as an authored local value:
-Scene Visibility, Cast and Receive Shadows (section 4), `Static`,
-`RayCastingSelectable` and `IgnoreParentTransform`. Each is a property of the
-schema's `Node` component, so Save, cooking and Live Preview carry all six. The
+`NodeFlagsComponent` stores every engine node flag: the source modes of Scene
+Visibility, Cast and Receive Shadows (section 4), and the local values of
+`Static`, `RayCastingSelectable` and `IgnoreParentTransform`. Each is a property
+of the schema's `Node` component, so Save, cooking and Live Preview carry all
+six; a source mode travels as its wire value (Inherit 0, the local on value 1,
+the local off value 2) and the cook writes it as `inherit`, `shown`/`on` or
+`hidden`/`off`. The component resolves a flag's value and the node it comes
+from; resolved values are never stored. The
 inspector edits `IgnoreParentTransform` in the Transform section, since it
 decides how the transform composes with the parent's, and `Static` and
 `RayCastingSelectable` under Rendering's Advanced. The serializer nests nodes by

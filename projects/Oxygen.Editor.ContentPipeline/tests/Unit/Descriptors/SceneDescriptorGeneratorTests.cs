@@ -141,36 +141,33 @@ internal sealed partial class SceneDescriptorGeneratorTests
         _ = camera.GetProperty("far_plane").GetSingle().Should().Be(200f);
     }
 
-    /// <summary>Preserves saved boolean intent as explicit local source choices at every hierarchy depth.</summary>
-    /// <param name="visible">The child node's authored visibility.</param>
-    /// <param name="castsShadows">The child node's authored geometry casting flag.</param>
-    /// <param name="receivesShadows">The child node's authored geometry receiving flag.</param>
+    /// <summary>Writes each node's saved source modes, Inherit included, whatever its parent's modes are.</summary>
+    /// <param name="visibility">The child node's visibility source mode.</param>
+    /// <param name="shadows">The child node's geometry shadow source modes.</param>
+    /// <param name="visible">The descriptor's child visibility.</param>
+    /// <param name="shadow">The descriptor's child shadow modes.</param>
     /// <returns>The asynchronous descriptor mapping test.</returns>
     [TestMethod]
-    [DataRow(false, false, false)]
-    [DataRow(false, false, true)]
-    [DataRow(false, true, false)]
-    [DataRow(false, true, true)]
-    [DataRow(true, false, false)]
-    [DataRow(true, false, true)]
-    [DataRow(true, true, false)]
-    [DataRow(true, true, true)]
-    public async Task GenerateAsyncShouldPreserveLocalNodeFlagsUnderOppositeParent(
-        bool visible,
-        bool castsShadows,
-        bool receivesShadows)
+    [DataRow(VisibilitySource.Inherit, ShadowSource.Inherit, "inherit", "inherit")]
+    [DataRow(VisibilitySource.Shown, ShadowSource.On, "shown", "on")]
+    [DataRow(VisibilitySource.Hidden, ShadowSource.Off, "hidden", "off")]
+    public async Task GenerateAsyncShouldWriteEachNodesSourceModes(
+        VisibilitySource visibility,
+        ShadowSource shadows,
+        string visible,
+        string shadow)
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
         var parent = new SceneNode(scene, "Parent");
-        parent.Flags.IsVisible = !visible;
-        parent.Flags.CastsShadows = !castsShadows;
-        parent.Flags.ReceivesShadows = !receivesShadows;
+        parent.Flags.Visibility = VisibilitySource.Hidden;
+        parent.Flags.CastsShadows = ShadowSource.On;
+        parent.Flags.ReceivesShadows = ShadowSource.Off;
         var child = new SceneNode(scene, "Child");
-        child.Flags.IsVisible = visible;
-        child.Flags.CastsShadows = castsShadows;
-        child.Flags.ReceivesShadows = receivesShadows;
+        child.Flags.Visibility = visibility;
+        child.Flags.CastsShadows = shadows;
+        child.Flags.ReceivesShadows = shadows;
         child.Flags.IsStatic = true;
         child.Flags.IsRayCastingSelectable = false;
         child.Flags.IgnoreParentTransform = true;
@@ -189,29 +186,32 @@ internal sealed partial class SceneDescriptorGeneratorTests
         _ = nodes.GetArrayLength().Should().Be(2);
         _ = nodes[1].GetProperty("parent").GetInt32().Should().Be(0);
         var parentFlags = nodes[0].GetProperty("flags");
-        _ = parentFlags.GetProperty("visible").GetString().Should().Be(visible ? "hidden" : "shown");
-        _ = parentFlags.GetProperty("casts_shadows").GetString().Should().Be(castsShadows ? "off" : "on");
-        _ = parentFlags.GetProperty("receives_shadows").GetString().Should().Be(receivesShadows ? "off" : "on");
+        _ = parentFlags.GetProperty("visible").GetString().Should().Be("hidden");
+        _ = parentFlags.GetProperty("casts_shadows").GetString().Should().Be("on");
+        _ = parentFlags.GetProperty("receives_shadows").GetString().Should().Be("off");
         var childFlags = nodes[1].GetProperty("flags");
-        _ = childFlags.GetProperty("visible").GetString().Should().Be(visible ? "shown" : "hidden");
-        _ = childFlags.GetProperty("casts_shadows").GetString().Should().Be(castsShadows ? "on" : "off");
-        _ = childFlags.GetProperty("receives_shadows").GetString().Should().Be(receivesShadows ? "on" : "off");
+        _ = childFlags.GetProperty("visible").GetString().Should().Be(visible);
+        _ = childFlags.GetProperty("casts_shadows").GetString().Should().Be(shadow);
+        _ = childFlags.GetProperty("receives_shadows").GetString().Should().Be(shadow);
         _ = childFlags.GetProperty("static").GetBoolean().Should().BeTrue();
         _ = childFlags.GetProperty("ray_cast_selectable").GetBoolean().Should().BeFalse();
         _ = childFlags.GetProperty("ignore_parent_transform").GetBoolean().Should().BeTrue();
     }
 
-    /// <summary>Component contribution gates retain their independent boolean wire contracts.</summary>
+    /// <summary>
+    /// The node flags are the only carriers of node visibility: a renderable repeats none of it, and light contribution
+    /// gates keep their own boolean wire contracts.
+    /// </summary>
     /// <returns>The asynchronous descriptor mapping test.</returns>
     [TestMethod]
-    public async Task GenerateAsyncShouldKeepRenderableAndLightFlagsBoolean()
+    public async Task GenerateAsyncShouldLeaveVisibilityToTheNodeFlags()
     {
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
         var node = new SceneNode(scene, "Fixture");
-        node.Flags.IsVisible = false;
-        node.Flags.CastsShadows = true;
+        node.Flags.Visibility = VisibilitySource.Hidden;
+        node.Flags.CastsShadows = ShadowSource.On;
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
@@ -227,7 +227,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         var root = document.RootElement;
         _ = root.GetProperty("nodes")[0].GetProperty("flags").GetProperty("visible").GetString().Should().Be("hidden");
         _ = root.GetProperty("nodes")[0].GetProperty("flags").GetProperty("casts_shadows").GetString().Should().Be("on");
-        _ = root.GetProperty("renderables")[0].GetProperty("visible").GetBoolean().Should().BeFalse();
+        _ = root.GetProperty("renderables")[0].TryGetProperty("visible", out _).Should().BeFalse();
         _ = root.GetProperty("lights").GetProperty("directional")[0].GetProperty("common").GetProperty("casts_shadows").GetBoolean().Should().BeFalse();
     }
 

@@ -201,9 +201,14 @@ node is. It belongs to one scene for its whole life and has:
     `Children`. `SetParent`, `AddChild` and `RemoveChild` keep both sides in
     step and refuse a parent that would make a cycle;
   - `Transform`, the `TransformComponent`;
-  - `Flags`, a `NodeFlagsComponent` with `IsVisible`, `CastsShadows`,
-    `ReceivesShadows`, `IsStatic`, `IsRayCastingSelectable` and
-    `IgnoreParentTransform`.
+  - `Flags`, a `NodeFlagsComponent` with the source modes `Visibility`
+    (`VisibilitySource`), `CastsShadows` and `ReceivesShadows` (`ShadowSource`),
+    and the local `IsStatic`, `IsRayCastingSelectable` and
+    `IgnoreParentTransform`. `ResolveVisibility`, `ResolveCastsShadows` and
+    `ResolveReceivesShadows` give a mode's value and the node it comes from:
+    Inherit takes the parent's resolved value, and a root's Inherit the scene
+    defaults Shown, On and On. `NodeFlagsData.WithCreationModes` gives a new
+    root Shown/On/On and a new child Inherit.
     Whether a node is present in the engine is Live Preview's state, not the
     node's.
 

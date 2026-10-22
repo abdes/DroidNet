@@ -43,7 +43,26 @@ namespace oxygen::interop::module {
     return std::nullopt;
   }
 
-  //! Applies authored node flags as local values, overriding inheritance.
+  //! Wire values of a node flag with a source mode, numbered as the editor's
+  //! `VisibilitySource` and `ShadowSource`.
+  enum class NodeFlagSource : std::uint8_t {
+    kInherit = 0,
+    kLocalOn = 1,
+    kLocalOff = 2,
+  };
+
+  //! Whether an authored node field carries a source mode rather than a
+  //! local boolean.
+  [[nodiscard]] constexpr auto HasSourceMode(const NodeField field) noexcept
+    -> bool
+  {
+    return field == NodeField::kVisible || field == NodeField::kCastsShadows
+      || field == NodeField::kReceivesShadows;
+  }
+
+  //! Applies authored node flags. Visibility and the geometry shadow flags
+  //! take a source mode: Inherit, or a local value. The other flags take a
+  //! local boolean.
   class NodePropertyApplier final : public IComponentPropertyApplier {
   public:
     [[nodiscard]] auto GetComponentId() const noexcept -> ComponentId override
@@ -55,8 +74,7 @@ namespace oxygen::interop::module {
       std::span<const PropertyEntry> entries) override
     {
       for (const auto& entry : entries) {
-        if (!ToSceneNodeFlag(static_cast<NodeField>(entry.field))
-          || (entry.value != 0.0F && entry.value != 1.0F)) {
+        if (!IsValid(entry)) {
           throw std::invalid_argument(
             std::to_string(entry.field) + ": invalid node flag property");
         }
@@ -67,10 +85,35 @@ namespace oxygen::interop::module {
         throw std::invalid_argument("The scene node has no flags");
       }
       for (const auto& entry : entries) {
-        flags->get().SetLocalValue(
-          *ToSceneNodeFlag(static_cast<NodeField>(entry.field)),
-          entry.value != 0.0F);
+        const auto field = static_cast<NodeField>(entry.field);
+        const auto flag = *ToSceneNodeFlag(field);
+        if (HasSourceMode(field)
+          && static_cast<NodeFlagSource>(entry.value)
+            == NodeFlagSource::kInherit) {
+          flags->get().SetInherited(flag, true);
+        } else if (HasSourceMode(field)) {
+          flags->get().SetLocalValue(flag,
+            static_cast<NodeFlagSource>(entry.value)
+              == NodeFlagSource::kLocalOn);
+        } else {
+          flags->get().SetLocalValue(flag, entry.value != 0.0F);
+        }
       }
+    }
+
+  private:
+    [[nodiscard]] static auto IsValid(const PropertyEntry& entry) noexcept
+      -> bool
+    {
+      const auto field = static_cast<NodeField>(entry.field);
+      if (!ToSceneNodeFlag(field)) {
+        return false;
+      }
+      if (HasSourceMode(field)) {
+        return entry.value == 0.0F || entry.value == 1.0F
+          || entry.value == 2.0F;
+      }
+      return entry.value == 0.0F || entry.value == 1.0F;
     }
   };
 

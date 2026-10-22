@@ -179,22 +179,27 @@ components:
         type: float
         fields: [ScaleZ]
 
-  # The authored flags of every node, applied as local values.
+  # The authored flags of every node. Visibility and the shadow flags are
+  # source modes: Inherit (0) takes the parent's resolved value, the others
+  # (1 on, 2 off) are local values.
   - name: Node
     kind: node-flags
     wire: { id: 7, field_set: Node }
     properties:
-      - name: IsVisible
+      - name: Visibility
         key: /visible
-        type: bool
+        type: enum
+        enum: VisibilitySource
         fields: [Visible]
       - name: CastsShadows
         key: /casts_shadows
-        type: bool
+        type: enum
+        enum: ShadowSource
         fields: [CastsShadows]
       - name: ReceivesShadows
         key: /receives_shadows
-        type: bool
+        type: enum
+        enum: ShadowSource
         fields: [ReceivesShadows]
       - name: IsStatic
         key: /static

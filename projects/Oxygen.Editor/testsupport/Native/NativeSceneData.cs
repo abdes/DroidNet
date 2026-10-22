@@ -38,8 +38,8 @@ internal static class NativeSceneData
     {
         AddGeometryNode(scene, "Cube");
         var cube = scene.RootNodes[^1];
-        cube.Flags.CastsShadows = true;
-        cube.Flags.ReceivesShadows = true;
+        cube.Flags.CastsShadows = Oxygen.Editor.World.Serialization.ShadowSource.On;
+        cube.Flags.ReceivesShadows = Oxygen.Editor.World.Serialization.ShadowSource.On;
         var sun = new SceneNode(scene, "Sun");
         _ = sun.AddComponent(new DirectionalLightComponent { Name = "Sun", CastsShadows = true, CascadeCount = cascades });
         scene.RootNodes.Add(sun);

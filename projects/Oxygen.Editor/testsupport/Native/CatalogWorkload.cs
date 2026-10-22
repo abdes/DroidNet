@@ -76,8 +76,8 @@ internal static class CatalogWorkload
         for (var index = 0; index < 98; index++)
         {
             var node = new SceneNode(scene, "Geometry " + index.ToString(CultureInfo.InvariantCulture));
-            node.Flags.CastsShadows = true;
-            node.Flags.ReceivesShadows = true;
+            node.Flags.CastsShadows = Oxygen.Editor.World.Serialization.ShadowSource.On;
+            node.Flags.ReceivesShadows = Oxygen.Editor.World.Serialization.ShadowSource.On;
             var geometryUri = index >= 90 ? mesh : EngineGeometries[index % EngineGeometries.Length];
             var geometry = new GeometryComponent
             {
@@ -112,7 +112,7 @@ internal static class CatalogWorkload
         scene.RootNodes.Add(sun);
         sun.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot = Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary;
         scene.Hydrate(scene.Dehydrate() with { Environment = scene.Environment with { PostProcess = scene.Environment.PostProcess with { ManualExposureEv = 9.7f } } });
-        _ = scene.RootNodes.SelectMany(static node => node.DescendantsAndSelf()).Should().HaveCount(100).And.OnlyContain(static node => node.Flags.IsVisible);
+        _ = scene.RootNodes.SelectMany(static node => node.DescendantsAndSelf()).Should().HaveCount(100).And.OnlyContain(static node => node.Flags.ResolveVisibility().Value);
     }
 
     internal static string DescribeWorkloadCook(ContentCookResult result) => string.Join(Environment.NewLine, result.Diagnostics.Select(static issue =>

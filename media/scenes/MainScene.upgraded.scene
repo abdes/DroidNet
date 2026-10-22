@@ -13,7 +13,7 @@
           "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
           "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
         },
-        { "$type": "NodeFlags", "Name": "Rendering", "IsVisible": true, "IsRayCastingSelectable": true },
+        { "$type": "NodeFlags", "Name": "Rendering", "Visibility": 1, "CastsShadows": 2, "ReceivesShadows": 2, "IsRayCastingSelectable": true },
         {
           "$type": "GeometryComponent",
           "Name": "PlayerMesh",
@@ -33,7 +33,7 @@
           "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
           "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
         },
-        { "$type": "NodeFlags", "Name": "Rendering", "IsVisible": true, "IsRayCastingSelectable": true },
+        { "$type": "NodeFlags", "Name": "Rendering", "Visibility": 1, "CastsShadows": 2, "ReceivesShadows": 2, "IsRayCastingSelectable": true },
         { "$type": "GeometryComponent", "Name": "EnemyMesh", "GeometryUri": "asset:///Engine/Generated/BasicShapes/Sphere" },
         { "$type": "Hierarchy", "Name": "Hierarchy" }
       ]
@@ -49,7 +49,7 @@
           "LocalRotation": { "x": -0.156434, "y": 0.0, "z": 0.0, "w": 0.987688 },
           "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
         },
-        { "$type": "NodeFlags", "Name": "Rendering", "IsVisible": true, "IsRayCastingSelectable": true },
+        { "$type": "NodeFlags", "Name": "Rendering", "Visibility": 1, "CastsShadows": 2, "ReceivesShadows": 2, "IsRayCastingSelectable": true },
         {
           "$type": "PerspectiveCamera",
           "Name": "MainCamera",
@@ -70,7 +70,7 @@
           "LocalRotation": { "x": 10.2, "y": 20.3, "z": 0.0, "w": 1.0 },
           "LocalScale": { "x": 2.0, "y": 2.0, "z": 4.0 }
         },
-        { "$type": "NodeFlags", "Name": "Rendering", "IsVisible": true, "IsRayCastingSelectable": true },
+        { "$type": "NodeFlags", "Name": "Rendering", "Visibility": 1, "CastsShadows": 2, "ReceivesShadows": 2, "IsRayCastingSelectable": true },
         { "$type": "GeometryComponent", "Name": "PickupMesh", "GeometryUri": "asset:///Engine/Generated/BasicShapes/Cylinder" },
         { "$type": "Hierarchy", "Name": "Hierarchy" }
       ]

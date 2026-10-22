@@ -51,6 +51,9 @@ public static class SceneDiagnosticCodes
     /// <summary>A point or spot light candidate failed the canonical light contract.</summary>
     public const string LocalLightInvalid = DiagnosticCodes.ScenePrefix + "LocalLight.Invalid";
 
+    /// <summary>A node flag's source mode is not one of its defined modes.</summary>
+    public const string NodeFlagSourceInvalid = DiagnosticCodes.ScenePrefix + "NodeFlags.Source.Invalid";
+
     /// <summary>Local fog volume value is invalid.</summary>
     public const string LocalFogVolumeInvalid = DiagnosticCodes.ScenePrefix + "LocalFogVolume.Invalid";
 

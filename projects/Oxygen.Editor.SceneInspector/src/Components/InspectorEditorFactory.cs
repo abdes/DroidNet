@@ -16,6 +16,7 @@ using Oxygen.Editor.SceneInspector.Components.Scripting;
 using Oxygen.Editor.SceneInspector.Components.Transform;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Components;
 
@@ -29,6 +30,7 @@ internal static class InspectorEditorFactory
     /// <param name="session">The project session the inspector belongs to.</param>
     /// <param name="logger">The scoped logging factory.</param>
     /// <param name="authoring">The authoring of the scene being inspected.</param>
+    /// <param name="selectNode">Selects a node of the inspected scene.</param>
     /// <param name="scripts">The scripting services, when the host provides them.</param>
     /// <returns>The component construction operations.</returns>
     internal static Dictionary<Type, Func<ComponentPropertyEditor>> Create(
@@ -38,11 +40,12 @@ internal static class InspectorEditorFactory
         IProjectSession session,
         ILoggerFactory? logger,
         Func<SceneAuthoring?> authoring,
+        Action<NodeId> selectNode,
         InspectorScriptServices? scripts = null)
         => new()
         {
             [typeof(TransformComponent)] = () => new TransformViewModel(logger, authoring),
-            [typeof(NodeFlagsComponent)] = () => new NodeRenderingViewModel(authoring),
+            [typeof(NodeFlagsComponent)] = () => new NodeRenderingViewModel(authoring, selectNode),
             [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, surfaces, session, authoring, logger),
             [typeof(PerspectiveCamera)] = () => new PerspectiveCameraViewModel(authoring),
             [typeof(OrthographicCamera)] = () => new OrthographicCameraViewModel(authoring),

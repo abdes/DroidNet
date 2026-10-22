@@ -833,19 +833,19 @@
           "x-editor-label": "Scene Visibility",
           "x-editor-group": "Rendering",
           "x-editor-order": 0,
-          "x-editor-renderer": "toggle"
+          "x-editor-renderer": "segmented"
         },
         "casts_shadows": {
           "x-editor-label": "Cast Shadows",
           "x-editor-group": "Rendering",
           "x-editor-order": 10,
-          "x-editor-renderer": "toggle"
+          "x-editor-renderer": "segmented"
         },
         "receives_shadows": {
           "x-editor-label": "Receive Shadows",
           "x-editor-group": "Rendering",
           "x-editor-order": 20,
-          "x-editor-renderer": "toggle"
+          "x-editor-renderer": "segmented"
         },
         "static": {
           "x-editor-label": "Static",

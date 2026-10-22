@@ -110,7 +110,10 @@ public static class SceneNodeTemplates
     public static SceneNodeData Empty(Scene scene, string name = "Node", NodePlacement? placement = null)
         => Finish(new SceneNode(scene, name), placement);
 
-    /// <summary>Builds the insert that appends a new node: last among its parent's children, last in its explorer place.</summary>
+    /// <summary>
+    /// Builds the insert that appends a new node: last among its parent's children, last in its explorer place, with the
+    /// node-flag source modes a new root or child starts with.
+    /// </summary>
     /// <param name="scene">The scene.</param>
     /// <param name="layout">The scene's explorer layout.</param>
     /// <param name="node">The node's data.</param>
@@ -127,7 +130,12 @@ public static class SceneNodeTemplates
             ? LayoutPosition.InFolder(inFolder, 0)
             : parent is { } underNode ? LayoutPosition.UnderNode(underNode, 0) : LayoutPosition.AtRoot(0);
         var entries = SceneLayout.ContainerOf(layout, place)?.Count ?? 0;
-        return new NodeInsert(node, new NodePosition(parent, siblings), place with { Index = entries });
+        var flags = node.Required<NodeFlagsData>();
+        var created = node with
+        {
+            Components = [.. node.Components.Select(component => ReferenceEquals(component, flags) ? flags.WithCreationModes(parent is null) : component)],
+        };
+        return new NodeInsert(created, new NodePosition(parent, siblings), place with { Index = entries });
     }
 
     // Created nodes are roots: their local transform is their world transform.

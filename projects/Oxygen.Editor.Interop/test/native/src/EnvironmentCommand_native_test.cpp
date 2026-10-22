@@ -123,6 +123,19 @@ struct DirectionalLightPropertySnapshot {
   float intensity_lux = 0.0F;
 };
 
+struct NodeFlagSourcesSnapshot {
+  NativeStatus status {};
+
+  bool inherit_root_visible = false;
+  bool inherit_root_casts = false;
+  bool inherit_child_of_hidden_visible = true;
+  bool inherit_child_of_off_casts = true;
+  bool local_child_of_hidden_visible = false;
+  bool inherit_child_inherits = false;
+  bool invalid_mode_rejected = false;
+  bool invalid_mode_preserved = false;
+};
+
 struct NodeFlagsSnapshot {
   NativeStatus status {};
 
@@ -513,6 +526,77 @@ auto RunSetPropertiesNodeFlagsApplyLocalValues(NodeFlagsSnapshot& result)
   });
 }
 
+auto RunSetPropertiesNodeFlagSourceModes(NodeFlagSourcesSnapshot& result)
+  -> void
+{
+  CaptureNative(result, [&result] {
+    auto scene = CreateTestScene("NodeFlagSourcesPropertyCommandTest");
+    auto parent = scene->CreateNode("Parent");
+    auto child = scene->CreateChildNode(parent, "Child").value();
+    auto context = BuildContext(*scene);
+    PropertyApplierRegistry::Bootstrap();
+
+    const auto entry = [](const NodeField field, const NodeFlagSource mode) {
+      return PropertyEntry { .component = ComponentId::kNode,
+        .field = static_cast<std::uint16_t>(field),
+        .value = static_cast<float>(mode) };
+    };
+    const auto effective = [](oxygen::scene::SceneNode& node,
+                             const oxygen::scene::SceneNodeFlags flag) {
+      return node.GetFlags()->get().GetEffectiveValue(flag);
+    };
+    using oxygen::scene::SceneNodeFlags;
+
+    // A root's Inherit resolves the scene defaults Shown and On.
+    SetPropertiesCommand(parent.GetHandle(),
+      { entry(NodeField::kVisible, NodeFlagSource::kInherit),
+        entry(NodeField::kCastsShadows, NodeFlagSource::kInherit) })
+      .Execute(context);
+    SetPropertiesCommand(child.GetHandle(),
+      { entry(NodeField::kVisible, NodeFlagSource::kInherit),
+        entry(NodeField::kCastsShadows, NodeFlagSource::kInherit) })
+      .Execute(context);
+    scene->Update(false);
+    result.inherit_root_visible
+      = effective(parent, SceneNodeFlags::kVisible);
+    result.inherit_root_casts
+      = effective(parent, SceneNodeFlags::kCastsShadows);
+    result.inherit_child_inherits
+      = child.GetFlags()->get().IsInherited(SceneNodeFlags::kVisible);
+
+    // Inherit copies the parent's resolved value.
+    SetPropertiesCommand(parent.GetHandle(),
+      { entry(NodeField::kVisible, NodeFlagSource::kLocalOff),
+        entry(NodeField::kCastsShadows, NodeFlagSource::kLocalOff) })
+      .Execute(context);
+    scene->Update(false);
+    result.inherit_child_of_hidden_visible
+      = effective(child, SceneNodeFlags::kVisible);
+    result.inherit_child_of_off_casts
+      = effective(child, SceneNodeFlags::kCastsShadows);
+
+    // A local value replaces inheritance.
+    SetPropertiesCommand(child.GetHandle(),
+      { entry(NodeField::kVisible, NodeFlagSource::kLocalOn) })
+      .Execute(context);
+    scene->Update(false);
+    result.local_child_of_hidden_visible
+      = effective(child, SceneNodeFlags::kVisible);
+
+    try {
+      SetPropertiesCommand(child.GetHandle(),
+        { { ComponentId::kNode,
+          static_cast<std::uint16_t>(NodeField::kVisible), 3.0F } })
+        .Execute(context);
+    } catch (const std::invalid_argument&) {
+      result.invalid_mode_rejected = true;
+    }
+    scene->Update(false);
+    result.invalid_mode_preserved = effective(child, SceneNodeFlags::kVisible)
+      && !child.GetFlags()->get().IsInherited(SceneNodeFlags::kVisible);
+  });
+}
+
 auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
   DirectionalLightPropertySnapshot& result) -> void
 {
@@ -532,7 +616,8 @@ auto RunSetPropertiesDirectionalLightEditInvalidatesResolvedSun(
     const auto set_visible = [&](const bool visible) -> void {
       SetPropertiesCommand(node.GetHandle(),
         { { ComponentId::kNode, static_cast<std::uint16_t>(NodeField::kVisible),
-          visible ? 1.0F : 0.0F } })
+          static_cast<float>(visible ? NodeFlagSource::kLocalOn
+                                     : NodeFlagSource::kLocalOff) } })
         .Execute(context);
     };
     set_visible(false);
@@ -1219,6 +1304,23 @@ public:
     Assert::IsTrue(snapshot.ignore_parent_transform);
     Assert::AreEqual(11.0F, snapshot.composed_world_x, 0.0001F);
     Assert::AreEqual(1.0F, snapshot.ignored_parent_world_x, 0.0001F);
+  }
+
+  [TestMethod]
+  void SetPropertiesNodeFlagSourceModes()
+  {
+    NodeFlagSourcesSnapshot snapshot {};
+    RunSetPropertiesNodeFlagSourceModes(snapshot);
+
+    AssertSucceeded(snapshot.status);
+    Assert::IsTrue(snapshot.inherit_root_visible);
+    Assert::IsTrue(snapshot.inherit_root_casts);
+    Assert::IsTrue(snapshot.inherit_child_inherits);
+    Assert::IsFalse(snapshot.inherit_child_of_hidden_visible);
+    Assert::IsFalse(snapshot.inherit_child_of_off_casts);
+    Assert::IsTrue(snapshot.local_child_of_hidden_visible);
+    Assert::IsTrue(snapshot.invalid_mode_rejected);
+    Assert::IsTrue(snapshot.invalid_mode_preserved);
   }
 
   [TestMethod]

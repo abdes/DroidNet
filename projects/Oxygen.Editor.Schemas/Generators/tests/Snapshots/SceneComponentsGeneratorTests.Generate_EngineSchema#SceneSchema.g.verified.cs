@@ -58,13 +58,13 @@ public static class SceneSchema
         public const string Kind = "node-flags";
 
         /// <summary>Gets the <c>/visible</c> property.</summary>
-        public static global::Oxygen.Managed.Core.PropertyId<bool> IsVisible { get; } = new(Kind, "/visible");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Editor.World.Serialization.VisibilitySource> Visibility { get; } = new(Kind, "/visible");
 
         /// <summary>Gets the <c>/casts_shadows</c> property.</summary>
-        public static global::Oxygen.Managed.Core.PropertyId<bool> CastsShadows { get; } = new(Kind, "/casts_shadows");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Editor.World.Serialization.ShadowSource> CastsShadows { get; } = new(Kind, "/casts_shadows");
 
         /// <summary>Gets the <c>/receives_shadows</c> property.</summary>
-        public static global::Oxygen.Managed.Core.PropertyId<bool> ReceivesShadows { get; } = new(Kind, "/receives_shadows");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Editor.World.Serialization.ShadowSource> ReceivesShadows { get; } = new(Kind, "/receives_shadows");
 
         /// <summary>Gets the <c>/static</c> property.</summary>
         public static global::Oxygen.Managed.Core.PropertyId<bool> IsStatic { get; } = new(Kind, "/static");

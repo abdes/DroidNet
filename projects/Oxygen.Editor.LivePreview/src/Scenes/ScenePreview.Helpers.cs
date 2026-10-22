@@ -237,17 +237,18 @@ internal sealed partial class ScenePreview
         var source = node.Flags;
         ImmutableArray<RuntimePropertyValue> flags =
         [
-            Flag(NodeField.Visible, source.IsVisible),
-            Flag(NodeField.CastsShadows, source.CastsShadows),
-            Flag(NodeField.ReceivesShadows, source.ReceivesShadows),
-            Flag(NodeField.Static, source.IsStatic),
-            Flag(NodeField.RayCastingSelectable, source.IsRayCastingSelectable),
-            Flag(NodeField.IgnoreParentTransform, source.IgnoreParentTransform),
+            Value(NodeField.Visible, (int)source.Visibility),
+            Value(NodeField.CastsShadows, (int)source.CastsShadows),
+            Value(NodeField.ReceivesShadows, (int)source.ReceivesShadows),
+            Value(NodeField.Static, source.IsStatic ? 1 : 0),
+            Value(NodeField.RayCastingSelectable, source.IsRayCastingSelectable ? 1 : 0),
+            Value(NodeField.IgnoreParentTransform, source.IgnoreParentTransform ? 1 : 0),
         ];
         world.Execute(new RuntimeSetProperties(node.Id, flags));
 
-        static RuntimePropertyValue Flag(NodeField field, bool value)
-            => new(RuntimeComponentId.Node, (ushort)field, value ? 1f : 0f);
+        // Visibility and the shadow flags send their source mode; the others their local value.
+        static RuntimePropertyValue Value(NodeField field, int value)
+            => new(RuntimeComponentId.Node, (ushort)field, value);
     }
 
     private static void ApplyGeometry(WorldDispatch world, SceneNode node, GeometryComponent geometry)

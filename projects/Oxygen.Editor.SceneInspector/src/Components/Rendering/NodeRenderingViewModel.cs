@@ -2,31 +2,36 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Globalization;
 using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas.Bindings;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Components.Rendering;
 
 /// <summary>
-/// The "Rendering" section, which edits the node-flags component every node has: authored Scene Visibility, geometry
-/// Cast/Receive Shadows and, under Advanced, Static and Ray-cast selectable, as explicit local values on every selected
-/// node. Ignore Parent Transform, also a node flag, is edited in the Transform section.
+/// The "Rendering" section, which edits the node-flags component every node has: the source modes of Scene Visibility
+/// and geometry Cast Shadows and, under Advanced, Receive Shadows, then the local Static and Ray-cast selectable values.
+/// Ignore Parent Transform, also a node flag, is edited in the Transform section.
 /// </summary>
 /// <remarks>
-/// The shadow flags affect only the node's own geometry, so the section shows them only when every selected node has
-/// geometry.
+/// Every node shows the shadow modes: a node without geometry passes them to its children that inherit. Under Inherit,
+/// each mode's caption gives the resolved value and the ancestor it comes from.
 /// </remarks>
 public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, IDisposable
 {
+    private static readonly IReadOnlyList<string> ShadowModeNames = ["Inherit", "On", "Off"];
+
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly List<IInspectorBindingRefresh> registrations = [];
-    private readonly PropertyBinding<bool> isVisibleBinding = new(SceneProperties.NodeFlags.IsVisibleDescriptor);
-    private readonly PropertyBinding<bool> castsShadowsBinding = new(SceneProperties.NodeFlags.CastsShadowsDescriptor);
-    private readonly PropertyBinding<bool> receivesShadowsBinding = new(SceneProperties.NodeFlags.ReceivesShadowsDescriptor);
+    private readonly PropertyBinding<VisibilitySource> visibilityBinding = new(SceneProperties.NodeFlags.VisibilityDescriptor);
+    private readonly PropertyBinding<ShadowSource> castsShadowsBinding = new(SceneProperties.NodeFlags.CastsShadowsDescriptor);
+    private readonly PropertyBinding<ShadowSource> receivesShadowsBinding = new(SceneProperties.NodeFlags.ReceivesShadowsDescriptor);
     private readonly PropertyBinding<bool> isStaticBinding = new(SceneProperties.NodeFlags.IsStaticDescriptor);
     private readonly PropertyBinding<bool> isRayCastingSelectableBinding = new(SceneProperties.NodeFlags.IsRayCastingSelectableDescriptor);
     private ICollection<SceneNode>? selectedItems;
@@ -34,41 +39,53 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
 
     /// <summary>Initializes a new instance of the <see cref="NodeRenderingViewModel"/> class.</summary>
     /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
+    /// <param name="selectNode">Selects a node, for the button that selects the ancestor a value comes from.</param>
     public NodeRenderingViewModel(
-        Func<SceneAuthoring?>? authoringProvider = null)
+        Func<SceneAuthoring?>? authoringProvider = null,
+        Action<NodeId>? selectNode = null)
     {
         if (authoringProvider is not null)
         {
             this.edits = new(authoringProvider, "Edit Rendering", this.RefreshValues);
         }
 
-        this.Register(this.isVisibleBinding, nameof(this.IsVisible));
-        this.Register(this.castsShadowsBinding, nameof(this.CastsShadows));
-        this.Register(this.receivesShadowsBinding, nameof(this.ReceivesShadows));
-        this.Register(this.isStaticBinding, nameof(this.IsStatic));
-        this.Register(this.isRayCastingSelectableBinding, nameof(this.IsRayCastingSelectable));
+        this.Visibility = new NodeFlagSourceField(
+            ["Inherit", "Shown", "Hidden"],
+            () => Index(this.visibilityBinding),
+            index => InspectorBindingRequests.Request(this.visibilityBinding, (VisibilitySource)index),
+            static flags => (int)flags.Visibility,
+            static flags => flags.ResolveVisibility(),
+            selectNode);
+        this.CastsShadows = new NodeFlagSourceField(
+            ShadowModeNames,
+            () => Index(this.castsShadowsBinding),
+            index => InspectorBindingRequests.Request(this.castsShadowsBinding, (ShadowSource)index),
+            static flags => (int)flags.CastsShadows,
+            static flags => flags.ResolveCastsShadows(),
+            selectNode);
+        this.ReceivesShadows = new NodeFlagSourceField(
+            ShadowModeNames,
+            () => Index(this.receivesShadowsBinding),
+            index => InspectorBindingRequests.Request(this.receivesShadowsBinding, (ShadowSource)index),
+            static flags => (int)flags.ReceivesShadows,
+            static flags => flags.ResolveReceivesShadows(),
+            selectNode);
+
+        this.Register(this.visibilityBinding, this.RefreshFields);
+        this.Register(this.castsShadowsBinding, this.RefreshFields);
+        this.Register(this.receivesShadowsBinding, this.RefreshFields);
+        this.Register(this.isStaticBinding, () => this.OnPropertyChanged(nameof(this.IsStatic)));
+        this.Register(this.isRayCastingSelectableBinding, () => this.OnPropertyChanged(nameof(this.IsRayCastingSelectable)));
     }
 
-    /// <summary>Gets or sets a value indicating whether the node is visible in the scene.</summary>
-    public bool IsVisible
-    {
-        get => this.isVisibleBinding.Value;
-        set => InspectorBindingRequests.Request(this.isVisibleBinding, value);
-    }
+    /// <summary>Gets the scene visibility source mode.</summary>
+    public NodeFlagSourceField Visibility { get; }
 
-    /// <summary>Gets or sets a value indicating whether the node geometry casts shadows.</summary>
-    public bool CastsShadows
-    {
-        get => this.castsShadowsBinding.Value;
-        set => InspectorBindingRequests.Request(this.castsShadowsBinding, value);
-    }
+    /// <summary>Gets the geometry shadow casting source mode.</summary>
+    public NodeFlagSourceField CastsShadows { get; }
 
-    /// <summary>Gets or sets a value indicating whether the node geometry receives shadows.</summary>
-    public bool ReceivesShadows
-    {
-        get => this.receivesShadowsBinding.Value;
-        set => InspectorBindingRequests.Request(this.receivesShadowsBinding, value);
-    }
+    /// <summary>Gets the geometry shadow receiving source mode.</summary>
+    public NodeFlagSourceField ReceivesShadows { get; }
 
     /// <summary>Gets or sets a value indicating whether the node is static, an optimization hint.</summary>
     public bool IsStatic
@@ -83,9 +100,6 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
         get => this.isRayCastingSelectableBinding.Value;
         set => InspectorBindingRequests.Request(this.isRayCastingSelectableBinding, value);
     }
-
-    /// <summary>Gets a value indicating whether every selected node has geometry, so the shadow flags apply.</summary>
-    public bool ShowsShadowFlags { get; private set; }
 
     /// <inheritdoc />
     public override string Header => "Rendering";
@@ -123,31 +137,50 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
         var nodes = targets.Keys.ToArray();
         this.edits?.Bind(nodes);
         this.selectedItems = items;
-        var showsShadowFlags = items.Count > 0 && items.All(HasGeometry);
-        if (showsShadowFlags != this.ShowsShadowFlags)
-        {
-            this.ShowsShadowFlags = showsShadowFlags;
-            this.OnPropertyChanged(nameof(this.ShowsShadowFlags));
-        }
-
         foreach (var registration in this.registrations)
         {
             registration.Refresh(nodes, id => targets.GetValueOrDefault(id));
         }
+
+        this.RefreshFields();
     }
 
     /// <inheritdoc />
     protected override void OnInputEnabledChanged(bool enabled) => this.edits?.SetInputEnabled(enabled);
 
+    private static int Index<T>(PropertyBinding<T> binding)
+        where T : struct, Enum
+        => binding.IsMixed || !binding.HasValue ? -1 : Convert.ToInt32(binding.Value, CultureInfo.InvariantCulture);
+
     private static bool HasGeometry(SceneNode node) => node.Components.OfType<GeometryComponent>().Any();
 
-    private void Register<T>(PropertyBinding<T> binding, string property)
+    // Hiding a node hides its children that inherit.
+    private static string? VisibilityNotice(IReadOnlyCollection<SceneNode> nodes)
+        => nodes.Count > 0
+            && nodes.All(static node => node.Flags.Visibility == VisibilitySource.Hidden)
+            && nodes.Any(static node => node.Hierarchy.Children.Any(static child => child.Flags.Visibility == VisibilitySource.Inherit))
+                ? "Children that inherit are hidden too."
+                : null;
+
+    // A node without geometry casts and receives nothing itself; its modes reach its children that inherit.
+    private static string? ShadowNotice(IReadOnlyCollection<SceneNode> nodes)
+        => nodes.Count > 0 && !nodes.Any(HasGeometry) ? "Applies to children that inherit." : null;
+
+    private void Register<T>(PropertyBinding<T> binding, Action changed)
         => this.registrations.Add(new InspectorBindingRegistration<T>(
             binding,
             this.edits,
             () => this.IsInputEnabled && !this.disposed,
             this.RefreshValues,
-            () => this.OnPropertyChanged(property)));
+            changed));
+
+    private void RefreshFields()
+    {
+        var nodes = this.selectedItems?.ToList() ?? [];
+        this.Visibility.Refresh(nodes, VisibilityNotice(nodes));
+        this.CastsShadows.Refresh(nodes, ShadowNotice(nodes));
+        this.ReceivesShadows.Refresh(nodes, ShadowNotice(nodes));
+    }
 
     private void RefreshValues()
     {

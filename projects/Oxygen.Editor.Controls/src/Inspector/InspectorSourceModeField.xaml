@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="utf-8" ?>
+<UserControl
+    x:Class="Oxygen.Editor.Controls.InspectorSourceModeField"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:local="using:Oxygen.Editor.Controls"
+    xmlns:seg="using:CommunityToolkit.WinUI.Controls"
+    x:Name="Root">
+    <!--  The caption sits below the card, so its wrapping text never decides whether the row stacks.  -->
+    <StackPanel Spacing="2">
+        <local:PropertyCard
+            x:Name="Card"
+            HorizontalContentAlignment="Stretch"
+            FontSize="{x:Bind FontSize, Mode=OneWay}"
+            PropertyName="{x:Bind Label, Mode=OneWay}">
+            <seg:Segmented
+                x:Name="Modes"
+                HorizontalAlignment="Stretch"
+                AutomationProperties.Name="{x:Bind Label, Mode=OneWay}"
+                ItemsSource="{x:Bind ModeNames, Mode=OneWay}"
+                SelectedIndex="{x:Bind SelectedIndex, Mode=TwoWay}"
+                Tag="{Binding Tag, ElementName=Root}" />
+        </local:PropertyCard>
+        <Grid
+            x:Name="CaptionRow"
+            ColumnSpacing="4"
+            Visibility="{x:Bind CaptionVisibility, Mode=OneWay}">
+            <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="*" />
+                <ColumnDefinition Width="Auto" />
+            </Grid.ColumnDefinitions>
+            <TextBlock
+                x:Name="CaptionText"
+                VerticalAlignment="Center"
+                AutomationProperties.LiveSetting="Polite"
+                FontSize="12"
+                Foreground="{ThemeResource TextFillColorSecondaryBrush}"
+                Text="{x:Bind Caption, Mode=OneWay}"
+                TextWrapping="Wrap" />
+            <Button
+                x:Name="SourceButton"
+                Grid.Column="1"
+                Padding="4"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="{x:Bind SourceToolTip, Mode=OneWay}"
+                Background="Transparent"
+                BorderThickness="0"
+                Click="OnSourceClick"
+                ToolTipService.ToolTip="{x:Bind SourceToolTip, Mode=OneWay}"
+                Visibility="{x:Bind SourceVisibility, Mode=OneWay}">
+                <FontIcon FontSize="14" Glyph="&#xE8FD;" />
+            </Button>
+        </Grid>
+    </StackPanel>
+</UserControl>

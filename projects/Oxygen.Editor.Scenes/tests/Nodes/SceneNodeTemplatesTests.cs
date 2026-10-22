@@ -143,6 +143,25 @@ public sealed class SceneNodeTemplatesTests
         _ = LayoutScopes.EntriesOf(fixture.Layout, container)[^1].Should().Be(LayoutEntryId.Of(node.Id));
     }
 
+    // Scene model: a new root starts Shown, On and On, a new child Inherit for all three.
+    [TestMethod]
+    [DynamicData(nameof(Scopes))]
+    public async Task Append_GivesTheNodeTheSourceModesOfANewRootOrChild(AppendCase row)
+    {
+        ArgumentNullException.ThrowIfNull(row);
+        using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
+        var node = SceneNodeTemplates.Empty(fixture.Scene, "Appended");
+
+        var result = await fixture.Authoring.ExecuteAsync(new InsertNodes([SceneNodeTemplates.Append(fixture.Scene, fixture.Layout, node, row.Parent, row.Folder)])).ConfigureAwait(false);
+
+        SceneAssert.Applied(result);
+        var flags = fixture.Node(node.Id).Flags;
+        var isRoot = row.Parent is null;
+        _ = flags.Visibility.Should().Be(isRoot ? VisibilitySource.Shown : VisibilitySource.Inherit);
+        _ = flags.CastsShadows.Should().Be(isRoot ? ShadowSource.On : ShadowSource.Inherit);
+        _ = flags.ReceivesShadows.Should().Be(isRoot ? ShadowSource.On : ShadowSource.Inherit);
+    }
+
     // Created nodes are new: no id of the node or its components is the scene's, and none is empty.
     private static void AssertNewIds(AuthoringFixture fixture, SceneNodeData node)
     {

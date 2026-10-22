@@ -113,30 +113,44 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             return Task.CompletedTask;
         });
 
-    /// <summary>For geometry, the node Rendering section realizes visibility, both shadow flags and, under Advanced, Static and Ray-cast selectable.</summary>
+    /// <summary>
+    /// Every node's Rendering section realizes the visibility and Cast shadows source modes and, under Advanced, Receive
+    /// shadows, then the Static and Ray-cast selectable toggles; a node without geometry keeps the shadow modes, which
+    /// reach its children that inherit.
+    /// </summary>
     /// <returns>The XAML realization task.</returns>
     [TestMethod]
-    public Task NodeRenderingXamlRealizesItsFlagToggles() => AssertInspectorRealizesAsync(
-        static fixture => CreateModel("Rendering", fixture),
-        static model => new NodeRenderingView { ViewModel = (NodeRenderingViewModel)model },
-        prepareFixture: static fixture => fixture.Node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") }),
-        assertRealizedAsync: static async view =>
-        {
-            await ExpandAdvancedAsync(view).ConfigureAwait(true);
-            _ = ToggleNames(view).Should().BeEquivalentTo("Scene visibility", "Cast shadows", "Receive shadows", "Static", "Ray-cast selectable");
-        });
-
-    /// <summary>For a node without geometry, the Rendering section hides the shadow flags and keeps the others.</summary>
-    /// <returns>The XAML realization task.</returns>
-    [TestMethod]
-    public Task NodeRenderingXamlHidesShadowFlagsWithoutGeometry() => AssertInspectorRealizesAsync(
+    public Task NodeRenderingXamlRealizesItsSourceModesForEveryNode() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Rendering", fixture),
         static model => new NodeRenderingView { ViewModel = (NodeRenderingViewModel)model },
         prepareFixture: null,
         assertRealizedAsync: static async view =>
         {
             await ExpandAdvancedAsync(view).ConfigureAwait(true);
-            _ = ToggleNames(view).Should().BeEquivalentTo("Scene visibility", "Static", "Ray-cast selectable");
+            var fields = view.FindDescendants().OfType<Oxygen.Editor.Controls.InspectorSourceModeField>().ToList();
+            _ = fields.Select(static field => field.Label).Should().Equal("Scene visibility", "Cast shadows", "Receive shadows");
+            _ = fields.Should().OnlyContain(static field => field.SelectedIndex == 0, "a root created without its creation modes inherits");
+            _ = ToggleNames(view).Should().BeEquivalentTo("Static", "Ray-cast selectable");
+        });
+
+    /// <summary>Choosing a mode in the realized <c>Segmented</c> writes it to the node's flags.</summary>
+    /// <returns>The XAML realization task.</returns>
+    [TestMethod]
+    public Task NodeRenderingXamlWritesTheChosenMode() => AssertInspectorRealizesAsync(
+        static fixture => CreateModel("Rendering", fixture),
+        static model => new NodeRenderingView { ViewModel = (NodeRenderingViewModel)model },
+        prepareFixture: null,
+        assertRealizedAsync: static async view =>
+        {
+            var model = (NodeRenderingViewModel)((NodeRenderingView)view).ViewModel!;
+            var visibility = view.FindDescendants().OfType<Oxygen.Editor.Controls.InspectorSourceModeField>().First();
+            var segmented = visibility.FindDescendant<CommunityToolkit.WinUI.Controls.Segmented>()!;
+
+            segmented.SelectedIndex = 2;
+            await model.PendingEdits.ConfigureAwait(true);
+
+            _ = model.Visibility.SelectedIndex.Should().Be(2);
+            _ = visibility.SelectedIndex.Should().Be(2);
         });
 
     private static string?[] ToggleNames(UserControl view)

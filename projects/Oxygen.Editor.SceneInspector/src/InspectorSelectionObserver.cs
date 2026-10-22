@@ -11,10 +11,15 @@ using Oxygen.Editor.World.Components;
 namespace Oxygen.Editor.SceneInspector;
 
 /// <summary>Owns selected component observation, overrides included, suppressing queued work from old selections.</summary>
+/// <remarks>
+/// It also observes each selected node's ancestors' flags and hierarchy, which decide the values its Inherit node flags
+/// resolve to, and follows a reparent to the new ancestors.
+/// </remarks>
 internal sealed class InspectorSelectionObserver(DispatcherQueue? dispatcher, Action<InspectorSelectionChange> changed) : IDisposable
 {
     private readonly HashSet<INotifyCollectionChanged> collections = [];
     private readonly HashSet<GameComponent> components = [];
+    private IReadOnlyList<SceneNode> nodes = [];
     private int generation;
     private bool disposed;
 
@@ -35,21 +40,33 @@ internal sealed class InspectorSelectionObserver(DispatcherQueue? dispatcher, Ac
             return;
         }
 
-        foreach (var node in nodes)
+        this.nodes = [.. nodes];
+        foreach (var node in this.nodes)
         {
             if (this.collections.Add(node.Components))
             {
                 node.Components.CollectionChanged += this.OnComponentsChanged;
             }
 
+            // A component replaces its overrides as a whole, so its own change covers them.
             foreach (var component in node.Components)
             {
-                // A component replaces its overrides as a whole, so its own change covers them.
-                if (this.components.Add(component))
-                {
-                    component.PropertyChanged += this.OnComponentChanged;
-                }
+                this.Observe(component);
             }
+
+            for (var ancestor = node.Hierarchy.Parent; ancestor is not null; ancestor = ancestor.Hierarchy.Parent)
+            {
+                this.Observe(ancestor.Flags);
+                this.Observe(ancestor.Hierarchy);
+            }
+        }
+    }
+
+    private void Observe(GameComponent component)
+    {
+        if (this.components.Add(component))
+        {
+            component.PropertyChanged += this.OnComponentChanged;
         }
     }
 
@@ -82,6 +99,12 @@ internal sealed class InspectorSelectionObserver(DispatcherQueue? dispatcher, Ac
     {
         if (sender is GameComponent component && this.components.Contains(component))
         {
+            // A reparent changes the ancestors whose flags resolve the selection's.
+            if (component is HierarchyComponent)
+            {
+                this.Bind(this.nodes);
+            }
+
             this.Notify(InspectorSelectionChange.Values);
         }
     }

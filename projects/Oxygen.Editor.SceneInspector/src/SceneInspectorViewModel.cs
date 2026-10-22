@@ -143,6 +143,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             session,
             loggerFactory,
             this.AuthoringOf,
+            this.SelectNode,
             new InspectorScriptServices(scripts, codeEditor, scriptCreation, problems));
         this.sceneSettings = new SceneSettingsViewModel(
             this.AuthoringOf,
@@ -560,6 +561,18 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     private async Task RevealAssetAsync(AssetPath asset)
     {
         _ = await this.assetReveal.RevealAsync([asset]).ConfigureAwait(true);
+    }
+
+    // Selects a node of the inspected scene, such as the ancestor an inherited node flag comes from.
+    private void SelectNode(NodeId nodeId)
+    {
+        if (this.documents.ActiveSceneId is not { } documentId
+            || this.activeScene?.AllNodes.FirstOrDefault(candidate => candidate.Id == nodeId) is not { } node)
+        {
+            return;
+        }
+
+        this.sceneSelectionService.SetSelection(documentId, [node], InspectorSelectionSource);
     }
 
     private async Task InspectAtmosphereSource(NodeId nodeId)

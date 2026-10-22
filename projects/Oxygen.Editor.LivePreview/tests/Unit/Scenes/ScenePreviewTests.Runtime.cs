@@ -9,6 +9,7 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -76,11 +77,11 @@ public sealed partial class ScenePreviewTests
         using var fixture = new PreviewFixture();
         var built = new Scene { Name = "Test Scene" };
         var parent = new SceneNode(built, "Hidden parent");
-        parent.Flags.IsVisible = false;
-        parent.Flags.CastsShadows = true;
-        parent.Flags.ReceivesShadows = false;
+        parent.Flags.Visibility = VisibilitySource.Hidden;
+        parent.Flags.CastsShadows = ShadowSource.On;
+        parent.Flags.ReceivesShadows = ShadowSource.Off;
         var child = new SceneNode(built, "Shown child");
-        child.Flags.IsVisible = true;
+        child.Flags.Visibility = VisibilitySource.Shown;
         parent.Hierarchy.AddChild(child);
         built.RootNodes.Add(parent);
         child.Components.Add(new OrthographicCamera
@@ -93,7 +94,6 @@ public sealed partial class ScenePreviewTests
             FarPlane = 50f,
         });
         var document = await fixture.OpenAsync(built).ConfigureAwait(false);
-        var shown = PreviewFixture.SceneOf(document).AllNodes.Single(node => node.Id == child.Id);
 
         _ = (await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 
@@ -104,8 +104,9 @@ public sealed partial class ScenePreviewTests
         _ = camera.AspectMode.Should().Be(CameraAspectMode.Fixed);
         _ = camera.NearPlane.Should().Be(0.5f);
         _ = camera.FarPlane.Should().Be(50f);
-        _ = Flags(parent.Id).Should().Equal(0f, 1f, 0f, 0f, 1f, 0f);
-        _ = Flags(child.Id).Should().Equal(1f, shown.Flags.CastsShadows ? 1f : 0f, shown.Flags.ReceivesShadows ? 1f : 0f, 0f, 1f, 0f);
+        // Source modes go as their wire values: Inherit 0, the local on value 1 and the local off value 2.
+        _ = Flags(parent.Id).Should().Equal(2f, 1f, 2f, 0f, 1f, 0f);
+        _ = Flags(child.Id).Should().Equal(1f, 0f, 0f, 0f, 1f, 0f);
 
         IEnumerable<float> Flags(NodeId nodeId)
             => fixture.World.PropertiesOf(nodeId, RuntimeComponentId.Node).OrderBy(static entry => entry.FieldId).Select(static entry => entry.Value);
@@ -133,7 +134,7 @@ public sealed partial class ScenePreviewTests
             (ushort)NodeField.Static,
             (ushort)NodeField.RayCastingSelectable,
             (ushort)NodeField.IgnoreParentTransform);
-        _ = sent.Select(static entry => entry.Value).Should().Equal(1f, 0f, 0f, 1f, 0f, 1f);
+        _ = sent.Select(static entry => entry.Value).Should().Equal(0f, 0f, 0f, 1f, 0f, 1f);
     }
 
     [TestMethod]

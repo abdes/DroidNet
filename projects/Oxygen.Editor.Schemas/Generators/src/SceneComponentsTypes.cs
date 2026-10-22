@@ -25,6 +25,8 @@ internal static class SceneComponentsTypes
         ["AtmosphereLightSlot"] = "global::Oxygen.Editor.World.Serialization.AtmosphereLightSlot",
         ["ShadowResolutionHint"] = "global::Oxygen.Editor.World.Serialization.ShadowResolutionHint",
         ["DirectionalCsmSplitMode"] = "global::Oxygen.Editor.World.Serialization.DirectionalCsmSplitMode",
+        ["VisibilitySource"] = "global::Oxygen.Editor.World.Serialization.VisibilitySource",
+        ["ShadowSource"] = "global::Oxygen.Editor.World.Serialization.ShadowSource",
     };
 
     /// <summary>Gets a value indicating whether a property's value type has an editor type.</summary>

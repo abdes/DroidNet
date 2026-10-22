@@ -111,8 +111,9 @@ rests on:
 - Import allocates one surface per distinct source material of a
   geometry and one submesh per surface per LOD; separate source objects become
   separate nodes.
-- The cook writes `RenderableRecord.visible` from the node's own `IsVisible`,
-  and `SceneInstantiation` skips the renderable when it is 0.
+- The editor's scene descriptor omits a renderable's `visible`, so the cooker
+  writes `RenderableRecord.visible` as 1; `SceneInstantiation` skips the
+  renderable when it is 0.
 - The engine has model scenes (`kModelScene`) and `SceneInstanceRecord`; the
   editor does not instance them yet.
 - No engine property declaration or generator exists; `NodeField` and the other

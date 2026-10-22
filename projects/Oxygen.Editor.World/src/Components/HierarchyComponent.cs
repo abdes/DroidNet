@@ -16,10 +16,16 @@ public sealed class HierarchyComponent : GameComponent
     /// <summary>The component name a new node's hierarchy takes.</summary>
     public const string DefaultName = "Hierarchy";
 
+    private SceneNode? parent;
+
     /// <summary>
     /// Gets the parent node, or <see langword="null"/> for a scene root or a detached node.
     /// </summary>
-    public SceneNode? Parent { get; private set; }
+    public SceneNode? Parent
+    {
+        get => this.parent;
+        private set => _ = this.SetProperty(ref this.parent, value);
+    }
 
     /// <summary>
     /// Gets the ordered child nodes.

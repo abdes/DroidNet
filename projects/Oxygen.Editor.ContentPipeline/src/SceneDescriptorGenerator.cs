@@ -227,15 +227,15 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
             var transform = node.Transform;
             var flags = node.Flags;
 
-            // Boolean authoring fields are explicit local choices, including on children.
+            // Every source mode is written, so the cooker's omitted-value defaults never decide one.
             nodes.Add(new NativeSceneNode(
                 node.Metadata.Name,
                 parentIndex,
                 new NativeNodeFlags(
-                    flags.IsVisible ? "shown" : "hidden",
+                    ToDescriptor(flags.Visibility),
                     flags.IsStatic,
-                    flags.CastsShadows ? "on" : "off",
-                    flags.ReceivesShadows ? "on" : "off",
+                    ToDescriptor(flags.CastsShadows),
+                    ToDescriptor(flags.ReceivesShadows),
                     flags.IsRayCastingSelectable,
                     flags.IgnoreParentTransform),
                 new NativeNodeTransform(
@@ -384,7 +384,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                 overrides.Add(new(surface.Part!.Value.Id, materialRef, surface.LayoutRevision!));
             }
 
-            renderables.Add(new NativeRenderable(nodeIndex, geometryRef, overrides, node.Flags.IsVisible));
+            renderables.Add(new NativeRenderable(nodeIndex, geometryRef, overrides));
         }
     }
 
@@ -686,6 +686,22 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
     private static float[] ToArray(Vector3 value) => [value.X, value.Y, value.Z];
 
     private static float[] ToArray(Quaternion value) => [value.X, value.Y, value.Z, value.W];
+
+    private static string ToDescriptor(VisibilitySource source) => source switch
+    {
+        VisibilitySource.Inherit => "inherit",
+        VisibilitySource.Shown => "shown",
+        VisibilitySource.Hidden => "hidden",
+        _ => throw new InvalidOperationException($"Scene visibility source mode {(int)source} is not defined."),
+    };
+
+    private static string ToDescriptor(ShadowSource source) => source switch
+    {
+        ShadowSource.Inherit => "inherit",
+        ShadowSource.On => "on",
+        ShadowSource.Off => "off",
+        _ => throw new InvalidOperationException($"Shadow source mode {(int)source} is not defined."),
+    };
 
     private static DiagnosticRecord CreateDiagnostic(
         Guid operationId,

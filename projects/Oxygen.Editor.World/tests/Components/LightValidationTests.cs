@@ -78,7 +78,7 @@ public sealed class LightValidationTests
     {
         var scene = new Scene { Name = "Scene" };
         var node1 = new SceneNode(scene, "InvisibleSun");
-        node1.Flags.IsVisible = false;
+        node1.Flags.Visibility = VisibilitySource.Hidden;
         _ = node1.AddComponent(new DirectionalLightComponent { Name = "Sun1", AtmosphereSlot = AtmosphereLightSlot.Primary });
         var node2 = new SceneNode(scene, "VisibleSun");
         _ = node2.AddComponent(new DirectionalLightComponent { Name = "Sun2", AtmosphereSlot = AtmosphereLightSlot.Primary });
@@ -99,7 +99,7 @@ public sealed class LightValidationTests
                     [
                         new MetadataData { Name = "InvisibleSun" },
                         new TransformData { Name = "Transform" },
-                        new NodeFlagsData { Name = NodeFlagsComponent.DefaultName, IsVisible = false },
+                        new NodeFlagsData { Name = NodeFlagsComponent.DefaultName, Visibility = VisibilitySource.Hidden },
                         new DirectionalLightData { Name = "Sun1", AtmosphereSlot = AtmosphereLightSlot.Primary },
                         new HierarchyData { Name = HierarchyComponent.DefaultName },
                     ],

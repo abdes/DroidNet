@@ -233,7 +233,7 @@ public sealed class SceneHydrationTests
     private static SceneNodeData HiddenOwner()
     {
         var components = SceneTestSupport.RequiredComponents("Hidden owner");
-        components[2] = new NodeFlagsData { Name = NodeFlagsComponent.DefaultName, IsVisible = false };
+        components[2] = new NodeFlagsData { Name = NodeFlagsComponent.DefaultName, Visibility = VisibilitySource.Hidden };
         components.Insert(3, new DirectionalLightData { Name = "Light", AtmosphereSlot = AtmosphereLightSlot.Primary });
         return new SceneNodeData { Id = NodeId.New(), Components = components };
     }

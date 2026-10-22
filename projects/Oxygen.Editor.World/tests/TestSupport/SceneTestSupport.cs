@@ -156,9 +156,9 @@ internal static class SceneTestSupport
     private static SceneNode CreateHeroNode(Scene scene, NodeId cameraNodeId)
     {
         var heroNode = new SceneNode(scene, "Hero Node");
-        heroNode.Flags.IsVisible = true;
-        heroNode.Flags.CastsShadows = true;
-        heroNode.Flags.ReceivesShadows = true;
+        heroNode.Flags.Visibility = VisibilitySource.Shown;
+        heroNode.Flags.CastsShadows = ShadowSource.On;
+        heroNode.Flags.ReceivesShadows = ShadowSource.On;
 
         _ = heroNode.AddComponent(CreateHeroGeometry());
         _ = heroNode.AddComponent(new DirectionalLightComponent

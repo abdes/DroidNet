@@ -28,6 +28,7 @@ using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 using Windows.Foundation;
@@ -122,7 +123,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
         host.ViewModel.SelectDisplayedItem(host.Adapter, host.ViewModel.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
-        host.Node.Flags.IsVisible = false;
+        host.Node.Flags.Visibility = VisibilitySource.Hidden;
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = host.Adapter.IsSelected.Should().BeTrue();
         AssertSlot(Button(host.Actions, "EyeButton"), suppressed: false, hovered: false);
@@ -147,7 +148,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
         host.Interaction.SetLocked(host.Node.Id, locked);
         host.ViewModel.SelectDisplayedItem(host.SecondaryAdapter, host.ViewModel.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
-        var authoredVisibility = host.Node.Flags.IsVisible;
+        var authoredVisibility = host.Node.Flags.Visibility;
         host.Actions.SetRowHovered(hovered: true);
         await InvokeEyeAsync(host).ConfigureAwait(true);
 
@@ -158,7 +159,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = host.SecondaryAdapter.IsSelected.Should().BeTrue();
         _ = host.TestScene.Document.History.UndoStack.Should().ContainSingle("the real command owner records one hide operation");
         _ = host.TestScene.Document.IsDirty.Should().BeFalse();
-        _ = host.Node.Flags.IsVisible.Should().Be(authoredVisibility);
+        _ = host.Node.Flags.Visibility.Should().Be(authoredVisibility);
         AssertSlot(Button(host.Actions, "LockButton"), locked, hovered: true);
 
         await host.TestScene.Document.History.UndoAsync().ConfigureAwait(true);

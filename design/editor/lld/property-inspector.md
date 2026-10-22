@@ -85,6 +85,16 @@ displays that origin. This resolution and the creation defaults are explicit
 engine/model policies, not assumptions about the current low-level Flags
 constructor.
 
+Each mode is an `InspectorSourceModeField` (`Oxygen.Editor.Controls`): a
+`PropertyCard` row, inline or stacked by width, holding the toolkit `Segmented`
+and, below it, a caption line. Under Inherit the caption gives the resolved
+value and the ancestor it comes from, or the scene default, with a button that
+selects that ancestor; mixed modes select no segment and the caption counts
+them. Hiding a node whose children inherit notes that they hide too, and a
+node without geometry notes that its shadow modes apply to children that
+inherit. The section also follows a reparent and edits of the selection's
+ancestors, which change the resolved values.
+
 Effective Hidden removes the node's geometry, shadows and light contribution.
 Hidden cameras remain selectable/usable. Geometry Cast/Receive flags are
 distinct from Light Cast Shadows. Opaque/masked casting is supported; blended

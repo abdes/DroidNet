@@ -20,15 +20,20 @@
         HeaderIcon="{ui:FontIcon Glyph='&#xE7B3;'}"
         IsExpanded="{x:Bind ViewModel.IsExpanded, Mode=TwoWay}">
         <editorcontrols:PropertiesExpander.Items>
-            <editorcontrols:PropertyCard PropertyName="Scene visibility">
-                <ToggleSwitch AutomationProperties.Name="Scene visibility" IsOn="{x:Bind ViewModel.IsVisible, Mode=TwoWay}" />
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Cast shadows" Visibility="{x:Bind ViewModel.ShowsShadowFlags, Mode=OneWay}">
-                <ToggleSwitch AutomationProperties.Name="Cast shadows" IsOn="{x:Bind ViewModel.CastsShadows, Mode=TwoWay}" />
-            </editorcontrols:PropertyCard>
-            <editorcontrols:PropertyCard PropertyName="Receive shadows" Visibility="{x:Bind ViewModel.ShowsShadowFlags, Mode=OneWay}">
-                <ToggleSwitch AutomationProperties.Name="Receive shadows" IsOn="{x:Bind ViewModel.ReceivesShadows, Mode=TwoWay}" />
-            </editorcontrols:PropertyCard>
+            <editorcontrols:InspectorSourceModeField
+                Caption="{x:Bind ViewModel.Visibility.Caption, Mode=OneWay}"
+                Label="Scene visibility"
+                ModeNames="{x:Bind ViewModel.Visibility.ModeNames}"
+                SelectedIndex="{x:Bind ViewModel.Visibility.SelectedIndex, Mode=TwoWay}"
+                SourceRequested="{x:Bind ViewModel.Visibility.SelectSource}"
+                SourceToolTip="{x:Bind ViewModel.Visibility.SourceToolTip, Mode=OneWay}" />
+            <editorcontrols:InspectorSourceModeField
+                Caption="{x:Bind ViewModel.CastsShadows.Caption, Mode=OneWay}"
+                Label="Cast shadows"
+                ModeNames="{x:Bind ViewModel.CastsShadows.ModeNames}"
+                SelectedIndex="{x:Bind ViewModel.CastsShadows.SelectedIndex, Mode=TwoWay}"
+                SourceRequested="{x:Bind ViewModel.CastsShadows.SelectSource}"
+                SourceToolTip="{x:Bind ViewModel.CastsShadows.SourceToolTip, Mode=OneWay}" />
             <Expander
                 HorizontalAlignment="Stretch"
                 HorizontalContentAlignment="Stretch"
@@ -37,6 +42,13 @@
                 IsExpanded="False"
                 Style="{StaticResource QuietDisclosure}">
                 <StackPanel Spacing="4">
+                    <editorcontrols:InspectorSourceModeField
+                        Caption="{x:Bind ViewModel.ReceivesShadows.Caption, Mode=OneWay}"
+                        Label="Receive shadows"
+                        ModeNames="{x:Bind ViewModel.ReceivesShadows.ModeNames}"
+                        SelectedIndex="{x:Bind ViewModel.ReceivesShadows.SelectedIndex, Mode=TwoWay}"
+                        SourceRequested="{x:Bind ViewModel.ReceivesShadows.SelectSource}"
+                        SourceToolTip="{x:Bind ViewModel.ReceivesShadows.SourceToolTip, Mode=OneWay}" />
                     <editorcontrols:PropertyCard PropertyName="Static">
                         <ToggleSwitch AutomationProperties.Name="Static" IsOn="{x:Bind ViewModel.IsStatic, Mode=TwoWay}" />
                     </editorcontrols:PropertyCard>

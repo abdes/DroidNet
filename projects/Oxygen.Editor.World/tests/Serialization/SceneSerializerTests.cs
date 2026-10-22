@@ -127,9 +127,9 @@ public sealed class SceneSerializerTests
     private static void AssertHeroNode(SceneNode heroNode)
     {
         _ = heroNode.Metadata.Name.Should().Be("Hero Node");
-        _ = heroNode.Flags.IsVisible.Should().BeTrue();
-        _ = heroNode.Flags.CastsShadows.Should().BeTrue();
-        _ = heroNode.Flags.ReceivesShadows.Should().BeTrue();
+        _ = heroNode.Flags.Visibility.Should().Be(VisibilitySource.Shown);
+        _ = heroNode.Flags.CastsShadows.Should().Be(ShadowSource.On);
+        _ = heroNode.Flags.ReceivesShadows.Should().Be(ShadowSource.On);
 
         var sun = heroNode.Components.OfType<DirectionalLightComponent>().Single();
         _ = sun.IntensityLux.Should().Be(110_000f);
