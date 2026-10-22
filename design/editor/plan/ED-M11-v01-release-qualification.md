@@ -1,4 +1,4 @@
-# ED-M10 - V0.1 Release Qualification
+# ED-M11 - V0.1 Release Qualification
 
 Status: `planned; qualification pending`
 
@@ -76,7 +76,7 @@ qualification. Use the recorded build/workload for repeatable results.
 
 ## 10. Status Ledger Hook
 
-Only after these gates pass, record the one ED-M10 row with build, fixture and
+Only after these gates pass, record the one ED-M11 row with build, fixture and
 workflow evidence. Preserve all historical milestone evidence;
 new gap-closing results belong to their own milestones. No implementation,
 visual, or release completion is implied by creating this plan.

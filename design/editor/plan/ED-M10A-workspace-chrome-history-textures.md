@@ -1,4 +1,4 @@
-# ED-M09A - Workspace Title Bar, History And Texture Editor
+# ED-M10A - Workspace Title Bar, History And Texture Editor
 
 Status: `planned; starts when issue #69 is done`
 
@@ -57,21 +57,21 @@ running editor before it is committed.
 
 | Slice   | Content                                                                                                                                                                                                                                            | Gate                                                                       |
 | ------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| M09A.1  | Aura: application decoration defaults, the title bar content provider, `ms-appx` and SVG icons. Controls.Menus: the expanded bar's back button, `IMenuSource.Opening`. Title bar design section 7.                                                 | Aura and Controls.Menus tests                                              |
-| M09A.2  | The menu bar: `MainMenuProvider`, `MainMenuPresenter`, `CommandMenuCommand`, `WorkspaceFocus`, `GestureText`; the commands of decision 15 with their handlers and the buttons bound to them; the categories; the logo and the `wnd-we` decoration. | Shell tests; owner's acceptance of scenarios 1 to 6 in the editor          |
-| M09A.3  | Reopening closed panels through `ShowPanelAsync`, sharing the initial layout's code (decision 13).                                                                                                                                                 | Shell placement tests; owner's acceptance of scenario 5                    |
-| M09A.4  | The project switcher and the Project information dialog (decisions 17 to 21).                                                                                                                                                                      | ProjectExplorer tests; owner's acceptance of scenarios 7 to 10             |
-| M09A.5  | Texture Editor design: `texture-editor.md` and its mockups, from the engine's texture facts and the research on other engines' texture editors.                                                                                                    | Owner's approval (given 2026-10-21)                                        |
-| M09A.6  | History panel: TimeMachine `ReplayToAsync` and `PositionAfter`, `Document.SavedPosition`, `Oxygen.Editor.Documents.Testing`, the `Oxygen.Editor.History` module and view.                                                                          | TimeMachine, Documents and History tests; owner's acceptance in editor     |
-| M09A.7  | Cooker and ImportTool: `inspect-texture`, explicit cube face sources, R16UNorm output (texture design section 7).                                                                                                                                  | Native tests; the owner's engine build                                     |
-| M09A.8  | Managed.Assets: the whole descriptor in `TextureSource`, `TexturePayloadReader`, `TextureTexels` with the chosen decoder library (license checked). ContentPipeline: `InspectTextureAsync`.                                                        | Managed.Assets and ContentPipeline tests                                   |
-| M09A.9  | Textures: import with the detected preset and face sources, `TextureDocumentKind`; the import dialog deleted.                                                                                                                                      | Textures tests                                                             |
-| M09A.10 | The `Oxygen.Editor.TextureEditor` module: settings pane, texture view, cube layouts and face slots.                                                                                                                                                | TextureEditor tests; owner's acceptance of scenarios 1 to 11 in the editor |
+| M10A.1  | Aura: application decoration defaults, the title bar content provider, `ms-appx` and SVG icons. Controls.Menus: the expanded bar's back button, `IMenuSource.Opening`. Title bar design section 7.                                                 | Aura and Controls.Menus tests                                              |
+| M10A.2  | The menu bar: `MainMenuProvider`, `MainMenuPresenter`, `CommandMenuCommand`, `WorkspaceFocus`, `GestureText`; the commands of decision 15 with their handlers and the buttons bound to them; the categories; the logo and the `wnd-we` decoration. | Shell tests; owner's acceptance of scenarios 1 to 6 in the editor          |
+| M10A.3  | Reopening closed panels through `ShowPanelAsync`, sharing the initial layout's code (decision 13).                                                                                                                                                 | Shell placement tests; owner's acceptance of scenario 5                    |
+| M10A.4  | The project switcher and the Project information dialog (decisions 17 to 21).                                                                                                                                                                      | ProjectExplorer tests; owner's acceptance of scenarios 7 to 10             |
+| M10A.5  | Texture Editor design: `texture-editor.md` and its mockups, from the engine's texture facts and the research on other engines' texture editors.                                                                                                    | Owner's approval (given 2026-10-21)                                        |
+| M10A.6  | History panel: TimeMachine `ReplayToAsync` and `PositionAfter`, `Document.SavedPosition`, `Oxygen.Editor.Documents.Testing`, the `Oxygen.Editor.History` module and view.                                                                          | TimeMachine, Documents and History tests; owner's acceptance in editor     |
+| M10A.7  | Cooker and ImportTool: `inspect-texture`, explicit cube face sources, R16UNorm output (texture design section 7).                                                                                                                                  | Native tests; the owner's engine build                                     |
+| M10A.8  | Managed.Assets: the whole descriptor in `TextureSource`, `TexturePayloadReader`, `TextureTexels` with the chosen decoder library (license checked). ContentPipeline: `InspectTextureAsync`.                                                        | Managed.Assets and ContentPipeline tests                                   |
+| M10A.9  | Textures: import with the detected preset and face sources, `TextureDocumentKind`; the import dialog deleted.                                                                                                                                      | Textures tests                                                             |
+| M10A.10 | The `Oxygen.Editor.TextureEditor` module: settings pane, texture view, cube layouts and face slots.                                                                                                                                                | TextureEditor tests; owner's acceptance of scenarios 1 to 11 in the editor |
 
-M09A.7 to M09A.10 are in that order, and independent of M09A.1 to M09A.6. The History code written
+M10A.7 to M10A.10 are in that order, and independent of M10A.1 to M10A.6. The History code written
 before its design was approved is kept on the local branch
-`wip/history-panel-code`; M09A.6 takes from it only what matches the approved
-design, and the branch is deleted when M09A.6 lands.
+`wip/history-panel-code`; M10A.6 takes from it only what matches the approved
+design, and the branch is deleted when M10A.6 lands.
 
 ## 7. Project And File Touch Points
 
@@ -103,8 +103,8 @@ design, and the branch is deleted when M09A.6 lands.
 | ------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ |
 | A user's persisted decoration override for `wnd-we` hides the menu  | The override wins by design; the owner clears it once if one exists                                    |
 | Menu commands run without the context their shortcut has            | `WorkspaceFocus` supplies the focused element; tests cover a command that depends on its context       |
-| Recreating a closed panel depends on Docking's route-based creation | M09A.3 reuses the initial layout's code; Docking tests cover a reopen after close                      |
-| A decoder library's license or upkeep does not fit                  | M09A.8 checks it before adoption; the decoder sits behind `TextureTexels`, so it can be replaced alone |
+| Recreating a closed panel depends on Docking's route-based creation | M10A.3 reuses the initial layout's code; Docking tests cover a reopen after close                      |
+| A decoder library's license or upkeep does not fit                  | M10A.8 checks it before adoption; the decoder sits behind `TextureTexels`, so it can be replaced alone |
 
 ## 9. Validation Gates
 
@@ -120,13 +120,13 @@ evidence per slice.
 
 | Slice   | Status        |
 | ------- | ------------- |
-| M09A.1  | `not started` |
-| M09A.2  | `not started` |
-| M09A.3  | `not started` |
-| M09A.4  | `not started` |
-| M09A.5  | `done`        |
-| M09A.6  | `not started` |
-| M09A.7  | `not started` |
-| M09A.8  | `not started` |
-| M09A.9  | `not started` |
-| M09A.10 | `not started` |
+| M10A.1  | `not started` |
+| M10A.2  | `not started` |
+| M10A.3  | `not started` |
+| M10A.4  | `not started` |
+| M10A.5  | `done`        |
+| M10A.6  | `not started` |
+| M10A.7  | `not started` |
+| M10A.8  | `not started` |
+| M10A.9  | `not started` |
+| M10A.10 | `not started` |

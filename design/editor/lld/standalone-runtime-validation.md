@@ -1106,8 +1106,8 @@ added.
 - [ ] M02's outstanding single-viewport evidence and the exact M08 build/
       publication/fixture/profile artifact set are recorded before M08 closes.
 
-M08 owns these implementation and proof obligations. M09 viewport tools and
-M10's complete release/GPU performance qualification remain separate.
+M08 owns these implementation and proof obligations. The M08.4–M08.6 viewport tools and
+M11's complete release/GPU performance qualification remain separate.
 
 ## 13. Design Rationale And Eliminated Alternatives
 

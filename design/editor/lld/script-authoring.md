@@ -51,7 +51,7 @@ family (model, slot rules, facts, ports) is in
   `Content/Scripts` exists in new projects.
 - The editor cannot create input actions or mapping contexts and does not cook
   input files. Editor input authoring belongs to
-  [ED-M09](../plan/ED-M09-input-authoring.md); this design cooks hand-written
+  [ED-M10](../plan/ED-M10-input-authoring.md); this design cooks hand-written
   input files (section 4, Input files).
 - There is no node scripting component, no script cook job and no way to run a
   scene from the editor. Editor viewports do not run scripts; that does not
@@ -120,7 +120,7 @@ emits one `input` job per file, and each declared action and mapping context
 then appears as its own tile in the file's folder (SD-12) and in asset and
 Play-section pickers. The details pane of an action or context names its file.
 Edit on the file or on any of its assets opens the file in the code editor (the
-input editor once [ED-M09](../plan/ED-M09-input-authoring.md) delivers it, with
+input editor once [ED-M10](../plan/ED-M10-input-authoring.md) delivers it, with
 **Open in code editor** kept), and schema or import errors fail the cook in the
 cooking panel. Each declared action and context is named under its source
 ([content pipeline §24](content-pipeline.md#24-input-sources)): `Jump` declared
@@ -198,7 +198,7 @@ selected node (multi-selection shows a message to select one node).
   hints: number fields with min, max, step and unit; vector fields; a color
   field for `color = true`; a choice list for `options`; a text box with the
   string length limit; an asset picker filtered by `kind` (input actions and
-  mapping contexts included, offering New action and New context once ED-M09.9
+  mapping contexts included, offering New action and New context once ED-M10.9
   delivers them); and a node picker with search that also accepts a node dragged
   from the Scene Explorer. Labels come from the parameter name, with the
   description as tooltip; dragging a number's label, or a vector component's

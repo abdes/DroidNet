@@ -74,7 +74,7 @@ managed PendingPropertySyncQueue, so 07A.4 remains required.
 No generic validation dashboard, new property architecture, full inspector
 rewrite, project-settings panel, autosave, texture authoring, or M04 closure
 sweep. Content descriptor/publication gaps belong to 07B; standalone parity to
-M08; viewport tools to M09. Existing record adapters may remain when they obey
+M08; viewport tools to M08. Existing record adapters may remain when they obey
 the canonical property contract. Purely cosmetic schema-native VM rewrites are
 not release requirements.
 
@@ -225,7 +225,8 @@ Pass: Near >= Far and a zero scale axis leave model/history unchanged, show inli
 errors, and never leave controls pretending the invalid value is committed. A
 valid subsequent edit clears only the resolved current error; changing selection
 or deleting the target cannot attach stale diagnostics to another inspector.
-M09 consumes this same mechanism for transform tools; it adds no validation model.
+The M08 transform tools consume this same mechanism; they add no validation
+model.
 
 Current field feedback is bound by property, request ordering and document
 lifetime. Numeric inspectors refresh rejected values and show inline errors;

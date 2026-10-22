@@ -10,8 +10,7 @@ Current: **M08.11 Asset thumbnails and previews**. The
 (former M08.3 and M08.5–M08.8) and the former M08.4 audit, and replaces them
 with what the editor still lacks as an authoring tool: viewport picking,
 selection feedback, transform gizmos, scene helpers and a refined HUD, and a
-Content Browser with real previews, working commands and drag-and-drop. The
-former ED-M09 viewport tools are delivered by M08.4–M08.6. See
+Content Browser with real previews, working commands and drag-and-drop. See
 [remaining slices](#4-execution-sequence) and
 [exit checklist](#7-exit-checklist). Captured-sky IBL is delivered by
 [VX-IBL-01](../../../projects/Oxygen.Engine/design/vortex/milestones/VX-IBL-01/README.md);
@@ -98,8 +97,8 @@ implementation must produce new evidence for captured sky and specular lighting.
 - Stable per-geometry material-slot identities and independent instance
   overrides for all existing slots; clearing restores the mesh material.
 - Scalar emission colour/intensity with float32 storage, explicit linear-colour
-  conversion and finite HDR bounds in source and cooked records (editing is an
-  open gap below).
+  conversion and finite HDR bounds in source and cooked records (editing is in
+  [ED-M09](ED-M09-v01-gaps-and-blocking-issues.md)).
 - Local/Inherit native visibility and geometry shadow records, local editor
   values, independent light contribution/shadow controls, and functional GPU
   receiving/contact shadows.
@@ -144,41 +143,6 @@ implementation must produce new evidence for captured sky and specular lighting.
 - **Formal inspector audit** (former M08.4): the inspectors were rebuilt and
   validated by M08.2 and the inspector refactoring plan. Defects found while
   using them are fixed as bugs in the slice that finds them.
-
-### Open gaps against the LLDs
-
-The design pack audit found three LLD behaviors that are not built. Each lands
-with M08.10 (engine capability parity) unless scheduled earlier.
-
-| Gap                       | LLD                                                                                                          | Today                                                                                                                                                                                     | Work                                                                                                                                                                                                     |
-| ------------------------- | ------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Inherit source modes      | [Scene model](../lld/scene-authoring-model.md#visibility-participation-and-shadow-source-state), inspector 4 | World stores `IsVisible`, `CastsShadows` and `ReceivesShadows` as booleans, so the editor authors local values only; the Rendering section offers no Inherit and shows no resolved origin | Inherit / Shown / Hidden and Inherit / On / Off in World source and `SceneNodeData`, Scenes descriptors, Interop `NodePropertyApplier` and the cooked node records; migrate the booleans as local values |
-| Light collection pruning  | [Scene model](../lld/scene-authoring-model.md#visibility-participation-and-shadow-source-state)              | `DirectionalLightResolver` and `SceneRenderer::BuildFrameLightSelection` traverse with `VisibleFilter`, so a locally Shown light under a Hidden parent contributes nothing                | Collect lights by each node's resolved visibility, as geometry extraction does; keep `VisibleFilter` for callers that prune subtrees deliberately                                                        |
-| Material emission editing | [Material editor](../lld/material-editor.md)                                                                 | `MaterialSource` carries and writes `EmissiveColor` and `EmissiveIntensity`; `MaterialEdits` has no emission edit and the Material Editor shows emission only as a texture slot           | Emission colour and HDR intensity edits in `Oxygen.Editor.Materials` and their Material Editor controls, with history, Save, cook and preview                                                            |
-
-The qualification harness is retired above; its LLD design stays for the
-post-V0.1 work.
-
-The editor Hide engine mask
-([settings](../lld/settings-architecture.md#51-workspace-visibility-storage-and-lifetime))
-is not built: the eye keeps state, persistence, undo and picking exclusion, and
-logs that viewport suppression is pending. The work, in order:
-
-1. Engine: a scene-scoped hidden-root snapshot with revision in
-   `ScenePrepContext`; `ScenePrepPipeline::PrepareView` skips the descendant
-   closure, emitting no render items and no shadow casters for editing views;
-   Vortex design note. Test: a hidden mesh has no draws and no casters in the
-   masked view and renders in an unmasked one.
-2. Interop: `EditorModule::SetEditingViewHiddenNodes(revision, ids)` queued with
-   world commands, IDs resolved through `NodeRegistry` into the snapshot of the
-   scene's editing views in `OnPublishViews`, unresolved IDs retained;
-   `OxygenWorld::SetEditingViewHiddenNodes`.
-3. Runtime: `RuntimeSetEditingViewHiddenNodes` and
-   `IRuntimeWorldCommands.SupportsEditingViewMask`.
-4. Editor: dispatch the mask on change; check hide of a mesh and of a parent
-   (geometry and shadows gone in every editing pane, kept in game and capture
-   views), show of a parent keeping the child hidden, and the gizmo on a
-   selected hidden node.
 
 ### Architecture decisions for M08.3–M08.12
 
@@ -1362,7 +1326,7 @@ slice removes those lock-outs.
    the starting camera and input contexts authored in the scene's Play section,
    and scripts switch both at runtime. A split Play button carries per-user
    session settings. Hand-written input files are cooked; editor input authoring
-   is [ED-M09](ED-M09-input-authoring.md). The design is in the
+   is [ED-M10](ED-M10-input-authoring.md). The design is in the
    [script authoring LLD](../lld/script-authoring.md) (workflow, inspector,
    cooking, Play, Problems) and the engine's
    [scene script hosting](../../../projects/Oxygen.Engine/design/scripting/scene-script-hosting.md),
@@ -1387,10 +1351,10 @@ Implementation, in build order:
 | M08.10i | Oxygen.Engine (Data, Cooker, Scripting), examples            | Parameter declarations and analyzer; asset and node parameters; sidecar validation; compiled external scripts; runtime `oxygen.script`; example declarations                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | M08.10j | Oxygen.Engine (Scripting), examples                          | Instances with `self`, start/destroy hooks, execution order, connection ownership; example scripts migrated                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                             |
 | M08.10k | Oxygen.Engine (Scripting)                                    | Script diagnostics: model, catalog, producers, text renderer, JSON form                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
-| M08.10l | Oxygen.Engine, DemoShell                                     | Engine scene instantiation and script attachment; starting camera and input contexts, active camera and context switching; input actions and contexts identified at runtime by asset key, `on_action` and context switching by asset reference (ED-M09 IF-12 c); input context `auto_load`/`auto_activate` removed from schema, cooked format and loaders, RenderScene and DemoShell starting the scene's contexts; source reload; DemoShell scripting removed; model scene instancing in the format, cooker and instantiation ([scene composition](../../../projects/Oxygen.Engine/design/runtime-core/scene-composition.md) SC-1–SC-4), `rotating-gltf` migrated to an authored scene |
+| M08.10l | Oxygen.Engine, DemoShell                                     | Engine scene instantiation and script attachment; starting camera and input contexts, active camera and context switching; input actions and contexts identified at runtime by asset key, `on_action` and context switching by asset reference (ED-M10 IF-12 c); input context `auto_load`/`auto_activate` removed from schema, cooked format and loaders, RenderScene and DemoShell starting the scene's contexts; source reload; DemoShell scripting removed; model scene instancing in the format, cooker and instantiation ([scene composition](../../../projects/Oxygen.Engine/design/runtime-core/scene-composition.md) SC-1–SC-4), `rotating-gltf` migrated to an authored scene |
 | M08.10m | Oxygen.Engine                                                | `Oxygen.Player` with launch file and control protocol                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                   |
 | M08.10n | Oxygen.Engine (Scripting)                                    | Binding registration tables, generated API definitions and type checking                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                |
-| M08.10o | Editor.Interop, ContentBrowser, ContentPipeline, WorldEditor | Script assets, analysis, code-editor preference, project tooling, Problems; hand-written input files cooked at their source folder, self-contained files only (ED-M09 IF-11)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
+| M08.10o | Editor.Interop, ContentBrowser, ContentPipeline, WorldEditor | Script assets, analysis, code-editor preference, project tooling, Problems; hand-written input files cooked at their source folder, self-contained files only (ED-M10 IF-11)                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                            |
 | M08.10p | Editor.World, WorldEditor, ContentPipeline                   | Scripting component, inspector, persistence, script and sidecar cooking                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 |
 | M08.10q | WorldEditor, Editor.Runtime, ContentPipeline                 | Scene Play section (starting camera and input contexts) and its cooking; Play split button with session settings; Play, Stop and session streaming                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                      |
 
@@ -1434,7 +1398,7 @@ and the engine's hosting (SSH), diagnostics (SDG) and player (SIP) gates.
 | SD-4  | 4        | How Play chooses its camera                                                                                                                                                  | Decided 2026-10-11: the scene's starting camera, authored in the scene's Play section (first camera as fallback); scripts switch the active camera                                                | None        | Owner |
 | SD-5  | 5        | Which input contexts a played scene starts with                                                                                                                              | Decided 2026-10-11: a list with priorities in the scene's Play section, moved from Scene References; scripts activate and deactivate contexts                                                     | None        | Owner |
 | SD-6  | 6        | Play session settings                                                                                                                                                        | Decided 2026-10-11: a split Play button whose dropdown sets window size, VSync and frame cap, persisted as per-user editor settings, while the player is external                                 | None        | Owner |
-| SD-7  | 7        | Input asset authoring                                                                                                                                                        | Decided 2026-10-11: V0.1 scope as [ED-M09](ED-M09-input-authoring.md); scripting cooks hand-written input files                                                                                   | None        | Owner |
+| SD-7  | 7        | Input asset authoring                                                                                                                                                        | Decided 2026-10-11: V0.1 scope as [ED-M10](ED-M10-input-authoring.md); scripting cooks hand-written input files                                                                                   | None        | Owner |
 | SD-8  | 8        | Where the code editor is chosen                                                                                                                                              | Decided 2026-10-13: asked on the first Edit, VS Code preselected when found, remembered; changed from Open with on the Edit button                                                                | None        | Owner |
 | SD-9  | 9        | Where New Script and New Input File appear                                                                                                                                   | Decided 2026-10-13: the Content Browser New menu, beside New Material; no context menu in this step                                                                                               | None        | Owner |
 | SD-10 | 10       | How Problems reacts to a save with errors                                                                                                                                    | Decided 2026-10-13: counts in its tab title and badges on the script; it comes forward only for runtime errors during Play                                                                        | None        | Owner |

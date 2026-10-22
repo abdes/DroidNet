@@ -75,18 +75,19 @@ flowchart LR
     M07A[ED-M07A<br/>Authoring integrity and runtime convergence]
     M07B[ED-M07B<br/>Safe content publication and compatibility]
     M08[ED-M08<br/>Runtime parity and authoring workspace]
-    M09[ED-M09<br/>Input authoring]
-    M09A[ED-M09A<br/>Title bar, History and Texture Editor]
-    M10[ED-M10<br/>V0.1 acceptance]
+    M09[ED-M09<br/>V0.1 gaps and blocking issues]
+    M10[ED-M10<br/>Input authoring]
+    M10A[ED-M10A<br/>Title bar, History and Texture Editor]
+    M11[ED-M11<br/>V0.1 acceptance]
 
     M00 --> M01
     M01 --> M03
     M02 --> M03
-    M03 --> M04 --> M05 --> M06 --> M06A --> M07 --> M07A --> M07B --> M08 --> M09 --> M09A --> M10
+    M03 --> M04 --> M05 --> M06 --> M06A --> M07 --> M07A --> M07B --> M08 --> M09 --> M10 --> M10A --> M11
 ```
 
 `ED-M02` is validated; its supported-viewport evidence is recorded. The current
-execution sequence is ED-M08 -> ED-M09 -> ED-M09A -> ED-M10; ED-M09A starts
+execution sequence is ED-M08 -> ED-M09 -> ED-M10 -> ED-M10A -> ED-M11; ED-M10A starts
 when issue #69 is done. ED-M07A and ED-M07B are
 validated. Earlier milestones retain their delivery records; source-identified
 omissions are assigned to 07A/07B, with no new M04 closure action. M08 still
@@ -104,7 +105,7 @@ rendering and view behavior is validated and closed on 2026-10-08. M08.V0
 viewport robustness, M08.V1 multi-viewport layouts and M08.V2 viewport state
 persistence are validated and closed on 2026-10-08. The 2026-10-08 rescope
 retires the development-only parity harness and adds the viewport editing tools
-(the former ED-M09) and the Content Browser redesign, including reference-aware
+and the Content Browser redesign, including reference-aware
 rename/move. M08.3 viewport HUD, M08.4 picking, selection outline and framing,
 M08.5 transform gizmos and snapping, and M08.6 scene helpers and orientation,
 and the M08.7 Content Browser redesign are validated on 2026-10-08; M08.8 asset
@@ -131,9 +132,10 @@ scripting engine and editor slices (M08.10i–q) follow.
 | `ED-M07A` | Authoring integrity and runtime convergence      | Identified background, gesture, field-diagnostic, sync-lifetime and save-integrity gaps close with concrete UI/native evidence.                                                                                    | `property-pipeline`, `property-inspector`, `environment-authoring`, `documents-and-commands`, `material-editor`, `settings-architecture`, `live-engine-sync`                                  | detailed plan exists                        |
 | `ED-M07B` | Safe content publication and compatibility       | Intuitive content discovery/use, consistent status, incremental cooking, saved snapshots, safe publication, complete native mappings, matched builds and reproducible import work.                                 | `content-cooking-workflows`, `content-explorer-asset-identity`, `material-editor`, `content-pipeline`, `runtime-integration`, `project-services`, `asset-primitives`                          | Validated; complete workflow audit recorded |
 | `ED-M08`  | Runtime parity and authoring workspace           | Canonical engine/editor authoring, multi-viewport layouts, viewport picking/gizmos/snapping/helpers, and a Content Browser with previews, reference-aware relocation and drag-and-drop.                            | Detailed plan's implementation document map                                                                                                                                                   | In progress                                 |
-| `ED-M09`  | Input authoring                                  | Users create and edit input actions and mapping contexts in the editor.                                                                                                                                            | [input-authoring.md](lld/input-authoring.md)                                                                                                                                                  | Design approved; awaiting final re-review   |
-| `ED-M09A` | Workspace title bar, History and Texture Editor  | A collapsible menu bar of every command, panels reopened from View, a project switcher, the History panel, and the Texture Editor.                                                                                 | [workspace-title-bar.md](lld/workspace-title-bar.md), [history-panel.md](lld/history-panel.md), [texture-editor.md](lld/texture-editor.md)                                                    | Planned; starts after issue #69             |
-| `ED-M10`  | V0.1 acceptance                                  | The full PRD V0.1 workflow completes end-to-end without manual repair.                                                                                                                                             | all V0.1 LLDs                                                                                                                                                                                 | required before validation                  |
+| `ED-M09`  | V0.1 gaps and blocking issues                    | Designed behaviors that are not built and the issues that block V0.1 are fixed.                                                                                                                                    |
+| `ED-M10`  | Input authoring                                  | Users create and edit input actions and mapping contexts in the editor.                                                                                                                                            | [input-authoring.md](lld/input-authoring.md)                                                                                                                                                  | Design approved; awaiting final re-review   |
+| `ED-M10A` | Workspace title bar, History and Texture Editor  | A collapsible menu bar of every command, panels reopened from View, a project switcher, the History panel, and the Texture Editor.                                                                                 | [workspace-title-bar.md](lld/workspace-title-bar.md), [history-panel.md](lld/history-panel.md), [texture-editor.md](lld/texture-editor.md)                                                    | Planned; starts after issue #69             |
+| `ED-M11`  | V0.1 acceptance                                  | The full PRD V0.1 workflow completes end-to-end without manual repair.                                                                                                                                             | all V0.1 LLDs                                                                                                                                                                                 | required before validation                  |
 
 ## 5. Milestone Details
 
@@ -419,7 +421,7 @@ ED-M07A/07B are validated. The
 [detailed plan](plan/ED-M08-runtime-parity-and-standalone-validation.md) owns
 the slices: canonical data and rendering (M08.1, M08.F1, M08.2), viewport
 layouts and persistence (M08.V0–V2), the viewport HUD and editing tools
-(M08.3–M08.6, the former ED-M09), and the Content Browser redesign, asset
+(M08.3–M08.6), and the Content Browser redesign, asset
 relocation, viewport performance, engine capability parity, thumbnails and
 drag-and-drop (M08.7–M08.12). The
 [V0.1 authoring contract](lld/scene-authoring-model.md#12-v01-capability-boundary)
@@ -433,23 +435,29 @@ in the standalone LLD is post-V0.1.
 Exit gate: the detailed plan's exit checklist, including the user's closeout
 walkthrough in the normal Release editor.
 
-### ED-M09 - Input Authoring
+### ED-M09 - V0.1 Gaps And Blocking Issues
+
+Purpose: build the LLD behaviors the design pack audit found missing (Inherit
+source modes, light collection pruning, material emission editing and the
+editor Hide mask) and fix the abdes/DroidNet issues that block V0.1. Sequence
+and gates: [plan](plan/ED-M09-v01-gaps-and-blocking-issues.md).
+
+### ED-M10 - Input Authoring
 
 Purpose: users create and edit input actions and mapping contexts in the editor
 (REQ-045). Design: [input authoring LLD](lld/input-authoring.md); sequence and
-acceptance: [plan](plan/ED-M09-input-authoring.md). The design was approved in
-M09.1; the engine input fixes (M09.2) come first. The ID previously named the
-viewport tools that ED-M08.4–M08.6 delivered.
+acceptance: [plan](plan/ED-M10-input-authoring.md). The design was approved in
+M10.1; the engine input fixes (M10.2) come first.
 
-### ED-M09A - Workspace Title Bar, History And Texture Editor
+### ED-M10A - Workspace Title Bar, History And Texture Editor
 
 Purpose: the features designed during issue #69 and kept out of it, so that #69
 stays a refactoring: the workspace title bar (collapsible menu bar, project
 switcher, Project information), the History panel, and the Texture Editor,
 whose design is the milestone's first Texture Editor slice. It starts when #69
-is done. Sequence and gates: [plan](plan/ED-M09A-workspace-chrome-history-textures.md).
+is done. Sequence and gates: [plan](plan/ED-M10A-workspace-chrome-history-textures.md).
 
-### ED-M10 - V0.1 Acceptance
+### ED-M11 - V0.1 Acceptance
 
 Purpose: close the full V0.1 workflow in product terms.
 
@@ -471,7 +479,7 @@ Exit gate:
 - Cook, inspect, refresh, and mount output.
 - Load cooked scene in standalone runtime.
 - Pass the matched-build, 100-node/1,000-entry workload, save/cook failure, and
-  clean-copy reproduction cases in the ED-M10 plan.
+  clean-copy reproduction cases in the ED-M11 plan.
 - Record final `SUCCESS-XXX` validation evidence in `IMPLEMENTATION_STATUS.md`.
 
 ## 6. LLD Schedule
@@ -543,9 +551,10 @@ Active milestone plans:
 | [ED-M07B-safe-content-publication-and-compatibility.md](plan/ED-M07B-safe-content-publication-and-compatibility.md)             | `ED-M07B`   |
 | [ED-M08-runtime-parity-and-standalone-validation.md](plan/ED-M08-runtime-parity-and-standalone-validation.md)                   | `ED-M08`    |
 | [ED-M08.F1-descriptor-local-references.md](plan/ED-M08.F1-descriptor-local-references.md)                                       | `ED-M08.F1` |
-| [ED-M09-input-authoring.md](plan/ED-M09-input-authoring.md)                                                                     | `ED-M09`    |
-| [ED-M09A-workspace-chrome-history-textures.md](plan/ED-M09A-workspace-chrome-history-textures.md)                               | `ED-M09A`   |
-| [ED-M10-v01-release-qualification.md](plan/ED-M10-v01-release-qualification.md)                                                 | `ED-M10`    |
+| [ED-M09-v01-gaps-and-blocking-issues.md](plan/ED-M09-v01-gaps-and-blocking-issues.md)                                           | `ED-M09`    |
+| [ED-M10-input-authoring.md](plan/ED-M10-input-authoring.md)                                                                     | `ED-M10`    |
+| [ED-M10A-workspace-chrome-history-textures.md](plan/ED-M10A-workspace-chrome-history-textures.md)                               | `ED-M10A`   |
+| [ED-M11-v01-release-qualification.md](plan/ED-M11-v01-release-qualification.md)                                                 | `ED-M11`    |
 
 ## 8. Milestone Closure
 

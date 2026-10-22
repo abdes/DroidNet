@@ -287,10 +287,10 @@ crash or interrupted later write.
 
 ## 10. Release Acceptance
 
-ED-M10 closes only after all non-deferred capability gates have fresh evidence
+ED-M11 closes only after all non-deferred capability gates have fresh evidence
 for the qualified build. ED-M08 proves the saved/published authoring slice and
-the viewport-tool gates; ED-M09 adds input authoring; neither depends on
-completion of a later milestone. The detailed ED-M08/09/10 plans own execution
+the viewport-tool gates; ED-M09 closes the LLD gaps and blocking issues;
+ED-M10 adds input authoring; none depends on completion of a later milestone. The detailed ED-M08 to ED-M11 plans own execution
 and evidence collection. No prototype warning, prior milestone row, issue fix,
 or newly written document substitutes for proof of a changed contract. Earlier
 evidence remains historical evidence at its original scope; newly required

@@ -1031,7 +1031,7 @@ their defects were marked closed.
       at**:
       [settings 5.1](../lld/settings-architecture.md#51-workspace-visibility-storage-and-lifetime)
       owns the behaviour and design; the engine and interop work is in the
-      ED-M08 plan's open gaps. This row does not restate them. What binds the
+      ED-M09 plan's LLD gaps. This row does not restate them. What binds the
       plan: - **D8a** is a scene-scoped hidden-node snapshot applied in
       `ScenePrepPipeline::PrepareView`. An editor-hidden node **does not render
       and does not cast shadows** in editing views (R2) — it is dropped, so no

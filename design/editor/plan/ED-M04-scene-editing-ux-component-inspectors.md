@@ -814,4 +814,4 @@ The field controls, scene-level Environment host, material override API path,
 command validators, undo machinery and coalescer already exist. The new plans
 repair the named gaps and exercise existing behavior; they do not prescribe a
 wholesale inspector rewrite. Shared diagnostic invalidation is the concrete
-revision-scoped mechanism in 07A.3, consumed by M09 tools without another model.
+revision-scoped mechanism in 07A.3, consumed by the M08 viewport tools without another model.

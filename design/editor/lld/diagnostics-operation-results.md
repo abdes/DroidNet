@@ -261,7 +261,7 @@ ED-M08 prefix allocations:
 | `OXE.SCRIPT.*` | Script assets, script analysis and code-editor launch ([script authoring](script-authoring.md#10-operation-results)). |
 | `OXE.PLAY.*`   | Play sessions: cook before play, player launch and session control ([script authoring](script-authoring.md#8-play)).  |
 
-ED-M09 prefix allocations:
+ED-M10 prefix allocations:
 
 | Prefix        | Owner                                                                                                                                                |
 | ------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
@@ -297,7 +297,7 @@ Domains are stable vocabulary, not class names.
 | `AssetImport`          | ED-M05                                      | Asset import.                                                        |
 | `AssetCook`            | ED-M07                                      | Cook execution.                                                      |
 | `StandaloneRuntime`    | ED-M08                                      | Standalone load validation.                                          |
-| `InputAuthoring`       | ED-M09                                      | Input action and mapping context authoring and validation.           |
+| `InputAuthoring`       | ED-M10                                      | Input action and mapping context authoring and validation.           |
 
 `ProjectSettings` is reserved for project-scoped settings. `Settings` is the
 global editor settings domain and is active in ED-M02 for runtime FPS/logging
