@@ -7,12 +7,15 @@ using System.Reactive.Subjects;
 using AwesomeAssertions;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
+using DroidNet.Documents;
 using DryIoc;
+using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Composition.UI.Tests.TestSupport;
 using Oxygen.Editor.ProjectExplorer.Activation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
+using Oxygen.Editor.Sessions;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
@@ -46,13 +49,16 @@ public sealed class ProjectActivationTests
         // Arrange
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
         var next = this.Arrange(scopes, navigationFails: false);
-        var documents = new Mock<IDocumentTabs>();
-        _ = documents.Setup(tabs => tabs.PrepareCloseAllWindowsAsync()).ReturnsAsync((DocumentCloseTransaction?)null);
-        _ = documents.Setup(tabs => tabs.UseCloseCoordinator(It.IsAny<DocumentCloseCoordinator>())).Returns(Mock.Of<IDisposable>());
-        scopes.Host.RegisterInstance(documents.Object, IfAlreadyRegistered.Replace);
-        var sessions = scopes.Host.Resolve<IProjectSessionHost>();
+        var sessions = scopes.Host.Resolve<ProjectSessionHost>();
         var (open, openProject) = NewProject();
         var kept = await sessions.OpenAsync(open, openProject).ConfigureAwait(false);
+
+        // A window of the session keeps its document when asked.
+        _ = scopes.ShowWindows(new OpenWindow(new WindowId(3), DroidNet.Aura.WindowCategory.Document, kept));
+        var tabs = sessions.OpenWindow(new WindowId(3), []).Resolver.Resolve<IDocumentTabs>();
+        var documentId = DocumentId.New();
+        _ = await tabs.OpenDocumentAsync(new WindowId(3), Mock.Of<IDocumentMetadata>(tab => tab.DocumentId == documentId && tab.Title == "Kept")).ConfigureAwait(false);
+        tabs.DocumentClosing += (_, args) => args.AddVetoTask(Task.FromResult(false));
 
         // Act
         var result = await scopes.Host.Resolve<IProjectActivationCoordinator>().ActivateAsync(Open(next)).ConfigureAwait(false);

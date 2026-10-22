@@ -19,7 +19,8 @@ namespace Oxygen.Editor.Shell.Documents;
 /// <remarks>
 ///     Every document of <see cref="OpenDocuments"/> that gets a tab here gets a <see cref="DocumentTab"/>. When that tab
 ///     closes, by the user or by <see cref="CloseAsync"/>, the area lets go of its editor, disposes the tab and closes the
-///     document; the session's document service then disposes the editor.
+///     document; the session's document service then disposes the editor. A tab that a drag moves to another window
+///     leaves the area with its document open, and the area of that window adopts the same tab.
 /// </remarks>
 public sealed partial class DocumentArea : IDocumentArea, IDisposable
 {
@@ -81,7 +82,9 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<DocumentArea>();
 
         this.tabs.DocumentOpened += this.OnTabOpened;
+        this.tabs.DocumentAttached += this.OnTabAttached;
         this.tabs.DocumentActivated += this.OnTabActivated;
+        this.tabs.DocumentDetached += this.OnTabDetached;
         this.tabs.DocumentClosed += this.OnTabClosed;
     }
 
@@ -95,12 +98,12 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
     public event EventHandler<DocumentPlacedEventArgs>? Placed;
 
     /// <summary>
-    ///     Raised when a document's tab is added to this area, before it is selected.
+    ///     Raised when a document's tab is added to this area, opened or moved here, before it is selected.
     /// </summary>
     internal event EventHandler<DocumentTabEventArgs>? TabAdded;
 
     /// <summary>
-    ///     Raised when a document's tab leaves this area, before the document closes.
+    ///     Raised when a document's tab leaves this area: before the document closes, or once a drag took it away.
     /// </summary>
     internal event EventHandler<DocumentTabEventArgs>? TabRemoved;
 
@@ -211,7 +214,9 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
 
         this.disposed = true;
         this.tabs.DocumentOpened -= this.OnTabOpened;
+        this.tabs.DocumentAttached -= this.OnTabAttached;
         this.tabs.DocumentActivated -= this.OnTabActivated;
+        this.tabs.DocumentDetached -= this.OnTabDetached;
         this.tabs.DocumentClosed -= this.OnTabClosed;
         this.SetActive(document: null);
         foreach (var tab in this.shown)
@@ -397,6 +402,34 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
         {
             this.TabAdded?.Invoke(this, new DocumentTabEventArgs(tab));
         }
+    }
+
+    // A tab another window detached, which a drag dropped here.
+    private void OnTabAttached(object? sender, DocumentAttachedEventArgs args)
+    {
+        if (args.WindowId == this.window && args.Metadata is DocumentTab tab && !this.shown.Contains(tab))
+        {
+            this.shown.Add(tab);
+            this.TabAdded?.Invoke(this, new DocumentTabEventArgs(tab));
+            this.LogTabMoved(tab.Document.Title, entered: true);
+        }
+    }
+
+    // The tab moves with its document, which stays open.
+    private void OnTabDetached(object? sender, DocumentDetachedEventArgs args)
+    {
+        if (args.WindowId != this.window || args.Metadata is not DocumentTab tab || !this.shown.Remove(tab))
+        {
+            return;
+        }
+
+        if (ReferenceEquals(this.ActiveDocument, tab.Document))
+        {
+            this.SetActive(document: null);
+        }
+
+        this.TabRemoved?.Invoke(this, new DocumentTabEventArgs(tab));
+        this.LogTabMoved(tab.Document.Title, entered: false);
     }
 
     private void OnTabActivated(object? sender, DocumentActivatedEventArgs args)

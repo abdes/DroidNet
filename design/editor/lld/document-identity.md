@@ -207,9 +207,15 @@ its own window without knowing a `WindowId`.
 
 A document's tab is in at most one area. `ShowAsync` for a document whose tab is
 in another window selects it there and brings that window forward. Moving a tab
-between areas is Aura's detach and attach: a torn-out tab is received by a
-document window ([editor-shell.md](../review/editor-shell.md#22-window-kinds)),
-and a detach that no window can receive is refused, leaving the tab in place.
+between areas is Aura's detach and attach, which Aura's document transfers drive.
+A tab dragged out of its window detaches its document, which stays open with its
+editor and history. The strip the tab is dropped on attaches it; a tab dropped
+outside every strip goes to a new document window
+([editor-shell.md](../review/editor-shell.md#22-window-kinds)), and a document
+that no window takes goes back where it came from. Only the editor's view is
+created again, in the window that shows the tab. A pinned tab never moves, so the
+scene stays in the workspace window. A document window closes once its last tab
+has left it, closed or moved to another window.
 The workspace close prepares every document of the window, and its prompt lists
 each document's asset. A `Document` closes in `OpenDocuments` only through the
 area's close; editors never call `OpenDocuments.Close`. An editor's
@@ -415,7 +421,8 @@ released when it closes (5.3). The cook sees open documents only through
 
 A rejected material edit is published as an operation result and changes nothing
 (5.9). A descriptor set that does not match the kinds fails when the window
-scope is built (5.8). A refused detach leaves the tab in place (5.4).
+scope is built (5.8). A refused detach leaves the tab in place, and a document
+that the window it is dropped on refuses goes back where it came from (5.4).
 
 ## 13. Dependency Rules
 
@@ -434,7 +441,9 @@ All edges point down:
 
 - Aura: the presenter keys tabs by `DocumentId`, updates a tab from
   `PropertyChanged` raised off the UI thread, stops listening to a closed or
-  detached tab and on dispose, and leaves a tab in place when detach is refused.
+  detached tab and on dispose, and leaves a tab in place when detach is refused;
+  a moved document is attached where its tab is dropped, in the window created
+  for a tear-out, or back where it came from.
 - Documents: `Find(DocumentId)`, `FindByAsset` by `AssetPath`.
 - Shell: `DocumentTab` follows edits, undo to the saved point, missing, rename
   and reload, and unsubscribes on dispose; `IDocumentArea` follows selection,

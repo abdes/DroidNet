@@ -35,7 +35,7 @@ public class DocumentTabsEventTests
             .Setup(f => f.CreateLogger(It.IsAny<string>()))
             .Returns(mockLogger.Object);
 
-        this.service = new DocumentTabs(loggerFactoryMock.Object);
+        this.service = Tabs.New(loggerFactoryMock.Object);
         this.testWindowId = new WindowId(1);
     }
 

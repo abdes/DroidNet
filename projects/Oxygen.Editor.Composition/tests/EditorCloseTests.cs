@@ -8,6 +8,7 @@ using System.Reactive.Subjects;
 using AwesomeAssertions;
 using DroidNet.Aura;
 using DroidNet.Aura.Windowing;
+using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Routing;
 using DroidNet.Routing.Events;
@@ -157,10 +158,7 @@ public sealed class EditorCloseTests : VisualUserInterfaceTests
         await OpenSessionAsync(sessions).ConfigureAwait(true);
         var document = new WindowId(8);
         _ = scopes.ShowWindows(new OpenWindow(Workspace, EditorWindows.WorkspaceCategory, sessions.Current), new OpenWindow(document, WindowCategory.Document, sessions.Current));
-        var tabs = new Mock<IDocumentTabs>();
-        _ = tabs.Setup(value => value.PrepareCloseAllAsync(document)).ReturnsAsync((DocumentCloseTransaction?)null);
-        _ = tabs.Setup(value => value.UseCloseCoordinator(It.IsAny<DocumentCloseCoordinator>())).Returns(Mock.Of<IDisposable>());
-        scopes.Host.RegisterInstance(tabs.Object, IfAlreadyRegistered.Replace);
+        await KeepADocumentAsync(sessions, document).ConfigureAwait(true);
 
         // Act
         var prepared = await PrepareAsync(scopes, new WindowClose { Window = Workspace, IsLastWindow = false }).ConfigureAwait(true);
@@ -255,6 +253,15 @@ public sealed class EditorCloseTests : VisualUserInterfaceTests
     {
         var context = TestProject.Create(new MockFileSystem()).Context;
         _ = await sessions.OpenAsync(context, new Project(TestProject.InfoOf(context))).ConfigureAwait(true);
+    }
+
+    // A window of the session with a document whose close is vetoed.
+    private static async Task KeepADocumentAsync(ProjectSessionHost sessions, WindowId window)
+    {
+        var tabs = sessions.OpenWindow(window, []).Resolver.Resolve<IDocumentTabs>();
+        var documentId = DocumentId.New();
+        _ = await tabs.OpenDocumentAsync(window, Mock.Of<IDocumentMetadata>(tab => tab.DocumentId == documentId && tab.Title == "Kept")).ConfigureAwait(true);
+        tabs.DocumentClosing += (_, args) => args.AddVetoTask(Task.FromResult(false));
     }
 
     // Prepares a close with the editor's own participants; false when one keeps the window open.

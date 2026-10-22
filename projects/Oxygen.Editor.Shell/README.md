@@ -19,17 +19,21 @@ Design: [editor-shell.md](../../design/editor/review/editor-shell.md),
 | `Layout`        | The docking workspace: its routed layout, dock views and the Docking placement adapter |
 | `Desktop`       | Clipboard, File Explorer, Recycle Bin and the external code editor                     |
 
-`ShellModule` registers the tabs of every window, the close of every window,
-and the prompts, confirmations and input commits of documents in the editor
-scope. Each takes the window it acts on with every call; an editor commits the
-input of the window that shows its document.
-`ShellSessionModule` registers the project session's document service, the
-editors of its document kinds, its global history and its unsaved documents,
-and creates the document service when the session opens.
-`ShellWindowModule` registers each window's document area, the lending of
-window services to editors, commands, placement and the external code editor.
-The Shell knows no project: the composition root opens the session.
-`DockingWindowModule` registers the window's docking.
+`ShellModule` registers the close of every window, and the prompts and
+confirmations of documents in the editor scope. Each takes the window it acts
+on with every call.
+`ShellSessionModule` registers the project session's tabs with their close
+coordinator, the input commits of the windows that show them, the document
+service, the editors of its document kinds, its global history and its unsaved
+documents, and creates the document service when the session opens.
+`ShellWindowModule` registers a workspace window's document area, the lending
+of window services to editors, its commands with the panels and commands of the
+features it is given, placement and the external code editor.
+`ShellDocumentWindowModule` registers the same document services for a document
+window, with no features. Both end the window's scope when the window closes.
+The Shell provides these modules and composes none: the composition root lists
+each window's modules and opens the session. `DockingWindowModule` registers the
+workspace window's docking.
 
 ## Documents
 
@@ -70,15 +74,18 @@ shows, how it closes and how it follows its file.
 
 ### Tabs
 
-`DocumentTabs` implements Aura's `IDocumentTabSource` over the tabs of every
-window. A tab is an `IDocumentMetadata`; in the editor it is the `DocumentTab`
-of one `Document`, which raises `PropertyChanged` when the document changes, so
-nothing pushes tab state to the tabs.
+`DocumentTabs` implements Aura's `IDocumentTabSource` over the tabs of a
+project session's windows: it is the session's, and every window of the session
+is bound to it. A tab is an `IDocumentMetadata`; in the editor it is the
+`DocumentTab` of one `Document`, which raises `PropertyChanged` when the
+document changes, so nothing pushes tab state to the tabs.
 
 - A document has at most one tab: opening or attaching a tab for a document that
   has one, in any window, is refused. `FindWindow` says which window has it.
-- Every detach is refused until the Shell has document windows to receive a
-  torn-out tab; Aura leaves the tab in place.
+- A drag detaches a tab with its document open, and the window it is dropped on
+  attaches the same tab; the tab is attached before it is selected. A pinned
+  tab, the scene's, never detaches. `WindowEmptied` reports a window whose last
+  tab was closed on its own or moved away, and a document window then closes.
 - Features do not use the tabs. They reach their window's documents through
   `IDocumentArea`, which is built over them.
 
@@ -88,12 +95,14 @@ A close is a transaction: it is prepared, then committed or dropped.
 
 - `PrepareCloseDocumentsAsync` prepares closing some tabs of a window,
   `PrepareCloseAllAsync` a window's close, and `PrepareCloseAllWindowsAsync` the
-  replacement of the project. `WindowDocumentsClose` prepares the window's
+  close of the session's documents in every window, leaving out a window whose
+  own close prepares its documents. `WindowDocumentsClose` prepares the window's
   documents when the window closes (see [Closing windows](#closing-windows)).
 - Preparing raises `DocumentClosing`, whose handlers may veto, then hands the
-  tabs to the session's one `DocumentCloseCoordinator`, which the document
-  service registers with the tabs and which serves every window. Each editor
-  takes part in the close as an `IDocumentCloseParticipant`.
+  tabs to the session's `DocumentCloseCoordinator`, which the tabs are created
+  with and which serves every window. Each editor takes part in the close as an
+  `IDocumentCloseParticipant`, which the document service registers with the
+  coordinator.
 - The coordinator asks `IDocumentClosePrompt`, in the window that closes them: _Save changes to 2
   documents?_ with Save, Don't Save and Cancel, each document listed with its
   asset and, when there are several, a check box. A document whose file changed
@@ -113,7 +122,7 @@ A close is a transaction: it is prepared, then committed or dropped.
 | `DocumentClosed`    | A tab was removed                                |
 | `DocumentActivated` | A tab was selected                               |
 | `DocumentAttached`  | A tab was attached to a window                   |
-| `DocumentDetached`  | Never: every detach is refused                   |
+| `DocumentDetached`  | A drag took a tab out of a window                |
 
 ## Commands
 

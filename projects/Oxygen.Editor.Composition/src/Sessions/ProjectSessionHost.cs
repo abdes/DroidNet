@@ -7,7 +7,9 @@ using DroidNet.Composition;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Shell.Documents;
 
 namespace Oxygen.Editor.Sessions;
 
@@ -22,7 +24,7 @@ namespace Oxygen.Editor.Sessions;
 ///     its scope, which disposes the scopes of its windows before its own services. Aura's window manager knows the
 ///     session's windows: each one carries the session in its metadata (<see cref="EditorWindows.SessionMetadataKey" />).
 /// </remarks>
-public sealed partial class ProjectSessionHost : IProjectSessionHost
+public sealed partial class ProjectSessionHost : IProjectSessionHost, ISessionWindows
 {
     private readonly ScopeFactory scopes;
     private readonly ScopeHandle editor;
@@ -90,19 +92,23 @@ public sealed partial class ProjectSessionHost : IProjectSessionHost
         return Task.FromResult<IProjectSession>(session);
     }
 
-    /// <summary>
-    ///     Creates the scope of a window of the open session, under the session's scope, which owns it and disposes it,
-    ///     awaited, when the session closes.
-    /// </summary>
-    /// <param name="modules">The window's modules, in registration and activation order.</param>
-    /// <param name="hostInstances">Registers the window's own instances, such as its id.</param>
-    /// <returns>The window's scope.</returns>
-    /// <exception cref="InvalidOperationException">No session is open.</exception>
-    public ScopeHandle CreateWindowScope(IEnumerable<IScopeModule<IWindowLayer>> modules, Action<IRegistrator>? hostInstances)
+    /// <inheritdoc />
+    public ScopeHandle OpenWindow(WindowId window, IEnumerable<IScopeModule<IWindowLayer>> modules)
     {
-        var scope = this.current?.Scope ?? throw new InvalidOperationException("A window of a project session opens only in an open session.");
-        return this.scopes.Create(scope, modules, hostInstances);
+        var session = this.current ?? throw new InvalidOperationException("A window of a project session opens only in an open session.");
+        var managed = this.windows.GetWindow(window)
+            ?? throw new InvalidOperationException($"Window {window.Value} is not open: a window joins a session once Aura's window manager knows it.");
+        var scope = this.scopes.Create(session.Scope!, modules, registrations => registrations.RegisterInstance(window));
+        this.windows.SetMetadata(window, EditorWindows.SessionMetadataKey, session);
+        managed.DocumentTabSource = scope.Resolver.Resolve<IDocumentTabs>();
+        return scope;
     }
+
+    /// <inheritdoc />
+    public Task<DocumentCloseTransaction?> PrepareCloseDocumentsAsync(WindowId? except = null)
+        => this.current?.Scope is { } scope
+            ? scope.Resolver.Resolve<IDocumentTabs>().PrepareCloseAllWindowsAsync(except)
+            : Task.FromResult<DocumentCloseTransaction?>(DocumentCloseTransaction.CreateEmpty());
 
     /// <inheritdoc />
     public void ChangeContext(ProjectContext next)
@@ -140,6 +146,13 @@ public sealed partial class ProjectSessionHost : IProjectSessionHost
             {
                 this.LogWindowNotClosed(window.Id);
             }
+        }
+
+        // A window still open leaves the session before its tabs and its services go.
+        foreach (var window in EditorWindows.WindowsOf(this.windows, session))
+        {
+            window.DocumentTabSource = null;
+            this.windows.RemoveMetadata(window.Id, EditorWindows.SessionMetadataKey);
         }
 
         this.current = null;

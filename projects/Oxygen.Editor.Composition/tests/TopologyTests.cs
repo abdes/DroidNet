@@ -42,6 +42,7 @@ using Oxygen.Editor.Sessions;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core.Compatibility;
 using Oxygen.Managed.Core.Diagnostics;
@@ -50,7 +51,7 @@ namespace Oxygen.Editor.Composition.UI.Tests;
 
 /// <summary>
 ///     The editor's scope chain as the application composes it: the editor scope, a project session's scope, a workspace
-///     window's scope and the Content Explorer's scope. Each scope registers only what it owns and resolves the rest from
+///     window's scope, a document window's scope and the Content Explorer's scope. Each scope registers only what it owns and resolves the rest from
 ///     its parent, so shared identity does not depend on which scope resolves first (spec 6.3).
 /// </summary>
 [TestClass]
@@ -77,13 +78,14 @@ public sealed class TopologyTests
         [nameof(SceneEditorProvider)] = "S6.1 removes IContainer from the scene editor's view model",
     };
 
-    // The services that create child scopes: each takes the handle of the scope that builds it.
-    private static readonly string[] ScopeOwners = [nameof(ProjectSessionHost), nameof(ContentExplorerViewModel)];
+    // The services that create child scopes, or end their own scope: each takes the handle of the scope that builds it.
+    private static readonly string[] ScopeOwners = [nameof(ProjectSessionHost), nameof(ContentExplorerViewModel), nameof(WindowScopeClose)];
 
-    // Singleton views that a later slice makes transient (spec 6.2); an entry that no longer occurs fails the test.
-    private static readonly Dictionary<string, string> PendingSingletonViews = new(StringComparer.Ordinal)
+    // The reviewed singleton views of a window's scope, which no other window shares; an entry that no longer occurs
+    // fails the test.
+    private static readonly Dictionary<string, string> WindowSingletonViews = new(StringComparer.Ordinal)
     {
-        [nameof(DocumentAreaView)] = "S5.3 creates the window's document host per window",
+        [nameof(DocumentAreaView)] = "the workspace's center dock presents its document area again whenever its dock panel rebinds; one view keeps the active editor's view under one parent, and a document window creates its own",
     };
 
     // Constructor arguments that the code creating the type passes through a Func<> factory.
@@ -106,6 +108,7 @@ public sealed class TopologyTests
         (nameof(IOperationResultPublisher), null),
         (nameof(Window), new DroidNet.Routing.Target { Name = "wnd-we" }),
         (nameof(Window), new DroidNet.Routing.Target { Name = "wnd-pe" }),
+        (nameof(Window), new DroidNet.Routing.Target { Name = "wnd-doc" }),
         (nameof(IEngineContentPak), null),
         (nameof(INativeCompatibilityService), EditorNativeCompatibilityService.CookingServiceKey),
         (nameof(ImportToolContentPipelineApi), null),
@@ -144,6 +147,14 @@ public sealed class TopologyTests
         (nameof(EditingViewMaskService), null),
     ];
 
+    // The reviewed delegate registrations of a document window's scope.
+    private static readonly (string Service, object? Key)[] DocumentWindowDelegates =
+    [
+        (nameof(ContributionRegistry), null),
+        (nameof(DocumentArea), null),
+        (nameof(IDocumentArea), null),
+    ];
+
     // The reviewed delegate registrations of the Content Explorer's scope.
     private static readonly (string Service, object? Key)[] ExplorerDelegates = [(nameof(IContextProvider), null)];
 
@@ -155,9 +166,11 @@ public sealed class TopologyTests
 
         // Act: the factory refuses a scope with an undeclared shadow.
         var create = () => scopes.CreateExplorer(scopes.CreateWindow(scopes.CreateSession()));
+        var createDocumentWindow = () => scopes.CreateDocumentWindow(scopes.CreateSession());
 
         // Assert
         _ = create.Should().NotThrow();
+        _ = createDocumentWindow.Should().NotThrow();
     }
 
     [TestMethod]
@@ -167,11 +180,13 @@ public sealed class TopologyTests
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
         var session = scopes.CreateSession();
         var window = scopes.CreateWindow(session);
+        var documentWindow = scopes.CreateDocumentWindow(session);
         var explorer = scopes.CreateExplorer(window);
 
         // Act
         var missing = Unprovided(session, EditorScopes.SessionModules().SelectMany(static module => module.Activation))
             .Concat(Unprovided(window, scopes.WindowModules().SelectMany(static module => module.Activation)))
+            .Concat(Unprovided(documentWindow, scopes.DocumentWindowModules().SelectMany(static module => module.Activation)))
             .Concat(Unprovided(explorer, EditorScopes.ExplorerModules().SelectMany(static module => module.Activation)));
 
         // Assert
@@ -254,10 +269,11 @@ public sealed class TopologyTests
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
         var session = scopes.CreateSession();
         var window = scopes.CreateWindow(session);
+        var documentWindow = scopes.CreateDocumentWindow(session);
         var explorer = scopes.CreateExplorer(window);
 
         // Act
-        var locators = new[] { scopes.Root, session, window, explorer }
+        var locators = new[] { scopes.Root, session, window, documentWindow, explorer }
             .SelectMany(static scope => ScopeTopology.Built(ScopeTopology.Owned(scope)))
             .Where(static built => ScopeTopology.LocatorParameters(built.Constructor).Any())
             .Select(static built => built.Type.Name)
@@ -275,10 +291,11 @@ public sealed class TopologyTests
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
         var session = scopes.CreateSession();
         var window = scopes.CreateWindow(session);
+        var documentWindow = scopes.CreateDocumentWindow(session);
         var explorer = scopes.CreateExplorer(window);
 
         // Act
-        var takers = new[] { scopes.Root, session, window, explorer }
+        var takers = new[] { scopes.Root, session, window, documentWindow, explorer }
             .SelectMany(static scope => ScopeTopology.Built(ScopeTopology.Owned(scope)))
             .Where(static built => built.Constructor.GetParameters().Any(static parameter => parameter.ParameterType == typeof(ScopeHandle)))
             .Select(static built => built.Type.Name)
@@ -295,11 +312,13 @@ public sealed class TopologyTests
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
         var session = scopes.CreateSession();
         var window = scopes.CreateWindow(session);
+        var documentWindow = scopes.CreateDocumentWindow(session);
         var explorer = scopes.CreateExplorer(window);
 
         // Act
         var collections = Violations(session, ScopeTopology.CrossLayerCollections)
             .Concat(Violations(window, ScopeTopology.CrossLayerCollections))
+            .Concat(Violations(documentWindow, ScopeTopology.CrossLayerCollections))
             .Concat(Violations(explorer, ScopeTopology.CrossLayerCollections));
 
         // Assert
@@ -367,10 +386,12 @@ public sealed class TopologyTests
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
         var session = scopes.CreateSession();
         var window = scopes.CreateWindow(session);
+        var documentWindow = scopes.CreateDocumentWindow(session);
         var explorer = scopes.CreateExplorer(window);
 
         // Act
         var unresolvable = Violations(window, ScopeTopology.Unresolvable)
+            .Concat(Violations(documentWindow, ScopeTopology.Unresolvable))
             .Concat(Violations(explorer, ScopeTopology.Unresolvable))
             .Except(FactoryArguments);
 
@@ -385,16 +406,17 @@ public sealed class TopologyTests
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
         var session = scopes.CreateSession();
         var window = scopes.CreateWindow(session);
+        var documentWindow = scopes.CreateDocumentWindow(session);
         var explorer = scopes.CreateExplorer(window);
 
         // Act
-        var views = new[] { scopes.Root, session, window, explorer }
+        var views = new[] { scopes.Root, session, window, documentWindow, explorer }
             .SelectMany(static scope => ScopeTopology.SingletonViews(ScopeTopology.Owned(scope)))
             .Select(static type => type.Name)
             .ToHashSet();
 
         // Assert
-        _ = views.Should().BeEquivalentTo(PendingSingletonViews.Keys, "a view cannot be shared across windows");
+        _ = views.Should().BeEquivalentTo(WindowSingletonViews.Keys, "a view cannot be shared across windows");
     }
 
     [TestMethod]
@@ -404,18 +426,21 @@ public sealed class TopologyTests
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
         var session = scopes.CreateSession();
         var window = scopes.CreateWindow(session);
+        var documentWindow = scopes.CreateDocumentWindow(session);
         var explorer = scopes.CreateExplorer(window);
 
         // Act
         var editor = ScopeTopology.Delegates(scopes.EditorRegistrations());
         var sessionDelegates = ScopeTopology.Delegates(ScopeTopology.Owned(session));
         var windowDelegates = ScopeTopology.Delegates(ScopeTopology.Owned(window));
+        var documentWindowDelegates = ScopeTopology.Delegates(ScopeTopology.Owned(documentWindow));
         var explorerDelegates = ScopeTopology.Delegates(ScopeTopology.Owned(explorer));
 
         // Assert: a delegate's dependencies are opaque to these checks, so each one is reviewed.
         _ = editor.Should().BeEquivalentTo(EditorDelegates);
         _ = sessionDelegates.Should().BeEquivalentTo(SessionDelegates);
         _ = windowDelegates.Should().BeEquivalentTo(WindowDelegates);
+        _ = documentWindowDelegates.Should().BeEquivalentTo(DocumentWindowDelegates);
         _ = explorerDelegates.Should().BeEquivalentTo(ExplorerDelegates);
     }
 

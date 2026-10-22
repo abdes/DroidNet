@@ -18,8 +18,8 @@ namespace Oxygen.Editor.Composition.UI.Tests.TestSupport;
 internal sealed record OpenWindow(WindowId Id, WindowCategory Category, IProjectSession? Session);
 
 /// <summary>
-/// Aura's window manager as the editor's close and session code read it: the open windows, each with its category and
-/// session metadata. Closing a window removes it, as the window manager does once the window is destroyed.
+/// Aura's window manager as the editor's close and session code read it: the open windows, each with its category,
+/// session metadata and tab source. Closing a window removes it, as the window manager does once the window is destroyed.
 /// </summary>
 internal static class EditorWindowsFake
 {
@@ -40,6 +40,8 @@ internal static class EditorWindowsFake
         _ = manager.SetupGet(value => value.WindowEvents).Returns(Observable.Never<WindowLifecycleEvent>());
         _ = manager.Setup(value => value.CloseWindowAsync(It.IsAny<WindowId>()))
             .Returns<WindowId>(id => Task.FromResult(windows.RemoveAll(window => window.Id == id) > 0));
+        _ = manager.Setup(value => value.GetWindow(It.IsAny<WindowId>()))
+            .Returns<WindowId>(id => windows.FirstOrDefault(window => window.Id == id));
         return manager;
     }
 
@@ -48,6 +50,7 @@ internal static class EditorWindowsFake
         var managed = new Mock<IManagedWindow>();
         _ = managed.SetupGet(value => value.Id).Returns(window.Id);
         _ = managed.SetupGet(value => value.Category).Returns(window.Category);
+        _ = managed.SetupProperty(value => value.DocumentTabSource);
         _ = managed.SetupGet(value => value.Metadata).Returns(window.Session is null
             ? null
             : new Dictionary<string, object>(StringComparer.Ordinal) { [EditorWindows.SessionMetadataKey] = window.Session });

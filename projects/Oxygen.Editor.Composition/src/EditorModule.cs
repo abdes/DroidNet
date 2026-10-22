@@ -10,6 +10,7 @@ using DroidNet.Routing;
 using DryIoc;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Diagnostics;
+using Oxygen.Editor.DocumentWindows;
 using Oxygen.Editor.LivePreview;
 using Oxygen.Editor.Materials;
 using Oxygen.Editor.ProjectExplorer;
@@ -50,10 +51,12 @@ public static class EditorModule
         new DiagnosticsModule(),
         new EngineModule(),
         new WorkspaceModule(),
+        new DocumentWindowsModule(),
     ];
 
     /// <summary>
-    ///     Creates the routes of the application's root router: the Project Explorer and the workspace window.
+    ///     Creates the routes of the application's root router: the Project Explorer, the workspace window and the
+    ///     document windows.
     /// </summary>
     /// <returns>The routes.</returns>
     public static Routes CreateRoutes() => new(
@@ -70,6 +73,12 @@ public static class EditorModule
                     Path = "we",
                     MatchMethod = PathMatch.Prefix,
                     ViewModelType = typeof(WorkspaceViewModel),
+                },
+                new Route
+                {
+                    Path = "doc",
+                    MatchMethod = PathMatch.Prefix,
+                    ViewModelType = typeof(DocumentWindowViewModel),
                 },
                 new Route
                 {

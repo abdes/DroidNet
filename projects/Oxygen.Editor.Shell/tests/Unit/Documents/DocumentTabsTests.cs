@@ -36,7 +36,7 @@ public class DocumentTabsTests
             .Setup(f => f.CreateLogger(It.IsAny<string>()))
             .Returns(mockLogger.Object);
 
-        this.service = new DocumentTabs(this.loggerFactoryMock.Object);
+        this.service = Tabs.New(this.loggerFactoryMock.Object);
         this.testWindowId = new WindowId(1);
     }
 
@@ -295,26 +295,6 @@ public class DocumentTabsTests
         // Assert
         _ = opened.Should().BeTrue();
         _ = this.service.GetOpenDocuments(this.testWindowId).Should().HaveCount(2);
-    }
-
-    /// <summary>
-    /// Test that detaching a tab is refused and leaves it in its window: no window can receive a torn-out tab yet.
-    /// </summary>
-    /// <returns>The asynchronous test.</returns>
-    [TestMethod]
-    public async Task DetachDocumentAsync_IsRefusedAndKeepsTheTab()
-    {
-        // Arrange
-        var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata, shouldSelect: true).ConfigureAwait(false);
-
-        // Act
-        var result = await this.service.DetachDocumentAsync(this.testWindowId, metadata.DocumentId).ConfigureAwait(false);
-
-        // Assert
-        _ = result.Should().BeNull();
-        _ = this.service.GetOpenDocuments(this.testWindowId).Should().ContainSingle().Which.Should().BeSameAs(metadata);
-        _ = this.service.GetActiveDocumentId(this.testWindowId).Should().Be(metadata.DocumentId);
     }
 
     /// <summary>

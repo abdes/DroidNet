@@ -14,6 +14,7 @@ using DroidNet.Routing.WinUI;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.UI;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Routing;
 using Oxygen.Editor.Shell.Commands;
@@ -71,24 +72,17 @@ public abstract partial class DockingWorkspaceViewModel(
     /// </summary>
     protected abstract object ThisViewModel { get; }
 
-    /// <summary>
-    /// Gets the routes configuration.
-    /// </summary>
-    protected abstract IRoutes RoutesConfig { get; }
-
     /// <inheritdoc/>
     public virtual async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
-        // The window's id is known only when the workspace is the content of a window.
-        var window = navigationContext.NavigationTarget as Window;
+        var window = navigationContext.NavigationTarget as Window
+            ?? throw new InvalidOperationException("A docking workspace shows only as the content of a window.");
         var context = new LocalRouterContext(navigationContext.NavigationTarget)
         {
             ParentRouter = router,
             RootViewModel = this.ThisViewModel,
         };
-        this.scope = this.CreateWindowScope(
-            [new RouterScopeModule(this.RoutesConfig, context), new DockingWindowModule(), .. this.CreateWindowModules()],
-            window is null ? null : registrations => registrations.RegisterInstance(window.AppWindow.Id));
+        this.scope = this.CreateWindowScope(window.AppWindow.Id, this.CreateWindowModules(context));
 
         var resolver = this.scope.Resolver;
         this.Docker = resolver.Resolve<IDocker>();
@@ -186,19 +180,21 @@ public abstract partial class DockingWorkspaceViewModel(
     protected abstract Task OnInitialNavigationAsync(ILocalRouterContext context);
 
     /// <summary>
-    /// Creates the workspace window's scope from its modules, under the scope that owns the window and disposes its
-    /// scope.
+    /// Creates the workspace window's scope from its modules, with the window's id registered in it, under the scope
+    /// that owns the window and disposes its scope.
     /// </summary>
+    /// <param name="window">The workspace window.</param>
     /// <param name="modules">The window's modules, in registration and activation order.</param>
-    /// <param name="hostInstances">Registers the window's own instances, such as its id.</param>
     /// <returns>The window's scope.</returns>
-    protected abstract ScopeHandle CreateWindowScope(IReadOnlyList<IScopeModule<IWindowLayer>> modules, Action<IRegistrator>? hostInstances);
+    protected abstract ScopeHandle CreateWindowScope(WindowId window, IReadOnlyList<IScopeModule<IWindowLayer>> modules);
 
     /// <summary>
-    /// Creates the modules of the workspace window's scope, which register after its router and its docking.
+    /// Creates the modules of the workspace window's scope: its router over its routes and the local router context,
+    /// its docking, and what the window shows.
     /// </summary>
+    /// <param name="context">The window's local router context.</param>
     /// <returns>The window's modules, in registration and activation order.</returns>
-    protected abstract IEnumerable<IScopeModule<IWindowLayer>> CreateWindowModules();
+    protected abstract IReadOnlyList<IScopeModule<IWindowLayer>> CreateWindowModules(LocalRouterContext context);
 
     /// <summary>
     /// Called once the workspace window's scope is open, with every module registered and activated.

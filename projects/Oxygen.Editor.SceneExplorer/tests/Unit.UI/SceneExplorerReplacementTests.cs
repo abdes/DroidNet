@@ -249,7 +249,9 @@ public sealed partial class SceneExplorerReplacementTests : VisualUserInterfaceT
 
         private LifetimeFixture()
         {
-            this.Documents = new DocumentTabs();
+            var results = Mock.Of<IOperationResultPublisher>();
+            var coordinator = new DocumentCloseCoordinator(this.CreateClosePrompt(), results);
+            this.Documents = new DocumentTabs(coordinator);
             var selection = new SceneSelectionService();
             this.Scenes = new TestSceneDocuments(TestProject.Create(new MockFileSystem()), otherKinds: [new MaterialDocumentKind(new MaterialValidation())]);
             this.Session = new TestSession(this.Context);
@@ -259,15 +261,13 @@ public sealed partial class SceneExplorerReplacementTests : VisualUserInterfaceT
             _ = input.Setup(value => value.CommitAsync(It.IsAny<WindowId>())).Returns(Task.CompletedTask);
             _ = input.Setup(value => value.CommitAsync(It.IsAny<DocumentId>())).Returns(Task.CompletedTask);
             var files = new ContentPipeline.Relocation.ProjectDocumentFiles(this.Scenes.Session);
-            var results = Mock.Of<IOperationResultPublisher>();
             this.Service = new DocumentService(
                 this.Documents,
+                coordinator,
                 this.Scenes.Open,
                 files,
-                this.CreateClosePrompt(),
                 Mock.Of<IDocumentConfirmations>(),
                 input.Object,
-                results,
                 new HostingContext
                 {
                     Dispatcher = DispatcherQueue.GetForCurrentThread(),

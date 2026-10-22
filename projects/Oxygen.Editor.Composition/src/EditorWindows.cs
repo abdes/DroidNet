@@ -13,8 +13,9 @@ using Oxygen.Editor.Projects;
 namespace Oxygen.Editor;
 
 /// <summary>
-///     The editor's top-level windows: the targets the application's router opens them in, the page each one shows
-///     first, and how Aura's window manager tells their kind and their session.
+///     The editor's top-level windows: the Start window, a project's workspace window and the document windows its tabs
+///     are torn out into; the targets the application's router opens them in, the page each one shows first, and how
+///     Aura's window manager tells their kind and their session.
 /// </summary>
 /// <remarks>
 ///     Aura's window manager is the editor's window registry: a window's kind is its <see cref="WindowCategory" />, and a
@@ -28,11 +29,17 @@ public static class EditorWindows
     /// <summary>The target of a project's workspace window.</summary>
     public const string WorkspaceTarget = "wnd-we";
 
+    /// <summary>The target of a document window, which a tab torn out of another window of the session opens.</summary>
+    public const string DocumentTarget = "wnd-doc";
+
     /// <summary>The page the Start window shows first.</summary>
     public const string StartPage = "/pe/home";
 
     /// <summary>The page of a project's workspace window.</summary>
     public const string WorkspacePage = "/we";
+
+    /// <summary>The page of a document window.</summary>
+    public const string DocumentPage = "/doc";
 
     /// <summary>The metadata key under which a window of a project session holds its <see cref="IProjectSession" />.</summary>
     public const string SessionMetadataKey = "Oxygen.ProjectSession";
@@ -42,6 +49,9 @@ public static class EditorWindows
 
     /// <summary>Gets the category of a project's workspace window.</summary>
     public static WindowCategory WorkspaceCategory { get; } = new(WorkspaceTarget);
+
+    /// <summary>Gets the category of a document window: Aura's document windows, which show document tabs.</summary>
+    public static WindowCategory DocumentCategory => WindowCategory.Document;
 
     /// <summary>Gets the open windows of a project session, as Aura's window manager knows them.</summary>
     /// <param name="windows">The window manager.</param>

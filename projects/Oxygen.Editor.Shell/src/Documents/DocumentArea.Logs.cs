@@ -29,6 +29,14 @@ public sealed partial class DocumentArea
 
     [LoggerMessage(
         SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "The tab of '{Title}' moved; it entered this window: {Entered}.")]
+    private static partial void LogTabMoved(ILogger logger, string title, bool entered);
+
+    private void LogTabMoved(string title, bool entered) => LogTabMoved(this.logger, title, entered);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
         Level = LogLevel.Warning,
         Message = "'{Asset}' was not opened: {Problem}")]
     private static partial void LogNotOpened(ILogger logger, AssetPath asset, string problem);

@@ -18,8 +18,9 @@ using Oxygen.Editor.Shell.Contributions;
 namespace Oxygen.Editor.Workspace;
 
 /// <summary>
-///     The workspace window in the editor scope: its view model and view, and the features each workspace window shows.
-///     Each window registers the features' services in its own scope.
+///     The workspace window in the editor scope: its view model and view, the features each workspace window shows, and
+///     the views of the features' document editors, which every window that shows documents has. Each window registers
+///     the features' services in its own scope.
 /// </summary>
 internal sealed class WorkspaceModule : IScopeModule<IApplicationLayer>
 {
@@ -39,11 +40,13 @@ internal sealed class WorkspaceModule : IScopeModule<IApplicationLayer>
         scope.Register<IFeatureModule, ContentExplorerModule>(Reuse.Singleton);
         scope.Register<IFeatureModule, CookedInspectorModule>(Reuse.Singleton);
         scope.Register<IFeatureModule, CookingModule>(Reuse.Singleton);
-        scope.Register<IFeatureModule, MaterialEditorModule>(Reuse.Singleton);
         scope.Register<IFeatureModule, OutputModule>(Reuse.Singleton);
         scope.Register<IFeatureModule, ProblemsModule>(Reuse.Singleton);
         scope.Register<IFeatureModule, SceneEditorModule>(Reuse.Singleton);
         scope.Register<IFeatureModule, SceneExplorerModule>(Reuse.Singleton);
         scope.Register<IFeatureModule, SceneInspectorModule>(Reuse.Singleton);
+
+        // The views of the editors whose documents move between the session's windows.
+        scope.Register<IDocumentViewModule, MaterialEditorModule>(Reuse.Singleton);
     }
 }

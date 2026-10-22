@@ -53,6 +53,7 @@ internal sealed class ApplicationModule : IScopeModule<IApplicationLayer>
         // window; closing the editor's last window otherwise exits it.
         scope.Register<ProjectSessionHost>(Reuse.Singleton);
         scope.RegisterMapping<IProjectSessionHost, ProjectSessionHost>();
+        scope.RegisterMapping<ISessionWindows, ProjectSessionHost>();
         scope.Register<IWindowCloseParticipant, SessionWindowClose>(Reuse.Singleton);
         scope.Register<IWindowCloseParticipant, EditorExit>(Reuse.Singleton);
 
@@ -95,6 +96,16 @@ internal sealed class ApplicationModule : IScopeModule<IApplicationLayer>
             },
             Reuse.Transient,
             serviceKey: new Target { Name = EditorWindows.WorkspaceTarget });
+
+        // Document window, one for each tab torn out of the session's windows
+        scope.RegisterDelegate<Window>(
+            resolverContext =>
+            {
+                var windowFactory = resolverContext.Resolve<IWindowFactory>();
+                return windowFactory.CreateDecoratedWindow<RoutedWindow>(EditorWindows.DocumentCategory).GetAwaiter().GetResult();
+            },
+            Reuse.Transient,
+            serviceKey: new Target { Name = EditorWindows.DocumentTarget });
 
         // Project Explorer window
         scope.RegisterDelegate<Window>(

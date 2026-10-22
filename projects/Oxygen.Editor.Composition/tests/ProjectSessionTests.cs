@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using DroidNet.Aura;
 using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Moq;
@@ -35,7 +36,7 @@ public sealed class ProjectSessionTests
     {
         // Arrange
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows();
+        _ = scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
         var host = scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         var changes = 0;
@@ -48,9 +49,12 @@ public sealed class ProjectSessionTests
         _ = host.Current.Should().BeSameAs(session);
         _ = scopes.Host.Resolve<IProjectSessionHost>().Should().BeSameAs(host);
         _ = session.Context.Should().BeSameAs(context);
-        var window = host.CreateWindowScope([], hostInstances: null);
+        var window = host.OpenWindow(new WindowId(1), []);
         _ = window.Resolver.Resolve<IProject>().Should().BeSameAs(project);
         _ = window.Resolver.Resolve<IProjectSession>().Should().BeSameAs(session);
+        _ = window.Resolver.Resolve<WindowId>().Should().Be(new WindowId(1));
+        scopes.Windows.Verify(manager => manager.SetMetadata(new WindowId(1), EditorWindows.SessionMetadataKey, session), Times.Once());
+        _ = scopes.Windows.Object.GetWindow(new WindowId(1))!.DocumentTabSource.Should().BeSameAs(window.Resolver.Resolve<IDocumentTabs>());
         _ = session.Lifetime.IsCancellationRequested.Should().BeFalse();
         _ = changes.Should().Be(1);
     }
@@ -79,11 +83,11 @@ public sealed class ProjectSessionTests
     {
         // Arrange
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows();
+        _ = scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
         var host = scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         var session = await host.OpenAsync(context, project).ConfigureAwait(false);
-        var window = host.CreateWindowScope([], hostInstances: null);
+        var window = host.OpenWindow(new WindowId(1), []);
         var history = window.Resolver.Resolve<IHistoryService>();
         history.GlobalHistory.AddChange("Edit", new List<int>(), static list => list.Clear());
         var changes = 0;
@@ -127,11 +131,11 @@ public sealed class ProjectSessionTests
     {
         // Arrange
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows();
+        _ = scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
         var host = scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         _ = await host.OpenAsync(context, project).ConfigureAwait(false);
-        var window = host.CreateWindowScope([], hostInstances: null);
+        var window = host.OpenWindow(new WindowId(1), []);
         var documents = window.Resolver.Resolve<OpenDocuments>();
         var clipboard = window.Resolver.Resolve<ISceneNodeClipboard>();
 
@@ -187,11 +191,11 @@ public sealed class ProjectSessionTests
     {
         // Arrange
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows();
+        _ = scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
         var host = scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         _ = await host.OpenAsync(context, project).ConfigureAwait(false);
-        var window = host.CreateWindowScope([], hostInstances: null);
+        var window = host.OpenWindow(new WindowId(1), []);
 
         // Act
         var first = window.Resolver.Resolve<PersistentState>();
@@ -234,7 +238,7 @@ public sealed class ProjectSessionTests
         var session = await host.OpenAsync(context, project).ConfigureAwait(false);
         var workspace = new WindowId(7);
         var windows = scopes.ShowWindows(new OpenWindow(workspace, EditorWindows.WorkspaceCategory, session));
-        var window = host.CreateWindowScope([], hostInstances: null);
+        var window = host.OpenWindow(workspace, []);
         var disposedWhenClosed = true;
         _ = windows.Setup(value => value.CloseWindowAsync(workspace))
             .Callback(() => disposedWhenClosed = window.IsDisposed)
@@ -248,6 +252,44 @@ public sealed class ProjectSessionTests
         _ = disposedWhenClosed.Should().BeFalse();
         _ = window.IsDisposed.Should().BeTrue();
         _ = host.Current.Should().BeNull();
+    }
+
+    [TestMethod]
+    public async Task OpenWindow_ThatAuraDoesNotKnow_Throws()
+    {
+        // Arrange
+        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
+        _ = scopes.ShowWindows();
+        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        var (context, project) = NewProject();
+        _ = await host.OpenAsync(context, project).ConfigureAwait(false);
+
+        // Act
+        var open = () => host.OpenWindow(new WindowId(4), []);
+
+        // Assert
+        _ = open.Should().Throw<InvalidOperationException>();
+    }
+
+    [TestMethod]
+    public async Task CloseAsync_WindowThatStaysOpen_LeavesTheSession()
+    {
+        // Arrange: the window refuses to close.
+        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
+        var host = scopes.Host.Resolve<ProjectSessionHost>();
+        var (context, project) = NewProject();
+        var session = await host.OpenAsync(context, project).ConfigureAwait(false);
+        var kept = new WindowId(5);
+        var windows = scopes.ShowWindows(new OpenWindow(kept, WindowCategory.Document, session));
+        _ = host.OpenWindow(kept, []);
+        _ = windows.Setup(value => value.CloseWindowAsync(kept)).ReturnsAsync(false);
+
+        // Act
+        await host.CloseAsync().ConfigureAwait(false);
+
+        // Assert: the window shows no tabs of the closed session and no longer carries it.
+        _ = windows.Object.GetWindow(kept)!.DocumentTabSource.Should().BeNull();
+        windows.Verify(value => value.RemoveMetadata(kept, EditorWindows.SessionMetadataKey), Times.Once());
     }
 
     [TestMethod]
@@ -273,11 +315,11 @@ public sealed class ProjectSessionTests
     {
         // Arrange
         await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
-        _ = scopes.ShowWindows();
+        _ = scopes.ShowWindows(new OpenWindow(new WindowId(1), EditorWindows.WorkspaceCategory, Session: null));
         var host = scopes.Host.Resolve<ProjectSessionHost>();
         var (context, project) = NewProject();
         _ = await host.OpenAsync(context, project).ConfigureAwait(false);
-        var before = host.CreateWindowScope([], hostInstances: null).Resolver.Resolve<IHistoryService>();
+        var before = host.OpenWindow(new WindowId(1), []).Resolver.Resolve<IHistoryService>();
         await host.CloseAsync().ConfigureAwait(false);
         var (next, nextProject) = NewProject();
 
@@ -286,7 +328,7 @@ public sealed class ProjectSessionTests
 
         // Assert
         _ = host.Current!.Context.Should().BeSameAs(next);
-        _ = host.CreateWindowScope([], hostInstances: null).Resolver.Resolve<IHistoryService>().Should().NotBeSameAs(before);
+        _ = host.OpenWindow(new WindowId(1), []).Resolver.Resolve<IHistoryService>().Should().NotBeSameAs(before);
     }
 
     private static (ProjectContext Context, IProject Project) NewProject()

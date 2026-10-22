@@ -25,7 +25,7 @@ namespace Oxygen.Editor.Services;
 /// </summary>
 /// <remarks>
 ///     This is a working implementation that currently handle placement of the `ProjectExplorer`
-///     and `WroldEditor` windows. Identification of the windows relies on the fact that we use
+///     and `WroldEditor` windows; a document window opens where its tab was dropped and keeps no placement. Identification of the windows relies on the fact that we use
 ///     routed navigation, and wach window will be associated with a navigation context. The
 ///     Navigation URL is used to identify the window type, and the placement information is stored
 ///     in the editor persistent settings.
@@ -96,9 +96,11 @@ public sealed partial class WindowPlacementService : IWindowCloseParticipant, ID
     {
         ArgumentNullException.ThrowIfNull(close);
 
-        // A window's placement is saved once its close is certain, before it is destroyed.
+        // A window's placement is saved once its close is certain, before it is destroyed. A document window has none.
         var window = close.Window;
-        return Task.FromResult<WindowCloseStep?>(new WindowCloseStep(finalize: () => this.TrySavePlacement(window)));
+        return Task.FromResult<WindowCloseStep?>(this.windows.ContainsKey(window)
+            ? new WindowCloseStep(finalize: () => this.TrySavePlacement(window))
+            : WindowCloseStep.None);
     }
 
     /// <inheritdoc/>
@@ -200,7 +202,13 @@ public sealed partial class WindowPlacementService : IWindowCloseParticipant, ID
             return;
         }
 
+        // A document window opens where its tab was dropped.
         var windowId = window.AppWindow.Id;
+        if (this.windowManager.GetWindow(windowId)?.Category == EditorWindows.DocumentCategory)
+        {
+            return;
+        }
+
         _ = this.windows.TryGetValue(windowId, out var placementInfo);
         if (placementInfo?.IsPlaced == true)
         {

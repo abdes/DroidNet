@@ -8,7 +8,6 @@ using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Core.Diagnostics;
@@ -41,7 +40,6 @@ internal sealed partial class SessionWindowClose : IWindowCloseParticipant
 
     private readonly ProjectSessionHost sessions;
     private readonly IWindowManagerService windows;
-    private readonly IDocumentTabs documents;
     private readonly IRouter router;
     private readonly HostingContext hosting;
     private readonly IOperationResultPublisher results;
@@ -51,7 +49,6 @@ internal sealed partial class SessionWindowClose : IWindowCloseParticipant
     /// <summary>Initializes a new instance of the <see cref="SessionWindowClose" /> class.</summary>
     /// <param name="sessions">The project session's host.</param>
     /// <param name="windows">The window manager, which knows the session's windows.</param>
-    /// <param name="documents">The tabs of every window, whose documents the session's close closes.</param>
     /// <param name="router">The application's router, which opens the Start window.</param>
     /// <param name="hosting">The UI thread, where documents close, windows open and the session closes.</param>
     /// <param name="results">Publishes a close that left the workspace window open.</param>
@@ -60,7 +57,6 @@ internal sealed partial class SessionWindowClose : IWindowCloseParticipant
     public SessionWindowClose(
         ProjectSessionHost sessions,
         IWindowManagerService windows,
-        IDocumentTabs documents,
         IRouter router,
         HostingContext hosting,
         IOperationResultPublisher results,
@@ -69,7 +65,6 @@ internal sealed partial class SessionWindowClose : IWindowCloseParticipant
     {
         this.sessions = sessions;
         this.windows = windows;
-        this.documents = documents;
         this.router = router;
         this.hosting = hosting;
         this.results = results;
@@ -93,8 +88,8 @@ internal sealed partial class SessionWindowClose : IWindowCloseParticipant
             return WindowCloseStep.None;
         }
 
-        var others = EditorWindows.WindowsOf(this.windows, session).Select(static managed => managed.Id).Where(id => id != window).ToList();
-        var prepared = await this.hosting.Dispatcher.DispatchAsync(() => this.PrepareDocumentsAsync(others)).ConfigureAwait(false);
+        // The closing window's own documents take part in its close as every window's do.
+        var prepared = await this.hosting.Dispatcher.DispatchAsync(() => this.sessions.PrepareCloseDocumentsAsync(except: window)).ConfigureAwait(false);
         return prepared is null
             ? null
             : new WindowCloseStep(
@@ -103,25 +98,7 @@ internal sealed partial class SessionWindowClose : IWindowCloseParticipant
                 prepared: prepared);
     }
 
-    // The documents of the session's other windows, each window prepared in turn; null when one is kept.
-    private async Task<PreparedDocuments?> PrepareDocumentsAsync(IReadOnlyList<WindowId> others)
-    {
-        var prepared = new PreparedDocuments();
-        foreach (var other in others)
-        {
-            if (await this.documents.PrepareCloseAllAsync(other).ConfigureAwait(true) is not { } transaction)
-            {
-                prepared.Dispose();
-                return null;
-            }
-
-            prepared.Add(transaction);
-        }
-
-        return prepared;
-    }
-
-    private async Task<bool> CommitAsync(PreparedDocuments prepared, WindowId window)
+    private async Task<bool> CommitAsync(DocumentCloseTransaction prepared, WindowId window)
         => await prepared.CommitAsync().ConfigureAwait(true) && await this.OpenStartWindowAsync(window).ConfigureAwait(true);
 
     private async Task<bool> OpenStartWindowAsync(WindowId window)
@@ -175,34 +152,5 @@ internal sealed partial class SessionWindowClose : IWindowCloseParticipant
             CompletedAt = DateTimeOffset.Now,
             Diagnostics = diagnostics,
         });
-    }
-
-    // The prepared closes of the session's other windows, committed together and released together.
-    private sealed class PreparedDocuments : IDisposable
-    {
-        private readonly List<DocumentCloseTransaction> transactions = [];
-
-        public void Add(DocumentCloseTransaction transaction) => this.transactions.Add(transaction);
-
-        public async Task<bool> CommitAsync()
-        {
-            foreach (var transaction in this.transactions)
-            {
-                if (!await transaction.CommitAsync().ConfigureAwait(true))
-                {
-                    return false;
-                }
-            }
-
-            return true;
-        }
-
-        public void Dispose()
-        {
-            foreach (var transaction in this.transactions)
-            {
-                transaction.Dispose();
-            }
-        }
     }
 }

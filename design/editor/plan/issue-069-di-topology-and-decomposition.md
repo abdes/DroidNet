@@ -811,15 +811,15 @@ docking state.
   - **Window creation:** `IWindowFactory.CreateDecoratedWindow` with Aura's
     `Document` category, as the Aura MultiWindow sample does.
   - **Tab drag between windows:** Aura's `TabDragCoordinator`, `TabStrip` and
-    `DocumentTabPresenter` over `IDocumentTabSource`, whose detach and attach are
-    already keyed by window. The Shell's `DocumentTabs` implements
-    `DetachDocumentAsync`, which refuses every detach today, and raises
-    `DocumentDetached`.
-  - **Tear-out:** `TabStrip.TabTearOutRequested` gives the dropped tab and the
-    screen point, and leaves creating the window to the application. The editor
-    handles it in the Shell; if Aura's `DocumentTabPresenter` can offer that
-    handling generally, through a window-factory hook, it goes into Aura
-    instead.
+    `DocumentTabPresenter` over `IDocumentTabSource`. The presenter completes the
+    drag protocol with Aura's `DocumentTransfers`, registered with the drag
+    services: a dragged-out tab detaches its document, the strip it is dropped on
+    attaches it, and a document no window takes goes back where it came from.
+    The Shell's `DocumentTabs` detaches a tab (never a pinned one), keeps the
+    document open, and attaches a tab before selecting it.
+  - **Tear-out:** a tab dropped outside every strip goes to the window Aura's
+    `IDocumentWindowFactory` hook creates at the drop point. The editor's
+    factory opens a document window through the application's router.
   - **Close:** Aura's `WindowClosing`, which S4.4 makes the Shell's single
     close and exit path.
 
@@ -837,10 +837,22 @@ docking state.
   their window through the window manager instead of being broadcast and
   filtered; dialogs and focus find their window at call time. Closing a document window closes its documents with the usual
   unsaved prompt, and Cancel keeps it open (owner's decision).
-  `DocumentAreaView` is created per window. The session's handle owns every
-  window scope (decision 13): the last workspace window's close disposes them
-  with the session, and a document window's close, which leaves the session
-  open, disposes its own window scope through the session's handle, awaited.
+  The workspace window keeps one `DocumentAreaView`, which its center dock
+  presents again on every rebind; a document window builds its own. The
+  features' `IDocumentViewModule`s register their editors' views in every window
+  that shows documents. A document window closes once its last tab has left it.
+  The session's handle owns every window scope (decision 13), and every window
+  scope ends, awaited, when its window closes; closing the session disposes what
+  is left. A window joins its session in one place, `ISessionWindows.OpenWindow`,
+  which creates its scope, records the window as the session's and binds its
+  tab strip to the session's tabs: Aura's tab source is a per-window binding
+  (`IManagedWindow.DocumentTabSource`), and a drop on a strip bound to another
+  source goes back where it came from. The tabs, their close coordinator and the
+  input commits are the session's (`ShellSessionModule`), and the session's
+  owner closes the session's documents through `PrepareCloseDocumentsAsync`. The
+  composition root lists the modules of every kind of window
+  (`EditorWindowModules`); the Shell provides them, and its window modules build
+  a window's contributions from the features they are given.
 
 - **S5.4 Lifetime tests.** `DocumentAreaViewModel` view switching (unit), a
   viewport's unload, reload and re-attach on tab switches (unit), a material
@@ -908,7 +920,8 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S4.1 to S4.4 Project Session                 | `done`        | Landed in `6e9621d0e`; the document service and editors moved into the session after it (decision 14); `EditorCloseTests` is the open check                                                 |
 | S5.1 Docking per docker                      | `done`        | Each `Docker` creates and finds its docks and dockables and runs its own docking maneuver; no docking statics remain                                                                        |
 | S5.2 Retained panels in the workspace window | `done`        | Closed panels keep their view models and dock back where they were; an explicit cook reopens Cooking; accepted in the running editor                                                        |
-| S5.3 to S5.4 Documents across windows        | `not started` |                                                                                                                                                                                             |
+| S5.3 Document windows                        | `done`        | Tabs tear out into document windows and drag back; the tabs, their close coordinator and input commits are the session's; accepted in the running editor                                    |
+| S5.4 Lifetime tests                          | `not started` |                                                                                                                                                                                             |
 | S6.1 to S6.3 Service location and messenger  | `not started` |                                                                                                                                                                                             |
 | S7 Documentation                             | `not started` |                                                                                                                                                                                             |
 

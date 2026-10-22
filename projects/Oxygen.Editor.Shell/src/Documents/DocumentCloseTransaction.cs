@@ -23,6 +23,10 @@ public sealed partial class DocumentCloseTransaction : IDisposable
         this.release = release;
     }
 
+    /// <summary>Creates a transaction that closes nothing, for a close that has no document to prepare.</summary>
+    /// <returns>The transaction, whose commit succeeds.</returns>
+    public static DocumentCloseTransaction CreateEmpty() => new(static () => Task.FromResult(true), static () => { });
+
     /// <summary>Closes prepared documents exactly once.</summary>
     /// <returns>True when the prepared documents closed; false if they changed after preparation.</returns>
     public async Task<bool> CommitAsync()

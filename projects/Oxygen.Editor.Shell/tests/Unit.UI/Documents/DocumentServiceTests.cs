@@ -34,6 +34,7 @@ namespace Oxygen.Editor.Shell.Unit.UI.Tests.Documents;
 public sealed partial class DocumentServiceTests : VisualUserInterfaceTests
 {
     private static readonly WindowId Window = new(5);
+    private static readonly WindowId OtherWindow = new(6);
 
     /// <summary>Opening an asset twice shows its one document, whose editor the kind's descriptor made once.</summary>
     /// <returns>The asynchronous test.</returns>
@@ -311,6 +312,33 @@ public sealed partial class DocumentServiceTests : VisualUserInterfaceTests
         _ = editor.Disposed.Should().BeTrue();
     });
 
+    /// <summary>
+    /// The editor of a document whose tab a drag moves to another window keeps editing it there, with that window's
+    /// services; the document stays open and its editor lives on.
+    /// </summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public Task AMovedTabsEditorUsesTheServicesOfItsNewWindow() => EnqueueAsync(async () =>
+    {
+        using var fixture = new Fixture();
+        using var other = fixture.CreateArea(OtherWindow);
+        using var attachments = new DocumentWindowAttachments(fixture.Area, fixture.Service, Mock.Of<ICommandService>(), Mock.Of<IPlacementService>());
+        using var otherAttachments = new DocumentWindowAttachments(other, fixture.Service, Mock.Of<ICommandService>(), Mock.Of<IPlacementService>());
+        var intro = await fixture.OpenAsync("Intro").ConfigureAwait(true);
+        var editor = fixture.Editors.Single();
+
+        var tab = await fixture.Tabs.DetachDocumentAsync(Window, intro.Id).ConfigureAwait(true);
+        _ = editor.Window.Should().BeNull("its tab has left the window");
+        _ = await fixture.Tabs.AttachDocumentAsync(OtherWindow, tab!).ConfigureAwait(true);
+
+        _ = editor.Window.Should().NotBeNull();
+        _ = editor.Window!.Window.Should().Be(OtherWindow);
+        _ = editor.Window.Area.Should().BeSameAs(other);
+        _ = editor.Disposed.Should().BeFalse();
+        _ = fixture.Service.EditorOf(intro).Should().BeSameAs(editor);
+        _ = other.ActiveEditor.Should().BeSameAs(editor);
+    });
+
     private static UnsavedDocument Describe(Document document) => new(document.Id, document.File, document.Title);
 
     private static async Task WaitUntilAsync(Func<bool> condition)
@@ -325,10 +353,11 @@ public sealed partial class DocumentServiceTests : VisualUserInterfaceTests
     private sealed partial class Fixture : IDisposable
     {
         private readonly IDisposable[] owned;
+        private readonly DocumentEditorDescriptor descriptor;
 
         public Fixture(bool onePerArea = false, bool approveClose = true, FakeRelocations? relocations = null)
         {
-            var descriptor = new DocumentEditorDescriptor(this.Notes.Kind, tab =>
+            this.descriptor = new DocumentEditorDescriptor(this.Notes.Kind, tab =>
             {
                 var editor = new RecordingEditor(tab.Document);
                 this.Editors.Add(editor);
@@ -347,32 +376,25 @@ public sealed partial class DocumentServiceTests : VisualUserInterfaceTests
                 Application = Application.Current,
                 DispatcherScheduler = new DispatcherQueueScheduler(DispatcherQueue.GetForCurrentThread()),
             };
+            var coordinator = new DocumentCloseCoordinator(prompt.Object, this.Results.Object);
+            this.Tabs = new DocumentTabs(coordinator);
             this.Service = new DocumentService(
                 this.Tabs,
+                coordinator,
                 this.Notes.Documents,
                 this.Notes.Locations,
-                prompt.Object,
                 this.Confirmations.Object,
                 this.Committer.Object,
-                this.Results.Object,
                 hosting,
                 catalog.Object,
                 relocations);
-            this.Area = new DocumentArea(
-                this.Tabs,
-                this.Notes.Documents,
-                new DocumentEditors(this.Notes.Documents, [descriptor]),
-                this.Service,
-                this.Notes.Locations,
-                this.Results.Object,
-                Window,
-                static _ => { });
+            this.Area = this.CreateArea(Window);
             this.owned = [this.Area, this.Service, this.Changes, this.Notes];
         }
 
         public Notes Notes { get; } = new();
 
-        public DocumentTabs Tabs { get; } = new();
+        public DocumentTabs Tabs { get; }
 
         public DocumentArea Area { get; }
 
@@ -387,6 +409,18 @@ public sealed partial class DocumentServiceTests : VisualUserInterfaceTests
         public Mock<IOperationResultPublisher> Results { get; } = new();
 
         public List<RecordingEditor> Editors { get; } = [];
+
+        // The document area of a window over the session's documents.
+        public DocumentArea CreateArea(WindowId window)
+            => new(
+                this.Tabs,
+                this.Notes.Documents,
+                new DocumentEditors(this.Notes.Documents, [this.descriptor]),
+                this.Service,
+                this.Notes.Locations,
+                this.Results.Object,
+                window,
+                static _ => { });
 
         public async Task<Document> OpenAsync(string name)
         {

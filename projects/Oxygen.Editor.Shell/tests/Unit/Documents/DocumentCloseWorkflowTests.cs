@@ -250,17 +250,54 @@ public sealed partial class DocumentCloseWorkflowTests
         _ = fixture.Participants.Should().OnlyContain(participant => participant.CloseCalls == 1);
     }
 
+    /// <summary>
+    /// A window whose own close prepares its documents is left out of the close of every window's documents, as the
+    /// close of a session's last workspace window does.
+    /// </summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task ClosingEveryWindowsDocuments_LeavesOutTheWindowThatClosesItself()
+    {
+        using var fixture = new Fixture(items =>
+        {
+            foreach (var item in items)
+            {
+                item.IsSelected = false;
+            }
+
+            return Task.FromResult(true);
+        });
+        var closing = new WindowId(2);
+        var other = await fixture.OpenAsync("Other").ConfigureAwait(false);
+        var own = await fixture.OpenAsync("Own", window: closing).ConfigureAwait(false);
+
+        using var transaction = await fixture.Service.PrepareCloseAllWindowsAsync(except: closing).ConfigureAwait(false);
+        _ = (await transaction!.CommitAsync().ConfigureAwait(false)).Should().BeTrue();
+
+        _ = fixture.Service.GetOpenDocuments(Window).Should().BeEmpty();
+        _ = fixture.Service.GetOpenDocuments(closing).Should().ContainSingle();
+        _ = other.CloseCalls.Should().Be(1);
+        _ = own.CloseCalls.Should().Be(0);
+    }
+
     /// <summary>Open note documents with an unsaved edit each, shown in the tabs of one or two windows.</summary>
-    private sealed partial class Fixture(Func<IReadOnlyList<DocumentCloseItem>, Task<bool>> prompt) : IDisposable
+    private sealed partial class Fixture : IDisposable
     {
         private readonly Notes notes = new();
         private readonly List<DocumentTab> tabs = [];
-        private DocumentCloseCoordinator? coordinator;
-        private IDisposable? coordinatorUse;
+
+        // One coordinator decides the closes of every window, as the project session's does.
+        private readonly DocumentCloseCoordinator coordinator;
+
+        public Fixture(Func<IReadOnlyList<DocumentCloseItem>, Task<bool>> prompt)
+        {
+            this.coordinator = new DocumentCloseCoordinator(new Prompt(prompt), this.Results.Object);
+            this.Service = new DocumentTabs(this.coordinator);
+        }
 
         public Mock<IOperationResultPublisher> Results { get; } = new();
 
-        public DocumentTabs Service { get; } = new();
+        public DocumentTabs Service { get; }
 
         public List<Participant> Participants { get; } = [];
 
@@ -273,28 +310,15 @@ public sealed partial class DocumentCloseWorkflowTests
             this.tabs.Add(tab);
             var participant = new Participant(tab);
             _ = (await this.Service.OpenDocumentAsync(target, tab).ConfigureAwait(false)).Should().BeTrue();
-            this.Coordinator().Register(tab, participant);
+            this.coordinator.Register(tab, participant);
             this.Participants.Add(participant);
             return participant;
         }
 
         public void Dispose()
         {
-            this.coordinatorUse?.Dispose();
             this.tabs.ForEach(static tab => tab.Dispose());
             this.notes.Dispose();
-        }
-
-        // One coordinator decides the closes of every window, as the project session's does.
-        private DocumentCloseCoordinator Coordinator()
-        {
-            if (this.coordinator is null)
-            {
-                this.coordinator = new DocumentCloseCoordinator(new Prompt(prompt), this.Results.Object);
-                this.coordinatorUse = this.Service.UseCloseCoordinator(this.coordinator);
-            }
-
-            return this.coordinator;
         }
     }
 

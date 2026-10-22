@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Aura.Windowing;
 using DroidNet.Composition;
 using DroidNet.Routing;
 using DryIoc;
@@ -35,8 +34,11 @@ namespace Oxygen.Editor.Workspace;
 public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 {
     private readonly IReadOnlyList<IFeatureModule> modules;
-    private readonly ProjectSessionHost sessions;
-    private readonly IWindowManagerService windows;
+    private readonly IReadOnlyList<IDocumentViewModule> documentViews;
+
+    // The window's own routes, and one per contributed panel.
+    private readonly Routes routes;
+    private readonly ISessionWindows sessions;
     private readonly IProjectManagerService projectManager;
     private readonly IProjectUsageService projectUsage;
     private readonly ILogger logger;
@@ -50,28 +52,29 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     /// <summary>
     ///     Initializes a new instance of the <see cref="WorkspaceViewModel"/> class.
     /// </summary>
-    /// <param name="sessions">The project session, which creates the workspace window's scope and owns it.</param>
-    /// <param name="windows">The window manager, which records the workspace window's session.</param>
+    /// <param name="sessions">The project session's windows, which creates the workspace window's scope and owns it.</param>
     /// <param name="router">The router for navigation within the workspace.</param>
     /// <param name="projectManager">The project authoring service.</param>
     /// <param name="projectUsage">The per-project usage store (last-opened scene).</param>
     /// <param name="modules">The features whose panels and services each workspace window has.</param>
+    /// <param name="documentViews">The views of the features' document editors, which each workspace window has.</param>
     /// <param name="loggerFactory">Optional logger factory for logging.</param>
     public WorkspaceViewModel(
-        ProjectSessionHost sessions,
-        IWindowManagerService windows,
+        ISessionWindows sessions,
         IRouter router,
         IProjectManagerService projectManager,
         IProjectUsageService projectUsage,
         IEnumerable<IFeatureModule> modules,
+        IEnumerable<IDocumentViewModule> documentViews,
         ILoggerFactory? loggerFactory = null)
         : base(router, loggerFactory)
     {
         ArgumentNullException.ThrowIfNull(modules);
+        ArgumentNullException.ThrowIfNull(documentViews);
         this.modules = [.. modules];
+        this.documentViews = [.. documentViews];
         this.sessions = sessions;
-        this.windows = windows;
-        this.RoutesConfig = CreateRoutes(this.modules);
+        this.routes = CreateRoutes(this.modules);
         this.projectManager = projectManager;
         this.projectUsage = projectUsage;
         this.logger = loggerFactory?.CreateLogger<WorkspaceViewModel>() ?? Microsoft.Extensions.Logging.Abstractions.NullLogger<WorkspaceViewModel>.Instance;
@@ -82,9 +85,6 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 
     /// <inheritdoc />
     protected override string CenterOutletName => "renderer";
-
-    /// <inheritdoc />
-    protected override IRoutes RoutesConfig { get; }
 
     /// <inheritdoc />
     public override async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
@@ -103,22 +103,19 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     }
 
     /// <inheritdoc />
-    protected override ScopeHandle CreateWindowScope(IReadOnlyList<IScopeModule<IWindowLayer>> modules, Action<IRegistrator>? hostInstances)
-        => this.sessions.CreateWindowScope(modules, hostInstances);
+    protected override ScopeHandle CreateWindowScope(WindowId window, IReadOnlyList<IScopeModule<IWindowLayer>> modules)
+        => this.sessions.OpenWindow(window, modules);
 
     /// <inheritdoc />
-    protected override IEnumerable<IScopeModule<IWindowLayer>> CreateWindowModules()
-        => WorkspaceWindowModule.Compose(this.modules);
+    protected override IReadOnlyList<IScopeModule<IWindowLayer>> CreateWindowModules(LocalRouterContext context)
+        => EditorWindowModules.Workspace(this.routes, context, this.modules, this.documentViews);
 
     /// <inheritdoc />
     protected override void OnWindowScopeOpened(IResolver window)
     {
         ArgumentNullException.ThrowIfNull(window);
 
-        // The window is one of the session's: closing the session's last window returns to the Start window and closes
-        // the session.
         this.session = window.Resolve<IProjectSession>();
-        this.windows.SetMetadata(window.Resolve<WindowId>(), EditorWindows.SessionMetadataKey, this.session);
         this.assetCatalog = window.Resolve<IAssetCatalog>();
         this.documentArea = window.Resolve<IDocumentArea>();
         this.placement = window.Resolve<IPlacementService>();

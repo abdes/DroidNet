@@ -150,6 +150,9 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     /// <summary>Gets the document area of the window that shows the transition host, once it was created.</summary>
     public DocumentArea? TransitionArea { get; private set; }
 
+    /// <summary>Gets the tabs of the transition window, once the host was created.</summary>
+    public DocumentTabs? TransitionTabs { get; private set; }
+
     /// <summary>Gets the session's document service under the transition host, once it was created.</summary>
     public DocumentService? TransitionDocuments { get; private set; }
 
@@ -271,7 +274,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         _ = (await this.contentSession.ChangeMountsAsync(this.Session.Context, desired, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
     }
 
-    public DocumentAreaViewModel CreateDocumentTransitionHost(IContainer container, DocumentTabs documents, CatalogWorkloadServices services, WindowId windowId)
+    public DocumentAreaViewModel CreateDocumentTransitionHost(IContainer container, CatalogWorkloadServices services, WindowId windowId)
     {
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
@@ -294,14 +297,16 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Session)),
         ];
         var files = new ProjectDocumentFiles(this.Session);
+        var coordinator = new DocumentCloseCoordinator(Mock.Of<IDocumentClosePrompt>(), publisher.Object);
+        var documents = new DocumentTabs(coordinator);
+        this.TransitionTabs = documents;
         this.TransitionDocuments = new DocumentService(
             documents,
+            coordinator,
             this.OpenDocuments,
             files,
-            Mock.Of<IDocumentClosePrompt>(),
             Mock.Of<IDocumentConfirmations>(),
             Mock.Of<IDocumentInputCommitter>(),
-            publisher.Object,
             this.hosting);
         container.RegisterInstance<IDocumentService>(this.TransitionDocuments);
         this.TransitionArea = new DocumentArea(

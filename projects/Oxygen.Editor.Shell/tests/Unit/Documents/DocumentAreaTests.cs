@@ -26,7 +26,7 @@ public sealed partial class DocumentAreaTests
     public async Task ShowAddsATabOnceAndFollowsTheSelection()
     {
         using var notes = new Notes();
-        var tabs = new DocumentTabs();
+        var tabs = Tabs.New();
         using var area = CreateArea(tabs, notes);
         var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
         var outro = await notes.OpenAsync("Outro", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -49,7 +49,7 @@ public sealed partial class DocumentAreaTests
     public async Task ClosingTheTabClosesTheDocument()
     {
         using var notes = new Notes();
-        var tabs = new DocumentTabs();
+        var tabs = Tabs.New();
         using var area = CreateArea(tabs, notes);
         var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = await area.ShowAsync(intro).ConfigureAwait(false);
@@ -67,7 +67,7 @@ public sealed partial class DocumentAreaTests
     public async Task ShowingADocumentWithATabInAnotherWindowSelectsItThere()
     {
         using var notes = new Notes();
-        var tabs = new DocumentTabs();
+        var tabs = Tabs.New();
         var brought = new List<WindowId>();
         using var first = CreateArea(tabs, notes, Window, brought.Add);
         using var second = CreateArea(tabs, notes, OtherWindow, brought.Add);
@@ -91,8 +91,7 @@ public sealed partial class DocumentAreaTests
     {
         using var notes = new Notes();
         var coordinator = new DocumentCloseCoordinator(new ApprovingPrompt(), new IgnoredResults());
-        var tabs = new DocumentTabs();
-        using var coordinatorUse = tabs.UseCloseCoordinator(coordinator);
+        var tabs = new DocumentTabs(coordinator);
         using var area = CreateArea(tabs, notes);
         var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
         var outro = await notes.OpenAsync("Outro", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -123,7 +122,7 @@ public sealed partial class DocumentAreaTests
     public async Task ASetWithADocumentNotShownHereIsNotClosed()
     {
         using var notes = new Notes();
-        var tabs = new DocumentTabs();
+        var tabs = Tabs.New();
         using var area = CreateArea(tabs, notes);
         var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
         var outro = await notes.OpenAsync("Outro", this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -135,21 +134,48 @@ public sealed partial class DocumentAreaTests
         _ = area.Documents.Should().Equal(intro);
     }
 
-    /// <summary>A tab cannot be torn out of its window: the detach is refused and the tab stays.</summary>
+    /// <summary>
+    ///     A tab a drag moves to another window takes its document there: it stays open, the window it left has no active
+    ///     document, and the window it entered shows it.
+    /// </summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
-    public async Task ATabCannotBeDetached()
+    public async Task AMovedTabTakesItsOpenDocumentToTheOtherWindow()
     {
         using var notes = new Notes();
-        var tabs = new DocumentTabs();
-        using var area = CreateArea(tabs, notes);
+        var tabs = Tabs.New();
+        using var first = CreateArea(tabs, notes, Window);
+        using var second = CreateArea(tabs, notes, OtherWindow);
         var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
-        _ = await area.ShowAsync(intro).ConfigureAwait(false);
+        _ = await first.ShowAsync(intro).ConfigureAwait(false);
 
-        _ = (await tabs.DetachDocumentAsync(Window, intro.Id).ConfigureAwait(false)).Should().BeNull();
+        var tab = await tabs.DetachDocumentAsync(Window, intro.Id).ConfigureAwait(false);
+        _ = first.ActiveDocument.Should().BeNull();
+        _ = (await tabs.AttachDocumentAsync(OtherWindow, tab!).ConfigureAwait(false)).Should().BeTrue();
 
-        _ = area.Documents.Should().ContainSingle().Which.Should().BeSameAs(intro);
-        _ = area.ActiveDocument.Should().BeSameAs(intro);
+        _ = notes.Documents.Documents.Should().Equal(intro);
+        _ = first.Documents.Should().BeEmpty();
+        _ = second.Documents.Should().Equal(intro);
+        _ = second.ActiveDocument.Should().BeSameAs(intro);
+    }
+
+    /// <summary>A document moved to another window closes there with its tab, as one opened there does.</summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task AMovedTabClosesItsDocumentInTheWindowItEntered()
+    {
+        using var notes = new Notes();
+        var tabs = Tabs.New();
+        using var first = CreateArea(tabs, notes, Window);
+        using var second = CreateArea(tabs, notes, OtherWindow);
+        var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await first.ShowAsync(intro).ConfigureAwait(false);
+        _ = await tabs.AttachDocumentAsync(OtherWindow, (await tabs.DetachDocumentAsync(Window, intro.Id).ConfigureAwait(false))!).ConfigureAwait(false);
+
+        _ = (await second.CloseAsync(intro).ConfigureAwait(false)).Should().BeTrue();
+
+        _ = notes.Documents.Documents.Should().BeEmpty();
+        _ = second.Documents.Should().BeEmpty();
     }
 
     /// <summary>The session's editors refuse a kind with no editor, or an editor that names a kind no document opens with.</summary>

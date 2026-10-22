@@ -23,15 +23,14 @@ using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Routing;
 using Oxygen.Editor.Sessions;
 using Oxygen.Editor.Shell.Contributions;
-using Oxygen.Editor.Shell.Layout;
-using Oxygen.Editor.Workspace;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Composition.UI.Tests.TestSupport;
 
 /// <summary>
 ///     The editor's scopes as the application builds them: the editor scope over a host-equivalent container, a project
-///     session's scope, a workspace window's scope under the session and the Content Explorer's scope under the window.
+///     session's scope, a workspace window's scope and a document window's scope under the session, and the Content
+///     Explorer's scope under the workspace window.
 /// </summary>
 /// <remarks>
 ///     <para>
@@ -55,6 +54,7 @@ internal sealed class EditorScopes : IAsyncDisposable
         this.Root = host.Resolve<ScopeHandle>();
         this.Factory = host.Resolve<ScopeFactory>();
         this.Features = [.. host.Resolve<IEnumerable<IFeatureModule>>()];
+        this.DocumentViews = [.. host.Resolve<IEnumerable<IDocumentViewModule>>()];
     }
 
     /// <summary>Gets the host container, which holds the editor scope.</summary>
@@ -71,6 +71,9 @@ internal sealed class EditorScopes : IAsyncDisposable
 
     /// <summary>Gets the features of the workspace windows.</summary>
     public IReadOnlyList<IFeatureModule> Features { get; }
+
+    /// <summary>Gets the views of the features' document editors, which every window that shows documents has.</summary>
+    public IReadOnlyList<IDocumentViewModule> DocumentViews { get; }
 
     /// <summary>Gets the editor scope's window manager, a fake that <see cref="EditorWindowsFake.ShowWindows" /> configures.</summary>
     public Mock<IWindowManagerService> Windows { get; } = new();
@@ -118,7 +121,11 @@ internal sealed class EditorScopes : IAsyncDisposable
     /// <summary>Gets the modules of a workspace window's scope, as the workspace view model creates them.</summary>
     /// <returns>The window's modules, in registration and activation order.</returns>
     public IReadOnlyList<IScopeModule<IWindowLayer>> WindowModules()
-        => [new RouterScopeModule(new Routes([]), new LocalRouterContext(new object())), new DockingWindowModule(), .. WorkspaceWindowModule.Compose(this.Features)];
+        => EditorWindowModules.Workspace(new Routes([]), new LocalRouterContext(new object()), this.Features, this.DocumentViews);
+
+    /// <summary>Gets the modules of a document window's scope, as the document window's view model creates them.</summary>
+    /// <returns>The window's modules, in registration and activation order.</returns>
+    public IReadOnlyList<IScopeModule<IWindowLayer>> DocumentWindowModules() => EditorWindowModules.Document(this.DocumentViews);
 
     /// <summary>Gets the modules of the Content Explorer's scope, as the explorer creates them.</summary>
     /// <returns>The explorer's modules, in registration and activation order.</returns>
@@ -152,6 +159,15 @@ internal sealed class EditorScopes : IAsyncDisposable
             session,
             this.WindowModules().Select(static module => new RegistrationsOf<IWindowLayer>(module)),
             window => window.RegisterInstance(new WindowId(1)));
+
+    /// <summary>Creates a document window's scope under a project session's scope.</summary>
+    /// <param name="session">The session's scope.</param>
+    /// <returns>The window's scope.</returns>
+    public ScopeHandle CreateDocumentWindow(ScopeHandle session)
+        => this.Factory.Create<IWindowLayer>(
+            session,
+            this.DocumentWindowModules().Select(static module => new RegistrationsOf<IWindowLayer>(module)),
+            window => window.RegisterInstance(new WindowId(2)));
 
     /// <summary>Creates the Content Explorer's scope under a window's scope.</summary>
     /// <param name="window">The window's scope.</param>

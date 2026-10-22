@@ -124,4 +124,13 @@ public partial class DocumentTabs
 
     private void LogDetachRefused(object windowId, DocumentId documentId)
         => LogDetachRefused(this.logger, windowId, documentId);
+
+    [LoggerMessage(
+        SkipEnabledCheck = true,
+        Level = LogLevel.Information,
+        Message = "Detached the tab of DocumentId: {DocumentId} from WindowId: {WindowId}; the document stays open until a window attaches it.")]
+    private static partial void LogDetached(ILogger logger, object windowId, DocumentId documentId);
+
+    private void LogDetached(object windowId, DocumentId documentId)
+        => LogDetached(this.logger, windowId, documentId);
 }

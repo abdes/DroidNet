@@ -10,21 +10,26 @@ using Microsoft.UI;
 namespace Oxygen.Editor.Shell.Documents;
 
 /// <summary>
-///     The tabs of every window, which Aura draws. The project session's close coordinator decides what closes save.
+///     The tabs of a project session's windows, which Aura draws: every window of the session is bound to them. The
+///     session's close coordinator decides what closing them saves.
 /// </summary>
+/// <param name="coordinator">The session's close coordinator.</param>
 /// <param name="loggerFactory">
 ///     Optional factory for creating loggers. If provided, enables detailed logging of the
 ///     recognition process. If <see langword="null" />, logging is disabled.
 /// </param>
-public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocumentTabs, IDocumentServiceState
+public partial class DocumentTabs(DocumentCloseCoordinator coordinator, ILoggerFactory? loggerFactory = null) : IDocumentTabs, IDocumentServiceState
 {
     private readonly ILogger logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<DocumentTabs>();
+    private readonly DocumentCloseCoordinator coordinator = coordinator ?? throw new ArgumentNullException(nameof(coordinator));
 
     // Store documents per window
     private readonly Dictionary<WindowId, Dictionary<DocumentId, IDocumentMetadata>> windowDocs = [];
     private readonly Dictionary<WindowId, DocumentId> activeDocuments = [];
     private readonly HashSet<WindowId> closingWindows = [];
-    private DocumentCloseCoordinator? coordinator;
+
+    // The window each detached document left, until a window attaches it.
+    private readonly Dictionary<DocumentId, WindowId> detachedFrom = [];
 
     /// <inheritdoc/>
     public event EventHandler<DocumentOpenedEventArgs>? DocumentOpened;
@@ -36,18 +41,16 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
     public event EventHandler<DocumentClosedEventArgs>? DocumentClosed;
 
     /// <inheritdoc/>
-    /// <remarks>Never raised: every detach is refused until the editor has document windows to receive a tab.</remarks>
-    public event EventHandler<DocumentDetachedEventArgs>? DocumentDetached
-    {
-        add { }
-        remove { }
-    }
+    public event EventHandler<DocumentDetachedEventArgs>? DocumentDetached;
 
     /// <inheritdoc/>
     public event EventHandler<DocumentAttachedEventArgs>? DocumentAttached;
 
     /// <inheritdoc/>
     public event EventHandler<DocumentActivatedEventArgs>? DocumentActivated;
+
+    /// <inheritdoc/>
+    public event EventHandler<WindowEmptiedEventArgs>? WindowEmptied;
 
     /// <inheritdoc/>
     /// <remarks>A document has at most one tab: opening a tab for a document that has one, in any window, is refused.</remarks>
@@ -92,20 +95,20 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
             return false;
         }
 
-        using var transaction = await this.PrepareCloseAsync(windowId, [metadata], force).ConfigureAwait(true);
+        using var transaction = await this.PrepareCloseAsync(windowId, [metadata], force, emptiesWindow: true).ConfigureAwait(true);
         return transaction is not null && await transaction.CommitAsync().ConfigureAwait(true);
     }
 
     /// <inheritdoc/>
     public Task<DocumentCloseTransaction?> PrepareCloseAllAsync(WindowId windowId)
-        => this.PrepareCloseAsync(windowId, this.GetOpenDocuments(windowId), force: false);
+        => this.PrepareCloseAsync(windowId, this.GetOpenDocuments(windowId), force: false, emptiesWindow: false);
 
     /// <inheritdoc/>
     public Task<DocumentCloseTransaction?> PrepareCloseDocumentsAsync(WindowId windowId, IReadOnlyList<DocumentId> documentIds)
     {
         ArgumentNullException.ThrowIfNull(documentIds);
         return this.windowDocs.TryGetValue(windowId, out var documents) && documentIds.All(documents.ContainsKey)
-            ? this.PrepareCloseAsync(windowId, [.. documentIds.Distinct().Select(id => documents[id])], force: false)
+            ? this.PrepareCloseAsync(windowId, [.. documentIds.Distinct().Select(id => documents[id])], force: false, emptiesWindow: false)
             : Task.FromResult<DocumentCloseTransaction?>(null);
     }
 
@@ -124,26 +127,13 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
     }
 
     /// <inheritdoc/>
-    public IDisposable UseCloseCoordinator(DocumentCloseCoordinator coordinator)
-    {
-        ArgumentNullException.ThrowIfNull(coordinator);
-        if (this.coordinator is not null)
-        {
-            throw new InvalidOperationException("Another close coordinator is in use.");
-        }
-
-        this.coordinator = coordinator;
-        return new CoordinatorUse(this, coordinator);
-    }
-
-    /// <inheritdoc/>
-    public async Task<DocumentCloseTransaction?> PrepareCloseAllWindowsAsync()
+    public async Task<DocumentCloseTransaction?> PrepareCloseAllWindowsAsync(WindowId? except = null)
     {
         var prepared = new List<DocumentCloseTransaction>();
         var retained = false;
         try
         {
-            foreach (var window in this.windowDocs.Keys.ToArray())
+            foreach (var window in this.windowDocs.Keys.Where(window => window != except).ToArray())
             {
                 var transaction = await this.PrepareCloseAllAsync(window).ConfigureAwait(true);
                 if (transaction is null)
@@ -181,13 +171,26 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
 
     /// <inheritdoc/>
     /// <remarks>
-    ///     Always refused: a torn-out tab needs a document window to receive it, which the editor does not have yet. The
-    ///     tab stays where it is.
+    ///     The document stays open without a tab until a window attaches it; its tab is the same metadata wherever it is
+    ///     attached. A pinned tab never moves, such as the scene's, and neither does a tab of a window that is closing:
+    ///     their detach is refused and the tab stays where it is.
     /// </remarks>
     public Task<IDocumentMetadata?> DetachDocumentAsync(WindowId windowId, DocumentId documentId)
     {
-        this.LogDetachRefused(windowId.Value, documentId);
-        return Task.FromResult<IDocumentMetadata?>(null);
+        if (this.closingWindows.Contains(windowId)
+            || !this.windowDocs.TryGetValue(windowId, out var docs)
+            || !docs.TryGetValue(documentId, out var metadata)
+            || metadata.IsPinnedHint)
+        {
+            this.LogDetachRefused(windowId.Value, documentId);
+            return Task.FromResult<IDocumentMetadata?>(null);
+        }
+
+        this.RemoveTab(windowId, documentId);
+        this.detachedFrom[documentId] = windowId;
+        this.DocumentDetached?.Invoke(this, new DocumentDetachedEventArgs(windowId, metadata));
+        this.LogDetached(windowId.Value, documentId);
+        return Task.FromResult<IDocumentMetadata?>(metadata);
     }
 
     /// <inheritdoc/>
@@ -208,18 +211,23 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
             return Task.FromResult(false);
         }
 
+        // The window has the tab before it is selected, as when it opens.
         var docs = this.GetDocumentsForWindow(targetWindowId);
         docs[metadata.DocumentId] = metadata;
+        this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindowId, metadata, indexHint));
+        this.LogAttached(targetWindowId.Value, metadata.DocumentId);
         if (shouldSelect)
         {
             this.activeDocuments[targetWindowId] = metadata.DocumentId;
-
-            // Raise DocumentActivated for consistency with SelectDocumentAsync
             this.DocumentActivated?.Invoke(this, new DocumentActivatedEventArgs(targetWindowId, metadata.DocumentId));
         }
 
-        this.DocumentAttached?.Invoke(this, new DocumentAttachedEventArgs(targetWindowId, metadata, indexHint));
-        this.LogAttached(targetWindowId.Value, metadata.DocumentId);
+        // A drag that moved the last tab of its window leaves that window empty.
+        if (this.detachedFrom.Remove(metadata.DocumentId, out var source) && source != targetWindowId && !this.windowDocs.ContainsKey(source))
+        {
+            this.WindowEmptied?.Invoke(this, new WindowEmptiedEventArgs(source));
+        }
+
         return Task.FromResult(true);
     }
 
@@ -257,8 +265,9 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
             ? documentId
             : null;
 
+    // Only a tab's own close reports the window it empties; closing a set of tabs, or all of them, does not.
     private async Task<DocumentCloseTransaction?> PrepareCloseAsync(
-        WindowId windowId, IReadOnlyList<IDocumentMetadata> documents, bool force)
+        WindowId windowId, IReadOnlyList<IDocumentMetadata> documents, bool force, bool emptiesWindow)
     {
         if (!this.closingWindows.Add(windowId))
         {
@@ -274,17 +283,9 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
                 return null;
             }
 
-            if (this.coordinator is { } coordinator)
+            authoring = await this.coordinator.PrepareAsync(windowId, documents, force).ConfigureAwait(true);
+            if (authoring is null)
             {
-                authoring = await coordinator.PrepareAsync(windowId, documents, force).ConfigureAwait(true);
-                if (authoring is null)
-                {
-                    return null;
-                }
-            }
-            else if (!force && documents.Any(metadata => metadata.IsDirty))
-            {
-                // Applications must install a close policy before dirty documents can be closed.
                 return null;
             }
 
@@ -300,6 +301,11 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
                     foreach (var metadata in documents)
                     {
                         this.RemoveClosedDocument(windowId, metadata);
+                    }
+
+                    if (emptiesWindow && documents.Count != 0 && !this.windowDocs.ContainsKey(windowId))
+                    {
+                        this.WindowEmptied?.Invoke(this, new WindowEmptiedEventArgs(windowId));
                     }
 
                     return true;
@@ -338,6 +344,13 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
     private void RemoveClosedDocument(WindowId windowId, IDocumentMetadata metadata)
     {
         var documentId = metadata.DocumentId;
+        this.RemoveTab(windowId, documentId);
+        this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
+        this.LogDocumentClosed(windowId.Value, documentId);
+    }
+
+    private void RemoveTab(WindowId windowId, DocumentId documentId)
+    {
         var docs = this.windowDocs[windowId];
         _ = docs.Remove(documentId);
         if (docs.Count == 0)
@@ -349,9 +362,6 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
         {
             _ = this.activeDocuments.Remove(windowId);
         }
-
-        this.DocumentClosed?.Invoke(this, new DocumentClosedEventArgs(windowId, metadata));
-        this.LogDocumentClosed(windowId.Value, documentId);
     }
 
     private bool HasTab(DocumentId documentId) => this.FindWindow(documentId) is not null;
@@ -365,16 +375,5 @@ public partial class DocumentTabs(ILoggerFactory? loggerFactory = null) : IDocum
         }
 
         return docs;
-    }
-
-    private sealed partial class CoordinatorUse(DocumentTabs tabs, DocumentCloseCoordinator coordinator) : IDisposable
-    {
-        public void Dispose()
-        {
-            if (ReferenceEquals(tabs.coordinator, coordinator))
-            {
-                tabs.coordinator = null;
-            }
-        }
     }
 }

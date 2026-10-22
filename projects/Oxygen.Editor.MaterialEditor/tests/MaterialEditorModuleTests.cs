@@ -13,15 +13,6 @@ namespace Oxygen.Editor.MaterialEditor.Tests;
 public sealed class MaterialEditorModuleTests
 {
     [TestMethod]
-    public void MaterialEditorModule_ContributesNeitherPanelNorCommand()
-    {
-        var module = new MaterialEditorModule();
-
-        _ = module.Panels.Should().BeEmpty();
-        _ = module.Commands.Should().BeEmpty();
-    }
-
-    [TestMethod]
     public void MaterialEditorModule_RegistersTheEditorsView()
     {
         using var window = HostContainer.Create();

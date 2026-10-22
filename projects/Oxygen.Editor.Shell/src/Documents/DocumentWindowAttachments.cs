@@ -44,6 +44,7 @@ public sealed class DocumentWindowAttachments : IDisposable
         this.services = new DocumentWindowServices(area.Window, area, commands, placement, reveal);
 
         this.documents.EditorCreated += this.OnEditorCreated;
+        this.area.TabAdded += this.OnTabAdded;
         this.area.TabRemoved += this.OnTabRemoved;
         foreach (var document in this.area.Documents)
         {
@@ -63,6 +64,7 @@ public sealed class DocumentWindowAttachments : IDisposable
 
         this.disposed = true;
         this.documents.EditorCreated -= this.OnEditorCreated;
+        this.area.TabAdded -= this.OnTabAdded;
         this.area.TabRemoved -= this.OnTabRemoved;
         foreach (var document in this.area.Documents)
         {
@@ -77,6 +79,10 @@ public sealed class DocumentWindowAttachments : IDisposable
             (this.documents.EditorOf(args.Tab.Document) as IDocumentWindowEditor)?.AttachWindow(this.services);
         }
     }
+
+    // A tab moved here keeps its editor, which now uses this window's services; an opened tab's editor comes after it.
+    private void OnTabAdded(object? sender, DocumentTabEventArgs args)
+        => (this.documents.EditorOf(args.Tab.Document) as IDocumentWindowEditor)?.AttachWindow(this.services);
 
     private void OnTabRemoved(object? sender, DocumentTabEventArgs args)
         => (this.documents.EditorOf(args.Tab.Document) as IDocumentWindowEditor)?.DetachWindow();

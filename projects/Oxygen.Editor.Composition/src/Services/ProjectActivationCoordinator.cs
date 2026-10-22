@@ -33,7 +33,7 @@ internal sealed partial class ProjectActivationCoordinator(
     IRecentProjectAdapter recentProjects,
     ITemplateUsageService templateUsage,
     IProjectExplorerService projectExplorer,
-    Oxygen.Editor.Shell.Documents.IDocumentTabs documents,
+    Oxygen.Editor.Sessions.ISessionWindows sessionWindows,
     IOperationResultPublisher operationResults,
     IStatusReducer statusReducer,
     IExceptionDiagnosticAdapter exceptionAdapter,
@@ -156,7 +156,7 @@ internal sealed partial class ProjectActivationCoordinator(
                 return PublishSuperseded();
             }
 
-            using var replacement = await documents.PrepareCloseAllWindowsAsync().ConfigureAwait(true);
+            using var replacement = await sessionWindows.PrepareCloseDocumentsAsync().ConfigureAwait(true);
             cancellationToken.ThrowIfCancellationRequested();
             if (replacement is null || this.stagedProject is null
                 || !await replacement.CommitAsync().ConfigureAwait(true))

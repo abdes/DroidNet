@@ -11,7 +11,6 @@ using Oxygen.Editor.Documents;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.Shell.Documents;
 
@@ -37,7 +36,6 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
     private readonly HostingContext hosting;
     private readonly ILogger logger;
     private readonly DocumentCloseCoordinator closeCoordinator;
-    private readonly IDisposable closeCoordinatorUse;
     private readonly IDisposable? catalogChanges;
     private readonly IDisposable? relocationFollower;
     private readonly Dictionary<DocumentId, (DocumentTab Tab, object Editor)> editors = [];
@@ -46,37 +44,34 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
     /// <summary>
     ///     Initializes a new instance of the <see cref="DocumentService"/> class.
     /// </summary>
-    /// <param name="tabs">The tabs of every window, whose close decisions the service makes.</param>
+    /// <param name="tabs">The tabs of the session's windows, whose documents get their editors here.</param>
+    /// <param name="closeCoordinator">The session's close decisions, which ask the editors created here.</param>
     /// <param name="documents">The open documents of the session.</param>
     /// <param name="files">Where the project keeps the files that documents edit.</param>
-    /// <param name="closePrompt">Asks a window's user about unsaved documents that close.</param>
     /// <param name="confirmations">Asks a window's user to save documents before an operation that reads saved files.</param>
     /// <param name="inputCommitter">Commits the focused control's input before a document operation.</param>
-    /// <param name="operationResults">Publishes the failures of closes.</param>
     /// <param name="hosting">The UI thread, where the documents live.</param>
     /// <param name="catalog">The catalog whose changes name the files that changed on disk, if any.</param>
     /// <param name="relocations">The relocations of the project's assets, if any.</param>
     /// <param name="loggerFactory">The logger factory, if any.</param>
     public DocumentService(
         IDocumentTabs tabs,
+        DocumentCloseCoordinator closeCoordinator,
         OpenDocuments documents,
         IDocumentFiles files,
-        IDocumentClosePrompt closePrompt,
         IDocumentConfirmations confirmations,
         IDocumentInputCommitter inputCommitter,
-        IOperationResultPublisher operationResults,
         HostingContext hosting,
         IAssetCatalog? catalog = null,
         IDocumentRelocations? relocations = null,
         ILoggerFactory? loggerFactory = null)
     {
         ArgumentNullException.ThrowIfNull(tabs);
+        ArgumentNullException.ThrowIfNull(closeCoordinator);
         ArgumentNullException.ThrowIfNull(documents);
         ArgumentNullException.ThrowIfNull(files);
-        ArgumentNullException.ThrowIfNull(closePrompt);
         ArgumentNullException.ThrowIfNull(confirmations);
         ArgumentNullException.ThrowIfNull(inputCommitter);
-        ArgumentNullException.ThrowIfNull(operationResults);
         ArgumentNullException.ThrowIfNull(hosting);
         this.tabs = tabs;
         this.documents = documents;
@@ -86,8 +81,7 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
         this.relocations = relocations;
         this.hosting = hosting;
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<DocumentService>();
-        this.closeCoordinator = new DocumentCloseCoordinator(closePrompt, operationResults, this);
-        this.closeCoordinatorUse = tabs.UseCloseCoordinator(this.closeCoordinator);
+        this.closeCoordinator = closeCoordinator;
 
         this.tabs.DocumentOpened += this.OnTabOpened;
         this.documents.Closed += this.OnDocumentClosed;
@@ -222,7 +216,6 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
         this.relocationFollower?.Dispose();
         this.relocations?.FilesDeleted -= this.OnFilesDeleted;
 
-        this.closeCoordinatorUse.Dispose();
         foreach (var (_, editor) in this.editors.Values)
         {
             (editor as IDisposable)?.Dispose();
@@ -244,7 +237,7 @@ public sealed partial class DocumentService : IDocumentService, IDisposable
         this.editors[tab.DocumentId] = (tab, editor);
         if (editor is IDocumentCloseParticipant participant)
         {
-            this.closeCoordinator.Register(tab, participant);
+            this.closeCoordinator.Register(tab, participant, this);
         }
         else
         {

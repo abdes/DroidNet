@@ -10,24 +10,24 @@ using Oxygen.Managed.Core.Diagnostics;
 namespace Oxygen.Editor.Shell.Documents;
 
 /// <summary>
-/// Makes the close decisions of one window's documents: asks about unsaved documents, saves the chosen ones, and closes
-/// their editors, before any editor state is released.
+/// Makes the close decisions of a project session's documents: asks the window that closes them about the unsaved ones,
+/// saves the chosen ones, and closes their editors, before any editor state is released.
 /// </summary>
 /// <param name="prompt">Asks the window's user about unsaved documents.</param>
 /// <param name="operationResults">Publishes the failures that keep a document open.</param>
-/// <param name="documents">The document service, which resolves a document whose file changed on disk.</param>
-public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOperationResultPublisher operationResults, IDocumentService? documents = null)
+public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOperationResultPublisher operationResults)
 {
     private readonly Dictionary<DocumentId, ParticipantEntry> participants = [];
 
-    /// <summary>Registers the editor of a document shown in the window.</summary>
+    /// <summary>Registers the editor of a document that has a tab.</summary>
     /// <param name="tab">The document's tab.</param>
     /// <param name="participant">The editor.</param>
-    public void Register(DocumentTab tab, IDocumentCloseParticipant participant)
+    /// <param name="documents">The document service that created the editor, which reloads the document or saves a copy when its file changed on disk.</param>
+    public void Register(DocumentTab tab, IDocumentCloseParticipant participant, IDocumentService? documents = null)
     {
         ArgumentNullException.ThrowIfNull(tab);
         ArgumentNullException.ThrowIfNull(participant);
-        this.participants.Add(tab.DocumentId, new ParticipantEntry(tab, participant));
+        this.participants.Add(tab.DocumentId, new ParticipantEntry(tab, participant, documents));
     }
 
     /// <summary>Unregisters the editor of a closed document.</summary>
@@ -52,7 +52,7 @@ public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOpera
         {
             await this.PrepareParticipantsAsync(tabs, prepared).ConfigureAwait(true);
             var dirty = prepared.Where(entry => entry.Tab.IsDirty)
-                .Select(entry => new DocumentCloseItem(entry.Tab, () => this.SaveAsync(entry), documents))
+                .Select(entry => new DocumentCloseItem(entry.Tab, () => this.SaveAsync(entry), entry.Documents))
                 .ToArray();
             if (!force && dirty.Length > 0
                 && !await prompt.ConfirmAsync(window, dirty).ConfigureAwait(true))
@@ -187,5 +187,5 @@ public sealed class DocumentCloseCoordinator(IDocumentClosePrompt prompt, IOpera
         });
     }
 
-    private sealed record ParticipantEntry(DocumentTab Tab, IDocumentCloseParticipant Participant);
+    private sealed record ParticipantEntry(DocumentTab Tab, IDocumentCloseParticipant Participant, IDocumentService? Documents);
 }

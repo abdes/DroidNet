@@ -3,20 +3,16 @@
 // SPDX-License-Identifier: MIT
 
 using DryIoc;
-using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Contributions;
 
 namespace Oxygen.Editor.MaterialEditor;
 
-/// <summary>The material editor in a window: the view that shows a material's editor, which the session creates.</summary>
-public sealed class MaterialEditorModule : IFeatureModule
+/// <summary>
+///     The material editor in a window: the view that shows a material's editor, which the session creates. Every window
+///     that shows materials registers it, the workspace window and the document windows a material's tab moves to.
+/// </summary>
+public sealed class MaterialEditorModule : IDocumentViewModule
 {
-    /// <inheritdoc />
-    public IReadOnlyList<PanelDescriptor> Panels { get; } = [];
-
-    /// <inheritdoc />
-    public IReadOnlyList<CommandDescriptor> Commands { get; } = [];
-
     /// <inheritdoc />
     public IReadOnlyCollection<Type> Shadows => [];
 

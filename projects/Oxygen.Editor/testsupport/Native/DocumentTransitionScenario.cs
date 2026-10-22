@@ -44,10 +44,10 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         fixture.Runtime.TargetFps = targetFps;
         var container = HostContainer.Create();
         await using var containerLifetime = container.ConfigureAwait(true);
-        var documents = new DocumentTabs();
         var window = VisualUserInterfaceTestsApp.MainWindow.AppWindow;
         var originalSize = window.Size;
-        using var host = fixture.CreateDocumentTransitionHost(container, documents, services, window.Id);
+        using var host = fixture.CreateDocumentTransitionHost(container, services, window.Id);
+        var documents = fixture.TransitionTabs!;
         using var service = fixture.TransitionDocuments!;
         using var area = fixture.TransitionArea!;
         using var attachments = fixture.TransitionAttachments!;
