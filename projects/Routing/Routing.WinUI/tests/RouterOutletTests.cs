@@ -5,6 +5,8 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using CommunityToolkit.WinUI;
+using DroidNet.Mvvm;
+using DroidNet.Mvvm.Converters;
 using DroidNet.Tests;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -163,6 +165,58 @@ public partial class RouterOutletTests : VisualUserInterfaceTests
         _ = ((TextBlock)outlet.OutletContent!).Text.Should().Be(label);
     });
 
+    [TestMethod]
+    public Task ConvertsTheViewModelOnce_WhenLoaded_Async() => EnqueueAsync(
+    async () =>
+    {
+        // Arrange
+        var converter = new TestVmToViewConverter();
+        var outlet = new RouterOutlet() { ViewModel = new TestViewModel { Label = "Test Label" }, VmToViewConverter = converter };
+
+        // Act
+        await LoadTestContentAsync(outlet).ConfigureAwait(true);
+
+        // Assert
+        _ = converter.Conversions.Should().Be(1);
+    });
+
+    [TestMethod]
+    public Task KeepsTheView_WhenVmToViewConverterChanges_Async() => EnqueueAsync(
+    async () =>
+    {
+        // Arrange
+        var outlet = new RouterOutlet() { ViewModel = new TestViewModel { Label = "Test Label" }, VmToViewConverter = new TestVmToViewConverter() };
+        await LoadTestContentAsync(outlet).ConfigureAwait(true);
+        var shown = outlet.OutletContent;
+        var other = new TestVmToViewConverter();
+
+        // Act
+        outlet.VmToViewConverter = other;
+
+        // Assert
+        _ = outlet.OutletContent.Should().BeSameAs(shown);
+        _ = other.Conversions.Should().Be(0);
+    });
+
+    [TestMethod]
+    public Task ReleasesTheView_WhenViewModelChanges_Async() => EnqueueAsync(
+    async () =>
+    {
+        // Arrange
+        var locator = new ResolvedViews();
+        var first = new TestViewModel { Label = "First" };
+        var outlet = new RouterOutlet() { ViewModel = first, VmToViewConverter = new ViewModelToView(locator) };
+        await LoadTestContentAsync(outlet).ConfigureAwait(true);
+
+        // Act
+        var second = new TestViewModel { Label = "Second" };
+        outlet.ViewModel = second;
+
+        // Assert
+        _ = locator.Views.Select(view => view.ViewModel).Should().Equal(null, second);
+        _ = outlet.OutletContent.Should().BeSameAs(locator.Views[1]);
+    });
+
     private static TestVisualStateManager InstallCustomVisualStateManager(RouterOutlet control)
     {
         var vsm = new TestVisualStateManager();
@@ -177,12 +231,17 @@ public partial class RouterOutletTests : VisualUserInterfaceTests
     {
         public const string InvalidViewModelLabel = "__INVALID__";
 
+        public int Conversions { get; private set; }
+
         public object? Convert(object value, Type targetType, object parameter, string language)
-            => value is TestViewModel testViewModel
+        {
+            this.Conversions++;
+            return value is TestViewModel testViewModel
                 ? testViewModel.Label.Equals(InvalidViewModelLabel, StringComparison.OrdinalIgnoreCase)
                     ? null
                     : new TextBlock { Text = testViewModel.Label }
                 : (object?)null;
+        }
 
         public object ConvertBack(object value, Type targetType, object parameter, string language) => throw new InvalidOperationException();
     }
@@ -190,5 +249,27 @@ public partial class RouterOutletTests : VisualUserInterfaceTests
     private sealed class TestViewModel
     {
         public string Label { get; init; } = string.Empty;
+    }
+
+    /// <summary>Resolves a new view for every request and keeps them in creation order.</summary>
+    private sealed class ResolvedViews : IViewLocator
+    {
+        public List<TestView> Views { get; } = [];
+
+        public object? ResolveView(object viewModel)
+        {
+            var view = new TestView();
+            this.Views.Add(view);
+            return view;
+        }
+
+        public IViewFor<T>? ResolveView<T>()
+            where T : class
+            => throw new InvalidOperationException();
+    }
+
+    private sealed partial class TestView : UserControl, IViewFor
+    {
+        public object? ViewModel { get; set; }
     }
 }

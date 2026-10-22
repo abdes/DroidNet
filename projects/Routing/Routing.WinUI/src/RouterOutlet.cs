@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics;
+using DroidNet.Mvvm;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Data;
@@ -25,6 +26,11 @@ namespace DroidNet.Routing.WinUI;
 /// which converts view models to their corresponding views using naming conventions or explicit mappings.
 /// It also properly manage the content lifecycle when the ViewModel changes, and uses visual states
 /// to show appropriate feedback when the outlet is inactive or when view resolution fails.
+/// </para>
+/// <para>
+/// The outlet shows one view per view-model instance: it converts its view model once and keeps that view while the
+/// view model stays, through template re-application and converter changes. When the view model changes, the view of
+/// the one that left is released (see <see cref="HostedViews"/>).
 /// </para>
 ///
 /// <strong>Setup Requirements</strong>
@@ -141,6 +147,8 @@ public sealed partial class RouterOutlet : ContentControl
             typeof(RouterOutlet),
             new PropertyMetadata(default(UIElement)));
 
+    private readonly HostedViews views = new();
+
     private string? outlet;
     private Grid? rootGrid;
 
@@ -169,6 +177,10 @@ public sealed partial class RouterOutlet : ContentControl
     /// <summary>
     /// Gets or sets the converter used to convert view models to views.
     /// </summary>
+    /// <remarks>
+    /// A view already shown for the current view model is kept when the converter changes; the new converter makes
+    /// the next view model's view.
+    /// </remarks>
     public IValueConverter? VmToViewConverter
     {
         get => (IValueConverter)this.GetValue(VmToViewConverterProperty);
@@ -255,15 +267,18 @@ public sealed partial class RouterOutlet : ContentControl
     }
 
     /// <summary>
-    /// Updates the outlet's content by resolving the view for the current view model.
+    /// Shows the view of the current view model: the one already made for that instance, or a new one from the
+    /// converter; then releases the view of a view model that left the outlet.
     /// </summary>
     private void UpdateContent()
     {
-        this.OutletContent = this.VmToViewConverter?.Convert(
-            this.ViewModel,
-            typeof(object),
-            parameter: null,
-            language: null) as UIElement;
+        var viewModel = this.ViewModel;
+        this.OutletContent = viewModel is null
+            ? null
+            : this.views.GetOrCreate(viewModel, this.VmToViewConverter) as UIElement;
+
+        // Released only once the new content is in place, so the outlet never shows a view that lost its view model.
+        this.views.RetainOnly([viewModel]);
 
         // Visual states are defined under the root grid, which is only there once the template is applied.
         if (this.rootGrid is not null)

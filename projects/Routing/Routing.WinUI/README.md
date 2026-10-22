@@ -31,7 +31,9 @@ A WinUI 3 implementation of routed navigation for building modern Windows applic
 A user control that represents a designated region in the UI where routed content is dynamically loaded. Key responsibilities:
 
 - Automatically resolves view models to views using a configured `IValueConverter`
-- Manages content lifecycle when the ViewModel changes
+- Shows one view per view-model instance: converts its view model once and
+  keeps that view through template re-application and converter changes, and
+  releases the view of a view model that leaves (`DroidNet.Mvvm.HostedViews`)
 - Provides visual states (Inactive, Normal, Error) for feedback
 - Handles view resolution failures gracefully with error templates
 
@@ -78,81 +80,81 @@ dotnet add package DroidNet.Routing.WinUI
 
 1. **Register the routing system** in your application host:
 
-    ```csharp
-    Host.CreateDefaultBuilder()
-        .ConfigureServices((context, services) =>
-        {
-            // Register your views and view models
-            services.AddTransient<ShellView>();
-            services.AddTransient<ShellViewModel>();
-            services.AddTransient<DashboardView>();
-            services.AddTransient<DashboardViewModel>();
-        })
-        .ConfigureRouter(routes =>
-        {
-            routes.Add(new Route
-            {
-                Path = string.Empty,
-                ViewModelType = typeof(ShellViewModel),
-                Children = new Routes([
-                    new Route
-                    {
-                        Path = "dashboard",
-                        ViewModelType = typeof(DashboardViewModel)
-                    }
-                ])
-            });
-        })
-        .Build();
-    ```
+   ```csharp
+   Host.CreateDefaultBuilder()
+       .ConfigureServices((context, services) =>
+       {
+           // Register your views and view models
+           services.AddTransient<ShellView>();
+           services.AddTransient<ShellViewModel>();
+           services.AddTransient<DashboardView>();
+           services.AddTransient<DashboardViewModel>();
+       })
+       .ConfigureRouter(routes =>
+       {
+           routes.Add(new Route
+           {
+               Path = string.Empty,
+               ViewModelType = typeof(ShellViewModel),
+               Children = new Routes([
+                   new Route
+                   {
+                       Path = "dashboard",
+                       ViewModelType = typeof(DashboardViewModel)
+                   }
+               ])
+           });
+       })
+       .Build();
+   ```
 
 2. **Add a ViewModel to View converter** to your application resources:
 
-    ```xaml
-    <Application.Resources>
-        <converters:ViewModelToView x:Key="VmToViewConverter"/>
-    </Application.Resources>
-    ```
+   ```xaml
+   <Application.Resources>
+       <converters:ViewModelToView x:Key="VmToViewConverter"/>
+   </Application.Resources>
+   ```
 
 3. **Create an outlet container ViewModel**:
 
-    ```csharp
-    public class WorkspaceViewModel : AbstractOutletContainer
-    {
-        public WorkspaceViewModel()
-        {
-            // Register outlets with their corresponding property names
-            this.Outlets.Add("primary", (nameof(this.MainContent), null));
-            this.Outlets.Add("sidebar", (nameof(this.SidebarContent), null));
-        }
+   ```csharp
+   public class WorkspaceViewModel : AbstractOutletContainer
+   {
+       public WorkspaceViewModel()
+       {
+           // Register outlets with their corresponding property names
+           this.Outlets.Add("primary", (nameof(this.MainContent), null));
+           this.Outlets.Add("sidebar", (nameof(this.SidebarContent), null));
+       }
 
-        public object? MainContent => this.Outlets["primary"].viewModel;
-        public object? SidebarContent => this.Outlets["sidebar"].viewModel;
-    }
-    ```
+       public object? MainContent => this.Outlets["primary"].viewModel;
+       public object? SidebarContent => this.Outlets["sidebar"].viewModel;
+   }
+   ```
 
 4. **Add RouterOutlet controls** to your XAML:
 
-    ```xaml
-    <Grid>
-        <Grid.ColumnDefinitions>
-            <ColumnDefinition Width="250"/>
-            <ColumnDefinition Width="*"/>
-        </Grid.ColumnDefinitions>
+   ```xaml
+   <Grid>
+       <Grid.ColumnDefinitions>
+           <ColumnDefinition Width="250"/>
+           <ColumnDefinition Width="*"/>
+       </Grid.ColumnDefinitions>
 
-        <!-- Sidebar outlet -->
-        <local:RouterOutlet
-            Grid.Column="0"
-            ViewModel="{Binding SidebarContent}"
-            VmToViewConverter="{StaticResource VmToViewConverter}"/>
+       <!-- Sidebar outlet -->
+       <local:RouterOutlet
+           Grid.Column="0"
+           ViewModel="{Binding SidebarContent}"
+           VmToViewConverter="{StaticResource VmToViewConverter}"/>
 
-        <!-- Main content outlet -->
-        <local:RouterOutlet
-            Grid.Column="1"
-            ViewModel="{Binding MainContent}"
-            VmToViewConverter="{StaticResource VmToViewConverter}"/>
-    </Grid>
-    ```
+       <!-- Main content outlet -->
+       <local:RouterOutlet
+           Grid.Column="1"
+           ViewModel="{Binding MainContent}"
+           VmToViewConverter="{StaticResource VmToViewConverter}"/>
+   </Grid>
+   ```
 
 ## Project Structure
 
@@ -191,24 +193,16 @@ Routing.WinUI/
 
 ### Building the Project
 
-Build the specific project:
-
-```powershell
-dotnet build projects/Routing/Routing.WinUI/src/Routing.WinUI.csproj
-```
-
-Or build the entire routing solution:
-
-```powershell
-dotnet build projects/Routing/Routing.sln
-```
+Follow the repository workflows in
+[tooling/doc/build.md](../../../tooling/doc/build.md): generate the solution
+with `open.cmd -NoLaunch` and build it with 64-bit MSBuild.
 
 ### Running Tests
 
-Run UI tests:
+Run the built UI tests:
 
 ```powershell
-dotnet test projects/Routing/Routing.WinUI/tests/Routing.WinUI.UI.Tests.csproj
+traverse Invoke-Tests --start projects/Routing/Routing.WinUI/tests --configuration Debug
 ```
 
 ### Code Style and Standards
@@ -292,13 +286,7 @@ public class RouterOutletTests : VisualUserInterfaceTests
 
 ### Running Tests
 
-```powershell
-# Run specific test project
-dotnet test projects/Routing/Routing.WinUI/tests/Routing.WinUI.UI.Tests.csproj
-
-# Run with coverage
-dotnet test projects/Routing/Routing.WinUI/tests/Routing.WinUI.UI.Tests.csproj /p:CollectCoverage=true
-```
+See [Running Tests](#running-tests) under Development Workflow.
 
 ## API Examples
 
