@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
-using DryIoc;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Properties;
@@ -47,8 +46,7 @@ public partial class SceneEditorViewModel
             ? new SceneCameraViewState(viewport.SceneCamera?.NodeId, viewport.IsPilotingSceneCamera)
             : null;
 
-    private SceneNodeInteraction? Interaction
-        => this.container.Resolve<SceneNodeInteraction>(IfUnresolved.ReturnDefault);
+    private SceneNodeInteraction Interaction => this.services.Interaction;
 
     private void AttachCameraServices(ViewportViewModel viewport)
     {
@@ -62,13 +60,12 @@ public partial class SceneEditorViewModel
     private void OnSelectionServiceChanged(object? sender, SceneSelectionChangedEventArgs args)
     {
         _ = sender;
-        if (this.isDisposed || args.DocumentId != this.Document.Id || this.scene is not { } selectedScene
-            || this.SelectionService is not { } service)
+        if (this.isDisposed || args.DocumentId != this.Document.Id || this.scene is not { } selectedScene)
         {
             return;
         }
 
-        var nodes = service.GetSelectedNodes(args.DocumentId, selectedScene);
+        var nodes = this.SelectionService.GetSelectedNodes(args.DocumentId, selectedScene);
         this.UpdateSelectedNodes(nodes);
         this.UpdateSelectionOutline(args.Context);
         this.UpdateTransformGizmo();
@@ -129,16 +126,15 @@ public partial class SceneEditorViewModel
     private SceneCameraChoice? GetSelectedCamera()
     {
         return this.scene is { } current
-            && this.SelectionService?.GetSelectedNodes(this.Document.Id, current) is [{ } node]
+            && this.SelectionService.GetSelectedNodes(this.Document.Id, current) is [{ } node]
             && node.Components.OfType<CameraComponent>().Any()
                 ? new SceneCameraChoice(node.Id, node.Name)
                 : null;
     }
 
     private bool IsCameraLocked(NodeId nodeId)
-        => this.Interaction is { } interaction
-            && this.FindNode(nodeId) is { } node
-            && interaction.GetLockOwner(node) is not null;
+        => this.FindNode(nodeId) is { } node
+            && this.Interaction.GetLockOwner(node) is not null;
 
     private SceneNode? FindNode(NodeId nodeId)
         => this.scene?.AllNodes.FirstOrDefault(node => node.Id == nodeId);

@@ -4,18 +4,14 @@
 
 using System.Text.Json;
 using AwesomeAssertions;
-using DroidNet.TestHelpers;
 using DroidNet.TimeMachine;
-using DryIoc;
 using Microsoft.UI;
 using Moq;
-using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
-using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor.Settings;
+using Oxygen.Editor.SceneEditor.Unit.Tests.TestSupport;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Commands;
@@ -81,7 +77,6 @@ internal sealed partial class SceneEditorConflictTests
 
     private sealed partial class Fixture : IDisposable
     {
-        private readonly IContainer container = HostContainer.Create();
         private readonly List<TestSession> sessions = [];
 
         private Fixture(TestSceneDocuments scenes, Document document)
@@ -127,7 +122,6 @@ internal sealed partial class SceneEditorConflictTests
         public void Dispose()
         {
             this.Editor.Dispose();
-            this.container.Dispose();
             foreach (var session in Enumerable.Reverse(this.sessions))
             {
                 session.Dispose();
@@ -156,7 +150,6 @@ internal sealed partial class SceneEditorConflictTests
 
         private void CreateEditor(bool active, PreviewSettingsService? previewSettings, Action? commitInput, bool synchronized)
         {
-            this.container.RegisterInstance<IProjectSession>(this.NewSession());
             _ = this.Preview.Setup(value => value.IsReady(this.Tab.DocumentId)).Returns(synchronized);
             var documents = new TestDocumentArea(this.Tab.Document);
             if (!active)
@@ -166,22 +159,9 @@ internal sealed partial class SceneEditorConflictTests
 
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync(It.IsAny<DroidNet.Documents.DocumentId>())).Callback(() => commitInput?.Invoke()).Returns(Task.CompletedTask);
-            var previewSettingsService = previewSettings ?? new PreviewSettingsService(
-                    Mock.Of<IEngineService>(),
-                    Mock.Of<Data.Services.IEditorSettingsManager>(),
-                    this.NewSession(),
-                    Mock.Of<IOperationResultPublisher>(),
-                    new OperationStatusReducer());
             this.Editor = new(
                 this.Tab,
-                Mock.Of<IEngineService>(),
-                this.Preview.Object,
-                input.Object,
-                this.Results,
-                new OperationStatusReducer(),
-                Mock.Of<IContentPipelineService>(),
-                this.container,
-                previewSettingsService);
+                TestSceneEditorServices.Create(this.NewSession(), this.Preview.Object, input.Object, this.Results, previewSettings));
             this.Editor.AttachWindow(new DocumentWindowServices(new WindowId(1), documents, Mock.Of<ICommandService>(), Mock.Of<IPlacementService>(), Mock.Of<IAssetReveal>()));
         }
 

@@ -4,21 +4,16 @@
 
 using AwesomeAssertions;
 using DroidNet.Controls.Menus;
-using DroidNet.TestHelpers;
-using DryIoc;
 using Microsoft.UI;
 using Moq;
-using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Projects.Testing;
-using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.SceneEditor.Settings;
+using Oxygen.Editor.SceneEditor.Unit.Tests.TestSupport;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
-using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.SceneEditor.Unit.Tests;
@@ -66,7 +61,6 @@ public sealed partial class SceneEditorQuickAddMenuTests
 
     private sealed partial class Fixture : IDisposable
     {
-        private readonly IContainer container = HostContainer.Create();
         private readonly TestSession session;
 
         public Fixture()
@@ -76,21 +70,7 @@ public sealed partial class SceneEditorQuickAddMenuTests
             this.Tab = new DocumentTab(this.Metadata.Document, new DocumentEditorDescriptor(this.Metadata.Document.Kind, static _ => new object()) { IsClosable = false });
             var input = new Mock<IDocumentInputCommitter>();
             _ = input.Setup(value => value.CommitAsync(It.IsAny<DroidNet.Documents.DocumentId>())).Returns(Task.CompletedTask);
-            this.Editor = new(
-                this.Tab,
-                Mock.Of<IEngineService>(),
-                Mock.Of<Oxygen.Editor.LivePreview.Scenes.IScenePreview>(),
-                input.Object,
-                Mock.Of<IOperationResultPublisher>(),
-                new OperationStatusReducer(),
-                Mock.Of<IContentPipelineService>(),
-                this.container,
-                new PreviewSettingsService(
-                    Mock.Of<IEngineService>(),
-                    Mock.Of<Data.Services.IEditorSettingsManager>(),
-                    this.session,
-                    Mock.Of<IOperationResultPublisher>(),
-                    new OperationStatusReducer()));
+            this.Editor = new(this.Tab, TestSceneEditorServices.Create(this.session, inputCommitter: input.Object));
             this.Editor.AttachWindow(new DocumentWindowServices(new WindowId(1), new TestDocumentArea(this.Metadata.Document), Mock.Of<ICommandService>(), Mock.Of<IPlacementService>(), Mock.Of<IAssetReveal>()));
         }
 
@@ -103,7 +83,6 @@ public sealed partial class SceneEditorQuickAddMenuTests
         public void Dispose()
         {
             this.Editor.Dispose();
-            this.container.Dispose();
             this.Tab.Dispose();
             this.Metadata.Dispose();
             this.session.Dispose();

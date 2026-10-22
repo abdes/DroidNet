@@ -42,7 +42,11 @@ public sealed partial class ContentExplorerViewModel(
     ScopeFactory scopes,
     ScopeHandle window,
     IRouter parentRouter,
+    HostingContext hosting,
     IProjectSession session,
+    IAssetFeed assetFeed,
+    ContentExplorerAssetReveal assetReveal,
+    ContentExplorerScriptCreation scriptCreation,
     IProjectUsageService projectUsage,
     IOperationResultPublisher operationResults,
     IStatusReducer statusReducer,
@@ -94,9 +98,8 @@ public sealed partial class ContentExplorerViewModel(
     // Navigation history management
     private readonly List<string> navigationHistory = [];
 
-    private ContentExplorerAssetReveal? assetReveal;
-    private ContentExplorerScriptCreation? scriptCreation;
     private Authoring.AuthoredAssetCreation? creation;
+    private AssetsViewModel? assets;
     private ScopeHandle? scope;
     private string currentAssetsViewPath = "assets/tiles"; // tracks whether we show list or tiles
     private int currentHistoryIndex = -1;
@@ -176,8 +179,7 @@ public sealed partial class ContentExplorerViewModel(
     /// <inheritdoc />
     public async Task OnNavigatedToAsync(IActiveRoute route, INavigationContext navigationContext)
     {
-        this.assetReveal = window.Resolver.Resolve<ContentExplorerAssetReveal>(IfUnresolved.ReturnDefault);
-        this.assetReveal?.Attach(this);
+        assetReveal.Attach(this);
 
         // One-time initialization for singleton
         if (!this.isInitialized)
@@ -185,6 +187,7 @@ public sealed partial class ContentExplorerViewModel(
             this.Outlets.Add("left", (nameof(this.LeftPaneViewModel), null));
             this.Outlets.Add("right", (nameof(this.RightPaneViewModel), null));
 
+            var state = new ContentExplorerState { Query = this.Query, Presentation = this.Presentation };
             this.scope = scopes.Create<IPanelLayer>(
                 window,
                 [
@@ -193,7 +196,7 @@ public sealed partial class ContentExplorerViewModel(
                         new LocalRouterContext(navigationContext.NavigationTarget) { ParentRouter = parentRouter, RootViewModel = this }),
                     new ContentExplorerPanelModule(),
                 ],
-                registrations => registrations.RegisterInstance(new ContentExplorerState { Query = this.Query, Presentation = this.Presentation }));
+                registrations => registrations.RegisterInstance(state));
             var panel = this.scope.Resolver;
 
             // Make sure to use our own ViewModel to View converter
@@ -201,14 +204,12 @@ public sealed partial class ContentExplorerViewModel(
 
             // The window's New Script requests are answered by this browser's creation.
             this.creation = panel.Resolve<Authoring.AuthoredAssetCreation>();
-            this.scriptCreation = window.Resolver.Resolve<ContentExplorerScriptCreation>(IfUnresolved.ReturnDefault);
-            this.scriptCreation?.Attach(this.creation);
+            scriptCreation.Attach(this.creation);
 
             this.localRouter = panel.Resolve<IRouter>();
 
             // Capture the UI Dispatcher from the hosting context to marshal UI-bound updates
-            var hostingContext = panel.Resolve<HostingContext>();
-            this.dispatcher = hostingContext.Dispatcher;
+            this.dispatcher = hosting.Dispatcher;
 
             // Subscribe to router events to track navigation history
             this.routerEventsSubscription = this.localRouter.Events
@@ -216,10 +217,10 @@ public sealed partial class ContentExplorerViewModel(
                 .Subscribe(this.OnNavigationEnd);
 
             // Subscribe to ContentExplorerState changes to update the navigation stack
-            var contentExplorerState = panel.Resolve<ContentExplorerState>();
-            this.browserState = contentExplorerState;
-            contentExplorerState.PropertyChanged += this.OnContentExplorerStateChanged;
+            this.browserState = state;
+            state.PropertyChanged += this.OnContentExplorerStateChanged;
             this.Details = panel.Resolve<AssetDetailsViewModel>();
+            this.assets = panel.Resolve<AssetsViewModel>();
 
             var initialUrl = await this.GetInitialContentExplorerUrlAsync().ConfigureAwait(true);
             await this.localRouter.NavigateAsync(initialUrl).ConfigureAwait(true);
@@ -289,10 +290,10 @@ public sealed partial class ContentExplorerViewModel(
         if (disposing)
         {
             this.isDisposed = true;
-            this.assetReveal?.Detach(this);
+            assetReveal.Detach(this);
             if (this.creation is { } current)
             {
-                this.scriptCreation?.Detach(current);
+                scriptCreation.Detach(current);
             }
 
             this.routerEventsSubscription?.Dispose();
@@ -516,7 +517,7 @@ public sealed partial class ContentExplorerViewModel(
 
     private string BuildCurrentUrl()
         => "/(left:folders//right:" + this.currentAssetsViewPath + ")"
-            + RouteStateMapping.BuildSelectedQuery(this.scope?.Resolver.Resolve<ContentExplorerState>()?.SelectedFolders ?? (IEnumerable<AssetPath>)[]);
+            + RouteStateMapping.BuildSelectedQuery(this.browserState?.SelectedFolders ?? (IEnumerable<AssetPath>)[]);
 
     // A URL that shows one folder, or the whole project when there is none.
     private string BuildUrl(AssetPath? folder)
@@ -547,7 +548,7 @@ public sealed partial class ContentExplorerViewModel(
         this.isApplyingRouteState = true;
         try
         {
-            if (this.scope?.Resolver.Resolve<ContentExplorerState>() is { } state)
+            if (this.browserState is { } state)
             {
                 RouteStateMapping.ApplyNavigationScope(state, url);
             }
@@ -688,7 +689,7 @@ public sealed partial class ContentExplorerViewModel(
         }
 
         // The whole project has no parent; a mount's parent is the whole project.
-        if (GetPrimarySelectedFolder(this.scope?.Resolver.Resolve<ContentExplorerState>()) is not { } current)
+        if (GetPrimarySelectedFolder(this.browserState) is not { } current)
         {
             return;
         }
@@ -700,7 +701,7 @@ public sealed partial class ContentExplorerViewModel(
 
     private void UpdateUpButtonState()
     {
-        var current = GetPrimarySelectedFolder(this.scope?.Resolver.Resolve<ContentExplorerState>());
+        var current = GetPrimarySelectedFolder(this.browserState);
 
         var old = this.CanGoUp;
         this.CanGoUp = current is not null;
@@ -719,30 +720,8 @@ public sealed partial class ContentExplorerViewModel(
         {
             var entries = new List<BreadcrumbEntry>();
 
-            var primary = pathOverride;
-            if (primary is null)
-            {
-                var state = this.scope?.Resolver.Resolve<ContentExplorerState>();
-                primary = GetPrimarySelectedFolder(state);
-            }
-
-            // Determine project name for root label if available
-            var rootLabel = "Project";
-            try
-            {
-                var pn = this.scope?.Resolver.Resolve<IProjectSession>().Context.Name;
-                if (!string.IsNullOrEmpty(pn))
-                {
-                    rootLabel = pn!;
-                }
-            }
-#pragma warning disable CA1031 // Do not catch general exception types
-            catch (Exception ex)
-            {
-                // ignore, fallback to default label
-                this.LogProjectNameRetrievalFailed(ex);
-            }
-#pragma warning restore CA1031 // Do not catch general exception types
+            var primary = pathOverride ?? GetPrimarySelectedFolder(this.browserState);
+            var rootLabel = string.IsNullOrEmpty(session.Context.Name) ? "Project" : session.Context.Name;
 
             // Always include root breadcrumb
             entries.Add(new BreadcrumbEntry(rootLabel, Folder: null));
@@ -823,7 +802,7 @@ public sealed partial class ContentExplorerViewModel(
                 await projectLayout.RefreshTreeAsync().ConfigureAwait(true);
             }
 
-            await this.scope.Resolver.Resolve<IAssetFeed>().RefreshAsync().ConfigureAwait(true);
+            await assetFeed.RefreshAsync().ConfigureAwait(true);
         }
         finally
         {

@@ -2,18 +2,9 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Config;
-using DryIoc;
-using Microsoft.Extensions.Logging;
-using Microsoft.UI;
-using Oxygen.Editor.ContentPipeline;
-using Oxygen.Editor.LivePreview.Scenes;
-using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Shell.Contributions;
 using Oxygen.Editor.Shell.Documents;
-using Oxygen.Managed.Core.Diagnostics;
 
 namespace Oxygen.Editor.SceneEditor;
 
@@ -22,23 +13,9 @@ namespace Oxygen.Editor.SceneEditor;
 /// scene's tab does not close on its own.
 /// </summary>
 /// <param name="kind">The scene document kind.</param>
-/// <param name="container">The project session's container, from which each editor gets its services.</param>
-public sealed class SceneEditorProvider(SceneDocumentKind kind, IContainer container) : IDocumentEditorProvider
+/// <param name="services">The project session's services, which every scene editor of the session uses.</param>
+public sealed class SceneEditorProvider(SceneDocumentKind kind, SceneEditorServices services) : IDocumentEditorProvider
 {
     /// <inheritdoc/>
-    public DocumentEditorDescriptor Editor { get; } = new(kind, tab => Create(container, tab)) { IsClosable = false, IsOnePerArea = true, IsPinned = true, IsPinLocked = true };
-
-    private static SceneEditorViewModel Create(IContainer container, DocumentTab tab)
-        => new(
-            tab,
-            container.Resolve<IEngineService>(),
-            container.Resolve<IScenePreview>(),
-            container.Resolve<IDocumentInputCommitter>(),
-            container.Resolve<IOperationResultPublisher>(),
-            container.Resolve<IStatusReducer>(),
-            container.Resolve<IContentPipelineService>(),
-            container,
-            container.Resolve<PreviewSettingsService>(),
-            container.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault),
-            engineSettings: container.Resolve<ISettingsService<IEngineStartupSettings>>(IfUnresolved.ReturnDefault));
+    public DocumentEditorDescriptor Editor { get; } = new(kind, tab => new SceneEditorViewModel(tab, services)) { IsClosable = false, IsOnePerArea = true, IsPinned = true, IsPinLocked = true };
 }

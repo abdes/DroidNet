@@ -72,12 +72,6 @@ public sealed class TopologyTests
         "DockViewFactory",
     ];
 
-    // Service locators that a later slice removes; an entry that no longer occurs fails the test.
-    private static readonly Dictionary<string, string> PendingLocators = new(StringComparer.Ordinal)
-    {
-        [nameof(SceneEditorProvider)] = "S6.1 removes IContainer from the scene editor's view model",
-    };
-
     // The services that create child scopes, or end their own scope: each takes the handle of the scope that builds it.
     private static readonly string[] ScopeOwners = [nameof(ProjectSessionHost), nameof(ContentExplorerViewModel), nameof(WindowScopeClose)];
 
@@ -281,7 +275,7 @@ public sealed class TopologyTests
             .ToHashSet();
 
         // Assert
-        _ = locators.Should().BeEquivalentTo(PendingLocators.Keys, "only container infrastructure locates services");
+        _ = locators.Should().BeEmpty("only container infrastructure locates services");
     }
 
     [TestMethod]
@@ -420,6 +414,41 @@ public sealed class TopologyTests
     }
 
     [TestMethod]
+    public async Task Registrations_OfEveryScope_NameTheOwnerOfEachDisposableTransient()
+    {
+        // Arrange
+        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
+        var session = scopes.CreateSession();
+        var window = scopes.CreateWindow(session);
+        var documentWindow = scopes.CreateDocumentWindow(session);
+        var explorer = scopes.CreateExplorer(window);
+
+        // Act
+        var unowned = new[] { scopes.Root, session, window, documentWindow, explorer }
+            .SelectMany(static scope => ScopeTopology.UnownedDisposableTransients(ScopeTopology.Owned(scope)))
+            .Select(static type => type.Name)
+            .ToHashSet();
+
+        // Assert: the editor scope tracks disposable transients until the editor exits, and the other scopes never do.
+        _ = unowned.Should().BeEmpty("a disposable transient is disposed by its scope, its outlet or the code that creates it (scope-topology.md 5.9)");
+    }
+
+    [TestMethod]
+    public void Dispose_EditorScopeTransientThatPreventsDisposal_LeavesItToItsOwner()
+    {
+        // Arrange: the editor scope runs on the host's rules, which track disposable transients.
+        var host = new Container(DryIoc.Microsoft.DependencyInjection.DryIocAdapter.MicrosoftDependencyInjectionRules);
+        host.Register<DisposableTransient>(Reuse.Transient, setup: Setup.With(preventDisposal: true));
+        var created = host.Resolve<DisposableTransient>();
+
+        // Act
+        host.Dispose();
+
+        // Assert
+        _ = created.IsDisposed.Should().BeFalse("the code that created it disposes it");
+    }
+
+    [TestMethod]
     public async Task DelegateRegistrations_OfEveryScope_AreTheReviewedOnes()
     {
         // Arrange
@@ -468,6 +497,14 @@ public sealed class TopologyTests
         Func<ScopeHandle, System.Reflection.ConstructorInfo, IEnumerable<System.Reflection.ParameterInfo>> rule)
         => ScopeTopology.Built(ScopeTopology.Owned(scope))
             .SelectMany(built => rule(scope, built.Constructor).Select(parameter => $"{built.Type.Name}({parameter.ParameterType.Name} {parameter.Name})"));
+
+    // A transient that its creator disposes.
+    private sealed class DisposableTransient : IDisposable
+    {
+        public bool IsDisposed { get; private set; }
+
+        public void Dispose() => this.IsDisposed = true;
+    }
 
     // A window type that would take the session's problem sources as a collection, which the rule refuses.
     private sealed class ProblemSourcesTaker(IEnumerable<IAssetProblemSource> sources)

@@ -51,7 +51,7 @@ internal sealed class EditorDataModule : IScopeModule<IApplicationLayer>
     private static void RegisterPersistentState(IRegistrator scope)
     {
         scope.RegisterDelegate<IDbContextFactory<PersistentState>>(CreatePool, Reuse.Singleton);
-        scope.RegisterDelegate<PersistentState>(CreatePersistentState, Reuse.Transient);
+        scope.RegisterDelegate<PersistentState>(CreatePersistentState, Reuse.Transient, setup: Setup.With(preventDisposal: true));
     }
 
     private static PooledDbContextFactory<PersistentState> CreatePool(IResolverContext resolver)

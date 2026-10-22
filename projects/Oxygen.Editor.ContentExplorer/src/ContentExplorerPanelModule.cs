@@ -28,11 +28,11 @@ public sealed class ContentExplorerPanelModule : IScopeModule<IPanelLayer>
     /// <param name="scope">The explorer's scope.</param>
     internal static void RegisterAssetLayouts(IRegistrator scope)
     {
-        scope.Register<ListLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
+        scope.Register<ListLayoutViewModel>(Reuse.Transient, setup: Setup.With(preventDisposal: true));
         scope.Register<ListLayoutView>(Reuse.Transient);
-        scope.Register<TilesLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
+        scope.Register<TilesLayoutViewModel>(Reuse.Transient, setup: Setup.With(preventDisposal: true));
         scope.Register<TilesLayoutView>(Reuse.Transient);
-        scope.Register<DetailsLayoutViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
+        scope.Register<DetailsLayoutViewModel>(Reuse.Transient, setup: Setup.With(preventDisposal: true));
         scope.Register<DetailsLayoutView>(Reuse.Transient);
     }
 
@@ -47,7 +47,7 @@ public sealed class ContentExplorerPanelModule : IScopeModule<IPanelLayer>
 
         scope.Register<ContentFoldersPane>(Reuse.Singleton);
         scope.RegisterMapping<IContentFoldersPane, ContentFoldersPane>();
-        scope.Register<ContentFoldersViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
+        scope.Register<ContentFoldersViewModel>(Reuse.Transient, setup: Setup.With(preventDisposal: true));
         scope.Register<ContentFoldersView>(Reuse.Transient);
 
         // Dialog views used via Aura's IDialogService + VmToViewConverter.

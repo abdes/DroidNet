@@ -5,7 +5,6 @@
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Documents;
-using DryIoc;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.SceneEditor.Settings;
@@ -35,11 +34,9 @@ public partial class SceneEditorViewModel
     [ObservableProperty]
     public partial ViewportViewModel? MaximizedViewport { get; private set; }
 
-    private ViewportStateService? ViewportStates
-        => this.container.Resolve<ViewportStateService>(IfUnresolved.ReturnDefault);
+    private ViewportStateService ViewportStates => this.services.ViewportStates;
 
-    private ProjectContext? ActiveProject
-        => this.container.Resolve<IProjectSession>(IfUnresolved.ReturnDefault)?.Context;
+    private ProjectContext ActiveProject => this.services.Session.Context;
 
     /// <summary>
     /// Marks the given viewport as focused and clears focus from all other viewports.
@@ -91,8 +88,8 @@ public partial class SceneEditorViewModel
         SceneViewportState? stored;
         try
         {
-            stored = this.Viewports.Count == 0 && this.ViewportStates is { } states && this.ActiveProject is { } project && this.scene is { } scene
-                ? await states.RestoreAsync(project, scene.Id).ConfigureAwait(true)
+            stored = this.Viewports.Count == 0 && this.scene is { } scene
+                ? await this.ViewportStates.RestoreAsync(this.ActiveProject, scene.Id).ConfigureAwait(true)
                 : null;
         }
         finally
@@ -167,10 +164,10 @@ public partial class SceneEditorViewModel
     {
         var viewport = new ViewportViewModel(
             documentId,
-            this.engineService,
-            this.operationResults,
-            this.statusReducer,
-            this.loggerFactory);
+            this.services.Engine,
+            this.services.OperationResults,
+            this.services.StatusReducer,
+            this.services.LoggerFactory);
         viewport.ToggleMaximizeCommand = new RelayCommand(() => this.ToggleMaximize(viewport));
         viewport.OnLayoutRequested = requestedLayout => this.ChangeLayoutCommand.Execute(requestedLayout);
         viewport.PilotStarting = this.StopOtherPilotsAsync;
@@ -285,24 +282,20 @@ public partial class SceneEditorViewModel
         }
 
         this.SaveViewportState();
-        if (this.ViewportStates is { } states)
-        {
-            await states.FlushAsync().ConfigureAwait(true);
-        }
+        await this.ViewportStates.FlushAsync().ConfigureAwait(true);
     }
 
     private void SaveViewportState()
     {
-        if (!this.sceneReady || this.isDisposed || this.Viewports.Count == 0
-            || this.ViewportStates is not { } states || this.ActiveProject is not { } project || this.scene is not { } scene)
+        if (!this.sceneReady || this.isDisposed || this.Viewports.Count == 0 || this.scene is not { } scene)
         {
             return;
         }
 
         // Viewport state belongs to the scene, not to one opening of it: it is kept under the scene's own id.
         var focused = this.Viewports.ToList().FindIndex(viewport => viewport.ViewportId == this.FocusedViewportId);
-        states.Update(
-            project,
+        this.ViewportStates.Update(
+            this.ActiveProject,
             scene.Id,
             new SceneViewportState(this.CurrentLayout, Math.Max(focused, 0), [.. this.Viewports.Select(static viewport => viewport.CaptureState())]));
     }

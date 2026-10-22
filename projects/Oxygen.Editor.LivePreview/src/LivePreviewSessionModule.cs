@@ -58,9 +58,9 @@ public sealed class LivePreviewSessionModule : IScopeModule<ISessionLayer>
             resolver => ScenePreviews.Create(
                 resolver.Resolve<IEngineService>(),
                 resolver.Resolve<OpenDocuments>(),
-                resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault),
-                resolver.Resolve<IOperationResultPublisher>(IfUnresolved.ReturnDefault),
-                resolver.Resolve<IAssetFeed>(IfUnresolved.ReturnDefault)),
+                resolver.Resolve<ILoggerFactory>(),
+                resolver.Resolve<IOperationResultPublisher>(),
+                resolver.Resolve<IAssetFeed>()),
             Reuse.Singleton);
         scope.Register<PreviewSession>(Reuse.Singleton);
         scope.RegisterMapping<IContentMountChanges, PreviewSession>();

@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DryIoc;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Managed.Core;
@@ -32,8 +31,7 @@ public partial class SceneEditorViewModel
         return true;
     }
 
-    private ISceneSelectionService? SelectionService
-        => this.container.Resolve<ISceneSelectionService>(IfUnresolved.ReturnDefault);
+    private ISceneSelectionService SelectionService => this.services.Selection;
 
     private void AttachSelectionServices(ViewportViewModel viewport)
     {
@@ -42,19 +40,18 @@ public partial class SceneEditorViewModel
     }
 
     private IReadOnlyList<NodeId> GetSelectedNodeIds()
-        => this.SelectionService?.GetContext(this.Document.Id).SelectedNodeIds ?? [];
+        => this.SelectionService.GetContext(this.Document.Id).SelectedNodeIds;
 
     private void ApplyViewportSelection(ViewportSelection selection)
     {
-        if (this.isDisposed || this.SelectionService is not { } service
-            || selection.Combine(this.GetSelectedNodeIds()) is not { } nodeIds)
+        if (this.isDisposed || selection.Combine(this.GetSelectedNodeIds()) is not { } nodeIds)
         {
             return;
         }
 
         // The Explorer reconciles its rows with the stored selection, reveals the active row and
         // tells the other panels.
-        service.Publish(
+        this.SelectionService.Publish(
             this.Document.Id,
             nodeIds.Count == 0
                 ? SceneSelectionContext.Empty
@@ -70,14 +67,14 @@ public partial class SceneEditorViewModel
     {
         try
         {
-            if (!await this.engineService.SetSelectionOutlineAsync(nodeIds, activeNodeId).ConfigureAwait(true))
+            if (!await this.services.Engine.SetSelectionOutlineAsync(nodeIds, activeNodeId).ConfigureAwait(true))
             {
                 this.LogSelectionOutlineRejected();
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            this.operationResults.Publish(new OperationResult
+            this.services.OperationResults.Publish(new OperationResult
             {
                 OperationId = Guid.NewGuid(),
                 OperationKind = RuntimeOperationKinds.SelectionOutline,

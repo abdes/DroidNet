@@ -135,16 +135,6 @@ public partial class ContentExplorerViewModel
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "Failed to retrieve project name for breadcrumbs")]
-    private static partial void LogProjectNameRetrievalFailed(ILogger logger, Exception ex);
-
-    [System.Diagnostics.Conditional("DEBUG")]
-    private void LogProjectNameRetrievalFailed(Exception ex)
-        => LogProjectNameRetrievalFailed(this.logger, ex);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
         Level = LogLevel.Warning,
         Message = "Failed to persist content explorer state for project {ProjectName}.")]
     private static partial void LogContentExplorerStatePersistFailed(ILogger logger, Exception ex, string projectName);

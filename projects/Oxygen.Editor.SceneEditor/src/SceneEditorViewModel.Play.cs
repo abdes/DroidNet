@@ -2,11 +2,8 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using CommunityToolkit.Mvvm.Messaging;
-using DryIoc;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
-using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.SceneEditor.Play;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
@@ -28,7 +25,7 @@ public partial class SceneEditorViewModel
 
     private void InitializePlay()
     {
-        if (this.container.Resolve<PlaySession>(IfUnresolved.ReturnDefault) is not { } session)
+        if (this.services.Play is not { } session)
         {
             return;
         }
@@ -41,15 +38,13 @@ public partial class SceneEditorViewModel
     // that shows the scene, through the ordinary Save and its conflict handling. Without a window, nobody can be asked.
     private Task<bool> SaveInputsAsync(SaveBeforeOperation operation)
     {
-        if (this.window is not { } window
-            || this.container.Resolve<IDocumentService>(IfUnresolved.ReturnDefault) is not { } documents
-            || this.container.Resolve<IUnsavedCookInputs>(IfUnresolved.ReturnDefault) is not { } inputs)
+        if (this.window is not { } window)
         {
-            return Task.FromResult(this.window is not null);
+            return Task.FromResult(false);
         }
 
         var request = new CookRunRequest(CookTargetKind.CurrentScene, this.Document.File.Asset);
-        return documents.SaveBeforeAsync(window.Window, operation, token => inputs.FindAsync(request, token));
+        return this.services.Documents.SaveBeforeAsync(window.Window, operation, token => this.services.UnsavedInputs.FindAsync(request, token));
     }
 
     // Also follows the current authoring, which a reload replaces.

@@ -4,7 +4,6 @@
 
 using System.Windows.Input;
 using CommunityToolkit.Mvvm.Input;
-using DryIoc;
 using Oxygen.Editor.Shell.Commands;
 
 namespace Oxygen.Editor.ContentExplorer;
@@ -49,7 +48,7 @@ public sealed partial class ContentExplorerViewModel : ICommandHandler
 
     private ICommand? CommandOf(string commandId)
     {
-        if (this.scope?.Resolver.Resolve<AssetsViewModel>(IfUnresolved.ReturnDefault) is not { } assets)
+        if (this.assets is not { } assets)
         {
             return null;
         }

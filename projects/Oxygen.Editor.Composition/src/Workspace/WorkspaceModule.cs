@@ -34,7 +34,8 @@ internal sealed class WorkspaceModule : IScopeModule<IApplicationLayer>
     public void Register(IRegistrator scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        scope.Register<WorkspaceViewModel>(Reuse.Transient);
+        // The router that shows the workspace disposes it with its window.
+        scope.Register<WorkspaceViewModel>(Reuse.Transient, setup: Setup.With(preventDisposal: true));
         scope.Register<WorkspaceView>(Reuse.Transient);
 
         scope.Register<IFeatureModule, ContentExplorerModule>(Reuse.Singleton);

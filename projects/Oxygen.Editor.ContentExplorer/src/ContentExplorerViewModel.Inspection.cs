@@ -4,7 +4,6 @@
 
 using System.Reactive.Linq;
 using System.Reactive.Threading.Tasks;
-using DryIoc;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.Assets;
 using Oxygen.Editor.ContentExplorer.Panes.ContentFolders;
@@ -29,7 +28,7 @@ public sealed partial class ContentExplorerViewModel
         }
 
         var project = session.Context;
-        var item = await this.scope.Resolver.Resolve<IAssetFeed>().ResolveAsync(asset).ConfigureAwait(true);
+        var item = await assetFeed.ResolveAsync(asset).ConfigureAwait(true);
         return item is not null && item.PrimaryState != AssetState.Missing && ReferenceEquals(project, session.Context)
             && !this.isDisposed && await this.RevealAssetsAsync(project, [item]).ConfigureAwait(true);
     }
@@ -47,9 +46,8 @@ public sealed partial class ContentExplorerViewModel
 
         var project = session.Context;
 
-        var provider = this.scope.Resolver.Resolve<IAssetFeed>();
-        await provider.RefreshAsync().ConfigureAwait(true);
-        var items = await provider.Items.FirstAsync().ToTask().ConfigureAwait(true);
+        await assetFeed.RefreshAsync().ConfigureAwait(true);
+        var items = await assetFeed.Items.FirstAsync().ToTask().ConfigureAwait(true);
         var requested = assets.ToHashSet();
         var available = items.Where(item => item.PrimaryState != AssetState.Missing && requested.Contains(item.Identity)).ToArray();
         return available.Length > 0 && !this.isDisposed && ReferenceEquals(project, session.Context)

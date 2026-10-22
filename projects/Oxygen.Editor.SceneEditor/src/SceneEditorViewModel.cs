@@ -5,11 +5,8 @@
 using System.Collections.ObjectModel;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using DroidNet.Config;
 using DroidNet.Documents;
-using DryIoc;
 using Microsoft.Extensions.Logging;
-using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.Documents;
 using Oxygen.Editor.LivePreview.Scenes;
@@ -33,15 +30,7 @@ namespace Oxygen.Editor.SceneEditor;
 public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, IDocumentCloseParticipant, IDocumentWindowEditor, IDisposable
 {
     private readonly ILogger logger;
-    private readonly ILoggerFactory? loggerFactory;
-    private readonly IEngineService engineService;
-    private readonly ISettingsService<IEngineStartupSettings>? engineSettings;
-    private readonly IScenePreview scenePreview;
-    private readonly IDocumentInputCommitter inputCommitter;
-    private readonly IOperationResultPublisher operationResults;
-    private readonly IStatusReducer statusReducer;
-    private readonly IContentPipelineService contentPipelineService;
-    private readonly IContainer container;
+    private readonly SceneEditorServices services;
     private DocumentWindowServices? window;
     private Oxygen.Editor.World.Scene? scene;
     private bool sceneReady;
@@ -53,47 +42,19 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// Initializes a new instance of the <see cref="SceneEditorViewModel"/> class.
     /// </summary>
     /// <param name="tab">The scene document's tab.</param>
-    /// <param name="engineService">Coordinates native engine usage for the document.</param>
-    /// <param name="scenePreview">Reports when the engine shows the document's scene.</param>
-    /// <param name="inputCommitter">Completes the focused inspector control's text input.</param>
-    /// <param name="operationResults">The visible operation-result publisher.</param>
-    /// <param name="statusReducer">The diagnostic status reducer.</param>
-    /// <param name="contentPipelineService">The explicit content cooking service.</param>
-    /// <param name="container">The session's container, from which the editor gets its session services.</param>
-    /// <param name="previewSettings">The shared project preview preferences.</param>
-    /// <param name="loggerFactory">The logger factory.</param>
-    /// <param name="engineSettings">The engine startup settings, whose logging verbosity the editor edits; optional.</param>
-    public SceneEditorViewModel(
-        DocumentTab tab,
-        IEngineService engineService,
-        IScenePreview scenePreview,
-        IDocumentInputCommitter inputCommitter,
-        IOperationResultPublisher operationResults,
-        IStatusReducer statusReducer,
-        IContentPipelineService contentPipelineService,
-        IContainer container,
-        PreviewSettingsService previewSettings,
-        ILoggerFactory? loggerFactory = null,
-        ISettingsService<IEngineStartupSettings>? engineSettings = null)
+    /// <param name="services">The session's services that the scene editors use.</param>
+    public SceneEditorViewModel(DocumentTab tab, SceneEditorServices services)
     {
-        this.engineService = engineService;
-        this.engineSettings = engineSettings;
-        this.PreviewSettings = previewSettings;
+        ArgumentNullException.ThrowIfNull(services);
+        this.services = services;
 
         // The scene editor owns the preview preferences: they are restored when it opens and reach the engine once it runs.
-        _ = previewSettings.EnsureRestoredAsync();
-        this.scenePreview = scenePreview;
-        this.inputCommitter = inputCommitter;
-        this.operationResults = operationResults;
-        this.statusReducer = statusReducer;
-        this.contentPipelineService = contentPipelineService;
-        this.loggerFactory = loggerFactory;
+        _ = services.PreviewSettings.EnsureRestoredAsync();
         this.Viewports = [];
         this.Tab = tab ?? throw new ArgumentNullException(nameof(tab));
         this.Document = tab.Document;
         this.scene = (tab.Document.Content as SceneContent)?.Scene;
-        this.container = container;
-        this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger(nameof(SceneEditorViewModel));
+        this.logger = services.LoggerFactory.CreateLogger(nameof(SceneEditorViewModel));
         this.InitializeTransformTools();
 
         // The stored layout of the scene is restored with its viewports.
@@ -102,11 +63,11 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         // Defer creating viewports until the engine shows the document's scene: the preview's readiness triggers the
         // layout restoration, which avoids creating engine views before the scene exists ("frame context has no scene").
         this.RegisterSubscriptions();
-        this.container.Resolve<SceneEditorViews>(IfUnresolved.ReturnDefault)?.Attach(this);
+        services.Views.Attach(this);
         this.Document.ContentReplaced += this.OnDocumentContentReplaced;
         this.InitializePlay();
-        scenePreview.ReadyChanged += this.OnPreviewReadyChanged;
-        if (this.scene is { } loaded && scenePreview.IsReady(this.Document.Id))
+        this.services.ScenePreview.ReadyChanged += this.OnPreviewReadyChanged;
+        if (this.scene is { } loaded && this.services.ScenePreview.IsReady(this.Document.Id))
         {
             // The engine showed the scene before this editor existed.
             this.OnSceneReady(loaded);
@@ -139,17 +100,17 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     public ObservableCollection<ViewportViewModel> Viewports { get; }
 
     /// <summary>Gets the shared project preview preferences.</summary>
-    public PreviewSettingsService PreviewSettings { get; }
+    public PreviewSettingsService PreviewSettings => this.services.PreviewSettings;
 
     /// <summary>Gets or sets the native engine logging verbosity, an engine startup setting the running engine takes live.</summary>
     public int EngineLoggingVerbosity
     {
-        get => this.engineSettings?.Settings.LoggingVerbosity ?? EngineConstants.DefaultLoggingVerbosity;
+        get => this.services.EngineSettings.Settings.LoggingVerbosity;
         set
         {
-            if (this.engineSettings is { } settings && settings.Settings.LoggingVerbosity != value)
+            if (this.services.EngineSettings.Settings.LoggingVerbosity != value)
             {
-                settings.Settings.LoggingVerbosity = value;
+                this.services.EngineSettings.Settings.LoggingVerbosity = value;
                 this.OnPropertyChanged();
             }
         }
@@ -185,7 +146,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     /// <inheritdoc/>
     public async Task PrepareForCloseAsync()
     {
-        await this.inputCommitter.CommitAsync(this.Document.Id).ConfigureAwait(true);
+        await this.services.InputCommitter.CommitAsync(this.Document.Id).ConfigureAwait(true);
         await this.SaveViewportStateForCloseAsync().ConfigureAwait(true);
         await this.PreviewSettings.FlushAsync().ConfigureAwait(true);
         if (this.Authoring is { } authoring)
@@ -232,9 +193,9 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.isDisposed = true;
             this.Document.ContentReplaced -= this.OnDocumentContentReplaced;
 
-            this.scenePreview.ReadyChanged -= this.OnPreviewReadyChanged;
+            this.services.ScenePreview.ReadyChanged -= this.OnPreviewReadyChanged;
             this.UnregisterSubscriptions();
-            this.container.Resolve<SceneEditorViews>(IfUnresolved.ReturnDefault)?.Detach(this);
+            this.services.Views.Detach(this);
             this.DisposeTransformTools();
             this.DisposePlay();
 
@@ -246,15 +207,15 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             this.Viewports.Clear();
 
             // The document's viewports are owned by its id; the engine drops whatever surface is left of them.
-            _ = this.engineService.ReleaseOwnerSurfacesAsync(new SurfaceOwnerId(this.Document.Id.Value));
+            _ = this.services.Engine.ReleaseOwnerSurfacesAsync(new SurfaceOwnerId(this.Document.Id.Value));
         }
     }
 
     private void RegisterSubscriptions()
-        => this.SelectionService?.SelectionChanged += this.OnSelectionServiceChanged;
+        => this.SelectionService.SelectionChanged += this.OnSelectionServiceChanged;
 
     private void UnregisterSubscriptions()
-        => this.SelectionService?.SelectionChanged -= this.OnSelectionServiceChanged;
+        => this.SelectionService.SelectionChanged -= this.OnSelectionServiceChanged;
 
     [RelayCommand]
     private async Task Save() => await this.SaveAsync().ConfigureAwait(true);
@@ -277,7 +238,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         try
         {
             var sceneUri = this.Document.File.Asset;
-            var result = await this.contentPipelineService.CookCurrentSceneAsync(sceneUri, CancellationToken.None)
+            var result = await this.services.ContentPipeline.CookCurrentSceneAsync(sceneUri, CancellationToken.None)
                 .ConfigureAwait(true);
 
             this.PublishCookResult(result, sceneUri);
@@ -290,7 +251,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
     private async Task<bool> SaveCoreAsync()
     {
-        await this.inputCommitter.CommitAsync(this.Document.Id).ConfigureAwait(true);
+        await this.services.InputCommitter.CommitAsync(this.Document.Id).ConfigureAwait(true);
         await this.PreviewSettings.FlushAsync().ConfigureAwait(true);
         if (this.scene is null)
         {
@@ -322,7 +283,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
         this.LogSaveSuccessful();
         if (this.Document.IsDirty)
         {
-            this.operationResults.Publish(new OperationResult
+            this.services.OperationResults.Publish(new OperationResult
             {
                 OperationId = Guid.NewGuid(),
                 OperationKind = SceneOperationKinds.Save,
@@ -341,7 +302,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private void PublishSaveFailure(string message, string code)
     {
         var operationId = Guid.NewGuid();
-        this.operationResults.Publish(new OperationResult
+        this.services.OperationResults.Publish(new OperationResult
         {
             OperationId = operationId,
             OperationKind = SceneOperationKinds.Save,
@@ -390,14 +351,14 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     private void PublishCookResult(ContentCookResult result, AssetPath sceneUri)
     {
         var diagnostics = result.Diagnostics;
-        this.operationResults.Publish(new OperationResult
+        this.services.OperationResults.Publish(new OperationResult
         {
             OperationId = result.OperationId,
             OperationKind = ContentPipelineOperationKinds.CookScene,
             Status = result.Status,
             Severity = result.Status == OperationStatus.Failed && diagnostics.Count == 0
                 ? DiagnosticSeverity.Error
-                : this.statusReducer.ComputeSeverity(diagnostics),
+                : this.services.StatusReducer.ComputeSeverity(diagnostics),
             Title = "Cook Current Scene",
             Message = result.Status == OperationStatus.Failed
                 ? $"Scene cook failed: {sceneUri}."
@@ -427,7 +388,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
             TechnicalMessage = exception?.Message,
             ExceptionType = exception?.GetType().FullName,
         };
-        this.operationResults.Publish(new OperationResult
+        this.services.OperationResults.Publish(new OperationResult
         {
             OperationId = operationId,
             OperationKind = ContentPipelineOperationKinds.CookScene,
@@ -450,7 +411,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
     {
         _ = sender;
         if (!this.isDisposed && args.Document == this.Document.Id && !this.sceneReady && !this.viewportRestorePending
-            && this.scenePreview.IsReady(args.Document) && this.scene is { } readyScene)
+            && this.services.ScenePreview.IsReady(args.Document) && this.scene is { } readyScene)
         {
             this.OnSceneReady(readyScene);
         }
@@ -465,10 +426,7 @@ public partial class SceneEditorViewModel : ObservableObject, IAsyncSaveable, ID
 
         // Build the panes now that the scene is ready, as the user left them.
         _ = this.RestoreViewportsAsync();
-        if (this.SelectionService is { } selection)
-        {
-            this.UpdateSelectionOutline(selection.GetContext(this.Document.Id));
-        }
+        this.UpdateSelectionOutline(this.SelectionService.GetContext(this.Document.Id));
 
         this.UpdateTransformGizmo();
     }

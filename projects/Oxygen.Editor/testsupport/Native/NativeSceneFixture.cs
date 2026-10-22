@@ -8,14 +8,11 @@ using System.Reactive.Concurrency;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using AwesomeAssertions;
-using CommunityToolkit.Mvvm.Messaging;
-using DroidNet.Aura.Settings;
 using DroidNet.Config;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm;
 using DroidNet.Storage.Native;
 using DroidNet.Tests;
-using DryIoc;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
@@ -23,6 +20,7 @@ using Microsoft.UI.Xaml;
 using Moq;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
+using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.ContentPipeline.Mounting;
 using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
@@ -41,7 +39,9 @@ using Oxygen.Editor.SceneEditor;
 using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Documents;
 using Oxygen.Editor.Shell.Testing;
@@ -78,7 +78,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     private readonly TestDocumentArea area = new();
     private readonly MaterialValidation materialValidation = new();
     private readonly MaterialDocumentKind materialKind;
-    private readonly StrongReferenceMessenger messenger = new();
     private readonly HostingContext hosting;
     private readonly BehaviorSubject<IReadOnlyList<Oxygen.Editor.Assets.AssetEntry>> feedAssets = new([]);
     private readonly SceneDocumentKind sceneKind;
@@ -274,28 +273,10 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         _ = (await this.contentSession.ChangeMountsAsync(this.Session.Context, desired, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
     }
 
-    public DocumentAreaViewModel CreateDocumentTransitionHost(IContainer container, CatalogWorkloadServices services, WindowId windowId)
+    public DocumentAreaViewModel CreateDocumentTransitionHost(CatalogWorkloadServices services, WindowId windowId)
     {
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
-        var appearance = new Mock<ISettingsService<IAppearanceSettings>>();
-        _ = appearance.SetupGet(value => value.Settings).Returns(new AppearanceSettings());
-        container.RegisterInstance(appearance.Object);
-        container.RegisterInstance<IMessenger>(this.messenger);
-        container.RegisterInstance(this.Preview);
-        container.RegisterInstance(Mock.Of<IDocumentInputCommitter>());
-        container.RegisterInstance<IContentPipelineService>(services.Pipeline);
-        container.RegisterInstance<IProjectSession>(services.Session);
-        container.RegisterInstance<IAssetFeed>(this.AssetCatalog.Object);
-        var preferences = new PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.Session, publisher.Object, new OperationStatusReducer());
-        container.RegisterInstance(preferences);
-        var materials = new MaterialEdits(this.materialValidation, publisher.Object);
-        var cook = new MaterialCookService(services.Pipeline, this.Session, NullLogger<MaterialCookService>.Instance);
-        DocumentEditorDescriptor[] editors =
-        [
-            new(this.sceneKind, tab => new SceneEditorViewModel(tab, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), services.Pipeline, container, preferences)) { IsClosable = false, IsOnePerArea = true },
-            new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Session)),
-        ];
         var files = new ProjectDocumentFiles(this.Session);
         var coordinator = new DocumentCloseCoordinator(Mock.Of<IDocumentClosePrompt>(), publisher.Object);
         var documents = new DocumentTabs(coordinator);
@@ -308,7 +289,14 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             Mock.Of<IDocumentConfirmations>(),
             Mock.Of<IDocumentInputCommitter>(),
             this.hosting);
-        container.RegisterInstance<IDocumentService>(this.TransitionDocuments);
+        var sceneServices = this.CreateSceneEditorServices(services, this.TransitionDocuments, publisher.Object);
+        var materials = new MaterialEdits(this.materialValidation, publisher.Object);
+        var cook = new MaterialCookService(services.Pipeline, this.Session, NullLogger<MaterialCookService>.Instance);
+        DocumentEditorDescriptor[] editors =
+        [
+            new(this.sceneKind, tab => new SceneEditorViewModel(tab, sceneServices)) { IsClosable = false, IsOnePerArea = true },
+            new(this.materialKind, tab => new MaterialEditorViewModel(tab, materials, this.AssetCatalog.Object, this.hosting.DispatcherScheduler, cook, services.Session)),
+        ];
         this.TransitionArea = new DocumentArea(
             documents,
             this.OpenDocuments,
@@ -318,7 +306,6 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             publisher.Object,
             windowId,
             static _ => { });
-        container.RegisterInstance<IDocumentArea>(this.TransitionArea);
         this.TransitionAttachments = new DocumentWindowAttachments(this.TransitionArea, this.TransitionDocuments, Mock.Of<ICommandService>(), Mock.Of<IPlacementService>());
         var views = new Mock<IViewLocator>();
         _ = views.Setup(value => value.ResolveView(It.IsAny<object>())).Returns((object model) => model is SceneEditorViewModel ? new SceneEditorView() : new MaterialEditorView());
@@ -441,17 +428,31 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         await this.SynchronizeAsync(stale, cancellationToken).ConfigureAwait(true);
     }
 
-    public async Task<SceneEditorViewModel> CreateSceneEditorAsync(IContainer container)
+    // The session's scene editor services over the fixture's engine and project, without play sessions.
+    private SceneEditorServices CreateSceneEditorServices(CatalogWorkloadServices services, IDocumentService documents, IOperationResultPublisher publisher)
     {
-        var publisher = new Mock<IOperationResultPublisher>();
-        _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Enqueue);
-        var preferences = new PreviewSettingsService(this.Runtime, Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>(), this.Session, publisher.Object, new OperationStatusReducer());
-        await preferences.EnsureRestoredAsync().ConfigureAwait(true);
-        var editor = new SceneEditorViewModel(this.Tab, this.Runtime, this.Preview, Mock.Of<IDocumentInputCommitter>(), publisher.Object, new OperationStatusReducer(), Mock.Of<IContentPipelineService>(), container, preferences);
-
-        // The editor runs in a window that shows its scene, as the workspace's does.
-        editor.AttachWindow(new DocumentWindowServices(new WindowId(1), this.area, Mock.Of<ICommandService>(), Mock.Of<IPlacementService>(), Mock.Of<IAssetReveal>()));
-        return editor;
+        var reducer = new OperationStatusReducer();
+        var settings = Mock.Of<Oxygen.Editor.Data.Services.IEditorSettingsManager>();
+        var engineSettings = new Mock<ISettingsService<IEngineStartupSettings>>();
+        _ = engineSettings.SetupGet(value => value.Settings).Returns(new EngineStartupSettings());
+        return new SceneEditorServices(
+            this.Runtime,
+            this.Preview,
+            Mock.Of<IDocumentInputCommitter>(),
+            publisher,
+            reducer,
+            services.Pipeline,
+            this.Session,
+            documents,
+            Mock.Of<IUnsavedCookInputs>(),
+            new SceneSelectionService(),
+            new SceneNodeInteraction(settings, publisher, reducer, NullLoggerFactory.Instance),
+            new SceneEditorViews(),
+            new PreviewSettingsService(this.Runtime, settings, this.Session, publisher, reducer),
+            new ViewportStateService(settings, publisher, reducer),
+            new TransformToolSettingsService(settings: null),
+            engineSettings.Object,
+            NullLoggerFactory.Instance);
     }
 
     /// <summary>Starts the project's preview session over the cook services, as the workspace does.</summary>

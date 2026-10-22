@@ -84,7 +84,7 @@ public sealed class ShellWindowModule(IReadOnlyList<IFeatureModule> features) : 
                 resolver.Resolve<IOperationResultPublisher>(),
                 resolver.Resolve<WindowId>(),
                 resolver.Resolve<IWindowManagerService>().ActivateWindow,
-                resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault)),
+                resolver.Resolve<ILoggerFactory>()),
             Reuse.Singleton);
         scope.RegisterMapping<IDocumentArea, DocumentArea>();
         scope.Register<DocumentWindowAttachments>(Reuse.Singleton);

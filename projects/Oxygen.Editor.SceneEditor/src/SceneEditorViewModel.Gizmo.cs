@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DryIoc;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
@@ -152,15 +151,15 @@ public partial class SceneEditorViewModel
     internal IReadOnlyList<NodeId> GetGizmoTargets(out NodeId? activeNodeId)
     {
         activeNodeId = null;
-        if (this.scene is null || this.SelectionService is not { } selection)
+        if (this.scene is null)
         {
             return [];
         }
 
-        var context = selection.GetContext(this.Document.Id);
+        var context = this.SelectionService.GetContext(this.Document.Id);
         var nodes = this.FindSelectionRoots(context.SelectedNodeIds);
         var interaction = this.Interaction;
-        var targets = nodes.Where(node => interaction?.GetLockOwner(node) is null).Select(static node => node.Id).ToList();
+        var targets = nodes.Where(node => interaction.GetLockOwner(node) is null).Select(static node => node.Id).ToList();
         activeNodeId = context.PrimaryNodeId is { } primary && targets.Contains(primary) ? primary
             : targets.Count > 0 ? targets[^1] : null;
         return targets;
@@ -190,26 +189,19 @@ public partial class SceneEditorViewModel
     private void InitializeTransformTools()
     {
         this.gizmoContext = SynchronizationContext.Current;
-        var settings = this.container.Resolve<TransformToolSettingsService>(IfUnresolved.ReturnDefault)
-            ?? new TransformToolSettingsService(settings: null);
+        var settings = this.services.TransformTools;
         this.TransformTools = new TransformToolsViewModel(settings);
         this.TransformTools.Changed += this.OnTransformToolsChanged;
-        this.engineService.GizmoEvent += this.OnEngineGizmoEvent;
-        if (this.Interaction is { } interaction)
-        {
-            interaction.StateChanged += this.OnInteractionStateChanged;
-        }
+        this.services.Engine.GizmoEvent += this.OnEngineGizmoEvent;
+        this.Interaction.StateChanged += this.OnInteractionStateChanged;
 
         _ = settings.EnsureLoadedAsync();
     }
 
     private void DisposeTransformTools()
     {
-        this.engineService.GizmoEvent -= this.OnEngineGizmoEvent;
-        if (this.Interaction is { } interaction)
-        {
-            interaction.StateChanged -= this.OnInteractionStateChanged;
-        }
+        this.services.Engine.GizmoEvent -= this.OnEngineGizmoEvent;
+        this.Interaction.StateChanged -= this.OnInteractionStateChanged;
 
         this.TransformTools.Changed -= this.OnTransformToolsChanged;
         this.TransformTools.Dispose();
@@ -308,14 +300,14 @@ public partial class SceneEditorViewModel
     private async Task SetSceneHelpersAsync(float displayScale)
     {
         var interaction = this.Interaction;
-        var selected = (this.SelectionService?.GetContext(this.Document.Id).SelectedNodeIds ?? []).ToHashSet();
-        IReadOnlyList<NodeId> locked = interaction is null || this.scene is null
+        var selected = this.SelectionService.GetContext(this.Document.Id).SelectedNodeIds.ToHashSet();
+        IReadOnlyList<NodeId> locked = this.scene is null
             ? []
             : [.. this.scene.AllNodes.Where(node => selected.Contains(node.Id) && interaction.GetLockOwner(node) is not null).Select(static node => node.Id)];
-        var helpers = new RuntimeSceneHelpers([.. interaction?.HiddenNodeIds() ?? []], locked, displayScale);
+        var helpers = new RuntimeSceneHelpers([.. interaction.HiddenNodeIds()], locked, displayScale);
         try
         {
-            if (!await this.engineService.SetSceneHelpersAsync(helpers).ConfigureAwait(true))
+            if (!await this.services.Engine.SetSceneHelpersAsync(helpers).ConfigureAwait(true))
             {
                 this.LogSceneHelpersRejected();
             }
@@ -330,14 +322,14 @@ public partial class SceneEditorViewModel
     {
         try
         {
-            if (!await this.engineService.SetTransformGizmoAsync(gizmo).ConfigureAwait(true))
+            if (!await this.services.Engine.SetTransformGizmoAsync(gizmo).ConfigureAwait(true))
             {
                 this.LogTransformGizmoRejected();
             }
         }
         catch (Exception ex) when (ex is not OperationCanceledException)
         {
-            this.operationResults.Publish(new OperationResult
+            this.services.OperationResults.Publish(new OperationResult
             {
                 OperationId = Guid.NewGuid(),
                 OperationKind = RuntimeOperationKinds.TransformGizmo,
@@ -447,7 +439,7 @@ public partial class SceneEditorViewModel
         switch (command)
         {
             case ViewportEditCommand.Duplicate:
-                var selected = this.SelectionService?.GetContext(this.Document.Id).SelectedNodeIds ?? [];
+                var selected = this.SelectionService.GetContext(this.Document.Id).SelectedNodeIds;
                 var roots = this.FindSelectionRoots(selected);
                 if (roots.Count > 0 && this.Authoring is { } authoring)
                 {
@@ -481,13 +473,13 @@ public partial class SceneEditorViewModel
         }
 
         var result = await authoring.ExecuteAsync(duplicate).ConfigureAwait(true);
-        if (!result.Succeeded || this.isDisposed || this.SelectionService is not { } selection)
+        if (!result.Succeeded || this.isDisposed)
         {
             return;
         }
 
         IReadOnlyList<NodeId> ids = [.. duplicate.Inserts.Select(static insert => insert.Node.Id)];
-        selection.Publish(
+        this.SelectionService.Publish(
             this.Document.Id,
             new SceneSelectionContext(SceneSelectionKind.Node, ids, [], ids[^1], PrimaryFolderId: null),
             ViewportSelectionSource);

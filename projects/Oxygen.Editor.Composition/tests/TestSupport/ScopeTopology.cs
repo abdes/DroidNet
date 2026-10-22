@@ -82,6 +82,22 @@ internal static class ScopeTopology
             .Where(static type => typeof(UIElement).IsAssignableFrom(type))
             .ToHashSet();
 
+    /// <summary>Gets the disposable transients of a scope that name no owner.</summary>
+    /// <param name="registrations">The scope's registrations.</param>
+    /// <returns>
+    ///     The types registered transient that are disposable and neither tracked by their scope
+    ///     (<c>trackDisposableTransient</c>) nor left to the outlet or the code that creates them (<c>preventDisposal</c>).
+    /// </returns>
+    public static IReadOnlySet<Type> UnownedDisposableTransients(IEnumerable<ServiceRegistrationInfo> registrations)
+        => registrations
+            .Select(static registration => (registration.Factory, Type: registration.Factory.ImplementationType ?? registration.ServiceType))
+            .Where(static built => (built.Factory.Reuse ?? Reuse.Transient).Lifespan == Reuse.Transient.Lifespan
+                && (typeof(IDisposable).IsAssignableFrom(built.Type) || typeof(IAsyncDisposable).IsAssignableFrom(built.Type))
+                && !built.Factory.Setup.TrackDisposableTransient
+                && !built.Factory.Setup.PreventDisposal)
+            .Select(static built => built.Type)
+            .ToHashSet();
+
     /// <summary>Gets the constructor parameters through which a type would locate services.</summary>
     /// <param name="constructor">The constructor.</param>
     /// <returns>The parameters of a container, resolver or service provider type.</returns>

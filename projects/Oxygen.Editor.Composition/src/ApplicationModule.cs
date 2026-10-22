@@ -58,7 +58,8 @@ internal sealed class ApplicationModule : IScopeModule<IApplicationLayer>
         scope.Register<IWindowCloseParticipant, EditorExit>(Reuse.Singleton);
 
         RegisterWindows(scope);
-        scope.Register<MainShellViewModel>(Reuse.Transient);
+        // The router that shows the shell disposes it with its window.
+        scope.Register<MainShellViewModel>(Reuse.Transient, setup: Setup.With(preventDisposal: true));
         scope.Register<MainShellView>(Reuse.Transient);
 
         // Every scope of the editor is created under the root's handle.

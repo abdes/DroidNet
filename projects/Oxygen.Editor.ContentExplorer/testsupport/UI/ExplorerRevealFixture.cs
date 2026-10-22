@@ -28,6 +28,7 @@ using Oxygen.Editor.Data.Services;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Shell.Desktop;
+using Oxygen.Editor.Shell.Windows;
 using Oxygen.Managed.Assets.Catalog;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -148,7 +149,8 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         this.container.RegisterInstance<ICookPublicationReader>(this.publications);
         this.container.RegisterInstance(mountChanges.Object);
         this.container.RegisterInstance(provider.Object);
-        this.container.RegisterInstance(CreateStatusHosting());
+        var hosting = CreateStatusHosting();
+        this.container.RegisterInstance(hosting);
         _ = this.logger.Setup(value => value.IsEnabled(It.IsAny<LogLevel>())).Returns(value: true);
         var logging = new Mock<ILoggerFactory>();
         _ = logging.Setup(value => value.CreateLogger(It.IsAny<string>())).Returns(this.logger.Object);
@@ -171,7 +173,16 @@ internal sealed partial class ExplorerRevealFixture : IDisposable
         this.container.RegisterInstance(Mock.Of<ICodeEditorService>());
         // The fixture's container stands in for the explorer's window.
         this.scopeRoot = ScopeFactory.CreateRoot(this.container);
-        this.Explorer = new(new ScopeFactory(), this.scopeRoot, Mock.Of<IRouter>(), this.Session, Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
+        this.Explorer = new(
+            new ScopeFactory(),
+            this.scopeRoot,
+            Mock.Of<IRouter>(),
+            hosting,
+            this.Session,
+            provider.Object,
+            new ContentExplorerAssetReveal(Mock.Of<IPlacementService>()),
+            new ContentExplorerScriptCreation(),
+            Mock.Of<IProjectUsageService>(), Mock.Of<IOperationResultPublisher>(), Mock.Of<IStatusReducer>(), logging.Object);
     }
 
     public TestSession Session { get; }

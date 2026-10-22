@@ -36,6 +36,7 @@ public sealed class SceneEditorSessionModule : IScopeModule<ISessionLayer>
 
         // The scene editors belong to the session; each window that shows one lends it the window's services.
         scope.Register<IDocumentEditorProvider, SceneEditorProvider>(Reuse.Singleton);
+        scope.Register<SceneEditorServices>(Reuse.Singleton);
         scope.Register<SceneEditorViews>(Reuse.Singleton);
         scope.RegisterMapping<ISceneViews, SceneEditorViews>();
 

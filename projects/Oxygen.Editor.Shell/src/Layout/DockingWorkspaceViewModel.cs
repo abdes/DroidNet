@@ -41,6 +41,7 @@ public abstract partial class DockingWorkspaceViewModel(
     private readonly List<RoutedDockable> deferredDockables = [];
 
     private ScopeHandle? scope;
+    private ContributionRegistry? contributions;
     private CompositeDisposable? localRouterEventsSub;
     private bool disposed;
 
@@ -87,7 +88,8 @@ public abstract partial class DockingWorkspaceViewModel(
         var resolver = this.scope.Resolver;
         this.Docker = resolver.Resolve<IDocker>();
         this.Layout = resolver.Resolve<DockingWorkspaceLayout>();
-        this.Commands = resolver.Resolve<ICommandService>(IfUnresolved.ReturnDefault);
+        this.Commands = resolver.Resolve<ICommandService>();
+        this.contributions = resolver.Resolve<ContributionRegistry>();
         this.OnWindowScopeOpened(resolver);
 
         var localRouter = resolver.Resolve<IRouter>();
@@ -167,6 +169,7 @@ public abstract partial class DockingWorkspaceViewModel(
 
             // The window's scope belongs to its owner, which disposes it, awaited, when the window's session closes.
             this.scope = null;
+            this.contributions = null;
         }
 
         this.disposed = true;
@@ -247,7 +250,7 @@ public abstract partial class DockingWorkspaceViewModel(
         {
             var dockableActiveRoute = this.activeRoute!.Children.First(c => c.Outlet == dockableId);
             var dockable = this.Docker.CreateDockable<RoutedDockable>(dockableId, dockableActiveRoute);
-            if (this.scope?.Resolver.Resolve<ContributionRegistry>(IfUnresolved.ReturnDefault)?.TitleOf(dockableId) is { } title)
+            if (this.contributions?.TitleOf(dockableId) is { } title)
             {
                 dockable.Title = title;
             }

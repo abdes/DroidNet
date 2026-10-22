@@ -4,7 +4,6 @@
 
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
-using DryIoc;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
@@ -68,7 +67,7 @@ public partial class SceneEditorViewModel
 
     private IMenuSource BuildQuickAddMenu()
     {
-        var builder = new MenuBuilder(this.loggerFactory);
+        var builder = new MenuBuilder(this.services.LoggerFactory);
         _ = builder.AddMenuItem("Empty node", new AsyncRelayCommand(this.AddEmptyNodeAsync));
         _ = builder.AddSeparator();
         _ = builder.AddSubmenu("Shapes", shapes =>
@@ -179,7 +178,7 @@ public partial class SceneEditorViewModel
     {
         var assets = this.GetSelectedAssets();
         this.LogBrowseToAssetRequested(assets.Count);
-        if (assets.Count == 0 || this.ActiveProject is null || this.window?.Reveal is not { } reveal)
+        if (assets.Count == 0 || this.window?.Reveal is not { } reveal)
         {
             return;
         }
@@ -190,7 +189,7 @@ public partial class SceneEditorViewModel
     /// <summary>Selects the scene itself, so the Inspector shows its environment.</summary>
     [RelayCommand]
     private void SelectEnvironment()
-        => this.container.Resolve<ISceneSelectionService>(IfUnresolved.ReturnDefault)?.Publish(
+        => this.SelectionService.Publish(
             this.Document.Id,
             new SceneSelectionContext(SceneSelectionKind.Scene, [], [], PrimaryNodeId: null, PrimaryFolderId: null),
             SelectionSource);

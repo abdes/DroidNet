@@ -89,7 +89,7 @@ public sealed class ProjectSessionModule : IScopeModule<ISessionLayer>
             resolver => new OpenDocuments(
                 [resolver.Resolve<SceneDocumentKind>(), resolver.Resolve<MaterialDocumentKind>()],
                 resolver.Resolve<IAtomicFileStore>(),
-                resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault)),
+                resolver.Resolve<ILoggerFactory>()),
             Reuse.Singleton);
         RegisterPreviewContentDemand(scope);
         scope.RegisterDelegate<PersistentState>(EditorDataModule.CreatePersistentState, Reuse.Singleton);
@@ -103,6 +103,6 @@ public sealed class ProjectSessionModule : IScopeModule<ISessionLayer>
                 resolver.Resolve<IAssetFeed>(),
                 resolver.Resolve<IContentPipelineService>(),
                 resolver.Resolve<IProjectSession>(),
-                resolver.Resolve<ILoggerFactory>(IfUnresolved.ReturnDefault))),
+                resolver.Resolve<ILoggerFactory>())),
             Reuse.Singleton);
 }

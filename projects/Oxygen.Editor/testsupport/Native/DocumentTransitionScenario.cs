@@ -3,7 +3,6 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
-using DroidNet.TestHelpers;
 using DroidNet.Tests;
 using Microsoft.UI;
 using Oxygen.Editor.MaterialEditor;
@@ -42,11 +41,9 @@ internal sealed class DocumentTransitionScenario : DroidNet.Tests.VisualUserInte
         var (material, _) = await fixture.CookTestMaterialAsync("Transition", timeout.Token).ConfigureAwait(true);
         await fixture.RefreshCookedRootsAsync().ConfigureAwait(true);
         fixture.Runtime.TargetFps = targetFps;
-        var container = HostContainer.Create();
-        await using var containerLifetime = container.ConfigureAwait(true);
         var window = VisualUserInterfaceTestsApp.MainWindow.AppWindow;
         var originalSize = window.Size;
-        using var host = fixture.CreateDocumentTransitionHost(container, services, window.Id);
+        using var host = fixture.CreateDocumentTransitionHost(services, window.Id);
         var documents = fixture.TransitionTabs!;
         using var service = fixture.TransitionDocuments!;
         using var area = fixture.TransitionArea!;
