@@ -4,17 +4,13 @@
 
 using System.Numerics;
 using AwesomeAssertions;
-using DroidNet.Documents;
 using DroidNet.Routing;
 using DroidNet.TimeMachine;
 using Moq;
-using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
-using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneExplorer.Unit.Tests;
 

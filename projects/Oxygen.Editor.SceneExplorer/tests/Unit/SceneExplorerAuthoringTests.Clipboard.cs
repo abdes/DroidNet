@@ -29,7 +29,7 @@ public sealed partial class SceneExplorerAuthoringTests
         _ = explorer.CurrentClipboardState.Should().Be(ClipboardState.Cut);
         _ = explorer.PasteCommand.CanExecute(parameter: null).Should().BeTrue();
         _ = scene.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(node);
-        _ = explorer.UndoStack.Should().BeEmpty();
+        _ = harness.History.UndoStack.Should().BeEmpty();
 
         // DynamicTree's Escape handler dispatches this intent; no workstation keyboard injection is needed.
         await explorer.ClearClipboardAsync().ConfigureAwait(false);
@@ -39,8 +39,8 @@ public sealed partial class SceneExplorerAuthoringTests
         _ = explorer.CurrentClipboardState.Should().Be(ClipboardState.Empty);
         _ = explorer.PasteCommand.CanExecute(parameter: null).Should().BeFalse();
         _ = JsonSerializer.Serialize(scene.Dehydrate(), ClipboardJsonOptions).Should().Be(before);
-        _ = explorer.UndoStack.Should().BeEmpty();
-        _ = explorer.RedoStack.Should().BeEmpty();
+        _ = harness.History.UndoStack.Should().BeEmpty();
+        _ = harness.History.RedoStack.Should().BeEmpty();
         _ = harness.Documents.Documents.Single().IsDirty.Should().BeFalse();
     }
 }

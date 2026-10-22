@@ -10,10 +10,10 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
-using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
+using Oxygen.Editor.Shell.Commands;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
@@ -137,6 +137,32 @@ public sealed partial class SceneExplorerAuthoringTests
 
         _ = scene.RootNodes.Should().HaveCount(2);
         _ = harness.History.UndoStack.Should().ContainSingle();
+    }
+
+    [TestMethod]
+    public async Task ShellUndoAndRedo_StepTheShownDocumentsHistory()
+    {
+        using var harness = new AuthoringHarness(out var scene, out _);
+        using var explorer = harness.Build();
+        await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(false);
+        _ = explorer.CanExecute(ShellCommands.Undo.Id).Should().BeFalse("the document's history starts empty");
+
+        await explorer.AddEntityCommand.ExecuteAsync(parameter: null).ConfigureAwait(false);
+        _ = explorer.CanExecute(ShellCommands.Undo.Id).Should().BeTrue();
+        _ = explorer.CanExecute(ShellCommands.Redo.Id).Should().BeFalse();
+
+        await explorer.ExecuteAsync(ShellCommands.Undo.Id).ConfigureAwait(false);
+
+        _ = scene.RootNodes.Should().ContainSingle();
+        _ = harness.History.UndoStack.Should().BeEmpty();
+        _ = harness.History.RedoStack.Should().ContainSingle();
+        _ = explorer.CanExecute(ShellCommands.Redo.Id).Should().BeTrue();
+
+        await explorer.ExecuteAsync(ShellCommands.Redo.Id).ConfigureAwait(false);
+
+        _ = scene.RootNodes.Should().HaveCount(2);
+        _ = harness.History.UndoStack.Should().ContainSingle();
+        _ = harness.History.RedoStack.Should().BeEmpty();
     }
 
     private sealed partial class AuthoringHarness : IDisposable

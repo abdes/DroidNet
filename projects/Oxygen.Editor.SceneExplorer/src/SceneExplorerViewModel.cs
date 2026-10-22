@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.ObjectModel;
 using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.Mvvm.ComponentModel;
@@ -11,8 +10,6 @@ using DroidNet.Controls;
 using DroidNet.Controls.Selection;
 using DroidNet.Documents;
 using DroidNet.Routing;
-using DroidNet.TimeMachine;
-using DroidNet.TimeMachine.Changes;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
@@ -196,9 +193,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         this.PropertyChanged += this.OnContextOwnerPropertyChanged;
         this.ClipboardContentChanged += (_, _) => this.RefreshContextActions();
 
-        this.UndoStack = this.History.UndoStack;
-        this.RedoStack = this.History.RedoStack;
-
         // Default selection mode for Scene Explorer is multiple selection.
         this.SelectionMode = SelectionMode.Multiple;
 
@@ -284,20 +278,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     ///     Gets the current scene adapter.
     /// </summary>
     public SceneAdapter? Scene { get; private set; }
-
-    /// <summary>
-    ///     Gets the undo stack.
-    /// </summary>
-    [ObservableProperty]
-    public partial ReadOnlyObservableCollection<IChange> UndoStack { get; set; }
-
-    /// <summary>
-    ///     Gets the redo stack.
-    /// </summary>
-    [ObservableProperty]
-    public partial ReadOnlyObservableCollection<IChange> RedoStack { get; set; }
-
-    private HistoryKeeper History => this.sceneDocument?.History ?? UndoRedo.Default[this];
 
     // Selection, edit requests and frame requests name the scene's document, not the scene.
     private DocumentId SceneDocumentId => this.sceneDocument?.Id ?? DocumentId.Empty;
@@ -1073,10 +1053,6 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             UseLayoutAdapters = true,
         };
         this.NotifyCategoryAvailabilityChanged();
-
-        // Update Undo/Redo stacks for the new scene
-        this.UndoStack = this.History.UndoStack;
-        this.RedoStack = this.History.RedoStack;
 
         // The refill clears the previous scene's selected rows; keep that inside a sync window so
         // it cannot publish over the stored document selection, then restore by identity outside it.
