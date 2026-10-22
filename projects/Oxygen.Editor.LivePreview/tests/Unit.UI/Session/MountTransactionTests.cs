@@ -90,7 +90,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
         };
         _ = (await fixture.Session.ChangeMountsAsync(original, fixture.Candidate, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
         _ = fixture.Activations.Should().ContainSingle().Which.Should().BeSameAs(fixture.ProjectSession.Context, "the session follows the new mounts");
-        _ = fixture.ProjectSession.Context.LocalFolderMounts.Should().ContainSingle();
+        _ = fixture.ProjectSession.Context.LocalFolderMounts.Select(static mount => mount.Name).Should().Equal("Library", "Base");
         _ = fixture.ProjectSession.Context.DefaultSceneId.Should().Be(original.DefaultSceneId);
         _ = ProjectInfo.FromJson(await File.ReadAllTextAsync(fixture.ManifestPath, this.TestContext.CancellationToken).ConfigureAwait(true)).DefaultSceneId.Should().Be(original.DefaultSceneId);
         _ = fixture.Roots.Should().Equal(fixture.Library, fixture.BaseLibrary);

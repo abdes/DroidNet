@@ -398,15 +398,30 @@ public sealed class EngineTests
     private sealed class TestSynchronizationContext(CancellationToken cancellationToken) : SynchronizationContext, IDisposable
     {
         private readonly BlockingCollection<(SendOrPostCallback callback, object? state)> workItems = [];
+        private readonly Lock gate = new();
+        private bool disposed;
         private int postCount;
 
         public int PostCount => Volatile.Read(ref this.postCount);
 
+        /// <remarks>
+        /// The engine can post after its test has finished and disposed this context; such a post belongs to no test
+        /// and is dropped.
+        /// </remarks>
         public override void Post(SendOrPostCallback d, object? state)
         {
             ArgumentNullException.ThrowIfNull(d);
 
-            this.workItems.Add((d, state), cancellationToken);
+            lock (this.gate)
+            {
+                if (this.disposed)
+                {
+                    return;
+                }
+
+                this.workItems.Add((d, state), cancellationToken);
+            }
+
             _ = Interlocked.Increment(ref this.postCount);
         }
 
@@ -430,6 +445,14 @@ public sealed class EngineTests
             }
         }
 
-        public void Dispose() => this.workItems.Dispose();
+        public void Dispose()
+        {
+            lock (this.gate)
+            {
+                this.disposed = true;
+            }
+
+            this.workItems.Dispose();
+        }
     }
 }
