@@ -8,7 +8,7 @@
 
         <EnableMsixTooling>true</EnableMsixTooling>
 
-        <Title>DroidNet Application Bootsrapper.</Title>
+        <Title>DroidNet Application Bootstrapper.</Title>
         <Description>Opinionated but reusable module, that manages the application bootstrapping process for a WinUI application.</Description>
         <PackageReadmeFile>README.md</PackageReadmeFile>
         <PackageTags>dependency-injection;configuration;host;lifecycle;bootstrap</PackageTags>

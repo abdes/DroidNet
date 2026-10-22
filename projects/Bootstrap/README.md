@@ -140,7 +140,7 @@ projects/Bootstrap/
 │   ├── BootstrapOptions.cs           # Configuration options
 │   └── BootstrapperException.cs      # Custom exception type
 └── tests/
-    ├── Bootsrap.UI.Tests.csproj      # UI integration tests (MSTest)
+    ├── Bootstrap.UI.Tests.csproj      # UI integration tests (MSTest)
     └── BootstrapperTests.cs          # Test implementations
 ```
 
@@ -231,13 +231,13 @@ dotnet build AllProjects.sln
 #### Run Bootstrap tests only
 
 ```powershell
-dotnet test --project projects/Bootstrap/tests/Bootsrap.UI.Tests.csproj
+dotnet test --project projects/Bootstrap/tests/Bootstrap.UI.Tests.csproj
 ```
 
 #### Run with code coverage
 
 ```powershell
-dotnet test --project projects/Bootstrap/tests/Bootsrap.UI.Tests.csproj `
+dotnet test --project projects/Bootstrap/tests/Bootstrap.UI.Tests.csproj `
     /p:CollectCoverage=true `
     /p:CoverletOutputFormat=lcov
 ```
@@ -257,7 +257,7 @@ For faster iteration, use targeted commands rather than full solution builds:
 dotnet build projects/Bootstrap/src/Bootstrap.csproj
 
 # Quick test run
-dotnet test --project projects/Bootstrap/tests/Bootsrap.UI.Tests.csproj
+dotnet test --project projects/Bootstrap/tests/Bootstrap.UI.Tests.csproj
 
 # Clean build artifacts (all projects)
 .\clean.ps1
@@ -364,14 +364,14 @@ Examples:
 
 ```powershell
 # Run all Bootstrap tests
-dotnet test projects/Bootstrap/tests/Bootsrap.UI.Tests.csproj
+dotnet test projects/Bootstrap/tests/Bootstrap.UI.Tests.csproj
 
 # Run specific test class
-dotnet test projects/Bootstrap/tests/Bootsrap.UI.Tests.csproj `
+dotnet test projects/Bootstrap/tests/Bootstrap.UI.Tests.csproj `
     --filter "ClassName=DroidNet.Bootstrap.Tests.BootstrapperTests"
 
 # With detailed output
-dotnet test projects/Bootstrap/tests/Bootsrap.UI.Tests.csproj -v detailed
+dotnet test projects/Bootstrap/tests/Bootstrap.UI.Tests.csproj -v detailed
 ```
 
 ### Test Project Conventions
@@ -484,7 +484,7 @@ bootstrap.Run();
 - Keep the fluent API surface minimal and focused
 - Consider impact on application startup time
 - Document new configuration options in `BootstrapOptions`
-- Add corresponding tests in `Bootsrap.UI.Tests.csproj`
+- Add corresponding tests in `Bootstrap.UI.Tests.csproj`
 
 ### Pull Request Checklist
 
