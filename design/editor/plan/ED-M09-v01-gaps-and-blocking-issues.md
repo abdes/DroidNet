@@ -9,8 +9,8 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: item 10**, Inherit source modes ([section 2](#2-lld-gaps)): its
-dependencies (#77 slice 77.3, #94, #95) are closed.
+**Next: item 11**, #77 slice 77.5 ([section 2.2](#22-77-implementation-slices)):
+its dependency (slice 77.4) is closed.
 
 | Order | Item                                                 | Needs        | State | Commit    |
 | ----- | ---------------------------------------------------- | ------------ | ----- | --------- |
@@ -23,7 +23,7 @@ dependencies (#77 slice 77.3, #94, #95) are closed.
 | 7     | #95 Scene Explorer history without `UndoRedo`        | -            | done  | ee79d3463 |
 | 8     | #74 one view per view model per host                 | -            | done  | 85ee1b76c |
 | 9     | #76 LivePreview leaves Ready on engine fault         | -            | done  | 7f4392514 |
-| 10    | Inherit source modes (section 2)                     | 4, #94, #95  | open  | -         |
+| 10    | Inherit source modes (section 2)                     | 4, #94, #95  | done  | 26124f382 |
 | 11    | #77 slice 77.5: format and runtime                   | 5            | open  | -         |
 | 12    | #77 slice 77.6: surface values in the editor         | 11, #95, #76 | open  | -         |
 | 13    | #77 slice 77.7: LOD policy in the editor             | 11, #95, #76 | open  | -         |
