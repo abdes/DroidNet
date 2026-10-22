@@ -276,6 +276,9 @@
                     Style="{StaticResource CaptionTextBlockStyle}"
                     Text="Undo" />
                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.UndoStack, Mode=OneWay}">
+                    <ItemsRepeater.Layout>
+                        <StackLayout />
+                    </ItemsRepeater.Layout>
                     <DataTemplate x:DataType="tm:IChange">
                         <TextBlock Text="{x:Bind Key}" />
                     </DataTemplate>
@@ -286,6 +289,9 @@
                     Style="{StaticResource CaptionTextBlockStyle}"
                     Text="Redo" />
                 <ItemsRepeater ItemsSource="{x:Bind ViewModel.RedoStack, Mode=OneWay}">
+                    <ItemsRepeater.Layout>
+                        <StackLayout />
+                    </ItemsRepeater.Layout>
                     <DataTemplate x:DataType="tm:IChange">
                         <TextBlock Foreground="{ThemeResource TextFillColorSecondaryBrush}" Text="{x:Bind Key}" />
                     </DataTemplate>

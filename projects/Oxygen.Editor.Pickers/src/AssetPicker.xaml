@@ -66,7 +66,11 @@
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"
                     Style="{ThemeResource CaptionTextBlockStyle}"
                     Text="{x:Bind Title}" />
-                <ItemsRepeater ItemTemplate="{StaticResource ChoiceTemplate}" ItemsSource="{x:Bind Rows}" />
+                <ItemsRepeater ItemTemplate="{StaticResource ChoiceTemplate}" ItemsSource="{x:Bind Rows}">
+                    <ItemsRepeater.Layout>
+                        <StackLayout />
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
             </StackPanel>
         </DataTemplate>
     </UserControl.Resources>
@@ -101,7 +105,11 @@
         </Button>
         <ScrollViewer Grid.Row="2" MaxHeight="{x:Bind MaxListHeight, Mode=OneWay}">
             <StackPanel>
-                <ItemsRepeater ItemTemplate="{StaticResource GroupTemplate}" ItemsSource="{x:Bind Model.Groups, Mode=OneWay}" />
+                <ItemsRepeater ItemTemplate="{StaticResource GroupTemplate}" ItemsSource="{x:Bind Model.Groups, Mode=OneWay}">
+                    <ItemsRepeater.Layout>
+                        <StackLayout />
+                    </ItemsRepeater.Layout>
+                </ItemsRepeater>
                 <TextBlock
                     Margin="8"
                     Foreground="{ThemeResource TextFillColorSecondaryBrush}"

@@ -120,6 +120,9 @@
                         VerticalScrollBarVisibility="Auto"
                         Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
                         <ItemsRepeater x:Name="ComponentSelector" ItemsSource="{x:Bind ViewModel.ComponentFilters}">
+                            <ItemsRepeater.Layout>
+                                <StackLayout />
+                            </ItemsRepeater.Layout>
                             <ItemsRepeater.ItemTemplate>
                                 <DataTemplate x:DataType="local:InspectorComponentFilter">
                                     <Grid ToolTipService.ToolTip="{x:Bind ToolTip, Mode=OneWay}">

@@ -56,6 +56,9 @@
                         </Grid>
                         <ScrollViewer Grid.Row="1">
                             <ItemsRepeater x:Name="PartItemsRepeater" ItemsSource="{Binding Path=DisplayedItems, RelativeSource={RelativeSource Mode=TemplatedParent}, Mode=OneWay}">
+                                <ItemsRepeater.Layout>
+                                    <StackLayout />
+                                </ItemsRepeater.Layout>
                                 <ItemsRepeater.ItemTemplate>
                                     <DataTemplate>
                                         <Grid AllowDrop="True">

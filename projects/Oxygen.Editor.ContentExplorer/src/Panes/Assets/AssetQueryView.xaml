@@ -41,6 +41,9 @@
                                 <StackPanel Spacing="4">
                                     <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Type" />
                                     <ItemsRepeater ItemsSource="{x:Bind ViewModel.TypeOptions, Mode=OneWay}">
+                                        <ItemsRepeater.Layout>
+                                            <StackLayout />
+                                        </ItemsRepeater.Layout>
                                         <ItemsRepeater.ItemTemplate>
                                             <DataTemplate x:DataType="explorer:AssetFilterOption">
                                                 <CheckBox
@@ -54,6 +57,9 @@
                                 <StackPanel Grid.Column="1" Spacing="4">
                                     <TextBlock Style="{ThemeResource BodyStrongTextBlockStyle}" Text="Status" />
                                     <ItemsRepeater ItemsSource="{x:Bind ViewModel.StatusOptions, Mode=OneWay}">
+                                        <ItemsRepeater.Layout>
+                                            <StackLayout />
+                                        </ItemsRepeater.Layout>
                                         <ItemsRepeater.ItemTemplate>
                                             <DataTemplate x:DataType="explorer:AssetFilterOption">
                                                 <CheckBox

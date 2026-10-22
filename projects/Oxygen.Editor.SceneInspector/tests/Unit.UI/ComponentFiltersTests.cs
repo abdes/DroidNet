@@ -66,6 +66,22 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = editor.IsInputEnabled.Should().BeFalse("changing filters must not re-enable a locked component editor");
     });
 
+    /// <summary>
+    /// Each inspector's component selector lays out its own items: a layout shared by repeaters keeps a torn-down
+    /// repeater's handler, and the next inspector's binding then invokes it (WinUI's default is one StackLayout for every
+    /// repeater that sets none).
+    /// </summary>
+    /// <returns>The asynchronous UI regression.</returns>
+    [TestMethod]
+    public Task ComponentSelectorsDoNotShareALayout() => EnqueueAsync(() =>
+    {
+        var first = (ItemsRepeater)new SceneInspectorView().FindName("ComponentSelector");
+        var second = (ItemsRepeater)new SceneInspectorView().FindName("ComponentSelector");
+
+        _ = first.Layout.Should().NotBeNull();
+        _ = first.Layout.Should().NotBeSameAs(second.Layout);
+    });
+
     /// <summary>All, individual types and repeated toggles change visible sections without authored edits.</summary>
     /// <returns>The asynchronous inspector regression.</returns>
     [TestMethod]
