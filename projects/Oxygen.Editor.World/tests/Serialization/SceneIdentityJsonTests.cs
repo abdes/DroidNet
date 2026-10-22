@@ -59,8 +59,13 @@ public sealed class SceneIdentityJsonTests
             new SceneNodeData
             {
                 Id = Camera,
-                Name = "Camera",
-                Components = [new TransformData { Id = Transform, Name = "Transform" }],
+                Components =
+                [
+                    new TransformData { Id = Transform, Name = "Transform" },
+                    new MetadataData { Name = "Camera" },
+                    new NodeFlagsData { Name = "Rendering" },
+                    new HierarchyData { Name = "Hierarchy" },
+                ],
             },
         ],
         StartingCamera = Camera,

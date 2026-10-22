@@ -158,7 +158,7 @@ public sealed class SetPropertiesTests
     }
 
     private static float PositionX(AuthoringFixture fixture, NodeId node)
-        => fixture.Node(node).Components.OfType<TransformComponent>().Single().LocalPosition.X;
+        => fixture.Node(node).Transform.LocalPosition.X;
 
     private static SetProperties Edit(params (NodeId Node, PropertyEdit Edit)[] edits)
         => new(edits.ToDictionary(static pair => pair.Node, static pair => pair.Edit), "Edit");

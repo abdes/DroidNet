@@ -225,19 +225,20 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
         {
             var nodeIndex = nodes.Count;
             nodeIndices[node.Id] = nodeIndex;
-            var transform = node.Components.OfType<TransformComponent>().First();
+            var transform = node.Transform;
+            var flags = node.Flags;
 
             // Boolean authoring fields are explicit local choices, including on children.
             nodes.Add(new NativeSceneNode(
-                node.Name,
+                node.Metadata.Name,
                 parentIndex,
                 new NativeNodeFlags(
-                    node.IsVisible ? "shown" : "hidden",
-                    node.IsStatic,
-                    node.CastsShadows ? "on" : "off",
-                    node.ReceivesShadows ? "on" : "off",
-                    node.IsRayCastingSelectable,
-                    node.IgnoreParentTransform),
+                    flags.IsVisible ? "shown" : "hidden",
+                    flags.IsStatic,
+                    flags.CastsShadows ? "on" : "off",
+                    flags.ReceivesShadows ? "on" : "off",
+                    flags.IsRayCastingSelectable,
+                    flags.IgnoreParentTransform),
                 new NativeNodeTransform(
                     ToArray(transform.LocalPosition),
                     ToArray(transform.LocalRotation),
@@ -332,7 +333,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                     volume.SortPriority));
             }
 
-            foreach (var child in node.Children)
+            foreach (var child in node.Hierarchy.Children)
             {
                 AddNode(child, nodeIndex);
             }
@@ -351,7 +352,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                     operationId,
                     DiagnosticSeverity.Error,
                     ContentPipelineDiagnosticCodes.GeometryDescriptorGenerationFailed,
-                    $"Scene node `{node.Name}` references geometry `{geometry.Geometry}` that cannot be normalized: {ex.Message}",
+                    $"Scene node `{node.Metadata.Name}` references geometry `{geometry.Geometry}` that cannot be normalized: {ex.Message}",
                     descriptorPath,
                     descriptorVirtualPath));
                 return;
@@ -368,7 +369,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                         operationId,
                         DiagnosticSeverity.Error,
                         ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                        $"Scene node '{node.Name}' has an invalid or unresolved surface material assignment.",
+                        $"Scene node '{node.Metadata.Name}' has an invalid or unresolved surface material assignment.",
                         descriptorPath,
                         descriptorVirtualPath));
                     return;
@@ -385,7 +386,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                         operationId,
                         DiagnosticSeverity.Error,
                         ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                        $"Scene node '{node.Name}' references invalid material '{slot.Material}': {exception.Message}",
+                        $"Scene node '{node.Metadata.Name}' references invalid material '{slot.Material}': {exception.Message}",
                         descriptorPath,
                         descriptorVirtualPath));
                     return;
@@ -395,7 +396,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                 overrides.Add(new(slot.Target.SurfaceId, materialRef, slot.Target.LayoutRevision));
             }
 
-            renderables.Add(new NativeRenderable(nodeIndex, geometryRef, overrides, node.IsVisible));
+            renderables.Add(new NativeRenderable(nodeIndex, geometryRef, overrides, node.Flags.IsVisible));
         }
     }
 

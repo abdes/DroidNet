@@ -53,7 +53,7 @@ public static class ThumbnailGenerator
             _ => null,
         };
 
-        return sceneNode is not null && sceneNode.Name.EndsWith('1')
+        return sceneNode is not null && sceneNode.Metadata.Name.EndsWith('1')
             ? Symbol.Camera
             : Symbol.Calculator;
     }

@@ -34,9 +34,9 @@ public static class SceneNodeExtensions
     {
         ArgumentNullException.ThrowIfNull(node);
         var names = new List<string>();
-        for (var current = node; current is not null; current = current.Parent)
+        for (var current = node; current is not null; current = current.Hierarchy.Parent)
         {
-            names.Add(current.Name);
+            names.Add(current.Metadata.Name);
         }
 
         names.Reverse();
@@ -44,12 +44,22 @@ public static class SceneNodeExtensions
     }
 
     /// <summary>
-    /// Flattened descendant enumeration (alias to instance method).
+    /// Return all descendants of the node (depth-first, children in order).
     /// </summary>
     /// <param name="node">The node to enumerate descendants for.</param>
     /// <returns>A sequence of descendant nodes.</returns>
     public static IEnumerable<SceneNode> Descendants(this SceneNode node)
-        => node.Descendants();
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        foreach (var child in node.Hierarchy.Children)
+        {
+            yield return child;
+            foreach (var descendant in child.Descendants())
+            {
+                yield return descendant;
+            }
+        }
+    }
 
     /// <summary>
     /// Return the node and all ancestors (closest parent first).
@@ -66,12 +76,18 @@ public static class SceneNodeExtensions
     }
 
     /// <summary>
-    /// Alias to instance Ancestors() for LINQ-style call sites.
+    /// Return the ancestors of the node (closest parent first).
     /// </summary>
     /// <param name="node">The node to enumerate ancestors for.</param>
     /// <returns>A sequence of ancestor nodes.</returns>
     public static IEnumerable<SceneNode> Ancestors(this SceneNode node)
-        => node.Ancestors();
+    {
+        ArgumentNullException.ThrowIfNull(node);
+        for (var current = node.Hierarchy.Parent; current is not null; current = current.Hierarchy.Parent)
+        {
+            yield return current;
+        }
+    }
 
     /// <summary>
     /// Find a node by a simple path expression.
@@ -130,8 +146,8 @@ public static class SceneNodeExtensions
             var cur = node;
             while (cur != null)
             {
-                segments.Add(cur.Name ?? string.Empty);
-                cur = cur.Parent;
+                segments.Add(cur.Metadata.Name);
+                cur = cur.Hierarchy.Parent;
             }
 
             segments.Reverse();

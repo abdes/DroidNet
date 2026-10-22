@@ -32,7 +32,7 @@ public sealed class SourceAnalysisReuseTests
         var api = CreateRecordingApi(compatibility);
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         var second = new Scene { Name = "Second" };
-        var node = new SceneNode(second) { Name = "OtherCube" };
+        var node = new SceneNode(second, "OtherCube");
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
@@ -50,7 +50,7 @@ public sealed class SourceAnalysisReuseTests
         AssertCookSucceeded(first);
         var descriptor = first.Inspection!.Assets.Single(static asset => string.Equals(asset.VirtualPath, "/Content/Scenes/Second.oscene", StringComparison.Ordinal));
         await File.WriteAllBytesAsync(Path.Combine(first.Inspection.CookedRoot, descriptor.DescriptorRelativePath!), [0], this.TestContext.CancellationToken).ConfigureAwait(false);
-        workspace.Scene.RootNodes[0].Name = "FreshlyChanged";
+        workspace.Scene.RootNodes[0].Metadata.Name = "FreshlyChanged";
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
         api.Imported.Clear();
         api.Analyzed.Clear();
@@ -103,7 +103,7 @@ public sealed class SourceAnalysisReuseTests
         await PrepareIncrementalSceneAsync(workspace, api).ConfigureAwait(false);
         const string relative = "Content/Scenes/Main.oscene.json";
         workspace.WriteText(".build/captured/" + relative, workspace.ReadText(relative));
-        workspace.Scene.RootNodes[0].Name = "EditedAfterCapture";
+        workspace.Scene.RootNodes[0].Metadata.Name = "EditedAfterCapture";
         await workspace.WriteSceneAsync(relative).ConfigureAwait(false);
         var operation = new ContentCookOperation(Guid.NewGuid(), workspace.ProjectContext, 1);
         var verified = await compatibility.VerifyAsync(operation.OperationId, this.TestContext.CancellationToken).ConfigureAwait(false);

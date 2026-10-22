@@ -52,11 +52,11 @@ public class SceneStartingTests
         var scene = new Scene { Name = "Cameras" };
         _ = EffectiveCameraName(scene).Should().BeNull();
 
-        var group = new SceneNode(scene) { Name = "Group" };
+        var group = new SceneNode(scene, "Group");
         scene.RootNodes.Add(group);
-        var nested = new SceneNode(scene) { Name = "Nested Camera" };
+        var nested = new SceneNode(scene, "Nested Camera");
         _ = nested.AddComponent(new PerspectiveCamera { Name = "Camera" });
-        group.AddChild(nested);
+        group.Hierarchy.AddChild(nested);
         var later = AddCamera(scene, "Later Camera");
 
         _ = EffectiveCameraName(scene).Should().Be("Nested Camera");
@@ -82,11 +82,11 @@ public class SceneStartingTests
 
     private static SceneNode AddCamera(Scene scene, string name)
     {
-        var node = new SceneNode(scene) { Name = name };
+        var node = new SceneNode(scene, name);
         _ = node.AddComponent(new PerspectiveCamera { Name = "Camera" });
         scene.RootNodes.Add(node);
         return node;
     }
 
-    private static string? EffectiveCameraName(Scene scene) => scene.EffectiveStartingCamera?.Name;
+    private static string? EffectiveCameraName(Scene scene) => scene.EffectiveStartingCamera?.Metadata.Name;
 }

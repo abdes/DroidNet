@@ -86,7 +86,7 @@ public sealed class HierarchyScenarioTests
         var deleted = await fixture.Authoring.ExecuteAsync(new RemoveFolder(SampleScene.AF, PromoteChildren: true)).ConfigureAwait(false);
 
         SceneAssert.Applied(deleted);
-        _ = fixture.Node(SampleScene.B).Parent!.Id.Should().Be(SampleScene.A);
+        _ = fixture.Node(SampleScene.B).Hierarchy.Parent!.Id.Should().Be(SampleScene.A);
         _ = LocalOf(fixture, SampleScene.B).Should().Be(local);
         _ = LayoutScopes.TryScopeOf(fixture.Layout, LayoutEntryId.Of(SampleScene.B), out var scope).Should().BeTrue();
         _ = scope.Should().Be(SampleScene.A, "the promoted entry stays in A's scope");
@@ -110,7 +110,7 @@ public sealed class HierarchyScenarioTests
         _ = target.Snapshot().Document.Should().Be(targetBefore.Document);
         _ = source.Snapshot().Should().Be(sourceEdited, "an undo in one scene leaves the other alone");
         SceneAssert.Applied(await source.Authoring.UndoAsync().ConfigureAwait(false));
-        _ = source.Node(SampleScene.A).Name.Should().Be("A");
+        _ = source.Node(SampleScene.A).Metadata.Name.Should().Be("A");
         _ = target.History.UndoStack.Should().BeEmpty();
     }
 
@@ -147,7 +147,7 @@ public sealed class HierarchyScenarioTests
 
     private static (Vector3 Position, Quaternion Rotation, Vector3 Scale) LocalOf(AuthoringFixture fixture, NodeId node)
     {
-        var transform = fixture.Node(node).Components.OfType<TransformComponent>().Single();
+        var transform = fixture.Node(node).Transform;
         return (transform.LocalPosition, transform.LocalRotation, transform.LocalScale);
     }
 }

@@ -50,7 +50,7 @@ internal sealed partial class SceneEditorConflictTests
         _ = fixture.Editor.Document.IsChangedOnDisk.Should().BeFalse();
         var current = ((SceneContent)fixture.Editor.Document.Content).Scene;
         _ = current.Should().NotBeSameAs(fixture.Scene);
-        _ = current!.RootNodes.Should().ContainSingle().Which.Name.Should().Be("Outside");
+        _ = current!.RootNodes.Should().ContainSingle().Which.Metadata.Name.Should().Be("Outside");
         _ = fixture.Editor.Document.IsDirty.Should().BeFalse();
         fixture.Editor.ResumeEditing();
         _ = (await fixture.Editor.SaveForCloseAsync().ConfigureAwait(false)).Should().BeTrue();
@@ -142,7 +142,7 @@ internal sealed partial class SceneEditorConflictTests
             var scene = new Scene { Name = name };
             foreach (var node in nodes)
             {
-                scene.RootNodes.Add(new SceneNode(scene) { Name = node });
+                scene.RootNodes.Add(new SceneNode(scene, node));
             }
 
             return scene.Dehydrate() with { Id = id };

@@ -71,7 +71,7 @@ public sealed partial class ScenePreviewTests
         var (createdRequest, creationCompletion) = fixture.DelayNodeCreation();
         var syncing = fixture.Preview.SyncSceneAsync(scene, this.TestContext.CancellationToken);
         var first = await createdRequest.Task.WaitAsync(TimeSpan.FromSeconds(5), this.TestContext.CancellationToken).ConfigureAwait(false);
-        var added = new SceneNode(scene) { Name = "Added during sync" };
+        var added = new SceneNode(scene, "Added during sync");
         scene.RootNodes.Add(added);
         _ = fixture.Preview.AdvanceRevision(scene);
         var adding = fixture.Preview.CreateNodeAsync(added);
@@ -85,7 +85,6 @@ public sealed partial class ScenePreviewTests
 
         _ = fixture.World.Commands.OfType<RuntimeCreateNode>().Count(command => command.NodeId == added.Id).Should().Be(1);
         _ = fixture.World.PropertiesOf(added.Id, RuntimeComponentId.Transform).Should().Equal(PositionX(9));
-        _ = added.IsActive.Should().BeTrue();
         _ = fixture.Preview.PendingFieldCount(document.Id).Should().Be(0);
     }
 
@@ -255,7 +254,7 @@ public sealed partial class ScenePreviewTests
         _ = initial.Position.X.Should().Be(1);
         _ = fixture.World.PropertiesOf(node.Id, RuntimeComponentId.Transform).Should().Equal(PositionX(9));
         _ = fixture.Preview.PendingFieldCount(document.Id).Should().Be(0);
-        _ = node.IsActive.Should().BeTrue();
+        _ = fixture.World.Commands.OfType<RuntimeCreateNode>().Count(command => command.NodeId == node.Id).Should().Be(1);
     }
 
     [TestMethod]
@@ -372,7 +371,7 @@ public sealed partial class ScenePreviewTests
 
     private static void SetPosition(ScenePreview preview, SceneNode node, float value)
     {
-        node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(value, 0, 0);
+        node.Transform.LocalPosition = new Vector3(value, 0, 0);
         _ = preview.AdvanceRevision(node.Scene);
     }
 }

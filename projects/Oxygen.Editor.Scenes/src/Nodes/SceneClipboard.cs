@@ -149,12 +149,12 @@ public sealed record SceneClipboard
                 return SceneDiagnostic.Error(SceneEditCodes.TargetMissing, "The node to paste after no longer exists.", after);
             }
 
-            if (target.Parent is { } parent && anchor.Parent?.Id != parent)
+            if (target.Parent is { } parent && anchor.Hierarchy.Parent?.Id != parent)
             {
                 return SceneDiagnostic.Error(SceneEditCodes.LayoutScopeMismatch, "The node to paste after is not under the target parent.", after);
             }
 
-            scope = anchor.Parent?.Id;
+            scope = anchor.Hierarchy.Parent?.Id;
         }
 
         if (target.Folder is { } folder)

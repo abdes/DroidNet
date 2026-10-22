@@ -7,15 +7,15 @@ using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Scenes.Properties;
 
-/// <summary>The rules of a node's authored rendering flags, which belong to the node itself.</summary>
-internal sealed class NodeRenderingRules : IComponentRules
+/// <summary>The rules of a node's authored flags, held by its node-flags component.</summary>
+internal sealed class NodeFlagsRules : IComponentRules
 {
     /// <inheritdoc/>
     public string Kind => SceneSchema.Node.Kind;
 
     /// <inheritdoc/>
-    public IReadOnlyDictionary<PropertyId, PropertyDescriptor> Descriptors => SceneProperties.NodeRendering.ById;
+    public IReadOnlyDictionary<PropertyId, PropertyDescriptor> Descriptors => SceneProperties.NodeFlags.ById;
 
     /// <inheritdoc/>
-    public object? TargetOf(Scene scene, SceneNode? node) => node;
+    public object? TargetOf(Scene scene, SceneNode? node) => node?.Flags;
 }

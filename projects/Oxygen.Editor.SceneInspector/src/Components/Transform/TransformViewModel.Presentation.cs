@@ -21,6 +21,7 @@ public sealed partial class TransformViewModel
     protected override void OnInputEnabledChanged(bool enabled)
     {
         this.controller.SetInputEnabled(enabled);
+        this.flagEdits?.SetInputEnabled(enabled);
     }
 
     private void RefreshSourceFeedback(NumberBinding<float> binding, Dictionary<NodeId, object?> targets)

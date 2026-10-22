@@ -409,12 +409,6 @@ internal sealed partial class ScenePreview
                     return false;
                 }
 
-                var projected = projection.NativeParents.Keys.ToHashSet();
-                foreach (var node in projection.Lifetime.Scene.AllNodes)
-                {
-                    node.IsActive = projected.Contains(node.Id);
-                }
-
                 if (!publishReady || this.GetPendingPropertySyncCount(projection.Snapshot.Id) > 0)
                 {
                     return false;
@@ -508,6 +502,6 @@ internal sealed partial class ScenePreview
 
     private sealed record SceneProjection(DocumentLifetime Lifetime, Scene Snapshot, SceneSyncRevision Boundary)
     {
-        public Dictionary<NodeId, NodeId?> NativeParents { get; } = Snapshot.AllNodes.ToDictionary(node => node.Id, node => node.Parent?.Id);
+        public Dictionary<NodeId, NodeId?> NativeParents { get; } = Snapshot.AllNodes.ToDictionary(node => node.Id, node => node.Hierarchy.Parent?.Id);
     }
 }

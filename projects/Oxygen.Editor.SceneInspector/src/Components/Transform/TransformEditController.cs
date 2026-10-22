@@ -143,7 +143,7 @@ internal sealed partial class TransformEditController(
         var descriptor = TransformDescriptor(property);
         var originalValues = nodes.ToDictionary(
             static node => node.Id,
-            node => descriptor.Read(node.Components.OfType<TransformComponent>().Single()));
+            node => descriptor.Read(node.Transform));
         this.activeSessions[property] = new TransformEditSession(
             authoring.BeginGestureAsync([.. nodes.Select(static node => node.Id)], [descriptor.Id], Label),
             nodes,

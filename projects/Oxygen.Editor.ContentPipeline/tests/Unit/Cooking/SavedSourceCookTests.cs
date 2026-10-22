@@ -94,8 +94,8 @@ public sealed class SavedSourceCookTests
     private static void MarkVersion(CookWorkspace workspace, string version)
     {
         workspace.Scene.RootNodes.Clear();
-        workspace.Scene.RootNodes.Add(new SceneNode(workspace.Scene) { Name = version });
+        workspace.Scene.RootNodes.Add(new SceneNode(workspace.Scene, version));
     }
 
-    private static string VersionOf(Scene scene) => scene.RootNodes.Single().Name;
+    private static string VersionOf(Scene scene) => scene.RootNodes.Single().Metadata.Name;
 }

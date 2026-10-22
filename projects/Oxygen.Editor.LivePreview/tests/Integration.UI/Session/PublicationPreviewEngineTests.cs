@@ -41,7 +41,7 @@ public sealed partial class PublicationPreviewEngineTests : DroidNet.Tests.Visua
         using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
         using var preview = new ScenePreview(engine, documents.Open);
         var built = new Scene { Name = "Test Scene" };
-        built.RootNodes.Add(new SceneNode(built) { Name = "Cube" });
+        built.RootNodes.Add(new SceneNode(built, "Cube"));
         var document = await documents.OpenAsync(built.Dehydrate()).ConfigureAwait(true);
         await PreviewWaits.UntilReadyAsync(preview, document.Id, token).ConfigureAwait(true);
         var shown = preview.ShownTargetOf(document.Id);

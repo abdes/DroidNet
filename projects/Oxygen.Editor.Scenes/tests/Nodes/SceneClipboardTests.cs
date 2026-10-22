@@ -92,9 +92,9 @@ public sealed class SceneClipboardTests
         var result = await fixture.Authoring.ExecuteAsync(paste).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        var pasted = fixture.Scene.AllNodes.Where(static node => string.Equals(node.Name, "B", StringComparison.Ordinal)).Should().ContainSingle().Which;
+        var pasted = fixture.Scene.AllNodes.Where(static node => string.Equals(node.Metadata.Name, "B", StringComparison.Ordinal)).Should().ContainSingle().Which;
         _ = pasted.Id.Should().NotBe(SampleScene.B);
-        _ = fixture.Node(SampleScene.B).Name.Should().Be("Box");
+        _ = fixture.Node(SampleScene.B).Metadata.Name.Should().Be("Box");
     }
 
     [TestMethod]
@@ -136,12 +136,12 @@ public sealed class SceneClipboardTests
         var localBefore = NodePose.LocalOf(fixture.Node(SampleScene.A2));
         var clipboard = Capture(fixture, [SampleScene.A2], []);
         var paste = BuildPaste(fixture, clipboard, new PasteTarget(Parent: SampleScene.A1), cut: false, preserveWorld);
-        var childrenBefore = fixture.Node(SampleScene.A1).Children.Select(static node => node.Id).ToList();
+        var childrenBefore = fixture.Node(SampleScene.A1).Hierarchy.Children.Select(static node => node.Id).ToList();
 
         var result = await fixture.Authoring.ExecuteAsync(paste).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        var pasted = fixture.Node(SampleScene.A1).Children.Single(node => !childrenBefore.Contains(node.Id));
+        var pasted = fixture.Node(SampleScene.A1).Hierarchy.Children.Single(node => !childrenBefore.Contains(node.Id));
         if (preserveWorld)
         {
             NodePose.AssertSameWorld(NodePose.WorldOf(pasted), worldBefore);
@@ -182,8 +182,8 @@ public sealed class SceneClipboardTests
 
         SceneAssert.Applied(result);
         _ = fixture.History.UndoStack.Should().HaveCount(before.UndoCount + 1);
-        _ = fixture.Node(SampleScene.B).Parent!.Id.Should().Be(SampleScene.A);
-        _ = fixture.Node(SampleScene.Cam).Parent!.Id.Should().Be(SampleScene.A);
+        _ = fixture.Node(SampleScene.B).Hierarchy.Parent!.Id.Should().Be(SampleScene.A);
+        _ = fixture.Node(SampleScene.Cam).Hierarchy.Parent!.Id.Should().Be(SampleScene.A);
         _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.AF, 0)).Should().Equal(
             LayoutEntryId.Of(SampleScene.A2),
             LayoutEntryId.Of(SampleScene.B),
@@ -209,7 +209,7 @@ public sealed class SceneClipboardTests
         _ = scope.Should().Be(SampleScene.A);
         _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.UnderNode(SampleScene.A, 0)).Should().Contain(LayoutEntryId.Of(SampleScene.F));
         _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.InFolder(SampleScene.F, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.B), LayoutEntryId.Of(SampleScene.G));
-        _ = fixture.Node(SampleScene.B).Parent!.Id.Should().Be(SampleScene.A);
+        _ = fixture.Node(SampleScene.B).Hierarchy.Parent!.Id.Should().Be(SampleScene.A);
         _ = NodePose.LocalOf(fixture.Node(SampleScene.B)).Should().Be(localBefore);
         _ = LayoutQuery.Folder(fixture.Layout, SampleScene.F)!.IsExpanded.Should().BeTrue();
         _ = LayoutQuery.Folder(fixture.Layout, SampleScene.G)!.IsExpanded.Should().BeFalse();
@@ -275,7 +275,7 @@ public sealed class SceneClipboardTests
         var result = await fixture.Authoring.ExecuteAsync(paste).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Scene.AllNodes.Count(static node => string.Equals(node.Name, "B", StringComparison.Ordinal)).Should().Be(2);
+        _ = fixture.Scene.AllNodes.Count(static node => string.Equals(node.Metadata.Name, "B", StringComparison.Ordinal)).Should().Be(2);
     }
 
     [TestMethod]

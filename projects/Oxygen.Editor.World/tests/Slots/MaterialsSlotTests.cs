@@ -49,7 +49,7 @@ public sealed class MaterialsSlotTests
     public async Task GeometrySurface_SerializesStableTargetAndMaterialIdentityOnly()
     {
         var scene = new Scene { Name = "Material Surface Scene" };
-        var node = new SceneNode(scene) { Name = "Cube" };
+        var node = new SceneNode(scene, "Cube");
         var geometry = new GeometryComponent
         {
             Name = "Geometry",

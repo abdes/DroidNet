@@ -66,6 +66,11 @@ public sealed partial class NativeLoopCleanupTests
         new(RuntimeComponentId.Node, 0, 1f),
         new(RuntimeComponentId.Node, 1, 0f),
         new(RuntimeComponentId.Node, 2, 1f),
+
+        // A node created natively keeps the engine's creation defaults for the flags the test never sets.
+        new(RuntimeComponentId.Node, 3, 0f),
+        new(RuntimeComponentId.Node, 4, 0f),
+        new(RuntimeComponentId.Node, 5, 0f),
     ];
 
     private async Task CheckNativeNodeAsync(RuntimeCommandDispatcher commands)

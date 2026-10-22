@@ -138,7 +138,7 @@ public sealed class SceneNodeTemplatesTests
         var result = await fixture.Authoring.ExecuteAsync(new InsertNodes([insert])).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        var siblings = row.Parent is { } owner ? fixture.Node(owner).Children : fixture.Scene.RootNodes;
+        var siblings = row.Parent is { } owner ? fixture.Node(owner).Hierarchy.Children : fixture.Scene.RootNodes;
         _ = siblings[^1].Id.Should().Be(node.Id);
         _ = LayoutScopes.EntriesOf(fixture.Layout, container)[^1].Should().Be(LayoutEntryId.Of(node.Id));
     }

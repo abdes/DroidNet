@@ -25,7 +25,7 @@ public sealed class RenameNodeTests
         var result = await fixture.Authoring.ExecuteAsync(new RenameNode(SampleScene.B, "Box")).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Node(SampleScene.B).Name.Should().Be("Box");
+        _ = fixture.Node(SampleScene.B).Metadata.Name.Should().Be("Box");
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.NodeRenamed(SampleScene.B));
     }
 
@@ -37,7 +37,7 @@ public sealed class RenameNodeTests
         var result = await fixture.Authoring.ExecuteAsync(new RenameNode(SampleScene.B, "  Box \t")).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Node(SampleScene.B).Name.Should().Be("Box");
+        _ = fixture.Node(SampleScene.B).Metadata.Name.Should().Be("Box");
     }
 
     [TestMethod]

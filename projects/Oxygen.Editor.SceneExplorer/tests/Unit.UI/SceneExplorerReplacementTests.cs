@@ -176,19 +176,19 @@ public sealed partial class SceneExplorerReplacementTests : VisualUserInterfaceT
     {
         using var fixture = await LifetimeFixture.CreateAsync(cut: false).ConfigureAwait(true);
         var source = fixture.First.RootNodes[0];
-        source.Name = "Changed after capture";
-        source.Components.OfType<TransformComponent>().Single().LocalPosition = new System.Numerics.Vector3(100, 0, 0);
+        source.Metadata.Name = "Changed after capture";
+        source.Transform.LocalPosition = new System.Numerics.Vector3(100, 0, 0);
 
         _ = (await fixture.OpenAsync(fixture.SecondAsset, this.TestContext.CancellationToken).ConfigureAwait(true)).Should().BeTrue();
         var accepted = fixture.Explorer.Scene!.AttachedObject;
         await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(true);
         await fixture.Explorer.PasteItemsAsync(fixture.Explorer.Scene).ConfigureAwait(true);
 
-        var pasted = accepted.RootNodes.Where(node => string.Equals(node.Name, "Node", StringComparison.Ordinal)).ToArray();
+        var pasted = accepted.RootNodes.Where(node => string.Equals(node.Metadata.Name, "Node", StringComparison.Ordinal)).ToArray();
         _ = pasted.Should().HaveCount(2);
         _ = pasted.Should().OnlyHaveUniqueItems(node => node.Id);
         _ = pasted.Should().NotContain(node => node.Id == source.Id);
-        _ = pasted.Should().OnlyContain(node => node.Components.OfType<TransformComponent>().Single().LocalPosition == System.Numerics.Vector3.Zero);
+        _ = pasted.Should().OnlyContain(node => node.Transform.LocalPosition == System.Numerics.Vector3.Zero);
         _ = pasted.Should().OnlyContain(node => ReferenceEquals(node.Scene, accepted));
         var destination = fixture.Scenes.Open.Find(fixture.PathOf("Second"))!;
         _ = destination.History.UndoStack.Should().HaveCount(2);
@@ -358,7 +358,7 @@ public sealed partial class SceneExplorerReplacementTests : VisualUserInterfaceT
             var scene = new Scene { Name = name };
             foreach (var node in nodes)
             {
-                scene.RootNodes.Add(new SceneNode(scene) { Name = node });
+                scene.RootNodes.Add(new SceneNode(scene, node));
             }
 
             _ = this.Scenes.Write(scene.Dehydrate() with { Id = SceneId.New() });

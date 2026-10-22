@@ -40,7 +40,7 @@ internal sealed partial class ScenePreview
             RuntimeComponentId.PointLight => SceneOperationKinds.EditPointLight,
             RuntimeComponentId.SpotLight => SceneOperationKinds.EditSpotLight,
             RuntimeComponentId.LocalFogVolume => SceneOperationKinds.EditLocalFogVolume,
-            RuntimeComponentId.Node => SceneOperationKinds.EditNodeRendering,
+            RuntimeComponentId.Node => SceneOperationKinds.EditNodeFlags,
             _ => SceneOperationKinds.EditTransform,
         };
 
@@ -66,7 +66,7 @@ internal sealed partial class ScenePreview
             SceneOperationKinds.EditPerspectiveCamera or SceneOperationKinds.EditOrthographicCamera => LiveSyncDiagnosticCodes.CameraRejected,
             SceneOperationKinds.EditDirectionalLight or SceneOperationKinds.EditPointLight or SceneOperationKinds.EditSpotLight => LiveSyncDiagnosticCodes.LightRejected,
             SceneOperationKinds.EditLocalFogVolume => LiveSyncDiagnosticCodes.LocalFogVolumeRejected,
-            SceneOperationKinds.EditNodeRendering => LiveSyncDiagnosticCodes.MutationRejected,
+            SceneOperationKinds.EditNodeFlags => LiveSyncDiagnosticCodes.MutationRejected,
             _ => LiveSyncDiagnosticCodes.TransformRejected,
         };
 
@@ -76,7 +76,7 @@ internal sealed partial class ScenePreview
             SceneOperationKinds.EditPerspectiveCamera or SceneOperationKinds.EditOrthographicCamera => LiveSyncDiagnosticCodes.CameraFailed,
             SceneOperationKinds.EditDirectionalLight or SceneOperationKinds.EditPointLight or SceneOperationKinds.EditSpotLight => LiveSyncDiagnosticCodes.LightFailed,
             SceneOperationKinds.EditLocalFogVolume => LiveSyncDiagnosticCodes.LocalFogVolumeFailed,
-            SceneOperationKinds.EditNodeRendering => LiveSyncDiagnosticCodes.MutationFailed,
+            SceneOperationKinds.EditNodeFlags => LiveSyncDiagnosticCodes.MutationFailed,
             _ => LiveSyncDiagnosticCodes.TransformFailed,
         };
 
@@ -199,7 +199,7 @@ internal sealed partial class ScenePreview
             SceneId = scene.Id,
             SceneName = scene.Name,
             NodeId = node?.Id ?? nodeId,
-            NodeName = node?.Name,
+            NodeName = node?.Metadata.Name,
             ComponentType = componentType,
             ComponentName = componentName,
             AssetVirtualPath = assetVirtualPath,
@@ -207,7 +207,7 @@ internal sealed partial class ScenePreview
 
     private static void ApplyTransform(WorldDispatch world, SceneNode node)
     {
-        var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
+        var transform = node.Transform;
         if (transform is not null)
         {
             var (position, rotation, scale) = TransformConverter.ToNative(transform);
@@ -233,15 +233,22 @@ internal sealed partial class ScenePreview
         world.Execute(new RuntimeSetProperties(node.Id, exposure));
     }
 
-    private static void ApplyNodeRendering(WorldDispatch world, SceneNode node)
+    private static void ApplyNodeFlags(WorldDispatch world, SceneNode node)
     {
+        var source = node.Flags;
         ImmutableArray<RuntimePropertyValue> flags =
         [
-            new(RuntimeComponentId.Node, (ushort)NodeField.Visible, node.IsVisible ? 1f : 0f),
-            new(RuntimeComponentId.Node, (ushort)NodeField.CastsShadows, node.CastsShadows ? 1f : 0f),
-            new(RuntimeComponentId.Node, (ushort)NodeField.ReceivesShadows, node.ReceivesShadows ? 1f : 0f),
+            Flag(NodeField.Visible, source.IsVisible),
+            Flag(NodeField.CastsShadows, source.CastsShadows),
+            Flag(NodeField.ReceivesShadows, source.ReceivesShadows),
+            Flag(NodeField.Static, source.IsStatic),
+            Flag(NodeField.RayCastingSelectable, source.IsRayCastingSelectable),
+            Flag(NodeField.IgnoreParentTransform, source.IgnoreParentTransform),
         ];
         world.Execute(new RuntimeSetProperties(node.Id, flags));
+
+        static RuntimePropertyValue Flag(NodeField field, bool value)
+            => new(RuntimeComponentId.Node, (ushort)field, value ? 1f : 0f);
     }
 
     private static void ApplyGeometry(WorldDispatch world, SceneNode node, GeometryComponent geometry)
@@ -435,46 +442,17 @@ internal sealed partial class ScenePreview
         bool initializeWorldAsRoot,
         CancellationToken cancellationToken)
     {
-        var syncContext = SynchronizationContext.Current;
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
         timeout.CancelAfter(NodeCreationTimeout);
         var result = await world.Commands.CreateNodeAsync(
-            new RuntimeWorldRequest(Guid.NewGuid(), world.Target, new RuntimeCreateNode(node.Name, node.Id, parentGuid, initializeWorldAsRoot)),
+            new RuntimeWorldRequest(Guid.NewGuid(), world.Target, new RuntimeCreateNode(node.Metadata.Name, node.Id, parentGuid, initializeWorldAsRoot)),
             timeout.Token).ConfigureAwait(false);
         if (!result.Succeeded || timeout.IsCancellationRequested || this.activeWorld?.Target != world.Target)
         {
             return false;
         }
 
-        if (syncContext is null)
-        {
-            node.IsActive = true;
-        }
-        else
-        {
-            var completion = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-            syncContext.Post(
-                state =>
-                {
-                    _ = state;
-                    try
-                    {
-                        if (!cancellationToken.IsCancellationRequested && world.Commands.RunId == world.Target.RunId && this.activeWorld?.Target == world.Target)
-                        {
-                            node.IsActive = true;
-                        }
-
-                        _ = completion.TrySetResult();
-                    }
-                    catch (Exception exception) when (EngineInteropExceptionPolicy.IsRecoverable(exception))
-                    {
-                        _ = completion.TrySetException(exception);
-                    }
-                },
-                state: null);
-            await completion.Task.WaitAsync(cancellationToken).ConfigureAwait(false);
-        }
-
-        return node.IsActive;
+        // The node exists in the scene activation this preview still projects.
+        return !cancellationToken.IsCancellationRequested && world.Commands.RunId == world.Target.RunId;
     }
 }

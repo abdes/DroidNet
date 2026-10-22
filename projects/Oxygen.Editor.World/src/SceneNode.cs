@@ -5,42 +5,36 @@
 using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.World.Components;
+using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World;
 
 /// <summary>
-///     Represents a scene node with a name and an associated scene.
+///     A scene node: an identity and a container of components, mirroring the engine's node.
 /// </summary>
 /// <remarks>
-///     The <see cref="SceneNode" /> class represents a scene node within a game, which is associated with a specific
-///     scene.
-///     It provides methods for JSON serialization and deserialization, allowing scene nodes to be easily saved and
-///     loaded.
+///     Every node holds exactly one each of the required <see cref="MetadataComponent"/> (its name),
+///     <see cref="HierarchyComponent"/> (its parent and children), <see cref="TransformComponent"/> and
+///     <see cref="NodeFlagsComponent"/>, created with the node and never removed; the other components are optional.
 /// </remarks>
-public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNodeData>
+public sealed class SceneNode : ScopedObservableObject, IPersistent<SceneNodeData>
 {
-    private bool isActive;
-    private bool isVisible = true;
-    private bool castsShadows;
-    private bool receivesShadows;
-    private bool isRayCastingSelectable = true;
-    private bool ignoreParentTransform;
-    private bool isStatic;
-
     /// <summary>
-    ///     Initializes a new instance of the <see cref="SceneNode" /> class.
+    ///     Initializes a new instance of the <see cref="SceneNode" /> class with its required components.
     /// </summary>
     /// <param name="scene">The scene associated with the scene node.</param>
-    public SceneNode(Scene scene)
+    /// <param name="name">The node's name, nonempty after trimming.</param>
+    /// <exception cref="ArgumentException">The name is empty or only white space.</exception>
+    public SceneNode(Scene scene, string name)
     {
         this.Scene = scene;
-        this.Name = "New Node"; // Initialize required property
-
-        // Initialize the components collection with the always-present TransformComponent.
-        // Use a concrete mutable collection that preserves insertion order.
-        this.Components = [new TransformComponent { Name = nameof(TransformComponent), Node = this }];
-        this.Children = [];
+        this.Metadata = new MetadataComponent { Name = name, Node = this };
+        this.Hierarchy = new HierarchyComponent { Name = HierarchyComponent.DefaultName, Node = this };
+        this.Transform = new TransformComponent { Name = nameof(TransformComponent), Node = this };
+        this.Flags = new NodeFlagsComponent { Name = NodeFlagsComponent.DefaultName, Node = this };
+        this.Components = [this.Metadata, this.Hierarchy, this.Transform, this.Flags];
     }
 
     /// <summary>
@@ -49,228 +43,73 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     public NodeId Id { get; init; } = NodeId.New();
 
     /// <summary>
-    ///     Gets or sets a value indicating whether the scene node is loaded in the Game Engine.
-    /// </summary>
-    public bool IsActive
-    {
-        get => this.isActive;
-        set
-        {
-            if (this.isActive == value)
-            {
-                return;
-            }
-
-            _ = this.SetProperty(ref this.isActive, value);
-        }
-    }
-
-    /// <summary>
-    ///     Gets or sets a value indicating whether gets or sets whether the node is visible (editor local value).
-    /// </summary>
-    public bool IsVisible
-    {
-        get => this.isVisible;
-        set => _ = this.SetProperty(ref this.isVisible, value);
-    }
-
-    /// <summary>
-    ///     Gets or sets a value indicating whether gets or sets whether this node casts shadows.
-    /// </summary>
-    public bool CastsShadows
-    {
-        get => this.castsShadows;
-        set => _ = this.SetProperty(ref this.castsShadows, value);
-    }
-
-    /// <summary>
-    ///     Gets or sets a value indicating whether gets or sets whether this node receives shadows.
-    /// </summary>
-    public bool ReceivesShadows
-    {
-        get => this.receivesShadows;
-        set => _ = this.SetProperty(ref this.receivesShadows, value);
-    }
-
-    /// <summary>
-    ///     Gets or sets a value indicating whether gets or sets whether this node is selectable by ray casting.
-    /// </summary>
-    public bool IsRayCastingSelectable
-    {
-        get => this.isRayCastingSelectable;
-        set => _ = this.SetProperty(ref this.isRayCastingSelectable, value);
-    }
-
-    /// <summary>
-    ///     Gets or sets a value indicating whether gets or sets whether this node ignores parent transforms.
-    /// </summary>
-    public bool IgnoreParentTransform
-    {
-        get => this.ignoreParentTransform;
-        set => _ = this.SetProperty(ref this.ignoreParentTransform, value);
-    }
-
-    /// <summary>
-    ///     Gets or sets a value indicating whether gets or sets whether this node is considered static (editor hint).
-    /// </summary>
-    public bool IsStatic
-    {
-        get => this.isStatic;
-        set => _ = this.SetProperty(ref this.isStatic, value);
-    }
-
-    /// <summary>
-    ///     Gets or sets a compact enum representing the current flags on this node.
-    ///     The getter composes the enum from the individual observable properties and the
-    ///     setter updates those properties (so change notifications fire).
-    /// </summary>
-    public SceneNodeFlags Flags
-    {
-        get
-        {
-            var f = SceneNodeFlags.None;
-            if (this.IsVisible)
-            {
-                f |= SceneNodeFlags.Visible;
-            }
-
-            if (this.CastsShadows)
-            {
-                f |= SceneNodeFlags.CastsShadows;
-            }
-
-            if (this.ReceivesShadows)
-            {
-                f |= SceneNodeFlags.ReceivesShadows;
-            }
-
-            if (this.IsRayCastingSelectable)
-            {
-                f |= SceneNodeFlags.RayCastingSelectable;
-            }
-
-            if (this.IgnoreParentTransform)
-            {
-                f |= SceneNodeFlags.IgnoreParentTransform;
-            }
-
-            if (this.IsStatic)
-            {
-                f |= SceneNodeFlags.Static;
-            }
-
-            return f;
-        }
-
-        set
-        {
-            // Use property setters so change notifications fire.
-            this.IsVisible = value.HasFlag(SceneNodeFlags.Visible);
-            this.CastsShadows = value.HasFlag(SceneNodeFlags.CastsShadows);
-            this.ReceivesShadows = value.HasFlag(SceneNodeFlags.ReceivesShadows);
-            this.IsRayCastingSelectable = value.HasFlag(SceneNodeFlags.RayCastingSelectable);
-            this.IgnoreParentTransform = value.HasFlag(SceneNodeFlags.IgnoreParentTransform);
-            this.IsStatic = value.HasFlag(SceneNodeFlags.Static);
-        }
-    }
-
-    /// <summary>
     ///     Gets the scene associated with the scene node.
     /// </summary>
     [JsonIgnore]
     public Scene Scene { get; }
 
     /// <summary>
-    ///     Gets the list of components associated with the scene node.
+    ///     Gets the node's required metadata component, which holds its name.
     /// </summary>
-    public ObservableCollection<GameComponent> Components { get; private init; }
+    public MetadataComponent Metadata { get; }
 
     /// <summary>
-    ///     Gets the parent of the scene node.
+    ///     Gets the node's required hierarchy component, which holds its parent and children.
     /// </summary>
-    [JsonIgnore]
-    public SceneNode? Parent { get; private set; }
+    public HierarchyComponent Hierarchy { get; }
 
     /// <summary>
-    ///     Gets the collection of child nodes.
+    ///     Gets the node's required transform component.
     /// </summary>
-    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)]
-    public ObservableCollection<SceneNode> Children { get; }
+    public TransformComponent Transform { get; }
 
     /// <summary>
-    /// Create and hydrate a <see cref="SceneNode"/> instance from DTO.
-    /// Factory sets required properties (Name/Id) via object initializer and
-    /// then calls the instance <see cref="Hydrate(Serialization.SceneNodeData)"/>.
+    ///     Gets the node's required node-flags component.
+    /// </summary>
+    public NodeFlagsComponent Flags { get; }
+
+    /// <summary>
+    ///     Gets the node's components, required ones first.
+    /// </summary>
+    public ObservableCollection<GameComponent> Components { get; }
+
+    /// <summary>
+    ///     Gets the node-scope override slots.
+    /// </summary>
+    public ObservableCollection<OverrideSlot> OverrideSlots { get; } = [];
+
+    /// <summary>
+    ///     Creates a node from its DTO, with its descendants.
     /// </summary>
     /// <param name="scene">The scene to associate with the new node.</param>
     /// <param name="data">The data transfer object to hydrate from.</param>
     /// <returns>A hydrated <see cref="SceneNode"/> instance.</returns>
-    public static SceneNode CreateAndHydrate(Scene scene, Serialization.SceneNodeData data)
+    /// <exception cref="System.Text.Json.JsonException">A required component is missing or repeated.</exception>
+    public static SceneNode CreateAndHydrate(Scene scene, SceneNodeData data)
     {
-        var node = new SceneNode(scene) { Name = data.Name, Id = data.Id };
+        ArgumentNullException.ThrowIfNull(data);
+        var node = new SceneNode(scene, data.Required<MetadataData>().Name) { Id = data.Id };
         node.Hydrate(data);
-
-        // If Children is null (missing from JSON), treat as empty
-        if (data.Children is null)
-        {
-            node.Children.Clear();
-        }
-
         return node;
     }
 
     /// <summary>
-    /// Toggle a single flag on this node.
-    /// </summary>
-    /// <param name="flag">The flag to toggle.</param>
-    public void ToggleFlag(SceneNodeFlags flag)
-    {
-        var f = this.Flags;
-        this.Flags = f ^ flag;
-    }
-
-    /// <summary>
-    /// Returns true if the node has the specified flag set.
-    /// </summary>
-    /// <param name="flag">The flag to check.</param>
-    /// <returns>True if the flag is set on this node; otherwise false.</returns>
-    public bool HasFlag(SceneNodeFlags flag) => this.Flags.HasFlag(flag);
-
-    /// <summary>
-    ///     Adds a child node to this node.
-    /// </summary>
-    /// <param name="child">The child node to add.</param>
-    public void AddChild(SceneNode child)
-    {
-        ArgumentNullException.ThrowIfNull(child);
-        child.SetParent(this);
-    }
-
-    /// <summary>
-    ///     Removes a child node from this node.
-    /// </summary>
-    /// <param name="child">The child node to remove.</param>
-    public void RemoveChild(SceneNode child)
-    {
-        ArgumentNullException.ThrowIfNull(child);
-        if (child.Parent == this)
-        {
-            child.SetParent(newParent: null);
-        }
-    }
-
-    /// <summary>
-    /// Adds a component to this node and sets the component's <see cref="GameComponent.Node"/> property.
+    ///     Adds an optional component to this node and sets the component's <see cref="GameComponent.Node"/> property.
     /// </summary>
     /// <param name="component">The component to add.</param>
-    /// <returns>True if the component was added; otherwise false.</returns>
+    /// <returns>True if the component was added; false if the node already holds it.</returns>
+    /// <exception cref="InvalidOperationException">The component is a required one, which a node holds from creation.</exception>
     public bool AddComponent(GameComponent component)
     {
         ArgumentNullException.ThrowIfNull(component);
-
         if (this.Components.Contains(component))
         {
             return false;
+        }
+
+        if (IsRequired(component))
+        {
+            throw new InvalidOperationException($"A node holds its {component.GetType().Name} from creation; it cannot be added.");
         }
 
         this.Components.Add(component);
@@ -279,13 +118,19 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     }
 
     /// <summary>
-    /// Removes the component from this node and clears its owner.
+    ///     Removes an optional component from this node and clears its owner.
     /// </summary>
     /// <param name="component">The component to remove.</param>
     /// <returns>True if the component was removed; otherwise false.</returns>
+    /// <exception cref="InvalidOperationException">The component is one of the node's required components.</exception>
     public bool RemoveComponent(GameComponent component)
     {
         ArgumentNullException.ThrowIfNull(component);
+        if (IsRequired(component) && this.Components.Contains(component))
+        {
+            throw new InvalidOperationException($"A node's {component.GetType().Name} cannot be removed.");
+        }
+
         var removed = this.Components.Remove(component);
         if (removed)
         {
@@ -296,148 +141,64 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
     }
 
     /// <summary>
-    ///     Sets the parent of this node.
-    /// </summary>
-    /// <param name="newParent">The new parent node, or null to detach.</param>
-    public void SetParent(SceneNode? newParent)
-    {
-        if (this.Parent == newParent)
-        {
-            return;
-        }
-
-        if (newParent != null && (newParent == this || newParent.Ancestors().Contains(this)))
-        {
-            throw new InvalidOperationException("Cannot set parent: would create circular reference.");
-        }
-
-        var oldParent = this.Parent;
-        this.Parent = newParent;
-
-        // Joining the new parent before leaving the old one keeps the node in the graph throughout, so observers of the
-        // graph never see it removed.
-        if (newParent?.Children.Contains(this) == false)
-        {
-            newParent.Children.Add(this);
-        }
-
-        _ = oldParent?.Children.Remove(this);
-    }
-
-    /// <summary>
-    ///     Gets all descendant nodes.
-    /// </summary>
-    /// <returns>An enumerable of descendant nodes.</returns>
-    public IEnumerable<SceneNode> Descendants()
-    {
-        foreach (var child in this.Children)
-        {
-            yield return child;
-            foreach (var descendant in child.Descendants())
-            {
-                yield return descendant;
-            }
-        }
-    }
-
-    /// <summary>
-    ///     Gets all ancestor nodes.
-    /// </summary>
-    /// <returns>An enumerable of ancestor nodes.</returns>
-    public IEnumerable<SceneNode> Ancestors()
-    {
-        var current = this.Parent;
-        while (current != null)
-        {
-            yield return current;
-            current = current.Parent;
-        }
-    }
-
-    /// <summary>
-    ///     Hydrates this scene node instance from the specified DTO. The factory
-    ///     `CreateAndHydrate` is responsible for setting required properties (Name/Id).
+    ///     Hydrates this scene node from the specified DTO: the required components in place, the optional components
+    ///     recreated, and the children of the hierarchy created and appended.
     /// </summary>
     /// <param name="data">The node DTO to hydrate from.</param>
-    public void Hydrate(Serialization.SceneNodeData data)
+    /// <exception cref="System.Text.Json.JsonException">A required component is missing or repeated.</exception>
+    public void Hydrate(SceneNodeData data)
     {
+        ArgumentNullException.ThrowIfNull(data);
+        var hierarchy = data.Required<HierarchyData>();
         using (this.SuppressNotifications())
         {
-            // 1. Recreate components from DTO using the canonical factory API.
-            // Clear existing components and recreate all components so component
-            // creation/hydration follows the same path for every component type.
+            this.Metadata.Hydrate(data.Required<MetadataData>());
+            this.Hierarchy.Hydrate(hierarchy);
+            this.Transform.Hydrate(data.Required<TransformData>());
+            this.Flags.Hydrate(data.Required<NodeFlagsData>());
+
             this.Components.Clear();
-            this.HydrateComponents(data.Components);
+            this.Components.Add(this.Metadata);
+            this.Components.Add(this.Hierarchy);
+            this.Components.Add(this.Transform);
+            this.Components.Add(this.Flags);
+            this.HydrateOptionalComponents(data.Components);
 
-            // 2. Ensure exactly one TransformComponent component exists after hydration.
-            var transforms = this.Components.OfType<TransformComponent>().ToList();
-            if (transforms.Count == 0)
-            {
-                throw new System.Text.Json.JsonException("Missing required Transform component in SceneNode data.");
-            }
-
-            if (transforms.Count > 1)
-            {
-                throw new System.Text.Json.JsonException("Multiple Transform components found in SceneNode data.");
-            }
-
-            // 3. Component & node-level override slots
-            // Node-level override slots are persisted separately from components.
             this.OverrideSlots.Clear();
-            if (data.OverrideSlots is not null)
+            foreach (var slotData in data.OverrideSlots)
             {
-                foreach (var slotData in data.OverrideSlots)
-                {
-                    var slot = Slots.OverrideSlot.CreateAndHydrate(slotData);
-                    this.OverrideSlots.Add(slot);
-                }
+                this.OverrideSlots.Add(OverrideSlot.CreateAndHydrate(slotData));
             }
 
-            // 4. Flags
-            this.IsActive = data.IsActive;
-            this.IsVisible = data.IsVisible;
-            this.CastsShadows = data.CastsShadows;
-            this.ReceivesShadows = data.ReceivesShadows;
-            this.IsRayCastingSelectable = data.IsRayCastingSelectable;
-            this.IgnoreParentTransform = data.IgnoreParentTransform;
-            this.IsStatic = data.IsStatic;
-
-            // 5. Children
-            if (data.Children != null)
+            foreach (var childData in hierarchy.Children ?? [])
             {
-                foreach (var childData in data.Children)
-                {
-                    var child = CreateAndHydrate(this.Scene, childData);
-                    this.AddChild(child);
-                }
+                this.Hierarchy.AddChild(CreateAndHydrate(this.Scene, childData));
             }
         }
     }
 
     /// <summary>
-    ///     Dehydrates this scene node to a data transfer object.
+    ///     Dehydrates this scene node to a data transfer object. The hierarchy, which nests the children, is written
+    ///     last, so a node's own components precede its descendants.
     /// </summary>
     /// <returns>A data transfer object containing the current state of this scene node.</returns>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "With LINQ, /ToList() is more natural")]
-    public Serialization.SceneNodeData Dehydrate()
-    {
-        var transform = this.Components.OfType<TransformComponent>().FirstOrDefault();
-        return new Serialization.SceneNodeData
+    public SceneNodeData Dehydrate()
+        => new()
         {
-            Name = this.Name,
             Id = this.Id,
-            Components = this.Components.Select(c => c.Dehydrate()).ToList(),
-            OverrideSlots = this.OverrideSlots.Select(s => s.Dehydrate()).ToList(),
-            Children = this.Children.Select(c => c.Dehydrate()).ToList(),
-            IsActive = this.IsActive,
-            IsVisible = this.IsVisible,
-            CastsShadows = this.CastsShadows,
-            ReceivesShadows = this.ReceivesShadows,
-            IsRayCastingSelectable = this.IsRayCastingSelectable,
-            IgnoreParentTransform = this.IgnoreParentTransform,
-            IsStatic = this.IsStatic,
+            Components =
+            [
+                .. this.Components.Where(component => component != this.Hierarchy).Select(static component => component.Dehydrate()),
+                this.Hierarchy.Dehydrate(),
+            ],
+            OverrideSlots = [.. this.OverrideSlots.Select(static slot => slot.Dehydrate())],
         };
-    }
+
+    private static bool IsRequired(GameComponent component)
+        => component is MetadataComponent or HierarchyComponent or TransformComponent or NodeFlagsComponent;
+
+    private static bool IsRequired(ComponentData data)
+        => data is MetadataData or HierarchyData or TransformData or NodeFlagsData;
 
     private static void EnsureComponentIdentity(GameComponent component, HashSet<ComponentId> usedIds)
     {
@@ -451,10 +212,15 @@ public partial class SceneNode : GameObject, IPersistent<Serialization.SceneNode
         }
     }
 
-    private void HydrateComponents(IEnumerable<Serialization.ComponentData> components)
+    private void HydrateOptionalComponents(IEnumerable<ComponentData> components)
     {
         var componentIds = new HashSet<ComponentId>();
-        foreach (var compData in components)
+        foreach (var required in this.Components)
+        {
+            EnsureComponentIdentity(required, componentIds);
+        }
+
+        foreach (var compData in components.Where(static data => !IsRequired(data)))
         {
             var component = GameComponent.CreateAndHydrate(compData);
             EnsureComponentIdentity(component, componentIds);

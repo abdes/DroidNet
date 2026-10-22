@@ -35,10 +35,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         {
             Name = "UI Test Scene",
         };
-        var node = new SceneNode(scene)
-        {
-            Name = "Camera and sun",
-        };
+        var node = new SceneNode(scene, "Camera and sun");
         _ = node.AddComponent(new PerspectiveCamera
         {
             Name = "Camera",

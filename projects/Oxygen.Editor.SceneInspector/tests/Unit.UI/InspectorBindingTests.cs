@@ -42,12 +42,14 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         prepareFixture: null,
         assertRealizedAsync: static view =>
         {
-            var rows = view.FindDescendants().OfType<Oxygen.Editor.Controls.PropertyCard>().ToArray();
+            var rows = view.FindDescendants().OfType<Oxygen.Editor.Controls.PropertyCard>().Where(static row => row.Content is VectorBox).ToArray();
             _ = rows.Select(row => (row.PropertyName, row.Qualifier, row.QualifierGroup)).Should().Equal(
                 ("Position", "m", "Transform"),
                 ("Rotation", "°", "Transform"),
                 ("Scale", "x", "Transform"));
             _ = rows.Select(row => AutomationProperties.GetName((VectorBox)row.Content)).Should().Equal("Position, metres", "Rotation, degrees", "Scale, multiplier");
+            _ = view.FindDescendants().OfType<ToggleSwitch>().Should().ContainSingle()
+                .Which.GetValue(AutomationProperties.NameProperty).Should().Be("Ignore parent transform");
             return Task.CompletedTask;
         });
 
@@ -111,32 +113,41 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
             return Task.CompletedTask;
         });
 
-    /// <summary>For geometry, the node Rendering section realizes all three authored flag toggles.</summary>
+    /// <summary>For geometry, the node Rendering section realizes visibility, both shadow flags and, under Advanced, Static and Ray-cast selectable.</summary>
     /// <returns>The XAML realization task.</returns>
     [TestMethod]
     public Task NodeRenderingXamlRealizesItsFlagToggles() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Rendering", fixture),
         static model => new NodeRenderingView { ViewModel = (NodeRenderingViewModel)model },
         prepareFixture: static fixture => fixture.Node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") }),
-        assertRealizedAsync: static view =>
+        assertRealizedAsync: static async view =>
         {
-            _ = view.FindDescendants().OfType<ToggleSwitch>().Should().HaveCount(3);
-            return Task.CompletedTask;
+            await ExpandAdvancedAsync(view).ConfigureAwait(true);
+            _ = ToggleNames(view).Should().BeEquivalentTo("Scene visibility", "Cast shadows", "Receive shadows", "Static", "Ray-cast selectable");
         });
 
-    /// <summary>For a light without geometry, the Rendering section realizes only Scene Visibility.</summary>
+    /// <summary>For a node without geometry, the Rendering section hides the shadow flags and keeps the others.</summary>
     /// <returns>The XAML realization task.</returns>
     [TestMethod]
     public Task NodeRenderingXamlHidesShadowFlagsWithoutGeometry() => AssertInspectorRealizesAsync(
         static fixture => CreateModel("Rendering", fixture),
         static model => new NodeRenderingView { ViewModel = (NodeRenderingViewModel)model },
         prepareFixture: null,
-        assertRealizedAsync: static view =>
+        assertRealizedAsync: static async view =>
         {
-            _ = view.FindDescendants().OfType<ToggleSwitch>().Should().ContainSingle()
-                .Which.GetValue(AutomationProperties.NameProperty).Should().Be("Scene visibility");
-            return Task.CompletedTask;
+            await ExpandAdvancedAsync(view).ConfigureAwait(true);
+            _ = ToggleNames(view).Should().BeEquivalentTo("Scene visibility", "Static", "Ray-cast selectable");
         });
+
+    private static string?[] ToggleNames(UserControl view)
+        => [.. view.FindDescendants().OfType<ToggleSwitch>().Select(static toggle => (string?)toggle.GetValue(AutomationProperties.NameProperty))];
+
+    private static async Task ExpandAdvancedAsync(UserControl view)
+    {
+        var advanced = view.FindDescendants().OfType<Expander>().Single(static expander => string.Equals(AutomationProperties.GetAutomationId(expander), "Scene.Node.Rendering.Advanced", StringComparison.Ordinal));
+        advanced.IsExpanded = true;
+        _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() => { }).ConfigureAwait(true);
+    }
 
     /// <summary>The atmosphere-lights inspector realizes its controls without a generated XAML connection-ID cast failure.</summary>
     /// <returns>The XAML realization task.</returns>
@@ -519,7 +530,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         await EnterTextAsync(number, "0").ConfigureAwait(true);
 
         // Live validation: the diagnostic surfaces while typing, before any commit.
-        _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalScale.X.Should().Be(1);
+        _ = fixture.Node.Transform.LocalScale.X.Should().Be(1);
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = model.ScaleXDiagnostic.Message.Should().NotBeEmpty();
         _ = VisibleFeedback(view).Should().ContainSingle().Which.Should().Be("X: " + model.ScaleXDiagnostic.Message);
@@ -529,7 +540,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         }).ConfigureAwait(true);
 
         // Commit parity with the camera inspector: committing the rejected value changes nothing.
-        _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalScale.X.Should().Be(1);
+        _ = fixture.Node.Transform.LocalScale.X.Should().Be(1);
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = model.ScaleXDiagnostic.Message.Should().NotBeEmpty();
         await EnterTextAsync(number, "2").ConfigureAwait(true);
@@ -537,7 +548,7 @@ public sealed partial class InspectorBindingTests : DroidNet.Tests.VisualUserInt
         _ = await CompositionTargetHelper.ExecuteAfterCompositionRenderingAsync(() =>
         {
         }).ConfigureAwait(true);
-        _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalScale.X.Should().Be(2);
+        _ = fixture.Node.Transform.LocalScale.X.Should().Be(2);
         _ = model.ScaleXDiagnostic.Message.Should().BeEmpty();
         _ = VisibleFeedback(view).Should().BeEmpty();
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();

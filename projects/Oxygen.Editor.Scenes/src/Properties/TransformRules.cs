@@ -4,7 +4,6 @@
 
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.Scenes.Properties;
 
@@ -18,7 +17,7 @@ internal sealed class TransformRules : IComponentRules
     public IReadOnlyDictionary<PropertyId, PropertyDescriptor> Descriptors => SceneProperties.Transform.ById;
 
     /// <inheritdoc/>
-    public object? TargetOf(Scene scene, SceneNode? node) => node?.Components.OfType<TransformComponent>().FirstOrDefault();
+    public object? TargetOf(Scene scene, SceneNode? node) => node?.Transform;
 
     /// <inheritdoc/>
     /// <remarks>

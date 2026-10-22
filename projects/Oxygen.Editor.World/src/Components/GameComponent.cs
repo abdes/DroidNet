@@ -22,6 +22,8 @@ public abstract class GameComponent : ScopedObservableObject, INamed, IPersisten
     private static readonly ConcurrentDictionary<Type, Func<ComponentData, GameComponent>> Factories
         = new();
 
+    private string name = string.Empty;
+
     /// <summary>
     /// Gets or sets the stable component identity.
     /// </summary>
@@ -30,7 +32,16 @@ public abstract class GameComponent : ScopedObservableObject, INamed, IPersisten
     /// <summary>
     /// Gets or sets the name of the component.
     /// </summary>
-    public required string Name { get; set; }
+    /// <exception cref="ArgumentException">The component rejects the name, see <see cref="ValidateName"/>.</exception>
+    public required string Name
+    {
+        get => this.name;
+        set
+        {
+            this.ValidateName(value);
+            _ = this.SetProperty(ref this.name, value);
+        }
+    }
 
     /// <summary>
     /// Gets the owner scene node of this component.
@@ -87,6 +98,15 @@ public abstract class GameComponent : ScopedObservableObject, INamed, IPersisten
     public abstract ComponentData Dehydrate();
 
     /// <summary>
+    /// Validates a name before it is set. Components whose name carries meaning, such as the node name a
+    /// <see cref="MetadataComponent"/> holds, reject the names they cannot take.
+    /// </summary>
+    /// <param name="value">The name to set.</param>
+    protected virtual void ValidateName(string value)
+    {
+    }
+
+    /// <summary>
     /// Register a creator for the given DTO type. The creator receives the strongly-typed DTO
     /// and must return a hydrated component instance. Intended for use by concrete
     /// <see cref="GameComponent"/> derived types to self-register their creators.
@@ -102,7 +122,9 @@ public abstract class GameComponent : ScopedObservableObject, INamed, IPersisten
 
     private static void EnsureBuiltInFactories()
     {
+        RuntimeHelpers.RunClassConstructor(typeof(MetadataComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(TransformComponent).TypeHandle);
+        RuntimeHelpers.RunClassConstructor(typeof(NodeFlagsComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(GeometryComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(PerspectiveCamera).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(OrthographicCamera).TypeHandle);

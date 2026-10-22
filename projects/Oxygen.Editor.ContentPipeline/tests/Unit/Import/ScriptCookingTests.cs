@@ -214,8 +214,8 @@ internal sealed partial class ScriptCookingTests : IDisposable
     {
         var scene = new Scene { Name = "Main", Id = SceneId.New() };
         scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });
-        target = new SceneNode(scene) { Name = "Target" };
-        player = new SceneNode(scene) { Name = "Player" };
+        target = new SceneNode(scene, "Target");
+        player = new SceneNode(scene, "Player");
         scene.RootNodes.Add(target);
         scene.RootNodes.Add(player);
         return scene;

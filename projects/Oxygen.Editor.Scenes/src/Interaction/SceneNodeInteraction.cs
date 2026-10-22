@@ -141,7 +141,7 @@ public sealed partial class SceneNodeInteraction(
             return null;
         }
 
-        for (var current = (SceneNode?)node; current is not null; current = current.Parent)
+        for (var current = (SceneNode?)node; current is not null; current = current.Hierarchy.Parent)
         {
             if (this.IsLocked(current.Id))
             {

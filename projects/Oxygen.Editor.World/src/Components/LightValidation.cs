@@ -53,7 +53,7 @@ public static class LightValidation
             var lights = node.Components.OfType<LightComponent>().ToArray();
             if (lights.Length > 1)
             {
-                return $"'{node.Name}' has more than one light.";
+                return $"'{node.Metadata.Name}' has more than one light.";
             }
 
             if (lights.Length == 0)
@@ -65,11 +65,11 @@ public static class LightValidation
                 ? candidate : (LightComponentData)lights[0].Dehydrate();
             if (Validate(light) is { } error)
             {
-                return $"'{node.Name}': {error}";
+                return $"'{node.Metadata.Name}': {error}";
             }
 
             if (light is DirectionalLightData { AtmosphereSlot: not AtmosphereLightSlot.None } directional
-                && !owners.TryAdd(directional.AtmosphereSlot, node.Name))
+                && !owners.TryAdd(directional.AtmosphereSlot, node.Metadata.Name))
             {
                 return $"Atmosphere slot {directional.AtmosphereSlot} is already owned by '{owners[directional.AtmosphereSlot]}'.";
             }
@@ -108,12 +108,9 @@ public static class LightValidation
                 }
             }
 
-            if (node.Children is { } children)
+            foreach (var child in node.Children.Reverse())
             {
-                foreach (var child in children.Reverse())
-                {
-                    pending.Push(child);
-                }
+                pending.Push(child);
             }
         }
 

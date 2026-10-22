@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Immutable;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Documents;
@@ -1042,7 +1043,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     // Every component is applied even after one failed, so one failure does not hide the others.
     private bool ApplyRenderableComponents(WorldDispatch world, SceneNode node)
     {
-        var succeeded = TryApply(() => ApplyNodeRendering(world, node), exception => this.LogFailedToApplyNodeRendering(exception, node.Id));
+        var succeeded = TryApply(() => ApplyNodeFlags(world, node), exception => this.LogFailedToApplyNodeFlags(exception, node.Id));
         if (node.Components.OfType<GeometryComponent>().FirstOrDefault() is { } geometry)
         {
             succeeded &= TryApply(() => ApplyGeometry(world, node, geometry), exception => this.LogFailedToAttachGeometry(exception, node));
@@ -1112,7 +1113,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                 cancellationToken);
             createTasks.Add(task);
 
-            foreach (var child in node.Children)
+            foreach (var child in node.Hierarchy.Children)
             {
                 EnqueueCreateRecursive(child);
             }
@@ -1136,7 +1137,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
         // queued node commands cannot leak into the next scene switch.
         _ = await this.CreateNodeWithCallbackAsync(
             world,
-            new SceneNode(scene) { Name = "__sync_barrier__" },
+            new SceneNode(scene, "__sync_barrier__"),
             parentGuid: null,
             initializeWorldAsRoot: false,
             CancellationToken.None).ConfigureAwait(false);
@@ -1148,15 +1149,9 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     {
         var succeeded = true;
 
+        // Every node exists natively: the projection only gets here once all of them were created.
         void ResolveAndApply(SceneNode node, NodeId? parentGuid)
         {
-            if (!node.IsActive)
-            {
-                this.LogNodeCreationNotSuccessful(node);
-                succeeded = false;
-                return;
-            }
-
             // Reparent to the desired parent
             try
             {
@@ -1181,7 +1176,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
 
             succeeded &= this.ApplyRenderableComponents(world, node);
 
-            foreach (var child in node.Children)
+            foreach (var child in node.Hierarchy.Children)
             {
                 ResolveAndApply(child, node.Id);
             }
@@ -1200,23 +1195,11 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     {
         try
         {
-            var handles = new List<NodeId>();
-
-            foreach (var root in scene.RootNodes)
+            // Every node of the projected scene exists natively.
+            var handles = scene.AllNodes.Select(static node => node.Id).ToImmutableArray();
+            if (handles.Length > 0)
             {
-                // Collect all active node IDs in the hierarchy
-                SceneTraversal.TraverseDepthFirst(root, (node, _) =>
-                {
-                    if (node.IsActive)
-                    {
-                        handles.Add(node.Id);
-                    }
-                });
-            }
-
-            if (handles.Count > 0)
-            {
-                world.Execute(new RuntimeUpdateTransformsForNodes([.. handles]));
+                world.Execute(new RuntimeUpdateTransformsForNodes(handles));
             }
 
             return true;
@@ -1238,7 +1221,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
                     root,
                     (node, parentGuid) =>
                     {
-                        var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
+                        var transform = node.Transform;
                         if (transform is not null)
                         {
                             // Delegate logging of transform details to helper so it can extract values itself

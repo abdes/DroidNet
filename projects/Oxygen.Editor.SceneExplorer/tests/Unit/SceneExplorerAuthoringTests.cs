@@ -104,7 +104,7 @@ public sealed partial class SceneExplorerAuthoringTests
     public void BuildSelectionContext_ClassifiesRowKindsAndPrimary()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene, "Node");
         var nodeAdapter = new SceneNodeAdapter(node);
         var folderAdapter = new FolderAdapter(FolderId.New(), "Folder");
         var sceneAdapter = new SceneAdapter(scene, []) { IsRoot = true };
@@ -147,7 +147,7 @@ public sealed partial class SceneExplorerAuthoringTests
         public AuthoringHarness(out Scene scene, out SceneNode node)
         {
             var built = new Scene { Name = "Scene" };
-            var builtNode = new SceneNode(built) { Name = "Node" };
+            var builtNode = new SceneNode(built, "Node");
             built.RootNodes.Add(builtNode);
 
             var documents = new TestDocumentArea();

@@ -26,8 +26,8 @@ public sealed class TestSupportTests
         _ = fixture.Scene.AllNodes.Select(static node => node.Id).Should().Equal(SampleScene.AllNodes);
         _ = Outline(fixture.Scene, fixture.Layout).Should().Be(
             "A(A1(A11) AF+(A2)) F+(B G-()) Cam Ortho Sun Moon Lamp Spot Fog Mesh Script");
-        _ = fixture.Scene.AllNodes.Single(static node => node.Id == SampleScene.A11).Parent!.Id.Should().Be(SampleScene.A1);
-        _ = fixture.Scene.AllNodes.Single(static node => node.Id == SampleScene.A2).Parent!.Id.Should().Be(SampleScene.A);
+        _ = fixture.Scene.AllNodes.Single(static node => node.Id == SampleScene.A11).Hierarchy.Parent!.Id.Should().Be(SampleScene.A1);
+        _ = fixture.Scene.AllNodes.Single(static node => node.Id == SampleScene.A2).Hierarchy.Parent!.Id.Should().Be(SampleScene.A);
     }
 
     [TestMethod]
@@ -74,7 +74,7 @@ public sealed class TestSupportTests
         => string.Join(' ', entries.Select(entry =>
         {
             var name = entry.NodeId is { } node
-                ? scene.AllNodes.Single(n => n.Id == node).Name
+                ? scene.AllNodes.Single(n => n.Id == node).Metadata.Name
                 : entry.Name + (entry.IsExpanded == true ? "+" : "-");
             return entry.Children is { } children && (children.Count > 0 || entry.FolderId is not null)
                 ? $"{name}({Outline(scene, children)})"

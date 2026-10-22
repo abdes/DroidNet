@@ -121,6 +121,15 @@ def test_render_orders_components_and_fields_by_id() -> None:
     assert "Geometry" not in text
 
 
+def test_component_without_properties_is_valid_and_not_rendered() -> None:
+    document = _minimal()
+    document["components"].append(
+        {"name": "Scripting", "kind": "scripting", "properties": []}
+    )
+    text = cpp.render(model.parse(document, _rules()), "test.yaml")
+    assert "Scripting" not in text
+
+
 def test_json_schema_violation_is_reported_with_its_path() -> None:
     document = _minimal()
     document["components"][0]["properties"][1]["type"] = "double"

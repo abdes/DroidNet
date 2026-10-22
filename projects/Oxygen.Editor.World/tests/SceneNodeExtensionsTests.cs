@@ -13,12 +13,12 @@ public class SceneNodeExtensionsTests
     public void DescendantsAndSelf_Includes_Node_And_All_Descendants()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child = new SceneNode(scene) { Name = "Child" };
-        var grand = new SceneNode(scene) { Name = "Grand" };
+        var root = new SceneNode(scene, "Root");
+        var child = new SceneNode(scene, "Child");
+        var grand = new SceneNode(scene, "Grand");
 
-        root.AddChild(child);
-        child.AddChild(grand);
+        root.Hierarchy.AddChild(child);
+        child.Hierarchy.AddChild(grand);
 
         scene.RootNodes.Add(root);
 
@@ -34,12 +34,12 @@ public class SceneNodeExtensionsTests
     public void AncestorsAndSelf_Includes_Node_Then_Parents()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child = new SceneNode(scene) { Name = "Child" };
-        var grand = new SceneNode(scene) { Name = "Grand" };
+        var root = new SceneNode(scene, "Root");
+        var child = new SceneNode(scene, "Child");
+        var grand = new SceneNode(scene, "Grand");
 
-        root.AddChild(child);
-        child.AddChild(grand);
+        root.Hierarchy.AddChild(child);
+        child.Hierarchy.AddChild(grand);
 
         scene.RootNodes.Add(root);
 
@@ -55,12 +55,12 @@ public class SceneNodeExtensionsTests
     public void FindByPath_ExactPath_Finds_Node()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child = new SceneNode(scene) { Name = "Child" };
-        var grand = new SceneNode(scene) { Name = "Grand" };
+        var root = new SceneNode(scene, "Root");
+        var child = new SceneNode(scene, "Child");
+        var grand = new SceneNode(scene, "Grand");
 
-        root.AddChild(child);
-        child.AddChild(grand);
+        root.Hierarchy.AddChild(child);
+        child.Hierarchy.AddChild(grand);
         scene.RootNodes.Add(root);
 
         var found = scene.FindByPath("Root/Child/Grand");
@@ -72,12 +72,12 @@ public class SceneNodeExtensionsTests
     public void FindByPath_SingleLevelWildcard_Finds_First_Matching()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child1 = new SceneNode(scene) { Name = "ChildA" };
-        var child2 = new SceneNode(scene) { Name = "ChildB" };
+        var root = new SceneNode(scene, "Root");
+        var child1 = new SceneNode(scene, "ChildA");
+        var child2 = new SceneNode(scene, "ChildB");
 
-        root.AddChild(child1);
-        root.AddChild(child2);
+        root.Hierarchy.AddChild(child1);
+        root.Hierarchy.AddChild(child2);
         scene.RootNodes.Add(root);
 
         var found = scene.FindByPath("Root/*");
@@ -90,14 +90,14 @@ public class SceneNodeExtensionsTests
     public void FindByPath_RecursiveWildcard_Finds_Deep_Node()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var a = new SceneNode(scene) { Name = "A" };
-        var b = new SceneNode(scene) { Name = "B" };
-        var c = new SceneNode(scene) { Name = "C" };
+        var root = new SceneNode(scene, "Root");
+        var a = new SceneNode(scene, "A");
+        var b = new SceneNode(scene, "B");
+        var c = new SceneNode(scene, "C");
 
-        root.AddChild(a);
-        a.AddChild(b);
-        b.AddChild(c);
+        root.Hierarchy.AddChild(a);
+        a.Hierarchy.AddChild(b);
+        b.Hierarchy.AddChild(c);
         scene.RootNodes.Add(root);
 
         var found = scene.FindByPath("Root/**/C");
@@ -119,7 +119,7 @@ public class SceneNodeExtensionsTests
     public void FindByPath_EmptyPath_ReturnsNull()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
+        var root = new SceneNode(scene, "Root");
         scene.RootNodes.Add(root);
 
         var found = scene.FindByPath(string.Empty);
@@ -131,10 +131,10 @@ public class SceneNodeExtensionsTests
     public void FindByPath_LeadingTrailingAndDuplicateSeparators_AreHandled()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child = new SceneNode(scene) { Name = "Child" };
+        var root = new SceneNode(scene, "Root");
+        var child = new SceneNode(scene, "Child");
 
-        root.AddChild(child);
+        root.Hierarchy.AddChild(child);
         scene.RootNodes.Add(root);
 
         var found1 = scene.FindByPath("/Root/Child/");
@@ -148,13 +148,13 @@ public class SceneNodeExtensionsTests
     public void FindByPath_MultipleRoots_FirstMatchIsReturned()
     {
         var scene = new Scene { Name = "Scene" };
-        var r1 = new SceneNode(scene) { Name = "R1" };
-        var r2 = new SceneNode(scene) { Name = "R2" };
-        var a = new SceneNode(scene) { Name = "X" };
-        var b = new SceneNode(scene) { Name = "X" };
+        var r1 = new SceneNode(scene, "R1");
+        var r2 = new SceneNode(scene, "R2");
+        var a = new SceneNode(scene, "X");
+        var b = new SceneNode(scene, "X");
 
-        r1.AddChild(a);
-        r2.AddChild(b);
+        r1.Hierarchy.AddChild(a);
+        r2.Hierarchy.AddChild(b);
 
         scene.RootNodes.Add(r1);
         scene.RootNodes.Add(r2);
@@ -168,12 +168,12 @@ public class SceneNodeExtensionsTests
     public void FindByPath_DuplicateNames_Returns_FirstMatchingNode()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var s1 = new SceneNode(scene) { Name = "Same" };
-        var s2 = new SceneNode(scene) { Name = "Same" };
+        var root = new SceneNode(scene, "Root");
+        var s1 = new SceneNode(scene, "Same");
+        var s2 = new SceneNode(scene, "Same");
 
-        root.AddChild(s1);
-        root.AddChild(s2);
+        root.Hierarchy.AddChild(s1);
+        root.Hierarchy.AddChild(s2);
         scene.RootNodes.Add(root);
 
         var found = scene.FindByPath("Root/Same");
@@ -185,12 +185,12 @@ public class SceneNodeExtensionsTests
     public void FindByPath_CaseInsensitive_MatchesRegardlessOfCase()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child = new SceneNode(scene) { Name = "Child" };
-        var grand = new SceneNode(scene) { Name = "Grand" };
+        var root = new SceneNode(scene, "Root");
+        var child = new SceneNode(scene, "Child");
+        var grand = new SceneNode(scene, "Grand");
 
-        root.AddChild(child);
-        child.AddChild(grand);
+        root.Hierarchy.AddChild(child);
+        child.Hierarchy.AddChild(grand);
         scene.RootNodes.Add(root);
 
         var found = scene.FindByPath("root/child/grand");
@@ -202,7 +202,7 @@ public class SceneNodeExtensionsTests
     public void FindByPath_NoMatch_ReturnsNull()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
+        var root = new SceneNode(scene, "Root");
         scene.RootNodes.Add(root);
 
         var found = scene.FindByPath("DoesNotExist");
@@ -214,9 +214,9 @@ public class SceneNodeExtensionsTests
     public void FindByPath_OnlyRecursiveWildcard_ReturnsFirstNode()
     {
         var scene = new Scene { Name = "Scene" };
-        var r = new SceneNode(scene) { Name = "Root" };
-        var c = new SceneNode(scene) { Name = "Child" };
-        r.AddChild(c);
+        var r = new SceneNode(scene, "Root");
+        var c = new SceneNode(scene, "Child");
+        r.Hierarchy.AddChild(c);
         scene.RootNodes.Add(r);
 
         var found = scene.FindByPath("**");

@@ -31,13 +31,19 @@ namespace oxygen::interop::module {
       return scene::SceneNodeFlags::kCastsShadows;
     case NodeField::kReceivesShadows:
       return scene::SceneNodeFlags::kReceivesShadows;
+    case NodeField::kStatic:
+      return scene::SceneNodeFlags::kStatic;
+    case NodeField::kRayCastingSelectable:
+      return scene::SceneNodeFlags::kRayCastingSelectable;
+    case NodeField::kIgnoreParentTransform:
+      return scene::SceneNodeFlags::kIgnoreParentTransform;
     case NodeField::kCount:
       break;
     }
     return std::nullopt;
   }
 
-  //! Applies authored rendering flags as local values, overriding inheritance.
+  //! Applies authored node flags as local values, overriding inheritance.
   class NodePropertyApplier final : public IComponentPropertyApplier {
   public:
     [[nodiscard]] auto GetComponentId() const noexcept -> ComponentId override

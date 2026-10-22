@@ -11,7 +11,6 @@ using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.TestSupport;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.TestSupport.NativeFieldCases;
 using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
@@ -46,7 +45,7 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         var source = fixture.Source.RootNodes[0];
         var destination = fixture.Source.RootNodes[1];
-        var moved = source.Children.Single();
+        var moved = source.Hierarchy.Children.Single();
         var folderId = fixture.Layout[1].Children!.Single().FolderId!.Value;
         var before = SourceNodeProperties(moved);
         await AssertNativeLocalTrsAsync(fixture, moved.Id, before, timeout.Token).ConfigureAwait(true);
@@ -58,7 +57,7 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
         var result = await fixture.Authoring.ExecuteAsync(edit).ConfigureAwait(true);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = moved.Parent.Should().BeSameAs(destination);
+        _ = moved.Hierarchy.Parent.Should().BeSameAs(destination);
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         var after = SourceNodeProperties(moved);
         if (groupIntoFolder || ignoreParentTransform)
@@ -74,7 +73,7 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
 
         await fixture.Document.History.UndoAsync(timeout.Token).ConfigureAwait(true);
 
-        _ = moved.Parent.Should().BeSameAs(source);
+        _ = moved.Hierarchy.Parent.Should().BeSameAs(source);
         _ = SourceNodeProperties(moved).Should().BeEquivalentTo(before);
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.History.RedoStack.Should().ContainSingle();
@@ -82,7 +81,7 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
 
         await fixture.Document.History.RedoAsync(timeout.Token).ConfigureAwait(true);
 
-        _ = moved.Parent.Should().BeSameAs(destination);
+        _ = moved.Hierarchy.Parent.Should().BeSameAs(destination);
         _ = SourceNodeProperties(moved).Should().BeEquivalentTo(after);
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         _ = fixture.Document.History.RedoStack.Should().BeEmpty();
@@ -91,22 +90,23 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
 
     private static void SeedHierarchy(Scene scene, bool ignoreParentTransform)
     {
-        var source = new SceneNode(scene) { Name = "Source" };
-        var sourceTransform = source.Components.OfType<TransformComponent>().Single();
+        var source = new SceneNode(scene, "Source");
+        var sourceTransform = source.Transform;
         sourceTransform.LocalPosition = new Vector3(10f, 2f, -4f);
         sourceTransform.LocalRotation = Quaternion.CreateFromYawPitchRoll(0.2f, 0.1f, 0.3f);
         sourceTransform.LocalScale = new Vector3(2f);
-        var destination = new SceneNode(scene) { Name = "Destination" };
-        var destinationTransform = destination.Components.OfType<TransformComponent>().Single();
+        var destination = new SceneNode(scene, "Destination");
+        var destinationTransform = destination.Transform;
         destinationTransform.LocalPosition = new Vector3(-3f, 4f, 7f);
         destinationTransform.LocalRotation = Quaternion.CreateFromYawPitchRoll(-0.3f, 0.2f, -0.1f);
         destinationTransform.LocalScale = new Vector3(3f);
-        var moved = new SceneNode(scene) { Name = "Moved", IgnoreParentTransform = ignoreParentTransform };
-        var transform = moved.Components.OfType<TransformComponent>().Single();
+        var moved = new SceneNode(scene, "Moved");
+        moved.Flags.IgnoreParentTransform = ignoreParentTransform;
+        var transform = moved.Transform;
         transform.LocalPosition = new Vector3(1f, 2f, 3f);
         transform.LocalRotation = Quaternion.CreateFromYawPitchRoll(0.1f, -0.2f, 0.3f);
         transform.LocalScale = new Vector3(1f, 2f, 3f);
-        source.AddChild(moved);
+        source.Hierarchy.AddChild(moved);
         scene.RootNodes.Add(source);
         scene.RootNodes.Add(destination);
     }
@@ -122,7 +122,7 @@ public sealed partial class HierarchyNativeSynchronizationTests : DroidNet.Tests
             {
                 Type = "Node",
                 NodeId = source.Id,
-                Children = [new ExplorerEntryData { Type = "Node", NodeId = source.Children.Single().Id }],
+                Children = [new ExplorerEntryData { Type = "Node", NodeId = source.Hierarchy.Children.Single().Id }],
             },
             new ExplorerEntryData
             {

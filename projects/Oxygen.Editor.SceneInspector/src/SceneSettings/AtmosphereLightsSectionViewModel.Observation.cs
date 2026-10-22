@@ -59,9 +59,9 @@ public sealed partial class AtmosphereLightsSectionViewModel
             return;
         }
 
-        node.Children.CollectionChanged += this.OnSceneTopologyChanged;
+        node.Hierarchy.Children.CollectionChanged += this.OnSceneTopologyChanged;
         node.Components.CollectionChanged += this.OnSunComponentsChanged;
-        node.PropertyChanged += this.OnSunNodeChanged;
+        node.Metadata.PropertyChanged += this.OnSunNodeChanged;
         foreach (var light in node.Components.OfType<DirectionalLightComponent>())
         {
             if (this.observedLights.Add(light))
@@ -70,15 +70,12 @@ public sealed partial class AtmosphereLightsSectionViewModel
             }
         }
 
-        foreach (var transform in node.Components.OfType<TransformComponent>())
+        if (this.observedTransforms.Add(node.Transform))
         {
-            if (this.observedTransforms.Add(transform))
-            {
-                transform.PropertyChanged += this.OnSourceTransformChanged;
-            }
+            node.Transform.PropertyChanged += this.OnSourceTransformChanged;
         }
 
-        foreach (var child in node.Children)
+        foreach (var child in node.Hierarchy.Children)
         {
             this.ObserveSubtree(child);
         }
@@ -91,9 +88,9 @@ public sealed partial class AtmosphereLightsSectionViewModel
             return;
         }
 
-        node.Children.CollectionChanged -= this.OnSceneTopologyChanged;
+        node.Hierarchy.Children.CollectionChanged -= this.OnSceneTopologyChanged;
         node.Components.CollectionChanged -= this.OnSunComponentsChanged;
-        node.PropertyChanged -= this.OnSunNodeChanged;
+        node.Metadata.PropertyChanged -= this.OnSunNodeChanged;
         foreach (var light in node.Components.OfType<DirectionalLightComponent>())
         {
             if (this.observedLights.Remove(light))
@@ -102,15 +99,12 @@ public sealed partial class AtmosphereLightsSectionViewModel
             }
         }
 
-        foreach (var transform in node.Components.OfType<TransformComponent>())
+        if (this.observedTransforms.Remove(node.Transform))
         {
-            if (this.observedTransforms.Remove(transform))
-            {
-                transform.PropertyChanged -= this.OnSourceTransformChanged;
-            }
+            node.Transform.PropertyChanged -= this.OnSourceTransformChanged;
         }
 
-        foreach (var child in node.Children)
+        foreach (var child in node.Hierarchy.Children)
         {
             this.UnobserveSubtree(child);
         }
@@ -153,7 +147,7 @@ public sealed partial class AtmosphereLightsSectionViewModel
 
     private void OnSceneTopologyChanged(object? sender, NotifyCollectionChangedEventArgs args)
     {
-        if (!ReferenceEquals(sender, this.scene?.RootNodes) && !this.observedNodes.Any(node => ReferenceEquals(sender, node.Children)))
+        if (!ReferenceEquals(sender, this.scene?.RootNodes) && !this.observedNodes.Any(node => ReferenceEquals(sender, node.Hierarchy.Children)))
         {
             return;
         }
@@ -194,7 +188,7 @@ public sealed partial class AtmosphereLightsSectionViewModel
             this.observedLights.Add(added);
         }
 
-        var currentTransforms = this.observedNodes.SelectMany(node => node.Components.OfType<TransformComponent>()).ToHashSet();
+        var currentTransforms = this.observedNodes.Select(static node => node.Transform).ToHashSet();
         foreach (var removed in this.observedTransforms.Except(currentTransforms).ToArray())
         {
             removed.PropertyChanged -= this.OnSourceTransformChanged;
@@ -215,13 +209,13 @@ public sealed partial class AtmosphereLightsSectionViewModel
 
     private void OnSunNodeChanged(object? sender, PropertyChangedEventArgs args)
     {
-        if (sender is SceneNode changed && this.observedNodes.Contains(changed))
+        if (sender is not MetadataComponent || !this.observedNodes.Any(node => ReferenceEquals(node.Metadata, sender)))
         {
-            this.RefreshAtmosphereSourceEditors();
+            return;
         }
 
-        if (sender is SceneNode node && this.observedNodes.Contains(node)
-            && (string.IsNullOrEmpty(args.PropertyName) || string.Equals(args.PropertyName, nameof(SceneNode.Name), StringComparison.Ordinal)))
+        this.RefreshAtmosphereSourceEditors();
+        if (string.IsNullOrEmpty(args.PropertyName) || string.Equals(args.PropertyName, nameof(MetadataComponent.Name), StringComparison.Ordinal))
         {
             this.RefreshSunDependencies();
         }

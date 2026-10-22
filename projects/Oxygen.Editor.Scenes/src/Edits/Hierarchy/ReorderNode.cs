@@ -5,6 +5,7 @@
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Layout;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Hierarchy;
@@ -68,7 +69,7 @@ public sealed record ReorderNode(NodeId Node, NodePosition At, LayoutPosition La
             return SceneDiagnostic.Error(SceneEditCodes.HierarchyCycle, "A node cannot be moved into its own descendant.", this.Node);
         }
 
-        var leaving = ReferenceEquals(node.Parent, parent) ? 1 : 0;
+        var leaving = ReferenceEquals(node.Hierarchy.Parent, parent) ? 1 : 0;
         if (SceneGraph.Check(scope, this.At, leaving) is { } place)
         {
             return place;

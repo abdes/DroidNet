@@ -53,7 +53,7 @@ internal sealed class DirectionalLightRules : IComponentRules
     /// <remarks>A light added to a node that is not rotated points down at its default angle instead of along the horizon.</remarks>
     public IReadOnlyList<ISceneEdit> OnAdd(SceneNode node)
     {
-        if (node.Components.OfType<TransformComponent>().FirstOrDefault() is not { } transform || transform.LocalRotation != Quaternion.Identity)
+        if (node.Transform.LocalRotation != Quaternion.Identity)
         {
             return [];
         }
@@ -87,11 +87,11 @@ internal sealed class DirectionalLightRules : IComponentRules
 
             if (slot == current)
             {
-                _ = owners.TryAdd(slot, node.Name);
+                _ = owners.TryAdd(slot, node.Metadata.Name);
             }
             else
             {
-                moving.Add((node.Id, node.Name, slot));
+                moving.Add((node.Id, node.Metadata.Name, slot));
             }
         }
 

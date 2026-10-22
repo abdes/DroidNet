@@ -29,12 +29,12 @@ public sealed class AssetRelocationTests
 
     private const string Scene = """
         { "Id": "6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10", "Name": "Main",
-          "RootNodes": [ { "Name": "Box", "Components": [ { "$type": "GeometryComponent",
+          "RootNodes": [ { "Id": "3d9a2b1c-0000-4000-8000-000000000001", "Components": [ { "$type": "Metadata", "Name": "Box" }, { "$type": "Transform", "Name": "Transform" }, { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "GeometryComponent",
             "GeometryUri": "asset:///Content/Geometry/Box.ogeo",
             "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Geometry/Box.ogeo", "MaterialUri": "asset:///Content/Materials/Red.omat" } ],
-            "TargetedOverrides": [ { "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Geometry/Box.ogeo", "MaterialUri": "asset:///Content/Materials/Red.omat" } ] } ] } ] },
-            { "Name": "Robot", "Components": [ { "$type": "GeometryComponent", "GeometryUri": "asset:///Content/Models/Robot/robot.gltf/Body.ogeo",
-              "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Models/Robot/robot.gltf/Body.ogeo", "MaterialUri": "asset:///Content/Models/Robot/robot.gltf/Paint.omat" } ] } ] } ],
+            "TargetedOverrides": [ { "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Geometry/Box.ogeo", "MaterialUri": "asset:///Content/Materials/Red.omat" } ] } ] }, { "$type": "Hierarchy", "Name": "Hierarchy" } ] },
+            { "Id": "3d9a2b1c-0000-4000-8000-000000000002", "Components": [ { "$type": "Metadata", "Name": "Robot" }, { "$type": "Transform", "Name": "Transform" }, { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "GeometryComponent", "GeometryUri": "asset:///Content/Models/Robot/robot.gltf/Body.ogeo",
+              "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Models/Robot/robot.gltf/Body.ogeo", "MaterialUri": "asset:///Content/Models/Robot/robot.gltf/Paint.omat" } ] }, { "$type": "Hierarchy", "Name": "Hierarchy" } ] } ],
           "Environment": { "PostProcess": { "AutoExposureMeteringMask": "asset:///Content/Textures/Wood.otex" } } }
         """;
 
@@ -53,7 +53,7 @@ public sealed class AssetRelocationTests
         _ = plan.Referrers.Should().BeEquivalentTo([AssetPath.Parse("/Content/Geometry/Box.ogeo.json"), AssetPath.Parse("/Content/Scenes/Main.oscene.json")]);
         var scene = workspace.Read("Content/Scenes/Main.oscene.json");
         _ = scene.Should().NotContain("Red.omat").And.Contain("asset:///Content/Materials/Blue.omat");
-        _ = workspace.ReadJson("Content/Scenes/Main.oscene.json")["RootNodes"]![0]!["Components"]![0]!["TargetedOverrides"]![0]!["OverrideSlots"]![0]!["MaterialUri"]!.GetValue<string>()
+        _ = workspace.ReadJson("Content/Scenes/Main.oscene.json")["RootNodes"]![0]!["Components"]![3]!["TargetedOverrides"]![0]!["OverrideSlots"]![0]!["MaterialUri"]!.GetValue<string>()
             .Should().Be("asset:///Content/Materials/Blue.omat");
         _ = workspace.ReadJson("Content/Geometry/Box.ogeo.json")["lods"]![0]!["submeshes"]![0]!["material_ref"]!.GetValue<string>().Should().Be("/Content/Materials/Blue.omat");
     }
@@ -69,7 +69,7 @@ public sealed class AssetRelocationTests
         using var workspace = CreateContent();
         _ = workspace.Write("Content/Scenes/Named.oscene.json", """
             { "Id": "0b0e6b8c-3c5a-4a0e-9a8f-1b1f2a3c4d5e", "Name": "Named",
-              "RootNodes": [ { "Name": "asset:///Content/Materials/Red.omat", "Components": [ { "$type": "Scripting", "Name": "Scripting", "Slots": [ {
+              "RootNodes": [ { "Id": "3d9a2b1c-0000-4000-8000-000000000003", "Components": [ { "$type": "Metadata", "Name": "asset:///Content/Materials/Red.omat" }, { "$type": "Transform", "Name": "Transform" }, { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "Scripting", "Name": "Scripting", "Slots": [ {
                 "Id": "0f8fad5b-d9cb-469f-a165-70867728950e", "Script": "asset:///Content/Scripts/paint.oscript",
                 "Overrides": {
                   "label": { "Type": "string", "Value": "asset:///Content/Materials/Red.omat" },
@@ -82,9 +82,9 @@ public sealed class AssetRelocationTests
         var plan = await workspace.Service.RelocateAsync(Move("/Content/Materials/Red.omat.json", "/Content/Materials/Blue.omat.json"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = plan.Referrers.Should().Contain(AssetPath.Parse("/Content/Scenes/Named.oscene.json")).And.NotContain(AssetPath.Parse("/Content/Shapes/Box.ocshape.json"));
-        var slot = workspace.ReadJson("Content/Scenes/Named.oscene.json")["RootNodes"]![0]!;
-        _ = slot["Name"]!.GetValue<string>().Should().Be("asset:///Content/Materials/Red.omat", "a node's name is text");
-        var overrides = slot["Components"]![0]!["Slots"]![0]!["Overrides"]!;
+        var components = workspace.ReadJson("Content/Scenes/Named.oscene.json")["RootNodes"]![0]!["Components"]!;
+        _ = components[0]!["Name"]!.GetValue<string>().Should().Be("asset:///Content/Materials/Red.omat", "a node's name is text");
+        var overrides = components[3]!["Slots"]![0]!["Overrides"]!;
         _ = overrides["label"]!["Value"]!.GetValue<string>().Should().Be("asset:///Content/Materials/Red.omat", "a string parameter is text");
         _ = overrides["paint"]!["Value"]!.GetValue<string>().Should().Be("asset:///Content/Materials/Blue.omat");
         _ = workspace.ReadJson("Content/Shapes/Box.ocshape.json")["name"]!.GetValue<string>().Should().Be("/Content/Materials/Red.omat");
@@ -227,7 +227,7 @@ public sealed class AssetRelocationTests
 
         _ = await workspace.Service.RelocateAsync(Move("/Content/Models/Robot", "/Content/Models/Bot"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var robot = workspace.ReadJson("Content/Scenes/Main.oscene.json")["RootNodes"]![1]!["Components"]![0]!;
+        var robot = workspace.ReadJson("Content/Scenes/Main.oscene.json")["RootNodes"]![1]!["Components"]![3]!;
         _ = robot["GeometryUri"]!.GetValue<string>().Should().Be("asset:///Content/Models/Bot/robot.gltf/Body.ogeo");
         var slot = robot["OverrideSlots"]![0]!;
         _ = slot["GeometryUri"]!.GetValue<string>().Should().Be("asset:///Content/Models/Bot/robot.gltf/Body.ogeo");
@@ -408,7 +408,7 @@ public sealed class AssetRelocationTests
         using var workspace = CreateContent();
         _ = workspace.Write("Content/Scripts/move.lua", "return {}");
         const string scripted = """
-            { "Name": "Scripted", "RootNodes": [ { "Name": "Player", "Components": [ { "$type": "Scripting", "Name": "Scripting",
+            { "Name": "Scripted", "RootNodes": [ { "Id": "3d9a2b1c-0000-4000-8000-000000000004", "Components": [ { "$type": "Metadata", "Name": "Player" }, { "$type": "Transform", "Name": "Transform" }, { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "Scripting", "Name": "Scripting",
               "Slots": [ { "Id": "0f8fad5b-d9cb-469f-a165-70867728950e", "Script": "asset:///Content/Scripts/move.oscript",
                 "Overrides": { "follow": { "Type": "asset", "Value": "asset:///Content/Scripts/move.oscript" } } } ] } ] } ] }
             """;
@@ -416,7 +416,7 @@ public sealed class AssetRelocationTests
 
         _ = await workspace.Service.RelocateAsync(Move("/Content/Scripts/move.lua", "/Content/Scripts/walk.lua"), "Move", new HistoryKeeper(this), this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var slot = workspace.ReadJson("Content/Scenes/Scripted.oscene.json")["RootNodes"]![0]!["Components"]![0]!["Slots"]![0]!;
+        var slot = workspace.ReadJson("Content/Scenes/Scripted.oscene.json")["RootNodes"]![0]!["Components"]![3]!["Slots"]![0]!;
         _ = slot["Script"]!.GetValue<string>().Should().Be("asset:///Content/Scripts/walk.oscript");
         _ = slot["Overrides"]!["follow"]!["Value"]!.GetValue<string>().Should().Be("asset:///Content/Scripts/walk.oscript");
     }

@@ -48,14 +48,11 @@ internal sealed partial class ResponsiveLayoutTests
     {
         using var fixture = new SceneAuthoringFixture();
         MakeGeometryOnly(fixture);
-        fixture.Node.Name = "A scene node with a longer display name";
+        fixture.Node.Metadata.Name = "A scene node with a longer display name";
         using var model = fixture.CreateInspectorHost("Transform", realizeViews: true);
         if (multiple)
         {
-            var second = new SceneNode(fixture.Scene)
-            {
-                Name = "Second",
-            };
+            var second = new SceneNode(fixture.Scene, "Second");
             _ = second.AddComponent(CreateInspectorGeometry());
             fixture.Scene.RootNodes.Add(second);
             fixture.Select(fixture.Node, second);
@@ -85,7 +82,8 @@ internal sealed partial class ResponsiveLayoutTests
             + (((StackPanel)header.Child).Spacing * (headerRows.Length - 1))
             + header.Padding.Top + header.Padding.Bottom;
         _ = header.ActualHeight.Should().BeApproximately(expectedHeaderHeight, 1, "the title, selection and component rows must not reserve unused dock height");
-        _ = components.ExtentHeight.Should().BeApproximately(64, 1);
+        // Transform, Rendering and Geometry: one 32 px row each.
+        _ = components.ExtentHeight.Should().BeApproximately(96, 1);
         _ = properties.ActualHeight.Should().BePositive("even a short dock must retain a scrollable property viewport");
         AssertAllToggle(view, multiple);
         await AssertScaledComponentSelectionAsync(view, multiple).ConfigureAwait(true);
@@ -96,7 +94,7 @@ internal sealed partial class ResponsiveLayoutTests
         await AssertExtraHeightGoesToPropertiesAsync(view, captureHost, header, properties).ConfigureAwait(true);
     });
 
-    /// <summary>Four valid components fit directly; a longer multi-node type list is bounded.</summary>
+    /// <summary>A component list longer than four rows is bounded and leaves the space to the properties.</summary>
     /// <param name="mixedTypes">Whether the selection contains different camera and light types.</param>
     /// <returns>The asynchronous component-list sizing regression.</returns>
     [TestMethod]
@@ -109,17 +107,11 @@ internal sealed partial class ResponsiveLayoutTests
         using var model = fixture.CreateInspectorHost("Transform", realizeViews: true);
         if (mixedTypes)
         {
-            var second = new SceneNode(fixture.Scene)
-            {
-                Name = "Second",
-            };
+            var second = new SceneNode(fixture.Scene, "Second");
             _ = second.AddComponent(CreateInspectorGeometry());
             _ = second.AddComponent(new OrthographicCamera { Name = "Camera" });
             _ = second.AddComponent(new PointLightComponent { Name = "Light" });
-            var third = new SceneNode(fixture.Scene)
-            {
-                Name = "Third",
-            };
+            var third = new SceneNode(fixture.Scene, "Third");
             _ = third.AddComponent(CreateInspectorGeometry());
             _ = third.AddComponent(new PerspectiveCamera { Name = "Camera" });
             _ = third.AddComponent(new SpotLightComponent { Name = "Light" });
@@ -135,10 +127,10 @@ internal sealed partial class ResponsiveLayoutTests
             Height = 500,
         };
         await LoadTestContentAsync(view).ConfigureAwait(true);
-        _ = model.ComponentFilters.Should().HaveCount(mixedTypes ? 7 : 4);
+        _ = model.ComponentFilters.Should().HaveCount(mixedTypes ? 8 : 5);
         var components = (ScrollViewer)view.FindName("ComponentScroll");
         _ = components.ActualHeight.Should().BeLessThanOrEqualTo(128);
-        _ = components.ExtentHeight.Should().BeApproximately((mixedTypes ? 7 : 4) * 32, 1);
+        _ = components.ExtentHeight.Should().BeApproximately((mixedTypes ? 8 : 5) * 32, 1);
         _ = ((ScrollViewer)view.FindName("PropertyScroll")).ActualHeight.Should().BeGreaterThan(250);
         _ = model.ComponentFilters.Single(option => option.ComponentType == typeof(GeometryComponent)).IsAvailable.Should().BeTrue();
     });

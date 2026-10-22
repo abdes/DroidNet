@@ -37,6 +37,9 @@ field_sets:
       - { name: Visible, id: 0 }
       - { name: CastsShadows, id: 1 }
       - { name: ReceivesShadows, id: 2 }
+      - { name: Static, id: 3 }
+      - { name: RayCastingSelectable, id: 4 }
+      - { name: IgnoreParentTransform, id: 5 }
 
   - name: PerspectiveCamera
     fields:
@@ -170,9 +173,9 @@ components:
         type: float
         fields: [ScaleZ]
 
-  # The authored rendering flags of every node, applied as local values.
+  # The authored flags of every node, applied as local values.
   - name: Node
-    kind: node-rendering
+    kind: node-flags
     wire: { id: 7, field_set: Node }
     properties:
       - name: IsVisible
@@ -187,6 +190,18 @@ components:
         key: /receives_shadows
         type: bool
         fields: [ReceivesShadows]
+      - name: IsStatic
+        key: /static
+        type: bool
+        fields: [Static]
+      - name: IsRayCastingSelectable
+        key: /ray_cast_selectable
+        type: bool
+        fields: [RayCastingSelectable]
+      - name: IgnoreParentTransform
+        key: /ignore_parent_transform
+        type: bool
+        fields: [IgnoreParentTransform]
 
   - name: Geometry
     kind: geometry
@@ -479,6 +494,12 @@ components:
         key: /outer_cone_angle_radians
         type: float
         fields: [OuterConeAngleRadians]
+
+  # Script slots are authored and cooked as a whole; no property is edited
+  # through the schema yet.
+  - name: Scripting
+    kind: scripting
+    properties: []
 
   - name: LocalFogVolume
     kind: local-fog-volume

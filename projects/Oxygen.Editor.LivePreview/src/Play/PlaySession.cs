@@ -188,7 +188,7 @@ public sealed partial class PlaySession : ObservableObject, IRuntimeProblemSourc
             return null;
         }
 
-        var named = played.Scene.AllNodes.Where(node => string.Equals(node.Name, name, StringComparison.Ordinal)).Take(2).ToArray();
+        var named = played.Scene.AllNodes.Where(node => string.Equals(node.Metadata.Name, name, StringComparison.Ordinal)).Take(2).ToArray();
         return named.Length == 1 ? (played.DocumentId, named[0].Id) : null;
     }
 

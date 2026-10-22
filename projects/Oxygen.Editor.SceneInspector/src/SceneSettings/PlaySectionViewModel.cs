@@ -326,11 +326,11 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
         var cameras = this.scene?.AllNodes.Where(IsCamera).ToArray() ?? [];
         var authored = this.scene?.StartingCamera;
         var gone = authored is { } id && cameras.All(camera => camera.Id != id);
-        var goneName = gone ? this.scene?.AllNodes.FirstOrDefault(node => node.Id == authored)?.Name : null;
+        var goneName = gone ? this.scene?.AllNodes.FirstOrDefault(node => node.Id == authored)?.Metadata.Name : null;
 
         // Automatic, every camera, and the authored camera when it is gone, so the list shows what is authored.
         var wanted = new List<(NodeId? Id, string Name)> { (null, "Automatic") };
-        wanted.AddRange(cameras.Select(static camera => ((NodeId?)camera.Id, camera.Name)));
+        wanted.AddRange(cameras.Select(static camera => ((NodeId?)camera.Id, camera.Metadata.Name)));
         if (gone)
         {
             wanted.Add((authored, goneName ?? "Missing camera"));
@@ -347,7 +347,7 @@ public sealed partial class PlaySectionViewModel : ObservableObject, IDisposable
 
         this.SelectedCamera = this.CameraChoices.First(choice => choice.Id == authored);
         this.automaticCamera = authored is null ? cameras.FirstOrDefault()?.Id : null;
-        this.AutomaticCameraName = authored is null ? cameras.FirstOrDefault()?.Name ?? string.Empty : string.Empty;
+        this.AutomaticCameraName = authored is null ? cameras.FirstOrDefault()?.Metadata.Name ?? string.Empty : string.Empty;
         this.ShowsAutomaticCamera = authored is null && cameras.Length > 0;
         this.ShowsNoCamera = authored is null && cameras.Length == 0;
         this.CameraError = !gone

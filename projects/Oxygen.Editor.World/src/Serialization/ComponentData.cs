@@ -11,7 +11,10 @@ namespace Oxygen.Editor.World.Serialization;
 /// Base data transfer object for game components.
 /// </summary>
 [JsonPolymorphic(TypeDiscriminatorPropertyName = "$type")]
+[JsonDerivedType(typeof(MetadataData), "Metadata")]
+[JsonDerivedType(typeof(HierarchyData), "Hierarchy")]
 [JsonDerivedType(typeof(TransformData), "Transform")]
+[JsonDerivedType(typeof(NodeFlagsData), "NodeFlags")]
 [JsonDerivedType(typeof(GeometryComponentData), "GeometryComponent")]
 [JsonDerivedType(typeof(PerspectiveCameraData), "PerspectiveCamera")]
 [JsonDerivedType(typeof(OrthographicCameraData), "OrthographicCamera")]

@@ -64,8 +64,8 @@ public sealed record ProbeEdit : ISceneEdit
             Label = $"Rename {from}",
             Targets = [node],
             Changes = [new SceneChange.NodeRenamed(node)],
-            Effect = scope => scope.FindNode(node)!.Name = to,
-            RevertEffect = scope => scope.FindNode(node)!.Name = from,
+            Effect = scope => scope.FindNode(node)!.Metadata.Name = to,
+            RevertEffect = scope => scope.FindNode(node)!.Metadata.Name = from,
         };
 
     /// <inheritdoc/>

@@ -52,7 +52,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
 
     public ScriptingViewModelTests()
     {
-        this.player = new SceneNode(this.scene) { Name = "Player" };
+        this.player = new SceneNode(this.scene, "Player");
         this.scene.RootNodes.Add(this.player);
         _ = this.player.AddComponent(this.scripting);
     }
@@ -87,7 +87,7 @@ public sealed partial class ScriptingViewModelTests : IDisposable
     public void SeveralSelectedNodesShowAMessageInsteadOfSlots()
     {
         using var model = this.CreateModel();
-        var other = new SceneNode(this.scene) { Name = "Other" };
+        var other = new SceneNode(this.scene, "Other");
 
         model.UpdateValues([this.player, other]);
 

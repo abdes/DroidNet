@@ -97,10 +97,10 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
     public Task TransformRelativeTextEditAppliesPerTargetAndUndoRestoresOriginalValues() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
-        var firstTransform = fixture.Node.Components.OfType<TransformComponent>().Single();
+        var firstTransform = fixture.Node.Transform;
         firstTransform.LocalPosition = new(10, 0, 0);
-        var second = new SceneNode(fixture.Scene) { Name = "Second" };
-        var secondTransform = second.Components.OfType<TransformComponent>().Single();
+        var second = new SceneNode(fixture.Scene, "Second");
+        var secondTransform = second.Transform;
         secondTransform.LocalPosition = new(20, 0, 0);
         fixture.Scene.RootNodes.Add(second);
 
@@ -140,9 +140,9 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
     public Task TransformRelativeTextEditEscapeLeavesAllTargetsUnchanged() => EnqueueAsync(async () =>
     {
         using var fixture = new SceneAuthoringFixture();
-        fixture.Node.Components.OfType<TransformComponent>().Single().LocalPosition = new(10, 0, 0);
-        var second = new SceneNode(fixture.Scene) { Name = "Second" };
-        second.Components.OfType<TransformComponent>().Single().LocalPosition = new(20, 0, 0);
+        fixture.Node.Transform.LocalPosition = new(10, 0, 0);
+        var second = new SceneNode(fixture.Scene, "Second");
+        second.Transform.LocalPosition = new(20, 0, 0);
         fixture.Scene.RootNodes.Add(second);
 
         using var host = fixture.CreateInspectorHost("Transform");
@@ -162,8 +162,8 @@ internal sealed class SelectionGesturesTests : DroidNet.Tests.VisualUserInterfac
         number.CancelEdit();
         await PendingNumericEdits(model).ConfigureAwait(true);
 
-        _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalPosition.X.Should().Be(10);
-        _ = second.Components.OfType<TransformComponent>().Single().LocalPosition.X.Should().Be(20);
+        _ = fixture.Node.Transform.LocalPosition.X.Should().Be(10);
+        _ = second.Transform.LocalPosition.X.Should().Be(20);
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });

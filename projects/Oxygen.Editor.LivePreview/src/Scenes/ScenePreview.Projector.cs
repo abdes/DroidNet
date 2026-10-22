@@ -158,7 +158,7 @@ internal sealed partial class ScenePreview
                 foreach (var node in added.Roots.Select(id => FindNode(scene, id)).OfType<SceneNode>())
                 {
                     RecordMaterialOverrides(lifetime, [node, .. node.Descendants()]);
-                    await this.CreateSubtreeAsync(node, node.Parent?.Id, cancellationToken).ConfigureAwait(true);
+                    await this.CreateSubtreeAsync(node, node.Hierarchy.Parent?.Id, cancellationToken).ConfigureAwait(true);
                 }
 
                 break;
@@ -169,7 +169,7 @@ internal sealed partial class ScenePreview
                 await this.ProjectPlacementAsync(scene, placed.Nodes, cancellationToken).ConfigureAwait(true);
                 break;
             case SceneChange.NodeRenamed renamed when FindNode(scene, renamed.Node) is { } node:
-                this.Report(await this.RenameNodeAsync(scene, node.Id, node.Name).ConfigureAwait(true));
+                this.Report(await this.RenameNodeAsync(scene, node.Id, node.Metadata.Name).ConfigureAwait(true));
                 break;
             case SceneChange.ComponentAdded added when FindNode(scene, added.Node) is { } node:
                 await this.AttachAsync(lifetime, node, node.Components.FirstOrDefault(component => component.Id == added.Component), cancellationToken).ConfigureAwait(true);
@@ -217,7 +217,7 @@ internal sealed partial class ScenePreview
     {
         cancellationToken.ThrowIfCancellationRequested();
         await this.CreateNodeAsync(node, parent).ConfigureAwait(true);
-        foreach (var child in node.Children.ToArray())
+        foreach (var child in node.Hierarchy.Children.ToArray())
         {
             await this.CreateSubtreeAsync(child, node.Id, cancellationToken).ConfigureAwait(true);
         }
@@ -232,7 +232,7 @@ internal sealed partial class ScenePreview
             this.Report(await this.UpdateNodeTransformAsync(scene, node, cancellationToken).ConfigureAwait(true));
         }
 
-        foreach (var group in nodes.GroupBy(static node => node.Parent?.Id))
+        foreach (var group in nodes.GroupBy(static node => node.Hierarchy.Parent?.Id))
         {
             cancellationToken.ThrowIfCancellationRequested();
             await this.ReparentHierarchiesAsync(scene, [.. group.Select(static node => node.Id)], group.Key, preserveWorldTransform: false).ConfigureAwait(true);

@@ -7,14 +7,14 @@ using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Tests.TestSupport;
 using Oxygen.Managed.Core;
 using SceneData = Oxygen.Editor.World.Serialization.SceneData;
-using TransformData = Oxygen.Editor.World.Serialization.TransformData;
 
 namespace Oxygen.Editor.World.Tests;
 
 /// <summary>
-/// Verifies <see cref="SceneNode"/> creation, transform component invariants, name validation, and hierarchy path queries.
+/// Verifies <see cref="SceneNode"/> creation, required components, name validation, and hierarchy path queries.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -22,30 +22,77 @@ namespace Oxygen.Editor.World.Tests;
 public sealed class SceneNodeTests
 {
     [TestMethod]
-    public void Constructor_InitializesNodeWithSingleLockedTransformComponent()
+    public void Constructor_HoldsExactlyTheRequiredComponentsInOrder()
     {
         var scene = new Scene { Name = "Scene" };
 
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene, "Node");
 
-        _ = node.Components.Should().ContainSingle();
-        var transform = node.Components[0] as TransformComponent;
-        _ = transform.Should().NotBeNull();
-        _ = transform!.IsLocked.Should().BeTrue();
-        _ = transform.Node.Should().BeSameAs(node);
+        _ = node.Components.Select(static component => component.GetType()).Should().Equal(
+            typeof(MetadataComponent),
+            typeof(HierarchyComponent),
+            typeof(TransformComponent),
+            typeof(NodeFlagsComponent));
+        _ = node.Components[0].Should().BeSameAs(node.Metadata);
+        _ = node.Components[1].Should().BeSameAs(node.Hierarchy);
+        _ = node.Components[2].Should().BeSameAs(node.Transform);
+        _ = node.Components[3].Should().BeSameAs(node.Flags);
+        _ = node.Components.Should().OnlyContain(component => component.Node == node && component.IsLocked);
+        _ = node.Metadata.Name.Should().Be("Node");
     }
 
     [TestMethod]
-    public void Hydrate_WhenMissingTransformComponent_ThrowsJsonException()
+    [DataRow("")]
+    [DataRow("  ")]
+    public void Constructor_WhenNameIsEmptyOrWhitespace_ThrowsArgumentException(string name)
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
-        var data = new SceneNodeData
-        {
-            Id = node.Id,
-            Name = node.Name,
-            Components = [],
-        };
+
+        var act = () => new SceneNode(scene, name);
+
+        _ = act.Should().Throw<ArgumentException>();
+    }
+
+    [TestMethod]
+    [DataRow(typeof(MetadataData))]
+    [DataRow(typeof(HierarchyData))]
+    [DataRow(typeof(TransformData))]
+    [DataRow(typeof(NodeFlagsData))]
+    public void CreateAndHydrate_WhenARequiredComponentIsMissing_ThrowsJsonException(Type missing)
+    {
+        var scene = new Scene { Name = "Scene" };
+        var components = SceneTestSupport.RequiredComponents("Node");
+        _ = components.RemoveAll(component => component.GetType() == missing);
+        var data = new SceneNodeData { Id = NodeId.New(), Components = components };
+
+        var act = () => SceneNode.CreateAndHydrate(scene, data);
+
+        _ = act.Should().Throw<JsonException>();
+    }
+
+    [TestMethod]
+    [DataRow(typeof(MetadataData))]
+    [DataRow(typeof(HierarchyData))]
+    [DataRow(typeof(TransformData))]
+    [DataRow(typeof(NodeFlagsData))]
+    public void CreateAndHydrate_WhenARequiredComponentIsRepeated_ThrowsJsonException(Type repeated)
+    {
+        var scene = new Scene { Name = "Scene" };
+        var components = SceneTestSupport.RequiredComponents("Node");
+        components.Add(components.Single(component => component.GetType() == repeated) with { Id = ComponentId.New() });
+        var data = new SceneNodeData { Id = NodeId.New(), Components = components };
+
+        var act = () => SceneNode.CreateAndHydrate(scene, data);
+
+        _ = act.Should().Throw<JsonException>();
+    }
+
+    [TestMethod]
+    public void Hydrate_WhenRequiredComponentsAreMissing_ThrowsJsonException()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var node = new SceneNode(scene, "Node");
+        var data = new SceneNodeData { Id = node.Id, Components = [] };
 
         Action act = () => node.Hydrate(data);
 
@@ -53,35 +100,31 @@ public sealed class SceneNodeTests
     }
 
     [TestMethod]
-    public void Hydrate_WhenMultipleTransformComponents_ThrowsJsonException()
+    public void Dehydrate_WritesTheHierarchyLastAndNestsChildrenInIt()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
-        var data = new SceneNodeData
-        {
-            Id = node.Id,
-            Name = node.Name,
-            Components =
-            [
-                new TransformData { Name = "Transform 1" },
-                new TransformData { Name = "Transform 2" },
-            ],
-        };
+        var parent = new SceneNode(scene, "Parent");
+        var child = new SceneNode(scene, "Child");
+        _ = parent.AddComponent(new PerspectiveCamera { Name = "Camera" });
+        parent.Hierarchy.AddChild(child);
 
-        Action act = () => node.Hydrate(data);
+        var parentData = parent.Dehydrate();
+        var childData = child.Dehydrate();
 
-        _ = act.Should().Throw<JsonException>();
+        var hierarchy = parentData.Components[^1].Should().BeOfType<HierarchyData>().Subject;
+        _ = parentData.Components.OfType<HierarchyData>().Should().ContainSingle();
+        _ = hierarchy.Children.Should().ContainSingle().Which.Id.Should().Be(child.Id);
+        _ = childData.Components[^1].Should().BeOfType<HierarchyData>().Which.Children.Should().BeNull();
     }
-
     [TestMethod]
     public void HierarchyPath_OnRootAndNestedNodes_ReturnsPathSeparatedBySlash()
     {
         var scene = new Scene { Name = "Scene" };
-        var level = new SceneNode(scene) { Name = "Level" };
-        var doors = new SceneNode(scene) { Name = "Doors" };
-        var front = new SceneNode(scene) { Name = "Front" };
-        level.AddChild(doors);
-        doors.AddChild(front);
+        var level = new SceneNode(scene, "Level");
+        var doors = new SceneNode(scene, "Doors");
+        var front = new SceneNode(scene, "Front");
+        level.Hierarchy.AddChild(doors);
+        doors.Hierarchy.AddChild(front);
         scene.RootNodes.Add(level);
 
         _ = level.HierarchyPath().Should().Be("Level");
@@ -93,12 +136,12 @@ public sealed class SceneNodeTests
     [DataRow(null)]
     [DataRow("")]
     [DataRow("   ")]
-    public void Name_WhenNullEmptyOrWhitespace_ThrowsArgumentException(string? invalidName)
+    public void MetadataName_WhenNullEmptyOrWhitespace_ThrowsArgumentException(string? invalidName)
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene, "Node");
 
-        Action act = () => node.Name = invalidName!;
+        Action act = () => node.Metadata.Name = invalidName!;
 
         _ = act.Should().Throw<ArgumentException>();
     }
@@ -107,66 +150,49 @@ public sealed class SceneNodeTests
     public void Dehydrate_Includes_Nested_Children()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child = new SceneNode(scene) { Name = "Child" };
+        var root = new SceneNode(scene, "Root");
+        var child = new SceneNode(scene, "Child");
 
-        root.AddChild(child);
+        root.Hierarchy.AddChild(child);
         scene.RootNodes.Add(root);
 
         var dto = scene.Dehydrate();
 
         // Verify DTO hierarchy captures nested nodes
-        _ = dto.RootNodes.Should().Contain(r => string.Equals(r.Name, "Root", StringComparison.Ordinal));
-        var rootDto = dto.RootNodes.Single(r => string.Equals(r.Name, "Root", StringComparison.Ordinal));
-        _ = rootDto.Children.Should().Contain(c => string.Equals(c.Name, "Child", StringComparison.Ordinal));
+        _ = dto.RootNodes.Should().Contain(r => r.Name == "Root");
+        var rootDto = dto.RootNodes.Single(r => r.Name == "Root");
+        _ = rootDto.Children.Should().Contain(c => c.Name == "Child");
     }
 
     [TestMethod]
     public void Hydrate_Populates_Nested_Hierarchy()
     {
         // Arrange: construct nested DTO programmatically
+        var childData = SceneTestSupport.NodeData("Child") with { Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000052")) };
+        var rootData = new SceneNodeData
+        {
+            Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000051")),
+            Components = SceneTestSupport.RequiredComponents("Root", [childData]),
+        };
         var data = new SceneData
         {
             Id = SceneId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000050")),
             Name = "Scene",
-            RootNodes = [
-                new()
-                {
-                    Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000051")),
-                    Name = "Root",
-                    Components =
-                    [
-                        new TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
-                    ],
-                    Children =
-                    [
-                        new()
-                        {
-                            Id = NodeId.FromValue(Guid.Parse("00000000-0000-0000-0000-000000000052")),
-                            Name = "Child",
-                            Components =
-                            [
-                                new TransformData { Name = "Transform", Position = default, Rotation = default, Scale = default },
-                            ],
-                        },
-                    ],
-                },
-            ],
+            RootNodes = [rootData],
         };
 
         var scene = new Scene { Name = data.Name, Id = data.Id };
         scene.Hydrate(data);
 
-        _ = scene.Should().NotBeNull();
         _ = scene.RootNodes.Should().ContainSingle();
 
         var root = scene.RootNodes[0];
-        _ = root.Name.Should().Be("Root");
-        _ = root.Children.Should().ContainSingle();
+        _ = root.Metadata.Name.Should().Be("Root");
+        _ = root.Hierarchy.Children.Should().ContainSingle();
 
-        var child = root.Children[0];
-        _ = child.Name.Should().Be("Child");
-        _ = child.Parent.Should().BeSameAs(root);
+        var child = root.Hierarchy.Children[0];
+        _ = child.Metadata.Name.Should().Be("Child");
+        _ = child.Hierarchy.Parent.Should().BeSameAs(root);
         _ = child.Scene.Should().BeSameAs(scene);
     }
 }

@@ -121,7 +121,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     {
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
         host.ViewModel.SelectDisplayedItem(host.Adapter, host.ViewModel.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
-        host.Node.IsVisible = false;
+        host.Node.Flags.IsVisible = false;
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = host.Adapter.IsSelected.Should().BeTrue();
         AssertSlot(Button(host.Actions, "EyeButton"), suppressed: false, hovered: false);
@@ -146,7 +146,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         using var host = await CreateRowHostAsync().ConfigureAwait(true);
         host.Interaction.SetLocked(host.Node.Id, locked);
         host.ViewModel.SelectDisplayedItem(host.SecondaryAdapter, host.ViewModel.ShownItems.ToArray(), isControlDown: false, isShiftDown: false);
-        var authoredVisibility = host.Node.IsVisible;
+        var authoredVisibility = host.Node.Flags.IsVisible;
         host.Actions.SetRowHovered(hovered: true);
         await InvokeEyeAsync(host).ConfigureAwait(true);
 
@@ -157,7 +157,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
         _ = host.SecondaryAdapter.IsSelected.Should().BeTrue();
         _ = host.TestScene.Document.History.UndoStack.Should().ContainSingle("the real command owner records one hide operation");
         _ = host.TestScene.Document.IsDirty.Should().BeFalse();
-        _ = host.Node.IsVisible.Should().Be(authoredVisibility);
+        _ = host.Node.Flags.IsVisible.Should().Be(authoredVisibility);
         AssertSlot(Button(host.Actions, "LockButton"), locked, hovered: true);
 
         await host.TestScene.Document.History.UndoAsync().ConfigureAwait(true);
@@ -462,10 +462,10 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
             testScene = TestScenes.Open(RowScene(), interaction);
             var scene = testScene.Scene;
             var node = scene.RootNodes[0];
-            var secondaryNode = new SceneNode(scene) { Name = "Secondary" };
-            var childNode = new SceneNode(scene) { Name = "Nested child" };
+            var secondaryNode = new SceneNode(scene, "Secondary");
+            var childNode = new SceneNode(scene, "Nested child");
             scene.RootNodes.Add(secondaryNode);
-            node.AddChild(childNode);
+            node.Hierarchy.AddChild(childNode);
             session = new TestSession(testScene.Project);
             viewModel = new SceneExplorerViewModel(
                 Mock.Of<IRouter>(),
@@ -502,7 +502,7 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     private static Scene RowScene()
     {
         var scene = new Scene { Name = "UI Test Scene" };
-        var node = new SceneNode(scene) { Name = "Camera and sun" };
+        var node = new SceneNode(scene, "Camera and sun");
         _ = node.AddComponent(new PerspectiveCamera { Name = "Camera", NearPlane = 0.1f, FarPlane = 1000 });
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun" });
         scene.RootNodes.Add(node);

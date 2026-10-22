@@ -846,6 +846,24 @@
           "x-editor-group": "Rendering",
           "x-editor-order": 20,
           "x-editor-renderer": "toggle"
+        },
+        "static": {
+          "x-editor-label": "Static",
+          "x-editor-group": "Rendering",
+          "x-editor-order": 30,
+          "x-editor-renderer": "toggle"
+        },
+        "ray_cast_selectable": {
+          "x-editor-label": "Ray-Cast Selectable",
+          "x-editor-group": "Rendering",
+          "x-editor-order": 40,
+          "x-editor-renderer": "toggle"
+        },
+        "ignore_parent_transform": {
+          "x-editor-label": "Ignore Parent Transform",
+          "x-editor-group": "Transform",
+          "x-editor-order": 0,
+          "x-editor-renderer": "toggle"
         }
       }
     },

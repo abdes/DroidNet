@@ -25,7 +25,7 @@ internal static class SceneTestData
 
     internal static void MakeGeometryOnly(SceneAuthoringFixture fixture)
     {
-        foreach (var component in fixture.Node.Components.Where(component => component is not TransformComponent).ToArray())
+        foreach (var component in fixture.Node.Components.Where(static component => !component.IsLocked).ToArray())
         {
             _ = fixture.Node.RemoveComponent(component);
         }
@@ -41,10 +41,7 @@ internal static class SceneTestData
 
     internal static SceneNode AddNumericNode(Scene scene, float value)
     {
-        var node = new SceneNode(scene)
-        {
-            Name = "Other target",
-        };
+        var node = new SceneNode(scene, "Other target");
         _ = node.AddComponent(new PerspectiveCamera { Name = "Camera", FieldOfView = value });
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Light", IntensityLux = value });
         scene.RootNodes.Add(node);

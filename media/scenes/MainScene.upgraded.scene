@@ -3,10 +3,9 @@
   "Id": "f47ac10b-58cc-4372-a567-0e02b2c3d479",
   "RootNodes": [
     {
-      "Name": "Player",
       "Id": "550e8400-e29b-41d4-a716-446655440000",
-      "IsActive": true,
       "Components": [
+        { "$type": "Metadata", "Name": "Player" },
         {
           "$type": "Transform",
           "Name": "Transform",
@@ -14,6 +13,7 @@
           "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
           "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
         },
+        { "$type": "NodeFlags", "Name": "Rendering", "IsVisible": true, "IsRayCastingSelectable": true },
         {
           "$type": "GeometryComponent",
           "Name": "PlayerMesh",
@@ -26,14 +26,14 @@
               "OverrideSlots": [ { "$type": "MaterialsSlot", "Material": { "Uri": "asset:///Engine/Generated/Materials/Default" } } ]
             }
           ]
-        }
+        },
+        { "$type": "Hierarchy", "Name": "Hierarchy" }
       ]
     },
     {
-      "Name": "Enemy",
       "Id": "550e8400-e29b-41d4-a716-446655440001",
-      "IsActive": true,
       "Components": [
+        { "$type": "Metadata", "Name": "Enemy" },
         {
           "$type": "Transform",
           "Name": "Transform",
@@ -41,14 +41,15 @@
           "LocalRotation": { "x": 0.0, "y": 0.0, "z": 0.0, "w": 1.0 },
           "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
         },
-        { "$type": "GeometryComponent", "Name": "EnemyMesh", "GeometryUri": "asset:///Engine/Generated/BasicShapes/Sphere" }
+        { "$type": "NodeFlags", "Name": "Rendering", "IsVisible": true, "IsRayCastingSelectable": true },
+        { "$type": "GeometryComponent", "Name": "EnemyMesh", "GeometryUri": "asset:///Engine/Generated/BasicShapes/Sphere" },
+        { "$type": "Hierarchy", "Name": "Hierarchy" }
       ]
     },
     {
-      "Name": "Camera",
       "Id": "550e8400-e29b-41d4-a716-446655440002",
-      "IsActive": true,
       "Components": [
+        { "$type": "Metadata", "Name": "Camera" },
         {
           "$type": "Transform",
           "Name": "Transform",
@@ -56,19 +57,20 @@
           "LocalRotation": { "x": -0.156434, "y": 0.0, "z": 0.0, "w": 0.987688 },
           "LocalScale": { "x": 1.0, "y": 1.0, "z": 1.0 }
         },
+        { "$type": "NodeFlags", "Name": "Rendering", "IsVisible": true, "IsRayCastingSelectable": true },
         {
           "$type": "PerspectiveCamera",
           "Name": "MainCamera",
           "NearPlane": 0.1,
           "FarPlane": 1000.0
-        }
+        },
+        { "$type": "Hierarchy", "Name": "Hierarchy" }
       ]
     },
     {
-      "Name": "Pickup",
       "Id": "d4a76010-0000-0000-0000-000000000010",
-      "IsActive": true,
       "Components": [
+        { "$type": "Metadata", "Name": "Pickup" },
         {
           "$type": "Transform",
           "Name": "Transform",
@@ -76,7 +78,9 @@
           "LocalRotation": { "x": 10.2, "y": 20.3, "z": 0.0, "w": 1.0 },
           "LocalScale": { "x": 2.0, "y": 2.0, "z": 4.0 }
         },
-        { "$type": "GeometryComponent", "Name": "PickupMesh", "GeometryUri": "asset:///Engine/Generated/BasicShapes/Cylinder" }
+        { "$type": "NodeFlags", "Name": "Rendering", "IsVisible": true, "IsRayCastingSelectable": true },
+        { "$type": "GeometryComponent", "Name": "PickupMesh", "GeometryUri": "asset:///Engine/Generated/BasicShapes/Cylinder" },
+        { "$type": "Hierarchy", "Name": "Hierarchy" }
       ]
     }
   ],

@@ -20,7 +20,6 @@ using Oxygen.Editor.Input;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.SceneInspector.Components;
-using Oxygen.Editor.SceneInspector.Components.Rendering;
 using Oxygen.Editor.SceneInspector.Components.Scripting;
 using Oxygen.Editor.SceneInspector.SceneSettings;
 using Oxygen.Editor.Scenes.Authoring;
@@ -61,7 +60,6 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     private readonly DispatcherQueue? dispatcher;
     private readonly InspectorSelectionObserver selectionObserver;
     private readonly SceneSettingsViewModel sceneSettings;
-    private readonly NodeRenderingViewModel renderingEditor;
     private readonly ISceneSelectionService sceneSelectionService;
 
     // The nodes whose property changes refresh the panel's own properties.
@@ -157,7 +155,6 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             session,
             inputSources,
             loggerFactory);
-        this.renderingEditor = new NodeRenderingViewModel(this.AuthoringOf);
 
         // Startup hydrates the authoritative typed context with the nodes: a folder-only selection
         // must initialize as the grouping summary, not as "scene properties".
@@ -253,8 +250,8 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             }
 
             return ReferenceEquals(node, lockOwner)
-                ? $"'{node.Name}' is locked. It remains selectable for inspection, but its properties cannot be changed."
-                : $"'{node.Name}' is protected by locked parent '{lockOwner.Name}'. Its properties cannot be changed.";
+                ? $"'{node.Metadata.Name}' is locked. It remains selectable for inspection, but its properties cannot be changed."
+                : $"'{node.Metadata.Name}' is protected by locked parent '{lockOwner.Metadata.Name}'. Its properties cannot be changed.";
         }
     }
 
@@ -395,7 +392,6 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         }
 
         this.sceneSettings.Dispose();
-        this.renderingEditor.Dispose();
         this.editorInstances.Clear();
         this.boundEditors.Clear();
         this.LogDisposed();
@@ -516,17 +512,15 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
             return result;
         }
 
-        var shown = this.propertyEditorFactories.Where(factory => keysToCheck.Contains(factory.Key)).Select(this.GetOrCreatePropertyEditor).ToList();
+        // All mode stacks the sections in the component list's order.
+        var shown = this.propertyEditorFactories
+            .Where(factory => keysToCheck.Contains(factory.Key))
+            .OrderBy(static factory => ComponentOrder(factory.Key))
+            .ThenBy(static factory => ComponentLabel(factory.Key), StringComparer.Ordinal)
+            .Select(this.GetOrCreatePropertyEditor)
+            .ToList();
         this.LogFiltered(this.propertyEditorFactories.Count, shown.Count);
         result.AddRange(shown);
-
-        // Node rendering flags follow every component section, in the unfiltered view only, and
-        // only for nodes the flags affect.
-        if (this.selectedComponentType is null && NodeRenderingViewModel.AppliesTo(this.items))
-        {
-            result.Add(this.renderingEditor);
-        }
-
         return result;
     }
 
@@ -542,8 +536,6 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
 
         this.sceneSettings.Refresh();
         this.sceneSettings.SetInputEnabled(this.PropertyEditors.Contains(this.sceneSettings));
-        this.renderingEditor.UpdateValues(selection);
-        this.renderingEditor.SetInputEnabled(this.IsEditorInputEnabled(this.renderingEditor));
     }
 
     /// <summary>Raises the change notifications for the selection-kind routing surface.</summary>

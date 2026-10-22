@@ -36,10 +36,10 @@ public sealed class AddComponentTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var light = ComponentId.New();
 
-        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, PointLight(light), index: 1)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, PointLight(light), index: SceneBuilder.RequiredComponentCount)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Node(SampleScene.B).Components.Select(static component => component.Id).Should().Equal(SceneBuilder.TransformId(SampleScene.B), light);
+        _ = fixture.Node(SampleScene.B).Components.Select(static component => component.Id).Should().Equal(SceneBuilder.ComponentIdsOf(SampleScene.B, light));
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.ComponentAdded(SampleScene.B, light));
     }
 
@@ -49,11 +49,11 @@ public sealed class AddComponentTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var light = ComponentId.New();
 
-        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.Mesh, PointLight(light), index: 1)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.Mesh, PointLight(light), index: SceneBuilder.RequiredComponentCount)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
         _ = fixture.Node(SampleScene.Mesh).Components.Select(static component => component.Id)
-            .Should().Equal(SceneBuilder.TransformId(SampleScene.Mesh), light, SampleScene.MeshGeometry);
+            .Should().Equal(SceneBuilder.ComponentIdsOf(SampleScene.Mesh, light, SampleScene.MeshGeometry));
     }
 
     [TestMethod]
@@ -62,8 +62,8 @@ public sealed class AddComponentTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        // B holds only its transform, so 1 appends and 2 is past the end.
-        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, PointLight(ComponentId.New()), index: 2)).ConfigureAwait(false);
+        // B holds only its required components, so their count appends and one more is past the end.
+        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, PointLight(ComponentId.New()), index: SceneBuilder.RequiredComponentCount + 1)).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.PositionOutOfRange, SampleScene.B);
         SceneAssert.Unchanged(fixture, before);
@@ -77,7 +77,7 @@ public sealed class AddComponentTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(row.Node, row.Component, index: 1)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(row.Node, row.Component, index: SceneBuilder.RequiredComponentCount)).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.ComponentDuplicate, row.Node);
         SceneAssert.Unchanged(fixture, before);
@@ -89,7 +89,7 @@ public sealed class AddComponentTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var before = fixture.Snapshot();
 
-        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, PointLight(SceneBuilder.TransformId(SampleScene.B)), index: 1)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, PointLight(SceneBuilder.TransformId(SampleScene.B)), index: SceneBuilder.RequiredComponentCount)).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.ComponentDuplicate, SampleScene.B);
         SceneAssert.Unchanged(fixture, before);
@@ -102,7 +102,7 @@ public sealed class AddComponentTests
         var before = fixture.Snapshot();
         var light = new DirectionalLightData { Name = "Light", AtmosphereSlot = AtmosphereLightSlot.Primary };
 
-        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, light, index: 1)).ConfigureAwait(false);
+        var result = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, light, index: SceneBuilder.RequiredComponentCount)).ConfigureAwait(false);
 
         SceneAssert.Invalid(result, SceneEditCodes.AtmosphereSlotOccupied, SampleScene.B);
         SceneAssert.Unchanged(fixture, before);

@@ -13,31 +13,32 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.Scenes.Nodes;
 
 /// <summary>Builds the edits that add components, with the defaults and consequences each kind brings.</summary>
+/// <remarks>The kinds are the scene schema's component kinds.</remarks>
 public static class SceneComponents
 {
     /// <summary>The kind of a geometry component, a cube until another geometry is chosen.</summary>
-    public const string Geometry = "GeometryComponent";
+    public const string Geometry = SceneSchema.Geometry.Kind;
 
     /// <summary>The kind of a perspective camera.</summary>
-    public const string PerspectiveCamera = "PerspectiveCamera";
+    public const string PerspectiveCamera = SceneSchema.PerspectiveCamera.Kind;
 
     /// <summary>The kind of an orthographic camera.</summary>
-    public const string OrthographicCamera = "OrthographicCamera";
+    public const string OrthographicCamera = SceneSchema.OrthographicCamera.Kind;
 
     /// <summary>The kind of a directional light.</summary>
-    public const string DirectionalLight = "DirectionalLight";
+    public const string DirectionalLight = SceneSchema.DirectionalLight.Kind;
 
     /// <summary>The kind of a point light.</summary>
-    public const string PointLight = "PointLight";
+    public const string PointLight = SceneSchema.PointLight.Kind;
 
     /// <summary>The kind of a spot light.</summary>
-    public const string SpotLight = "SpotLight";
+    public const string SpotLight = SceneSchema.SpotLight.Kind;
 
     /// <summary>The kind of a local fog volume.</summary>
-    public const string LocalFogVolume = "LocalFogVolume";
+    public const string LocalFogVolume = SceneSchema.LocalFogVolume.Kind;
 
     /// <summary>The kind of a Scripting component, with one empty script slot.</summary>
-    public const string Scripting = "Scripting";
+    public const string Scripting = SceneSchema.Scripting.Kind;
 
     /// <summary>Builds the edit for the inspector's "add component": the component, then the edits its kind requires.</summary>
     /// <param name="authoring">The scene's authoring, to read the node from.</param>

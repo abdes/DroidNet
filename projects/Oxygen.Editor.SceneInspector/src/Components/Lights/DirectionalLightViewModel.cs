@@ -601,7 +601,7 @@ public sealed partial class DirectionalLightViewModel : ComponentPropertyEditor,
 
     private void UpdateSunDirectionValues(IReadOnlyList<SceneNode> nodes)
     {
-        if (nodes.FirstOrDefault(static node => node.Components.OfType<TransformComponent>().Any()) is not { } node)
+        if (nodes.FirstOrDefault() is not { } node)
         {
             this.SunAzimuth = 0f;
             this.SunElevation = 0f;

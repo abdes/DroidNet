@@ -66,7 +66,7 @@ internal sealed class RuntimeProblemNodesTests
     private static async Task<Document> OpenSceneAsync(TestSceneDocuments documents)
     {
         var built = new Scene { Name = "Test Scene" };
-        built.RootNodes.Add(new SceneNode(built) { Name = "Cube" });
+        built.RootNodes.Add(new SceneNode(built, "Cube"));
         return await documents.OpenAsync(built.Dehydrate()).ConfigureAwait(false);
     }
 

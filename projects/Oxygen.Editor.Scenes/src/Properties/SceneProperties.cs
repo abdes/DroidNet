@@ -22,7 +22,7 @@ public static class SceneProperties
         new LocalLightRules(SceneSchema.PointLight.Kind),
         new LocalLightRules(SceneSchema.SpotLight.Kind),
         new LocalFogVolumeRules(),
-        new NodeRenderingRules(),
+        new NodeFlagsRules(),
         new SceneEnvironmentRules(),
     }.ToFrozenDictionary(static rules => rules.Kind, StringComparer.Ordinal);
 
@@ -51,8 +51,8 @@ public static class SceneProperties
     /// <summary>Gets the local fog volume descriptors.</summary>
     public static LocalFogVolumeDescriptors LocalFogVolume { get; } = LocalFogVolumeDescriptors.Build();
 
-    /// <summary>Gets the node rendering flag descriptors.</summary>
-    public static NodeRenderingDescriptors NodeRendering { get; } = NodeRenderingDescriptors.Build();
+    /// <summary>Gets the node-flags descriptors.</summary>
+    public static NodeFlagsDescriptors NodeFlags { get; } = NodeFlagsDescriptors.Build();
 
     /// <summary>Gets the scene environment descriptors.</summary>
     public static SceneEnvironmentDescriptors SceneEnvironment { get; } = SceneEnvironmentDescriptors.Build();

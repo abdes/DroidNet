@@ -10,7 +10,7 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Components;
 
-/// <summary>Removes a component from a node; the transform cannot be removed.</summary>
+/// <summary>Removes an optional component from a node; the required components cannot be removed.</summary>
 /// <param name="Node">The node.</param>
 /// <param name="Component">The component.</param>
 public sealed record RemoveComponent(NodeId Node, ComponentId Component) : ISceneEdit
@@ -28,8 +28,8 @@ public sealed record RemoveComponent(NodeId Node, ComponentId Component) : IScen
         return this.Find(scope) switch
         {
             null => SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.ComponentMissing, "The component no longer exists.", this.Node)),
-            { } component when component.IsLocked || component is TransformComponent
-                => SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.ComponentNotRemovable, "The transform component is locked and cannot be removed.", this.Node)),
+            { IsLocked: true }
+                => SceneEditValidation.Invalid(SceneDiagnostic.Error(SceneEditCodes.ComponentNotRemovable, "A required component cannot be removed.", this.Node)),
             _ => SceneEditValidation.Valid,
         };
     }

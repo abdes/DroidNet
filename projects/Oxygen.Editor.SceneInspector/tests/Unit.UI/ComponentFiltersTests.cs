@@ -84,8 +84,8 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         var original = model.PropertyEditors.ToArray();
         var version = fixture.Document.History.Position;
         _ = original.Select(static editor => editor.GetType()).Should().Equal(
-            [typeof(TransformViewModel), typeof(GeometryViewModel), typeof(NodeRenderingViewModel)],
-            "the node Rendering section follows every component section in the unfiltered view");
+            [typeof(TransformViewModel), typeof(NodeRenderingViewModel), typeof(GeometryViewModel)],
+            "the node Rendering section is listed right after Transform in the unfiltered view");
         var geometry = ComponentButton(view, typeof(GeometryComponent));
         _ = ((InspectorComponentFilter)geometry.Tag).Label.Should().Be("Geometry");
         Toggle(geometry);
@@ -121,10 +121,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
     {
         using var fixture = new SceneAuthoringFixture();
         using var model = fixture.CreateInspectorHost("Camera", realizeViews: true);
-        var second = new SceneNode(fixture.Scene)
-        {
-            Name = "Second",
-        };
+        var second = new SceneNode(fixture.Scene, "Second");
         _ = second.AddComponent(new PerspectiveCamera { Name = "Camera", FieldOfView = 80 });
         fixture.Scene.RootNodes.Add(second);
         model.SelectComponentFilter(typeof(DirectionalLightComponent));
@@ -248,10 +245,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         {
             Name = "Other scene",
         };
-        var node = new SceneNode(scene)
-        {
-            Name = "Other node",
-        };
+        var node = new SceneNode(scene, "Other node");
         _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") });
         scene.RootNodes.Add(node);
         using var metadata = TestScenes.Open(scene);
@@ -263,7 +257,7 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = model.IsAllComponentsSelected.Should().BeTrue();
         _ = model.SelectedNode.Should().BeSameAs(node);
         _ = model.PropertyEditors.Select(static editor => editor.GetType()).Should().Equal(
-            typeof(TransformViewModel), typeof(GeometryViewModel), typeof(NodeRenderingViewModel));
+            typeof(TransformViewModel), typeof(NodeRenderingViewModel), typeof(GeometryViewModel));
         _ = model.ComponentFilters.Should().NotContain(option => option.ComponentType == typeof(PerspectiveCamera));
         _ = metadata.Document.IsDirty.Should().BeFalse();
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
@@ -324,15 +318,52 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         var remove = (Button)header.FindName("DeleteComponentButton");
         _ = remove.IsEnabled.Should().BeTrue();
         _ = header.ViewModel!.SelectedComponent.Should().BeSameAs(component);
-        var other = new SceneNode(fixture.Scene)
-        {
-            Name = "Other node",
-        };
+        var other = new SceneNode(fixture.Scene, "Other node");
         fixture.Scene.RootNodes.Add(other);
         header.Node = other;
         _ = header.ViewModel.SelectedComponent.Should().BeNull();
         _ = header.DeleteSelectedComponent().Should().BeFalse();
         _ = fixture.Node.Components.Should().Contain(component);
+        _ = fixture.Document.History.UndoStack.Should().BeEmpty();
+    });
+
+    /// <summary>A node with no other components lists Transform then Rendering, and never its name or hierarchy.</summary>
+    /// <returns>The asynchronous component list regression.</returns>
+    [TestMethod]
+    public Task GroupNode_ListsTransformThenRendering_AndNeverMetadataOrHierarchy() => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture();
+        using var model = fixture.CreateInspectorHost("Transform", realizeViews: true);
+        var group = new SceneNode(fixture.Scene, "Group");
+        fixture.Scene.RootNodes.Add(group);
+        fixture.Select(group);
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        _ = model.ComponentFilters.Select(static option => option.ComponentType).Should().Equal(typeof(TransformComponent), typeof(NodeFlagsComponent));
+        _ = model.ComponentFilters.Should().NotContain(option => option.ComponentType == typeof(MetadataComponent) || option.ComponentType == typeof(HierarchyComponent));
+        _ = model.PropertyEditors.Select(static editor => editor.GetType()).Should().Equal(typeof(TransformViewModel), typeof(NodeRenderingViewModel));
+    });
+
+    /// <summary>The Rendering component is locked: the node details offer no removal for it.</summary>
+    /// <returns>The asynchronous header regression.</returns>
+    [TestMethod]
+    public Task RenderingComponent_IsLocked_AndCannotBeRemoved() => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture();
+        using var model = fixture.CreateInspectorHost("Transform");
+        var header = new SceneNodeDetailsView
+        {
+            NodeEdits = model,
+            Node = fixture.Node,
+            SelectedComponent = fixture.Node.Flags,
+            IsAllComponentsSelected = false,
+        };
+        await LoadTestContentAsync(header).ConfigureAwait(true);
+
+        _ = fixture.Node.Flags.IsLocked.Should().BeTrue();
+        _ = ((Button)header.FindName("DeleteComponentButton")).IsEnabled.Should().BeFalse();
+        _ = header.DeleteSelectedComponent().Should().BeFalse();
+        _ = fixture.Node.Components.Should().Contain(fixture.Node.Flags);
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
     });
 }

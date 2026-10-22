@@ -30,7 +30,7 @@ public sealed partial class SceneDescriptorGenerator
     {
         if (scene.StartingCamera is { } authored && scene.EffectiveStartingCamera is null)
         {
-            var name = scene.AllNodes.FirstOrDefault(node => node.Id == authored)?.Name;
+            var name = scene.AllNodes.FirstOrDefault(node => node.Id == authored)?.Metadata.Name;
             site.Report(
                 SceneStartingPropertyPaths.StartingCamera,
                 name is null

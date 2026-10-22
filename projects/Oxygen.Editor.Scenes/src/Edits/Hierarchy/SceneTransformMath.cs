@@ -15,7 +15,7 @@ namespace Oxygen.Editor.Scenes.Edits.Hierarchy;
 /// The composition follows the editor's established convention (see
 /// <see cref="Nodes.DirectionalLightOrientation"/>): a child's world transform is its local
 /// transform applied first, then its ancestors'. For row-vector matrices this is
-/// <c>world = local * parentWorld</c>; a node with <see cref="SceneNode.IgnoreParentTransform"/>
+/// <c>world = local * parentWorld</c>; a node with <see cref="NodeFlagsComponent.IgnoreParentTransform"/>
 /// set (or without a parent) has <c>world = local</c>. Local matrices are composed as
 /// <c>scale * rotation * translation</c>.
 /// </remarks>
@@ -31,14 +31,13 @@ internal static class SceneTransformMath
            * Matrix4x4.CreateFromQuaternion(transform.LocalRotation)
            * Matrix4x4.CreateTranslation(transform.LocalPosition);
 
-    /// <summary>Computes the world transform of a node, honouring <see cref="SceneNode.IgnoreParentTransform"/>.</summary>
+    /// <summary>Computes the world transform of a node, honouring <see cref="NodeFlagsComponent.IgnoreParentTransform"/>.</summary>
     /// <param name="node">The node whose world transform is computed.</param>
     /// <returns>The node's local matrix composed with its ancestors', or the local matrix alone for a root or a node that ignores its parent.</returns>
     internal static Matrix4x4 WorldMatrix(SceneNode node)
     {
-        var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
-        var local = transform is null ? Matrix4x4.Identity : LocalMatrix(transform);
-        return node.Parent is null || node.IgnoreParentTransform ? local : local * WorldMatrix(node.Parent);
+        var local = LocalMatrix(node.Transform);
+        return node.Hierarchy.Parent is { } parent && !node.Flags.IgnoreParentTransform ? local * WorldMatrix(parent) : local;
     }
 
     /// <summary>
@@ -72,7 +71,7 @@ internal static class SceneTransformMath
         // destination parent after the move, so its local must stay equal to its world.
         // Dividing by the new parent's world here would shift it (e.g. world X=0 under a
         // parent at X=10 would become X=-10).
-        if (node.IgnoreParentTransform)
+        if (node.Flags.IgnoreParentTransform)
         {
             return TryDecompose(world, out position, out rotation, out scale);
         }

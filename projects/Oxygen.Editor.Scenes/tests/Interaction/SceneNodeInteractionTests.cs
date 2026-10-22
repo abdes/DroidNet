@@ -54,11 +54,11 @@ public sealed partial class SceneNodeInteractionTests
     {
         var project = TestProject.Create(new MockFileSystem()).Context;
         var scene = CreateScene();
-        var parent = new SceneNode(scene) { Name = "Locked Parent" };
-        var child = new SceneNode(scene) { Name = "Child" };
-        parent.AddChild(child);
+        var parent = new SceneNode(scene, "Locked Parent");
+        var child = new SceneNode(scene, "Child");
+        parent.Hierarchy.AddChild(child);
         scene.RootNodes.Add(parent);
-        var otherSceneNode = new SceneNode(CreateScene()) { Name = "Other Scene Node" };
+        var otherSceneNode = new SceneNode(CreateScene(), "Other Scene Node");
 
         var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
         var service = new SceneNodeInteraction(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());

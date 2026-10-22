@@ -243,7 +243,7 @@ public sealed partial class ScriptingViewModel : ComponentPropertyEditor, IDispo
         }
 
         var terms = query.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
-        return scene.AllNodes.Select(static candidate => new ScriptNodeChoice(candidate.Id, candidate.Name, candidate.HierarchyPath()))
+        return scene.AllNodes.Select(static candidate => new ScriptNodeChoice(candidate.Id, candidate.Metadata.Name, candidate.HierarchyPath()))
             .Where(choice => terms.All(term => choice.Path.Contains(term, StringComparison.OrdinalIgnoreCase)));
     }
 

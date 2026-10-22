@@ -28,7 +28,7 @@ public sealed class Vector4SceneSerializationTests
     public async Task DirectionalCascadeDistancesSurviveTheSceneJsonRoundTrip()
     {
         var scene = new Scene { Name = "Cascade serialization" };
-        var node = new SceneNode(scene) { Name = "Sun" };
+        var node = new SceneNode(scene, "Sun");
         var expected = new Vector4(16, 48, 128, 256);
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun", SplitMode = DirectionalCsmSplitMode.ManualDistances, CascadeDistances = expected });
         scene.RootNodes.Add(node);

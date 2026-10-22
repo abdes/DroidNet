@@ -16,6 +16,10 @@ using Oxygen.Editor.World.Utils;
 namespace Oxygen.Editor.SceneInspector.Components.Transform;
 
 /// <summary>Owns transform values and mixed/diagnostic presentation; the edit controller owns gesture lifetime.</summary>
+/// <remarks>
+/// The section also edits Ignore Parent Transform, a node flag held by the node-flags component, since it decides how
+/// the transform composes with the parent's.
+/// </remarks>
 public sealed partial class TransformViewModel : ComponentPropertyEditor, IDisposable
 {
     private readonly InspectorFieldDiagnostics diagnostics = new();
@@ -29,6 +33,10 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     private readonly NumberBinding<float> scaleXBinding = new(SceneProperties.Transform.ScaleXDescriptor);
     private readonly NumberBinding<float> scaleYBinding = new(SceneProperties.Transform.ScaleYDescriptor);
     private readonly NumberBinding<float> scaleZBinding = new(SceneProperties.Transform.ScaleZDescriptor);
+    private readonly PropertyBinding<bool> ignoreParentTransformBinding = new(SceneProperties.NodeFlags.IgnoreParentTransformDescriptor);
+    private readonly InspectorEditSessionCoordinator? flagEdits;
+    private readonly InspectorBindingRegistration<bool> ignoreParentTransformRegistration;
+    private ICollection<SceneNode>? selectedItems;
     private bool isApplyingEditorChanges;
     private bool disposed;
 
@@ -41,6 +49,17 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     {
         this.LoggerFactory = loggerFactory;
         this.controller = new(loggerFactory, authoringProvider ?? (static () => null), () => this.IsInputEnabled && !this.disposed, this.UpdateValues, this.diagnostics);
+        if (authoringProvider is not null)
+        {
+            this.flagEdits = new(authoringProvider, "Edit Transform", this.RefreshFlagValues);
+        }
+
+        this.ignoreParentTransformRegistration = new(
+            this.ignoreParentTransformBinding,
+            this.flagEdits,
+            () => this.IsInputEnabled && !this.disposed,
+            this.RefreshFlagValues,
+            () => this.OnPropertyChanged(nameof(this.IgnoreParentTransform)));
     }
 
     [ObservableProperty]
@@ -97,6 +116,13 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     [ObservableProperty]
     public partial bool ScaleZIsIndeterminate { get; set; }
 
+    /// <summary>Gets or sets a value indicating whether the node's world transform ignores its parent's.</summary>
+    public bool IgnoreParentTransform
+    {
+        get => this.ignoreParentTransformBinding.Value;
+        set => InspectorBindingRequests.Request(this.ignoreParentTransformBinding, value);
+    }
+
     /// <summary>Gets the scoped factory used by numeric controls.</summary>
     public ILoggerFactory? LoggerFactory { get; }
 
@@ -142,8 +168,8 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     /// <summary>Gets existing scale metadata.</summary>
     public InspectorFieldState ScaleProperty { get; } = new() { Name = "Scale" };
 
-    /// <summary>Gets completion of controller-owned in-flight requests.</summary>
-    internal Task PendingEdits => this.controller.PendingEdits;
+    /// <summary>Gets completion of controller-owned in-flight requests and of submitted flag edits.</summary>
+    internal Task PendingEdits => Task.WhenAll(this.controller.PendingEdits, this.flagEdits?.Pending ?? Task.CompletedTask);
 
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
@@ -166,6 +192,8 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
         {
             this.isApplyingEditorChanges = false;
         }
+
+        this.UpdateFlagValues(items);
     }
 
     /// <inheritdoc />
@@ -173,6 +201,8 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
     {
         this.disposed = true;
         this.controller.Dispose();
+        this.ignoreParentTransformRegistration.Dispose();
+        this.flagEdits?.Dispose();
     }
 
     /// <summary>Begins a captured-target component gesture.</summary>
@@ -222,10 +252,27 @@ public sealed partial class TransformViewModel : ComponentPropertyEditor, IDispo
         }
     }
 
+    private void UpdateFlagValues(ICollection<SceneNode> items)
+    {
+        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Flags);
+        var nodes = targets.Keys.ToArray();
+        this.flagEdits?.Bind(nodes);
+        this.selectedItems = items;
+        this.ignoreParentTransformRegistration.Refresh(nodes, id => targets.GetValueOrDefault(id));
+    }
+
+    private void RefreshFlagValues()
+    {
+        if (this.selectedItems is { } items)
+        {
+            this.UpdateFlagValues(items);
+        }
+    }
+
     private void UpdateBindingValue(NumberBinding<float> binding, ICollection<SceneNode> items, Action<float> setValue, Action<bool> setMixed)
     {
         var nodes = items.Select(static node => node.Id).ToArray();
-        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Components.OfType<TransformComponent>().FirstOrDefault());
+        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Transform);
         this.RefreshSourceFeedback(binding, targets);
         binding.UpdateFromModel(nodes, id => targets.GetValueOrDefault(id));
         var value = binding.HasValue ? binding.Value : 0;

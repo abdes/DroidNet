@@ -23,6 +23,7 @@ using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.LivePreview.Assets;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.TestSupport;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 using static DroidNet.Tests.UiTestHosting;
@@ -52,7 +53,7 @@ public sealed partial class CatalogWorkloadBenchmarks : DroidNet.Tests.VisualUse
         await fixture.InitializeAsync(timeout.Token, mountPublished: true).ConfigureAwait(true);
         await fixture.RefreshCookedRootsAsync().WaitAsync(timeout.Token).ConfigureAwait(true);
         _ = fixture.Runtime.ContentStatus.State.Should().Be(RuntimeContentState.Mounted);
-        var geometryNodes = fixture.Source.RootNodes.SelectMany(static node => node.Descendants().Prepend(node)).Where(static node => node.Components.OfType<GeometryComponent>().Any()).ToArray();
+        var geometryNodes = fixture.Source.RootNodes.SelectMany(static node => node.DescendantsAndSelf()).Where(static node => node.Components.OfType<GeometryComponent>().Any()).ToArray();
         _ = geometryNodes.Should().HaveCount(98);
         ulong triangles = 0;
         foreach (var node in geometryNodes)

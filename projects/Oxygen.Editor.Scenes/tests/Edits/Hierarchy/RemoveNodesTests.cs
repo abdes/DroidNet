@@ -63,7 +63,7 @@ public sealed class RemoveNodesTests
         // Undo restores the descendant once, under its parent, not a second time as a root of its own.
         SceneAssert.Applied(await fixture.Authoring.UndoAsync().ConfigureAwait(false));
         _ = fixture.Scene.AllNodes.Should().HaveCount(nodesBefore);
-        _ = fixture.Node(SampleScene.A1).Parent!.Id.Should().Be(SampleScene.A);
+        _ = fixture.Node(SampleScene.A1).Hierarchy.Parent!.Id.Should().Be(SampleScene.A);
     }
 
     [TestMethod]

@@ -33,7 +33,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "Authored mesh" };
+        var node = new SceneNode(scene, "Authored mesh");
         var geometryUri = AssetPath.Parse("/Content/Geometry/Imported.ogeo");
         var geometry = new GeometryComponent
         {
@@ -63,8 +63,8 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "Cube" };
-        var transform = node.Components.OfType<TransformComponent>().Single();
+        var node = new SceneNode(scene, "Cube");
+        var transform = node.Transform;
         transform.LocalPosition = new Vector3(1.0f, 2.0f, 3.0f);
         var geometry = new GeometryComponent
         {
@@ -114,7 +114,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "TopDown" };
+        var node = new SceneNode(scene, "TopDown");
         _ = node.AddComponent(new OrthographicCamera
         {
             Name = "Camera",
@@ -164,24 +164,18 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        var parent = new SceneNode(scene)
-        {
-            Name = "Parent",
-            IsVisible = !visible,
-            CastsShadows = !castsShadows,
-            ReceivesShadows = !receivesShadows,
-        };
-        var child = new SceneNode(scene)
-        {
-            Name = "Child",
-            IsVisible = visible,
-            CastsShadows = castsShadows,
-            ReceivesShadows = receivesShadows,
-            IsStatic = true,
-            IsRayCastingSelectable = false,
-            IgnoreParentTransform = true,
-        };
-        parent.AddChild(child);
+        var parent = new SceneNode(scene, "Parent");
+        parent.Flags.IsVisible = !visible;
+        parent.Flags.CastsShadows = !castsShadows;
+        parent.Flags.ReceivesShadows = !receivesShadows;
+        var child = new SceneNode(scene, "Child");
+        child.Flags.IsVisible = visible;
+        child.Flags.CastsShadows = castsShadows;
+        child.Flags.ReceivesShadows = receivesShadows;
+        child.Flags.IsStatic = true;
+        child.Flags.IsRayCastingSelectable = false;
+        child.Flags.IgnoreParentTransform = true;
+        parent.Hierarchy.AddChild(child);
         scene.RootNodes.Add(parent);
         var savedScene = await RoundTripSavedSceneAsync(scene).ConfigureAwait(false);
         var generator = new SceneDescriptorGenerator();
@@ -216,7 +210,9 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "Fixture", IsVisible = false, CastsShadows = true };
+        var node = new SceneNode(scene, "Fixture");
+        node.Flags.IsVisible = false;
+        node.Flags.CastsShadows = true;
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
@@ -244,7 +240,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "Cube" };
+        var node = new SceneNode(scene, "Cube");
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
@@ -304,8 +300,8 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        scene.RootNodes.Add(new SceneNode(scene) { Name = "Plain" });
-        var foggy = new SceneNode(scene) { Name = "Foggy" };
+        scene.RootNodes.Add(new SceneNode(scene, "Plain"));
+        var foggy = new SceneNode(scene, "Foggy");
         _ = foggy.AddComponent(new LocalFogVolumeComponent
         {
             Name = "Local Fog Volume",
@@ -337,7 +333,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "Cube" };
+        var node = new SceneNode(scene, "Cube");
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
@@ -383,7 +379,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "Cube" };
+        var node = new SceneNode(scene, "Cube");
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
@@ -415,7 +411,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "AuthoredMesh" };
+        var node = new SceneNode(scene, "AuthoredMesh");
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
@@ -465,7 +461,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
     {
         using var workspace = new DescriptorWorkspace();
         var scene = CreateScene();
-        scene.RootNodes.Add(new SceneNode(scene) { Name = "Root" });
+        scene.RootNodes.Add(new SceneNode(scene, "Root"));
         scene.SetEnvironment(new SceneEnvironmentData { AtmosphereEnabled = atmosphereEnabled });
         var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, CreateScope(workspace), this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -549,7 +545,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        scene.RootNodes.Add(new SceneNode(scene) { Name = "Root" });
+        scene.RootNodes.Add(new SceneNode(scene, "Root"));
         var generator = new SceneDescriptorGenerator();
         foreach (var toneMapper in Enum.GetValues<ToneMappingMode>())
         {
@@ -606,7 +602,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        scene.RootNodes.Add(new SceneNode(scene) { Name = "Root" });
+        scene.RootNodes.Add(new SceneNode(scene, "Root"));
         var generator = new SceneDescriptorGenerator();
         var backdrop = AssetPath.Parse("/Content/Textures/Backdrop.otex");
         var light = AssetPath.Parse("/Content/Textures/Light.otex");
@@ -682,7 +678,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         using var workspace = new DescriptorWorkspace();
         var scope = CreateScope(workspace);
         var scene = CreateScene();
-        scene.RootNodes.Add(new SceneNode(scene) { Name = "Node" });
+        scene.RootNodes.Add(new SceneNode(scene, "Node"));
         scene.SetEnvironment(scene.Environment with { SkyAtmosphere = new SkyAtmosphereEnvironmentData { AerialPerspectiveStartDepthMeters = value } });
         var generator = new SceneDescriptorGenerator();
         var result = await generator.GenerateAsync(scene, scope, this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -709,7 +705,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
             PhysicsSidecars = [AssetPath.Parse("/Content/Physics/Main.opscene")],
             ExtraAssets = [AssetPath.Parse("/Content/Extras/Z.bin"), AssetPath.Parse("/Content/Extras/A.bin"), AssetPath.Parse("/Content/Extras/A.bin")],
         });
-        var node = new SceneNode(scene) { Name = "Authored mesh" };
+        var node = new SceneNode(scene, "Authored mesh");
         var geometryUri = AssetPath.Parse("/Content/Geometry/Imported.ogeo");
         var geometry = new GeometryComponent
         {

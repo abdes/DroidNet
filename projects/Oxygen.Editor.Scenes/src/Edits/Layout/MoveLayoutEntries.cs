@@ -85,7 +85,7 @@ public sealed record MoveLayoutEntries : ISceneEdit
         => (SceneLayout.IsNode(entry) ? [entry.NodeId!.Value] : SceneLayout.ScopeNodes(entry.Children ?? []))
             .Select(scope.FindNode)
             .OfType<SceneNode>()
-            .All(node => node.Parent?.Id == destination);
+            .All(node => node.Hierarchy.Parent?.Id == destination);
 
     private SceneDiagnostic? Check(SceneEditScope scope, IList<ExplorerEntryData> layout)
     {

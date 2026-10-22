@@ -31,7 +31,7 @@ public enum RuntimeComponentId : ushort
     /// <summary>The <c>spot-light</c> component.</summary>
     SpotLight = 6,
 
-    /// <summary>The <c>node-rendering</c> component.</summary>
+    /// <summary>The <c>node-flags</c> component.</summary>
     Node = 7,
 
     /// <summary>The <c>local-fog-volume</c> component.</summary>
@@ -80,6 +80,15 @@ public enum NodeField : ushort
 
     /// <summary>Field 2 of the Node field set.</summary>
     ReceivesShadows = 2,
+
+    /// <summary>Field 3 of the Node field set.</summary>
+    Static = 3,
+
+    /// <summary>Field 4 of the Node field set.</summary>
+    RayCastingSelectable = 4,
+
+    /// <summary>Field 5 of the Node field set.</summary>
+    IgnoreParentTransform = 5,
 }
 
 /// <summary>Component-local field ids of the PerspectiveCamera field set.</summary>

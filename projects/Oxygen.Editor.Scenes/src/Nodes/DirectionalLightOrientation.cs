@@ -35,8 +35,8 @@ public static class DirectionalLightOrientation
         var cosElevation = MathF.Cos(elevation);
         var directionToLight = NormalizeOrFallback(new(MathF.Sin(azimuth) * cosElevation, MathF.Cos(azimuth) * cosElevation, MathF.Sin(elevation)), EngineUp);
         var desired = RotationFromForward(-directionToLight);
-        return node.Parent is null || node.IgnoreParentTransform
-            ? desired : NormalizeOrIdentity(Quaternion.Inverse(WorldRotation(node.Parent)) * desired);
+        return node.Hierarchy.Parent is { } parent && !node.Flags.IgnoreParentTransform
+            ? NormalizeOrIdentity(Quaternion.Inverse(WorldRotation(parent)) * desired) : desired;
     }
 
     /// <summary>Reads world direction using the engine's emitted-forward convention.</summary>
@@ -53,9 +53,9 @@ public static class DirectionalLightOrientation
 
     private static Quaternion WorldRotation(SceneNode node)
     {
-        var local = node.Components.OfType<TransformComponent>().FirstOrDefault()?.LocalRotation ?? Quaternion.Identity;
-        return node.Parent is null || node.IgnoreParentTransform ? NormalizeOrIdentity(local)
-            : NormalizeOrIdentity(WorldRotation(node.Parent) * local);
+        var local = node.Transform.LocalRotation;
+        return node.Hierarchy.Parent is { } parent && !node.Flags.IgnoreParentTransform
+            ? NormalizeOrIdentity(WorldRotation(parent) * local) : NormalizeOrIdentity(local);
     }
 
     private static Quaternion RotationFromForward(Vector3 targetDirection)

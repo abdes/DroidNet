@@ -40,7 +40,7 @@ public sealed partial class SceneDescriptorGenerator
             for (var number = 1; number <= slots.Length; number++)
             {
                 var slot = slots[number - 1];
-                var site = new ScriptBindingSite(node.Id, node.Name, slot.Id, number, [.. slot.Overrides.Keys]);
+                var site = new ScriptBindingSite(node.Id, node.Metadata.Name, slot.Id, number, [.. slot.Overrides.Keys]);
                 var problems = ScriptSlotRules.Check(
                     slot,
                     nodeIndices.ContainsKey,

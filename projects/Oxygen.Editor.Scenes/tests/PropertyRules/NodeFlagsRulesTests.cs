@@ -11,24 +11,31 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.Scenes.Tests.PropertyRules;
 
 /// <summary>
-/// The rendering flags of a node, through <see cref="SetProperties"/>, on <c>Mesh</c>.
+/// The node flags of a node, through <see cref="SetProperties"/>, on <c>Mesh</c>: each flag is written to the node's
+/// flags component, undone and redone.
 /// </summary>
 [TestClass]
-public sealed class NodeRenderingRulesTests
+public sealed class NodeFlagsRulesTests
 {
     [TestMethod]
     [DataRow(0, DisplayName = "IsVisible")]
     [DataRow(1, DisplayName = "CastsShadows")]
     [DataRow(2, DisplayName = "ReceivesShadows")]
+    [DataRow(3, DisplayName = "IsStatic")]
+    [DataRow(4, DisplayName = "IsRayCastingSelectable")]
+    [DataRow(5, DisplayName = "IgnoreParentTransform")]
     public async Task Flag_Toggle_RoundTrips(int flag)
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var mesh = fixture.Node(SampleScene.Mesh);
+        var flags = fixture.Node(SampleScene.Mesh).Flags;
         var (property, current) = flag switch
         {
-            0 => (SceneSchema.Node.IsVisible.Id, mesh.IsVisible),
-            1 => (SceneSchema.Node.CastsShadows.Id, mesh.CastsShadows),
-            _ => (SceneSchema.Node.ReceivesShadows.Id, mesh.ReceivesShadows),
+            0 => (SceneSchema.Node.IsVisible.Id, flags.IsVisible),
+            1 => (SceneSchema.Node.CastsShadows.Id, flags.CastsShadows),
+            2 => (SceneSchema.Node.ReceivesShadows.Id, flags.ReceivesShadows),
+            3 => (SceneSchema.Node.IsStatic.Id, flags.IsStatic),
+            4 => (SceneSchema.Node.IsRayCastingSelectable.Id, flags.IsRayCastingSelectable),
+            _ => (SceneSchema.Node.IgnoreParentTransform.Id, flags.IgnoreParentTransform),
         };
         var edit = new PropertyEdit.Builder().SetRaw(property, !current).Build();
 

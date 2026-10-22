@@ -143,11 +143,11 @@ public sealed class TransformToolsTests
     public void HelperEdits_ChangeOnlyTheDraggedLightValue()
     {
         var scene = new Scene { Name = "Scene" };
-        var spot = new SceneNode(scene) { Name = "Spot" };
+        var spot = new SceneNode(scene, "Spot");
         _ = spot.AddComponent(new SpotLightComponent { Name = "Spot" });
-        var point = new SceneNode(scene) { Name = "Point" };
+        var point = new SceneNode(scene, "Point");
         _ = point.AddComponent(new PointLightComponent { Name = "Point" });
-        var empty = new SceneNode(scene) { Name = "Empty" };
+        var empty = new SceneNode(scene, "Empty");
 
         var outer = SceneEditorViewModel.BuildHelperEdit(spot, RuntimeHelperHandle.OuterCone, 0.6F);
         var range = SceneEditorViewModel.BuildHelperEdit(point, RuntimeHelperHandle.Range, 7.5F);

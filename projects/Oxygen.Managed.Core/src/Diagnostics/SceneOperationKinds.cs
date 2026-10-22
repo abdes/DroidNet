@@ -112,9 +112,9 @@ public static class SceneOperationKinds
     public const string EditSpotLight = "Scene.Component.EditSpotLight";
 
     /// <summary>
-    /// Authored node rendering flags edit (scene visibility, cast and receive shadows).
+    /// Authored node flags edit (scene visibility, shadows, static, ray-cast selection, parent transform).
     /// </summary>
-    public const string EditNodeRendering = "Scene.Node.EditRendering";
+    public const string EditNodeFlags = "Scene.Node.EditFlags";
 
     /// <summary>
     /// Component add.

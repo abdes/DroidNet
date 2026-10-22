@@ -44,11 +44,11 @@ public static class SceneSchema
         public static global::Oxygen.Editor.Schemas.PropertyId<float> ScaleZ { get; } = new(Kind, "/local_scale/2");
     }
 
-    /// <summary>The <c>node-rendering</c> component.</summary>
+    /// <summary>The <c>node-flags</c> component.</summary>
     public static class Node
     {
         /// <summary>The component kind.</summary>
-        public const string Kind = "node-rendering";
+        public const string Kind = "node-flags";
 
         /// <summary>Gets the <c>/visible</c> property.</summary>
         public static global::Oxygen.Editor.Schemas.PropertyId<bool> IsVisible { get; } = new(Kind, "/visible");
@@ -58,6 +58,15 @@ public static class SceneSchema
 
         /// <summary>Gets the <c>/receives_shadows</c> property.</summary>
         public static global::Oxygen.Editor.Schemas.PropertyId<bool> ReceivesShadows { get; } = new(Kind, "/receives_shadows");
+
+        /// <summary>Gets the <c>/static</c> property.</summary>
+        public static global::Oxygen.Editor.Schemas.PropertyId<bool> IsStatic { get; } = new(Kind, "/static");
+
+        /// <summary>Gets the <c>/ray_cast_selectable</c> property.</summary>
+        public static global::Oxygen.Editor.Schemas.PropertyId<bool> IsRayCastingSelectable { get; } = new(Kind, "/ray_cast_selectable");
+
+        /// <summary>Gets the <c>/ignore_parent_transform</c> property.</summary>
+        public static global::Oxygen.Editor.Schemas.PropertyId<bool> IgnoreParentTransform { get; } = new(Kind, "/ignore_parent_transform");
     }
 
     /// <summary>The <c>geometry</c> component.</summary>
@@ -292,6 +301,13 @@ public static class SceneSchema
 
         /// <summary>Gets the <c>/outer_cone_angle_radians</c> property.</summary>
         public static global::Oxygen.Editor.Schemas.PropertyId<float> OuterConeAngleRadians { get; } = new(Kind, "/outer_cone_angle_radians");
+    }
+
+    /// <summary>The <c>scripting</c> component.</summary>
+    public static class Scripting
+    {
+        /// <summary>The component kind.</summary>
+        public const string Kind = "scripting";
     }
 
     /// <summary>The <c>local-fog-volume</c> component.</summary>

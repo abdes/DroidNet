@@ -28,7 +28,7 @@ public sealed class SceneExplorerOpenDocumentTests
     public async Task CommitRenameAsync_RenamesTheNodeInOneUndoStep()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Original" };
+        var node = new SceneNode(scene, "Original");
         scene.RootNodes.Add(node);
         using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
@@ -43,7 +43,7 @@ public sealed class SceneExplorerOpenDocumentTests
         var result = await explorer.CommitRenameAsync(adapter!, "  Renamed  ").ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = node.Name.Should().Be("Renamed");
+        _ = node.Metadata.Name.Should().Be("Renamed");
         _ = metadata.Document.History.UndoStack.Should().ContainSingle();
     }
 
@@ -51,7 +51,7 @@ public sealed class SceneExplorerOpenDocumentTests
     public async Task CommitRenameAsync_EmptyNameFailsAndChangesNothing()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Original" };
+        var node = new SceneNode(scene, "Original");
         scene.RootNodes.Add(node);
         using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
@@ -66,7 +66,7 @@ public sealed class SceneExplorerOpenDocumentTests
         var result = await explorer.CommitRenameAsync(adapter!, "   ").ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeFalse();
-        _ = node.Name.Should().Be("Original");
+        _ = node.Metadata.Name.Should().Be("Original");
         _ = metadata.Document.History.UndoStack.Should().BeEmpty();
     }
 
@@ -74,7 +74,7 @@ public sealed class SceneExplorerOpenDocumentTests
     public async Task CommitRenameAsync_UnchangedNameRecordsNothing()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Original" };
+        var node = new SceneNode(scene, "Original");
         scene.RootNodes.Add(node);
         using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
@@ -89,7 +89,7 @@ public sealed class SceneExplorerOpenDocumentTests
         var result = await explorer.CommitRenameAsync(adapter!, "Original").ConfigureAwait(false);
 
         _ = result.Succeeded.Should().BeTrue();
-        _ = node.Name.Should().Be("Original");
+        _ = node.Metadata.Name.Should().Be("Original");
         _ = metadata.Document.History.UndoStack.Should().BeEmpty();
     }
 
@@ -97,11 +97,11 @@ public sealed class SceneExplorerOpenDocumentTests
     public async Task ReloadReplacesTreeAdaptersWithoutRequiringRuntime()
     {
         var original = new Scene { Name = "Scene" };
-        var originalNode = new SceneNode(original) { Name = "Original node" };
+        var originalNode = new SceneNode(original, "Original node");
         original.RootNodes.Add(originalNode);
         using var metadata = TestScenes.Open(original);
         var replacement = Scene.CreateAndHydrate(original.Dehydrate());
-        replacement.RootNodes[0].Name = "Reloaded node";
+        replacement.RootNodes[0].Metadata.Name = "Reloaded node";
         metadata.WriteFile(replacement);
         original = metadata.Scene;
         originalNode = metadata.NodeOf(originalNode);
@@ -134,8 +134,8 @@ public sealed class SceneExplorerOpenDocumentTests
     {
         var first = new Scene { Name = "First" };
         var second = new Scene { Name = "Second" };
-        var node = new SceneNode(first) { Name = "Unsaved node" };
-        node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(9, 8, 7);
+        var node = new SceneNode(first, "Unsaved node");
+        node.Transform.LocalPosition = new Vector3(9, 8, 7);
         first.RootNodes.Add(node);
         using var firstMetadata = TestScenes.Open(first);
         first = firstMetadata.Scene;
@@ -158,7 +158,7 @@ public sealed class SceneExplorerOpenDocumentTests
         _ = explorer.Scene!.AttachedObject.Should().BeSameAs(first);
         _ = firstMetadata.Document.IsDirty.Should().BeTrue();
         _ = first.RootNodes.Should().ContainSingle().Which.Should().BeSameAs(node);
-        _ = node.Components.OfType<TransformComponent>().Single().LocalPosition.Should().Be(new Vector3(9, 8, 7));
+        _ = node.Transform.LocalPosition.Should().Be(new Vector3(9, 8, 7));
         _ = (await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false)).Should().NotBeNull();
     }
 }

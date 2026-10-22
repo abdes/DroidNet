@@ -5,6 +5,7 @@
 using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Nodes;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -97,10 +98,10 @@ public sealed class SceneComponentsTests
 
         SceneAssert.Applied(result);
 
-        // B held only its transform, so the added component is the second.
+        // B held only its required components, so the added component is the last.
         var components = fixture.Node(SampleScene.B).Components;
-        _ = components.Should().HaveCount(2);
-        row.Verify(components[1]);
+        _ = components.Should().HaveCount(SceneBuilder.RequiredComponentCount + 1);
+        row.Verify(components[^1]);
     }
 
     [TestMethod]
@@ -145,10 +146,39 @@ public sealed class SceneComponentsTests
     }
 
     [TestMethod]
+    public void Kinds_AreTheSchemaKinds()
+    {
+        string[] kinds =
+        [
+            SceneComponents.Geometry,
+            SceneComponents.PerspectiveCamera,
+            SceneComponents.OrthographicCamera,
+            SceneComponents.DirectionalLight,
+            SceneComponents.PointLight,
+            SceneComponents.SpotLight,
+            SceneComponents.LocalFogVolume,
+            SceneComponents.Scripting,
+        ];
+        string[] schemaKinds =
+        [
+            SceneSchema.Geometry.Kind,
+            SceneSchema.PerspectiveCamera.Kind,
+            SceneSchema.OrthographicCamera.Kind,
+            SceneSchema.DirectionalLight.Kind,
+            SceneSchema.PointLight.Kind,
+            SceneSchema.SpotLight.Kind,
+            SceneSchema.LocalFogVolume.Kind,
+            SceneSchema.Scripting.Kind,
+        ];
+
+        _ = kinds.Should().Equal(schemaKinds);
+    }
+
+    [TestMethod]
     public async Task KindOf_Transform_ThrowsArgumentException()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var transform = fixture.Node(SampleScene.B).Components.OfType<TransformComponent>().Single();
+        var transform = fixture.Node(SampleScene.B).Transform;
 
         var kindOf = () => SceneComponents.KindOf(transform);
 
@@ -159,5 +189,5 @@ public sealed class SceneComponentsTests
         => new(new DefaultsCase(kind, verify)) { DisplayName = name };
 
     private static Quaternion LocalRotation(AuthoringFixture fixture, NodeId node)
-        => fixture.Node(node).Components.OfType<TransformComponent>().Single().LocalRotation;
+        => fixture.Node(node).Transform.LocalRotation;
 }

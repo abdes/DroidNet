@@ -65,7 +65,7 @@ public sealed class ScriptCookTests
         _ = again.IsUpToDate.Should().BeTrue(string.Join("; ", again.Diagnostics.Select(static issue => issue.Code + ": " + (issue.TechnicalMessage ?? issue.Message))));
 
         // Changing only a value recooks the scene; its sidecar finds the reused script in the published content.
-        var player = workspace.Scene.RootNodes.Single(static node => string.Equals(node.Name, "Player", StringComparison.Ordinal));
+        var player = workspace.Scene.RootNodes.Single(static node => string.Equals(node.Metadata.Name, "Player", StringComparison.Ordinal));
         var scripting = player.Components.OfType<ScriptingComponent>().Single();
         scripting.Slots = [scripting.Slots[0].WithOverride("speed", ScriptValue.FromFloat(4f))];
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
@@ -138,14 +138,14 @@ public sealed class ScriptCookTests
     private static ScriptSlot AddScriptedNodes(CookWorkspace workspace, out SceneNode target)
     {
         workspace.WriteText("Content/Player/move.lua", Move);
-        target = new SceneNode(workspace.Scene) { Name = "Target" };
+        target = new SceneNode(workspace.Scene, "Target");
         workspace.Scene.RootNodes.Add(target);
         return new ScriptSlot { Script = MoveScript, ExecutionOrder = 3 };
     }
 
     private async Task WriteSceneAsync(CookWorkspace workspace, ScriptSlot slot)
     {
-        var player = new SceneNode(workspace.Scene) { Name = "Player" };
+        var player = new SceneNode(workspace.Scene, "Player");
         _ = player.AddComponent(new ScriptingComponent { Name = ScriptingComponent.DefaultName, Slots = [slot] });
         workspace.Scene.RootNodes.Add(player);
         workspace.Scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });

@@ -95,7 +95,7 @@ internal static class SceneReferenceRetargeting
     internal static IReadOnlyList<SceneNode> RetargetSubtree(SceneNode node, Func<AssetPath, AssetPath?> map)
     {
         ArgumentNullException.ThrowIfNull(node);
-        return [.. new[] { node }.Concat(node.Descendants()).Where(item => RetargetNode(item, map))];
+        return [.. node.DescendantsAndSelf().Where(item => RetargetNode(item, map))];
     }
 
     /// <summary>Re-points scene references.</summary>

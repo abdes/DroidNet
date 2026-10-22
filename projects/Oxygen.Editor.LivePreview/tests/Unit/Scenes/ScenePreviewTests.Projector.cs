@@ -85,7 +85,7 @@ public sealed partial class ScenePreviewTests
     {
         using var fixture = new PreviewFixture();
         var built = new Scene { Name = "Test Scene" };
-        var cube = new SceneNode(built) { Name = "Cube" };
+        var cube = new SceneNode(built, "Cube");
         built.RootNodes.Add(cube);
         var target = new SurfaceTarget(EngineAssets.BasicShape("Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
@@ -106,7 +106,7 @@ public sealed partial class ScenePreviewTests
     {
         using var fixture = new PreviewFixture();
         var built = new Scene { Name = "Test Scene" };
-        var node = new SceneNode(built) { Name = "Crate" };
+        var node = new SceneNode(built, "Crate");
         built.RootNodes.Add(node);
         node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") });
         var document = await fixture.OpenAsync(built).ConfigureAwait(false);

@@ -30,7 +30,7 @@ public sealed class ReorderNodeTests
         var result = await fixture.Authoring.ExecuteAsync(edit).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Node(SampleScene.A).Children.Select(static node => node.Id).Should().Equal(SampleScene.A2, SampleScene.A1);
+        _ = fixture.Node(SampleScene.A).Hierarchy.Children.Select(static node => node.Id).Should().Equal(SampleScene.A2, SampleScene.A1);
         _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.UnderNode(SampleScene.A, 0)).Should().StartWith(LayoutEntryId.Of(SampleScene.A2));
         _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.A2)).Should().Be(LayoutPosition.UnderNode(SampleScene.A, 0));
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.NodesPlaced([SampleScene.A2]), new SceneChange.LayoutChanged());
@@ -107,7 +107,7 @@ public sealed class ReorderNodeTests
     public async Task Index_OutsideZeroToCount_IsInvalid(bool inLayout, int offsetFromCount)
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var siblings = fixture.Node(SampleScene.A).Children.Count;
+        var siblings = fixture.Node(SampleScene.A).Hierarchy.Children.Count;
         var entries = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.UnderNode(SampleScene.A, 0)).Count;
         var count = inLayout ? entries : siblings;
         var bad = offsetFromCount < 0 ? offsetFromCount : count + offsetFromCount;

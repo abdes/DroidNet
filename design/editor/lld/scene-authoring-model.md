@@ -55,10 +55,14 @@ Scene: Id, Name, ordered RootNodes, Environment
   ExplorerLayout (editor layout, never native nodes)
 ```
 
-`NodeFlagsComponent` stores the authored node flags; the engine flags without
-an authoring workflow (`Static`, `RayCastingSelectable`,
-`IgnoreParentTransform`) take their engine creation defaults until the schema
-declares them. The serializer nests nodes by their hierarchy component.
+`NodeFlagsComponent` stores every engine node flag as an authored local value:
+Scene Visibility, Cast and Receive Shadows (section 4), `Static`,
+`RayCastingSelectable` and `IgnoreParentTransform`. Each is a property of the
+schema's `Node` component, so Save, cooking and Live Preview carry all six. The
+inspector edits `IgnoreParentTransform` in the Transform section, since it
+decides how the transform composes with the parent's, and `Static` and
+`RayCastingSelectable` under Rendering's Advanced. The serializer nests nodes by
+their hierarchy component, written after the node's other components.
 
 IDs are nonempty and unique within the document. Names are nonempty after
 trimming; duplicate display names are allowed and never identify native nodes.
@@ -167,9 +171,7 @@ surface-lighting paths. Opaque/masked casting is supported; blended casting and
 authored hidden-shadow/shadows-only modes are excluded. Visible off-screen
 casters remain eligible; authored Hidden removes a caster; editor Hide removes
 it from the editing views only. `IgnoreParentTransform` concerns transform
-composition, not visibility or light participation. Other optimization/selection
-metadata does not automatically gain an inspector control because a DTO/native
-flag exists.
+composition, not visibility or light participation.
 
 ## 5. Geometry, surfaces, overrides and primitives
 

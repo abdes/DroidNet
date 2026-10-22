@@ -21,8 +21,8 @@ public sealed class SceneSelectionServiceTests
     public void SetSelection_DeduplicatesNodesAndPreservesOrder()
     {
         var scene = CreateScene();
-        var first = new SceneNode(scene) { Name = "First" };
-        var second = new SceneNode(scene) { Name = "Second" };
+        var first = new SceneNode(scene, "First");
+        var second = new SceneNode(scene, "Second");
         scene.RootNodes.Add(first);
         scene.RootNodes.Add(second);
         var sut = new SceneSelectionService();
@@ -37,8 +37,8 @@ public sealed class SceneSelectionServiceTests
     {
         var scene = CreateScene();
         var staleScene = CreateScene();
-        var selected = new SceneNode(scene) { Name = "Selected" };
-        var stale = new SceneNode(staleScene) { Name = "Stale" };
+        var selected = new SceneNode(scene, "Selected");
+        var stale = new SceneNode(staleScene, "Stale");
         scene.RootNodes.Add(selected);
         staleScene.RootNodes.Add(stale);
         var sut = new SceneSelectionService();
@@ -54,7 +54,7 @@ public sealed class SceneSelectionServiceTests
     public void Clear_RemovesDocumentSelection()
     {
         var scene = CreateScene();
-        var selected = new SceneNode(scene) { Name = "Selected" };
+        var selected = new SceneNode(scene, "Selected");
         scene.RootNodes.Add(selected);
         var sut = new SceneSelectionService();
         sut.SetSelection(SceneDocument, [selected], "test");
@@ -109,8 +109,8 @@ public sealed class SceneSelectionServiceTests
     public void SetSelection_ClassifiesAsNodeWithLastNodePrimaryAndFires()
     {
         var scene = CreateScene();
-        var first = new SceneNode(scene) { Name = "First" };
-        var second = new SceneNode(scene) { Name = "Second" };
+        var first = new SceneNode(scene, "First");
+        var second = new SceneNode(scene, "Second");
         scene.RootNodes.Add(first);
         scene.RootNodes.Add(second);
         var sut = new SceneSelectionService();
@@ -128,7 +128,7 @@ public sealed class SceneSelectionServiceTests
     public void Clear_FiresEmptyContextOnlyWhenAnEntryExisted()
     {
         var scene = CreateScene();
-        var selected = new SceneNode(scene) { Name = "Selected" };
+        var selected = new SceneNode(scene, "Selected");
         scene.RootNodes.Add(selected);
         var sut = new SceneSelectionService();
         var events = new List<SceneSelectionChangedEventArgs>();
@@ -152,8 +152,8 @@ public sealed class SceneSelectionServiceTests
     {
         var scene = CreateScene();
         var staleScene = CreateScene();
-        var selected = new SceneNode(scene) { Name = "Selected" };
-        var stale = new SceneNode(staleScene) { Name = "Stale" };
+        var selected = new SceneNode(scene, "Selected");
+        var stale = new SceneNode(staleScene, "Stale");
         scene.RootNodes.Add(selected);
         var folderId = FolderId.New();
         IList<ExplorerEntryData> layout = [new ExplorerEntryData { Type = "Folder", FolderId = folderId }];
@@ -177,7 +177,7 @@ public sealed class SceneSelectionServiceTests
     {
         var scene = CreateScene();
         var staleScene = CreateScene();
-        var stale = new SceneNode(staleScene) { Name = "Stale" };
+        var stale = new SceneNode(staleScene, "Stale");
         var sut = new SceneSelectionService();
         sut.SetSelection(SceneDocument, [stale], "test");
         var events = new List<SceneSelectionChangedEventArgs>();
@@ -211,7 +211,7 @@ public sealed class SceneSelectionServiceTests
     public void Reconcile_SurvivingFolderPrimary_DoesNotInventNodePrimary()
     {
         var scene = CreateScene();
-        var node = new SceneNode(scene) { Name = "Selected" };
+        var node = new SceneNode(scene, "Selected");
         scene.RootNodes.Add(node);
         var folderId = FolderId.New();
         IList<ExplorerEntryData> layout = [new ExplorerEntryData { Type = "Folder", FolderId = folderId }];
@@ -270,8 +270,8 @@ public sealed class SceneSelectionServiceTests
     public void Reconcile_DeletedNodePrimary_FallsBackToFirstNotLastSurvivor()
     {
         var scene = CreateScene();
-        var first = new SceneNode(scene) { Name = "First" };
-        var second = new SceneNode(scene) { Name = "Second" };
+        var first = new SceneNode(scene, "First");
+        var second = new SceneNode(scene, "Second");
         scene.RootNodes.Add(first);
         scene.RootNodes.Add(second);
         var deletedId = NodeId.New();

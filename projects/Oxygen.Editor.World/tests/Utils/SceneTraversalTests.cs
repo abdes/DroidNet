@@ -21,14 +21,14 @@ public sealed class SceneTraversalTests
     public void TraverseDepthFirst_VisitsNodesInDepthFirstOrderWithCorrectParentIds()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var childA = new SceneNode(scene) { Name = "ChildA" };
-        var childB = new SceneNode(scene) { Name = "ChildB" };
-        var grandChild = new SceneNode(scene) { Name = "GrandChild" };
+        var root = new SceneNode(scene, "Root");
+        var childA = new SceneNode(scene, "ChildA");
+        var childB = new SceneNode(scene, "ChildB");
+        var grandChild = new SceneNode(scene, "GrandChild");
 
-        root.AddChild(childA);
-        childA.AddChild(grandChild);
-        root.AddChild(childB);
+        root.Hierarchy.AddChild(childA);
+        childA.Hierarchy.AddChild(grandChild);
+        root.Hierarchy.AddChild(childB);
 
         var visited = new List<(SceneNode Node, NodeId? ParentId)>();
         SceneTraversal.TraverseDepthFirst(root, (node, parentId) => visited.Add((node, parentId)));
@@ -48,9 +48,9 @@ public sealed class SceneTraversalTests
     public async Task TraverseDepthFirstAsync_VisitsNodesInDepthFirstOrderWithCorrectParentIds()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child = new SceneNode(scene) { Name = "Child" };
-        root.AddChild(child);
+        var root = new SceneNode(scene, "Root");
+        var child = new SceneNode(scene, "Child");
+        root.Hierarchy.AddChild(child);
 
         var visited = new List<(SceneNode Node, NodeId? ParentId)>();
         await SceneTraversal.TraverseDepthFirstAsync(root, (node, parentId) =>
@@ -70,11 +70,11 @@ public sealed class SceneTraversalTests
     public void CollectNodes_And_CollectNodeIds_ReturnAllNodesInDepthFirstOrder()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child = new SceneNode(scene) { Name = "Child" };
-        var grandChild = new SceneNode(scene) { Name = "GrandChild" };
-        root.AddChild(child);
-        child.AddChild(grandChild);
+        var root = new SceneNode(scene, "Root");
+        var child = new SceneNode(scene, "Child");
+        var grandChild = new SceneNode(scene, "GrandChild");
+        root.Hierarchy.AddChild(child);
+        child.Hierarchy.AddChild(grandChild);
 
         var nodes = SceneTraversal.CollectNodes(root);
         var ids = SceneTraversal.CollectNodeIds(root);
@@ -87,9 +87,9 @@ public sealed class SceneTraversalTests
     public void FindNodeById_WhenNodeExists_ReturnsNode()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
-        var child = new SceneNode(scene) { Name = "Child" };
-        root.AddChild(child);
+        var root = new SceneNode(scene, "Root");
+        var child = new SceneNode(scene, "Child");
+        root.Hierarchy.AddChild(child);
 
         _ = SceneTraversal.FindNodeById(root, root.Id).Should().BeSameAs(root);
         _ = SceneTraversal.FindNodeById(root, child.Id).Should().BeSameAs(child);
@@ -99,7 +99,7 @@ public sealed class SceneTraversalTests
     public void FindNodeById_WhenNodeDoesNotExist_ReturnsNull()
     {
         var scene = new Scene { Name = "Scene" };
-        var root = new SceneNode(scene) { Name = "Root" };
+        var root = new SceneNode(scene, "Root");
 
         _ = SceneTraversal.FindNodeById(root, NodeId.New()).Should().BeNull();
     }

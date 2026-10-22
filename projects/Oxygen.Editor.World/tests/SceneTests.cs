@@ -51,17 +51,17 @@ public sealed class SceneTests
     public void AllNodes_ReturnsDepthFirstInHierarchyOrderAcrossSeveralRoots()
     {
         var scene = new Scene { Name = "Multi-root Scene" };
-        var root1 = new SceneNode(scene) { Name = "Root1" };
-        var child1a = new SceneNode(scene) { Name = "Child1A" };
-        var child1b = new SceneNode(scene) { Name = "Child1B" };
-        var grandChild1 = new SceneNode(scene) { Name = "GrandChild1" };
-        root1.AddChild(child1a);
-        child1a.AddChild(grandChild1);
-        root1.AddChild(child1b);
+        var root1 = new SceneNode(scene, "Root1");
+        var child1a = new SceneNode(scene, "Child1A");
+        var child1b = new SceneNode(scene, "Child1B");
+        var grandChild1 = new SceneNode(scene, "GrandChild1");
+        root1.Hierarchy.AddChild(child1a);
+        child1a.Hierarchy.AddChild(grandChild1);
+        root1.Hierarchy.AddChild(child1b);
 
-        var root2 = new SceneNode(scene) { Name = "Root2" };
-        var child2a = new SceneNode(scene) { Name = "Child2A" };
-        root2.AddChild(child2a);
+        var root2 = new SceneNode(scene, "Root2");
+        var child2a = new SceneNode(scene, "Child2A");
+        root2.Hierarchy.AddChild(child2a);
 
         scene.RootNodes.Add(root1);
         scene.RootNodes.Add(root2);
@@ -219,7 +219,7 @@ public sealed class SceneTests
     public void EffectiveStartingCamera_WhenAuthoredNodeMissing_ReturnsNull()
     {
         var scene = new Scene { Name = "Scene" };
-        var cameraNode = new SceneNode(scene) { Name = "Camera" };
+        var cameraNode = new SceneNode(scene, "Camera");
         _ = cameraNode.AddComponent(new PerspectiveCamera { Name = "Camera" });
         scene.RootNodes.Add(cameraNode);
         var nonExistentNodeId = NodeId.New();
@@ -233,7 +233,7 @@ public sealed class SceneTests
     public void EffectiveStartingCamera_WhenAuthoredNodeHasNoCameraComponent_ReturnsNull()
     {
         var scene = new Scene { Name = "Scene" };
-        var nodeWithoutCamera = new SceneNode(scene) { Name = "NodeWithoutCamera" };
+        var nodeWithoutCamera = new SceneNode(scene, "NodeWithoutCamera");
         scene.RootNodes.Add(nodeWithoutCamera);
 
         scene.SetStartingCamera(nodeWithoutCamera.Id);
@@ -246,8 +246,8 @@ public sealed class SceneTests
     {
         // Arrange
         var scene = new Scene { Name = "Scene Name" };
-        var node1 = new SceneNode(scene) { Name = "Node 1" };
-        var node2 = new SceneNode(scene) { Name = "Node 2" };
+        var node1 = new SceneNode(scene, "Node 1");
+        var node2 = new SceneNode(scene, "Node 2");
         scene.RootNodes.Add(node1);
         scene.RootNodes.Add(node2);
 

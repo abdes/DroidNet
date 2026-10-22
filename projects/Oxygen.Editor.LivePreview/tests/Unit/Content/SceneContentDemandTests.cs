@@ -176,7 +176,7 @@ public sealed partial class SceneContentDemandTests
         public async Task<(Document Document, Scene Built)> OpenAsync(bool withGeometry, bool withTargetedOverride = false)
         {
             var built = new Scene { Name = "Test Scene" };
-            var node = new SceneNode(built) { Name = "Cube" };
+            var node = new SceneNode(built, "Cube");
             built.RootNodes.Add(node);
             if (withGeometry)
             {
@@ -201,7 +201,7 @@ public sealed partial class SceneContentDemandTests
         public async Task<(Document Document, Scene Built)> OpenEngineCubeAsync()
         {
             var built = new Scene { Name = "Test Scene" };
-            var node = new SceneNode(built) { Name = "Cube" };
+            var node = new SceneNode(built, "Cube");
             built.RootNodes.Add(node);
             node.Components.Add(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") });
             var document = await this.Documents.OpenAsync(built.Dehydrate()).ConfigureAwait(false);

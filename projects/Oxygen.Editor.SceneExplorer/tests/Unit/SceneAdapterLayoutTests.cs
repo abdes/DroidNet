@@ -17,10 +17,10 @@ public sealed class SceneAdapterLayoutTests
     public async Task Children_LayoutReferencingSameNodeTwice_RealizesSingleAdapter()
     {
         var scene = CreateScene();
-        var parent = new SceneNode(scene) { Name = "Parent" };
-        var child = new SceneNode(scene) { Name = "Child" };
+        var parent = new SceneNode(scene, "Parent");
+        var child = new SceneNode(scene, "Child");
         scene.RootNodes.Add(parent);
-        parent.AddChild(child);
+        parent.Hierarchy.AddChild(child);
         IList<ExplorerEntryData> layout =
         [
             new ExplorerEntryData { Type = "Node", NodeId = parent.Id },
@@ -75,12 +75,12 @@ public sealed class SceneAdapterLayoutTests
     public async Task Children_NestedFoldersAndUnknownNodeId_RealizeInLayoutOrder()
     {
         var scene = CreateScene();
-        var nodeA = new SceneNode(scene) { Name = "A" };
-        var nodeB = new SceneNode(scene) { Name = "B" };
-        var nodeC = new SceneNode(scene) { Name = "C" };
+        var nodeA = new SceneNode(scene, "A");
+        var nodeB = new SceneNode(scene, "B");
+        var nodeC = new SceneNode(scene, "C");
         scene.RootNodes.Add(nodeA);
         scene.RootNodes.Add(nodeC);
-        nodeA.AddChild(nodeB);
+        nodeA.Hierarchy.AddChild(nodeB);
         var folderId = FolderId.New();
         var nestedFolderId = FolderId.New();
         IList<ExplorerEntryData> layout =
@@ -124,10 +124,10 @@ public sealed class SceneAdapterLayoutTests
     public async Task Children_UnseatedDescendantOfSeatedParent_IsRealizedWithoutMutatingLayout()
     {
         var scene = CreateScene();
-        var parent = new SceneNode(scene) { Name = "Parent" };
-        var child = new SceneNode(scene) { Name = "Child" };
+        var parent = new SceneNode(scene, "Parent");
+        var child = new SceneNode(scene, "Child");
         scene.RootNodes.Add(parent);
-        parent.AddChild(child);
+        parent.Hierarchy.AddChild(child);
         var parentEntry = new ExplorerEntryData { Type = "Node", NodeId = parent.Id };
         IList<ExplorerEntryData> layout = [parentEntry];
         var adapter = SceneAdapter.BuildLayoutTree(scene, layout);
@@ -143,10 +143,10 @@ public sealed class SceneAdapterLayoutTests
     public async Task Children_UnseatedParentWithSeatedChild_DoesNotDuplicateChild()
     {
         var scene = CreateScene();
-        var parent = new SceneNode(scene) { Name = "Parent" };
-        var child = new SceneNode(scene) { Name = "Child" };
+        var parent = new SceneNode(scene, "Parent");
+        var child = new SceneNode(scene, "Child");
         scene.RootNodes.Add(parent);
-        parent.AddChild(child);
+        parent.Hierarchy.AddChild(child);
         IList<ExplorerEntryData> layout = [new ExplorerEntryData { Type = "Node", NodeId = child.Id }];
         var adapter = SceneAdapter.BuildLayoutTree(scene, layout);
 

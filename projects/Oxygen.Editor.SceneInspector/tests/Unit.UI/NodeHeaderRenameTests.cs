@@ -27,14 +27,14 @@ internal sealed class NodeHeaderRenameTests : DroidNet.Tests.VisualUserInterface
             Node = fixture.Node,
         };
         await LoadTestContentAsync(header).ConfigureAwait(true);
-        var before = fixture.Node.Name;
+        var before = fixture.Node.Metadata.Name;
 
         header.ViewModel!.Name = "Renamed";
 
-        _ = fixture.Node.Name.Should().Be("Renamed");
+        _ = fixture.Node.Metadata.Name.Should().Be("Renamed");
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         await fixture.Document.History.UndoAsync(this.TestContext.CancellationToken).ConfigureAwait(true);
-        _ = fixture.Node.Name.Should().Be(before);
+        _ = fixture.Node.Metadata.Name.Should().Be(before);
     });
 
     /// <summary>A name the authoring refuses leaves the node and its history, and the header shows the node's name again.</summary>
@@ -50,11 +50,11 @@ internal sealed class NodeHeaderRenameTests : DroidNet.Tests.VisualUserInterface
             Node = fixture.Node,
         };
         await LoadTestContentAsync(header).ConfigureAwait(true);
-        var before = fixture.Node.Name;
+        var before = fixture.Node.Metadata.Name;
 
         header.ViewModel!.Name = "   ";
 
-        _ = fixture.Node.Name.Should().Be(before);
+        _ = fixture.Node.Metadata.Name.Should().Be(before);
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = header.ViewModel.Name.Should().Be(before);
     });

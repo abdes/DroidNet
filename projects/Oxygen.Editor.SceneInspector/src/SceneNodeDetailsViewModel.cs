@@ -23,8 +23,8 @@ namespace Oxygen.Editor.SceneInspector;
 /// operations such as adding or removing components.
 /// </summary>
 /// <remarks>
-/// The view model wires to the <c>SceneNode.PropertyChanged</c> events of the
-/// current <see cref="Node"/> to keep UI-bound properties (for example <see cref="Name"/>)
+/// The view model wires to the <c>PropertyChanged</c> events of the current <see cref="Node"/>'s
+/// <see cref="MetadataComponent"/> to keep UI-bound properties (for example <see cref="Name"/>)
 /// in sync. Renames and component add/remove requests go to <see cref="NodeEdits"/>, so that the editor host performs the
 /// actual mutations and records them in the scene's history.
 /// </remarks>
@@ -81,8 +81,8 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
 
     /// <summary>
     /// Gets or sets the current <see cref="SceneNode"/>. This view model assumes a single selection.
-    /// When set, the view model subscribes to the node's <see cref="INotifyPropertyChanged"/>
-    /// events to keep view-model properties synchronized with changes originating from the model.
+    /// When set, the view model subscribes to the <see cref="INotifyPropertyChanged"/> events of the node's
+    /// metadata component to keep view-model properties synchronized with changes originating from the model.
     /// </summary>
     public SceneNode? Node
     {
@@ -94,11 +94,11 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
                 return;
             }
 
-            var oldNodeName = field?.Name;
-            var newNodeName = value?.Name;
+            var oldNodeName = field?.Metadata.Name;
+            var newNodeName = value?.Metadata.Name;
             this.LogNodeChanged(oldNodeName, newNodeName);
 
-            field?.PropertyChanged -= OnNodePropertyChanged;
+            field?.Metadata.PropertyChanged -= OnNamePropertyChanged;
             this.componentCollectionNotifier?.CollectionChanged -= this.OnNodeComponentsChanged;
             this.componentCollectionNotifier = null;
 
@@ -107,7 +107,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
 
             if (field is not null)
             {
-                field.PropertyChanged += OnNodePropertyChanged;
+                field.Metadata.PropertyChanged += OnNamePropertyChanged;
                 if (field.Components is INotifyCollectionChanged componentNotifier)
                 {
                     this.componentCollectionNotifier = componentNotifier;
@@ -130,14 +130,14 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
 
             return;
 
-            void OnNodePropertyChanged(object? sender, PropertyChangedEventArgs e)
+            void OnNamePropertyChanged(object? sender, PropertyChangedEventArgs e)
             {
-                if (string.Equals(e.PropertyName, nameof(SceneNode.Name), StringComparison.Ordinal))
+                if (string.Equals(e.PropertyName, nameof(MetadataComponent.Name), StringComparison.Ordinal))
                 {
                     _ = this.dispatcher?.DispatchAsync(() =>
                     {
                         this.doNotPropagateName = true;
-                        this.Name = field?.Name;
+                        this.Name = field?.Metadata.Name;
                         this.doNotPropagateName = false;
                     });
                 }
@@ -171,25 +171,10 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
     /// </summary>
     public IMenuSource AddComponentMenu => field ??= this.BuildAddComponentMenu();
 
-    // Scenes creates the component, with its defaults, from its kind.
-    private static string? KindFromId(string typeId)
-        => typeId switch
-        {
-            "Geometry" => SceneComponents.Geometry,
-            "PerspectiveCamera" => SceneComponents.PerspectiveCamera,
-            "OrthographicCamera" => SceneComponents.OrthographicCamera,
-            "DirectionalLight" => SceneComponents.DirectionalLight,
-            "PointLight" => SceneComponents.PointLight,
-            "SpotLight" => SceneComponents.SpotLight,
-            "LocalFogVolume" => SceneComponents.LocalFogVolume,
-            "Scripting" => SceneComponents.Scripting,
-            _ => null,
-        };
-
     // The scene's authoring renames the node, as one step of its history; a refused name shows the node's own again.
     partial void OnNameChanged(string? value)
     {
-        if (this.doNotPropagateName || this.Node is not { } node || value is null || string.Equals(value, node.Name, StringComparison.Ordinal))
+        if (this.doNotPropagateName || this.Node is not { } node || value is null || string.Equals(value, node.Metadata.Name, StringComparison.Ordinal))
         {
             return;
         }
@@ -222,38 +207,38 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             .Build();
 
     [RelayCommand(CanExecute = nameof(CanAddGeometry))]
-    private void AddGeometry() => this.AddComponent("Geometry");
+    private void AddGeometry() => this.AddComponent(SceneComponents.Geometry);
 
     private bool CanAddGeometry() => this.Node is not null && this.Node.Components.OfType<GeometryComponent>().FirstOrDefault() is null;
 
     [RelayCommand(CanExecute = nameof(CanAddPerspectiveCamera))]
-    private void AddPerspectiveCamera() => this.AddComponent("PerspectiveCamera");
+    private void AddPerspectiveCamera() => this.AddComponent(SceneComponents.PerspectiveCamera);
 
     private bool CanAddPerspectiveCamera() => this.CanAddCamera();
 
     [RelayCommand(CanExecute = nameof(CanAddOrthographicCamera))]
-    private void AddOrthographicCamera() => this.AddComponent("OrthographicCamera");
+    private void AddOrthographicCamera() => this.AddComponent(SceneComponents.OrthographicCamera);
 
     private bool CanAddOrthographicCamera() => this.CanAddCamera();
 
     [RelayCommand(CanExecute = nameof(CanAddLight))]
-    private void AddDirectionalLight() => this.AddComponent("DirectionalLight");
+    private void AddDirectionalLight() => this.AddComponent(SceneComponents.DirectionalLight);
 
     [RelayCommand(CanExecute = nameof(CanAddLight))]
-    private void AddPointLight() => this.AddComponent("PointLight");
+    private void AddPointLight() => this.AddComponent(SceneComponents.PointLight);
 
     [RelayCommand(CanExecute = nameof(CanAddLight))]
-    private void AddSpotLight() => this.AddComponent("SpotLight");
+    private void AddSpotLight() => this.AddComponent(SceneComponents.SpotLight);
 
     private bool CanAddLight() => this.Node is not null && this.Node.Components.OfType<LightComponent>().FirstOrDefault() is null;
 
     [RelayCommand(CanExecute = nameof(CanAddLocalFogVolume))]
-    private void AddLocalFogVolume() => this.AddComponent("LocalFogVolume");
+    private void AddLocalFogVolume() => this.AddComponent(SceneComponents.LocalFogVolume);
 
     private bool CanAddLocalFogVolume() => this.Node is not null && !this.Node.Components.OfType<LocalFogVolumeComponent>().Any();
 
     [RelayCommand(CanExecute = nameof(CanAddScripting))]
-    private void AddScripting() => this.AddComponent("Scripting");
+    private void AddScripting() => this.AddComponent(SceneComponents.Scripting);
 
     private bool CanAddScripting() => this.Node is not null && !this.Node.Components.OfType<ScriptingComponent>().Any();
 
@@ -272,23 +257,19 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
 
     private bool CanDeleteComponent(GameComponent? comp) => this.Node is not null && this.IsCurrentComponent(comp) && comp?.IsLocked == false;
 
-    private void AddComponent(string typeId)
+    // Scenes creates the component, with its defaults, from its schema kind.
+    private void AddComponent(string kind)
     {
         if (this.Node is null)
         {
             return;
         }
 
-        this.LogAddComponentRequested(typeId, this.Node.Name, this.Node.Components?.Count ?? 0, selectedComponentName: null);
+        this.LogAddComponentRequested(kind, this.Node.Metadata.Name, this.Node.Components.Count, selectedComponentName: null);
 
-        if (typeId.EndsWith("Light", StringComparison.Ordinal) && !this.CanAddLight())
+        if (kind is SceneComponents.DirectionalLight or SceneComponents.PointLight or SceneComponents.SpotLight
+            && !this.CanAddLight())
         {
-            return;
-        }
-
-        if (KindFromId(typeId) is not { } kind)
-        {
-            this.LogAddComponentFactoryFailed(typeId);
             return;
         }
 
@@ -306,7 +287,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
         if (ReferenceEquals(this.Node, node))
         {
             this.doNotPropagateName = true;
-            this.Name = node.Name;
+            this.Name = node.Metadata.Name;
             this.doNotPropagateName = false;
         }
     }
@@ -317,7 +298,7 @@ public sealed partial class SceneNodeDetailsViewModel : ObservableObject
             try
             {
                 this.doNotPropagateName = true;
-                this.Name = this.Node?.Name;
+                this.Name = this.Node?.Metadata.Name;
                 this.doNotPropagateName = false;
             }
             catch (Exception ex)

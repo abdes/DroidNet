@@ -176,7 +176,7 @@ public sealed partial class SceneExplorerSelectionTests
         _ = await harness.Insert(scene, SceneNodeTemplates.Empty(scene, "Added"), node.Id).ConfigureAwait(false);
 
         var rebuiltAdapter = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(false);
-        var added = node.Children.Should().ContainSingle().Subject;
+        var added = node.Hierarchy.Children.Should().ContainSingle().Subject;
         _ = rebuiltAdapter.Should().NotBeNull();
         _ = rebuiltAdapter.Should().NotBeSameAs(nodeAdapter, "the rebuild replaces the selected adapter");
         _ = (await explorer.FindAdapterByNodeIdAsync(added.Id).ConfigureAwait(false)).Should().NotBeNull();
@@ -383,8 +383,8 @@ public sealed partial class SceneExplorerSelectionTests
             scene = new Scene { Name = "Scene A" };
             this.sceneA = scene;
 
-            var folderNode = new SceneNode(scene) { Name = "InFolder" };
-            freeNode = new SceneNode(scene) { Name = "Free" };
+            var folderNode = new SceneNode(scene, "InFolder");
+            freeNode = new SceneNode(scene, "Free");
             scene.RootNodes.Add(folderNode);
             scene.RootNodes.Add(freeNode);
 

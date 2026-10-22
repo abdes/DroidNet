@@ -26,7 +26,7 @@ public static class SceneNodeTemplates
     public static SceneNodeData Primitive(Scene scene, PrimitiveKind kind, NodePlacement? placement = null)
     {
         var name = Enum.IsDefined(kind) ? kind.ToString() : throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown primitive kind.");
-        var node = new SceneNode(scene) { Name = name };
+        var node = new SceneNode(scene, name);
         _ = node.AddComponent(new GeometryComponent
         {
             Name = "Geometry",
@@ -53,22 +53,20 @@ public static class SceneNodeTemplates
             LightKind.Spot => new SpotLightComponent { Name = "Spot Light", LuminousFluxLumens = 1_600f, Range = 15f },
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown light kind."),
         };
-        var node = new SceneNode(scene) { Name = $"{kind} Light" };
-        if (node.Components.OfType<TransformComponent>().FirstOrDefault() is { } transform)
+        var node = new SceneNode(scene, $"{kind} Light");
+        var transform = node.Transform;
+        transform.LocalPosition = kind switch
         {
-            transform.LocalPosition = kind switch
-            {
-                LightKind.Point => new Vector3(0f, 2f, 0f),
-                LightKind.Spot => new Vector3(0f, 3f, 3f),
-                _ => Vector3.Zero,
-            };
-            transform.LocalRotation = kind switch
-            {
-                LightKind.Directional => DirectionalLightComponent.DefaultLocalRotation,
-                LightKind.Spot => Quaternion.CreateFromYawPitchRoll(0f, -0.7853982f, 0f),
-                _ => Quaternion.Identity,
-            };
-        }
+            LightKind.Point => new Vector3(0f, 2f, 0f),
+            LightKind.Spot => new Vector3(0f, 3f, 3f),
+            _ => Vector3.Zero,
+        };
+        transform.LocalRotation = kind switch
+        {
+            LightKind.Directional => DirectionalLightComponent.DefaultLocalRotation,
+            LightKind.Spot => Quaternion.CreateFromYawPitchRoll(0f, -0.7853982f, 0f),
+            _ => Quaternion.Identity,
+        };
 
         _ = node.AddComponent(light);
         return Finish(node, placement);
@@ -80,7 +78,7 @@ public static class SceneNodeTemplates
     /// <returns>The node's data.</returns>
     public static SceneNodeData LocalFogVolume(Scene scene, NodePlacement? placement = null)
     {
-        var node = new SceneNode(scene) { Name = "Local Fog Volume" };
+        var node = new SceneNode(scene, "Local Fog Volume");
         _ = node.AddComponent(new LocalFogVolumeComponent { Name = "Local Fog Volume" });
         return Finish(node, placement);
     }
@@ -99,7 +97,7 @@ public static class SceneNodeTemplates
             CameraKind.Orthographic => new OrthographicCamera { Name = "Orthographic Camera" },
             _ => throw new ArgumentOutOfRangeException(nameof(kind), kind, "Unknown camera kind."),
         };
-        var node = new SceneNode(scene) { Name = "Camera" };
+        var node = new SceneNode(scene, "Camera");
         _ = node.AddComponent(camera);
         return Finish(node, placement);
     }
@@ -110,7 +108,7 @@ public static class SceneNodeTemplates
     /// <param name="placement">Where the node goes; the scene origin when <see langword="null"/>.</param>
     /// <returns>The node's data.</returns>
     public static SceneNodeData Empty(Scene scene, string name = "Node", NodePlacement? placement = null)
-        => Finish(new SceneNode(scene) { Name = name }, placement);
+        => Finish(new SceneNode(scene, name), placement);
 
     /// <summary>Builds the insert that appends a new node: last among its parent's children, last in its explorer place.</summary>
     /// <param name="scene">The scene.</param>
@@ -124,7 +122,7 @@ public static class SceneNodeTemplates
         ArgumentNullException.ThrowIfNull(scene);
         ArgumentNullException.ThrowIfNull(layout);
         var parentNode = parent is { } id ? scene.AllNodes.First(candidate => candidate.Id == id) : null;
-        var siblings = parentNode?.Children.Count ?? scene.RootNodes.Count;
+        var siblings = parentNode?.Hierarchy.Children.Count ?? scene.RootNodes.Count;
         var place = folder is { } inFolder
             ? LayoutPosition.InFolder(inFolder, 0)
             : parent is { } underNode ? LayoutPosition.UnderNode(underNode, 0) : LayoutPosition.AtRoot(0);
@@ -135,8 +133,9 @@ public static class SceneNodeTemplates
     // Created nodes are roots: their local transform is their world transform.
     private static SceneNodeData Finish(SceneNode node, NodePlacement? placement)
     {
-        if (placement is not null && node.Components.OfType<TransformComponent>().FirstOrDefault() is { } transform)
+        if (placement is not null)
         {
+            var transform = node.Transform;
             transform.LocalPosition = placement.Position;
             if (placement.Rotation is { } rotation)
             {

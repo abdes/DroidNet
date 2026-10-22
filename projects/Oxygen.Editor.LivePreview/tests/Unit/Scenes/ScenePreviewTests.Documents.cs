@@ -10,7 +10,6 @@ using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.LivePreview.Tests.Scenes;
@@ -87,11 +86,11 @@ public sealed partial class ScenePreviewTests
     {
         using var fixture = new PreviewFixture();
         var built = new Scene { Name = "Test Scene" };
-        var node = new SceneNode(built) { Name = "Cube" };
+        var node = new SceneNode(built, "Cube");
         built.RootNodes.Add(node);
         var document = await fixture.Documents.OpenAsync(built.Dehydrate()).ConfigureAwait(false);
         var before = PreviewFixture.SceneOf(document);
-        node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(5, 0, 0);
+        node.Transform.LocalPosition = new Vector3(5, 0, 0);
         fixture.Requests.Clear();
 
         fixture.Documents.Write(document.File, built.Dehydrate());

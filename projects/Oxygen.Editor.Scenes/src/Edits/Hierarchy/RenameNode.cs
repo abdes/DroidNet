@@ -34,13 +34,13 @@ public sealed record RenameNode(NodeId Node, string Name) : ISceneEdit
         ArgumentNullException.ThrowIfNull(scope);
         var node = scope.FindNode(this.Node)!;
         var name = this.Name.Trim();
-        var before = node.Name;
+        var before = node.Metadata.Name;
         if (string.Equals(before, name, StringComparison.Ordinal))
         {
             return new SceneEditApplication.Applied(this, []);
         }
 
-        node.Name = name;
+        node.Metadata.Name = name;
         return new SceneEditApplication.Applied(this with { Name = before }, [new SceneChange.NodeRenamed(this.Node)]);
     }
 }

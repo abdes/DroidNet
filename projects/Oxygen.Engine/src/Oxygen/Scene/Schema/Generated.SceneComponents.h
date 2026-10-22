@@ -44,7 +44,10 @@ enum class NodeField : std::uint16_t {
   kVisible = 0,
   kCastsShadows = 1,
   kReceivesShadows = 2,
-  kCount = 3,
+  kStatic = 3,
+  kRayCastingSelectable = 4,
+  kIgnoreParentTransform = 5,
+  kCount = 6,
 };
 
 //! Component-local field ids of the PerspectiveCamera field set.

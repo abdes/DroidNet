@@ -31,7 +31,7 @@ public sealed class GeometryComponentTests
     {
         // Arrange
         var scene = new Scene { Name = "Geometry Scene" };
-        var node = new SceneNode(scene) { Name = "MeshNode" };
+        var node = new SceneNode(scene, "MeshNode");
         scene.RootNodes.Add(node);
 
         var geo = new GeometryComponent
@@ -148,7 +148,7 @@ public sealed class GeometryComponentTests
     public async Task Deserialize_GeometryUriNotAnAsset_ThrowsJsonException(string value)
     {
         var scene = new Scene { Name = "Crates" };
-        var node = new SceneNode(scene) { Name = "Crate" };
+        var node = new SceneNode(scene, "Crate");
         _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = Cube });
         scene.RootNodes.Add(node);
         var saved = await SceneTestSupport.SerializeToStreamAsync(scene).ConfigureAwait(false);
@@ -168,7 +168,7 @@ public sealed class GeometryComponentTests
     public async Task Deserialize_GeometryWithoutGeometryUri_ThrowsJsonException()
     {
         var scene = new Scene { Name = "Crates" };
-        var node = new SceneNode(scene) { Name = "Crate" };
+        var node = new SceneNode(scene, "Crate");
         _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = Cube });
         scene.RootNodes.Add(node);
         var saved = await SceneTestSupport.SerializeToStreamAsync(scene).ConfigureAwait(false);
@@ -188,7 +188,7 @@ public sealed class GeometryComponentTests
     public void Hydrate_RejectedGeometry_LeavesTheSceneAsItWas()
     {
         var scene = new Scene { Name = "Crates" };
-        var kept = new SceneNode(scene) { Name = "Kept" };
+        var kept = new SceneNode(scene, "Kept");
         scene.RootNodes.Add(kept);
         var data = new SceneData
         {
@@ -196,16 +196,7 @@ public sealed class GeometryComponentTests
             Id = scene.Id,
             RootNodes =
             [
-                new SceneNodeData
-                {
-                    Id = NodeId.New(),
-                    Name = "Rejected",
-                    Components =
-                    [
-                        new TransformData { Name = "Transform" },
-                        new GeometryComponentData { Name = "Geometry", GeometryUri = null! },
-                    ],
-                },
+                SceneTestSupport.NodeData("Rejected", new GeometryComponentData { Name = "Geometry", GeometryUri = null! }),
             ],
         };
 

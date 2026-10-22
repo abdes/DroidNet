@@ -14,7 +14,7 @@ namespace Oxygen.Editor.World.Slots;
 /// </summary>
 /// <remarks>
 /// Override slots are observable containers for <see cref="World.OverridableProperty{T}"/> values.
-/// They can be attached to <see cref="GameObject"/> (global scope), <see cref="GameComponent"/> (component scope),
+/// They can be attached to <see cref="SceneNode"/> (node scope), <see cref="GameComponent"/> (component scope),
 /// or <see cref="GeometryOverrideTarget"/> (LOD/submesh scope) to override rendering properties.
 /// </remarks>
 public abstract class OverrideSlot : ScopedObservableObject, IPersistent<OverrideSlotData>

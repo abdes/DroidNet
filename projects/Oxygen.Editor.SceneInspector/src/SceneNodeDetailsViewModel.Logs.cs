@@ -33,21 +33,12 @@ public sealed partial class SceneNodeDetailsViewModel
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Trace,
-        Message = "Add component requested. TypeId={TypeId}, Node={NodeName}, VmCount={VmCount}, Selected={SelectedComponentName}")]
-    private static partial void LogAddComponentRequested(ILogger logger, string typeId, string nodeName, int vmCount, string? selectedComponentName);
+        Message = "Add component requested. Kind={Kind}, Node={NodeName}, VmCount={VmCount}, Selected={SelectedComponentName}")]
+    private static partial void LogAddComponentRequested(ILogger logger, string kind, string nodeName, int vmCount, string? selectedComponentName);
 
     [Conditional("DEBUG")]
-    private void LogAddComponentRequested(string typeId, string nodeName, int vmCount, string? selectedComponentName)
-        => LogAddComponentRequested(this.logger, typeId, nodeName, vmCount, selectedComponentName);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "Add component failed: unknown TypeId={TypeId}")]
-    private static partial void LogAddComponentFactoryFailed(ILogger logger, string typeId);
-
-    [Conditional("DEBUG")]
-    private void LogAddComponentFactoryFailed(string typeId) => LogAddComponentFactoryFailed(this.logger, typeId);
+    private void LogAddComponentRequested(string kind, string nodeName, int vmCount, string? selectedComponentName)
+        => LogAddComponentRequested(this.logger, kind, nodeName, vmCount, selectedComponentName);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

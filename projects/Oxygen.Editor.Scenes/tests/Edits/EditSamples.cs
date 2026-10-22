@@ -268,7 +268,7 @@ public static class EditSamples
     private static EditSample AddComponentSample =>
         new(
             nameof(AddComponent),
-            static _ => new AddComponent(SampleScene.A11, CameraToAdd(), index: 1),
+            static _ => new AddComponent(SampleScene.A11, CameraToAdd(), index: SceneBuilder.RequiredComponentCount),
             [new SceneChange.ComponentAdded(SampleScene.A11, AddedCamera)],
             [new SceneChange.ComponentRemoved(SampleScene.A11, AddedCamera, SceneComponents.PerspectiveCamera)])
         {
@@ -284,7 +284,7 @@ public static class EditSamples
                     OverrideSlots = slots,
                 };
                 return new TamperedEdit(
-                    new AddComponent(SampleScene.A11, component, index: 1),
+                    new AddComponent(SampleScene.A11, component, index: SceneBuilder.RequiredComponentCount),
                     () => slots.Add(new MaterialsSlotData
                     {
                         GeometryUri = SampleScene.SphereGeometry,
@@ -582,17 +582,10 @@ public static class EditSamples
         => samples.Select(static sample => new TestDataRow<EditSample>(sample) { DisplayName = sample.Name });
 
     private static SceneNodeData InsertedNodeData()
-        => new()
-        {
-            Id = InsertedNode,
-            Name = "Inserted",
-            IsActive = true,
-            Components =
-            [
-                new TransformData { Id = SceneBuilder.TransformId(InsertedNode), Name = "Transform" },
-                new GeometryComponentData { Id = InsertedGeometry, Name = "Geometry", GeometryUri = SampleScene.SphereGeometry },
-            ],
-        };
+        => SceneBuilder.NodeData(
+            InsertedNode,
+            "Inserted",
+            components: [new GeometryComponentData { Id = InsertedGeometry, Name = "Geometry", GeometryUri = SampleScene.SphereGeometry }]);
 
     private static NodeInsert InsertAtA2(SceneNodeData node)
         => new(node, new NodePosition(SampleScene.A2, Index: 0), LayoutPosition.UnderNode(SampleScene.A2, 0));

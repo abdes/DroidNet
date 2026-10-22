@@ -55,9 +55,9 @@ internal sealed class SceneInspectorViewModelTests
     public async Task LockedSelection_RemainsInspectableAndDisablesAuthoring()
     {
         var scene = CreateScene();
-        var parent = new SceneNode(scene) { Name = "Locked Parent" };
-        var child = new SceneNode(scene) { Name = "Child" };
-        parent.AddChild(child);
+        var parent = new SceneNode(scene, "Locked Parent");
+        var child = new SceneNode(scene, "Child");
+        parent.Hierarchy.AddChild(child);
         scene.RootNodes.Add(parent);
         var interaction = new SceneNodeInteraction(
             new Mock<IEditorSettingsManager>(MockBehavior.Loose).Object,
@@ -140,14 +140,14 @@ internal sealed class SceneInspectorViewModelTests
         var built = CreateDirectionalLightNode(scene);
         using var testScene = TestScenes.Open(scene);
         var node = testScene.NodeOf(built);
-        var before = node.Components.OfType<TransformComponent>().Single().LocalRotation;
+        var before = node.Transform.LocalRotation;
 
         using var sut = new DirectionalLightViewModel(() => testScene.Authoring);
         sut.UpdateValues([node]);
         sut.SunAzimuth = 45f;
         await sut.PendingEdits.ConfigureAwait(false);
 
-        _ = node.Components.OfType<TransformComponent>().Single().LocalRotation.Should().NotBe(before);
+        _ = node.Transform.LocalRotation.Should().NotBe(before);
         _ = testScene.Document.History.UndoStack.Should().ContainSingle();
     }
 
@@ -193,14 +193,14 @@ internal sealed class SceneInspectorViewModelTests
 
     private static SceneNode CreateNode(Scene scene)
     {
-        var node = new SceneNode(scene) { Name = "Cube" };
+        var node = new SceneNode(scene, "Cube");
         scene.RootNodes.Add(node);
         return node;
     }
 
     private static SceneNode CreateDirectionalLightNode(Scene scene)
     {
-        var node = new SceneNode(scene) { Name = "Sun" };
+        var node = new SceneNode(scene, "Sun");
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Directional Light" });
         scene.RootNodes.Add(node);
         return node;

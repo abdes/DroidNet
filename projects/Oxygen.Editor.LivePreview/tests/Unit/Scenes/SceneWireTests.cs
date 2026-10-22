@@ -67,7 +67,7 @@ public sealed class SceneWireTests
     public void ComponentPresence_CoversEveryEngineComponent()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene, "Node");
         node.Components.Add(new PerspectiveCamera { Name = "Camera" });
         node.Components.Add(new SpotLightComponent { Name = "Spot" });
 

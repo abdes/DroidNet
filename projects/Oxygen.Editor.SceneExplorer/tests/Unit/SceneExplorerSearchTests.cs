@@ -25,9 +25,9 @@ public sealed partial class SceneExplorerSearchTests
     public async Task SearchAsync_RevealsCollapsedDescendantAndRestoresExpansion()
     {
         var scene = new Scene { Name = "Scene" };
-        var parent = new SceneNode(scene) { Name = "Parent" };
-        var child = new SceneNode(scene) { Name = "FindMe" };
-        parent.AddChild(child);
+        var parent = new SceneNode(scene, "Parent");
+        var child = new SceneNode(scene, "FindMe");
+        parent.Hierarchy.AddChild(child);
         scene.RootNodes.Add(parent);
         using var metadata = TestScenes.Open(scene);
         scene = metadata.Scene;
@@ -55,7 +55,7 @@ public sealed partial class SceneExplorerSearchTests
     {
         using var harness = CreateHarness();
         var scene = harness.Scene;
-        var node = new SceneNode(scene) { Name = "FindMe" };
+        var node = new SceneNode(scene, "FindMe");
         scene.RootNodes.Add(node);
         var outerId = FolderId.New();
         var innerId = FolderId.New();
@@ -159,8 +159,8 @@ public sealed partial class SceneExplorerSearchTests
     {
         using var harness = CreateHarness();
         var scene = harness.Scene;
-        var first = new SceneNode(scene) { Name = "FindOne" };
-        var second = new SceneNode(scene) { Name = "FindTwo" };
+        var first = new SceneNode(scene, "FindOne");
+        var second = new SceneNode(scene, "FindTwo");
         scene.RootNodes.Add(first);
         scene.RootNodes.Add(second);
         var collapsedId = FolderId.New();
@@ -200,7 +200,7 @@ public sealed partial class SceneExplorerSearchTests
     {
         using var harness = CreateHarness();
         var scene = harness.Scene;
-        var node = new SceneNode(scene) { Name = "FindMe" };
+        var node = new SceneNode(scene, "FindMe");
         scene.RootNodes.Add(node);
         harness.Metadata.ReplaceLayout(
             [
@@ -230,8 +230,8 @@ public sealed partial class SceneExplorerSearchTests
     {
         using var harness = CreateHarness();
         var scene = harness.Scene;
-        var find = new SceneNode(scene) { Name = "FindMe" };
-        var other = new SceneNode(scene) { Name = "Other" };
+        var find = new SceneNode(scene, "FindMe");
+        var other = new SceneNode(scene, "Other");
         scene.RootNodes.Add(find);
         scene.RootNodes.Add(other);
         var folderId = FolderId.New();

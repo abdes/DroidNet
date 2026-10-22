@@ -33,6 +33,9 @@ public sealed partial class NodeFieldSynchronizationTests : DroidNet.Tests.Visua
     [DataRow("Light", "IntensityLux")]
     [DataRow("Light", "CascadeCount")]
     [DataRow("Light", "SplitMode")]
+    [DataRow("Node", "Static")]
+    [DataRow("Node", "RayCastingSelectable")]
+    [DataRow("Node", "IgnoreParentTransform")]
     public Task NodeFieldEditHistoryAndReopenReachNativeState(string kind, string fieldName) => EnqueueAsync(async () =>
     {
         var field = NativeNodeFields.Single(value => string.Equals(value.Kind, kind, StringComparison.Ordinal) && string.Equals(value.Field, fieldName, StringComparison.Ordinal));

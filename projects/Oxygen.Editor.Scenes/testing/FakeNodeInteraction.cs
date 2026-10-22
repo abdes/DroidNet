@@ -82,7 +82,7 @@ public sealed class FakeNodeInteraction : ISceneNodeInteraction
     public SceneNode? GetLockOwner(SceneNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
-        for (var current = node; current is not null; current = current.Parent)
+        for (var current = node; current is not null; current = current.Hierarchy.Parent)
         {
             if (this.IsLocked(current.Id))
             {

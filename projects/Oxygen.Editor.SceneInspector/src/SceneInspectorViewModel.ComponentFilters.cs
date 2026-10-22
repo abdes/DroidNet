@@ -61,10 +61,18 @@ public sealed partial class SceneInspectorViewModel
         this.RefreshEditorInputState();
     }
 
+    // Required components come first, Transform then Rendering; the optional ones follow by label.
+    private static int ComponentOrder(Type type)
+        => type == typeof(TransformComponent) ? 0 : type == typeof(NodeFlagsComponent) ? 1 : 2;
+
+    // The name and the hierarchy keep their own UI, the selection header and the Scene Explorer.
+    private static bool IsListed(Type type) => type != typeof(MetadataComponent) && type != typeof(HierarchyComponent);
+
     private static string ComponentLabel(Type type)
         => type.Name switch
         {
             nameof(TransformComponent) => "Transform",
+            nameof(NodeFlagsComponent) => "Rendering",
             nameof(GeometryComponent) => "Geometry",
             nameof(PerspectiveCamera) => "Camera",
             nameof(OrthographicCamera) => "Orthographic Camera",
@@ -87,8 +95,6 @@ public sealed partial class SceneInspectorViewModel
 
             editor.SetInputEnabled(this.IsEditorInputEnabled(editor));
         }
-
-        this.renderingEditor.SetInputEnabled(this.IsEditorInputEnabled(this.renderingEditor));
     }
 
     private void SetComponentFilter(Type? componentType)
@@ -124,7 +130,7 @@ public sealed partial class SceneInspectorViewModel
             selectedType = null;
         }
 
-        var present = this.items.SelectMany(static node => node.Components).Select(static component => component.GetType()).ToHashSet();
+        var present = this.items.SelectMany(static node => node.Components).Select(static component => component.GetType()).Where(IsListed).ToHashSet();
         for (var index = this.ComponentFilters.Count - 1; index >= 0; --index)
         {
             if (!present.Contains(this.ComponentFilters[index].ComponentType))
@@ -133,7 +139,7 @@ public sealed partial class SceneInspectorViewModel
             }
         }
 
-        foreach (var type in present.OrderBy(type => type == typeof(TransformComponent) ? 0 : 1).ThenBy(ComponentLabel, StringComparer.Ordinal))
+        foreach (var type in present.OrderBy(ComponentOrder).ThenBy(ComponentLabel, StringComparer.Ordinal))
         {
             var option = this.ComponentFilters.FirstOrDefault(candidate => candidate.ComponentType == type);
             if (option is null)

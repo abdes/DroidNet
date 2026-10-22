@@ -18,7 +18,7 @@ namespace Oxygen.Editor.World.Components;
 /// and configure how they are rendered. It supports:
 /// </para>
 /// <list type="bullet">
-/// <item><description>Global overrides (via <see cref="GameComponent.Node"/>'s <see cref="GameObject.OverrideSlots"/>)</description></item>
+/// <item><description>Global overrides (via <see cref="GameComponent.Node"/>'s <see cref="SceneNode.OverrideSlots"/>)</description></item>
 /// <item><description>Component-level overrides (via <see cref="Slots.OverrideSlot"/> instances directly on this component)</description></item>
 /// <item><description>Targeted overrides (via <see cref="TargetedOverrides"/> for specific LODs/submeshes)</description></item>
 /// </list>

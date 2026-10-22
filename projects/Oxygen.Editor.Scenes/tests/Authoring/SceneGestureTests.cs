@@ -422,7 +422,7 @@ public sealed class SceneGestureTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var light = new PointLightData { Id = ComponentId.New(), Name = "Light" };
-        _ = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, light, index: 1)).ConfigureAwait(false);
+        _ = await fixture.Authoring.ExecuteAsync(new AddComponent(SampleScene.B, light, index: SceneBuilder.RequiredComponentCount)).ConfigureAwait(false);
         var range = SceneProperties.PointLight.RangeDescriptor;
         var gesture = await fixture.Authoring.BeginGestureAsync([SampleScene.B], [range.Id], "Range").ConfigureAwait(false);
         _ = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
@@ -444,8 +444,8 @@ public sealed class SceneGestureTests
         => new(new Dictionary<NodeId, PropertyEdit> { [node] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, x) }, "Move");
 
     private static Vector3 PositionOf(AuthoringFixture fixture, NodeId node)
-        => fixture.Node(node).Components.OfType<TransformComponent>().Single().LocalPosition;
+        => fixture.Node(node).Transform.LocalPosition;
 
     private static Quaternion RotationOf(AuthoringFixture fixture, NodeId node)
-        => fixture.Node(node).Components.OfType<TransformComponent>().Single().LocalRotation;
+        => fixture.Node(node).Transform.LocalRotation;
 }

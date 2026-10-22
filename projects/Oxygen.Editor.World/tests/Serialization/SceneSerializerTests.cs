@@ -121,7 +121,7 @@ public sealed class SceneSerializerTests
 
     private static void AssertCameraNode(SceneNode cameraNode)
     {
-        _ = cameraNode.Name.Should().Be("Starting Camera Node");
+        _ = cameraNode.Metadata.Name.Should().Be("Starting Camera Node");
         var camera = cameraNode.Components.OfType<PerspectiveCamera>().Single();
         _ = camera.FieldOfView.Should().Be(75f);
         _ = camera.ApertureF.Should().Be(4f);
@@ -131,8 +131,10 @@ public sealed class SceneSerializerTests
 
     private static void AssertHeroNode(SceneNode heroNode)
     {
-        _ = heroNode.Name.Should().Be("Hero Node");
-        _ = heroNode.Flags.Should().HaveFlag(SceneNodeFlags.Visible | SceneNodeFlags.CastsShadows | SceneNodeFlags.ReceivesShadows);
+        _ = heroNode.Metadata.Name.Should().Be("Hero Node");
+        _ = heroNode.Flags.IsVisible.Should().BeTrue();
+        _ = heroNode.Flags.CastsShadows.Should().BeTrue();
+        _ = heroNode.Flags.ReceivesShadows.Should().BeTrue();
 
         var sun = heroNode.Components.OfType<DirectionalLightComponent>().Single();
         _ = sun.IntensityLux.Should().Be(110_000f);
@@ -151,13 +153,13 @@ public sealed class SceneSerializerTests
         _ = geo.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle();
         _ = geo.TargetedOverrides.Should().ContainSingle();
 
-        _ = heroNode.Children.Should().ContainSingle();
-        AssertChildNode(heroNode.Children[0]);
+        _ = heroNode.Hierarchy.Children.Should().ContainSingle();
+        AssertChildNode(heroNode.Hierarchy.Children[0]);
     }
 
     private static void AssertChildNode(SceneNode childNode)
     {
-        _ = childNode.Name.Should().Be("Child Node");
+        _ = childNode.Metadata.Name.Should().Be("Child Node");
         _ = childNode.Components.OfType<OrthographicCamera>().Should().ContainSingle();
         var pointLight = childNode.Components.OfType<PointLightComponent>().Single();
         _ = pointLight.LuminousFluxLumens.Should().Be(1200f);
@@ -168,9 +170,9 @@ public sealed class SceneSerializerTests
         var lodSlot = childNode.OverrideSlots.OfType<LevelOfDetailSlot>().Single();
         _ = lodSlot.LodPolicy.OverrideValue.Should().BeOfType<DistanceLodPolicy>();
 
-        _ = childNode.Children.Should().ContainSingle();
-        var spotNode = childNode.Children[0];
-        _ = spotNode.Name.Should().Be("Spotlight Node");
+        _ = childNode.Hierarchy.Children.Should().ContainSingle();
+        var spotNode = childNode.Hierarchy.Children[0];
+        _ = spotNode.Metadata.Name.Should().Be("Spotlight Node");
         var spotLight = spotNode.Components.OfType<SpotLightComponent>().Single();
         _ = spotLight.LuminousFluxLumens.Should().Be(1500f);
         _ = spotLight.Range.Should().Be(25f);

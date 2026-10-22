@@ -70,7 +70,7 @@ public sealed class MaterialKeyPriorityTests
     private async Task VerifySharedProjectConsumersAsync(CookWorkspace consumer, CookWorkspace materials, ContentPipelineService service, ContentPipelineService materialProducer, ImportToolContentPipelineApi api)
     {
         var second = new Scene { Name = "Project material" };
-        var node = new SceneNode(second) { Name = "Project cube" };
+        var node = new SceneNode(second, "Project cube");
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") };
         geometry.OverrideSlots.Add(await CreateSurfaceMaterialOverrideAsync(
             consumer, api, geometry.Geometry, AssetPath.Parse("/Art/Materials/Shared.omat"), this.TestContext.CancellationToken).ConfigureAwait(false));

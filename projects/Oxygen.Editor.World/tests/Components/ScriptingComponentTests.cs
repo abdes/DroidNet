@@ -30,8 +30,8 @@ public sealed class ScriptingComponentTests
     public async Task SaveAndReopenKeepSlotsOrderExecutionOrderAndEveryValueType()
     {
         var scene = new Scene { Name = "Scripted" };
-        var target = new SceneNode(scene) { Name = "Target" };
-        var player = new SceneNode(scene) { Name = "Player" };
+        var target = new SceneNode(scene, "Target");
+        var player = new SceneNode(scene, "Player");
         scene.RootNodes.Add(target);
         scene.RootNodes.Add(player);
         var first = new ScriptSlot { Script = MoveScript, ExecutionOrder = -5 }

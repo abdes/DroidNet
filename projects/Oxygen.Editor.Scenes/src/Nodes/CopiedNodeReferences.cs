@@ -23,7 +23,7 @@ internal static class CopiedNodeReferences
     {
         ArgumentNullException.ThrowIfNull(root);
         ArgumentNullException.ThrowIfNull(copies);
-        foreach (var scripting in new[] { root }.Concat(root.Descendants()).SelectMany(static node => node.Components.OfType<ScriptingComponent>()))
+        foreach (var scripting in root.DescendantsAndSelf().SelectMany(static node => node.Components.OfType<ScriptingComponent>()))
         {
             if (Remap(scripting.Slots, copies) is { } slots)
             {

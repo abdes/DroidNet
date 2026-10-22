@@ -5,6 +5,7 @@
 using System.Text.Json;
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -62,7 +63,7 @@ public sealed class SceneFileJsonTests
     {
         Id = Scene,
         Name = "Main",
-        RootNodes = [new SceneNodeData { Id = Camera, Name = "Camera" }],
+        RootNodes = [SceneBuilder.NodeData(Camera, "Camera")],
         ExplorerLayout =
         [
             new ExplorerEntryData

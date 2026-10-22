@@ -70,7 +70,7 @@ public partial class SceneEditorViewModel
         this.UpdateSelectionOutline(args.Context);
         this.UpdateTransformGizmo();
         this.selectedCamera = nodes is [{ } node] && node.Components.OfType<CameraComponent>().Any()
-            ? new SceneCameraChoice(node.Id, node.Name)
+            ? new SceneCameraChoice(node.Id, node.Metadata.Name)
             : null;
         this.UpdateInsets();
     }
@@ -121,14 +121,14 @@ public partial class SceneEditorViewModel
             ? []
             : [.. this.scene.AllNodes
                 .Where(static node => node.Components.OfType<CameraComponent>().Any())
-                .Select(static node => new SceneCameraChoice(node.Id, node.Name))];
+                .Select(static node => new SceneCameraChoice(node.Id, node.Metadata.Name))];
 
     private SceneCameraChoice? GetSelectedCamera()
     {
         return this.scene is { } current
             && this.SelectionService.GetSelectedNodes(this.Document.Id, current) is [{ } node]
             && node.Components.OfType<CameraComponent>().Any()
-                ? new SceneCameraChoice(node.Id, node.Name)
+                ? new SceneCameraChoice(node.Id, node.Metadata.Name)
                 : null;
     }
 
@@ -151,7 +151,7 @@ public partial class SceneEditorViewModel
         }
 
         var edits = new List<ISceneEdit>();
-        if (node.Components.OfType<TransformComponent>().FirstOrDefault() is not { } transform
+        if (node.Transform is not { } transform
             || !HasPose(transform, pose))
         {
             var values = new PropertyEdit.Builder()
@@ -187,7 +187,7 @@ public partial class SceneEditorViewModel
         }
 
         // One undo step however many properties the view changed.
-        var edit = edits.Count == 1 ? edits[0] : new SceneEditBatch($"Move camera '{node.Name}'", edits);
+        var edit = edits.Count == 1 ? edits[0] : new SceneEditBatch($"Move camera '{node.Metadata.Name}'", edits);
         return (await authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded;
     }
 

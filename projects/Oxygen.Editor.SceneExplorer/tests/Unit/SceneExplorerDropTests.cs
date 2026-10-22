@@ -34,7 +34,7 @@ public sealed partial class SceneExplorerDropTests
 
         _ = result.Succeeded.Should().BeTrue();
         _ = result.Items.Should().ContainSingle().Which.Should().BeAssignableTo<SceneNodeAdapter>();
-        _ = scene.AllNodes.Single(node => node.Id == child.Id).Parent!.Id.Should().Be(parent.Id);
+        _ = scene.AllNodes.Single(node => node.Id == child.Id).Hierarchy.Parent!.Id.Should().Be(parent.Id);
         _ = harness.Metadata.Document.History.UndoStack.Should().ContainSingle();
     }
 
@@ -111,8 +111,8 @@ public sealed partial class SceneExplorerDropTests
     {
         var project = new Project(new ProjectInfo("Drop", Category.Games, "H:/DropTreeTests", "preview.png"));
         scene = new Scene { Name = "Scene" };
-        parent = new SceneNode(scene) { Name = "Parent" };
-        child = new SceneNode(scene) { Name = "Child" };
+        parent = new SceneNode(scene, "Parent");
+        child = new SceneNode(scene, "Child");
         scene.RootNodes.Add(parent);
         scene.RootNodes.Add(child);
         var harness = new Harness(project, scene, folderId ?? FolderId.New());

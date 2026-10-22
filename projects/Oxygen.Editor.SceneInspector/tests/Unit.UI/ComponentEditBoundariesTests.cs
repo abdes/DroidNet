@@ -77,7 +77,7 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
             await PendingNumericEdits(editor).ConfigureAwait(true);
         }
 
-        float ReadValue() => editor is TransformViewModel ? fixture.Node.Components.OfType<TransformComponent>().Single().LocalPosition.X : ReadNumericSource(fixture.Node, kind);
+        float ReadValue() => editor is TransformViewModel ? fixture.Node.Transform.LocalPosition.X : ReadNumericSource(fixture.Node, kind);
         _ = ReadValue().Should().Be(text ? edited : before, "the filter boundary must finish the original interaction before detaching its controls");
         _ = fixture.Document.History.UndoStack.Should().HaveCount(text ? 1 : 0);
         if (text)
@@ -114,7 +114,7 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
         await WaitForRenderAsync().ConfigureAwait(true);
         _ = transform.ScaleXDiagnostic.Message.Should().Be(message);
         _ = host.ComponentFilters.Single(option => option.ComponentType == typeof(TransformComponent)).ValidationMessage.Should().Be(message);
-        _ = fixture.Node.Components.OfType<TransformComponent>().Single().LocalScale.X.Should().Be(1);
+        _ = fixture.Node.Transform.LocalScale.X.Should().Be(1);
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
@@ -129,11 +129,11 @@ internal sealed class ComponentEditBoundariesTests : DroidNet.Tests.VisualUserIn
     {
         using var fixture = new SceneAuthoringFixture();
         using var host = fixture.CreateInspectorHost("Transform");
-        var target = fixture.Node.Components.OfType<TransformComponent>().Single();
+        var target = fixture.Node.Transform;
         if (mixed)
         {
             var second = AddNumericNode(fixture.Scene, 80);
-            target = second.Components.OfType<TransformComponent>().Single();
+            target = second.Transform;
             target.LocalScale = new(2, 1, 1);
             fixture.Select(fixture.Node, second);
         }

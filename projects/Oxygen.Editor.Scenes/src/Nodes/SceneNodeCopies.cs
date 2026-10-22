@@ -133,8 +133,9 @@ public static class SceneNodeCopies
         return data with
         {
             Id = id,
-            Components = [.. data.Components.Select(Renew)],
-            Children = data.Children?.Select(child => Renew(child, ids)).ToList(),
+            Components = [.. data.Components.Select(component => component is HierarchyData hierarchy
+                ? hierarchy with { Id = ComponentId.New(), Children = hierarchy.Children?.Select(child => Renew(child, ids)).ToList() }
+                : Renew(component))],
         };
     }
 

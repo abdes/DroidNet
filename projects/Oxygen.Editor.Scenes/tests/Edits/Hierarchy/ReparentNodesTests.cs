@@ -49,7 +49,7 @@ public sealed class ReparentNodesTests
         var result = await fixture.Authoring.ExecuteAsync(new ReparentNodes([SampleScene.B], SampleScene.A, preserveWorld: false)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Node(SampleScene.B).Parent!.Id.Should().Be(SampleScene.A);
+        _ = fixture.Node(SampleScene.B).Hierarchy.Parent!.Id.Should().Be(SampleScene.A);
         _ = NodePose.LocalOf(fixture.Node(SampleScene.B)).Should().Be(localBefore);
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.NodesPlaced([SampleScene.B]), new SceneChange.LayoutChanged());
     }
@@ -76,7 +76,7 @@ public sealed class ReparentNodesTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         NodePose.Pose(fixture.Node(SampleScene.B));
-        fixture.Node(SampleScene.B).IgnoreParentTransform = true;
+        fixture.Node(SampleScene.B).Flags.IgnoreParentTransform = true;
         var worldBefore = NodePose.WorldOf(fixture.Node(SampleScene.B));
         var localBefore = NodePose.LocalOf(fixture.Node(SampleScene.B));
 
@@ -120,7 +120,7 @@ public sealed class ReparentNodesTests
 
         SceneAssert.Invalid(result, SceneEditCodes.HierarchyCycle, SampleScene.A);
         SceneAssert.Unchanged(fixture, before);
-        _ = fixture.Node(SampleScene.B).Parent.Should().BeNull();
+        _ = fixture.Node(SampleScene.B).Hierarchy.Parent.Should().BeNull();
     }
 
     [TestMethod]
@@ -168,14 +168,14 @@ public sealed class ReparentNodesTests
     public async Task AfterSibling_PlacesNodesConsecutively()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var siblings = fixture.Node(SampleScene.A).Children.Select(static node => node.Id).ToList();
+        var siblings = fixture.Node(SampleScene.A).Hierarchy.Children.Select(static node => node.Id).ToList();
         var anchor = siblings.IndexOf(SampleScene.A1);
         List<NodeId> expected = [.. siblings.Take(anchor + 1), SampleScene.B, SampleScene.Cam, .. siblings.Skip(anchor + 1)];
 
         var result = await fixture.Authoring.ExecuteAsync(new ReparentNodes([SampleScene.B, SampleScene.Cam], SampleScene.A, preserveWorld: false, after: SampleScene.A1)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Node(SampleScene.A).Children.Select(static node => node.Id).Should().Equal(expected);
+        _ = fixture.Node(SampleScene.A).Hierarchy.Children.Select(static node => node.Id).Should().Equal(expected);
     }
 
     [TestMethod]
@@ -186,9 +186,9 @@ public sealed class ReparentNodesTests
         var result = await fixture.Authoring.ExecuteAsync(new ReparentNodes([SampleScene.A2], parent: null, preserveWorld: false)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Node(SampleScene.A2).Parent.Should().BeNull();
+        _ = fixture.Node(SampleScene.A2).Hierarchy.Parent.Should().BeNull();
         _ = fixture.Scene.RootNodes.Select(static node => node.Id).Should().Contain(SampleScene.A2);
-        _ = fixture.Node(SampleScene.A).Children.Select(static node => node.Id).Should().NotContain(SampleScene.A2);
+        _ = fixture.Node(SampleScene.A).Hierarchy.Children.Select(static node => node.Id).Should().NotContain(SampleScene.A2);
     }
 
     [TestMethod]
@@ -213,13 +213,13 @@ public sealed class ReparentNodesTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         NodePose.Pose(fixture.Node(SampleScene.B));
         var rootBefore = fixture.Scene.RootNodes.Select(static node => node.Id).ToList();
-        var childrenBefore = fixture.Node(SampleScene.A).Children.Select(static node => node.Id).ToList();
+        var childrenBefore = fixture.Node(SampleScene.A).Hierarchy.Children.Select(static node => node.Id).ToList();
         var localBefore = NodePose.LocalOf(fixture.Node(SampleScene.B));
 
         _ = await SceneAssert.RoundTripAsync(fixture, new ReparentNodes([SampleScene.B, SampleScene.A2], SampleScene.Cam, preserveWorld: true)).ConfigureAwait(false);
 
         _ = fixture.Scene.RootNodes.Select(static node => node.Id).Should().Equal(rootBefore);
-        _ = fixture.Node(SampleScene.A).Children.Select(static node => node.Id).Should().Equal(childrenBefore);
+        _ = fixture.Node(SampleScene.A).Hierarchy.Children.Select(static node => node.Id).Should().Equal(childrenBefore);
         _ = NodePose.LocalOf(fixture.Node(SampleScene.B)).Should().Be(localBefore);
         _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(SampleScene.A2)).Should().Be(LayoutPosition.InFolder(SampleScene.AF, 0));
     }

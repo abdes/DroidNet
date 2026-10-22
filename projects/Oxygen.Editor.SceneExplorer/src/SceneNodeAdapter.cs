@@ -4,6 +4,7 @@
 
 using DroidNet.Controls;
 using Oxygen.Editor.World;
+using Oxygen.Editor.World.Components;
 
 namespace Oxygen.Editor.SceneExplorer;
 
@@ -17,7 +18,7 @@ public sealed partial class SceneNodeAdapter : LayoutItemAdapter, ITreeItem<Scen
     public SceneNodeAdapter(SceneNode payload)
     {
         this.AttachedObject = payload ?? throw new ArgumentNullException(nameof(payload));
-        this.AttachedObject.PropertyChanged += this.OnPayloadPropertyChanged;
+        this.AttachedObject.Metadata.PropertyChanged += this.OnPayloadPropertyChanged;
     }
 
     /// <summary>
@@ -27,7 +28,7 @@ public sealed partial class SceneNodeAdapter : LayoutItemAdapter, ITreeItem<Scen
 
     public override string Label
     {
-        get => this.AttachedObject.Name;
+        get => this.AttachedObject.Metadata.Name;
         set => throw new NotSupportedException("Scene node name is read-only presentation; rename through the document command owner.");
     }
 
@@ -46,11 +47,11 @@ public sealed partial class SceneNodeAdapter : LayoutItemAdapter, ITreeItem<Scen
     /// Detaches this adapter from its payload model, releasing the property-change
     /// subscription so a removed or reloaded adapter does not keep the model alive.
     /// </summary>
-    public void Detach() => this.AttachedObject.PropertyChanged -= this.OnPayloadPropertyChanged;
+    public void Detach() => this.AttachedObject.Metadata.PropertyChanged -= this.OnPayloadPropertyChanged;
 
     private void OnPayloadPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs e)
     {
-        if (string.Equals(e.PropertyName, nameof(SceneNode.Name), StringComparison.Ordinal))
+        if (string.Equals(e.PropertyName, nameof(MetadataComponent.Name), StringComparison.Ordinal))
         {
             this.OnPropertyChanged(nameof(this.Label));
         }

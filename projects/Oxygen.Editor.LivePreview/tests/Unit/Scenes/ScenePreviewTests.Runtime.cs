@@ -54,7 +54,7 @@ public sealed partial class ScenePreviewTests
     {
         using var fixture = new PreviewFixture();
         var built = new Scene { Name = "Test Scene" };
-        var camera = new SceneNode(built) { Name = "Camera" };
+        var camera = new SceneNode(built, "Camera");
         built.RootNodes.Add(camera);
         camera.Components.Add(new PerspectiveCamera { Name = "Perspective Camera", FieldOfView = 60, AspectMode = aspectMode, AspectRatio = 1.5f, NearPlane = 0.25f, FarPlane = 500 });
         var document = await fixture.OpenAsync(built).ConfigureAwait(false);
@@ -75,9 +75,13 @@ public sealed partial class ScenePreviewTests
     {
         using var fixture = new PreviewFixture();
         var built = new Scene { Name = "Test Scene" };
-        var parent = new SceneNode(built) { Name = "Hidden parent", IsVisible = false, CastsShadows = true, ReceivesShadows = false };
-        var child = new SceneNode(built) { Name = "Shown child", IsVisible = true };
-        parent.AddChild(child);
+        var parent = new SceneNode(built, "Hidden parent");
+        parent.Flags.IsVisible = false;
+        parent.Flags.CastsShadows = true;
+        parent.Flags.ReceivesShadows = false;
+        var child = new SceneNode(built, "Shown child");
+        child.Flags.IsVisible = true;
+        parent.Hierarchy.AddChild(child);
         built.RootNodes.Add(parent);
         child.Components.Add(new OrthographicCamera
         {
@@ -100,11 +104,36 @@ public sealed partial class ScenePreviewTests
         _ = camera.AspectMode.Should().Be(CameraAspectMode.Fixed);
         _ = camera.NearPlane.Should().Be(0.5f);
         _ = camera.FarPlane.Should().Be(50f);
-        _ = Flags(parent.Id).Should().Equal(0f, 1f, 0f);
-        _ = Flags(child.Id).Should().Equal(1f, shown.CastsShadows ? 1f : 0f, shown.ReceivesShadows ? 1f : 0f);
+        _ = Flags(parent.Id).Should().Equal(0f, 1f, 0f, 0f, 1f, 0f);
+        _ = Flags(child.Id).Should().Equal(1f, shown.Flags.CastsShadows ? 1f : 0f, shown.Flags.ReceivesShadows ? 1f : 0f, 0f, 1f, 0f);
 
         IEnumerable<float> Flags(NodeId nodeId)
             => fixture.World.PropertiesOf(nodeId, RuntimeComponentId.Node).OrderBy(static entry => entry.FieldId).Select(static entry => entry.Value);
+    }
+
+    [TestMethod]
+    public async Task SceneProjection_SendsAllSixAuthoredNodeFlags()
+    {
+        using var fixture = new PreviewFixture();
+        var built = new Scene { Name = "Test Scene" };
+        var node = new SceneNode(built, "Flagged");
+        node.Flags.IsStatic = true;
+        node.Flags.IsRayCastingSelectable = false;
+        node.Flags.IgnoreParentTransform = true;
+        built.RootNodes.Add(node);
+        var document = await fixture.OpenAsync(built).ConfigureAwait(false);
+
+        _ = (await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
+
+        var sent = fixture.World.PropertiesOf(node.Id, RuntimeComponentId.Node).OrderBy(static entry => entry.FieldId).ToArray();
+        _ = sent.Select(static entry => entry.FieldId).Should().Equal(
+            (ushort)NodeField.Visible,
+            (ushort)NodeField.CastsShadows,
+            (ushort)NodeField.ReceivesShadows,
+            (ushort)NodeField.Static,
+            (ushort)NodeField.RayCastingSelectable,
+            (ushort)NodeField.IgnoreParentTransform);
+        _ = sent.Select(static entry => entry.Value).Should().Equal(1f, 0f, 0f, 1f, 0f, 1f);
     }
 
     [TestMethod]
@@ -112,7 +141,7 @@ public sealed partial class ScenePreviewTests
     {
         using var fixture = new PreviewFixture();
         var built = new Scene { Name = "Test Scene" };
-        var node = new SceneNode(built) { Name = "Saved geometry" };
+        var node = new SceneNode(built, "Saved geometry");
         built.RootNodes.Add(node);
         var target = new SurfaceTarget(
             EngineAssets.BasicShape("Cube"),

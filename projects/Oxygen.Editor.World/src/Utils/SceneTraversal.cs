@@ -24,7 +24,7 @@ public static class SceneTraversal
 
         visitor(root, parentId);
 
-        foreach (var child in root.Children)
+        foreach (var child in root.Hierarchy.Children)
         {
             TraverseDepthFirst(child, visitor, root.Id);
         }
@@ -47,7 +47,7 @@ public static class SceneTraversal
 
         await visitor(root, parentId).ConfigureAwait(false);
 
-        foreach (var child in root.Children)
+        foreach (var child in root.Hierarchy.Children)
         {
             await TraverseDepthFirstAsync(child, visitor, root.Id).ConfigureAwait(false);
         }
@@ -96,7 +96,7 @@ public static class SceneTraversal
             return root;
         }
 
-        foreach (var child in root.Children)
+        foreach (var child in root.Hierarchy.Children)
         {
             var found = FindNodeById(child, targetId);
             if (found is not null)

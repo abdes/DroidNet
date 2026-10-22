@@ -188,7 +188,7 @@ public partial class SceneAdapter : TreeItemAdapter, ITreeItem<Scene>
             this.AddToParent(parent, adapter);
         }
 
-        foreach (var child in node.Children)
+        foreach (var child in node.Hierarchy.Children)
         {
             this.PopulateUnseatedNodes(child, adapter, realizedNodes);
         }

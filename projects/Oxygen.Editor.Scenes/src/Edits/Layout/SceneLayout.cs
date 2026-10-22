@@ -263,7 +263,7 @@ internal static class SceneLayout
         {
             Type = NodeType,
             NodeId = node.Id,
-            Children = node.Children.Count == 0 ? null : [.. node.Children.Select(EntryFor)],
+            Children = node.Hierarchy.Children.Count == 0 ? null : [.. node.Hierarchy.Children.Select(EntryFor)],
         };
 
     private static void Complete(IList<ExplorerEntryData> layout, SceneNode node, IList<ExplorerEntryData> scope)
@@ -274,7 +274,7 @@ internal static class SceneLayout
             return;
         }
 
-        foreach (var child in node.Children)
+        foreach (var child in node.Hierarchy.Children)
         {
             Complete(layout, child, found.Entry.EnsureChildren());
         }

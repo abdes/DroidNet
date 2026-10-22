@@ -173,7 +173,7 @@ public sealed class SceneContentTests
         => new(new Dictionary<NodeId, PropertyEdit> { [SampleScene.A] = PropertyEdit.SingleEdit(SceneSchema.Transform.PositionX, x) }, "Move");
 
     private static float PositionXOf(SceneContent content, NodeId node)
-        => content.Scene.AllNodes.Single(candidate => candidate.Id == node).Components.OfType<TransformComponent>().Single().LocalPosition.X;
+        => content.Scene.AllNodes.Single(candidate => candidate.Id == node).Transform.LocalPosition.X;
 
     private static string StateOf(Document document)
         => JsonSerializer.Serialize(

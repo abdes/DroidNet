@@ -12,7 +12,7 @@ internal static class DependencyScenario
 {
     internal static void AddGeometryNode(CookWorkspace workspace, AssetPath asset, string name)
     {
-        var node = new SceneNode(workspace.Scene) { Name = name };
+        var node = new SceneNode(workspace.Scene, name);
         _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = asset });
         workspace.Scene.RootNodes.Add(node);
     }

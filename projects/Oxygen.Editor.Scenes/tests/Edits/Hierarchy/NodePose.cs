@@ -63,5 +63,5 @@ internal static class NodePose
         }
     }
 
-    private static TransformComponent TransformOf(SceneNode node) => node.Components.OfType<TransformComponent>().Single();
+    private static TransformComponent TransformOf(SceneNode node) => node.Transform;
 }

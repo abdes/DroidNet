@@ -61,16 +61,16 @@ public sealed class PlaceNodesTests
         var result = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Node(SampleScene.B).Parent.Should().BeNull();
+        _ = fixture.Node(SampleScene.B).Hierarchy.Parent.Should().BeNull();
     }
 
     private static NodePlacementState StateOf(AuthoringFixture fixture, NodeId id)
     {
         var node = fixture.Node(id);
-        var siblings = node.Parent?.Children ?? fixture.Scene.RootNodes;
+        var siblings = node.Hierarchy.Parent?.Hierarchy.Children ?? fixture.Scene.RootNodes;
         return new NodePlacementState(
             id,
-            new NodePosition(node.Parent?.Id, siblings.IndexOf(node)),
+            new NodePosition(node.Hierarchy.Parent?.Id, siblings.IndexOf(node)),
             NodePose.LocalOf(node),
             LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(id))!);
     }

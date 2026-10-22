@@ -27,8 +27,8 @@ public sealed class UnsavedCookInputsTests
 
     private const string Scene = """
         { "Id": "6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10", "Name": "Main",
-          "RootNodes": [ { "Name": "Box", "Components": [ { "$type": "GeometryComponent",
-            "GeometryUri": "asset:///Content/Geometry/Box.ogeo" } ] } ] }
+          "RootNodes": [ { "Id": "3d9a2b1c-0000-4000-8000-000000000001", "Components": [ { "$type": "Metadata", "Name": "Box" }, { "$type": "Transform", "Name": "Transform" }, { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "GeometryComponent",
+            "GeometryUri": "asset:///Content/Geometry/Box.ogeo" }, { "$type": "Hierarchy", "Name": "Hierarchy" } ] } ] }
         """;
 
     public TestContext TestContext { get; set; } = null!;

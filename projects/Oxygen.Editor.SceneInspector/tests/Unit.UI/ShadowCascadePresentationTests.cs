@@ -123,7 +123,7 @@ internal sealed class ShadowCascadePresentationTests : VisualUserInterfaceTests
         using var fixture = new SceneAuthoringFixture();
         var first = fixture.Node.Components.OfType<DirectionalLightComponent>().Single();
         first.SplitMode = DirectionalCsmSplitMode.ManualDistances;
-        var other = new SceneNode(fixture.Scene) { Name = "Other sun" };
+        var other = new SceneNode(fixture.Scene, "Other sun");
         var second = new DirectionalLightComponent { Name = "Other sun", SplitMode = DirectionalCsmSplitMode.ManualDistances, CascadeCount = 2 };
         _ = other.AddComponent(second);
         fixture.Scene.RootNodes.Add(other);

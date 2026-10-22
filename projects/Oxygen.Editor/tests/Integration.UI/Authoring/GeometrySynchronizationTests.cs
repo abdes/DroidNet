@@ -34,7 +34,7 @@ public sealed partial class GeometrySynchronizationTests : DroidNet.Tests.Visual
         using var timeout = CancellationTokenSource.CreateLinkedTokenSource(this.TestContext.CancellationToken);
         timeout.CancelAfter(TimeSpan.FromSeconds(30));
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
-        var nodes = fixture.Source.RootNodes.Select(static node => (node.Id, Shape: node.Name)).ToArray();
+        var nodes = fixture.Source.RootNodes.Select(static node => (node.Id, Shape: node.Metadata.Name)).ToArray();
         var original = new Dictionary<NodeId, RuntimeNodeState>();
         foreach (var (id, shape) in nodes)
         {

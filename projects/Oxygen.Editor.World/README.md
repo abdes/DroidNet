@@ -57,8 +57,8 @@ flowchart BT
 
 | Folder               | Contents                                                                                                                                                                                       |
 | -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/` (root)        | `Scene`, `SceneNode`, their `GameObject` base, `SceneNodeFlags`, the hierarchy queries in `SceneNodeExtensions`, `IPersistent<TData>` and `OverridableProperty<T>`                             |
-| `src/Components/`    | The components a node carries: transform, geometry, perspective and orthographic cameras, directional, point and spot lights, local fog volume and scripting, plus `LightValidation`           |
+| `src/` (root)        | `Scene` and its `GameObject` base, `SceneNode`, the hierarchy queries in `SceneNodeExtensions`, `IPersistent<TData>` and `OverridableProperty<T>`                                              |
+| `src/Components/`    | The components a node carries: metadata, hierarchy, transform, node flags, geometry, cameras, lights, local fog volume and scripting, plus `LightValidation`                                   |
 | `src/Slots/`         | The override slots (`RenderingSlot`, `LightingSlot`, `MaterialsSlot`, `LevelOfDetailSlot`) and the LOD policies                                                                                |
 | `src/Serialization/` | The data records a scene is written as (`SceneData`, `SceneNodeData`, one record per component and slot), the source-generated `SceneJsonContext` and `SceneSerializer`; see its [README][ser] |
 | `src/Utils/`         | The vector and quaternion JSON converters, `TransformConverter` (engine transform and Euler-angle conversions) and `SceneTraversal`                                                            |
@@ -89,11 +89,8 @@ classDiagram
     }
     class SceneNode {
         NodeId Id
-        Parent
-        Children
         Components
-        IsActive
-        Flags
+        OverrideSlots
     }
     class GameComponent {
         <<abstract>>
@@ -106,11 +103,9 @@ classDiagram
     }
 
     GameObject <|-- Scene
-    GameObject <|-- SceneNode
     Scene "1" *-- "*" SceneNode : RootNodes
-    SceneNode "1" *-- "*" SceneNode : Children
-    SceneNode "1" *-- "1..*" GameComponent : Components
-    GameObject "1" *-- "*" OverrideSlot : OverrideSlots
+    SceneNode "1" *-- "4..*" GameComponent : Components
+    SceneNode "1" *-- "*" OverrideSlot : OverrideSlots
 ```
 
 The components and slots each have their own small hierarchy:
@@ -124,7 +119,10 @@ config:
 classDiagram
     direction LR
 
+    GameComponent <|-- MetadataComponent
+    GameComponent <|-- HierarchyComponent
     GameComponent <|-- TransformComponent
+    GameComponent <|-- NodeFlagsComponent
     GameComponent <|-- GeometryComponent
     GameComponent <|-- CameraComponent
     GameComponent <|-- LightComponent
@@ -136,6 +134,7 @@ classDiagram
     LightComponent <|-- PointLightComponent
     LightComponent <|-- SpotLightComponent
 
+    HierarchyComponent "1" o-- "*" SceneNode : Children
     GeometryComponent "1" *-- "*" OverrideSlot : OverrideSlots
     GeometryComponent "1" *-- "*" GeometryOverrideTarget : TargetedOverrides
     GeometryOverrideTarget "1" *-- "*" OverrideSlot : OverrideSlots
@@ -145,21 +144,18 @@ classDiagram
     OverrideSlot <|-- LevelOfDetailSlot
 ```
 
-A small scene, as the Scene Explorer would show it with its components:
+A small scene, as the Scene Explorer would show it with its optional components
+(every node also has its metadata, hierarchy, transform and node flags):
 
 ```text
 Scene "Courtyard"
 ├── SceneNode "Sun"
-│   ├── TransformComponent
 │   └── DirectionalLightComponent      (drives the primary atmosphere light)
 ├── SceneNode "Fountain"
-│   ├── TransformComponent
 │   ├── GeometryComponent              (MaterialsSlot targeted at LOD 0, submesh 1)
 │   └── SceneNode "Water"
-│       ├── TransformComponent
 │       └── LocalFogVolumeComponent
 └── SceneNode "Player"
-    ├── TransformComponent
     ├── PerspectiveCamera              (the scene's StartingCamera)
     └── ScriptingComponent
 ```
@@ -186,17 +182,27 @@ a change notification only when the value differs.
 
 ### SceneNode
 
-A `SceneNode` belongs to one scene for its whole life and has:
+A `SceneNode` is an identity and a container of components, as the engine's
+node is. It belongs to one scene for its whole life and has:
 
-- `Id`, a `NodeId` written in the file, and `Name`.
-- `Parent` and `Children`. `SetParent`, `AddChild` and `RemoveChild` keep both
-  sides in step and refuse a parent that would make a cycle.
-- `Components`, which always holds exactly one `TransformComponent`.
-  `AddComponent` and `RemoveComponent` set and clear each component's `Node`.
-- `IsActive` and the flags: `IsVisible`, `CastsShadows`, `ReceivesShadows`,
-  `IsRayCastingSelectable`, `IgnoreParentTransform` and `IsStatic`. `Flags`
-  reads and writes them together as a `SceneNodeFlags` value.
+- `Id`, a `NodeId` written in the file.
+- `Components`, which hold exactly one of each required component, created with
+  the node and never added, removed or replaced, then the optional ones.
+  `AddComponent` and `RemoveComponent` refuse required components and set and
+  clear each component's `Node`. Typed accessors return the required ones:
+  - `Metadata`, a `MetadataComponent` whose `Name` is the node's name, nonempty
+    after trimming;
+  - `Hierarchy`, a `HierarchyComponent` with `Parent` and the ordered
+    `Children`. `SetParent`, `AddChild` and `RemoveChild` keep both sides in
+    step and refuse a parent that would make a cycle;
+  - `Transform`, the `TransformComponent`;
+  - `Flags`, a `NodeFlagsComponent` with `IsVisible`, `CastsShadows`,
+    `ReceivesShadows`, `IsStatic`, `IsRayCastingSelectable` and
+    `IgnoreParentTransform`.
 - `OverrideSlots`, which apply to every component of the node.
+
+Whether a node is present in the engine is Live Preview's state, not the
+node's.
 
 `Descendants`, `Ancestors`, `DescendantsAndSelf`, `AncestorsAndSelf`,
 `HierarchyPath` and `Scene.FindByPath` query the hierarchy. `FindByPath` accepts
@@ -348,12 +354,11 @@ change notification when the value is replaced.
 | `LightingSlot`      | Shadow casting and receiving                                | Stored and round-tripped; nothing authors or applies it |
 | `LevelOfDetailSlot` | The LOD policy: fixed, by distance or by screen-space error | Stored and round-tripped; nothing authors or applies it |
 
-Node visibility and shadows come from the node's own flags (`IsVisible`,
-`CastsShadows`, `ReceivesShadows`), not from `RenderingSlot` or `LightingSlot`.
+Node visibility and shadows come from the node's `NodeFlagsComponent`
+(`IsVisible`, `CastsShadows`, `ReceivesShadows`), not from `RenderingSlot` or
+`LightingSlot`.
 The node scope and the LOD-or-submesh scope are likewise stored but not
 authored; asset reference tracking still looks in them for materials.
-
-`GetOrCreateSlot<T>()` returns a node's slot of a type, adding it if missing.
 
 ## Persistence
 

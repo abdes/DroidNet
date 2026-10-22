@@ -29,6 +29,22 @@
             <editorcontrols:PropertyCard PropertyName="Receive shadows" Visibility="{x:Bind ViewModel.ShowsShadowFlags, Mode=OneWay}">
                 <ToggleSwitch AutomationProperties.Name="Receive shadows" IsOn="{x:Bind ViewModel.ReceivesShadows, Mode=TwoWay}" />
             </editorcontrols:PropertyCard>
+            <Expander
+                HorizontalAlignment="Stretch"
+                HorizontalContentAlignment="Stretch"
+                AutomationProperties.AutomationId="Scene.Node.Rendering.Advanced"
+                Header="Advanced"
+                IsExpanded="False"
+                Style="{StaticResource QuietDisclosure}">
+                <StackPanel Spacing="4">
+                    <editorcontrols:PropertyCard PropertyName="Static">
+                        <ToggleSwitch AutomationProperties.Name="Static" IsOn="{x:Bind ViewModel.IsStatic, Mode=TwoWay}" />
+                    </editorcontrols:PropertyCard>
+                    <editorcontrols:PropertyCard PropertyName="Ray-cast selectable">
+                        <ToggleSwitch AutomationProperties.Name="Ray-cast selectable" IsOn="{x:Bind ViewModel.IsRayCastingSelectable, Mode=TwoWay}" />
+                    </editorcontrols:PropertyCard>
+                </StackPanel>
+            </Expander>
         </editorcontrols:PropertiesExpander.Items>
     </editorcontrols:PropertiesExpander>
 </UserControl>

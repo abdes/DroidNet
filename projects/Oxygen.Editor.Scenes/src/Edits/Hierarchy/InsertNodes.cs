@@ -59,7 +59,7 @@ public sealed record InsertNodes : ISceneEdit
         {
             SceneGraph.Attach(scene, node, insert.At.Parent is { } parent ? scope.FindNode(parent) : null, insert.At.Index);
             _ = SceneReferenceRetargeting.RetargetSubtree(node, scope.Moved);
-            foreach (var held in new[] { node }.Concat(node.Descendants()))
+            foreach (var held in node.DescendantsAndSelf())
             {
                 scope.WarnIfDeleted(SceneAssetReferences.Runtime(held).Concat(SceneAssetReferences.Scripts(held)), held.Id);
             }
@@ -117,7 +117,7 @@ public sealed record InsertNodes : ISceneEdit
     private static SceneDiagnostic? CheckSuns(Scene scene, IEnumerable<SceneNodeData> inserted)
     {
         var owners = scene.AllNodes
-            .SelectMany(static node => node.Components.OfType<DirectionalLightComponent>().Select(light => (light.AtmosphereSlot, node.Name)))
+            .SelectMany(static node => node.Components.OfType<DirectionalLightComponent>().Select(light => (light.AtmosphereSlot, node.Metadata.Name)))
             .Where(static owner => owner.AtmosphereSlot != AtmosphereLightSlot.None)
             .ToDictionary(static owner => owner.AtmosphereSlot, static owner => owner.Name);
         foreach (var (slot, name) in inserted.SelectMany(Lights))

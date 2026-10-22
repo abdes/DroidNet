@@ -2,15 +2,18 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json;
 using System.Text.Json.Serialization;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
-/// Data transfer object for scene node.
+/// Data transfer object for a scene node: its identity and its components. The name, hierarchy, transform and node
+/// flags are the required <see cref="MetadataData"/>, <see cref="HierarchyData"/>, <see cref="TransformData"/> and
+/// <see cref="NodeFlagsData"/> entries, exactly one each.
 /// </summary>
-public record SceneNodeData : NamedData
+public record SceneNodeData
 {
     /// <summary>
     /// Gets or initializes the identity of the node.
@@ -19,16 +22,9 @@ public record SceneNodeData : NamedData
     public required NodeId Id { get; init; }
 
     /// <summary>
-    /// Gets or initializes the list of components (including TransformComponent).
-    /// TransformComponent is represented by a <see cref="TransformData"/> entry.
+    /// Gets or initializes the node's components, required ones included.
     /// </summary>
     public IList<ComponentData> Components { get; init; } = [];
-
-    /// <summary>
-    /// Gets or initializes the list of child nodes.
-    /// </summary>
-    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
-    public IList<SceneNodeData>? Children { get; init; } = null;
 
     /// <summary>
     /// Gets or initializes the list of override slots for this node.
@@ -36,37 +32,39 @@ public record SceneNodeData : NamedData
     public IList<OverrideSlotData> OverrideSlots { get; init; } = [];
 
     /// <summary>
-    /// Gets a value indicating whether gets or initializes a value indicating whether the node is active.
+    /// Gets the node's name, held by its metadata component.
     /// </summary>
-    public bool IsActive { get; init; }
+    /// <exception cref="JsonException">The metadata component is missing or repeated.</exception>
+    [JsonIgnore]
+    public string Name => this.Required<MetadataData>().Name;
 
     /// <summary>
-    /// Gets a value indicating whether gets or initializes a value indicating whether the node is visible.
+    /// Gets the node's ordered children, nested in its hierarchy component.
     /// </summary>
-    public bool IsVisible { get; init; } = true;
+    /// <exception cref="JsonException">The hierarchy component is missing or repeated.</exception>
+    [JsonIgnore]
+    public IList<SceneNodeData> Children => this.Required<HierarchyData>().Children ?? [];
 
     /// <summary>
-    /// Gets a value indicating whether gets or initializes a value indicating whether the node casts shadows.
+    /// Gets the node's one component of a required kind.
     /// </summary>
-    public bool CastsShadows { get; init; }
+    /// <typeparam name="TData">The required component's data type.</typeparam>
+    /// <returns>The component data.</returns>
+    /// <exception cref="JsonException">The component is missing or repeated.</exception>
+    public TData Required<TData>()
+        where TData : ComponentData
+    {
+        TData? found = null;
+        foreach (var component in this.Components.OfType<TData>())
+        {
+            if (found is not null)
+            {
+                throw new JsonException($"Node {this.Id} has more than one {typeof(TData).Name} component.");
+            }
 
-    /// <summary>
-    /// Gets a value indicating whether gets or initializes a value indicating whether the node receives shadows.
-    /// </summary>
-    public bool ReceivesShadows { get; init; }
+            found = component;
+        }
 
-    /// <summary>
-    /// Gets a value indicating whether gets or initializes a value indicating whether the node is ray casting selectable.
-    /// </summary>
-    public bool IsRayCastingSelectable { get; init; } = true;
-
-    /// <summary>
-    /// Gets a value indicating whether gets or initializes a value indicating whether the node ignores parent transform.
-    /// </summary>
-    public bool IgnoreParentTransform { get; init; }
-
-    /// <summary>
-    /// Gets a value indicating whether gets or initializes a value indicating whether the node is static.
-    /// </summary>
-    public bool IsStatic { get; init; }
+        return found ?? throw new JsonException($"Node {this.Id} has no {typeof(TData).Name} component.");
+    }
 }

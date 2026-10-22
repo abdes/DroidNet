@@ -12,22 +12,23 @@ using Oxygen.Editor.World.Components;
 namespace Oxygen.Editor.SceneInspector.Components.Rendering;
 
 /// <summary>
-/// Node "Rendering" section: authored Scene Visibility and geometry Cast/Receive Shadows, edited as
-/// explicit local values on every selected node.
+/// The "Rendering" section, which edits the node-flags component every node has: authored Scene Visibility, geometry
+/// Cast/Receive Shadows and, under Advanced, Static and Ray-cast selectable, as explicit local values on every selected
+/// node. Ignore Parent Transform, also a node flag, is edited in the Transform section.
 /// </summary>
 /// <remarks>
-/// Every authored node carries its own values, so the flags only matter where the node itself is
-/// rendered: Scene Visibility for geometry and lights, the shadow flags for geometry. The section
-/// applies only when every selected node has geometry or a light, and shows the shadow flags only
-/// when every selected node has geometry.
+/// The shadow flags affect only the node's own geometry, so the section shows them only when every selected node has
+/// geometry.
 /// </remarks>
 public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, IDisposable
 {
     private readonly InspectorEditSessionCoordinator? edits;
     private readonly List<IInspectorBindingRefresh> registrations = [];
-    private readonly PropertyBinding<bool> isVisibleBinding = new(SceneProperties.NodeRendering.IsVisibleDescriptor);
-    private readonly PropertyBinding<bool> castsShadowsBinding = new(SceneProperties.NodeRendering.CastsShadowsDescriptor);
-    private readonly PropertyBinding<bool> receivesShadowsBinding = new(SceneProperties.NodeRendering.ReceivesShadowsDescriptor);
+    private readonly PropertyBinding<bool> isVisibleBinding = new(SceneProperties.NodeFlags.IsVisibleDescriptor);
+    private readonly PropertyBinding<bool> castsShadowsBinding = new(SceneProperties.NodeFlags.CastsShadowsDescriptor);
+    private readonly PropertyBinding<bool> receivesShadowsBinding = new(SceneProperties.NodeFlags.ReceivesShadowsDescriptor);
+    private readonly PropertyBinding<bool> isStaticBinding = new(SceneProperties.NodeFlags.IsStaticDescriptor);
+    private readonly PropertyBinding<bool> isRayCastingSelectableBinding = new(SceneProperties.NodeFlags.IsRayCastingSelectableDescriptor);
     private ICollection<SceneNode>? selectedItems;
     private bool disposed;
 
@@ -44,6 +45,8 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
         this.Register(this.isVisibleBinding, nameof(this.IsVisible));
         this.Register(this.castsShadowsBinding, nameof(this.CastsShadows));
         this.Register(this.receivesShadowsBinding, nameof(this.ReceivesShadows));
+        this.Register(this.isStaticBinding, nameof(this.IsStatic));
+        this.Register(this.isRayCastingSelectableBinding, nameof(this.IsRayCastingSelectable));
     }
 
     /// <summary>Gets or sets a value indicating whether the node is visible in the scene.</summary>
@@ -67,6 +70,20 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
         set => InspectorBindingRequests.Request(this.receivesShadowsBinding, value);
     }
 
+    /// <summary>Gets or sets a value indicating whether the node is static, an optimization hint.</summary>
+    public bool IsStatic
+    {
+        get => this.isStaticBinding.Value;
+        set => InspectorBindingRequests.Request(this.isStaticBinding, value);
+    }
+
+    /// <summary>Gets or sets a value indicating whether ray casting can select the node.</summary>
+    public bool IsRayCastingSelectable
+    {
+        get => this.isRayCastingSelectableBinding.Value;
+        set => InspectorBindingRequests.Request(this.isRayCastingSelectableBinding, value);
+    }
+
     /// <summary>Gets a value indicating whether every selected node has geometry, so the shadow flags apply.</summary>
     public bool ShowsShadowFlags { get; private set; }
 
@@ -74,7 +91,7 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
     public override string Header => "Rendering";
 
     /// <inheritdoc />
-    public override string Description => "Scene visibility and geometry shadow participation.";
+    public override string Description => "Scene visibility, geometry shadow participation and node hints.";
 
     /// <inheritdoc />
     internal override InspectorFieldDiagnostics? ValidationFeedback => this.edits?.Diagnostics;
@@ -102,7 +119,7 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
     /// <inheritdoc />
     public override void UpdateValues(ICollection<SceneNode> items)
     {
-        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node);
+        var targets = items.ToDictionary(static node => node.Id, static node => (object?)node.Flags);
         var nodes = targets.Keys.ToArray();
         this.edits?.Bind(nodes);
         this.selectedItems = items;
@@ -118,14 +135,6 @@ public sealed partial class NodeRenderingViewModel : ComponentPropertyEditor, ID
             registration.Refresh(nodes, id => targets.GetValueOrDefault(id));
         }
     }
-
-    /// <summary>
-    /// Gets a value indicating whether the section applies to a selection: every node has geometry or a light.
-    /// </summary>
-    /// <param name="items">The selected nodes.</param>
-    /// <returns><see langword="true"/> when the rendering flags affect every selected node.</returns>
-    internal static bool AppliesTo(ICollection<SceneNode> items)
-        => items.Count > 0 && items.All(static node => HasGeometry(node) || node.Components.OfType<LightComponent>().Any());
 
     /// <inheritdoc />
     protected override void OnInputEnabledChanged(bool enabled) => this.edits?.SetInputEnabled(enabled);

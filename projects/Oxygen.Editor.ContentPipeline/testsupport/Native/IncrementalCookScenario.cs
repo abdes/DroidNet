@@ -42,7 +42,7 @@ internal static class IncrementalCookScenario
     internal static async Task PrepareIncrementalSceneAsync(CookWorkspace workspace, ICookedGeometryInspector inspector)
     {
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
-        var node = new SceneNode(workspace.Scene) { Name = "Cube" };
+        var node = new SceneNode(workspace.Scene, "Cube");
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") };
         geometry.OverrideSlots.Add(await CreateSurfaceMaterialOverrideAsync(
             workspace, inspector, geometry.Geometry, AssetPath.Parse("/Content/Materials/Blue.omat")).ConfigureAwait(false));

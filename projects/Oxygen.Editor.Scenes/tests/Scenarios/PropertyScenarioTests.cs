@@ -145,5 +145,5 @@ public sealed class PropertyScenarioTests
         => fixture.Node(light).Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot;
 
     private static TransformComponent TransformOf(AuthoringFixture fixture, NodeId node)
-        => fixture.Node(node).Components.OfType<TransformComponent>().Single();
+        => fixture.Node(node).Transform;
 }

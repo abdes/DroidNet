@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
@@ -13,10 +14,10 @@ namespace Oxygen.Editor.Scenes.Edits.Components;
 public static class ComponentFamilies
 {
     /// <summary>The family of a node's transform.</summary>
-    public const string Transform = "transform";
+    public const string Transform = SceneSchema.Transform.Kind;
 
     /// <summary>The family of a node's geometry.</summary>
-    public const string Geometry = "geometry";
+    public const string Geometry = SceneSchema.Geometry.Kind;
 
     /// <summary>The family of a node's camera, perspective or orthographic.</summary>
     public const string Camera = "camera";
@@ -25,10 +26,10 @@ public static class ComponentFamilies
     public const string Light = "light";
 
     /// <summary>The family of a node's local fog volume.</summary>
-    public const string LocalFogVolume = "local-fog-volume";
+    public const string LocalFogVolume = SceneSchema.LocalFogVolume.Kind;
 
     /// <summary>The family of a node's Scripting component.</summary>
-    public const string Scripting = "scripting";
+    public const string Scripting = SceneSchema.Scripting.Kind;
 
     /// <summary>Gets a component's family.</summary>
     /// <param name="component">The component.</param>
@@ -52,7 +53,7 @@ public static class ComponentFamilies
     internal static SceneDiagnostic? Conflict(SceneNode node, ComponentData component)
         => component switch
         {
-            TransformData => Duplicate("Transform is locked and already present on every scene node."),
+            TransformData or MetadataData or HierarchyData or NodeFlagsData => Duplicate("The node's required components are present on every scene node."),
             GeometryComponentData when node.Components.OfType<GeometryComponent>().Any() => Duplicate("This node already has a geometry component."),
             CameraComponentData when node.Components.OfType<CameraComponent>().Any() => Duplicate("This node already has a camera component."),
             LightComponentData when node.Components.OfType<LightComponent>().Any() => Duplicate("This node already has a light component."),

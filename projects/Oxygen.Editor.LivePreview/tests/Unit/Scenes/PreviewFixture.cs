@@ -14,7 +14,6 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core.Diagnostics;
 using Testably.Abstractions.Testing;
 
@@ -83,9 +82,9 @@ internal sealed partial class PreviewFixture : IDisposable
     public async Task<(Scene Scene, SceneNode Node, Document Document)> OpenCubeAsync(float x)
     {
         var scene = new Scene { Name = string.Create(CultureInfo.InvariantCulture, $"Scene {this.opened.Count + 1}") };
-        var node = new SceneNode(scene) { Name = "Cube" };
+        var node = new SceneNode(scene, "Cube");
         scene.RootNodes.Add(node);
-        node.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(x, 0, 0);
+        node.Transform.LocalPosition = new Vector3(x, 0, 0);
         var document = await this.OpenAsync(scene).ConfigureAwait(false);
         var shown = SceneOf(document);
         return (shown, shown.AllNodes.Single(candidate => candidate.Id == node.Id), document);

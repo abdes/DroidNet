@@ -7,7 +7,6 @@ using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core;
 
@@ -107,7 +106,7 @@ internal sealed partial class ScenePreview
     private static partial void LogCannotCreateNode(ILogger logger, string nodeName);
 
     private void LogCannotCreateNode(SceneNode node)
-        => LogCannotCreateNode(this.logger, node.Name);
+        => LogCannotCreateNode(this.logger, node.Metadata.Name);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -117,7 +116,7 @@ internal sealed partial class ScenePreview
 
     [Conditional("DEBUG")]
     private void LogCreatedAndInitializedNode(SceneNode node)
-        => LogCreatedAndInitializedNode(this.logger, node.Name);
+        => LogCreatedAndInitializedNode(this.logger, node.Metadata.Name);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -126,7 +125,7 @@ internal sealed partial class ScenePreview
     private static partial void LogFailedToCreateNode(ILogger logger, Exception exception, string nodeName);
 
     private void LogFailedToCreateNode(Exception ex, SceneNode node)
-        => LogFailedToCreateNode(this.logger, ex, node.Name);
+        => LogFailedToCreateNode(this.logger, ex, node.Metadata.Name);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -218,7 +217,7 @@ internal sealed partial class ScenePreview
     private static partial void LogCannotAttachGeometry(ILogger logger, string nodeName);
 
     private void LogCannotAttachGeometry(SceneNode node)
-        => LogCannotAttachGeometry(this.logger, node.Name);
+        => LogCannotAttachGeometry(this.logger, node.Metadata.Name);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -228,7 +227,7 @@ internal sealed partial class ScenePreview
 
     [Conditional("DEBUG")]
     private void LogAttachedGeometry(SceneNode node)
-        => LogAttachedGeometry(this.logger, node.Name);
+        => LogAttachedGeometry(this.logger, node.Metadata.Name);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -265,16 +264,7 @@ internal sealed partial class ScenePreview
     private static partial void LogFailedToAttachGeometry(ILogger logger, Exception exception, string nodeName);
 
     private void LogFailedToAttachGeometry(Exception ex, SceneNode node)
-        => LogFailedToAttachGeometry(this.logger, ex, node.Name);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Error,
-        Message = "Node '{NodeName}' creation was not successful")]
-    private static partial void LogNodeCreationNotSuccessful(ILogger logger, string nodeName);
-
-    private void LogNodeCreationNotSuccessful(SceneNode node)
-        => LogNodeCreationNotSuccessful(this.logger, node.Name);
+        => LogFailedToAttachGeometry(this.logger, ex, node.Metadata.Name);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -283,7 +273,7 @@ internal sealed partial class ScenePreview
     private static partial void LogFailedToReparentNode(ILogger logger, Exception exception, string nodeName);
 
     private void LogFailedToReparentNode(Exception ex, SceneNode node)
-        => LogFailedToReparentNode(this.logger, ex, node.Name);
+        => LogFailedToReparentNode(this.logger, ex, node.Metadata.Name);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -292,7 +282,7 @@ internal sealed partial class ScenePreview
     private static partial void LogFailedToSetTransform(ILogger logger, Exception exception, string nodeName);
 
     private void LogFailedToSetTransform(Exception ex, SceneNode node)
-        => LogFailedToSetTransform(this.logger, ex, node.Name);
+        => LogFailedToSetTransform(this.logger, ex, node.Metadata.Name);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -462,11 +452,11 @@ internal sealed partial class ScenePreview
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Error,
-        Message = "Failed to apply authored rendering flags to node {NodeId}")]
-    private static partial void LogFailedToApplyNodeRendering(ILogger logger, Exception exception, NodeId nodeId);
+        Message = "Failed to apply authored node flags to node {NodeId}")]
+    private static partial void LogFailedToApplyNodeFlags(ILogger logger, Exception exception, NodeId nodeId);
 
-    private void LogFailedToApplyNodeRendering(Exception ex, NodeId nodeId)
-        => LogFailedToApplyNodeRendering(this.logger, ex, nodeId);
+    private void LogFailedToApplyNodeFlags(Exception ex, NodeId nodeId)
+        => LogFailedToApplyNodeFlags(this.logger, ex, nodeId);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -485,7 +475,7 @@ internal sealed partial class ScenePreview
 
     [Conditional("DEBUG")]
     private void LogEnqueueingRootNodeCreation(SceneNode node)
-        => LogEnqueueingRootNodeCreation(this.logger, node.Name, node.Id);
+        => LogEnqueueingRootNodeCreation(this.logger, node.Metadata.Name, node.Id);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -505,7 +495,7 @@ internal sealed partial class ScenePreview
 
     [Conditional("DEBUG")]
     private void LogProcessingHierarchyRootNode(SceneNode node)
-        => LogProcessingHierarchyRootNode(this.logger, node.Name, node.Id);
+        => LogProcessingHierarchyRootNode(this.logger, node.Metadata.Name, node.Id);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -520,7 +510,7 @@ internal sealed partial class ScenePreview
             return;
         }
 
-        var transform = node.Components.OfType<TransformComponent>().FirstOrDefault();
+        var transform = node.Transform;
         if (transform is null)
         {
             this.LogSceneTransformHasNoComponent(node, parentGuid);
@@ -531,7 +521,7 @@ internal sealed partial class ScenePreview
         var (pos, rot, scale) = TransformConverter.ToNative(transform);
         LogSceneTransform(
             this.logger,
-            node.Name,
+            node.Metadata.Name,
             parentId,
             pos.X,
             pos.Y,
@@ -559,7 +549,7 @@ internal sealed partial class ScenePreview
         }
 
         var parentId = parentGuid.HasValue ? parentGuid.GetValueOrDefault().ToString() : "root";
-        LogSceneTransformHasNoComponent(this.logger, node.Name, parentId);
+        LogSceneTransformHasNoComponent(this.logger, node.Metadata.Name, parentId);
     }
 
     [LoggerMessage(

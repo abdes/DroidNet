@@ -123,6 +123,16 @@ struct DirectionalLightPropertySnapshot {
   float intensity_lux = 0.0F;
 };
 
+struct NodeFlagsSnapshot {
+  NativeStatus status {};
+
+  bool is_static = false;
+  bool ray_casting_selectable = true;
+  bool ignore_parent_transform = false;
+  float composed_world_x = 0.0F;
+  float ignored_parent_world_x = 0.0F;
+};
+
 thread_local char last_native_error[1024] {};
 
 auto NativeFailure(std::string message) -> NativeStatus
@@ -460,6 +470,46 @@ auto RunAttachDirectionalNonSunClearsAtmosphereLightRole(
       result.disk_luminance_scale_y
         = light->get().GetAtmosphereDiskLuminanceScale().y;
     }
+  });
+}
+
+auto RunSetPropertiesNodeFlagsApplyLocalValues(NodeFlagsSnapshot& result)
+  -> void
+{
+  CaptureNative(result, [&result] {
+    auto scene = CreateTestScene("NodeFlagsPropertyCommandTest");
+    auto parent = scene->CreateNode("Parent");
+    auto child = scene->CreateChildNode(parent, "Child").value();
+    auto context = BuildContext(*scene);
+    PropertyApplierRegistry::Bootstrap();
+
+    (void)parent.GetTransform().SetLocalPosition({ 10.0F, 0.0F, 0.0F });
+    (void)child.GetTransform().SetLocalPosition({ 1.0F, 0.0F, 0.0F });
+    scene->Update(false);
+    result.composed_world_x
+      = child.GetTransform().GetWorldPosition().value_or(oxygen::Vec3 {}).x;
+
+    const auto field = [](const NodeField value) -> std::uint16_t {
+      return static_cast<std::uint16_t>(value);
+    };
+    SetPropertiesCommand(child.GetHandle(),
+      {
+        { ComponentId::kNode, field(NodeField::kStatic), 1.0F },
+        { ComponentId::kNode, field(NodeField::kRayCastingSelectable), 0.0F },
+        { ComponentId::kNode, field(NodeField::kIgnoreParentTransform), 1.0F },
+      })
+      .Execute(context);
+    scene->Update(false);
+
+    const auto& flags = child.GetFlags()->get();
+    result.is_static
+      = flags.GetEffectiveValue(oxygen::scene::SceneNodeFlags::kStatic);
+    result.ray_casting_selectable = flags.GetEffectiveValue(
+      oxygen::scene::SceneNodeFlags::kRayCastingSelectable);
+    result.ignore_parent_transform = flags.GetEffectiveValue(
+      oxygen::scene::SceneNodeFlags::kIgnoreParentTransform);
+    result.ignored_parent_world_x
+      = child.GetTransform().GetWorldPosition().value_or(oxygen::Vec3 {}).x;
   });
 }
 
@@ -1155,6 +1205,20 @@ public:
       snapshot.atmosphere_slot);
     Assert::IsFalse(snapshot.per_pixel_transmittance);
     Assert::AreEqual(1.0F, snapshot.disk_luminance_scale_y, 0.0001F);
+  }
+
+  [TestMethod]
+  void SetPropertiesNodeFlagsApplyLocalValues()
+  {
+    NodeFlagsSnapshot snapshot {};
+    RunSetPropertiesNodeFlagsApplyLocalValues(snapshot);
+
+    AssertSucceeded(snapshot.status);
+    Assert::IsTrue(snapshot.is_static);
+    Assert::IsFalse(snapshot.ray_casting_selectable);
+    Assert::IsTrue(snapshot.ignore_parent_transform);
+    Assert::AreEqual(11.0F, snapshot.composed_world_x, 0.0001F);
+    Assert::AreEqual(1.0F, snapshot.ignored_parent_world_x, 0.0001F);
   }
 
   [TestMethod]

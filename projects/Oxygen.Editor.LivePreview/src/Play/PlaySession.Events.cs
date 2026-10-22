@@ -155,7 +155,7 @@ public sealed partial class PlaySession
         {
             var message = issue["message"]?.GetValue<string>() is { Length: > 0 } text ? text : "the player could not apply part of the scene";
             var index = issue["node_index"] is JsonValue value && value.TryGetValue<int>(out var number) ? number : (int?)null;
-            var node = index is { } at && at < nodes.Length ? nodes[at].Name : null;
+            var node = index is { } at && at < nodes.Length ? nodes[at].Metadata.Name : null;
             var code = severity == DiagnosticSeverity.Error ? PlayDiagnosticCodes.SceneFailed : PlayDiagnosticCodes.SceneIssue;
             var location = node is null ? string.Empty : $"\n = note: on node '{node}'";
             this.AddRuntimeProblem(new RuntimeScriptProblem(

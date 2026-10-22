@@ -7,7 +7,6 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -20,13 +19,13 @@ internal static class SceneGraph
     /// <param name="scene">The scene.</param>
     /// <param name="parent">The parent, or <see langword="null"/> for the root nodes.</param>
     /// <returns>The siblings.</returns>
-    public static ObservableCollection<SceneNode> ChildrenOf(Scene scene, SceneNode? parent) => parent?.Children ?? scene.RootNodes;
+    public static ObservableCollection<SceneNode> ChildrenOf(Scene scene, SceneNode? parent) => parent?.Hierarchy.Children ?? scene.RootNodes;
 
     /// <summary>Gets a node's place in the graph.</summary>
     /// <param name="scene">The scene.</param>
     /// <param name="node">The node.</param>
     /// <returns>Its place.</returns>
-    public static NodePosition PositionOf(Scene scene, SceneNode node) => new(node.Parent?.Id, ChildrenOf(scene, node.Parent).IndexOf(node));
+    public static NodePosition PositionOf(Scene scene, SceneNode node) => new(node.Hierarchy.Parent?.Id, ChildrenOf(scene, node.Hierarchy.Parent).IndexOf(node));
 
     /// <summary>Gets a node's full placement: graph place, local transform and layout place.</summary>
     /// <param name="scene">The scene.</param>
@@ -44,21 +43,17 @@ internal static class SceneGraph
     /// <param name="node">The node.</param>
     /// <returns>The local transform.</returns>
     public static TransformData LocalOf(SceneNode node)
-        => node.Components.OfType<TransformComponent>().FirstOrDefault() is { } transform
-            ? new TransformData { Name = transform.Name, Position = transform.LocalPosition, Rotation = transform.LocalRotation, Scale = transform.LocalScale }
-            : new TransformData { Name = "Transform" };
+        => new TransformData { Name = node.Transform.Name, Position = node.Transform.LocalPosition, Rotation = node.Transform.LocalRotation, Scale = node.Transform.LocalScale };
 
     /// <summary>Writes a node's local transform.</summary>
     /// <param name="node">The node.</param>
     /// <param name="local">The local transform.</param>
     public static void SetLocal(SceneNode node, TransformData local)
     {
-        if (node.Components.OfType<TransformComponent>().FirstOrDefault() is { } transform)
-        {
-            transform.LocalPosition = local.Position;
-            transform.LocalRotation = local.Rotation;
-            transform.LocalScale = local.Scale;
-        }
+        var transform = node.Transform;
+        transform.LocalPosition = local.Position;
+        transform.LocalRotation = local.Rotation;
+        transform.LocalScale = local.Scale;
     }
 
     /// <summary>Takes a node out of the graph, with its subtree.</summary>
@@ -66,13 +61,13 @@ internal static class SceneGraph
     /// <param name="node">The node.</param>
     public static void Detach(Scene scene, SceneNode node)
     {
-        if (node.Parent is null)
+        if (node.Hierarchy.Parent is null)
         {
             _ = scene.RootNodes.Remove(node);
         }
         else
         {
-            node.SetParent(newParent: null);
+            node.Hierarchy.SetParent(newParent: null);
         }
     }
 
@@ -87,17 +82,17 @@ internal static class SceneGraph
     public static void MoveInto(Scene scene, IReadOnlyList<SceneNode> nodes, SceneNode? parent, SceneNode? after)
     {
         var destination = ChildrenOf(scene, parent);
-        foreach (var node in nodes.Where(node => node.Parent != parent))
+        foreach (var node in nodes.Where(node => node.Hierarchy.Parent != parent))
         {
             if (parent is null)
             {
                 destination.Add(node);
-                node.SetParent(newParent: null);
+                node.Hierarchy.SetParent(newParent: null);
             }
             else
             {
-                var wasRoot = node.Parent is null;
-                node.SetParent(parent);
+                var wasRoot = node.Hierarchy.Parent is null;
+                node.Hierarchy.SetParent(parent);
                 if (wasRoot)
                 {
                     _ = scene.RootNodes.Remove(node);
@@ -130,8 +125,8 @@ internal static class SceneGraph
             return;
         }
 
-        node.SetParent(parent);
-        parent.Children.Move(parent.Children.Count - 1, index);
+        node.Hierarchy.SetParent(parent);
+        parent.Hierarchy.Children.Move(parent.Hierarchy.Children.Count - 1, index);
     }
 
     /// <summary>Takes nodes out of the graph, then puts each at its place, so all places refer to one graph.</summary>

@@ -10,6 +10,7 @@ using Oxygen.Editor.Scenes.Edits.Layout;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Tests.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
@@ -147,7 +148,7 @@ public sealed class SceneNodeCopiesTests
         _ = afterInAF.Should().HaveCount(entriesInAF.Count + 1);
         _ = afterInAF.Should().HaveElementAt(0, entriesInAF[0]);
         var copyOfA2 = afterInAF[1].Node!.Value;
-        var children = fixture.Node(SampleScene.A).Children.Select(static node => node.Id).ToList();
+        var children = fixture.Node(SampleScene.A).Hierarchy.Children.Select(static node => node.Id).ToList();
         _ = children.Should().HaveElementAt(children.IndexOf(SampleScene.A2) + 1, copyOfA2);
     }
 

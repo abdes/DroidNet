@@ -17,6 +17,34 @@ namespace Oxygen.Editor.World.Tests.TestSupport;
 [ExcludeFromCodeCoverage]
 internal static class SceneTestSupport
 {
+    /// <summary>
+    /// Creates the four required component DTOs of a node, in canonical order with the hierarchy last.
+    /// </summary>
+    /// <param name="name">The node name.</param>
+    /// <param name="children">The hierarchy's children, or <see langword="null"/> for a leaf.</param>
+    /// <returns>A mutable list, so a test can drop or repeat an entry.</returns>
+    public static List<ComponentData> RequiredComponents(string name, IList<SceneNodeData>? children = null)
+        =>
+        [
+            new MetadataData { Name = name },
+            new TransformData { Name = "Transform" },
+            new NodeFlagsData { Name = NodeFlagsComponent.DefaultName },
+            new HierarchyData { Name = HierarchyComponent.DefaultName, Children = children },
+        ];
+
+    /// <summary>
+    /// Creates a node DTO holding the required components and the given optional ones.
+    /// </summary>
+    /// <param name="name">The node name.</param>
+    /// <param name="optional">Optional component DTOs.</param>
+    /// <returns>The node DTO.</returns>
+    public static SceneNodeData NodeData(string name, params ComponentData[] optional)
+    {
+        var components = RequiredComponents(name);
+        components.InsertRange(3, optional);
+        return new SceneNodeData { Id = NodeId.New(), Components = components };
+    }
+
     public static async Task<MemoryStream> SerializeToStreamAsync(Scene scene)
     {
         var stream = new MemoryStream();
@@ -58,7 +86,7 @@ internal static class SceneTestSupport
         scene.SetStartingCamera(cameraNode.Id);
 
         var heroNode = CreateHeroNode(scene, cameraNode.Id);
-        heroNode.AddChild(CreateChildNode(scene));
+        heroNode.Hierarchy.AddChild(CreateChildNode(scene));
         scene.RootNodes.Add(heroNode);
 
         return scene;
@@ -109,7 +137,7 @@ internal static class SceneTestSupport
 
     private static SceneNode CreateCameraNode(Scene scene)
     {
-        var cameraNode = new SceneNode(scene) { Name = "Starting Camera Node" };
+        var cameraNode = new SceneNode(scene, "Starting Camera Node");
         var perspectiveCamera = new PerspectiveCamera
         {
             Name = "Main Camera",
@@ -128,11 +156,10 @@ internal static class SceneTestSupport
 
     private static SceneNode CreateHeroNode(Scene scene, NodeId cameraNodeId)
     {
-        var heroNode = new SceneNode(scene)
-        {
-            Name = "Hero Node",
-            Flags = SceneNodeFlags.Visible | SceneNodeFlags.CastsShadows | SceneNodeFlags.ReceivesShadows,
-        };
+        var heroNode = new SceneNode(scene, "Hero Node");
+        heroNode.Flags.IsVisible = true;
+        heroNode.Flags.CastsShadows = true;
+        heroNode.Flags.ReceivesShadows = true;
 
         _ = heroNode.AddComponent(CreateHeroGeometry());
         _ = heroNode.AddComponent(new DirectionalLightComponent
@@ -197,7 +224,7 @@ internal static class SceneTestSupport
 
     private static SceneNode CreateChildNode(Scene scene)
     {
-        var childNode = new SceneNode(scene) { Name = "Child Node" };
+        var childNode = new SceneNode(scene, "Child Node");
         _ = childNode.AddComponent(new OrthographicCamera
         {
             Name = "Minimap Camera",
@@ -215,7 +242,7 @@ internal static class SceneTestSupport
             Color = new Vector3(1f, 0.6f, 0.2f),
         });
 
-        var spotLightChild = new SceneNode(scene) { Name = "Spotlight Node" };
+        var spotLightChild = new SceneNode(scene, "Spotlight Node");
         _ = spotLightChild.AddComponent(new SpotLightComponent
         {
             Name = "Flashlight",
@@ -224,7 +251,7 @@ internal static class SceneTestSupport
             InnerConeAngleRadians = 0.3f,
             OuterConeAngleRadians = 0.5f,
         });
-        childNode.AddChild(spotLightChild);
+        childNode.Hierarchy.AddChild(spotLightChild);
 
         var renderingSlot = new RenderingSlot();
         renderingSlot.IsVisible = renderingSlot.IsVisible.WithOverride(false);

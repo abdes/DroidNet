@@ -20,7 +20,7 @@ public sealed class SceneNodeComponentsTests
     public void AddComponent_SetsNodePropertyAndReturnsTrue()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene, "Node");
         var camera = new PerspectiveCamera { Name = "Camera" };
 
         var added = node.AddComponent(camera);
@@ -34,7 +34,7 @@ public sealed class SceneNodeComponentsTests
     public void AddComponent_WhenComponentAlreadyOnNode_ReturnsFalse()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene, "Node");
         var camera = new PerspectiveCamera { Name = "Camera" };
         _ = node.AddComponent(camera);
 
@@ -48,7 +48,7 @@ public sealed class SceneNodeComponentsTests
     public void RemoveComponent_ClearsNodePropertyAndReturnsTrue()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene, "Node");
         var camera = new PerspectiveCamera { Name = "Camera" };
         _ = node.AddComponent(camera);
 
@@ -63,7 +63,7 @@ public sealed class SceneNodeComponentsTests
     public void RemoveComponent_WhenComponentNotOnNode_ReturnsFalse()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene, "Node");
         var unattachedCamera = new PerspectiveCamera { Name = "Unattached" };
 
         var removed = node.RemoveComponent(unattachedCamera);
@@ -72,10 +72,46 @@ public sealed class SceneNodeComponentsTests
     }
 
     [TestMethod]
+    public void AddComponent_WhenComponentIsRequiredKind_ThrowsInvalidOperationException()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var node = new SceneNode(scene, "Node");
+
+        var addMetadata = () => node.AddComponent(new MetadataComponent { Name = "Other" });
+        var addHierarchy = () => node.AddComponent(new HierarchyComponent { Name = "Hierarchy" });
+        var addTransform = () => node.AddComponent(new TransformComponent { Name = "Transform" });
+        var addFlags = () => node.AddComponent(new NodeFlagsComponent { Name = "Rendering" });
+
+        _ = addMetadata.Should().Throw<InvalidOperationException>();
+        _ = addHierarchy.Should().Throw<InvalidOperationException>();
+        _ = addTransform.Should().Throw<InvalidOperationException>();
+        _ = addFlags.Should().Throw<InvalidOperationException>();
+        _ = node.Components.Should().HaveCount(4);
+    }
+
+    [TestMethod]
+    public void RemoveComponent_WhenComponentIsRequired_ThrowsInvalidOperationException()
+    {
+        var scene = new Scene { Name = "Scene" };
+        var node = new SceneNode(scene, "Node");
+
+        var removeMetadata = () => node.RemoveComponent(node.Metadata);
+        var removeHierarchy = () => node.RemoveComponent(node.Hierarchy);
+        var removeTransform = () => node.RemoveComponent(node.Transform);
+        var removeFlags = () => node.RemoveComponent(node.Flags);
+
+        _ = removeMetadata.Should().Throw<InvalidOperationException>();
+        _ = removeHierarchy.Should().Throw<InvalidOperationException>();
+        _ = removeTransform.Should().Throw<InvalidOperationException>();
+        _ = removeFlags.Should().Throw<InvalidOperationException>();
+        _ = node.Components.Should().HaveCount(4);
+    }
+
+    [TestMethod]
     public void AddComponent_And_RemoveComponent_WhenComponentNull_ThrowArgumentNullException()
     {
         var scene = new Scene { Name = "Scene" };
-        var node = new SceneNode(scene) { Name = "Node" };
+        var node = new SceneNode(scene, "Node");
 
         Action addNull = () => node.AddComponent(null!);
         Action removeNull = () => node.RemoveComponent(null!);

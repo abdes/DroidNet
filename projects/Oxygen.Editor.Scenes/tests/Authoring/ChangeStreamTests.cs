@@ -52,7 +52,7 @@ public sealed class ChangeStreamTests
         {
             if (args.Changes.OfType<SceneChange.NodeRenamed>().SingleOrDefault() is { } renamed)
             {
-                nameSeenByHandler = fixture.Node(renamed.Node).Name;
+                nameSeenByHandler = fixture.Node(renamed.Node).Metadata.Name;
             }
         };
 

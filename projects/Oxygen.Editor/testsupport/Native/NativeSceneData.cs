@@ -13,20 +13,14 @@ internal static class NativeSceneData
 {
     internal static void AddGeometryNode(Scene scene, string shape)
     {
-        var node = new SceneNode(scene)
-        {
-            Name = shape,
-        };
+        var node = new SceneNode(scene, shape);
         _ = node.AddComponent(new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape(shape) });
         scene.RootNodes.Add(node);
     }
 
     internal static void SeedNativeNode(Scene scene, string kind, Action<SceneNode>? arrange = null)
     {
-        var node = new SceneNode(scene)
-        {
-            Name = kind,
-        };
+        var node = new SceneNode(scene, kind);
         if (string.Equals(kind, "Camera", StringComparison.Ordinal))
         {
             _ = node.AddComponent(new PerspectiveCamera { Name = "Camera" });
@@ -44,14 +38,9 @@ internal static class NativeSceneData
     {
         AddGeometryNode(scene, "Cube");
         var cube = scene.RootNodes[^1];
-        cube.IsActive = true;
-        cube.CastsShadows = true;
-        cube.ReceivesShadows = true;
-        var sun = new SceneNode(scene)
-        {
-            Name = "Sun",
-            IsActive = true,
-        };
+        cube.Flags.CastsShadows = true;
+        cube.Flags.ReceivesShadows = true;
+        var sun = new SceneNode(scene, "Sun");
         _ = sun.AddComponent(new DirectionalLightComponent { Name = "Sun", CastsShadows = true, CascadeCount = cascades });
         scene.RootNodes.Add(sun);
         sun.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot = Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary;

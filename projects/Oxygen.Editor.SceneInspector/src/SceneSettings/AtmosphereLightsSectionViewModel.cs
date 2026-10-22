@@ -194,7 +194,7 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
                 continue;
             }
 
-            var rotation = TransformConverter.QuaternionToEulerDegrees(node.Components.OfType<TransformComponent>().Single().LocalRotation);
+            var rotation = TransformConverter.QuaternionToEulerDegrees(node.Transform.LocalRotation);
             result.Add(node.Id, new PropertyEdit.Builder()
                 .Set(SceneSchema.DirectionalLight.AtmosphereSlot, light.AtmosphereSlot)
                 .Set(SceneSchema.DirectionalLight.AngularSizeRadians, light.AngularSizeRadians)
@@ -306,8 +306,8 @@ public sealed partial class AtmosphereLightsSectionViewModel : ObservableObject,
                 continue;
             }
 
-            var primary = new SunLightOption(node.Id, light.AtmosphereSlot == AtmosphereLightSlot.Secondary ? $"{node.Name} · Secondary" : node.Name, light.AtmosphereSlot != AtmosphereLightSlot.Secondary);
-            var secondary = new SunLightOption(node.Id, light.AtmosphereSlot == AtmosphereLightSlot.Primary ? $"{node.Name} · Primary" : node.Name, light.AtmosphereSlot != AtmosphereLightSlot.Primary);
+            var primary = new SunLightOption(node.Id, light.AtmosphereSlot == AtmosphereLightSlot.Secondary ? $"{node.Metadata.Name} · Secondary" : node.Metadata.Name, light.AtmosphereSlot != AtmosphereLightSlot.Secondary);
+            var secondary = new SunLightOption(node.Id, light.AtmosphereSlot == AtmosphereLightSlot.Primary ? $"{node.Metadata.Name} · Primary" : node.Metadata.Name, light.AtmosphereSlot != AtmosphereLightSlot.Primary);
             this.SunOptions.Add(primary);
             this.SecondarySunOptions.Add(secondary);
             if (primaryNodeId == node.Id)

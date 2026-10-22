@@ -136,7 +136,7 @@ public sealed class TransformRulesTests
             .Build();
 
     private static Quaternion OrientationOfA1(AuthoringFixture fixture)
-        => fixture.Node(SampleScene.A1).Components.OfType<TransformComponent>().Single().LocalRotation;
+        => fixture.Node(SampleScene.A1).Transform.LocalRotation;
 
     private static SetProperties SetAxis(int axis, float degrees)
     {

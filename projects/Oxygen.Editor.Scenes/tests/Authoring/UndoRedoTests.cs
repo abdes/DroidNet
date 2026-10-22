@@ -34,7 +34,7 @@ public sealed class UndoRedoTests
         var undone = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
 
         SceneAssert.Applied(undone);
-        _ = fixture.Node(SampleScene.B).Name.Should().Be("B");
+        _ = fixture.Node(SampleScene.B).Metadata.Name.Should().Be("B");
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.NodeRenamed(SampleScene.B));
     }
 
@@ -49,7 +49,7 @@ public sealed class UndoRedoTests
         var redone = await fixture.Authoring.RedoAsync().ConfigureAwait(false);
 
         SceneAssert.Applied(redone);
-        _ = fixture.Node(SampleScene.B).Name.Should().Be("Box");
+        _ = fixture.Node(SampleScene.B).Metadata.Name.Should().Be("Box");
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.NodeRenamed(SampleScene.B));
     }
 
@@ -86,13 +86,13 @@ public sealed class UndoRedoTests
         fixture.Interaction!.Lock(SampleScene.B);
 
         var undone = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
-        var nameAfterUndo = fixture.Node(SampleScene.B).Name;
+        var nameAfterUndo = fixture.Node(SampleScene.B).Metadata.Name;
         var redone = await fixture.Authoring.RedoAsync().ConfigureAwait(false);
 
         SceneAssert.Applied(undone);
         _ = nameAfterUndo.Should().Be("B");
         SceneAssert.Applied(redone);
-        _ = fixture.Node(SampleScene.B).Name.Should().Be("Box");
+        _ = fixture.Node(SampleScene.B).Metadata.Name.Should().Be("Box");
     }
 
     [TestMethod]
@@ -122,7 +122,7 @@ public sealed class UndoRedoTests
         var undone = await fixture.Authoring.UndoAsync().ConfigureAwait(false);
 
         SceneAssert.Refused(undone, SceneEditCodes.TargetMissing, SampleScene.A);
-        _ = fixture.Node(SampleScene.B).Name.Should().Be("Box");
+        _ = fixture.Node(SampleScene.B).Metadata.Name.Should().Be("Box");
         SceneAssert.Unchanged(fixture, before);
     }
 

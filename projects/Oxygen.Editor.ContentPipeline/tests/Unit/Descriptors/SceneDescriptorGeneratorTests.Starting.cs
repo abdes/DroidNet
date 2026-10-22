@@ -60,9 +60,9 @@ internal sealed partial class SceneDescriptorGeneratorTests
 
         var scene = CreateScene();
         var rig = AddNode(scene, "Rig", camera: false);
-        var nested = new SceneNode(scene) { Name = "Nested" };
+        var nested = new SceneNode(scene, "Nested");
         _ = nested.AddComponent(new PerspectiveCamera { Name = "Camera" });
-        rig.AddChild(nested);
+        rig.Hierarchy.AddChild(nested);
         _ = AddNode(scene, "Later", camera: true);
 
         using var descriptor = await this.GenerateDescriptorAsync(workspace, scene).ConfigureAwait(false);
@@ -147,7 +147,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
 
     private static SceneNode AddNode(Scene scene, string name, bool camera)
     {
-        var node = new SceneNode(scene) { Name = name };
+        var node = new SceneNode(scene, name);
         if (camera)
         {
             _ = node.AddComponent(new PerspectiveCamera { Name = "Camera" });

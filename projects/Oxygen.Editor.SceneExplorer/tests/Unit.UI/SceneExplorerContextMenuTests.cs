@@ -28,8 +28,8 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     [TestMethod]
     public Task ContextMenuSelectionChangesRejectsCapturedDelete() => EnqueueAsync(async () =>
     {
-        using var harness = new AuthoringHarness(out var scene, out var node, static (built, _) => built.RootNodes.Add(new SceneNode(built) { Name = "Second" }));
-        var second = scene.RootNodes.Single(static candidate => candidate.Name == "Second");
+        using var harness = new AuthoringHarness(out var scene, out var node, static (built, _) => built.RootNodes.Add(new SceneNode(built, "Second")));
+        var second = scene.RootNodes.Single(static candidate => candidate.Metadata.Name == "Second");
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         _ = await explorer.SetSelectedNodes([node.Id]).ConfigureAwait(true);
@@ -51,8 +51,8 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     [TestMethod]
     public Task ContextMenuSelectedAnchorPreservesBatchAndDeletesAllCapturedNodes() => EnqueueAsync(async () =>
     {
-        using var harness = new AuthoringHarness(out var scene, out var node, static (built, _) => built.RootNodes.Add(new SceneNode(built) { Name = "Second" }));
-        var second = scene.RootNodes.Single(static candidate => candidate.Name == "Second");
+        using var harness = new AuthoringHarness(out var scene, out var node, static (built, _) => built.RootNodes.Add(new SceneNode(built, "Second")));
+        var second = scene.RootNodes.Single(static candidate => candidate.Metadata.Name == "Second");
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         _ = await explorer.SetSelectedNodes([node.Id, second.Id]).ConfigureAwait(true);
@@ -86,8 +86,8 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     [TestMethod]
     public Task ContextMenuUnselectedAnchorSettlesInspectorAndSelectsExclusively() => EnqueueAsync(async () =>
     {
-        using var harness = new AuthoringHarness(out var scene, out var node, static (built, _) => built.RootNodes.Add(new SceneNode(built) { Name = "Second" }));
-        var second = scene.RootNodes.Single(static candidate => candidate.Name == "Second");
+        using var harness = new AuthoringHarness(out var scene, out var node, static (built, _) => built.RootNodes.Add(new SceneNode(built, "Second")));
+        var second = scene.RootNodes.Single(static candidate => candidate.Metadata.Name == "Second");
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         _ = await explorer.SetSelectedNodes([node.Id]).ConfigureAwait(true);
@@ -102,8 +102,8 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     [TestMethod]
     public Task ContextMenuNonAnchorLockedDisablesEntireBatchAndMatchesToolbar() => EnqueueAsync(async () =>
     {
-        using var harness = new AuthoringHarness(out var scene, out var node, static (built, _) => built.RootNodes.Add(new SceneNode(built) { Name = "Locked second" }));
-        var second = scene.RootNodes.Single(static candidate => candidate.Name == "Locked second");
+        using var harness = new AuthoringHarness(out var scene, out var node, static (built, _) => built.RootNodes.Add(new SceneNode(built, "Locked second")));
+        var second = scene.RootNodes.Single(static candidate => candidate.Metadata.Name == "Locked second");
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         _ = await explorer.SetSelectedNodes([node.Id, second.Id]).ConfigureAwait(true);
@@ -134,7 +134,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         var menu = explorer.BuildContextMenuSource(row);
         await GetMenuCommand(menu, "Paste as child (keep world pose)").ExecuteAsync(parameter: null).ConfigureAwait(true);
 
-        _ = node.Children.Should().ContainSingle().Which.Name.Should().Be(node.Name);
+        _ = node.Hierarchy.Children.Should().ContainSingle().Which.Metadata.Name.Should().Be(node.Metadata.Name);
         _ = harness.History.UndoStack.Should().ContainSingle();
     });
 
@@ -168,12 +168,12 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     {
         using var harness = new AuthoringHarness(out var scene, out var parent, static (built, root) =>
         {
-            root.Components.OfType<TransformComponent>().Single().LocalPosition = new System.Numerics.Vector3(10, 0, 0);
-            var child = new SceneNode(built) { Name = "Child" };
-            child.Components.OfType<TransformComponent>().Single().LocalPosition = new System.Numerics.Vector3(1, 0, 0);
-            root.AddChild(child);
+            root.Transform.LocalPosition = new System.Numerics.Vector3(10, 0, 0);
+            var child = new SceneNode(built, "Child");
+            child.Transform.LocalPosition = new System.Numerics.Vector3(1, 0, 0);
+            root.Hierarchy.AddChild(child);
         });
-        var node = parent.Children.Single();
+        var node = parent.Hierarchy.Children.Single();
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         var row = await explorer.FindAdapterByNodeIdAsync(node.Id).ConfigureAwait(true);
@@ -181,8 +181,8 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
 
         await GetMenuCommand(explorer.BuildContextMenuSource(anchor: null), "Paste at scene root").ExecuteAsync(parameter: null).ConfigureAwait(true);
 
-        _ = node.Parent.Should().BeNull();
-        _ = node.Components.OfType<TransformComponent>().Single().LocalPosition.Should().Be(new System.Numerics.Vector3(1, 0, 0));
+        _ = node.Hierarchy.Parent.Should().BeNull();
+        _ = node.Transform.LocalPosition.Should().Be(new System.Numerics.Vector3(1, 0, 0));
     });
 
     [TestMethod]
@@ -264,9 +264,9 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
     [TestMethod]
     public Task CameraNodeMenuNeedsASceneViewport() => EnqueueAsync(async () =>
     {
-        using var harness = new AuthoringHarness(out var scene, out var node, static (built, _) => built.RootNodes.Add(new SceneNode(built) { Name = "Plain" }));
+        using var harness = new AuthoringHarness(out var scene, out var node, static (built, _) => built.RootNodes.Add(new SceneNode(built, "Plain")));
         node.Components.Add(new PerspectiveCamera { Name = "Camera" });
-        var plain = scene.RootNodes.Single(static candidate => candidate.Name == "Plain");
+        var plain = scene.RootNodes.Single(static candidate => candidate.Metadata.Name == "Plain");
         using var explorer = harness.Build();
         await explorer.HandleDocumentOpenedAsync(scene).ConfigureAwait(true);
         _ = await explorer.SetSelectedNodes([node.Id]).ConfigureAwait(true);
@@ -292,7 +292,7 @@ internal sealed class SceneExplorerContextMenuTests : DroidNet.Tests.VisualUserI
         public AuthoringHarness(out Scene scene, out SceneNode node, Action<Scene, SceneNode>? build = null, Func<SceneNode, IList<ExplorerEntryData>>? layout = null)
         {
             var built = new Scene { Name = "Scene" };
-            var builtNode = new SceneNode(built) { Name = "Node" };
+            var builtNode = new SceneNode(built, "Node");
             built.RootNodes.Add(builtNode);
             build?.Invoke(built, builtNode);
             this.Documents = new TestDocumentArea();

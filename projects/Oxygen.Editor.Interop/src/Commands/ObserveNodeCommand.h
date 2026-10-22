@@ -172,7 +172,9 @@ private:
       return;
     }
     for (const auto field : { NodeField::kVisible, NodeField::kCastsShadows,
-           NodeField::kReceivesShadows }) {
+           NodeField::kReceivesShadows, NodeField::kStatic,
+           NodeField::kRayCastingSelectable,
+           NodeField::kIgnoreParentTransform }) {
       Add(result, ComponentId::kNode, field,
         flags->get().GetEffectiveValue(*ToSceneNodeFlag(field)));
     }

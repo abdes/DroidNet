@@ -47,7 +47,7 @@ public sealed class RemoveFolderTests
 
         SceneAssert.Applied(result);
         _ = LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.UnderNode(SampleScene.A, 0)).Should().Equal(LayoutEntryId.Of(SampleScene.A1), LayoutEntryId.Of(SampleScene.A2));
-        _ = fixture.Node(SampleScene.A2).Parent!.Id.Should().Be(SampleScene.A);
+        _ = fixture.Node(SampleScene.A2).Hierarchy.Parent!.Id.Should().Be(SampleScene.A);
         _ = SceneTransformMath.WorldMatrix(fixture.Node(SampleScene.A2)).Should().Be(worldBefore);
     }
 

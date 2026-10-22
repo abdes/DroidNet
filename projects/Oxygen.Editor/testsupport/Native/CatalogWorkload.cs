@@ -75,13 +75,9 @@ internal static class CatalogWorkload
     {
         for (var index = 0; index < 98; index++)
         {
-            var node = new SceneNode(scene)
-            {
-                Name = "Geometry " + index.ToString(CultureInfo.InvariantCulture),
-                IsActive = true,
-                CastsShadows = true,
-                ReceivesShadows = true,
-            };
+            var node = new SceneNode(scene, "Geometry " + index.ToString(CultureInfo.InvariantCulture));
+            node.Flags.CastsShadows = true;
+            node.Flags.ReceivesShadows = true;
             var geometryUri = index >= 90 ? mesh : EngineGeometries[index % EngineGeometries.Length];
             var geometry = new GeometryComponent
             {
@@ -95,10 +91,10 @@ internal static class CatalogWorkload
             var position = new Vector3(index % 10, index / 10, 0);
             position *= 2;
             position -= new Vector3(9, 9, 0);
-            node.Components.OfType<TransformComponent>().Single().LocalPosition = position;
+            node.Transform.LocalPosition = position;
             if (index is > 0 and < 8)
             {
-                node.SetParent(scene.RootNodes[0]);
+                node.Hierarchy.SetParent(scene.RootNodes[0]);
             }
             else
             {
@@ -106,25 +102,17 @@ internal static class CatalogWorkload
             }
         }
 
-        var camera = new SceneNode(scene)
-        {
-            Name = "Camera",
-            IsActive = true,
-        };
+        var camera = new SceneNode(scene, "Camera");
         _ = camera.AddComponent(new PerspectiveCamera { Name = "Camera" });
-        camera.Components.OfType<TransformComponent>().Single().LocalPosition = new Vector3(0, -25, 15);
+        camera.Transform.LocalPosition = new Vector3(0, -25, 15);
         scene.RootNodes.Add(camera);
-        var sun = new SceneNode(scene)
-        {
-            Name = "Sun",
-            IsActive = true,
-        };
+        var sun = new SceneNode(scene, "Sun");
         _ = sun.AddComponent(new DirectionalLightComponent { Name = "Sun", CastsShadows = true, CascadeCount = 4 });
-        sun.Components.OfType<TransformComponent>().Single().LocalRotation = DirectionalLightComponent.DefaultLocalRotation;
+        sun.Transform.LocalRotation = DirectionalLightComponent.DefaultLocalRotation;
         scene.RootNodes.Add(sun);
         sun.Components.OfType<DirectionalLightComponent>().Single().AtmosphereSlot = Oxygen.Editor.World.Serialization.AtmosphereLightSlot.Primary;
         scene.Hydrate(scene.Dehydrate() with { Environment = scene.Environment with { PostProcess = scene.Environment.PostProcess with { ManualExposureEv = 9.7f } } });
-        _ = scene.RootNodes.SelectMany(static node => node.Descendants().Prepend(node)).Should().HaveCount(100).And.OnlyContain(static node => node.IsActive && node.IsVisible);
+        _ = scene.RootNodes.SelectMany(static node => node.DescendantsAndSelf()).Should().HaveCount(100).And.OnlyContain(static node => node.Flags.IsVisible);
     }
 
     internal static string DescribeWorkloadCook(ContentCookResult result) => string.Join(Environment.NewLine, result.Diagnostics.Select(static issue =>

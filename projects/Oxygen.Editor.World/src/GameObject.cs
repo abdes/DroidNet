@@ -2,9 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.ObjectModel;
 using System.Diagnostics.CodeAnalysis;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World;
@@ -39,15 +37,6 @@ public abstract class GameObject : ScopedObservableObject, INamed
     }
 
     /// <summary>
-    /// Gets the collection of override slots for this game object.
-    /// </summary>
-    /// <remarks>
-    /// Override slots at the GameObject level apply globally to all components.
-    /// For component-specific or targeted overrides, use the slots on individual components.
-    /// </remarks>
-    public ObservableCollection<OverrideSlot> OverrideSlots { get; } = [];
-
-    /// <summary>
     /// Validates the name of the game object.
     /// </summary>
     /// <param name="name">The name to validate.</param>
@@ -60,25 +49,6 @@ public abstract class GameObject : ScopedObservableObject, INamed
                 "a scene must have a name and it should not be only white spaces",
                 nameof(name));
         }
-    }
-
-    /// <summary>
-    /// Gets an existing override slot of the specified type, or creates and adds a new one if not found.
-    /// </summary>
-    /// <typeparam name="T">The type of override slot to get or create.</typeparam>
-    /// <returns>The existing or newly created override slot.</returns>
-    public T GetOrCreateSlot<T>()
-        where T : OverrideSlot, new()
-    {
-        var existing = this.OverrideSlots.OfType<T>().FirstOrDefault();
-        if (existing != null)
-        {
-            return existing;
-        }
-
-        var newSlot = new T();
-        this.OverrideSlots.Add(newSlot);
-        return newSlot;
     }
 
     /// <summary>

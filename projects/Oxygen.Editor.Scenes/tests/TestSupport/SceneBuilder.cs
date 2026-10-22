@@ -4,6 +4,7 @@
 
 using System.Text.Json;
 using Oxygen.Editor.Scenes.Layout;
+using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 
@@ -30,6 +31,12 @@ public sealed class SceneBuilder
     private SceneReferencesData? references;
 
     /// <summary>
+    /// Gets the number of required components every node holds: metadata, hierarchy, transform and node flags. The
+    /// first optional component of a node is at this index.
+    /// </summary>
+    public static int RequiredComponentCount => 4;
+
+    /// <summary>
     /// Gets the id the builder gives a node's transform, so that every build of a scene has the same ids.
     /// </summary>
     /// <param name="node">The node.</param>
@@ -39,6 +46,49 @@ public sealed class SceneBuilder
         var bytes = node.Value.ToByteArray();
         bytes[8] ^= 0xFF;
         return ComponentId.FromValue(new Guid(bytes));
+    }
+
+    /// <summary>
+    /// Gets the ids of a node's components in the node's order: the required ones as the builder gives them, then the
+    /// given optional ones.
+    /// </summary>
+    /// <param name="node">The node.</param>
+    /// <param name="optional">The ids of the node's optional components, in order.</param>
+    /// <returns>The component ids.</returns>
+    public static ComponentId[] ComponentIdsOf(NodeId node, params ComponentId[] optional)
+        => [RequiredId(node, 0x01), RequiredId(node, 0x03), TransformId(node), RequiredId(node, 0x02), .. optional];
+
+    /// <summary>
+    /// Builds the data of a node with its required components: metadata, transform, node flags and hierarchy, the
+    /// hierarchy last, as a node dehydrates.
+    /// </summary>
+    /// <param name="nodeId">The node's id.</param>
+    /// <param name="nodeName">The node's name.</param>
+    /// <param name="transform">The node's transform; identity with the builder's id when <see langword="null"/>.</param>
+    /// <param name="components">The node's optional components; a <see cref="NodeFlagsData"/> among them replaces the default flags.</param>
+    /// <param name="children">The node's children; none when <see langword="null"/>.</param>
+    /// <returns>The node data.</returns>
+    public static SceneNodeData NodeData(
+        NodeId nodeId,
+        string nodeName,
+        TransformData? transform = null,
+        IEnumerable<ComponentData>? components = null,
+        IList<SceneNodeData>? children = null)
+    {
+        var optional = (components ?? []).ToList();
+        var flags = optional.OfType<NodeFlagsData>().FirstOrDefault() ?? new NodeFlagsData { Id = RequiredId(nodeId, 0x02), Name = NodeFlagsComponent.DefaultName };
+        return new SceneNodeData
+        {
+            Id = nodeId,
+            Components =
+            [
+                new MetadataData { Id = RequiredId(nodeId, 0x01), Name = nodeName },
+                (transform ?? new TransformData { Name = "Transform" }) with { Id = TransformId(nodeId) },
+                flags,
+                .. optional.Where(static component => component is not NodeFlagsData),
+                new HierarchyData { Id = RequiredId(nodeId, 0x03), Name = HierarchyComponent.DefaultName, Children = children is { Count: > 0 } ? children : null },
+            ],
+        };
     }
 
     /// <summary>
@@ -240,6 +290,13 @@ public sealed class SceneBuilder
         return JsonSerializer.Deserialize(JsonSerializer.SerializeToUtf8Bytes(data, SceneFileJsonContext.Default.SceneFileData), SceneFileJsonContext.Default.SceneFileData)!;
     }
 
+    private static ComponentId RequiredId(NodeId node, byte salt)
+    {
+        var bytes = node.Value.ToByteArray();
+        bytes[7] ^= salt;
+        return ComponentId.FromValue(new Guid(bytes));
+    }
+
     private static ExplorerEntryData NodeEntry(NodeId nodeId, List<ExplorerEntryData> children)
         => new() { Type = "Node", NodeId = nodeId, Children = children.Count == 0 ? null : children };
 
@@ -249,14 +306,7 @@ public sealed class SceneBuilder
         => this.nodes.Where(node => node.Parent == parent).Select(node =>
         {
             var children = this.NodesUnder(node.Id).ToList();
-            return new SceneNodeData
-            {
-                Id = node.Id,
-                Name = node.Name,
-                Components = [.. node.Components],
-                Children = children.Count == 0 ? null : children,
-                IsActive = true,
-            };
+            return NodeData(node.Id, node.Name, node.Components.OfType<TransformData>().Single(), node.Components.Where(static component => component is not TransformData), children);
         });
 
     private IEnumerable<ExplorerEntryData> EntriesIn(NodeId? underNode, FolderId? inFolder)

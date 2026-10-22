@@ -129,10 +129,9 @@ Unchanged and reused: `PropertiesExpander`, `QuietDisclosure`, `Thumbnail`,
 `SceneUnitSuffix`, `MixedValue<T>` bindings, and the component list with its
 partial-presence counts.
 
-| Today                                                         | Change                                                   |
-| ------------------------------------------------------------- | -------------------------------------------------------- |
-| `NodeRenderingView`: three `ToggleSwitch` rows                | Three source-mode fields; Receive shadows under Advanced |
-| Rendering appended in All mode for geometry or light nodes    | A component-list entry after Transform for every node    |
-| `GeometryView`: a `Slot` `ComboBox` and one `Material` picker | Removed; Level of detail row and the Surfaces list       |
-| Refresh and clear-unresolved buttons beside the picker        | Move to the Surfaces header                              |
-| `SurfaceChoice`, `GeometryViewModel.Surfaces`                 | Surface view models, one per card                        |
+| Today                                                                                              | Change                                                   |
+| -------------------------------------------------------------------------------------------------- | -------------------------------------------------------- |
+| `NodeRenderingView`: three `ToggleSwitch` rows, then Static and Ray-cast selectable under Advanced | Three source-mode fields; Receive shadows joins Advanced |
+| `GeometryView`: a `Slot` `ComboBox` and one `Material` picker                                      | Removed; Level of detail row and the Surfaces list       |
+| Refresh and clear-unresolved buttons beside the picker                                             | Move to the Surfaces header                              |
+| `SurfaceChoice`, `GeometryViewModel.Surfaces`                                                      | Surface view models, one per card                        |

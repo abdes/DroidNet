@@ -23,7 +23,7 @@ public sealed partial class ScenePreviewTests
     {
         using var fixture = new PreviewFixture(EngineServiceState.Ready);
         var scene = new Scene { Name = "Test Scene" };
-        var node = new SceneNode(scene) { Name = "Cube" };
+        var node = new SceneNode(scene, "Cube");
         var reads = fixture.Engine.WorldReads;
 
         var outcome = await fixture.Preview.UpdateNodeTransformAsync(scene, node, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
@@ -41,7 +41,7 @@ public sealed partial class ScenePreviewTests
         using var fixture = new PreviewFixture();
         fixture.Engine.HasWorld = false;
         var scene = new Scene { Name = "Test Scene" };
-        var node = new SceneNode(scene) { Name = "Cube" };
+        var node = new SceneNode(scene, "Cube");
 
         var outcome = await fixture.Preview.UpdateNodeTransformAsync(scene, node, cancellationToken: this.TestContext.CancellationToken).ConfigureAwait(false);
 
@@ -54,7 +54,7 @@ public sealed partial class ScenePreviewTests
     {
         using var fixture = new PreviewFixture();
         var scene = new Scene { Name = "Test Scene" };
-        var node = new SceneNode(scene) { Name = "Cube" };
+        var node = new SceneNode(scene, "Cube");
         using var cts = new CancellationTokenSource();
         await cts.CancelAsync().ConfigureAwait(false);
         var (states, worlds) = (fixture.Engine.StateReads, fixture.Engine.WorldReads);
@@ -71,7 +71,7 @@ public sealed partial class ScenePreviewTests
     {
         using var fixture = new PreviewFixture(EngineServiceState.Ready);
         var scene = new Scene { Name = "Test Scene" };
-        var node = new SceneNode(scene) { Name = "Cube" };
+        var node = new SceneNode(scene, "Cube");
         var reads = fixture.Engine.WorldReads;
 
         var outcome = await fixture.Preview.RenameNodeAsync(scene, node.Id, "Sphere").ConfigureAwait(false);
@@ -138,7 +138,7 @@ public sealed partial class ScenePreviewTests
     {
         using var fixture = new PreviewFixture(EngineServiceState.Ready);
         var scene = new Scene { Name = "Test Scene" };
-        var node = new SceneNode(scene) { Name = "Camera" };
+        var node = new SceneNode(scene, "Camera");
         node.Components.Add(new OrthographicCamera { Name = "Camera" });
         var reads = fixture.Engine.WorldReads;
 

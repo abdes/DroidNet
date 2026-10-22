@@ -55,7 +55,7 @@ public sealed class SceneEditBatchTests
         var result = await fixture.Authoring.ExecuteAsync(batch).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Node(inserted).Name.Should().Be("Renamed");
+        _ = fixture.Node(inserted).Metadata.Name.Should().Be("Renamed");
         _ = fixture.History.UndoStack.Should().ContainSingle();
     }
 
@@ -144,8 +144,8 @@ public sealed class SceneEditBatchTests
         var redone = await fixture.Authoring.RedoAsync().ConfigureAwait(false);
 
         SceneAssert.Applied(redone);
-        _ = fixture.Node(SampleScene.A).Name.Should().Be("X");
-        _ = fixture.Node(SampleScene.B).Name.Should().Be("Y");
+        _ = fixture.Node(SampleScene.A).Metadata.Name.Should().Be("X");
+        _ = fixture.Node(SampleScene.B).Metadata.Name.Should().Be("Y");
     }
 
     [TestMethod]
@@ -251,16 +251,10 @@ public sealed class SceneEditBatchTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         fixture.Redirects.Delete(SampleScene.SphereGeometry);
         var ball = NodeId.New();
-        var node = new SceneNodeData
-        {
-            Id = ball,
-            Name = "Ball",
-            Components =
-            [
-                new TransformData { Id = ComponentId.New(), Name = "Transform" },
-                new GeometryComponentData { Id = ComponentId.New(), Name = "Geometry", GeometryUri = SampleScene.SphereGeometry },
-            ],
-        };
+        var node = SceneBuilder.NodeData(
+            ball,
+            "Ball",
+            components: [new GeometryComponentData { Id = ComponentId.New(), Name = "Geometry", GeometryUri = SampleScene.SphereGeometry }]);
         var batch = new SceneEditBatch("Create", [new InsertNodes([new NodeInsert(node, new NodePosition(Parent: null, Index: 0), LayoutPosition.AtRoot(0))])]);
 
         var result = await fixture.Authoring.ExecuteAsync(batch).ConfigureAwait(false);
@@ -270,12 +264,7 @@ public sealed class SceneEditBatchTests
 
     private static InsertNodes InsertingRoot(NodeId id, string name)
         => new([new NodeInsert(
-            new SceneNodeData
-            {
-                Id = id,
-                Name = name,
-                Components = [new TransformData { Id = ComponentId.New(), Name = "Transform" }],
-            },
+            SceneBuilder.NodeData(id, name),
             new NodePosition(Parent: null, Index: 0),
             LayoutPosition.AtRoot(0))]);
 

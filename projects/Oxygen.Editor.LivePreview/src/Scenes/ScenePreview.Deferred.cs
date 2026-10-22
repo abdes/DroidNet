@@ -89,7 +89,7 @@ internal sealed partial class ScenePreview
             var snapshotScene = new Scene { Id = node.Scene.Id, Name = node.Scene.Name };
             snapshotScene.SetEnvironment(node.Scene.Environment);
             var snapshot = SceneNode.CreateAndHydrate(snapshotScene, node.Dehydrate());
-            var commands = new List<RuntimeWorldCommand> { new RuntimeCreateNode(snapshot.Name, node.Id, parentId, InitializeWorldAsRoot: false) };
+            var commands = new List<RuntimeWorldCommand> { new RuntimeCreateNode(snapshot.Metadata.Name, node.Id, parentId, InitializeWorldAsRoot: false) };
             var collector = this.activeWorld! with { Collect = commands.Add };
             ApplyTransform(collector, snapshot);
             var captured = this.ApplyRenderableComponents(collector, snapshot);

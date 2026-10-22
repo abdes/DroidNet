@@ -274,11 +274,11 @@ public sealed class InspectorSceneEditingTests
         var selected = editor.AtmosphereLights.SelectedSun;
 
         first.RootNodes.Clear();
-        firstSun.Name = "Old document change";
+        firstSun.Metadata.Name = "Old document change";
 
         _ = editor.AtmosphereLights.SelectedSun.Should().BeSameAs(selected);
         _ = editor.AtmosphereLights.SelectedSun!.NodeId.Should().Be(secondSun.Id);
-        secondSun.Name = "Renamed Sun";
+        secondSun.Metadata.Name = "Renamed Sun";
         _ = editor.AtmosphereLights.SelectedSun.DisplayName.Should().Be("Renamed Sun");
     }
 
@@ -287,9 +287,9 @@ public sealed class InspectorSceneEditingTests
     {
         var scene = CreateScene();
         var firstBuilt = CameraNode(scene, 60);
-        firstBuilt.Name = "Overview";
+        firstBuilt.Metadata.Name = "Overview";
         var secondBuilt = CameraNode(scene, 60);
-        secondBuilt.Name = "Gameplay";
+        secondBuilt.Metadata.Name = "Gameplay";
         using var testScene = Open(scene, firstBuilt, secondBuilt, out _, out var second);
         using var editor = new SceneSettingsViewModel(() => testScene.Authoring);
         editor.SetScene(testScene.Scene);
@@ -328,7 +328,7 @@ public sealed class InspectorSceneEditingTests
         _ = play.CameraChoices.Should().Equal(entries, "an open list and its selection survive refreshes that change no camera");
         _ = play.SelectedCamera.Should().BeSameAs(selected);
 
-        second.Name = "Chase cam";
+        second.Metadata.Name = "Chase cam";
         play.Refresh();
 
         _ = play.CameraChoices.Select(static choice => choice.Name).Should().Contain("Chase cam");
@@ -434,14 +434,14 @@ public sealed class InspectorSceneEditingTests
 
     private static SceneNode CameraNode(Scene scene, float fieldOfView)
     {
-        var node = new SceneNode(scene) { Name = "Camera" };
+        var node = new SceneNode(scene, "Camera");
         node.Components.Add(new PerspectiveCamera { Name = "Camera", FieldOfView = fieldOfView });
         return node;
     }
 
     private static SceneNode DirectionalLightNode(Scene scene, string name, AtmosphereLightSlot slot)
     {
-        var node = new SceneNode(scene) { Name = name };
+        var node = new SceneNode(scene, name);
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Directional Light", AtmosphereSlot = slot });
         return node;
     }

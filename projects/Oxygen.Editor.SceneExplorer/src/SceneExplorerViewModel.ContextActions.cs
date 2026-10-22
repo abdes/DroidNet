@@ -257,7 +257,7 @@ public partial class SceneExplorerViewModel
         return new(authoring, this.session?.Project, selection, Array.AsReadOnly(selected),
             Array.AsReadOnly(targets), anchor, destination, background,
             selected.Select(static row => (Row: row, Parent: row.Parent,
-                SceneParent: (row as SceneNodeAdapter)?.AttachedObject.Parent)).ToArray(), this.session?.Context);
+                SceneParent: (row as SceneNodeAdapter)?.AttachedObject.Hierarchy.Parent)).ToArray(), this.session?.Context);
     }
 
     private ITreeItem? ResolveSharedPasteTarget(IReadOnlyList<ITreeItem> targets)
@@ -283,7 +283,7 @@ public partial class SceneExplorerViewModel
             && context.Selection.SelectedFolderIds.All(id => this.projection.GetFolder(id) is not null)
             && context.SelectedRows.All(this.IsCurrentContextRow)
             && context.Parentage.All(static captured => ReferenceEquals(captured.Row.Parent, captured.Parent)
-                && ReferenceEquals((captured.Row as SceneNodeAdapter)?.AttachedObject.Parent, captured.SceneParent))
+                && ReferenceEquals((captured.Row as SceneNodeAdapter)?.AttachedObject.Hierarchy.Parent, captured.SceneParent))
             && (context.Anchor is null || this.IsCurrentContextRow(context.Anchor));
     }
 
@@ -351,7 +351,7 @@ public partial class SceneExplorerViewModel
             yield return (SceneExplorerCommandKind.RemoveFromFolder, "Remove from folder", "hierarchy");
         }
 
-        if (node is not null && (node.AttachedObject.Parent is not null || node.Parent is FolderAdapter))
+        if (node is not null && (node.AttachedObject.Hierarchy.Parent is not null || node.Parent is FolderAdapter))
         {
             yield return (SceneExplorerCommandKind.MoveToSceneRoot, "Move to scene root", "hierarchy");
         }
@@ -463,7 +463,7 @@ public partial class SceneExplorerViewModel
             var ids = nodes.Select(static row => row.AttachedObject.Id).ToHashSet();
             foreach (var descendant in this.projection.Nodes)
             {
-                for (var parent = descendant.AttachedObject.Parent; parent is not null; parent = parent.Parent)
+                for (var parent = descendant.AttachedObject.Hierarchy.Parent; parent is not null; parent = parent.Hierarchy.Parent)
                 {
                     if (ids.Contains(parent.Id) && this.FindLockedContextRow(descendant) is { } locked)
                     {
@@ -491,11 +491,11 @@ public partial class SceneExplorerViewModel
         {
             foreach (var row in nodes)
             {
-                for (var parent = row.AttachedObject.Parent; parent is not null; parent = parent.Parent)
+                for (var parent = row.AttachedObject.Hierarchy.Parent; parent is not null; parent = parent.Hierarchy.Parent)
                 {
                     if (kind == SceneExplorerCommandKind.Show ? this.interaction!.IsHidden(parent.Id) : this.interaction!.IsLocked(parent.Id))
                     {
-                        return $"{(kind == SceneExplorerCommandKind.Show ? "Hidden" : "Locked")} by {parent.Name}.";
+                        return $"{(kind == SceneExplorerCommandKind.Show ? "Hidden" : "Locked")} by {parent.Metadata.Name}.";
                     }
                 }
             }
@@ -635,7 +635,7 @@ public partial class SceneExplorerViewModel
                 result = await OutOfFolderAsync(authoring, nodes, ((FolderAdapter)target!.Parent!).Id).ConfigureAwait(true);
                 break;
             case SceneExplorerCommandKind.MoveToSceneRoot:
-                result = target!.Parent is FolderAdapter sourceFolder && ((SceneNodeAdapter)target).AttachedObject.Parent is null
+                result = target!.Parent is FolderAdapter sourceFolder && ((SceneNodeAdapter)target).AttachedObject.Hierarchy.Parent is null
                     ? await OutOfFolderAsync(authoring, nodes, sourceFolder.Id).ConfigureAwait(true)
                     : await authoring.ExecuteAsync(new ReparentNodes(nodes, parent: null, preserveWorld: false)).ConfigureAwait(true);
                 break;
@@ -706,7 +706,7 @@ public partial class SceneExplorerViewModel
         var target = asChild ? context.Targets[0] : context.Destination;
         var node = target as SceneNodeAdapter;
         var folder = target as FolderAdapter ?? (!asChild ? node?.Parent as FolderAdapter : null);
-        var parentId = asChild ? node!.AttachedObject.Id : node?.AttachedObject.Parent?.Id;
+        var parentId = asChild ? node!.AttachedObject.Id : node?.AttachedObject.Hierarchy.Parent?.Id;
         if (!asChild && context.Targets.Count > 1
             && context.Targets.All(row => ReferenceEquals(row.Parent, target)))
         {

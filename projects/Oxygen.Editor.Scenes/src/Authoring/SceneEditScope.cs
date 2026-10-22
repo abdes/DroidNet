@@ -133,7 +133,7 @@ public sealed class SceneEditScope
         {
             foreach (var locked in root.Descendants().Where(node => interaction.IsLocked(node.Id)))
             {
-                (errors ??= []).Add(SceneDiagnostic.Error(SceneEditCodes.TargetLocked, $"'{locked.Name}' is locked.", locked.Id));
+                (errors ??= []).Add(SceneDiagnostic.Error(SceneEditCodes.TargetLocked, $"'{locked.Metadata.Name}' is locked.", locked.Id));
             }
         }
 
@@ -169,13 +169,13 @@ public sealed class SceneEditScope
             return null;
         }
 
-        for (var current = node; current is not null; current = current.Parent)
+        for (var current = node; current is not null; current = current.Hierarchy.Parent)
         {
             if (interaction.IsLocked(current.Id))
             {
                 return SceneDiagnostic.Error(
                     SceneEditCodes.TargetLocked,
-                    current == node ? $"'{node.Name}' is locked." : $"'{node.Name}' is locked by '{current.Name}'.",
+                    current == node ? $"'{node.Metadata.Name}' is locked." : $"'{node.Metadata.Name}' is locked by '{current.Metadata.Name}'.",
                     target);
             }
         }

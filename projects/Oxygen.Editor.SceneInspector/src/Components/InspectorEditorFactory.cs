@@ -11,6 +11,7 @@ using Oxygen.Editor.SceneInspector.Components.Cameras;
 using Oxygen.Editor.SceneInspector.Components.Fog;
 using Oxygen.Editor.SceneInspector.Components.Geometry;
 using Oxygen.Editor.SceneInspector.Components.Lights;
+using Oxygen.Editor.SceneInspector.Components.Rendering;
 using Oxygen.Editor.SceneInspector.Components.Scripting;
 using Oxygen.Editor.SceneInspector.Components.Transform;
 using Oxygen.Editor.Scenes.Authoring;
@@ -41,6 +42,7 @@ internal static class InspectorEditorFactory
         => new()
         {
             [typeof(TransformComponent)] = () => new TransformViewModel(logger, authoring),
+            [typeof(NodeFlagsComponent)] = () => new NodeRenderingViewModel(authoring),
             [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, surfaces, session, authoring, logger),
             [typeof(PerspectiveCamera)] = () => new PerspectiveCameraViewModel(authoring),
             [typeof(OrthographicCamera)] = () => new OrthographicCameraViewModel(authoring),

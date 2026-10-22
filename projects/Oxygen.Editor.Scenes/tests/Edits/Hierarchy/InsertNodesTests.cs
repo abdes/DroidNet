@@ -46,7 +46,7 @@ public sealed class InsertNodesTests
 
         SceneAssert.Applied(result);
         var inserted = fixture.Node(node.Id);
-        _ = (inserted.Parent?.Id).Should().Be(row.Parent);
+        _ = (inserted.Hierarchy.Parent?.Id).Should().Be(row.Parent);
         _ = SiblingsOf(fixture, row.Parent).IndexOf(inserted).Should().Be(at.Index);
         _ = LayoutScopes.PositionOf(fixture.Layout, LayoutEntryId.Of(node.Id)).Should().Be(layout);
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.NodesAdded([node.Id]), new SceneChange.LayoutChanged());
@@ -57,12 +57,12 @@ public sealed class InsertNodesTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var leaf = NewNode("Leaf");
-        var root = NewNode("Root") with { Children = [leaf] };
+        var root = SceneBuilder.NodeData(NodeId.New(), "Root", children: [leaf]);
 
         var result = await fixture.Authoring.ExecuteAsync(new InsertNodes([AtRootEnd(fixture, root)])).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = fixture.Node(leaf.Id).Parent!.Id.Should().Be(root.Id);
+        _ = fixture.Node(leaf.Id).Hierarchy.Parent!.Id.Should().Be(root.Id);
         SceneAssert.Changes(fixture.Changes.Only(), new SceneChange.NodesAdded([root.Id]), new SceneChange.LayoutChanged());
     }
 
@@ -74,7 +74,7 @@ public sealed class InsertNodesTests
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         var node = reuseNodeId
             ? NewNode("Clash") with { Id = SampleScene.B }
-            : NewNode("Clash") with { Components = [new TransformData { Id = SceneBuilder.TransformId(SampleScene.B), Name = "Transform" }] };
+            : SceneBuilder.NodeData(NodeId.New(), "Clash", components: [new PointLightData { Id = SceneBuilder.TransformId(SampleScene.B), Name = "Light" }]);
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(new InsertNodes([AtRootEnd(fixture, node)])).ConfigureAwait(false);
@@ -104,7 +104,7 @@ public sealed class InsertNodesTests
         fixture.Interaction!.Lock(SampleScene.A);
         var insert = new NodeInsert(
             NewNode("New"),
-            new NodePosition(SampleScene.A, fixture.Node(SampleScene.A).Children.Count),
+            new NodePosition(SampleScene.A, fixture.Node(SampleScene.A).Hierarchy.Children.Count),
             LayoutPosition.UnderNode(SampleScene.A, LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.UnderNode(SampleScene.A, 0)).Count));
         var before = fixture.Snapshot();
 
@@ -118,14 +118,7 @@ public sealed class InsertNodesTests
     public async Task DirectionalLightWithTakenSlot_IsInvalid()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var sun = NewNode("Second sun") with
-        {
-            Components =
-            [
-                new TransformData { Id = ComponentId.New(), Name = "Transform" },
-                new DirectionalLightData { Id = ComponentId.New(), Name = "Light", AtmosphereSlot = AtmosphereLightSlot.Primary },
-            ],
-        };
+        var sun = NewNode("Second sun", new DirectionalLightData { Id = ComponentId.New(), Name = "Light", AtmosphereSlot = AtmosphereLightSlot.Primary });
         var before = fixture.Snapshot();
 
         var result = await fixture.Authoring.ExecuteAsync(new InsertNodes([AtRootEnd(fixture, sun)])).ConfigureAwait(false);
@@ -166,14 +159,7 @@ public sealed class InsertNodesTests
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
         fixture.Redirects.Move(SampleScene.CubeGeometry, SampleScene.SphereGeometry);
-        var node = NewNode("Box") with
-        {
-            Components =
-            [
-                new TransformData { Id = ComponentId.New(), Name = "Transform" },
-                new GeometryComponentData { Id = ComponentId.New(), Name = "Geometry", GeometryUri = SampleScene.CubeGeometry },
-            ],
-        };
+        var node = NewNode("Box", new GeometryComponentData { Id = ComponentId.New(), Name = "Geometry", GeometryUri = SampleScene.CubeGeometry });
 
         var result = await fixture.Authoring.ExecuteAsync(new InsertNodes([AtRootEnd(fixture, node)])).ConfigureAwait(false);
 
@@ -202,14 +188,8 @@ public sealed class InsertNodesTests
         SceneAssert.Unchanged(fixture, before);
     }
 
-    private static SceneNodeData NewNode(string name)
-        => new()
-        {
-            Id = NodeId.New(),
-            Name = name,
-            IsActive = true,
-            Components = [new TransformData { Id = ComponentId.New(), Name = "Transform" }],
-        };
+    private static SceneNodeData NewNode(string name, params ComponentData[] optional)
+        => SceneBuilder.NodeData(NodeId.New(), name, components: optional);
 
     private static NodeInsert AtRootEnd(AuthoringFixture fixture, SceneNodeData node)
         => new(node, RootEndAt(fixture), RootEndLayout(fixture));
@@ -220,7 +200,7 @@ public sealed class InsertNodesTests
         => LayoutPosition.AtRoot(LayoutScopes.EntriesOf(fixture.Layout, LayoutPosition.AtRoot(0)).Count);
 
     private static ObservableCollection<SceneNode> SiblingsOf(AuthoringFixture fixture, NodeId? parent)
-        => parent is { } id ? fixture.Node(id).Children : fixture.Scene.RootNodes;
+        => parent is { } id ? fixture.Node(id).Hierarchy.Children : fixture.Scene.RootNodes;
 
     private static NodePosition SceneAt(AuthoringFixture fixture, InsertCase row)
         => new(row.Parent, row.AtStart ? 0 : SiblingsOf(fixture, row.Parent).Count);

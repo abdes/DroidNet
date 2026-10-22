@@ -208,13 +208,13 @@ public sealed class MoveLayoutEntriesTests
 
         SceneAssert.Applied(result);
         _ = fixture.History.UndoStack.Should().ContainSingle();
-        _ = fixture.Node(SampleScene.Cam).Parent!.Id.Should().Be(SampleScene.A);
+        _ = fixture.Node(SampleScene.Cam).Hierarchy.Parent!.Id.Should().Be(SampleScene.A);
         _ = LocalPosition(fixture, SampleScene.Cam).Should().Be(Vector3.Zero);
         _ = LayoutScopes.PositionOf(fixture.Layout, cam).Should().Be(LayoutPosition.InFolder(SampleScene.AF, 0));
 
         // The single entry undoes the reparent and the move together.
         SceneAssert.Applied(await fixture.Authoring.UndoAsync().ConfigureAwait(false));
-        _ = fixture.Node(SampleScene.Cam).Parent.Should().BeNull();
+        _ = fixture.Node(SampleScene.Cam).Hierarchy.Parent.Should().BeNull();
         _ = LocalPosition(fixture, SampleScene.Cam).Should().Be(Vector3.Zero);
         _ = LayoutScopes.PositionOf(fixture.Layout, cam).Should().Be(LayoutPosition.AtRoot(2));
         _ = fixture.Snapshot().Document.Should().Be(before.Document);
@@ -235,5 +235,5 @@ public sealed class MoveLayoutEntriesTests
         => new(new MoveCase(entries, to, container, expected)) { DisplayName = name };
 
     private static Vector3 LocalPosition(AuthoringFixture fixture, NodeId node)
-        => fixture.Node(node).Components.OfType<TransformComponent>().Single().LocalPosition;
+        => fixture.Node(node).Transform.LocalPosition;
 }

@@ -23,7 +23,7 @@ public sealed class DirectionalLightOrientationTests
     [DataRow(-90f, -20f)]
     public void LocalRotation_OfARootLight_ShinesFromTheGivenDirection(float azimuth, float elevation)
     {
-        var light = new SceneNode(new Scene { Name = "Orientation" }) { Name = "Light" };
+        var light = new SceneNode(new Scene { Name = "Orientation" }, "Light");
 
         Rotate(light, DirectionalLightOrientation.LocalRotation(light, azimuth, elevation));
 
@@ -34,16 +34,16 @@ public sealed class DirectionalLightOrientationTests
     public void LocalRotation_OfAChildLight_CompensatesForItsParent()
     {
         var scene = new Scene { Name = "Orientation" };
-        var parent = new SceneNode(scene) { Name = "Parent" };
-        var light = new SceneNode(scene) { Name = "Light" };
-        parent.AddChild(light);
+        var parent = new SceneNode(scene, "Parent");
+        var light = new SceneNode(scene, "Light");
+        parent.Hierarchy.AddChild(light);
         Rotate(parent, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2f));
 
         var local = DirectionalLightOrientation.LocalRotation(light, 30f, 10f);
         Rotate(light, local);
 
         AssertShinesFrom(light, 30f, 10f);
-        var unparented = DirectionalLightOrientation.LocalRotation(new SceneNode(scene) { Name = "Root light" }, 30f, 10f);
+        var unparented = DirectionalLightOrientation.LocalRotation(new SceneNode(scene, "Root light"), 30f, 10f);
         _ = MathF.Abs(Quaternion.Dot(local, unparented)).Should().BeLessThan(0.999f, "the parent's turn is undone in the local rotation");
     }
 
@@ -51,9 +51,10 @@ public sealed class DirectionalLightOrientationTests
     public void LocalRotation_OfALightThatIgnoresItsParent_IsItsWorldRotation()
     {
         var scene = new Scene { Name = "Orientation" };
-        var parent = new SceneNode(scene) { Name = "Parent" };
-        var light = new SceneNode(scene) { Name = "Light", IgnoreParentTransform = true };
-        parent.AddChild(light);
+        var parent = new SceneNode(scene, "Parent");
+        var light = new SceneNode(scene, "Light");
+        light.Flags.IgnoreParentTransform = true;
+        parent.Hierarchy.AddChild(light);
         Rotate(parent, Quaternion.CreateFromAxisAngle(Vector3.UnitZ, MathF.PI / 2f));
 
         Rotate(light, DirectionalLightOrientation.LocalRotation(light, 30f, 10f));
@@ -62,7 +63,7 @@ public sealed class DirectionalLightOrientationTests
     }
 
     private static void Rotate(SceneNode node, Quaternion rotation)
-        => node.Components.OfType<TransformComponent>().Single().LocalRotation = rotation;
+        => node.Transform.LocalRotation = rotation;
 
     private static void AssertShinesFrom(SceneNode light, float azimuth, float elevation)
     {

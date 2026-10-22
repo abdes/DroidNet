@@ -244,7 +244,7 @@ public sealed class CookRecoveryTests
     private static async Task<Document> OpenSceneAsync(TestSceneDocuments scenes, SceneId id)
     {
         var built = new Scene { Name = SceneName };
-        built.RootNodes.Add(new SceneNode(built) { Name = "Cube" });
+        built.RootNodes.Add(new SceneNode(built, "Cube"));
         return await scenes.OpenAsync(built.Dehydrate() with { Id = id }).ConfigureAwait(false);
     }
 

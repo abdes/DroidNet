@@ -122,7 +122,7 @@ public sealed record ReparentNodes : ISceneEdit
                 return SceneDiagnostic.Error(SceneEditCodes.HierarchyCycle, "A node cannot be moved into its own descendant.", node.Id);
             }
 
-            if (this.PreserveWorld && !node.IgnoreParentTransform && !SceneTransformMath.TryPreserveWorldLocal(node, parent, out _, out _, out _))
+            if (this.PreserveWorld && !node.Flags.IgnoreParentTransform && !SceneTransformMath.TryPreserveWorldLocal(node, parent, out _, out _, out _))
             {
                 return SceneDiagnostic.Error(SceneEditCodes.TransformUnrepresentable, "The destination would produce an unrepresentable transform (singular or sheared).", node.Id);
             }
@@ -133,10 +133,10 @@ public sealed record ReparentNodes : ISceneEdit
 
     // Inserting after a sibling implies the sibling's parent.
     private SceneNode? DestinationOf(SceneEditScope scope)
-        => this.After is { } after ? scope.FindNode(after)?.Parent : this.Parent is { } parent ? scope.FindNode(parent) : null;
+        => this.After is { } after ? scope.FindNode(after)?.Hierarchy.Parent : this.Parent is { } parent ? scope.FindNode(parent) : null;
 
     private TransformData LocalAfterMove(SceneNode node, SceneNode? parent)
-        => this.PreserveWorld && !node.IgnoreParentTransform && SceneTransformMath.TryPreserveWorldLocal(node, parent, out var position, out var rotation, out var scale)
+        => this.PreserveWorld && !node.Flags.IgnoreParentTransform && SceneTransformMath.TryPreserveWorldLocal(node, parent, out var position, out var rotation, out var scale)
             ? SceneGraph.LocalOf(node) with { Position = position, Rotation = rotation, Scale = scale }
             : SceneGraph.LocalOf(node);
 

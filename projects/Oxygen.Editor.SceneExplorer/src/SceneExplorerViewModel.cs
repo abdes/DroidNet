@@ -755,7 +755,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <returns><see langword="true"/> when an ancestor of <paramref name="node"/> is hidden.</returns>
     private static bool HasHiddenSceneAncestor(SceneNode node, SceneNodeInteraction service)
     {
-        for (var parent = node.Parent; parent is not null; parent = parent.Parent)
+        for (var parent = node.Hierarchy.Parent; parent is not null; parent = parent.Hierarchy.Parent)
         {
             if (service.IsHidden(parent.Id))
             {
@@ -1238,7 +1238,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         var nodeById = sceneAdapter.AttachedObject.AllNodes.ToDictionary(node => node.Id);
         var matchingNodeIds = nodeById.Values
             .Where(node => this.IsIncludedByCategories(node)
-                && node.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
+                && node.Metadata.Name.Contains(query, StringComparison.OrdinalIgnoreCase))
             .Select(node => node.Id)
             .ToList();
 
@@ -1428,7 +1428,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         }
 
         var matchingNodeCount = sceneAdapter.AttachedObject.AllNodes.Count(node =>
-            this.IsIncludedByCategories(node) && node.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
+            this.IsIncludedByCategories(node) && node.Metadata.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
         var matchingFolderCount = this.projection.LayoutFolders.Count(folder =>
             folder.Name.Contains(query, StringComparison.OrdinalIgnoreCase));
         this.SearchResultCount = matchingNodeCount + matchingFolderCount;
@@ -1457,7 +1457,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         // adapters. Nodes use their actual scene ancestry rather than the realized adapter
         // Parent (unset while collapsed).
         var ancestors = new Stack<SceneNode>();
-        for (var parent = nodeById[nodeId].Parent; parent is not null; parent = parent.Parent)
+        for (var parent = nodeById[nodeId].Hierarchy.Parent; parent is not null; parent = parent.Hierarchy.Parent)
         {
             ancestors.Push(parent);
         }
@@ -2091,7 +2091,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
         var rest = entries.Where(entry => entry != self).ToList();
         var index = Math.Clamp(request.Index > current ? request.Index - 1 : request.Index, 0, rest.Count);
         var graphIndex = rest.Take(index).Count(static entry => entry.Node is not null);
-        return new ReorderNode(nodeId, new NodePosition(this.projection.GetNode(nodeId)?.AttachedObject.Parent?.Id, graphIndex), container with { Index = index });
+        return new ReorderNode(nodeId, new NodePosition(this.projection.GetNode(nodeId)?.AttachedObject.Hierarchy.Parent?.Id, graphIndex), container with { Index = index });
     }
 
     private bool IsSameParentReorder(TreeDropRequest request, NodeId nodeId)
@@ -2101,7 +2101,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return false;
         }
 
-        var sceneParentId = adapter.AttachedObject.Parent?.Id;
+        var sceneParentId = adapter.AttachedObject.Hierarchy.Parent?.Id;
         return request.Parent switch
         {
             SceneAdapter => sceneParentId is null,

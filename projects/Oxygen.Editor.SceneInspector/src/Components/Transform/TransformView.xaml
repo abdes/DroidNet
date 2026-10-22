@@ -185,6 +185,9 @@
                     <Run Text="Z: " /><Run Text="{x:Bind ViewModel.ScaleZDiagnostic.Message, Mode=OneWay}" />
                 </TextBlock>
             </StackPanel>
+            <editorcontrols:PropertyCard PropertyName="Ignore parent transform">
+                <ToggleSwitch AutomationProperties.Name="Ignore parent transform" IsOn="{x:Bind ViewModel.IgnoreParentTransform, Mode=TwoWay}" />
+            </editorcontrols:PropertyCard>
         </editorcontrols:PropertiesExpander.Items>
     </editorcontrols:PropertiesExpander>
 </UserControl>

@@ -58,7 +58,7 @@ public sealed partial class ComponentLifetimeTests : DroidNet.Tests.VisualUserIn
     private static async Task AssertTransformRemovalRefusedAsync(NativeSceneFixture fixture, CancellationToken cancellationToken)
     {
         var node = fixture.Source.RootNodes.Single();
-        var transform = node.Components.OfType<TransformComponent>().Single();
+        var transform = node.Transform;
         _ = (await fixture.Authoring.ExecuteAsync(new RemoveComponent(node.Id, transform.Id)).ConfigureAwait(true)).Succeeded.Should().BeFalse();
         _ = fixture.Document.History.UndoStack.Should().BeEmpty();
         var native = await fixture.ReadNodeAsync(node.Id, cancellationToken).ConfigureAwait(true);

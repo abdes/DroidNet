@@ -6,6 +6,7 @@ using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Editor.World.Tests.TestSupport;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests.Components;
@@ -40,13 +41,14 @@ public sealed class ComponentIdentityTests
     {
         var scene = new Scene { Name = "Scene" };
         var duplicateId = ComponentId.FromValue(Guid.Parse("11111111-1111-1111-1111-111111111111"));
+        var required = SceneTestSupport.RequiredComponents("Cube");
+        required[1] = new TransformData { Id = ComponentId.Empty, Name = "Transform" };
         var data = new SceneNodeData
         {
             Id = NodeId.New(),
-            Name = "Cube",
             Components =
             [
-                new TransformData { Id = ComponentId.Empty, Name = "Transform" },
+                .. required,
                 new GeometryComponentData
                 {
                     Id = ComponentId.Empty,

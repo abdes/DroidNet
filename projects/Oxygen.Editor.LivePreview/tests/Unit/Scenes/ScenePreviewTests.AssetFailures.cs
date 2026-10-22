@@ -82,7 +82,7 @@ public sealed partial class ScenePreviewTests
     // A cube whose one surface names a material that does not exist, so the engine reports the material's load.
     private static SceneNode AddCubeWithMissingMaterial(Scene scene)
     {
-        var node = new SceneNode(scene) { Name = "Cube with a missing material" };
+        var node = new SceneNode(scene, "Cube with a missing material");
         scene.RootNodes.Add(node);
         var target = new SurfaceTarget(EngineAssets.BasicShape("Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
