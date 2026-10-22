@@ -17,15 +17,7 @@
         {
           "$type": "GeometryComponent",
           "Name": "PlayerMesh",
-          "GeometryUri": "asset:///Engine/Generated/BasicShapes/Cube",
-          "OverrideSlots": [ { "$type": "RenderingSlot", "IsVisible": { "Value": true } } ],
-          "TargetedOverrides": [
-            {
-              "LodIndex": 0,
-              "SubmeshIndex": 0,
-              "OverrideSlots": [ { "$type": "MaterialsSlot", "Material": { "Uri": "asset:///Engine/Generated/Materials/Default" } } ]
-            }
-          ]
+          "GeometryUri": "asset:///Engine/Generated/BasicShapes/Cube"
         },
         { "$type": "Hierarchy", "Name": "Hierarchy" }
       ]

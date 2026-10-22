@@ -2,8 +2,10 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Numerics;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.World.Utils;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
@@ -43,11 +45,12 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonSerializable(typeof(string))]
 [JsonSerializable(typeof(SpotLightData))]
 [JsonSerializable(typeof(TransformData))]
-[JsonSerializable(typeof(OverrideSlotData))]
-[JsonSerializable(typeof(RenderingSlotData))]
-[JsonSerializable(typeof(MaterialsSlotData))]
-[JsonSerializable(typeof(LightingSlotData))]
-[JsonSerializable(typeof(LevelOfDetailSlotData))]
+[JsonSerializable(typeof(SourceOverridesData))]
+[JsonSerializable(typeof(PartOverridesData))]
+
+// The value types of overridable properties (SceneSchema.Overridable).
+[JsonSerializable(typeof(AssetPath))]
+[JsonSerializable(typeof(Vector3))]
 [JsonSourceGenerationOptions(
     WriteIndented = true,
     DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,

@@ -9,6 +9,7 @@ using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Properties;
 

@@ -8,13 +8,13 @@ using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
+using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 

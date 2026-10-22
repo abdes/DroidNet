@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Authoring;

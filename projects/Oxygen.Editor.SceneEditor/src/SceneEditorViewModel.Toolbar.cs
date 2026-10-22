@@ -4,13 +4,12 @@
 
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Controls.Menus;
+using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Edits.Hierarchy;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneEditor;
@@ -46,24 +45,6 @@ public partial class SceneEditorViewModel
     /// in front of the focused pane's camera and selected.
     /// </summary>
     public IMenuSource QuickAddMenu => this.quickAddMenu ??= this.BuildQuickAddMenu();
-
-    /// <summary>The geometry and material assets a node uses, in a stable order.</summary>
-    private static IEnumerable<AssetPath> GetAssets(SceneNode node)
-    {
-        var geometry = node.Components.OfType<GeometryComponent>().FirstOrDefault();
-        if (geometry is not null)
-        {
-            yield return geometry.Geometry;
-        }
-
-        var slots = node.OverrideSlots
-            .Concat(geometry?.OverrideSlots ?? [])
-            .Concat(geometry?.TargetedOverrides.SelectMany(target => target.OverrideSlots) ?? []);
-        foreach (var materials in slots.OfType<MaterialsSlot>())
-        {
-            yield return materials.Material;
-        }
-    }
 
     private IMenuSource BuildQuickAddMenu()
     {
@@ -168,7 +149,7 @@ public partial class SceneEditorViewModel
     }
 
     private IReadOnlyList<AssetPath> GetSelectedAssets()
-        => [.. this.selectedNodes.SelectMany(GetAssets).Distinct()];
+        => [.. this.selectedNodes.SelectMany(SceneAssetReferences.Runtime).Distinct()];
 
     private bool CanBrowseToAsset() => this.GetSelectedAssets().Count > 0;
 

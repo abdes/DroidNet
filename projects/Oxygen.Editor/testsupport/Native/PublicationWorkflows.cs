@@ -99,7 +99,7 @@ internal static class PublicationWorkflows
             foreach (var nodeId in nodes)
             {
                 var target = await fixture.ReadSingleSurfaceAsync(nodeId, cancellationToken).ConfigureAwait(true);
-                var result = await fixture.Authoring.ExecuteAsync(new SetSurfaceMaterial([nodeId], target, choice.Identity)).ConfigureAwait(true);
+                var result = await fixture.Authoring.ExecuteAsync(NativeSceneFixture.SetSurfaceMaterial(nodeId, target, choice.Identity)).ConfigureAwait(true);
                 _ = result.Succeeded.Should().BeTrue();
             }
         }

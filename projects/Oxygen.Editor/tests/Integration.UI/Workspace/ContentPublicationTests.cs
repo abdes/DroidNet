@@ -12,7 +12,6 @@ using Oxygen.Editor.ContentPipeline.Publication;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.TestSupport;
 using Oxygen.Editor.World.Components;
@@ -113,7 +112,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         }
         else if (string.Equals(action, "Clear", StringComparison.Ordinal))
         {
-            _ = (await fixture.Authoring.ExecuteAsync(new SetSurfaceMaterial([nodes[0].Id], await fixture.ReadSingleSurfaceAsync(nodes[0].Id, cancellationToken).ConfigureAwait(true), material: null)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            _ = (await fixture.Authoring.ExecuteAsync(NativeSceneFixture.SetSurfaceMaterial(nodes[0].Id, await fixture.ReadSingleSurfaceAsync(nodes[0].Id, cancellationToken).ConfigureAwait(true), material: null)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         }
         else
         {

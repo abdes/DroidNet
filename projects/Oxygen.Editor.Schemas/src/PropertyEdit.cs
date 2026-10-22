@@ -4,6 +4,7 @@
 
 using System.Collections;
 using System.Collections.Frozen;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Schemas;
 

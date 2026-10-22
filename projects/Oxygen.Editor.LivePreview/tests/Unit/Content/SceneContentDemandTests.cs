@@ -18,7 +18,6 @@ using Oxygen.Editor.Scenes.Edits.Components;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Testably.Abstractions.Testing;
@@ -35,18 +34,17 @@ public sealed partial class SceneContentDemandTests
 {
     private static readonly AssetPath Geometry = AssetPath.Parse("/Content/Geometry/Custom.ogeo");
     private static readonly AssetPath Material = AssetPath.Parse("/Content/Materials/Custom.omat");
-    private static readonly AssetPath Targeted = AssetPath.Parse("/Content/Materials/Targeted.omat");
 
     public TestContext TestContext { get; set; }
 
     [TestMethod]
-    public async Task OpenedScene_DemandsEveryStaleReferenceIncludingTargetedOverrides()
+    public async Task OpenedScene_DemandsEveryStaleReferenceIncludingOverrideMaterials()
     {
         using var fixture = new DemandFixture();
 
-        _ = await fixture.OpenAsync(withGeometry: true, withTargetedOverride: true).ConfigureAwait(false);
+        _ = await fixture.OpenAsync(withGeometry: true).ConfigureAwait(false);
 
-        _ = fixture.Demanded.Should().BeEquivalentTo([Geometry, Material, Targeted]);
+        _ = fixture.Demanded.Should().BeEquivalentTo([Geometry, Material]);
     }
 
     [TestMethod]
@@ -173,22 +171,19 @@ public sealed partial class SceneContentDemandTests
 
         public IEnumerable<AssetPath> Demanded => this.Requests.Select(static request => request.Asset);
 
-        public async Task<(Document Document, Scene Built)> OpenAsync(bool withGeometry, bool withTargetedOverride = false)
+        public async Task<(Document Document, Scene Built)> OpenAsync(bool withGeometry)
         {
             var built = new Scene { Name = "Test Scene" };
             var node = new SceneNode(built, "Cube");
             built.RootNodes.Add(node);
             if (withGeometry)
             {
-                var target = new SurfaceTarget(Geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
                 var geometry = new GeometryComponent { Name = "Geometry", Geometry = Geometry };
-                geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = Material });
-                if (withTargetedOverride)
-                {
-                    var lod = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 0 };
-                    lod.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = Targeted });
-                    geometry.TargetedOverrides.Add(lod);
-                }
+                geometry.Overrides = geometry.Overrides.With(
+                    SceneSchema.Geometry.Surface.Material,
+                    new PartId(SceneSchema.Geometry.Surface.Kind, Guid.Parse("10000000-0000-0000-0000-000000000001")),
+                    new string('a', 64),
+                    Material);
 
                 node.Components.Add(geometry);
             }

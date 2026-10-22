@@ -7,7 +7,7 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Pickers;
 using Oxygen.Editor.SceneInspector.Components.Geometry;
 using Oxygen.Editor.SceneInspector.TestSupport;
-using Oxygen.Editor.World.Slots;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Unit.UI.Tests;
@@ -30,7 +30,7 @@ internal sealed class SurfacesTests : DroidNet.Tests.VisualUserInterfaceTests
             SurfaceId = Guid.Parse("10000000-0000-0000-0000-000000000002"),
         };
         fixture.Authoring.Surfaces.Publish(new GeometrySurfaceMetadata(geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), first.LayoutRevision, [new(first.SurfaceId, "Surface", [new(0, 0, Guid.Empty)]), new(second.SurfaceId, "Surface", [new(0, 1, Guid.Empty), new(1, 2, Guid.Empty)])]));
-        fixture.Geometry.OverrideSlots.Add(new MaterialsSlot { Target = first, Material = AssetPath.Parse("/Content/Materials/Body.omat") });
+        fixture.Geometry.Overrides = fixture.Geometry.Overrides.With(SceneSchema.Geometry.Surface.Material, first.Part, first.LayoutRevision, AssetPath.Parse("/Content/Materials/Body.omat"));
         using var host = fixture.Authoring.CreateInspectorHost("Geometry", assetProvider: fixture.Assets.Object);
         var model = host.PropertyEditors.OfType<GeometryViewModel>().Single();
         await model.RefreshSurfacesAsync().ConfigureAwait(true);
@@ -39,11 +39,13 @@ internal sealed class SurfacesTests : DroidNet.Tests.VisualUserInterfaceTests
         model.SelectedSurface = model.Surfaces.Single(surface => surface.Target.SurfaceId == second.SurfaceId);
         await model.RefreshMaterialPickerAsync().ConfigureAwait(true);
         await model.ApplyMaterialAsync(new AssetChoice("Trim", fixture.MaterialAsset, "Material", fixture.MaterialAsset.VirtualPath, IsEnabled: true, Glyph: string.Empty)).ConfigureAwait(true);
-        _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Single(slot => slot.Target.SurfaceId == second.SurfaceId).Material.Should().Be(fixture.MaterialAsset);
-        _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Single(slot => slot.Target.SurfaceId == first.SurfaceId).Material.Should().Be(AssetPath.Parse("/Content/Materials/Body.omat"));
+        _ = fixture.Geometry.Overrides.TryGet(SceneSchema.Geometry.Surface.Material, second.Part, out var trim).Should().BeTrue();
+        _ = trim.Should().Be(fixture.MaterialAsset);
+        _ = fixture.Geometry.Overrides.TryGet(SceneSchema.Geometry.Surface.Material, first.Part, out var body).Should().BeTrue();
+        _ = body.Should().Be(AssetPath.Parse("/Content/Materials/Body.omat"));
         await model.RefreshMaterialPickerAsync().ConfigureAwait(true);
         await model.ApplyMaterialAsync(new AssetChoice("Clear override", Asset: null, "Geometry default", "Geometry default", IsEnabled: true, Glyph: string.Empty)).ConfigureAwait(true);
-        _ = fixture.Geometry.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle().Which.Target.SurfaceId.Should().Be(first.SurfaceId);
+        _ = fixture.Geometry.Overrides.All.Should().ContainSingle().Which.Part.Should().Be(first.Part);
         _ = model.SelectedMaterialName.Should().Be("Geometry default");
     });
 

@@ -4,7 +4,6 @@
 
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 

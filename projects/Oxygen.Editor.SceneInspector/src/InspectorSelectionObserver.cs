@@ -7,17 +7,14 @@ using System.ComponentModel;
 using Microsoft.UI.Dispatching;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.SceneInspector;
 
-/// <summary>Owns selected component and surface material observation, suppressing queued work from old selections.</summary>
+/// <summary>Owns selected component observation, overrides included, suppressing queued work from old selections.</summary>
 internal sealed class InspectorSelectionObserver(DispatcherQueue? dispatcher, Action<InspectorSelectionChange> changed) : IDisposable
 {
     private readonly HashSet<INotifyCollectionChanged> collections = [];
     private readonly HashSet<GameComponent> components = [];
-    private readonly HashSet<GeometryComponent> geometries = [];
-    private readonly HashSet<OverrideSlot> slots = [];
     private int generation;
     private bool disposed;
 
@@ -47,19 +44,13 @@ internal sealed class InspectorSelectionObserver(DispatcherQueue? dispatcher, Ac
 
             foreach (var component in node.Components)
             {
+                // A component replaces its overrides as a whole, so its own change covers them.
                 if (this.components.Add(component))
                 {
                     component.PropertyChanged += this.OnComponentChanged;
                 }
-
-                if (component is GeometryComponent geometry && this.geometries.Add(geometry))
-                {
-                    geometry.OverrideSlots.CollectionChanged += this.OnSlotsChanged;
-                }
             }
         }
-
-        this.AttachSlots();
     }
 
     private void Detach()
@@ -75,36 +66,8 @@ internal sealed class InspectorSelectionObserver(DispatcherQueue? dispatcher, Ac
             component.PropertyChanged -= this.OnComponentChanged;
         }
 
-        foreach (var geometry in this.geometries)
-        {
-            geometry.OverrideSlots.CollectionChanged -= this.OnSlotsChanged;
-        }
-
-        this.DetachSlots();
         this.collections.Clear();
         this.components.Clear();
-        this.geometries.Clear();
-    }
-
-    private void AttachSlots()
-    {
-        foreach (var slot in this.geometries.SelectMany(static geometry => geometry.OverrideSlots))
-        {
-            if (this.slots.Add(slot))
-            {
-                slot.PropertyChanged += this.OnSlotChanged;
-            }
-        }
-    }
-
-    private void DetachSlots()
-    {
-        foreach (var slot in this.slots)
-        {
-            slot.PropertyChanged -= this.OnSlotChanged;
-        }
-
-        this.slots.Clear();
     }
 
     private void OnComponentsChanged(object? sender, NotifyCollectionChangedEventArgs args)
@@ -118,21 +81,6 @@ internal sealed class InspectorSelectionObserver(DispatcherQueue? dispatcher, Ac
     private void OnComponentChanged(object? sender, PropertyChangedEventArgs args)
     {
         if (sender is GameComponent component && this.components.Contains(component))
-        {
-            this.Notify(InspectorSelectionChange.Values);
-        }
-    }
-
-    private void OnSlotsChanged(object? sender, NotifyCollectionChangedEventArgs args)
-    {
-        this.DetachSlots();
-        this.AttachSlots();
-        this.Notify(InspectorSelectionChange.Values);
-    }
-
-    private void OnSlotChanged(object? sender, PropertyChangedEventArgs args)
-    {
-        if (sender is OverrideSlot slot && this.slots.Contains(slot))
         {
             this.Notify(InspectorSelectionChange.Values);
         }

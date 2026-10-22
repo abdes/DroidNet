@@ -10,7 +10,6 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -358,27 +357,16 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                 return;
             }
 
+            // The cooked scene takes surface materials as material overrides until the override table replaces them. The
+            // cooker refuses an override of a surface the geometry does not have.
             var overrides = new List<NativeSurfaceMaterialOverride>();
-            var assignedSurfaces = new HashSet<Guid>();
-            foreach (var slot in geometry.OverrideSlots.OfType<MaterialsSlot>())
+            foreach (var surface in geometry.Overrides.All.Where(static entry => entry.Property == SceneSchema.Geometry.Surface.Material.Id))
             {
-                if (slot.Target.Geometry != geometry.Geometry || slot.Target.SurfaceId == Guid.Empty
-                    || !assignedSurfaces.Add(slot.Target.SurfaceId))
-                {
-                    diagnostics.Add(CreateDiagnostic(
-                        operationId,
-                        DiagnosticSeverity.Error,
-                        ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                        $"Scene node '{node.Metadata.Name}' has an invalid or unresolved surface material assignment.",
-                        descriptorPath,
-                        descriptorVirtualPath));
-                    return;
-                }
-
+                var material = (AssetPath)surface.Value;
                 string materialRef;
                 try
                 {
-                    materialRef = ContentPipelinePaths.ToNativeDescriptorPath(slot.Material, AssetFileTypes.Material);
+                    materialRef = ContentPipelinePaths.ToNativeDescriptorPath(material, AssetFileTypes.Material);
                 }
                 catch (ArgumentException exception)
                 {
@@ -386,14 +374,14 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                         operationId,
                         DiagnosticSeverity.Error,
                         ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                        $"Scene node '{node.Metadata.Name}' references invalid material '{slot.Material}': {exception.Message}",
+                        $"Scene node '{node.Metadata.Name}' references invalid material '{material}': {exception.Message}",
                         descriptorPath,
                         descriptorVirtualPath));
                     return;
                 }
 
                 _ = materialRefs.Add(materialRef);
-                overrides.Add(new(slot.Target.SurfaceId, materialRef, slot.Target.LayoutRevision));
+                overrides.Add(new(surface.Part!.Value.Id, materialRef, surface.LayoutRevision!));
             }
 
             renderables.Add(new NativeRenderable(nodeIndex, geometryRef, overrides, node.Flags.IsVisible));

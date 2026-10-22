@@ -159,7 +159,7 @@ public sealed partial class OrthographicCameraViewModel : ComponentPropertyEdito
     /// <inheritdoc />
     protected override void OnInputEnabledChanged(bool enabled) => this.edits?.SetInputEnabled(enabled);
 
-    private InspectorFieldDiagnostic Diagnostic(Oxygen.Editor.Schemas.PropertyId id)
+    private InspectorFieldDiagnostic Diagnostic(PropertyId id)
         => this.edits?.Diagnostics.Get(id) ?? this.unboundDiagnostic;
 
     private void Register<T>(PropertyBinding<T> binding, string? property = null)

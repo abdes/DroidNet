@@ -70,6 +70,16 @@ class Property:
     enum: str | None
     fields: tuple[str, ...]
     encoding: str | None
+    sources: tuple[str, ...]
+
+
+@dataclass(frozen=True)
+class Part:
+    """A piece of a component, identified by the asset that defines it."""
+
+    name: str
+    kind: str
+    properties: tuple[Property, ...]
 
 
 @dataclass(frozen=True)
@@ -80,6 +90,7 @@ class Component:
     kind: str
     wire: Wire | None
     properties: tuple[Property, ...]
+    parts: tuple[Part, ...]
 
 
 @dataclass(frozen=True)
@@ -144,6 +155,15 @@ def _component(item: Mapping[str, Any]) -> Component:
         kind=item["kind"],
         wire=None if wire is None else Wire(id=wire["id"], field_set=wire["field_set"]),
         properties=tuple(_property(entry) for entry in item["properties"]),
+        parts=tuple(_part(entry) for entry in item.get("parts", ())),
+    )
+
+
+def _part(item: Mapping[str, Any]) -> Part:
+    return Part(
+        name=item["name"],
+        kind=item["kind"],
+        properties=tuple(_property(entry) for entry in item["properties"]),
     )
 
 
@@ -155,6 +175,7 @@ def _property(item: Mapping[str, Any]) -> Property:
         enum=item.get("enum"),
         fields=tuple(item.get("fields", ())),
         encoding=item.get("encoding"),
+        sources=tuple(item.get("sources", ())),
     )
 
 
@@ -201,6 +222,7 @@ def _check_component(component: Component, field_sets: Mapping[str, FieldSet]) -
         f"property in {where}", [entry.name for entry in component.properties]
     )
     _check_unique(f"key in {where}", [entry.key for entry in component.properties])
+    _check_parts(component)
     if component.wire is None:
         for entry in component.properties:
             if entry.fields:
@@ -230,3 +252,22 @@ def _check_component(component: Component, field_sets: Mapping[str, FieldSet]) -
         f"field use in {where}",
         [name for entry in component.properties for name in entry.fields],
     )
+
+
+def _check_parts(component: Component) -> None:
+    # A part's name scopes its properties' names, so it cannot be a property's.
+    where = component.name
+    _check_unique(
+        f"part or property in {where}",
+        [entry.name for entry in component.properties]
+        + [part.name for part in component.parts],
+    )
+    _check_unique(f"part kind in {where}", [part.kind for part in component.parts])
+    for part in component.parts:
+        _check_unique(
+            f"property in {where}.{part.name}",
+            [entry.name for entry in part.properties],
+        )
+        _check_unique(
+            f"key in {where}.{part.name}", [entry.key for entry in part.properties]
+        )

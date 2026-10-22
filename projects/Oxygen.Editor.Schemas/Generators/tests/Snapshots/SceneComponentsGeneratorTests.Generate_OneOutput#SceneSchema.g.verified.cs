@@ -5,11 +5,18 @@
 
 #nullable enable
 
-namespace Oxygen.Editor.Scenes.Properties;
+namespace Oxygen.Editor.World;
 
-/// <summary>The scene components: each one's kind and the typed ids of its properties.</summary>
+/// <summary>The scene components: each one's kind and the typed ids of its properties and of its parts' properties.</summary>
 public static class SceneSchema
 {
+    /// <summary>Gets the value type of each property a source may supply; a scene stores only its overrides of them.</summary>
+    public static global::System.Collections.Frozen.FrozenDictionary<global::Oxygen.Managed.Core.PropertyId, global::System.Type> Overridable { get; } =
+        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::System.Type>
+        {
+            [Geometry.Surface.Material.Id] = typeof(global::Oxygen.Managed.Core.AssetPath),
+        });
+
     /// <summary>The <c>lamp</c> component.</summary>
     public static class Lamp
     {
@@ -17,13 +24,13 @@ public static class SceneSchema
         public const string Kind = "lamp";
 
         /// <summary>Gets the <c>/color</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
+        public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
 
         /// <summary>Gets the <c>/range</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> Range { get; } = new(Kind, "/range");
+        public static global::Oxygen.Managed.Core.PropertyId<float> Range { get; } = new(Kind, "/range");
 
         /// <summary>Gets the <c>/fov_degrees</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> FovDegrees { get; } = new(Kind, "/fov_degrees");
+        public static global::Oxygen.Managed.Core.PropertyId<float> FovDegrees { get; } = new(Kind, "/fov_degrees");
     }
 
     /// <summary>The <c>geometry</c> component.</summary>
@@ -33,6 +40,16 @@ public static class SceneSchema
         public const string Kind = "geometry";
 
         /// <summary>Gets the <c>/geometry_uri</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::Oxygen.Managed.Core.AssetPath?> GeometryUri { get; } = new(Kind, "/geometry_uri");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.AssetPath?> GeometryUri { get; } = new(Kind, "/geometry_uri");
+
+        /// <summary>The <c>surface</c> part of the <c>geometry</c> component.</summary>
+        public static class Surface
+        {
+            /// <summary>The part kind.</summary>
+            public const string Kind = "surface";
+
+            /// <summary>Gets the <c>/material</c> property.</summary>
+            public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.AssetPath> Material { get; } = new(Geometry.Kind, Kind, "/material");
+        }
     }
 }

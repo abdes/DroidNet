@@ -39,7 +39,6 @@ public sealed class SceneJsonDefaultsTests
         var read = JsonSerializer.Deserialize($$"""{ "Id": "{{NodeIdentity}}" }""", SceneJsonContext.Default.SceneNodeData)!;
 
         _ = read.Components.Should().BeEmpty();
-        _ = read.OverrideSlots.Should().BeEmpty();
     }
 
     [TestMethod]

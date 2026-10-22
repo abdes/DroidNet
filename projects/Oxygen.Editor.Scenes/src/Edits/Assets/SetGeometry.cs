@@ -13,8 +13,9 @@ namespace Oxygen.Editor.Scenes.Edits.Assets;
 
 /// <summary>Sets the geometry asset of nodes' geometry components.</summary>
 /// <remarks>
-/// A geometry component always references a geometry: removing the component is how geometry is detached. Material
-/// overrides stay as they are; those the new geometry does not have are removed by <see cref="RemoveSurfaceMaterials"/>.
+/// A geometry component always references a geometry: removing the component is how geometry is detached. Surface
+/// overrides stay as they are; those of surfaces the new geometry does not have stay unresolved until
+/// <see cref="SurfaceEdits.ClearUnresolvedAsync"/> resets them.
 /// </remarks>
 public sealed record SetGeometry : ISceneEdit
 {

@@ -21,7 +21,8 @@ public sealed class AssetReferenceFieldTests
               "Children": [ { "Components": [ { "GeometryUri": "asset:///Content/Child.ogeo", "Count": 3 } ],
                 "Children": [ { "Components": [ { "GeometryUri": "asset:///Content/Grandchild.ogeo" } ] } ] } ] } ],
           "References": { "Scripts": [ "asset:///Content/S.oscript", 4 ] },
-          "Overrides": { "speed": { "Type": "string", "Value": "/Content/C.omat" }, "target": { "Type": "asset", "Value": "asset:///Content/D.omat" } } }
+          "Overrides": { "speed": { "Type": "string", "Value": "/Content/C.omat" }, "target": { "Type": "asset", "Value": "asset:///Content/D.omat" } },
+          "Values": { "/material": "asset:///Content/E.omat", "/label": "/Content/F.omat", "a~b": "asset:///Content/G.omat" } }
         """)!;
 
     [TestMethod]
@@ -41,6 +42,17 @@ public sealed class AssetReferenceFieldTests
     public void Select_Condition_TakesTheFieldOnlyWhenItsObjectHoldsTheValue()
         => _ = Values(new AssetReferenceField("Overrides/*/Value") { WhenProperty = "Type", WhenValue = "asset" })
             .Should().ContainSingle().Which.Should().Be("asset:///Content/D.omat", "a string value shaped like a path is still text");
+
+    [TestMethod]
+    public void Select_EscapedName_MatchesThePropertyNamedWithSlashOrTilde()
+    {
+        _ = Values(new AssetReferenceField("Values/" + AssetReferenceField.Escape("/material"))).Should().Equal("asset:///Content/E.omat");
+        _ = Values(new AssetReferenceField("Values/" + AssetReferenceField.Escape("a~b"))).Should().Equal("asset:///Content/G.omat");
+    }
+
+    [TestMethod]
+    public void Escape_EncodesTildeAndSlashAsAJsonPointer()
+        => _ = AssetReferenceField.Escape("/a~b/c").Should().Be("~1a~0b~1c");
 
     [TestMethod]
     public void Select_MissingPath_FindsNothing()

@@ -3,9 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Scenes.Edits.Properties;
-using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.PropertyRules;

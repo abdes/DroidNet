@@ -108,7 +108,7 @@ problem type per meaning, and one producer of facts for every window.
 
 - **World** holds the scene model only, and the value types a scene serializes
   when it references another family (`ScriptSlot`, `ScriptValue`,
-  `MaterialsSlot`, `SurfaceTarget`, `StartingInputContextData`). It knows
+  `SourceOverrides`, `StartingInputContextData`). It knows
   no family's rules, no project and no document.
 - **Projects** holds the project model: `IProject`, settings, mount points and
   categories. It references no scene type.
@@ -364,11 +364,10 @@ classDiagram
     }
     class GeometryComponent {
         Geometry: Uri of a .ogeo, always set
-        OverrideSlots: whole geometry
+        Overrides: SourceOverrides
     }
-    class MaterialsSlot {
-        Material: Uri of a .omat
-        Target: GeometryUri, SurfaceId, LayoutRevision
+    class SourceOverrides {
+        Parts: PartId(surface, SurfaceId) → LayoutRevision, Material: Uri of a .omat
     }
     class ScriptSlot {
         Id: Guid
@@ -406,8 +405,8 @@ classDiagram
     Scene "1" *-- "*" StartingInputContextData
     Scene "1" *-- "*" GeometryComponent : nodes carry
     Scene "1" *-- "*" ScriptSlot : nodes carry
-    GeometryComponent *-- "*" MaterialsSlot
-    MaterialsSlot ..> Material : URI
+    GeometryComponent *-- "1" SourceOverrides
+    SourceOverrides ..> Material : URI
     Material ..> Texture : virtual path
     ScriptSlot ..> Script : URI
     ScriptSlotRules ..> ScriptSlot : checks against Script
@@ -417,13 +416,12 @@ classDiagram
 
 The scene's data stays in World; each reference is checked by the family it
 points to. Surfaces are resolved against the geometry's layout, and Scenes
-owns that (`SetSurfaceMaterial`, `RemoveSurfaceMaterials`, `SurfaceMaterialEdits`);
+owns that (`SetOverrides`, `SurfaceEdits`);
 script slots and starting contexts are checked the same way, by
 `ScriptSlotRules` and `StartingContextRules`, in the inspector and in the cook.
 
-The diagram leaves out the geometry's LOD-or-submesh slot scope: nothing authors
-or applies it (abdes/DroidNet#77), and material overrides target the engine's
-surface identity, which already covers every LOD and submesh the surface binds.
+Material overrides target the engine's surface identity, which already covers
+every LOD and submesh the surface binds.
 
 ### 5.7 From asset to editor
 

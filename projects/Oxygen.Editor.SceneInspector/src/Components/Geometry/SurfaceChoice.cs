@@ -2,7 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.World.Slots;
+using Oxygen.Editor.Scenes.Edits.Assets;
 
 namespace Oxygen.Editor.SceneInspector.Components.Geometry;
 

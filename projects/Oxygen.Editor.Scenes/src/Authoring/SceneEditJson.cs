@@ -5,11 +5,13 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Text.Json.Serialization.Metadata;
+using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Utils;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Authoring;
 
@@ -43,6 +45,7 @@ public static class SceneEditJson
                 new Vector4JsonConverter(),
                 new QuaternionJsonConverter(),
                 new PropertyEditJsonConverter(),
+                new OverrideWriteJsonConverter(),
                 new ScriptSlotJsonConverter(),
                 new ScriptValueJsonConverter(),
             },
@@ -116,6 +119,59 @@ public static class SceneEditJson
     }
 
     /// <summary>Writes a script slot in its saved form, overrides included.</summary>
+    // A value is written as its property's type, as a scene file writes it.
+    private sealed class OverrideWriteJsonConverter : JsonConverter<OverrideWrite>
+    {
+        public override OverrideWrite Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)
+        {
+            using var entry = JsonDocument.ParseValue(ref reader);
+            var root = entry.RootElement;
+            var partKind = root.GetProperty("part").GetString();
+            var property = new PropertyId(root.GetProperty("component").GetString()!, partKind, root.GetProperty("pointer").GetString()!);
+            var value = root.GetProperty("value");
+            var owner = root.TryGetProperty("owner", out var ownerJson) ? ownerJson.Deserialize(SceneJsonContext.Default.AssetPath) : null;
+            return new OverrideWrite(
+                property,
+                partKind is null ? null : new PartId(partKind, root.GetProperty("partId").GetGuid()),
+                root.GetProperty("revision").GetString(),
+                value.ValueKind == JsonValueKind.Null ? null : SourceOverridesJson.ReadValue(property, value))
+            {
+                PartOwner = owner,
+            };
+        }
+
+        public override void Write(Utf8JsonWriter writer, OverrideWrite value, JsonSerializerOptions options)
+        {
+            writer.WriteStartObject();
+            writer.WriteString("component", value.Property.ComponentKind);
+            writer.WriteString("part", value.Property.PartKind);
+            writer.WriteString("pointer", value.Property.JsonPointer);
+            if (value.Part is { } part)
+            {
+                writer.WriteString("partId", part.Id);
+            }
+
+            writer.WriteString("revision", value.LayoutRevision);
+            if (value.PartOwner is { } owner)
+            {
+                writer.WritePropertyName("owner");
+                JsonSerializer.Serialize(writer, owner, SceneJsonContext.Default.AssetPath);
+            }
+
+            writer.WritePropertyName("value");
+            if (value.Value is null)
+            {
+                writer.WriteNullValue();
+            }
+            else
+            {
+                SourceOverridesJson.WriteValue(value.Value).WriteTo(writer);
+            }
+
+            writer.WriteEndObject();
+        }
+    }
+
     private sealed class ScriptSlotJsonConverter : JsonConverter<ScriptSlot>
     {
         public override ScriptSlot Read(ref Utf8JsonReader reader, Type typeToConvert, JsonSerializerOptions options)

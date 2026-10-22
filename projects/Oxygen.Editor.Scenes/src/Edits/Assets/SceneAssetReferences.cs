@@ -5,7 +5,6 @@
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Assets;
@@ -13,15 +12,13 @@ namespace Oxygen.Editor.Scenes.Edits.Assets;
 /// <summary>The assets a scene's nodes and environment reference.</summary>
 public static class SceneAssetReferences
 {
-    /// <summary>Gets the asset references the runtime shows for a node: its geometry and surface materials.</summary>
+    /// <summary>Gets the asset references the runtime shows for a node: its geometry and the assets its overrides name.</summary>
     /// <param name="node">The node.</param>
-    /// <returns>The geometry and the materials of its component and targeted overrides.</returns>
+    /// <returns>The geometry, then the assets of the geometry's overrides, such as surface materials.</returns>
     public static IEnumerable<AssetPath> Runtime(SceneNode node)
     {
         ArgumentNullException.ThrowIfNull(node);
-        return node.Components.OfType<GeometryComponent>().SelectMany(static geometry => new[] { geometry.Geometry }
-            .Concat(geometry.OverrideSlots.Concat(geometry.TargetedOverrides.SelectMany(static target => target.OverrideSlots))
-                .OfType<MaterialsSlot>().Select(static slot => slot.Material)));
+        return node.Components.OfType<GeometryComponent>().SelectMany(static geometry => geometry.Overrides.Assets.Prepend(geometry.Geometry));
     }
 
     /// <summary>Gets the asset references a node's script slots hold.</summary>

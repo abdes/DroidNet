@@ -2,14 +2,17 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Text.Json.Serialization;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
 
 /// <summary>
-/// Data transfer object for <see cref="GeometryComponent"/>.
+/// Data transfer object for <see cref="GeometryComponent"/>. A member it does not declare, such as a removed override
+/// slot, rejects the scene instead of being dropped.
 /// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record GeometryComponentData : ComponentData
 {
     /// <summary>
@@ -18,14 +21,8 @@ public record GeometryComponentData : ComponentData
     public required AssetPath GeometryUri { get; init; }
 
     /// <summary>
-    /// Gets or initializes the component-level override slots.
+    /// Gets or sets the values the scene stores over the geometry asset's, or <see langword="null"/> when there are none.
     /// </summary>
-    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
-    public IList<OverrideSlotData>? OverrideSlots { get; init; } = null;
-
-    /// <summary>
-    /// Gets or initializes the targeted overrides for specific LODs/submeshes.
-    /// </summary>
-    [System.Text.Json.Serialization.JsonIgnore(Condition = System.Text.Json.Serialization.JsonIgnoreCondition.WhenWritingDefault)]
-    public IList<TargetedOverrideData>? TargetedOverrides { get; init; } = null;
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public SourceOverridesData? Overrides { get; set; }
 }

@@ -11,7 +11,6 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -89,13 +88,13 @@ public sealed partial class ScenePreviewTests
         built.RootNodes.Add(cube);
         var target = new SurfaceTarget(EngineAssets.BasicShape("Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
-        geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = AssetPath.Parse("/Content/Materials/Red.omat") });
+        geometry.Overrides = geometry.Overrides.With(SceneSchema.Geometry.Surface.Material, target.Part, target.LayoutRevision, AssetPath.Parse("/Content/Materials/Red.omat"));
         cube.Components.Add(geometry);
         var document = await fixture.OpenAsync(built).ConfigureAwait(false);
         _ = await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.Requests.Clear();
 
-        _ = await PreviewFixture.AuthoringOf(document).ExecuteAsync(new SetSurfaceMaterial([cube.Id], target, material: null)).ConfigureAwait(false);
+        _ = await PreviewFixture.AuthoringOf(document).ExecuteAsync(new SetOverrides([cube.Id], [new OverrideWrite(SceneSchema.Geometry.Surface.Material.Id, target.Part, target.LayoutRevision, null)], "Edit Surface Material")).ConfigureAwait(false);
 
         var cleared = fixture.World.Commands.OfType<RuntimeSetMaterialOverride>().Should().ContainSingle().Subject;
         _ = (cleared.SurfaceId, cleared.MaterialPath).Should().Be((target.SurfaceId, null));

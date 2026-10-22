@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.ComponentModel;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Schemas.Bindings;
 

@@ -9,7 +9,6 @@ using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Edits.Properties;
-using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Testing;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;

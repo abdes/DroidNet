@@ -5,6 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.SceneInspector.Presentation;
 using Oxygen.Editor.Scenes.Properties;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
 
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;

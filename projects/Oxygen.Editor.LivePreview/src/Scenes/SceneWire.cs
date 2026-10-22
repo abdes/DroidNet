@@ -7,9 +7,9 @@ using System.Collections.Immutable;
 using System.Globalization;
 using System.Numerics;
 using Oxygen.Editor.Runtime.Engine;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Scenes;
 

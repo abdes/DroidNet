@@ -6,7 +6,6 @@ using System.Collections.ObjectModel;
 using System.Text.Json.Serialization;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World;
@@ -72,11 +71,6 @@ public sealed class SceneNode : ScopedObservableObject, IPersistent<SceneNodeDat
     ///     Gets the node's components, required ones first.
     /// </summary>
     public ObservableCollection<GameComponent> Components { get; }
-
-    /// <summary>
-    ///     Gets the node-scope override slots.
-    /// </summary>
-    public ObservableCollection<OverrideSlot> OverrideSlots { get; } = [];
 
     /// <summary>
     ///     Creates a node from its DTO, with its descendants.
@@ -164,12 +158,6 @@ public sealed class SceneNode : ScopedObservableObject, IPersistent<SceneNodeDat
             this.Components.Add(this.Flags);
             this.HydrateOptionalComponents(data.Components);
 
-            this.OverrideSlots.Clear();
-            foreach (var slotData in data.OverrideSlots)
-            {
-                this.OverrideSlots.Add(OverrideSlot.CreateAndHydrate(slotData));
-            }
-
             foreach (var childData in hierarchy.Children ?? [])
             {
                 this.Hierarchy.AddChild(CreateAndHydrate(this.Scene, childData));
@@ -191,7 +179,6 @@ public sealed class SceneNode : ScopedObservableObject, IPersistent<SceneNodeDat
                 .. this.Components.Where(component => component != this.Hierarchy).Select(static component => component.Dehydrate()),
                 this.Hierarchy.Dehydrate(),
             ],
-            OverrideSlots = [.. this.OverrideSlots.Select(static slot => slot.Dehydrate())],
         };
 
     private static bool IsRequired(GameComponent component)

@@ -8,11 +8,9 @@ using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -49,8 +47,8 @@ internal sealed partial class ScenePreview
         return [.. changes.Where(Releases), .. changes.Where(change => !Releases(change))];
     }
 
-    private static SurfaceTarget[] MaterialOverridesOf(SceneNode node)
-        => [.. node.Components.OfType<GeometryComponent>().SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>()).Select(static slot => slot.Target)];
+    private static SourceOverride[] MaterialOverridesOf(SceneNode node)
+        => [.. node.Components.OfType<GeometryComponent>().SelectMany(static geometry => MaterialOverrides(geometry))];
 
     private static void RecordMaterialOverrides(DocumentLifetime lifetime, IEnumerable<SceneNode> nodes)
     {
@@ -184,7 +182,8 @@ internal sealed partial class ScenePreview
                 RecordMaterialOverrides(lifetime, [node]);
                 await this.AttachGeometryWhenMountedAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
                 break;
-            case SceneChange.SurfaceMaterialsChanged surfaces when FindNode(scene, surfaces.Node) is { } node:
+            case SceneChange.OverridesChanged overrides
+                when overrides.Properties.Contains(SceneSchema.Geometry.Surface.Material.Id) && FindNode(scene, overrides.Node) is { } node:
                 await this.ProjectSurfacesAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
                 break;
             default:
@@ -198,8 +197,8 @@ internal sealed partial class ScenePreview
     private async Task ProjectSurfacesAsync(DocumentLifetime lifetime, SceneNode node, CancellationToken cancellationToken)
     {
         var current = MaterialOverridesOf(node);
-        SurfaceTarget[] cleared = [.. lifetime.MaterialOverrides.GetValueOrDefault(node.Id, [])
-            .Where(previous => !current.Any(target => target.Geometry == previous.Geometry && target.SurfaceId == previous.SurfaceId))];
+        SourceOverride[] cleared = [.. lifetime.MaterialOverrides.GetValueOrDefault(node.Id, [])
+            .Where(previous => !current.Any(entry => entry.Part == previous.Part))];
         lifetime.MaterialOverrides[node.Id] = current;
         var mounted = this.IsMounted(SceneAssetReferences.Runtime(node));
         if (!mounted)

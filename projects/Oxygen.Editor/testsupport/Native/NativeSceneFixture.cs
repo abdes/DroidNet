@@ -39,6 +39,8 @@ using Oxygen.Editor.SceneEditor;
 using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
+using Oxygen.Editor.Scenes.Edits.Assets;
+using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scenes.Selection;
@@ -49,7 +51,6 @@ using Oxygen.Editor.Shell.Windows;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Assets.Persistence.LooseCooked;
 using Oxygen.Managed.Core;
@@ -193,6 +194,14 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     public EngineService Runtime { get; }
 
     private IScenePreview Preview => this.preview ?? throw new InvalidOperationException("The fixture shows its scene once it initializes.");
+
+    /// <summary>Builds the edit that sets or resets the material of one surface on a node.</summary>
+    /// <param name="nodeId">The node.</param>
+    /// <param name="target">The surface, with the inventory revision it was read from.</param>
+    /// <param name="material">The material, or <see langword="null"/> to reset to the geometry's.</param>
+    /// <returns>The overrides edit.</returns>
+    public static SetOverrides SetSurfaceMaterial(NodeId nodeId, SurfaceTarget target, AssetPath? material)
+        => new([nodeId], [new OverrideWrite(SceneSchema.Geometry.Surface.Material.Id, target.Part, target.LayoutRevision, material) { PartOwner = target.Geometry }], "Edit Surface Material");
 
     public CookingPanelViewModel CreateTimingCookingPanel(CatalogWorkloadServices services) => new(services.Runs, services.Pipeline, services.Session, Mock.Of<ICookRecovery>(), this.hosting);
 

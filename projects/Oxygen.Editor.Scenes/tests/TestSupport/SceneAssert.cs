@@ -6,7 +6,6 @@ using System.Numerics;
 using AwesomeAssertions;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
-using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.TestSupport;

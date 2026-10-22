@@ -328,6 +328,85 @@ Advanced. Exact metric defaults/orientation are in
 centred in Z-up space. No managed generator/default list or editor-only
 corrective rotation/scale exists.
 
+### 5.7 Editor representation of parts and overrides
+
+The editor mirrors the engine: a geometry component is the engine's renderable
+component, whose state per surface (`SurfaceId`) is applied to every LOD and
+submesh binding of that surface. The schema is the only declaration of what a
+component, a part and an override can hold.
+
+**Schema.** A component may declare `parts`, each with a PascalCase name, a
+kind and its properties. A property may declare `sources` (`asset`, `model`):
+the property is then stored as a sparse override. A part property declares at
+least one source and has no `fields`; overrides reach the engine through the
+override table and command, never field by field. The Geometry component
+declares the `Surface` part (kind `surface`) with `Material` (key `/material`,
+type `asset`, source `asset`). The engine's generator validates parts and
+sources and emits nothing for them until the engine applies overrides; the
+editor's generator emits their ids.
+
+**Identity.** `PropertyId` (component kind, optional part kind, JSON pointer)
+and `PropertyId<T>` are vocabulary of `Oxygen.Managed.Core`, so the scene model,
+the cook and Live Preview address properties without a dependency on the
+editor's schema services. The generated `SceneSchema` belongs to
+`Oxygen.Editor.World`, next to the enumerations its ids are typed with. A part
+property is `SceneSchema.Geometry.Surface.Material`, typed
+`PropertyId<AssetPath>`. `SceneSchema.Overridable` maps every property with a
+source to its value type; nothing else may be overridden.
+
+**Values.** An override holds a value of its property's schema type, the CLR
+type of its typed id: `bool`, `int`, `float`, `Vector3`, a mapped enumeration,
+`AssetPath`. A structured type, such as the LOD policy, is a schema `struct`
+mapped to an editor record type the same way enumerations are mapped; it
+arrives with its first property. Script parameter values stay a separate,
+tagged representation: a script declares its parameters at run time and a
+value may outlive its declaration, whereas a schema property's type is fixed
+at compile time.
+
+**Store.** A component with sourced properties implements
+`IOverridableComponent` and holds one immutable `SourceOverrides`:
+
+- `PartId(string Kind, Guid Id)`, an asset-owned part identity;
+- component-level values by `PropertyId`, for properties without a part;
+- part entries by `PartId`, each with the layout revision the part was
+  witnessed in and its values by `PropertyId`;
+- `TryGet`, `With` and `Without`; an entry left with no values is removed, so
+  an absent key always means the source's value.
+
+The component replaces the whole value on each change, so one property change
+notification covers every override and an edit's inverse is the previous
+value. It also names the asset that owns each part kind's IDs: a geometry
+component's surfaces are its geometry's.
+
+An override's address carries no asset: a part ID is the asset's, and the
+override applies to whatever asset of the component has that part. It stays
+across geometry replacement and applies to a new geometry with the same part
+ID; otherwise it is kept, unresolved.
+
+**Saved form.** Values are written as their property's JSON and read back
+through `SceneSchema.Overridable`. An unknown key, a wrong part kind or a value
+of the wrong type rejects the scene, as does a member the node or geometry
+records do not declare, so a stale file fails to open instead of being saved
+without what it held:
+
+```json
+"Overrides": {
+  "Parts": [ { "Kind": "surface", "Id": "…", "LayoutRevision": "…",
+               "Values": { "/material": "asset:///Content/Materials/Red.omat" } } ]
+}
+```
+
+**Edits.** `SetOverrides` writes or resets (a null value) overrides of nodes,
+each addressed by property, part and the witnessed layout revision. It
+validates that the property is overridable, that the part matches the
+property's part kind, and the value through the property's override rule (one
+per overridable property), and records the previous values as its inverse. A
+write built from an asset's part inventory names that asset, and the edit
+refuses a node whose component no longer uses it; the inverse names none, so
+undo always restores. Clearing unresolved overrides is the same edit. The inspector, the cook and Live Preview read the
+store through typed ids; asset-typed values are found by the store, so asset
+references, retargeting and relocation need no rule per property.
+
 ## 6. Light components
 
 A directional light owns colour, lux, source angle, Affects World, shadow

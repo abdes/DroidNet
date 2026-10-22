@@ -13,7 +13,7 @@ internal static class SceneComponentsEmitter
     /// <summary>The runtime's component and field ids.</summary>
     public const string WireIds = "WireIds";
 
-    /// <summary>The scene component kinds and typed property ids.</summary>
+    /// <summary>The scene component and part kinds, the typed property ids and the value type of each overridable property.</summary>
     public const string PropertyIds = "PropertyIds";
 
     /// <summary>The live preview's table of each property's engine component, fields and encoding.</summary>
@@ -85,15 +85,36 @@ internal static class SceneComponentsEmitter
 
     private static string RenderPropertyIds(SceneComponentsSchema schema)
     {
-        var source = Header("Oxygen.Editor.Scenes.Properties")
+        const string PropertyId = "global::Oxygen.Managed.Core.PropertyId";
+        var source = Header("Oxygen.Editor.World")
             .AppendLine()
-            .AppendLine("/// <summary>The scene components: each one's kind and the typed ids of its properties.</summary>")
+            .AppendLine("/// <summary>The scene components: each one's kind and the typed ids of its properties and of its parts' properties.</summary>")
             .AppendLine("public static class SceneSchema")
-            .AppendLine("{");
-        var first = true;
+            .AppendLine("{")
+            .AppendLine("    /// <summary>Gets the value type of each property a source may supply; a scene stores only its overrides of them.</summary>")
+            .Append("    public static global::System.Collections.Frozen.FrozenDictionary<").Append(PropertyId).AppendLine(", global::System.Type> Overridable { get; } =")
+            .Append("        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<").Append(PropertyId).AppendLine(", global::System.Type>")
+            .AppendLine("        {");
         foreach (var component in schema.Components)
         {
-            _ = (first ? source : source.AppendLine())
+            foreach (var property in component.Properties.Where(static property => property.Sources.Count != 0))
+            {
+                _ = AppendOverridable(source, component.Name + "." + property.Name, property);
+            }
+
+            foreach (var part in component.Parts)
+            {
+                foreach (var property in part.Properties)
+                {
+                    _ = AppendOverridable(source, component.Name + "." + part.Name + "." + property.Name, property);
+                }
+            }
+        }
+
+        _ = source.AppendLine("        });");
+        foreach (var component in schema.Components)
+        {
+            _ = source.AppendLine()
                 .Append("    /// <summary>The <c>").Append(component.Kind).AppendLine("</c> component.</summary>")
                 .Append("    public static class ").AppendLine(component.Name)
                 .AppendLine("    {")
@@ -101,18 +122,42 @@ internal static class SceneComponentsEmitter
                 .Append("        public const string Kind = \"").Append(component.Kind).AppendLine("\";");
             foreach (var property in component.Properties)
             {
-                var type = "global::Oxygen.Editor.Schemas.PropertyId<" + SceneComponentsTypes.EditorType(property) + ">";
                 _ = source.AppendLine()
                     .Append("        /// <summary>Gets the <c>").Append(property.Key).AppendLine("</c> property.</summary>")
-                    .Append("        public static ").Append(type).Append(' ').Append(property.Name)
+                    .Append("        public static ").Append(PropertyId).Append('<').Append(IdType(property)).Append("> ").Append(property.Name)
                     .Append(" { get; } = new(Kind, \"").Append(property.Key).AppendLine("\");");
             }
 
+            foreach (var part in component.Parts)
+            {
+                _ = source.AppendLine()
+                    .Append("        /// <summary>The <c>").Append(part.Kind).Append("</c> part of the <c>").Append(component.Kind).AppendLine("</c> component.</summary>")
+                    .Append("        public static class ").AppendLine(part.Name)
+                    .AppendLine("        {")
+                    .AppendLine("            /// <summary>The part kind.</summary>")
+                    .Append("            public const string Kind = \"").Append(part.Kind).AppendLine("\";");
+                foreach (var property in part.Properties)
+                {
+                    _ = source.AppendLine()
+                        .Append("            /// <summary>Gets the <c>").Append(property.Key).AppendLine("</c> property.</summary>")
+                        .Append("            public static ").Append(PropertyId).Append('<').Append(IdType(property)).Append("> ").Append(property.Name)
+                        .Append(" { get; } = new(").Append(component.Name).Append(".Kind, Kind, \"").Append(property.Key).AppendLine("\");");
+                }
+
+                _ = source.AppendLine("        }");
+            }
+
             _ = source.AppendLine("    }");
-            first = false;
         }
 
         return source.AppendLine("}").ToString();
+
+        // An override always holds a value, so the id of a property a source supplies is not nullable.
+        static string IdType(SceneComponentsSchema.PropertyEntry property)
+            => property.Sources.Count != 0 ? SceneComponentsTypes.ValueType(property) : SceneComponentsTypes.EditorType(property);
+
+        static StringBuilder AppendOverridable(StringBuilder source, string path, SceneComponentsSchema.PropertyEntry property)
+            => source.Append("            [").Append(path).Append(".Id] = typeof(").Append(SceneComponentsTypes.ValueType(property)).AppendLine("),");
     }
 
     private static string RenderWireTable(SceneComponentsSchema schema)
@@ -122,7 +167,7 @@ internal static class SceneComponentsEmitter
             .AppendLine("/// <content>The engine component, fields and encoding of each property the engine takes field by field.</content>")
             .AppendLine("internal static partial class SceneWire")
             .AppendLine("{")
-            .AppendLine("    private static void AddSchemaMappings(global::System.Collections.Generic.Dictionary<global::Oxygen.Editor.Schemas.PropertyId, Mapping> map)")
+            .AppendLine("    private static void AddSchemaMappings(global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, Mapping> map)")
             .AppendLine("    {");
         foreach (var component in schema.Components.Where(static component => component.Wire is not null))
         {
@@ -131,7 +176,7 @@ internal static class SceneComponentsEmitter
             {
                 var fields = string.Join(", ", property.Fields.Select(field => "(ushort)" + fieldEnum + "." + field));
                 _ = source
-                    .Append("        map.Add(global::Oxygen.Editor.Scenes.Properties.SceneSchema.").Append(component.Name).Append('.').Append(property.Name)
+                    .Append("        map.Add(global::Oxygen.Editor.World.SceneSchema.").Append(component.Name).Append('.').Append(property.Name)
                     .Append(".Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.").Append(component.Name)
                     .Append(", [").Append(fields).Append("])");
                 _ = property.Encoding is null

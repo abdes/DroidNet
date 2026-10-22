@@ -3,8 +3,8 @@
 // SPDX-License-Identifier: MIT
 
 using System.Collections.Immutable;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Presentation;
 

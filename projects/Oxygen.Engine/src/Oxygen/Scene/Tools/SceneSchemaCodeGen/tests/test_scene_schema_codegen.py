@@ -198,6 +198,80 @@ def test_unknown_field_set_is_refused() -> None:
     assert "PointLight: unknown field set Lamp" in _error_of(document)
 
 
+def _with_surface(document: dict[str, Any]) -> dict[str, Any]:
+    document["components"][1]["parts"] = [
+        {
+            "name": "Surface",
+            "kind": "surface",
+            "properties": [
+                {
+                    "name": "Material",
+                    "key": "/material",
+                    "type": "asset",
+                    "sources": ["asset"],
+                }
+            ],
+        }
+    ]
+    return document
+
+
+def test_schema_declares_the_surface_material() -> None:
+    schema = model.load(_SCHEMA, _JSON_SCHEMA)
+    geometry = next(entry for entry in schema.components if entry.kind == "geometry")
+    surface = geometry.parts[0]
+    assert (surface.name, surface.kind) == ("Surface", "surface")
+    assert [(entry.key, entry.type, entry.sources) for entry in surface.properties] == [
+        ("/material", "asset", ("asset",))
+    ]
+
+
+def test_parts_are_not_rendered() -> None:
+    text = cpp.render(model.parse(_with_surface(_minimal()), _rules()), "test.yaml")
+    assert "Surface" not in text
+    assert "Material" not in text
+
+
+def test_part_property_needs_a_source() -> None:
+    document = _with_surface(_minimal())
+    del document["components"][1]["parts"][0]["properties"][0]["sources"]
+    assert "/components/1/parts/0/properties/0" in _error_of(document)
+
+
+def test_part_property_has_no_fields() -> None:
+    document = _with_surface(_minimal())
+    document["components"][1]["parts"][0]["properties"][0]["fields"] = ["Range"]
+    assert "/components/1/parts/0/properties/0" in _error_of(document)
+
+
+def test_unknown_source_is_refused() -> None:
+    document = _minimal()
+    document["components"][1]["properties"][0]["sources"] = ["prefab"]
+    assert "/components/1/properties/0/sources/0" in _error_of(document)
+
+
+def test_part_named_like_a_property_is_refused() -> None:
+    document = _with_surface(_minimal())
+    document["components"][1]["parts"][0]["name"] = "GeometryUri"
+    assert "duplicate part or property in Geometry: GeometryUri" in _error_of(document)
+
+
+def test_duplicate_part_kind_is_refused() -> None:
+    document = _with_surface(_minimal())
+    twin = copy.deepcopy(document["components"][1]["parts"][0])
+    twin["name"] = "Section"
+    document["components"][1]["parts"].append(twin)
+    assert "duplicate part kind in Geometry: surface" in _error_of(document)
+
+
+def test_duplicate_key_in_a_part_is_refused() -> None:
+    document = _with_surface(_minimal())
+    twin = copy.deepcopy(document["components"][1]["parts"][0]["properties"][0])
+    twin["name"] = "Shade"
+    document["components"][1]["parts"][0]["properties"].append(twin)
+    assert "duplicate key in Geometry.Surface: /material" in _error_of(document)
+
+
 def test_cli_writes_once_and_refuses_an_invalid_schema(tmp_path: Path) -> None:
     out = tmp_path / "Generated.h"
     arguments = ["--json-schema", str(_JSON_SCHEMA), "--cpp-out", str(out)]

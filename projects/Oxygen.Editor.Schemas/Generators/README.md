@@ -10,11 +10,11 @@ engine build generates its own header from the same file.
 A project sets `SceneComponentsOutput` to what it owns and imports
 [SceneComponents.targets](SceneComponents.targets):
 
-| Output        | Project     | Generated                                                         |
-| ------------- | ----------- | ----------------------------------------------------------------- |
-| `WireIds`     | Runtime     | `RuntimeComponentId` and one `<FieldSet>Field` enum per field set |
-| `PropertyIds` | Scenes      | `SceneSchema`: each component's `Kind` and typed `PropertyId`s    |
-| `WireTable`   | LivePreview | `SceneWire`'s property-to-component, fields and encoding table    |
+| Output        | Project     | Generated                                                                                                                                                                                                          |
+| ------------- | ----------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `WireIds`     | Runtime     | `RuntimeComponentId` and one `<FieldSet>Field` enum per field set                                                                                                                                                  |
+| `PropertyIds` | World       | `SceneSchema`, in `Oxygen.Editor.World`: each component's `Kind` and typed `PropertyId`s, nested part classes (`SceneSchema.Geometry.Surface`) and `Overridable` (each property with `sources` and its value type) |
+| `WireTable`   | LivePreview | `SceneWire`'s property-to-component, fields and encoding table                                                                                                                                                     |
 
 A problem in the schema is a compiler error at the offending value:
 

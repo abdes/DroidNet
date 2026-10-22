@@ -8,7 +8,6 @@ using AwesomeAssertions;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
-using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.TestSupport;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.TestSupport.ModelImportScenario;
@@ -45,7 +44,7 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
         var material = first.CookedAssets.Single(static asset => asset.Kind == ContentCookAssetKind.Material).CookedAssetUri;
         var node = fixture.Source.RootNodes[0].Id;
         var surface = await fixture.ReadSingleSurfaceAsync(node, timeout.Token).ConfigureAwait(true);
-        _ = (await fixture.Authoring.ExecuteAsync(new SetSurfaceMaterial([node], surface, material)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Authoring.ExecuteAsync(NativeSceneFixture.SetSurfaceMaterial(node, surface, material)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         var before = await WaitForNodeAsync(fixture, node, static value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, timeout.Token).ConfigureAwait(true);
         var revision = fixture.Document.History.Position;
         var history = fixture.Document.History.UndoStack.Count;

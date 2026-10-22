@@ -2,28 +2,19 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using System.Collections.ObjectModel;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Components;
 
 /// <summary>
-/// Component that references and configures geometry assets for rendering.
+/// Component that renders a geometry asset: the engine's renderable component.
 /// </summary>
 /// <remarks>
-/// <para>
-/// The <see cref="GeometryComponent"/> allows scene nodes to reference geometry assets (meshes)
-/// and configure how they are rendered. It supports:
-/// </para>
-/// <list type="bullet">
-/// <item><description>Global overrides (via <see cref="GameComponent.Node"/>'s <see cref="SceneNode.OverrideSlots"/>)</description></item>
-/// <item><description>Component-level overrides (via <see cref="Slots.OverrideSlot"/> instances directly on this component)</description></item>
-/// <item><description>Targeted overrides (via <see cref="TargetedOverrides"/> for specific LODs/submeshes)</description></item>
-/// </list>
+/// The geometry asset supplies the defaults of its surfaces, such as each surface's material; the component stores only
+/// the values this scene changes, in <see cref="Overrides"/>, by surface ID.
 /// </remarks>
-public partial class GeometryComponent : GameComponent
+public partial class GeometryComponent : GameComponent, IOverridableComponent
 {
     static GeometryComponent()
     {
@@ -55,20 +46,29 @@ public partial class GeometryComponent : GameComponent
         set => _ = this.SetProperty(ref field, value ?? throw new ArgumentNullException(nameof(value)));
     }
 
-    /// <summary>
-    /// Gets the collection of targeted overrides for specific LODs and/or submeshes.
-    /// </summary>
+    /// <inheritdoc/>
     /// <remarks>
-    /// Targeted overrides allow fine-grained control over rendering properties for specific parts
-    /// of the geometry. Each <see cref="GeometryOverrideTarget"/> specifies which LOD and submesh
-    /// to target, with -1 meaning "all".
+    /// Overrides are kept when the geometry changes; those of a surface the new geometry does not have stay unresolved
+    /// until they are removed.
     /// </remarks>
-    public ObservableCollection<GeometryOverrideTarget> TargetedOverrides { get; } = [];
+    public SourceOverrides Overrides
+    {
+        get;
+        set
+        {
+            ArgumentNullException.ThrowIfNull(value);
+            if (!string.Equals(value.ComponentKind, SceneSchema.Geometry.Kind, StringComparison.Ordinal))
+            {
+                throw new ArgumentException($"The overrides of a {value.ComponentKind} component cannot be a geometry's.", nameof(value));
+            }
 
-    /// <summary>
-    /// Gets component-level override slots for this geometry component.
-    /// </summary>
-    public ObservableCollection<OverrideSlot> OverrideSlots { get; } = [];
+            _ = this.SetProperty(ref field, value);
+        }
+    } = SourceOverrides.For(SceneSchema.Geometry.Kind);
+
+    /// <inheritdoc/>
+    public AssetPath? PartOwner(string partKind)
+        => string.Equals(partKind, SceneSchema.Geometry.Surface.Kind, StringComparison.Ordinal) ? this.Geometry : null;
 
     /// <inheritdoc/>
     public override void Hydrate(ComponentData data)
@@ -83,54 +83,17 @@ public partial class GeometryComponent : GameComponent
         using (this.SuppressNotifications())
         {
             this.Geometry = AssetPathData.Require(gd.GeometryUri, nameof(gd.GeometryUri));
-
-            // component-level override slots
-            this.OverrideSlots.Clear();
-            if (gd.OverrideSlots is not null)
-            {
-                foreach (var slotDto in gd.OverrideSlots)
-                {
-                    var slot = OverrideSlot.CreateAndHydrate(slotDto);
-                    this.OverrideSlots.Add(slot);
-                }
-            }
-
-            // targeted overrides
-            this.TargetedOverrides.Clear();
-            if (gd.TargetedOverrides is not null)
-            {
-                foreach (var targ in gd.TargetedOverrides)
-                {
-                    if (targ.OverrideSlots is not null)
-                    {
-                        var t = new GeometryOverrideTarget { LodIndex = targ.LodIndex, SubmeshIndex = targ.SubmeshIndex };
-                        foreach (var s in targ.OverrideSlots)
-                        {
-                            var slot = OverrideSlot.CreateAndHydrate(s);
-                            t.OverrideSlots.Add(slot);
-                        }
-
-                        this.TargetedOverrides.Add(t);
-                    }
-                }
-            }
+            this.Overrides = SourceOverridesJson.Read(SceneSchema.Geometry.Kind, gd.Overrides);
         }
     }
 
     /// <inheritdoc/>
-    [System.Diagnostics.CodeAnalysis.SuppressMessage("Style", "IDE0305:Simplify collection initialization", Justification = "I find .ToList() is clearer with LINQ")]
     public override ComponentData Dehydrate()
         => new GeometryComponentData
         {
             Id = this.Id,
             Name = this.Name,
             GeometryUri = this.Geometry,
-            OverrideSlots = this.OverrideSlots.Select(s => s.Dehydrate()).ToList(),
-            TargetedOverrides = this.TargetedOverrides.Select(t => new TargetedOverrideData
-            {
-                LodIndex = t.LodIndex,
-                SubmeshIndex = t.SubmeshIndex,
-                OverrideSlots = t.OverrideSlots.Select(s => s.Dehydrate()).ToList(),
-            }).ToList(),
+            Overrides = SourceOverridesJson.Write(this.Overrides),
         };
 }

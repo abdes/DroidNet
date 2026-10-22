@@ -4,6 +4,7 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Schemas.Bindings;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Schemas.Tests;
 

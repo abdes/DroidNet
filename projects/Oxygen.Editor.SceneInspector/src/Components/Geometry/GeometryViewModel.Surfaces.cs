@@ -8,7 +8,6 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.SceneInspector.Components.Geometry;
 
@@ -56,7 +55,7 @@ public sealed partial class GeometryViewModel
         ? this.MaterialButtonLabel
         : this.MaterialButtonLabel + System.Environment.NewLine + this.SurfaceNotice;
 
-    /// <summary>Clears the selection's unresolved material overrides as one undoable edit.</summary>
+    /// <summary>Resets the selection's overrides of surfaces their geometry does not have, as one undoable edit.</summary>
     /// <returns>Completion after the edit and a fresh surface projection.</returns>
     [RelayCommand]
     public async Task ClearUnresolvedSurfacesAsync()
@@ -69,7 +68,7 @@ public sealed partial class GeometryViewModel
 
         var project = this.session.Context;
         var nodes = selected.ToList();
-        var built = await SurfaceMaterialEdits.ClearUnresolvedAsync(this.surfaces, project, authoring.Scene, nodes.ConvertAll(static node => node.Id)).ConfigureAwait(true);
+        var built = await SurfaceEdits.ClearUnresolvedAsync(this.surfaces, project, authoring.Scene, nodes.ConvertAll(static node => node.Id)).ConfigureAwait(true);
         if (built.Edit is { } edit)
         {
             _ = await authoring.ExecuteAsync(edit).ConfigureAwait(true);
@@ -141,13 +140,13 @@ public sealed partial class GeometryViewModel
             this.SelectedSurface = this.Surfaces.FirstOrDefault(surface => selected is not null && surface.Target.Geometry == selected.Geometry && surface.Target.SurfaceId == selected.SurfaceId)
                 ?? this.Surfaces.FirstOrDefault();
             var surfaceIds = inventory.Surfaces.Select(static surface => surface.SurfaceId).ToHashSet();
-            var unresolved = nodes.SelectMany(static node => node.Components.OfType<GeometryComponent>().SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>()))
-                .Count(slot => slot.Target.Geometry != geometryUri || !surfaceIds.Contains(slot.Target.SurfaceId));
+            var unresolved = nodes.SelectMany(static node => node.Components.OfType<GeometryComponent>().SelectMany(static geometry => geometry.Overrides.Parts.Keys))
+                .Count(part => !surfaceIds.Contains(part.Id));
             this.HasUnresolvedSurfaces = unresolved != 0;
             this.IsSurfaceInventoryFailed = false;
             this.SurfaceNotice = unresolved == 1
-                ? "One material assignment targets another geometry or a missing surface. Clear unresolved (✕) removes it; Undo restores it."
-                : unresolved > 1 ? $"{unresolved} material assignments target another geometry or a missing surface. Clear unresolved (✕) removes them; Undo restores them."
+                ? "One surface override targets a surface this geometry does not have. Clear unresolved (✕) removes it; Undo restores it."
+                : unresolved > 1 ? $"{unresolved} surface overrides target surfaces this geometry does not have. Clear unresolved (✕) removes them; Undo restores them."
                 : this.Surfaces.Count == 0 ? "This geometry has no surfaces." : string.Empty;
             this.UpdateSelectedSurfaceDisplay();
         }
@@ -206,8 +205,10 @@ public sealed partial class GeometryViewModel
             return;
         }
 
-        var materials = (this.selectedItems ?? []).Select(node => node.Components.OfType<GeometryComponent>().FirstOrDefault()
-            ?.OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault(slot => slot.Target.Geometry == selected.Target.Geometry && slot.Target.SurfaceId == selected.Target.SurfaceId)?.Material)
+        var materials = (this.selectedItems ?? []).Select(node => node.Components.OfType<GeometryComponent>().FirstOrDefault() is { } geometry
+                && geometry.Overrides.TryGet(SceneSchema.Geometry.Surface.Material, selected.Target.Part, out var material)
+                ? material
+                : null)
             .Distinct().ToArray();
         this.IsMaterialMixed = materials.Length > 1;
         this.SelectedMaterial = this.IsMaterialMixed ? null : materials.FirstOrDefault();

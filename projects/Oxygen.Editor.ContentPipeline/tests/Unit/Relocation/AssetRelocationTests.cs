@@ -31,16 +31,15 @@ public sealed class AssetRelocationTests
         { "Id": "6a1f2c0e-6c1e-4a59-9a77-1f6a3e4b2d10", "Name": "Main",
           "RootNodes": [ { "Id": "3d9a2b1c-0000-4000-8000-000000000001", "Components": [ { "$type": "Metadata", "Name": "Box" }, { "$type": "Transform", "Name": "Transform" }, { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "GeometryComponent",
             "GeometryUri": "asset:///Content/Geometry/Box.ogeo",
-            "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Geometry/Box.ogeo", "MaterialUri": "asset:///Content/Materials/Red.omat" } ],
-            "TargetedOverrides": [ { "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Geometry/Box.ogeo", "MaterialUri": "asset:///Content/Materials/Red.omat" } ] } ] }, { "$type": "Hierarchy", "Name": "Hierarchy" } ] },
+            "Overrides": { "Parts": [ { "Kind": "surface", "Id": "6e1d1f0a-0000-4000-8000-000000000001", "LayoutRevision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "Values": { "/material": "asset:///Content/Materials/Red.omat" } } ] } }, { "$type": "Hierarchy", "Name": "Hierarchy" } ] },
             { "Id": "3d9a2b1c-0000-4000-8000-000000000002", "Components": [ { "$type": "Metadata", "Name": "Robot" }, { "$type": "Transform", "Name": "Transform" }, { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "GeometryComponent", "GeometryUri": "asset:///Content/Models/Robot/robot.gltf/Body.ogeo",
-              "OverrideSlots": [ { "$type": "MaterialsSlot", "GeometryUri": "asset:///Content/Models/Robot/robot.gltf/Body.ogeo", "MaterialUri": "asset:///Content/Models/Robot/robot.gltf/Paint.omat" } ] }, { "$type": "Hierarchy", "Name": "Hierarchy" } ] } ],
+              "Overrides": { "Parts": [ { "Kind": "surface", "Id": "6e1d1f0a-0000-4000-8000-000000000002", "LayoutRevision": "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb", "Values": { "/material": "asset:///Content/Models/Robot/robot.gltf/Paint.omat" } } ] } }, { "$type": "Hierarchy", "Name": "Hierarchy" } ] } ],
           "Environment": { "PostProcess": { "AutoExposureMeteringMask": "asset:///Content/Textures/Wood.otex" } } }
         """;
 
     public TestContext TestContext { get; set; } = null!;
 
-    /// <summary>Renaming a material rewrites scene slots (component and targeted) and geometry material references.</summary>
+    /// <summary>Renaming a material rewrites scene surface overrides and geometry material references.</summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]
     public async Task RenamingMaterialRewritesEveryReferenceInItsForm()
@@ -53,7 +52,7 @@ public sealed class AssetRelocationTests
         _ = plan.Referrers.Should().BeEquivalentTo([AssetPath.Parse("/Content/Geometry/Box.ogeo.json"), AssetPath.Parse("/Content/Scenes/Main.oscene.json")]);
         var scene = workspace.Read("Content/Scenes/Main.oscene.json");
         _ = scene.Should().NotContain("Red.omat").And.Contain("asset:///Content/Materials/Blue.omat");
-        _ = workspace.ReadJson("Content/Scenes/Main.oscene.json")["RootNodes"]![0]!["Components"]![3]!["TargetedOverrides"]![0]!["OverrideSlots"]![0]!["MaterialUri"]!.GetValue<string>()
+        _ = workspace.ReadJson("Content/Scenes/Main.oscene.json")["RootNodes"]![0]!["Components"]![3]!["Overrides"]!["Parts"]![0]!["Values"]!["/material"]!.GetValue<string>()
             .Should().Be("asset:///Content/Materials/Blue.omat");
         _ = workspace.ReadJson("Content/Geometry/Box.ogeo.json")["lods"]![0]!["submeshes"]![0]!["material_ref"]!.GetValue<string>().Should().Be("/Content/Materials/Blue.omat");
     }
@@ -229,9 +228,8 @@ public sealed class AssetRelocationTests
 
         var robot = workspace.ReadJson("Content/Scenes/Main.oscene.json")["RootNodes"]![1]!["Components"]![3]!;
         _ = robot["GeometryUri"]!.GetValue<string>().Should().Be("asset:///Content/Models/Bot/robot.gltf/Body.ogeo");
-        var slot = robot["OverrideSlots"]![0]!;
-        _ = slot["GeometryUri"]!.GetValue<string>().Should().Be("asset:///Content/Models/Bot/robot.gltf/Body.ogeo");
-        _ = slot["MaterialUri"]!.GetValue<string>().Should().Be("asset:///Content/Models/Bot/robot.gltf/Paint.omat");
+        var values = robot["Overrides"]!["Parts"]![0]!["Values"]!;
+        _ = values["/material"]!.GetValue<string>().Should().Be("asset:///Content/Models/Bot/robot.gltf/Paint.omat");
     }
 
     /// <summary>

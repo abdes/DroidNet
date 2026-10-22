@@ -16,8 +16,8 @@ using Oxygen.Editor.LivePreview.Assets;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.TestSupport;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.TestSupport.CatalogWorkload;
 using static Oxygen.Editor.TestSupport.ModelImportScenario;
@@ -113,7 +113,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         _ = selected.GeometryKey.Should().Be(ImportedNativeKey(geometry));
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
         var surface = await ReadSingleSurfaceAsync(inventories, fixture.Session.Context, geometry.Identity, cancellationToken).ConfigureAwait(true);
-        var built = await SurfaceMaterialEdits.SetAsync(inventories, fixture.Session.Context, [node.Id], surface, material.Identity, cancellationToken).ConfigureAwait(true);
+        var built = await SurfaceEdits.SetAsync(inventories, fixture.Session.Context, [node.Id], surface, SceneSchema.Geometry.Surface.Material.Id, material.Identity, "Edit Surface Material", cancellationToken).ConfigureAwait(true);
         _ = built.Error.Should().BeNull("the current native surface must be editable");
         _ = (await fixture.Authoring.ExecuteAsync(built.Edit!).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = fixture.Document.History.UndoStack.Should().HaveCount(2);
@@ -122,7 +122,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         _ = assigned.MaterialKeys.Should().ContainSingle().Which.Should().Be(ImportedNativeKey(material));
         _ = node.Components.OfType<GeometryComponent>().Single().Geometry.Should().Be(geometry.Identity);
         await fixture.Document.History.UndoAsync(cancellationToken).ConfigureAwait(true);
-        _ = node.Components.OfType<GeometryComponent>().Single().OverrideSlots.Should().BeEmpty();
+        _ = node.Components.OfType<GeometryComponent>().Single().Overrides.All.Should().BeEmpty();
         await fixture.Document.History.UndoAsync(cancellationToken).ConfigureAwait(true);
         _ = await WaitForNodeAsync(fixture, node.Id, value => string.Equals(value.GeometryKey, original.GeometryKey, StringComparison.Ordinal), cancellationToken).ConfigureAwait(true);
         await AssertMaterialAsync(fixture, node.Id, original.MaterialKeys.Single(), cancellationToken).ConfigureAwait(true);

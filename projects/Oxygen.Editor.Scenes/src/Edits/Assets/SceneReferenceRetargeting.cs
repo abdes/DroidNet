@@ -6,14 +6,13 @@ using System.Collections.Immutable;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Edits.Assets;
 
 /// <summary>
-/// Re-points a scene's asset references through an identity mapping, in place: geometry, surface materials (component
-/// and targeted), surface targets, script slots, scene references, starting input contexts and the environment's metering mask. Used when an open scene follows
+/// Re-points a scene's asset references through an identity mapping, in place: geometry, the assets overrides name
+/// (such as surface materials), script slots, scene references, starting input contexts and the environment's metering mask. Used when an open scene follows
 /// a relocation, and when undo, redo or paste restores references captured before a relocation.
 /// </summary>
 internal static class SceneReferenceRetargeting
@@ -34,20 +33,15 @@ internal static class SceneReferenceRetargeting
                 geometry.Geometry = mapped;
                 changed = true;
             }
+        }
 
-            foreach (var slot in geometry.OverrideSlots.Concat(geometry.TargetedOverrides.SelectMany(static target => target.OverrideSlots)).OfType<MaterialsSlot>())
+        foreach (var overridable in node.Components.OfType<IOverridableComponent>())
+        {
+            var overrides = overridable.Overrides.MapAssets(asset => map(asset) ?? asset);
+            if (!overrides.Equals(overridable.Overrides))
             {
-                if (map(slot.Material) is { } material)
-                {
-                    slot.Material = material;
-                    changed = true;
-                }
-
-                if (map(slot.Target.Geometry) is { } target)
-                {
-                    slot.Target = slot.Target with { Geometry = target };
-                    changed = true;
-                }
+                overridable.Overrides = overrides;
+                changed = true;
             }
         }
 

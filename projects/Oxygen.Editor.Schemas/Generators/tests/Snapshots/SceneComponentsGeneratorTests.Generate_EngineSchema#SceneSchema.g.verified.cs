@@ -5,11 +5,18 @@
 
 #nullable enable
 
-namespace Oxygen.Editor.Scenes.Properties;
+namespace Oxygen.Editor.World;
 
-/// <summary>The scene components: each one's kind and the typed ids of its properties.</summary>
+/// <summary>The scene components: each one's kind and the typed ids of its properties and of its parts' properties.</summary>
 public static class SceneSchema
 {
+    /// <summary>Gets the value type of each property a source may supply; a scene stores only its overrides of them.</summary>
+    public static global::System.Collections.Frozen.FrozenDictionary<global::Oxygen.Managed.Core.PropertyId, global::System.Type> Overridable { get; } =
+        global::System.Collections.Frozen.FrozenDictionary.ToFrozenDictionary(new global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, global::System.Type>
+        {
+            [Geometry.Surface.Material.Id] = typeof(global::Oxygen.Managed.Core.AssetPath),
+        });
+
     /// <summary>The <c>transform</c> component.</summary>
     public static class Transform
     {
@@ -17,31 +24,31 @@ public static class SceneSchema
         public const string Kind = "transform";
 
         /// <summary>Gets the <c>/local_position/0</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> PositionX { get; } = new(Kind, "/local_position/0");
+        public static global::Oxygen.Managed.Core.PropertyId<float> PositionX { get; } = new(Kind, "/local_position/0");
 
         /// <summary>Gets the <c>/local_position/1</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> PositionY { get; } = new(Kind, "/local_position/1");
+        public static global::Oxygen.Managed.Core.PropertyId<float> PositionY { get; } = new(Kind, "/local_position/1");
 
         /// <summary>Gets the <c>/local_position/2</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> PositionZ { get; } = new(Kind, "/local_position/2");
+        public static global::Oxygen.Managed.Core.PropertyId<float> PositionZ { get; } = new(Kind, "/local_position/2");
 
         /// <summary>Gets the <c>/local_rotation_euler_degrees/0</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> RotationX { get; } = new(Kind, "/local_rotation_euler_degrees/0");
+        public static global::Oxygen.Managed.Core.PropertyId<float> RotationX { get; } = new(Kind, "/local_rotation_euler_degrees/0");
 
         /// <summary>Gets the <c>/local_rotation_euler_degrees/1</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> RotationY { get; } = new(Kind, "/local_rotation_euler_degrees/1");
+        public static global::Oxygen.Managed.Core.PropertyId<float> RotationY { get; } = new(Kind, "/local_rotation_euler_degrees/1");
 
         /// <summary>Gets the <c>/local_rotation_euler_degrees/2</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> RotationZ { get; } = new(Kind, "/local_rotation_euler_degrees/2");
+        public static global::Oxygen.Managed.Core.PropertyId<float> RotationZ { get; } = new(Kind, "/local_rotation_euler_degrees/2");
 
         /// <summary>Gets the <c>/local_scale/0</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ScaleX { get; } = new(Kind, "/local_scale/0");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ScaleX { get; } = new(Kind, "/local_scale/0");
 
         /// <summary>Gets the <c>/local_scale/1</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ScaleY { get; } = new(Kind, "/local_scale/1");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ScaleY { get; } = new(Kind, "/local_scale/1");
 
         /// <summary>Gets the <c>/local_scale/2</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ScaleZ { get; } = new(Kind, "/local_scale/2");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ScaleZ { get; } = new(Kind, "/local_scale/2");
     }
 
     /// <summary>The <c>node-flags</c> component.</summary>
@@ -51,22 +58,22 @@ public static class SceneSchema
         public const string Kind = "node-flags";
 
         /// <summary>Gets the <c>/visible</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> IsVisible { get; } = new(Kind, "/visible");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> IsVisible { get; } = new(Kind, "/visible");
 
         /// <summary>Gets the <c>/casts_shadows</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> CastsShadows { get; } = new(Kind, "/casts_shadows");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> CastsShadows { get; } = new(Kind, "/casts_shadows");
 
         /// <summary>Gets the <c>/receives_shadows</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> ReceivesShadows { get; } = new(Kind, "/receives_shadows");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> ReceivesShadows { get; } = new(Kind, "/receives_shadows");
 
         /// <summary>Gets the <c>/static</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> IsStatic { get; } = new(Kind, "/static");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> IsStatic { get; } = new(Kind, "/static");
 
         /// <summary>Gets the <c>/ray_cast_selectable</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> IsRayCastingSelectable { get; } = new(Kind, "/ray_cast_selectable");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> IsRayCastingSelectable { get; } = new(Kind, "/ray_cast_selectable");
 
         /// <summary>Gets the <c>/ignore_parent_transform</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> IgnoreParentTransform { get; } = new(Kind, "/ignore_parent_transform");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> IgnoreParentTransform { get; } = new(Kind, "/ignore_parent_transform");
     }
 
     /// <summary>The <c>geometry</c> component.</summary>
@@ -76,7 +83,17 @@ public static class SceneSchema
         public const string Kind = "geometry";
 
         /// <summary>Gets the <c>/geometry_uri</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::Oxygen.Managed.Core.AssetPath?> GeometryUri { get; } = new(Kind, "/geometry_uri");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.AssetPath?> GeometryUri { get; } = new(Kind, "/geometry_uri");
+
+        /// <summary>The <c>surface</c> part of the <c>geometry</c> component.</summary>
+        public static class Surface
+        {
+            /// <summary>The part kind.</summary>
+            public const string Kind = "surface";
+
+            /// <summary>Gets the <c>/material</c> property.</summary>
+            public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.AssetPath> Material { get; } = new(Geometry.Kind, Kind, "/material");
+        }
     }
 
     /// <summary>The <c>perspective-camera</c> component.</summary>
@@ -86,28 +103,28 @@ public static class SceneSchema
         public const string Kind = "perspective-camera";
 
         /// <summary>Gets the <c>/field_of_view_degrees</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> FieldOfViewDegrees { get; } = new(Kind, "/field_of_view_degrees");
+        public static global::Oxygen.Managed.Core.PropertyId<float> FieldOfViewDegrees { get; } = new(Kind, "/field_of_view_degrees");
 
         /// <summary>Gets the <c>/aspect_ratio</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> AspectRatio { get; } = new(Kind, "/aspect_ratio");
+        public static global::Oxygen.Managed.Core.PropertyId<float> AspectRatio { get; } = new(Kind, "/aspect_ratio");
 
         /// <summary>Gets the <c>/near_plane</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> NearPlane { get; } = new(Kind, "/near_plane");
+        public static global::Oxygen.Managed.Core.PropertyId<float> NearPlane { get; } = new(Kind, "/near_plane");
 
         /// <summary>Gets the <c>/far_plane</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> FarPlane { get; } = new(Kind, "/far_plane");
+        public static global::Oxygen.Managed.Core.PropertyId<float> FarPlane { get; } = new(Kind, "/far_plane");
 
         /// <summary>Gets the <c>/aperture_f</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ApertureF { get; } = new(Kind, "/aperture_f");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ApertureF { get; } = new(Kind, "/aperture_f");
 
         /// <summary>Gets the <c>/shutter_rate</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ShutterRate { get; } = new(Kind, "/shutter_rate");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ShutterRate { get; } = new(Kind, "/shutter_rate");
 
         /// <summary>Gets the <c>/iso</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> Iso { get; } = new(Kind, "/iso");
+        public static global::Oxygen.Managed.Core.PropertyId<float> Iso { get; } = new(Kind, "/iso");
 
         /// <summary>Gets the <c>/aspect_mode</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::Oxygen.Managed.Core.CameraAspectMode> AspectMode { get; } = new(Kind, "/aspect_mode");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.CameraAspectMode> AspectMode { get; } = new(Kind, "/aspect_mode");
     }
 
     /// <summary>The <c>orthographic-camera</c> component.</summary>
@@ -117,28 +134,28 @@ public static class SceneSchema
         public const string Kind = "orthographic-camera";
 
         /// <summary>Gets the <c>/orthographic_size</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> OrthographicSize { get; } = new(Kind, "/orthographic_size");
+        public static global::Oxygen.Managed.Core.PropertyId<float> OrthographicSize { get; } = new(Kind, "/orthographic_size");
 
         /// <summary>Gets the <c>/aspect_mode</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::Oxygen.Managed.Core.CameraAspectMode> AspectMode { get; } = new(Kind, "/aspect_mode");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Managed.Core.CameraAspectMode> AspectMode { get; } = new(Kind, "/aspect_mode");
 
         /// <summary>Gets the <c>/aspect_ratio</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> AspectRatio { get; } = new(Kind, "/aspect_ratio");
+        public static global::Oxygen.Managed.Core.PropertyId<float> AspectRatio { get; } = new(Kind, "/aspect_ratio");
 
         /// <summary>Gets the <c>/near_plane</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> NearPlane { get; } = new(Kind, "/near_plane");
+        public static global::Oxygen.Managed.Core.PropertyId<float> NearPlane { get; } = new(Kind, "/near_plane");
 
         /// <summary>Gets the <c>/far_plane</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> FarPlane { get; } = new(Kind, "/far_plane");
+        public static global::Oxygen.Managed.Core.PropertyId<float> FarPlane { get; } = new(Kind, "/far_plane");
 
         /// <summary>Gets the <c>/aperture_f</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ApertureF { get; } = new(Kind, "/aperture_f");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ApertureF { get; } = new(Kind, "/aperture_f");
 
         /// <summary>Gets the <c>/shutter_rate</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ShutterRate { get; } = new(Kind, "/shutter_rate");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ShutterRate { get; } = new(Kind, "/shutter_rate");
 
         /// <summary>Gets the <c>/iso</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> Iso { get; } = new(Kind, "/iso");
+        public static global::Oxygen.Managed.Core.PropertyId<float> Iso { get; } = new(Kind, "/iso");
     }
 
     /// <summary>The <c>directional-light</c> component.</summary>
@@ -148,73 +165,73 @@ public static class SceneSchema
         public const string Kind = "directional-light";
 
         /// <summary>Gets the <c>/color</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
+        public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
 
         /// <summary>Gets the <c>/intensity_lux</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> IntensityLux { get; } = new(Kind, "/intensity_lux");
+        public static global::Oxygen.Managed.Core.PropertyId<float> IntensityLux { get; } = new(Kind, "/intensity_lux");
 
         /// <summary>Gets the <c>/atmosphere_light_slot</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::Oxygen.Editor.World.Serialization.AtmosphereLightSlot> AtmosphereSlot { get; } = new(Kind, "/atmosphere_light_slot");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Editor.World.Serialization.AtmosphereLightSlot> AtmosphereSlot { get; } = new(Kind, "/atmosphere_light_slot");
 
         /// <summary>Gets the <c>/use_per_pixel_atmosphere_transmittance</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> UsePerPixelAtmosphereTransmittance { get; } = new(Kind, "/use_per_pixel_atmosphere_transmittance");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> UsePerPixelAtmosphereTransmittance { get; } = new(Kind, "/use_per_pixel_atmosphere_transmittance");
 
         /// <summary>Gets the <c>/casts_shadows</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> CastsShadows { get; } = new(Kind, "/casts_shadows");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> CastsShadows { get; } = new(Kind, "/casts_shadows");
 
         /// <summary>Gets the <c>/affects_world</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> AffectsWorld { get; } = new(Kind, "/affects_world");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> AffectsWorld { get; } = new(Kind, "/affects_world");
 
         /// <summary>Gets the <c>/angular_size_radians</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> AngularSizeRadians { get; } = new(Kind, "/angular_size_radians");
+        public static global::Oxygen.Managed.Core.PropertyId<float> AngularSizeRadians { get; } = new(Kind, "/angular_size_radians");
 
         /// <summary>Gets the <c>/exposure_compensation</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ExposureCompensation { get; } = new(Kind, "/exposure_compensation");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ExposureCompensation { get; } = new(Kind, "/exposure_compensation");
 
         /// <summary>Gets the <c>/atmosphere_disk_luminance_scale_rgb</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::System.Numerics.Vector3> AtmosphereDiskLuminanceScaleRgb { get; } = new(Kind, "/atmosphere_disk_luminance_scale_rgb");
+        public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> AtmosphereDiskLuminanceScaleRgb { get; } = new(Kind, "/atmosphere_disk_luminance_scale_rgb");
 
         /// <summary>Gets the <c>/shadow/bias</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ShadowBias { get; } = new(Kind, "/shadow/bias");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ShadowBias { get; } = new(Kind, "/shadow/bias");
 
         /// <summary>Gets the <c>/shadow/normal_bias</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ShadowNormalBias { get; } = new(Kind, "/shadow/normal_bias");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ShadowNormalBias { get; } = new(Kind, "/shadow/normal_bias");
 
         /// <summary>Gets the <c>/shadow/contact_shadows</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> ContactShadows { get; } = new(Kind, "/shadow/contact_shadows");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> ContactShadows { get; } = new(Kind, "/shadow/contact_shadows");
 
         /// <summary>Gets the <c>/shadow/resolution_hint</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::Oxygen.Editor.World.Serialization.ShadowResolutionHint> ShadowResolutionHint { get; } = new(Kind, "/shadow/resolution_hint");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Editor.World.Serialization.ShadowResolutionHint> ShadowResolutionHint { get; } = new(Kind, "/shadow/resolution_hint");
 
         /// <summary>Gets the <c>/csm/cascade_count</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<int> CascadeCount { get; } = new(Kind, "/csm/cascade_count");
+        public static global::Oxygen.Managed.Core.PropertyId<int> CascadeCount { get; } = new(Kind, "/csm/cascade_count");
 
         /// <summary>Gets the <c>/csm/split_mode</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::Oxygen.Editor.World.Serialization.DirectionalCsmSplitMode> SplitMode { get; } = new(Kind, "/csm/split_mode");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Editor.World.Serialization.DirectionalCsmSplitMode> SplitMode { get; } = new(Kind, "/csm/split_mode");
 
         /// <summary>Gets the <c>/csm/max_shadow_distance</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> MaxShadowDistance { get; } = new(Kind, "/csm/max_shadow_distance");
+        public static global::Oxygen.Managed.Core.PropertyId<float> MaxShadowDistance { get; } = new(Kind, "/csm/max_shadow_distance");
 
         /// <summary>Gets the <c>/csm/cascade_distances/0</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> CascadeDistance0 { get; } = new(Kind, "/csm/cascade_distances/0");
+        public static global::Oxygen.Managed.Core.PropertyId<float> CascadeDistance0 { get; } = new(Kind, "/csm/cascade_distances/0");
 
         /// <summary>Gets the <c>/csm/cascade_distances/1</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> CascadeDistance1 { get; } = new(Kind, "/csm/cascade_distances/1");
+        public static global::Oxygen.Managed.Core.PropertyId<float> CascadeDistance1 { get; } = new(Kind, "/csm/cascade_distances/1");
 
         /// <summary>Gets the <c>/csm/cascade_distances/2</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> CascadeDistance2 { get; } = new(Kind, "/csm/cascade_distances/2");
+        public static global::Oxygen.Managed.Core.PropertyId<float> CascadeDistance2 { get; } = new(Kind, "/csm/cascade_distances/2");
 
         /// <summary>Gets the <c>/csm/cascade_distances/3</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> CascadeDistance3 { get; } = new(Kind, "/csm/cascade_distances/3");
+        public static global::Oxygen.Managed.Core.PropertyId<float> CascadeDistance3 { get; } = new(Kind, "/csm/cascade_distances/3");
 
         /// <summary>Gets the <c>/csm/distribution_exponent</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> DistributionExponent { get; } = new(Kind, "/csm/distribution_exponent");
+        public static global::Oxygen.Managed.Core.PropertyId<float> DistributionExponent { get; } = new(Kind, "/csm/distribution_exponent");
 
         /// <summary>Gets the <c>/csm/transition_fraction</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> TransitionFraction { get; } = new(Kind, "/csm/transition_fraction");
+        public static global::Oxygen.Managed.Core.PropertyId<float> TransitionFraction { get; } = new(Kind, "/csm/transition_fraction");
 
         /// <summary>Gets the <c>/csm/distance_fadeout_fraction</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> DistanceFadeoutFraction { get; } = new(Kind, "/csm/distance_fadeout_fraction");
+        public static global::Oxygen.Managed.Core.PropertyId<float> DistanceFadeoutFraction { get; } = new(Kind, "/csm/distance_fadeout_fraction");
     }
 
     /// <summary>The <c>point-light</c> component.</summary>
@@ -224,37 +241,37 @@ public static class SceneSchema
         public const string Kind = "point-light";
 
         /// <summary>Gets the <c>/color</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
+        public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
 
         /// <summary>Gets the <c>/affects_world</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> AffectsWorld { get; } = new(Kind, "/affects_world");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> AffectsWorld { get; } = new(Kind, "/affects_world");
 
         /// <summary>Gets the <c>/casts_shadows</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> CastsShadows { get; } = new(Kind, "/casts_shadows");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> CastsShadows { get; } = new(Kind, "/casts_shadows");
 
         /// <summary>Gets the <c>/exposure_compensation</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ExposureCompensation { get; } = new(Kind, "/exposure_compensation");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ExposureCompensation { get; } = new(Kind, "/exposure_compensation");
 
         /// <summary>Gets the <c>/shadow/bias</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ShadowBias { get; } = new(Kind, "/shadow/bias");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ShadowBias { get; } = new(Kind, "/shadow/bias");
 
         /// <summary>Gets the <c>/shadow/normal_bias</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ShadowNormalBias { get; } = new(Kind, "/shadow/normal_bias");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ShadowNormalBias { get; } = new(Kind, "/shadow/normal_bias");
 
         /// <summary>Gets the <c>/shadow/contact_shadows</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> ContactShadows { get; } = new(Kind, "/shadow/contact_shadows");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> ContactShadows { get; } = new(Kind, "/shadow/contact_shadows");
 
         /// <summary>Gets the <c>/shadow/resolution_hint</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::Oxygen.Editor.World.Serialization.ShadowResolutionHint> ShadowResolutionHint { get; } = new(Kind, "/shadow/resolution_hint");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Editor.World.Serialization.ShadowResolutionHint> ShadowResolutionHint { get; } = new(Kind, "/shadow/resolution_hint");
 
         /// <summary>Gets the <c>/luminous_flux_lm</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> LuminousFluxLumens { get; } = new(Kind, "/luminous_flux_lm");
+        public static global::Oxygen.Managed.Core.PropertyId<float> LuminousFluxLumens { get; } = new(Kind, "/luminous_flux_lm");
 
         /// <summary>Gets the <c>/range</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> Range { get; } = new(Kind, "/range");
+        public static global::Oxygen.Managed.Core.PropertyId<float> Range { get; } = new(Kind, "/range");
 
         /// <summary>Gets the <c>/source_radius</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> SourceRadius { get; } = new(Kind, "/source_radius");
+        public static global::Oxygen.Managed.Core.PropertyId<float> SourceRadius { get; } = new(Kind, "/source_radius");
     }
 
     /// <summary>The <c>spot-light</c> component.</summary>
@@ -264,43 +281,43 @@ public static class SceneSchema
         public const string Kind = "spot-light";
 
         /// <summary>Gets the <c>/color</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
+        public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> Color { get; } = new(Kind, "/color");
 
         /// <summary>Gets the <c>/affects_world</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> AffectsWorld { get; } = new(Kind, "/affects_world");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> AffectsWorld { get; } = new(Kind, "/affects_world");
 
         /// <summary>Gets the <c>/casts_shadows</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> CastsShadows { get; } = new(Kind, "/casts_shadows");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> CastsShadows { get; } = new(Kind, "/casts_shadows");
 
         /// <summary>Gets the <c>/exposure_compensation</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ExposureCompensation { get; } = new(Kind, "/exposure_compensation");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ExposureCompensation { get; } = new(Kind, "/exposure_compensation");
 
         /// <summary>Gets the <c>/shadow/bias</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ShadowBias { get; } = new(Kind, "/shadow/bias");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ShadowBias { get; } = new(Kind, "/shadow/bias");
 
         /// <summary>Gets the <c>/shadow/normal_bias</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> ShadowNormalBias { get; } = new(Kind, "/shadow/normal_bias");
+        public static global::Oxygen.Managed.Core.PropertyId<float> ShadowNormalBias { get; } = new(Kind, "/shadow/normal_bias");
 
         /// <summary>Gets the <c>/shadow/contact_shadows</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> ContactShadows { get; } = new(Kind, "/shadow/contact_shadows");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> ContactShadows { get; } = new(Kind, "/shadow/contact_shadows");
 
         /// <summary>Gets the <c>/shadow/resolution_hint</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::Oxygen.Editor.World.Serialization.ShadowResolutionHint> ShadowResolutionHint { get; } = new(Kind, "/shadow/resolution_hint");
+        public static global::Oxygen.Managed.Core.PropertyId<global::Oxygen.Editor.World.Serialization.ShadowResolutionHint> ShadowResolutionHint { get; } = new(Kind, "/shadow/resolution_hint");
 
         /// <summary>Gets the <c>/luminous_flux_lm</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> LuminousFluxLumens { get; } = new(Kind, "/luminous_flux_lm");
+        public static global::Oxygen.Managed.Core.PropertyId<float> LuminousFluxLumens { get; } = new(Kind, "/luminous_flux_lm");
 
         /// <summary>Gets the <c>/range</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> Range { get; } = new(Kind, "/range");
+        public static global::Oxygen.Managed.Core.PropertyId<float> Range { get; } = new(Kind, "/range");
 
         /// <summary>Gets the <c>/source_radius</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> SourceRadius { get; } = new(Kind, "/source_radius");
+        public static global::Oxygen.Managed.Core.PropertyId<float> SourceRadius { get; } = new(Kind, "/source_radius");
 
         /// <summary>Gets the <c>/inner_cone_angle_radians</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> InnerConeAngleRadians { get; } = new(Kind, "/inner_cone_angle_radians");
+        public static global::Oxygen.Managed.Core.PropertyId<float> InnerConeAngleRadians { get; } = new(Kind, "/inner_cone_angle_radians");
 
         /// <summary>Gets the <c>/outer_cone_angle_radians</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> OuterConeAngleRadians { get; } = new(Kind, "/outer_cone_angle_radians");
+        public static global::Oxygen.Managed.Core.PropertyId<float> OuterConeAngleRadians { get; } = new(Kind, "/outer_cone_angle_radians");
     }
 
     /// <summary>The <c>scripting</c> component.</summary>
@@ -317,30 +334,30 @@ public static class SceneSchema
         public const string Kind = "local-fog-volume";
 
         /// <summary>Gets the <c>/enabled</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<bool> Enabled { get; } = new(Kind, "/enabled");
+        public static global::Oxygen.Managed.Core.PropertyId<bool> Enabled { get; } = new(Kind, "/enabled");
 
         /// <summary>Gets the <c>/radial_fog_extinction</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> RadialFogExtinction { get; } = new(Kind, "/radial_fog_extinction");
+        public static global::Oxygen.Managed.Core.PropertyId<float> RadialFogExtinction { get; } = new(Kind, "/radial_fog_extinction");
 
         /// <summary>Gets the <c>/height_fog_extinction</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> HeightFogExtinction { get; } = new(Kind, "/height_fog_extinction");
+        public static global::Oxygen.Managed.Core.PropertyId<float> HeightFogExtinction { get; } = new(Kind, "/height_fog_extinction");
 
         /// <summary>Gets the <c>/height_fog_falloff</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> HeightFogFalloff { get; } = new(Kind, "/height_fog_falloff");
+        public static global::Oxygen.Managed.Core.PropertyId<float> HeightFogFalloff { get; } = new(Kind, "/height_fog_falloff");
 
         /// <summary>Gets the <c>/height_fog_offset</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> HeightFogOffset { get; } = new(Kind, "/height_fog_offset");
+        public static global::Oxygen.Managed.Core.PropertyId<float> HeightFogOffset { get; } = new(Kind, "/height_fog_offset");
 
         /// <summary>Gets the <c>/fog_phase_g</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<float> FogPhaseG { get; } = new(Kind, "/fog_phase_g");
+        public static global::Oxygen.Managed.Core.PropertyId<float> FogPhaseG { get; } = new(Kind, "/fog_phase_g");
 
         /// <summary>Gets the <c>/fog_albedo</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::System.Numerics.Vector3> FogAlbedo { get; } = new(Kind, "/fog_albedo");
+        public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> FogAlbedo { get; } = new(Kind, "/fog_albedo");
 
         /// <summary>Gets the <c>/fog_emissive</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<global::System.Numerics.Vector3> FogEmissive { get; } = new(Kind, "/fog_emissive");
+        public static global::Oxygen.Managed.Core.PropertyId<global::System.Numerics.Vector3> FogEmissive { get; } = new(Kind, "/fog_emissive");
 
         /// <summary>Gets the <c>/sort_priority</c> property.</summary>
-        public static global::Oxygen.Editor.Schemas.PropertyId<int> SortPriority { get; } = new(Kind, "/sort_priority");
+        public static global::Oxygen.Managed.Core.PropertyId<int> SortPriority { get; } = new(Kind, "/sort_priority");
     }
 }

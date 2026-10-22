@@ -7,6 +7,7 @@ using System.Text.Json;
 using Oxygen.Editor.Scenes.Edits.Scripting;
 using Oxygen.Editor.Scenes.Layout;
 using Oxygen.Editor.Scripting;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Assets;
@@ -205,16 +206,22 @@ public static class SampleScene
             Id = MeshGeometry,
             Name = "Geometry",
             GeometryUri = CubeGeometry,
-            OverrideSlots =
-            [
-                new MaterialsSlotData
-                {
-                    GeometryUri = CubeGeometry,
-                    SurfaceId = CubeSurface,
-                    LayoutRevision = CubeLayoutRevision,
-                    MaterialUri = RedMaterial,
-                },
-            ],
+            Overrides = new SourceOverridesData
+            {
+                Parts =
+                [
+                    new PartOverridesData
+                    {
+                        Kind = SceneSchema.Geometry.Surface.Kind,
+                        Id = CubeSurface,
+                        LayoutRevision = CubeLayoutRevision,
+                        Values = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+                        {
+                            [SceneSchema.Geometry.Surface.Material.Id.JsonPointer] = JsonSerializer.SerializeToElement(RedMaterial, SceneJsonContext.Default.AssetPath),
+                        },
+                    },
+                ],
+            },
         };
 
     private static ScriptingData MoveTowardB()

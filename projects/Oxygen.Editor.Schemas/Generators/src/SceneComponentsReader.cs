@@ -16,7 +16,8 @@ namespace Oxygen.Editor.Schemas.Generators;
 /// <remarks>
 /// The engine build validates the file against its JSON Schema. The reader checks the shape it reads and what the
 /// generated code relies on: names that are unique, field sets and fields that exist, value types and enumerations with
-/// an editor type, the number of fields of each value, and encodings the editor implements.
+/// an editor type, the number of fields of each value, encodings the editor implements, and parts whose properties each
+/// have a source and no fields.
 /// </remarks>
 internal sealed class SceneComponentsReader
 {
@@ -24,10 +25,14 @@ internal sealed class SceneComponentsReader
     private static readonly string[] FieldSetKeys = ["name", "fields"];
     private static readonly string[] FieldKeys = ["name", "id"];
     private static readonly string[] ComponentKeys = ["name", "kind", "properties"];
-    private static readonly string[] ComponentOptionalKeys = ["wire"];
+    private static readonly string[] ComponentOptionalKeys = ["wire", "parts"];
     private static readonly string[] WireKeys = ["id", "field_set"];
+    private static readonly string[] PartKeys = ["name", "kind", "properties"];
     private static readonly string[] PropertyKeys = ["name", "key", "type"];
-    private static readonly string[] PropertyOptionalKeys = ["enum", "fields", "encoding"];
+    private static readonly string[] PropertyOptionalKeys = ["enum", "fields", "encoding", "sources"];
+    private static readonly string[] PartPropertyKeys = ["name", "key", "type", "sources"];
+    private static readonly string[] PartPropertyOptionalKeys = ["enum"];
+    private static readonly string[] Sources = ["asset", "model"];
 
     private readonly string path;
     private readonly List<Diagnostic> diagnostics;
@@ -154,22 +159,45 @@ internal sealed class SceneComponentsReader
             wire = id is null || fieldSet is null ? null : new SceneComponentsSchema.WireEntry(id.Value, fieldSet, this.LocationsOf(wireMap));
         }
 
-        var properties = this.Items(map, "properties", where).Select(item => this.ReadProperty(item, where)).OfType<SceneComponentsSchema.PropertyEntry>().ToList();
+        var properties = this.Items(map, "properties", where)
+            .Select(item => this.ReadProperty(item, where, PropertyKeys, PropertyOptionalKeys))
+            .OfType<SceneComponentsSchema.PropertyEntry>()
+            .ToList();
+        var parts = this.Items(map, "parts", where).Select(item => this.ReadPart(item, where)).OfType<SceneComponentsSchema.PartEntry>().ToList();
 
         // A wire that could not be read is reported; checking the properties against no wire would only add noise.
         return name is null || kind is null || (wireNode is not null && wire is null)
             ? null
-            : new SceneComponentsSchema.ComponentEntry(name, kind, wire, properties, this.LocationsOf(map));
+            : new SceneComponentsSchema.ComponentEntry(name, kind, wire, properties, parts, this.LocationsOf(map));
     }
 
-    private SceneComponentsSchema.PropertyEntry? ReadProperty(YamlNode node, string component)
+    // A part's properties always have a source and never take fields, so a key that breaks that is an unknown key.
+    private SceneComponentsSchema.PartEntry? ReadPart(YamlNode node, string component)
+    {
+        if (this.Mapping(node, component + " part") is not YamlMappingNode map)
+        {
+            return null;
+        }
+
+        this.CheckKeys(map, component + " part", PartKeys, []);
+        var name = this.Scalar(map, "name", component + " part");
+        var where = component + "." + (name ?? "?");
+        var kind = this.Scalar(map, "kind", where);
+        var properties = this.Items(map, "properties", where)
+            .Select(item => this.ReadProperty(item, where, PartPropertyKeys, PartPropertyOptionalKeys))
+            .OfType<SceneComponentsSchema.PropertyEntry>()
+            .ToList();
+        return name is null || kind is null ? null : new SceneComponentsSchema.PartEntry(name, kind, properties, this.LocationsOf(map));
+    }
+
+    private SceneComponentsSchema.PropertyEntry? ReadProperty(YamlNode node, string component, string[] required, string[] optional)
     {
         if (this.Mapping(node, component + " property") is not YamlMappingNode map)
         {
             return null;
         }
 
-        this.CheckKeys(map, component + " property", PropertyKeys, PropertyOptionalKeys);
+        this.CheckKeys(map, component + " property", required, optional);
         var name = this.Scalar(map, "name", component + " property");
         var where = component + "." + (name ?? "?");
         var key = this.Scalar(map, "key", where);
@@ -179,9 +207,46 @@ internal sealed class SceneComponentsReader
         var fields = map.Children.ContainsKey(new YamlScalarNode("fields"))
             ? this.Items(map, "fields", where).Select(item => this.ScalarValue(item, where + ".fields")).OfType<string>().ToList()
             : [];
+        var sources = this.ReadSources(map, where);
         return name is null || key is null || type is null
             ? null
-            : new SceneComponentsSchema.PropertyEntry(name, key, type, enumeration, fields, encoding, this.LocationsOf(map));
+            : new SceneComponentsSchema.PropertyEntry(name, key, type, enumeration, fields, encoding, sources, this.LocationsOf(map));
+    }
+
+    private List<string> ReadSources(YamlMappingNode map, string where)
+    {
+        if (!map.Children.TryGetValue(new YamlScalarNode("sources"), out var node))
+        {
+            return [];
+        }
+
+        var items = this.Items(map, "sources", where).ToList();
+        if (node is YamlSequenceNode && items.Count == 0)
+        {
+            this.Report(SceneComponentsDiagnostics.InvalidShape, this.At(node), $"{where}.sources must name a source");
+        }
+
+        var sources = new List<string>();
+        foreach (var item in items)
+        {
+            if (this.ScalarValue(item, where + ".sources") is not string source)
+            {
+                continue;
+            }
+
+            if (!Sources.Contains(source, StringComparer.Ordinal))
+            {
+                this.Report(SceneComponentsDiagnostics.InvalidShape, this.At(item), $"{where}.sources has an unknown source '{source}'");
+            }
+            else if (sources.Contains(source, StringComparer.Ordinal))
+            {
+                this.Report(SceneComponentsDiagnostics.InvalidShape, this.At(item), $"{where}.sources names '{source}' twice");
+            }
+
+            sources.Add(source);
+        }
+
+        return sources;
     }
 
     private void Check(SceneComponentsSchema schema)
@@ -209,6 +274,27 @@ internal sealed class SceneComponentsReader
             foreach (var property in component.Properties)
             {
                 this.CheckProperty(component, property, fieldSet);
+            }
+
+            this.CheckParts(component);
+        }
+    }
+
+    // A part's name scopes its properties' names in the generated code, so it cannot be a property's name.
+    private void CheckParts(SceneComponentsSchema.ComponentEntry component)
+    {
+        var names = component.Properties.Select(static property => (property.Name, Location: property.Locations.Of("name")))
+            .Concat(component.Parts.Select(static part => (part.Name, Location: part.Locations.Of("name"))));
+        this.CheckUnique(names, static entry => entry.Name, static entry => entry.Location, "part or property of " + component.Name);
+        this.CheckUnique(component.Parts, static part => part.Kind, static part => part.Locations.Of("kind"), "part kind of " + component.Name);
+        foreach (var part in component.Parts)
+        {
+            var where = component.Name + "." + part.Name;
+            this.CheckUnique(part.Properties, static property => property.Name, static property => property.Locations.Of("name"), "property of " + where);
+            this.CheckUnique(part.Properties, static property => property.Key, static property => property.Locations.Of("key"), "key of " + where);
+            foreach (var property in part.Properties.Where(static property => !SceneComponentsTypes.IsKnown(property)))
+            {
+                this.Report(SceneComponentsDiagnostics.UnknownType, property.Locations.Of(property.Enum is null ? "type" : "enum"), where + "." + property.Name, property.Enum ?? property.Type);
             }
         }
     }

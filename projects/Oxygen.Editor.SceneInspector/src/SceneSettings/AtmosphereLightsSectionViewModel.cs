@@ -11,7 +11,6 @@ using Oxygen.Editor.SceneInspector.Components.Lights;
 using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Properties;
-using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;

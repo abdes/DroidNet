@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
+using System.Text.Json;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Assets;
@@ -19,9 +20,9 @@ using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.Schemas;
 using Oxygen.Editor.Scripting;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits;
@@ -68,8 +69,6 @@ public static class EditSamples
 
     private static FolderId RestoredFolder { get; } = FolderId.FromValue(SampleScene.Tagged(3, "2B"));
 
-    private static Guid RestoredSurface { get; } = SampleScene.Tagged(4, "C2");
-
     private static ScriptSlotId AddedSlot { get; } = ScriptSlotId.FromValue(SampleScene.Tagged(4, "C3"));
 
     private static AssetPath GreenMaterial { get; } = AssetPath.Parse("/Content/Green.omat");
@@ -102,9 +101,8 @@ public static class EditSamples
         SetScenePropertiesSample,
         SetSceneEnvironmentSample,
         SetGeometrySample,
-        SetSurfaceMaterialSample,
-        RemoveSurfaceMaterialsSample,
-        RestoreSurfaceMaterialsSample,
+        SetOverridesSample,
+        ResetOverridesSample,
         SetStartingCameraSample,
         SetStartingInputContextsSample,
         SetSceneReferencesSample,
@@ -275,22 +273,25 @@ public static class EditSamples
             HasTargets = true,
             Tamper = static _ =>
             {
-                var slots = new List<OverrideSlotData>();
+                var parts = new List<PartOverridesData>();
                 var component = new GeometryComponentData
                 {
                     Id = AddedGeometry,
                     Name = "Geometry",
                     GeometryUri = SampleScene.SphereGeometry,
-                    OverrideSlots = slots,
+                    Overrides = new SourceOverridesData { Parts = parts },
                 };
                 return new TamperedEdit(
                     new AddComponent(SampleScene.A11, component, index: SceneBuilder.RequiredComponentCount),
-                    () => slots.Add(new MaterialsSlotData
+                    () => parts.Add(new PartOverridesData
                     {
-                        GeometryUri = SampleScene.SphereGeometry,
-                        SurfaceId = SampleScene.CubeSurface,
+                        Kind = SceneSchema.Geometry.Surface.Kind,
+                        Id = SampleScene.CubeSurface,
                         LayoutRevision = SampleScene.CubeLayoutRevision,
-                        MaterialUri = SampleScene.RedMaterial,
+                        Values = new Dictionary<string, JsonElement>(StringComparer.Ordinal)
+                        {
+                            [SceneSchema.Geometry.Surface.Material.Id.JsonPointer] = JsonSerializer.SerializeToElement(SampleScene.RedMaterial, SceneJsonContext.Default.AssetPath),
+                        },
                     }));
             },
         };
@@ -360,12 +361,12 @@ public static class EditSamples
             AssetNode = SampleScene.Mesh,
         };
 
-    private static EditSample SetSurfaceMaterialSample =>
+    private static EditSample SetOverridesSample =>
         new(
-            nameof(SetSurfaceMaterial),
-            static _ => new SetSurfaceMaterial([SampleScene.Mesh], CubeSurfaceTarget, GreenMaterial),
-            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)],
-            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)])
+            nameof(SetOverrides),
+            static _ => SurfaceMaterial(GreenMaterial),
+            [new SceneChange.OverridesChanged(SampleScene.Mesh, [SceneSchema.Geometry.Surface.Material.Id])],
+            [new SceneChange.OverridesChanged(SampleScene.Mesh, [SceneSchema.Geometry.Surface.Material.Id])])
         {
             HasTargets = true,
             CarriesAssetReference = true,
@@ -373,30 +374,12 @@ public static class EditSamples
             AssetNode = SampleScene.Mesh,
         };
 
-    private static EditSample RemoveSurfaceMaterialsSample =>
+    private static EditSample ResetOverridesSample =>
         new(
-            nameof(RemoveSurfaceMaterials),
-            static _ => new RemoveSurfaceMaterials(new Dictionary<NodeId, IReadOnlyList<SurfaceTarget>> { [SampleScene.Mesh] = [CubeSurfaceTarget] }),
-            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)],
-            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)])
-        {
-            HasTargets = true,
-        };
-
-    private static EditSample RestoreSurfaceMaterialsSample =>
-        new(
-            nameof(RestoreSurfaceMaterials),
-            static _ => new RestoreSurfaceMaterials(new Dictionary<NodeId, IReadOnlyList<RestoredSurfaceMaterial>>
-            {
-                [SampleScene.Mesh] =
-                [
-                    new RestoredSurfaceMaterial(
-                        new SurfaceMaterialAssignment(new SurfaceTarget(SampleScene.CubeGeometry, RestoredSurface, SampleScene.CubeLayoutRevision), SampleScene.RedMaterial),
-                        Index: 1),
-                ],
-            }),
-            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)],
-            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)])
+            nameof(SetOverrides) + " reset",
+            static _ => SurfaceMaterial(material: null),
+            [new SceneChange.OverridesChanged(SampleScene.Mesh, [SceneSchema.Geometry.Surface.Material.Id])],
+            [new SceneChange.OverridesChanged(SampleScene.Mesh, [SceneSchema.Geometry.Surface.Material.Id])])
         {
             HasTargets = true,
         };
@@ -597,6 +580,12 @@ public static class EditSamples
 
     private static RestoreFolder RestoringFolder(IReadOnlyList<LayoutEntryId> children, ExplorerEntryData entry)
         => new(entry, LayoutPosition.AtRoot(2), children);
+
+    private static SetOverrides SurfaceMaterial(AssetPath? material)
+        => new(
+            [SampleScene.Mesh],
+            [new OverrideWrite(SceneSchema.Geometry.Surface.Material.Id, CubeSurfaceTarget.Part, CubeSurfaceTarget.LayoutRevision, material) { PartOwner = CubeSurfaceTarget.Geometry }],
+            "Edit Surface Material");
 
     private static PerspectiveCameraData CameraToAdd()
         => new() { Id = AddedCamera, Name = "Camera", NearPlane = 0.1f, FarPlane = 100f, AspectMode = CameraAspectMode.Auto };

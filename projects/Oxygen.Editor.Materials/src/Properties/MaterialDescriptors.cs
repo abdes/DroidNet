@@ -4,6 +4,7 @@
 
 using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Assets.Authoring.Materials;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Materials.Properties;
 

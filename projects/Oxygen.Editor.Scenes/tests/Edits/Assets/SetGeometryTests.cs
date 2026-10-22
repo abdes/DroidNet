@@ -8,7 +8,6 @@ using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Tests.Edits.Assets;
@@ -58,16 +57,16 @@ public sealed class SetGeometryTests
     }
 
     [TestMethod]
-    public async Task NewAsset_KeepsOverrideSlots()
+    public async Task NewAsset_KeepsTheOverrides()
     {
         using var fixture = await AuthoringFixture.CreateAsync(SampleScene.Build()).ConfigureAwait(false);
-        var slotsBefore = OverridesOf(fixture, SampleScene.Mesh);
+        var overridesBefore = GeometryOf(fixture, SampleScene.Mesh).Overrides;
 
         var result = await fixture.Authoring.ExecuteAsync(new SetGeometry([SampleScene.Mesh], SampleScene.SphereGeometry)).ConfigureAwait(false);
 
         SceneAssert.Applied(result);
-        _ = slotsBefore.Should().NotBeEmpty("the sample's Mesh has an override slot");
-        _ = OverridesOf(fixture, SampleScene.Mesh).Should().Equal(slotsBefore);
+        _ = overridesBefore.IsEmpty.Should().BeFalse("the sample's Mesh overrides a surface material");
+        _ = GeometryOf(fixture, SampleScene.Mesh).Overrides.Should().Be(overridesBefore);
     }
 
     [TestMethod]
@@ -96,8 +95,4 @@ public sealed class SetGeometryTests
 
     private static GeometryComponent GeometryOf(AuthoringFixture fixture, NodeId node)
         => fixture.Node(node).Components.OfType<GeometryComponent>().Single();
-
-    // Each override as its target and material, so two reads compare by value.
-    private static List<string> OverridesOf(AuthoringFixture fixture, NodeId node)
-        => [.. GeometryOf(fixture, node).OverrideSlots.OfType<MaterialsSlot>().Select(static slot => $"{slot.Target} -> {slot.Material}")];
 }

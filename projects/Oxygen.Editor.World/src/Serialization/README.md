@@ -9,7 +9,7 @@ Follow these rules when adding or modifying serialization behaviour:
 - DTOs in this folder are the single source-of-truth for on-disk persistence of
   scenes.
   - Use the DTO classes (e.g. `SceneData`, `SceneNodeData`,
-    `GeometryComponentData`, `OverrideSlotData`) for file formats, migrations
+    `GeometryComponentData`, `SourceOverridesData`) for file formats, migrations
     and compatibility.
 
 - Use the Hydrate / Dehydrate pattern for converting between DTOs and runtime
@@ -17,14 +17,22 @@ Follow these rules when adding or modifying serialization behaviour:
   - Domain objects implement `IPersistent<TDto>` where `Hydrate(TDto)` populates
     runtime state and `Dehydrate()` returns a DTO representation to persist.
   - Creation should follow the existing factory/registration pattern (see
-    `GameComponent` and `OverrideSlot.CreateAndHydrate`) so concrete types
+    `GameComponent.CreateAndHydrate`) so concrete types
     register how to create themselves from DTOs.
 
 - Important design decisions
   - DTOs contain only persisted state and intentionally omit runtime-only
     defaults or caches.
-  - `OverridablePropertyData<T>` stores only the override intent; defaults live
-    in the domain types and are not serialized.
+  - `SourceOverridesData` stores only the override intent; defaults live in the
+    domain types and are not serialized. `SourceOverridesJson` converts it to
+    and from `SourceOverrides`: each value is JSON under its property's key and
+    is read as the type the generated `SceneSchema.Overridable` gives that
+    property. A key that is not an overridable property of the component or
+    part kind, or a value that does not fit its type, fails the read with a
+    `JsonException`.
+  - Records reject unknown members (`JsonUnmappedMemberHandling.Disallow`, as on
+    `GeometryComponentData`, `SceneNodeData` and `SourceOverridesData`), so a
+    scene file with a key the model no longer has fails to open.
   - Hydration must be performed with notifications suppressed (so
     property-change observers don't get noisy events while building objects).
   - A property with a default other than its type's default is `{ get; set; }`.
@@ -47,8 +55,7 @@ Follow these rules when adding or modifying serialization behaviour:
   - Add round-trip tests that verify DTO -> Hydrate -> Dehydrate -> DTO produces
     equivalent DTOs (or follows documented equivalence rules for omitted
     defaults).
-  - Prefer explicit unit tests for conversion code (e.g. `OverridableProperty`
-    helpers).
+  - Prefer explicit unit tests for conversion code (e.g. `SourceOverridesJson`).
 
 If you're unsure which approach to use for a particular feature, prefer adding a
 small DTO and explicit Hydrate/Dehydrate implementation rather than attempting

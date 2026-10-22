@@ -6,7 +6,6 @@ using System.Runtime.CompilerServices;
 using System.Text;
 using System.Text.Json;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
@@ -31,12 +30,6 @@ public static class SceneSerializer
         RuntimeHelpers.RunClassConstructor(typeof(SpotLightComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(LocalFogVolumeComponent).TypeHandle);
         RuntimeHelpers.RunClassConstructor(typeof(ScriptingComponent).TypeHandle);
-
-        // Slots
-        RuntimeHelpers.RunClassConstructor(typeof(RenderingSlot).TypeHandle);
-        RuntimeHelpers.RunClassConstructor(typeof(LightingSlot).TypeHandle);
-        RuntimeHelpers.RunClassConstructor(typeof(MaterialsSlot).TypeHandle);
-        RuntimeHelpers.RunClassConstructor(typeof(LevelOfDetailSlot).TypeHandle);
 
         // Add other types as needed
         return true;
@@ -117,7 +110,7 @@ public static class SceneSerializer
     }
 
     /// <summary>
-    /// Registers the component and slot factories that hydration looks types up in.
+    /// Registers the component factories that hydration looks types up in.
     /// </summary>
     internal static void EnsureFactories() => _ = FactoriesInitialized.Value;
 }

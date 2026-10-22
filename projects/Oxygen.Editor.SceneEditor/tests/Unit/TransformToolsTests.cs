@@ -10,7 +10,6 @@ using Oxygen.Editor.Data.Settings;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;

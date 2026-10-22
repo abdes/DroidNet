@@ -3,7 +3,9 @@
 // SPDX-License-Identifier: MIT
 
 using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Properties;
 

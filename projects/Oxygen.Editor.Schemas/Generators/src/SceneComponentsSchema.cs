@@ -57,8 +57,9 @@ internal sealed class SceneComponentsSchema(IReadOnlyList<SceneComponentsSchema.
     /// <param name="kind">The component kind.</param>
     /// <param name="wire">How the engine takes the component field by field, or <see langword="null"/>.</param>
     /// <param name="properties">The properties, in schema order.</param>
+    /// <param name="parts">The parts, in schema order.</param>
     /// <param name="locations">The entry's locations in the schema file.</param>
-    internal sealed class ComponentEntry(string name, string kind, WireEntry? wire, IReadOnlyList<PropertyEntry> properties, SceneComponentsSchema.Locations locations)
+    internal sealed class ComponentEntry(string name, string kind, WireEntry? wire, IReadOnlyList<PropertyEntry> properties, IReadOnlyList<PartEntry> parts, SceneComponentsSchema.Locations locations)
     {
         /// <summary>Gets the component name.</summary>
         public string Name { get; } = name;
@@ -68,6 +69,29 @@ internal sealed class SceneComponentsSchema(IReadOnlyList<SceneComponentsSchema.
 
         /// <summary>Gets how the engine takes the component field by field, or <see langword="null"/>.</summary>
         public WireEntry? Wire { get; } = wire;
+
+        /// <summary>Gets the properties, in schema order.</summary>
+        public IReadOnlyList<PropertyEntry> Properties { get; } = properties;
+
+        /// <summary>Gets the parts, in schema order.</summary>
+        public IReadOnlyList<PartEntry> Parts { get; } = parts;
+
+        /// <summary>Gets the entry's locations in the schema file.</summary>
+        public Locations Locations { get; } = locations;
+    }
+
+    /// <summary>A piece of a component, identified by the asset that defines it, such as a surface of a geometry.</summary>
+    /// <param name="name">The part name.</param>
+    /// <param name="kind">The part kind.</param>
+    /// <param name="properties">The properties, in schema order; each has a source.</param>
+    /// <param name="locations">The entry's locations in the schema file.</param>
+    internal sealed class PartEntry(string name, string kind, IReadOnlyList<PropertyEntry> properties, SceneComponentsSchema.Locations locations)
+    {
+        /// <summary>Gets the part name.</summary>
+        public string Name { get; } = name;
+
+        /// <summary>Gets the part kind.</summary>
+        public string Kind { get; } = kind;
 
         /// <summary>Gets the properties, in schema order.</summary>
         public IReadOnlyList<PropertyEntry> Properties { get; } = properties;
@@ -99,8 +123,9 @@ internal sealed class SceneComponentsSchema(IReadOnlyList<SceneComponentsSchema.
     /// <param name="enumeration">The enumeration of an enum value, or <see langword="null"/>.</param>
     /// <param name="fields">The fields that receive the value, in order.</param>
     /// <param name="encoding">The encoding applied before the value goes to its fields, or <see langword="null"/>.</param>
+    /// <param name="sources">What may supply the value; a scene then stores only its overrides of it.</param>
     /// <param name="locations">The entry's locations in the schema file.</param>
-    internal sealed class PropertyEntry(string name, string key, string type, string? enumeration, IReadOnlyList<string> fields, string? encoding, SceneComponentsSchema.Locations locations)
+    internal sealed class PropertyEntry(string name, string key, string type, string? enumeration, IReadOnlyList<string> fields, string? encoding, IReadOnlyList<string> sources, SceneComponentsSchema.Locations locations)
     {
         /// <summary>Gets the property name.</summary>
         public string Name { get; } = name;
@@ -119,6 +144,9 @@ internal sealed class SceneComponentsSchema(IReadOnlyList<SceneComponentsSchema.
 
         /// <summary>Gets the encoding applied before the value goes to its fields, or <see langword="null"/>.</summary>
         public string? Encoding { get; } = encoding;
+
+        /// <summary>Gets what may supply the value; empty when the scene stores the value itself.</summary>
+        public IReadOnlyList<string> Sources { get; } = sources;
 
         /// <summary>Gets the entry's locations in the schema file.</summary>
         public Locations Locations { get; } = locations;

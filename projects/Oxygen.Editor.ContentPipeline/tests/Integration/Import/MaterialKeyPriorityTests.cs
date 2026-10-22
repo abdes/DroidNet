@@ -72,8 +72,8 @@ public sealed class MaterialKeyPriorityTests
         var second = new Scene { Name = "Project material" };
         var node = new SceneNode(second, "Project cube");
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") };
-        geometry.OverrideSlots.Add(await CreateSurfaceMaterialOverrideAsync(
-            consumer, api, geometry.Geometry, AssetPath.Parse("/Art/Materials/Shared.omat"), this.TestContext.CancellationToken).ConfigureAwait(false));
+        await ApplySurfaceMaterialOverrideAsync(
+            consumer, api, geometry, AssetPath.Parse("/Art/Materials/Shared.omat"), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = node.AddComponent(geometry);
         second.RootNodes.Add(node);
         var stream = File.Create(Path.Combine(consumer.Root, "Content/Scenes/Project.oscene.json"));

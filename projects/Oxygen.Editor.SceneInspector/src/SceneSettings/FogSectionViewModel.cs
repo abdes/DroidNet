@@ -6,8 +6,8 @@ using System.Numerics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.SceneSettings;
 

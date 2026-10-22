@@ -6,7 +6,6 @@ using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.TestSupport.NativeFieldCases;
@@ -80,7 +79,10 @@ internal static class NativeSceneAssertions
         }
     }
 
-    internal static AssetPath? ReadMaterialAsset(SceneNode node) => node.Components.OfType<GeometryComponent>().Single().OverrideSlots.OfType<MaterialsSlot>().FirstOrDefault()?.Material;
+    internal static AssetPath? ReadMaterialAsset(SceneNode node) => node.Components.OfType<GeometryComponent>().Single().Overrides.All
+        .Where(static entry => entry.Property == SceneSchema.Geometry.Surface.Material.Id)
+        .Select(static entry => (AssetPath?)entry.Value)
+        .FirstOrDefault();
 
     internal static async Task AssertMaterialAsync(NativeSceneFixture fixture, NodeId nodeId, string expected, CancellationToken cancellationToken)
     {

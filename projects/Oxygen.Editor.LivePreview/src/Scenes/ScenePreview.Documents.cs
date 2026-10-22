@@ -10,7 +10,7 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.World;
-using Oxygen.Editor.World.Slots;
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.LivePreview.Scenes;
@@ -496,8 +496,8 @@ internal sealed partial class ScenePreview
 
         public bool EnvironmentAwaitsMount { get; set; }
 
-        // The material overrides each node had when the projector last saw it; an override that goes away is cleared.
-        public Dictionary<NodeId, SurfaceTarget[]> MaterialOverrides { get; } = [];
+        // The surface material overrides each node had when the projector last saw it; an override that goes away is cleared.
+        public Dictionary<NodeId, SourceOverride[]> MaterialOverrides { get; } = [];
     }
 
     private sealed record SceneProjection(DocumentLifetime Lifetime, Scene Snapshot, SceneSyncRevision Boundary)

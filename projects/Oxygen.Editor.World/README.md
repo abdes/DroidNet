@@ -1,9 +1,10 @@
 # Oxygen.Editor.World
 
 The editor's scene model: a scene, its node hierarchy, the components on each
-node, the override slots, and the data records a scene file is written as. It
-has no UI, no engine and no file system: it can be built, edited, saved and
-compared in memory, in a unit test, without a viewport.
+node, the overrides of the values an asset supplies, and the data records a
+scene file is written as. It has no UI, no engine and no file system: it can be
+built, edited, saved and compared in memory, in a unit test, without a
+viewport.
 
 A scene does not know where it is stored, which project opened it or how the
 Scene Explorer arranges it. Whoever holds the scene knows that.
@@ -12,8 +13,8 @@ Scene Explorer arranges it. Whoever holds the scene knows that.
 
 - **Scene → nodes → components.** A scene holds a tree of nodes; every node has
   a transform and any other components.
-- **Override slots** replace default values on a node, a geometry, or one LOD or
-  submesh of it.
+- **Overrides** replace the values a node's asset supplies, on one node's
+  geometry or on one of its parts, such as a surface.
 - **Data records are the file format.** The model dehydrates to records and
   hydrates from them; JSON only ever sees the records.
 - **Edits live elsewhere.** `Oxygen.Editor.Scenes` changes open scenes, with
@@ -55,13 +56,12 @@ flowchart BT
 
 ## Source layout
 
-| Folder               | Contents                                                                                                                                                                                       |
-| -------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `src/` (root)        | `Scene` and its `GameObject` base, `SceneNode`, the hierarchy queries in `SceneNodeExtensions`, `IPersistent<TData>` and `OverridableProperty<T>`                                              |
-| `src/Components/`    | The components a node carries: metadata, hierarchy, transform, node flags, geometry, cameras, lights, local fog volume and scripting, plus `LightValidation`                                   |
-| `src/Slots/`         | The override slots (`RenderingSlot`, `LightingSlot`, `MaterialsSlot`, `LevelOfDetailSlot`) and the LOD policies                                                                                |
-| `src/Serialization/` | The data records a scene is written as (`SceneData`, `SceneNodeData`, one record per component and slot), the source-generated `SceneJsonContext` and `SceneSerializer`; see its [README][ser] |
-| `src/Utils/`         | The vector and quaternion JSON converters, `TransformConverter` (engine transform and Euler-angle conversions) and `SceneTraversal`                                                            |
+| Folder               | Contents                                                                                                                                                                                                                                                    |
+| -------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `src/` (root)        | `Scene` and its `GameObject` base, `SceneNode`, the hierarchy queries in `SceneNodeExtensions`, `IPersistent<TData>`                                                                                                                                        |
+| `src/Components/`    | The components a node carries: metadata, hierarchy, transform, node flags, geometry, cameras, lights, local fog volume and scripting, plus `LightValidation` and the override store (`IOverridableComponent`, `SourceOverrides`, `PartOverrides`, `PartId`) |
+| `src/Serialization/` | The data records a scene is written as (`SceneData`, `SceneNodeData`, one record per component, and the override data), the source-generated `SceneJsonContext` and `SceneSerializer`; see its [README][ser]                                                |
+| `src/Utils/`         | The vector and quaternion JSON converters, `TransformConverter` (engine transform and Euler-angle conversions) and `SceneTraversal`                                                                                                                         |
 
 ## The model
 
@@ -77,7 +77,6 @@ classDiagram
     class GameObject {
         <<abstract>>
         Name
-        OverrideSlots
     }
     class Scene {
         SceneId Id
@@ -90,7 +89,6 @@ classDiagram
     class SceneNode {
         NodeId Id
         Components
-        OverrideSlots
     }
     class GameComponent {
         <<abstract>>
@@ -98,17 +96,14 @@ classDiagram
         Name
         Node
     }
-    class OverrideSlot {
-        <<abstract>>
-    }
 
     GameObject <|-- Scene
     Scene "1" *-- "*" SceneNode : RootNodes
     SceneNode "1" *-- "4..*" GameComponent : Components
-    SceneNode "1" *-- "*" OverrideSlot : OverrideSlots
 ```
 
-The components and slots each have their own small hierarchy:
+The components have their own small hierarchy, and the geometry component holds
+its overrides:
 
 ```mermaid
 ---
@@ -135,13 +130,23 @@ classDiagram
     LightComponent <|-- SpotLightComponent
 
     HierarchyComponent "1" o-- "*" SceneNode : Children
-    GeometryComponent "1" *-- "*" OverrideSlot : OverrideSlots
-    GeometryComponent "1" *-- "*" GeometryOverrideTarget : TargetedOverrides
-    GeometryOverrideTarget "1" *-- "*" OverrideSlot : OverrideSlots
-    OverrideSlot <|-- RenderingSlot
-    OverrideSlot <|-- LightingSlot
-    OverrideSlot <|-- MaterialsSlot
-    OverrideSlot <|-- LevelOfDetailSlot
+    class IOverridableComponent {
+        <<interface>>
+        SourceOverrides Overrides
+        PartOwner(partKind)
+    }
+    class SourceOverrides {
+        Values by PropertyId
+        Parts by PartId
+    }
+    class PartOverrides {
+        LayoutRevision
+        Values by PropertyId
+    }
+
+    IOverridableComponent <|.. GeometryComponent
+    GeometryComponent "1" *-- "1" SourceOverrides : Overrides
+    SourceOverrides "1" *-- "*" PartOverrides : Parts, keyed by PartId
 ```
 
 A small scene, as the Scene Explorer would show it with its optional components
@@ -152,7 +157,7 @@ Scene "Courtyard"
 ├── SceneNode "Sun"
 │   └── DirectionalLightComponent      (drives the primary atmosphere light)
 ├── SceneNode "Fountain"
-│   ├── GeometryComponent              (MaterialsSlot targeted at LOD 0, submesh 1)
+│   ├── GeometryComponent              (overrides the material of one surface)
 │   └── SceneNode "Water"
 │       └── LocalFogVolumeComponent
 └── SceneNode "Player"
@@ -199,10 +204,8 @@ node is. It belongs to one scene for its whole life and has:
   - `Flags`, a `NodeFlagsComponent` with `IsVisible`, `CastsShadows`,
     `ReceivesShadows`, `IsStatic`, `IsRayCastingSelectable` and
     `IgnoreParentTransform`.
-- `OverrideSlots`, which apply to every component of the node.
-
-Whether a node is present in the engine is Live Preview's state, not the
-node's.
+    Whether a node is present in the engine is Live Preview's state, not the
+    node's.
 
 `Descendants`, `Ancestors`, `DescendantsAndSelf`, `AncestorsAndSelf`,
 `HierarchyPath` and `Scene.FindByPath` query the hierarchy. `FindByPath` accepts
@@ -216,7 +219,7 @@ and knows its `Node`. The transform reports `IsLocked`, so it cannot be removed.
 | Component                                                                | Holds                                                                                                      |
 | ------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
 | `TransformComponent`                                                     | Local position, rotation and scale                                                                         |
-| `GeometryComponent`                                                      | The geometry asset (always set), component-level slots and slots targeted at one LOD or submesh            |
+| `GeometryComponent`                                                      | The geometry asset (always set) and the overrides of its own values and of its surfaces                    |
 | `PerspectiveCamera`, `OrthographicCamera`                                | Clip planes and exposure (aperture, shutter rate, ISO), plus field of view or orthographic size            |
 | `DirectionalLightComponent`, `PointLightComponent`, `SpotLightComponent` | Color, intensity, shadows and exposure compensation; a directional light can drive one atmosphere light    |
 | `LocalFogVolumeComponent`                                                | Fog extinction, falloff, albedo, emission and sort priority                                                |
@@ -229,8 +232,8 @@ one light per node and one directional light per atmosphere light.
 
 A scene links to an asset by its URI, an absolute `asset:` URI such as
 `asset:///Content/Geometry/Crate.ogeo`. `GeometryComponent.Geometry`,
-`MaterialsSlot.Material` and `SurfaceTarget.GeometryUri` are required and
-check the form when set (`AssetUris.EnsureAssetUri`), so neither code nor a file
+and a material override's `AssetPath` value are required and check the form
+when set (`AssetUris.EnsureAssetUri`), so neither code nor a file
 can put a missing link, a file path or a web address in a scene. A link to an
 asset that does not exist is still a valid link: Live Preview and the cook
 report the missing asset.
@@ -239,40 +242,59 @@ The scene holds no facts about the linked asset. Code that needs them asks the
 module that owns the asset's family, by the URI: the asset feed for its kind,
 files and availability, and the content pipeline for a mesh's surfaces.
 
-### Override slots
+### Overrides
 
-#### Why slots exist
+#### Why overrides exist
 
 A geometry asset is shared. Every node that shows the same mesh gets that mesh's
-own values: the material on each of its surfaces, and its rendering and
-LOD defaults. A level designer often wants _this_ crate painted red while every
-other crate keeps the material it was imported with. Changing the mesh asset
-would repaint every crate; copying the mesh would lose the link to it.
+own values, such as the material on each of its surfaces. A level designer often
+wants _this_ crate painted red while every other crate keeps the material it was
+imported with. Changing the mesh asset would repaint every crate; copying the
+mesh would lose the link to it.
 
-An override slot solves this. It records, on one scene instance, the values that
-differ from what the asset supplies, and nothing else:
+An override records, on one scene instance, the values that differ from what the
+asset supplies, and nothing else:
 
 - **The asset stays untouched.** An override changes one node's instance. The
   shared mesh and material assets never change.
 - **Only the intent is stored.** The file records what was overridden, not the
   asset's defaults. When the asset changes later, every value the scene did not
   override follows it.
-- **Clearing restores the asset's value.** Removing an override brings back what
-  the mesh supplies. Choosing the engine's default material is a separate,
-  explicit assignment, not a clear.
+- **Clearing restores the asset's value.** An absent override is the source's
+  (the geometry asset's) value. Choosing the engine's default material is a
+  separate, explicit assignment, not a clear.
+
+#### The override store
+
+`GeometryComponent`, the engine's renderable component, implements
+`IOverridableComponent` and holds `Overrides`, an immutable `SourceOverrides`
+value:
+
+| Member                | Holds                                                                                              |
+| --------------------- | -------------------------------------------------------------------------------------------------- |
+| `Values`              | Overrides of the component's own properties, by `PropertyId`                                       |
+| `Parts`               | Overrides of each part, by `PartId(Kind, Id)`, each a `PartOverrides(LayoutRevision, Values)`      |
+| `PartOwner(partKind)` | On `IOverridableComponent`: the asset that owns the IDs of a part kind (the geometry for surfaces) |
+
+A `PropertyId` (in `Oxygen.Managed.Core`) names a component kind, an optional
+part kind and a JSON pointer. Only the properties in the generated
+`SceneSchema.Overridable`, the properties with `sources` in the engine schema,
+can be overridden, on their component and part kinds and with a value of their
+type. Today the only one is `SceneSchema.Geometry.Surface.Material`: part kind
+`surface`, key `/material`, an `AssetPath`.
 
 #### Material overrides follow the engine's surface identity
 
 A mesh's surfaces belong to the engine. Its geometry inventory gives each
-surface an opaque `SurfaceId`, says which LODs and submeshes the surface binds,
-and carries a layout revision. A `MaterialsSlot` holds the `Material` to use and
-a `SurfaceTarget` naming the surface it replaces:
+surface an opaque surface ID, says which LODs and submeshes the surface binds,
+and carries a layout revision. A material override is an entry of
+`Overrides.Parts` for the part `PartId("surface", <surface id>)`:
 
-| Target field     | Purpose                                                                                        |
+| Field            | Purpose                                                                                        |
 | ---------------- | ---------------------------------------------------------------------------------------------- |
-| `GeometryUri`    | The geometry whose inventory owns the surface                                                  |
-| `SurfaceId`      | The engine's identity of the surface; names, list order and indices are for display only       |
+| `PartId.Id`      | The engine's identity of the surface; names, list order and indices are for display only       |
 | `LayoutRevision` | The inventory revision seen when the override was chosen, so stale assignments can be detected |
+| `Values`         | The overridden properties of the surface; `/material` is the material to use                   |
 
 Because the engine maps the surface to every LOD and submesh it binds, one override
 covers all of them. The editor never derives a surface from a name or an index, so
@@ -288,7 +310,7 @@ flowchart LR
     end
 
     subgraph instance["Scene instance"]
-        o2["<b>Node 'Red crate'</b><br/>GeometryComponent<br/>MaterialsSlot<br/>target: Crate.geometry, id 91be…, rev 7<br/>material: RedPaint"]
+        o2["<b>Node 'Red crate'</b><br/>GeometryComponent.Overrides<br/>part surface:91be…, rev 7<br/>/material: RedPaint"]
     end
 
     subgraph result["Rendered for this node"]
@@ -302,63 +324,19 @@ flowchart LR
     o2 --> r2
 ```
 
-What each module does with a material override:
+What each module does with an override:
 
-| Module                          | Role                                                                                                                                              |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor.Scenes`          | `SetSurfaceMaterial` sets or clears it after checking the surface against the current inventory; `SetGeometry` keeps those the new mesh still has |
-| `Oxygen.Editor.LivePreview`     | Sends it to the engine with its surface id and layout revision                                                                                    |
-| `Oxygen.Editor.ContentPipeline` | Writes it into the scene descriptor; an override with no matching geometry or surface id fails the scene's cook                                   |
-| `Oxygen.Editor.SceneInspector`  | Lists the mesh's surfaces in the inspector and offers Reassign or Clear for overrides whose surface no longer resolves                            |
+| Module                          | Role                                                                                                                                                                            |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor.Scenes`          | `SetOverrides` writes or resets it after checking the property, part kind, value and surface against the geometry's inventory; `SetGeometry` keeps those the new mesh still has |
+| `Oxygen.Editor.LivePreview`     | Sends each surface material override to the engine with its surface id and layout revision, and clears the ones that went away                                                  |
+| `Oxygen.Editor.ContentPipeline` | Writes each material override as a material override record of the renderable; an override with no matching geometry or surface id fails the scene's cook                       |
+| `Oxygen.Editor.SceneInspector`  | Lists the mesh's surfaces in the inspector and offers Reassign or Clear for overrides whose surface no longer resolves                                                          |
 
 An override whose surface no longer exists after a reimport is kept, with its
 material and surface context, until it is reassigned or cleared. It blocks only the
 cook of the scenes that hold it. The full identity and reimport contract is in
 [content-pipeline.md §20][surface-identity].
-
-#### Where slots attach
-
-Slots attach at three scopes, from the broadest to the narrowest:
-
-```mermaid
-flowchart TB
-    nodeScope["<b>Node</b> · SceneNode.OverrideSlots<br/>every component of the node"]
-    geometryScope["<b>Geometry</b> · GeometryComponent.OverrideSlots<br/>one geometry instance"]
-    targetScope["<b>LOD or submesh</b> · GeometryOverrideTarget.OverrideSlots<br/>chosen by LodIndex and SubmeshIndex, where -1 means all"]
-
-    nodeScope --> geometryScope --> targetScope
-```
-
-Material overrides live on the geometry scope. They do not need the narrowest
-scope: the engine's surface identity already says which LODs and submeshes are
-affected.
-
-#### Slot types
-
-A slot type groups overridable values that belong together. Except in
-`MaterialsSlot`, whose presence is the override, each value is an
-`OverridableProperty<T>`:
-
-| State          | `IsOverridden` | `EffectiveValue` | Written to the file |
-| -------------- | -------------- | ---------------- | ------------------- |
-| Not overridden | `false`        | `DefaultValue`   | Nothing             |
-| Overridden     | `true`         | `OverrideValue`  | The override        |
-
-`WithOverride` and `ClearOverride` return a new value; the slot raises the
-change notification when the value is replaced.
-
-| Slot                | Overrides                                                   | Used today                                              |
-| ------------------- | ----------------------------------------------------------- | ------------------------------------------------------- |
-| `MaterialsSlot`     | The material of one engine surface                          | Yes, on the geometry scope, by every module above       |
-| `RenderingSlot`     | Visibility                                                  | Stored and round-tripped; nothing authors or applies it |
-| `LightingSlot`      | Shadow casting and receiving                                | Stored and round-tripped; nothing authors or applies it |
-| `LevelOfDetailSlot` | The LOD policy: fixed, by distance or by screen-space error | Stored and round-tripped; nothing authors or applies it |
-
-Node visibility and shadows come from the node's `NodeFlagsComponent`
-(`IsVisible`, `CastsShadows`, `ReceivesShadows`), not from `RenderingSlot` or
-`LightingSlot`.
-The node scope and the LOD-or-submesh scope are likewise stored but not
-authored; asset reference tracking still looks in them for materials.
 
 ## Persistence
 
@@ -370,8 +348,8 @@ reads it:
 flowchart TB
     subgraph world["Oxygen.Editor.World"]
         direction LR
-        model["<b>Scene model</b><br/>Scene, SceneNode,<br/>components, slots"]
-        records["<b>Data records</b><br/>SceneData, SceneNodeData,<br/>ComponentData, OverrideSlotData"]
+        model["<b>Scene model</b><br/>Scene, SceneNode,<br/>components, overrides"]
+        records["<b>Data records</b><br/>SceneData, SceneNodeData,<br/>ComponentData, SourceOverridesData"]
         model -- "Dehydrate()" --> records
         records -- "CreateAndHydrate()" --> model
     end
@@ -393,14 +371,32 @@ flowchart TB
 
 Each persistent type implements `IPersistent<TData>`: `Dehydrate()` returns its
 data record and `Hydrate(data)` restores it. `Scene.CreateAndHydrate`,
-`SceneNode.CreateAndHydrate`, `GameComponent.CreateAndHydrate` and
-`OverrideSlot.CreateAndHydrate` create the right type from a record. Hydration
+`SceneNode.CreateAndHydrate` and `GameComponent.CreateAndHydrate` create the
+right type from a record. A geometry component converts its overrides with
+`SourceOverridesJson`, which reads each value as the type
+`SceneSchema.Overridable` gives its property. Hydration
 suppresses change notifications.
 
 `SceneJsonContext` serializes the records with the source generator, writes
 vectors and quaternions as `{ "X": … }` objects, and omits null values.
-Components and slots carry a `$type` discriminator. Identities are written as
+Components carry a `$type` discriminator. Identities are written as
 GUID strings.
+
+A geometry component writes its overrides as an `Overrides` object, omitted
+when empty:
+
+```json
+"Overrides": {
+  "Parts": [
+    {
+      "Kind": "surface",
+      "Id": "<surface id>",
+      "LayoutRevision": "<64 lowercase hex>",
+      "Values": { "/material": "asset:///Content/Materials/RedPaint.omat" }
+    }
+  ]
+}
+```
 
 `SceneData` has these top-level properties:
 
@@ -420,12 +416,14 @@ the cook and the tests use it.
 
 ### What hydration rejects
 
-| Problem                                                                     | Result                                                                           |
-| --------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
-| A node without exactly one transform                                        | `JsonException`                                                                  |
-| Lights that fail `LightValidation`                                          | `ArgumentException` when hydrating, `InvalidOperationException` when dehydrating |
-| A geometry or material link that is missing or not an absolute `asset:` URI | `JsonException`                                                                  |
-| Component identities empty or repeated in a node                            | Not rejected: they are replaced with new identities                              |
+| Problem                                                                                                 | Result                                                                           |
+| ------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------- |
+| A node without exactly one transform                                                                    | `JsonException`                                                                  |
+| Lights that fail `LightValidation`                                                                      | `ArgumentException` when hydrating, `InvalidOperationException` when dehydrating |
+| A geometry or material link that is missing or not an absolute `asset:` URI                             | `JsonException`                                                                  |
+| An override of a property that is not overridable, or with a value of the wrong type                    | `JsonException`                                                                  |
+| A member a record does not declare, such as a removed key in `GeometryComponentData` or `SceneNodeData` | `JsonException`; the scene fails to open                                         |
+| Component identities empty or repeated in a node                                                        | Not rejected: they are replaced with new identities                              |
 
 `Scene.Hydrate` builds every node before replacing any, so data it rejects
 leaves the scene as it was.
@@ -477,7 +475,7 @@ in their own module.
 ## Tests
 
 [tests/](tests/) holds the unit tests: scene and node behavior, identities in
-JSON, the starting camera and input contexts, components, slots, vector
+JSON, the starting camera and input contexts, components, overrides, vector
 serialization and the transform conversions.
 
 ## Related documentation

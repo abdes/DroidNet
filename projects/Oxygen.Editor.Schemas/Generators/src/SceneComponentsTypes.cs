@@ -41,6 +41,11 @@ internal static class SceneComponentsTypes
     public static string EditorType(SceneComponentsSchema.PropertyEntry property)
         => string.Equals(property.Type, "enum", StringComparison.Ordinal) ? Enums[property.Enum!] : Values[property.Type];
 
+    /// <summary>Gets the editor type of a property's values, which are never null.</summary>
+    /// <param name="property">A property whose type is known.</param>
+    /// <returns>The fully qualified type name, without a nullable annotation.</returns>
+    public static string ValueType(SceneComponentsSchema.PropertyEntry property) => EditorType(property).TrimEnd('?');
+
     /// <summary>Gets the name of the editor method that implements an encoding.</summary>
     /// <param name="encoding">The schema's encoding name.</param>
     /// <returns>The method name, in PascalCase.</returns>

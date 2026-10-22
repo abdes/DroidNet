@@ -72,8 +72,41 @@
           "description": "The properties edited through the schema; empty for a component authored only as a whole.",
           "type": "array",
           "items": { "$ref": "#/definitions/property" }
+        },
+        "parts": {
+          "description": "The parts of the component, each identified by an ID the asset that defines it owns.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/part" }
         }
       }
+    },
+    "part": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["name", "kind", "properties"],
+      "properties": {
+        "name": { "$ref": "#/definitions/identifier" },
+        "kind": {
+          "description": "The part kind that addresses the part's properties.",
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9]*(-[a-z0-9]+)*$"
+        },
+        "properties": {
+          "description": "The part's properties, each supplied by a source and stored as an override.",
+          "type": "array",
+          "minItems": 1,
+          "items": { "$ref": "#/definitions/part_property" }
+        }
+      }
+    },
+    "part_property": {
+      "description": "A part property: always supplied by a source and never applied field by field.",
+      "allOf": [
+        { "$ref": "#/definitions/property" },
+        { "required": ["sources"] },
+        { "not": { "required": ["fields"] } }
+      ]
     },
     "property": {
       "type": "object",
@@ -102,6 +135,13 @@
         "encoding": {
           "description": "A unit conversion applied before the value goes to its fields.",
           "enum": ["degrees-to-radians"]
+        },
+        "sources": {
+          "description": "What may supply the value; a scene then stores only its overrides of it.",
+          "type": "array",
+          "minItems": 1,
+          "uniqueItems": true,
+          "items": { "enum": ["asset", "model"] }
         }
       },
       "allOf": [

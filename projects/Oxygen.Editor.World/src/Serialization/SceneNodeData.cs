@@ -11,8 +11,10 @@ namespace Oxygen.Editor.World.Serialization;
 /// <summary>
 /// Data transfer object for a scene node: its identity and its components. The name, hierarchy, transform and node
 /// flags are the required <see cref="MetadataData"/>, <see cref="HierarchyData"/>, <see cref="TransformData"/> and
-/// <see cref="NodeFlagsData"/> entries, exactly one each.
+/// <see cref="NodeFlagsData"/> entries, exactly one each. A member it does not declare, such as a removed node field,
+/// rejects the scene instead of being dropped.
 /// </summary>
+[JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public record SceneNodeData
 {
     /// <summary>
@@ -25,11 +27,6 @@ public record SceneNodeData
     /// Gets or sets the node's components, required ones included.
     /// </summary>
     public IList<ComponentData> Components { get; set; } = [];
-
-    /// <summary>
-    /// Gets or sets the list of override slots for this node.
-    /// </summary>
-    public IList<OverrideSlotData> OverrideSlots { get; set; } = [];
 
     /// <summary>
     /// Gets the node's name, held by its metadata component.

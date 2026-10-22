@@ -5,7 +5,7 @@
 using AwesomeAssertions;
 using Oxygen.Editor.SceneInspector.Editing;
 using Oxygen.Editor.Scenes.Authoring;
-using Oxygen.Editor.Schemas;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Unit.Tests;
 

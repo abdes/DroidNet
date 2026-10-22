@@ -19,4 +19,10 @@
         <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
     </ItemGroup>
 
+    <!-- The scene component kinds and typed property ids are generated from the engine's scene components schema. -->
+    <PropertyGroup>
+        <SceneComponentsOutput>PropertyIds</SceneComponentsOutput>
+    </PropertyGroup>
+    <Import Project="$(ProjectsRoot)\Oxygen.Editor.Schemas\Generators\SceneComponents.targets" />
+
 </Project>

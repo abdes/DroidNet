@@ -415,15 +415,6 @@ internal sealed partial class ScenePreview
 
     [LoggerMessage(
         SkipEnabledCheck = true,
-        Level = LogLevel.Warning,
-        Message = "Live LOD policy sync is unsupported for node {NodeId}")]
-    private static partial void LogLodPolicySyncUnsupported(ILogger logger, NodeId nodeId);
-
-    private void LogLodPolicySyncUnsupported(NodeId nodeId)
-        => LogLodPolicySyncUnsupported(this.logger, nodeId);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
         Level = LogLevel.Error,
         Message = "Failed to attach camera component to node {NodeId}")]
     private static partial void LogFailedToAttachCameraComponent(ILogger logger, Exception exception, NodeId nodeId);

@@ -10,10 +10,10 @@ namespace Oxygen.Editor.LivePreview.Scenes;
 /// <content>The engine component, fields and encoding of each property the engine takes field by field.</content>
 internal static partial class SceneWire
 {
-    private static void AddSchemaMappings(global::System.Collections.Generic.Dictionary<global::Oxygen.Editor.Schemas.PropertyId, Mapping> map)
+    private static void AddSchemaMappings(global::System.Collections.Generic.Dictionary<global::Oxygen.Managed.Core.PropertyId, Mapping> map)
     {
-        map.Add(global::Oxygen.Editor.Scenes.Properties.SceneSchema.Lamp.Color.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.ColorR, (ushort)global::Oxygen.Editor.Runtime.Engine.LampField.ColorG, (ushort)global::Oxygen.Editor.Runtime.Engine.LampField.ColorB]));
-        map.Add(global::Oxygen.Editor.Scenes.Properties.SceneSchema.Lamp.Range.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.Range]));
-        map.Add(global::Oxygen.Editor.Scenes.Properties.SceneSchema.Lamp.FovDegrees.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.FovRadians]) { Encode = DegreesToRadians });
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.Color.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.ColorR, (ushort)global::Oxygen.Editor.Runtime.Engine.LampField.ColorG, (ushort)global::Oxygen.Editor.Runtime.Engine.LampField.ColorB]));
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.Range.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.Range]));
+        map.Add(global::Oxygen.Editor.World.SceneSchema.Lamp.FovDegrees.Id, new Mapping(global::Oxygen.Editor.Runtime.Engine.RuntimeComponentId.Lamp, [(ushort)global::Oxygen.Editor.Runtime.Engine.LampField.FovRadians]) { Encode = DegreesToRadians });
     }
 }

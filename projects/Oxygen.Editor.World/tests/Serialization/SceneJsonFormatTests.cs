@@ -49,30 +49,23 @@ public sealed class SceneJsonFormatTests
     }
 
     [TestMethod]
-    [DataRow("MaterialsSlot")]
-    [DataRow("RenderingSlot")]
-    [DataRow("LightingSlot")]
-    [DataRow("LevelOfDetailSlot")]
-    public void OverrideSlotData_SerializesExpectedTypeDiscriminator(string slotType)
+    public void EveryOverridableValueType_HasAJsonContract()
+        => _ = SceneSchema.Overridable.Values.Distinct()
+            .Where(static type => SceneJsonContext.Default.GetTypeInfo(type) is null)
+            .Should().BeEmpty("an override value is read and written as its property's type");
+
+    [TestMethod]
+    public void EveryAssetTypedOverridableProperty_IsAReferenceField()
     {
-        OverrideSlotData instance = slotType switch
+        var assetProperties = SceneSchema.Overridable.Where(static entry => entry.Value == typeof(AssetPath)).Select(static entry => entry.Key).ToList();
+
+        _ = assetProperties.Should().NotBeEmpty();
+        foreach (var property in assetProperties)
         {
-            "MaterialsSlot" => new MaterialsSlotData
-            {
-                GeometryUri = AssetPath.Parse("/Content/Mesh.geometry"),
-                SurfaceId = Guid.NewGuid(),
-                LayoutRevision = "rev1",
-                MaterialUri = AssetPath.Parse("/Content/Material.omat"),
-            },
-            "RenderingSlot" => new RenderingSlotData(),
-            "LightingSlot" => new LightingSlotData(),
-            "LevelOfDetailSlot" => new LevelOfDetailSlotData(),
-            _ => throw new ArgumentException("Unknown slot type", nameof(slotType)),
-        };
-
-        var json = JsonSerializer.Serialize(instance, SceneJsonContext.Default.OverrideSlotData);
-
-        _ = json.Should().Contain($"\"$type\": \"{slotType}\"");
+            _ = SceneReferenceFields.All.Should().Contain(
+                field => field.Path.EndsWith("/Values/" + AssetReferenceField.Escape(property.JsonPointer), StringComparison.Ordinal),
+                $"relocation must rewrite the asset of {property}");
+        }
     }
 
     [TestMethod]
@@ -128,5 +121,21 @@ public sealed class SceneJsonFormatTests
         var act = async () => await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
 
         _ = await act.Should().ThrowAsync<JsonException>().ConfigureAwait(false);
+    }
+
+    [TestMethod]
+    public async Task DeserializeAsync_NodeWithRemovedOverrideSlots_ThrowsJsonException()
+    {
+        var stream = new MemoryStream(Encoding.UTF8.GetBytes("""
+            { "Id": "00000000-0000-4000-8000-000000000101", "Name": "Main", "RootNodes": [ { "Id": "00000000-0000-4000-8000-000000000201",
+              "Components": [ { "$type": "Metadata", "Name": "Box" }, { "$type": "Transform", "Name": "Transform" },
+                { "$type": "NodeFlags", "Name": "Rendering" }, { "$type": "Hierarchy", "Name": "Hierarchy" } ],
+              "OverrideSlots": [] } ] }
+            """));
+        await using var lifetime = stream.ConfigureAwait(false);
+
+        var act = async () => await SceneSerializer.DeserializeAsync(stream).ConfigureAwait(false);
+
+        _ = await act.Should().ThrowAsync<JsonException>("a stale scene fails to open instead of being saved without what it held").ConfigureAwait(false);
     }
 }

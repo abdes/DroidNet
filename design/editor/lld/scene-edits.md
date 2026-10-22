@@ -21,7 +21,7 @@ mandatory edit rules it implements, are in
 | `REQ-005`  | Add and remove component edits, and one property path for every component and the environment (5.11).            |
 | `REQ-006`  | Every change is an edit recorded into its document's history by one frame; batches leave no partial entry (5.4). |
 | `REQ-008`  | The change stream (5.8) is what the live preview projects; no edit calls the engine.                             |
-| `REQ-012`  | `SetSurfaceMaterial` and `RemoveSurfaceMaterials` against the geometry's surface inventory (5.16).               |
+| `REQ-012`  | `SetOverrides` against the geometry's surface inventory (5.16).                                                  |
 | `REQ-043`  | `SetScriptSlots` with undo, and retargeting of asset references held in history (5.12).                          |
 | `REQ-044`  | `SetStartingCamera` and `SetStartingInputContexts` author what Play starts with.                                 |
 | `GOAL-006` | Every refusal is a result with coded diagnostics; an exception from an edit is a defect, never swallowed (5.9).  |
@@ -320,7 +320,7 @@ scene, which already holds them.
 | `ComponentRemoved(NodeId, ComponentId, string kind)`, the kind `SceneComponents.Add` takes | remove component                            |
 | `PropertiesChanged(NodeId? node, properties, EditPhase)`                                   | properties (`node` null: scene)             |
 | `GeometryChanged(NodeId)`                                                                  | geometry asset                              |
-| `SurfaceMaterialsChanged(NodeId)`                                                          | surfaces                                    |
+| `OverridesChanged(NodeId, properties)`                                                     | overrides, such as surface materials        |
 | `LayoutChanged`                                                                            | every edit that changes the explorer layout |
 | `EditorVisibilityChanged(nodes)`                                                           | hide or show in editor                      |
 | `StartingCameraChanged`, `StartingInputContextsChanged`, `SceneReferencesChanged`          | scene settings                              |
@@ -351,7 +351,7 @@ Consumers:
   - reporting engine outcomes.
 - **LivePreview's content demand** follows `NodesAdded`, `NodesRemoved`,
   `ComponentAdded`, `ComponentRemoved`, `GeometryChanged` and
-  `SurfaceMaterialsChanged`.
+  `OverridesChanged`.
 - **Selection** drops removed nodes: the selection is reconciled with the scene
   when nodes are removed. Edits do not set the selection; a caller that wants
   created nodes selected selects the ids it put in the edit.
@@ -468,7 +468,7 @@ batch.
 
 - **In history.** An entry recorded before an asset moved holds the old
   `AssetPath`. Edits that carry asset references (`SetGeometry`,
-  `SetSurfaceMaterial`, `InsertNodes`, `SetStartingInputContexts`,
+  `SetOverrides`, `InsertNodes`, `SetStartingInputContexts`,
   `SetSceneReferences`, `SetScriptSlots`, `SetSceneProperties`) retarget them
   through `scope.Redirects` in `Validate` and `Apply`, and report a reference to
   a deleted asset as an `AssetReference.Deleted` warning naming the node that
@@ -525,30 +525,29 @@ public sealed record NodePlacementState(NodeId Node, NodePosition At, TransformD
 public readonly record struct LayoutEntryId(NodeId? Node, FolderId? Folder);       // a node or a folder entry
 ```
 
-| Edit                                                                                                                                         | Revert                                                                                                   |
-| -------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
-| `InsertNodes(IReadOnlyList<NodeInsert>, string? label)`                                                                                      | `RemoveNodes(roots)`                                                                                     |
-| `RemoveNodes(IReadOnlyList<NodeId> roots)`                                                                                                   | `InsertNodes` with each root's data, positions and layout entry subtree (folders under it, `IsExpanded`) |
-| `RenameNode(NodeId, string)`                                                                                                                 | `RenameNode` with the old name                                                                           |
-| `ReparentNodes(IReadOnlyList<NodeId>, NodeId? parent, bool preserveWorld, NodeId? after)`                                                    | `PlaceNodes` with each node's prior placement state                                                      |
-| `ReorderNode(NodeId, NodePosition, LayoutPosition)`                                                                                          | `PlaceNodes` with the prior state                                                                        |
-| `PlaceNodes(IReadOnlyList<NodePlacementState>)`                                                                                              | `PlaceNodes` with the states it replaced                                                                 |
-| `CreateFolder(FolderId, LayoutPosition, string name, bool? isExpanded)`                                                                      | `RemoveFolder(id, promoteChildren: false)`                                                               |
-| `RemoveFolder(FolderId, bool promoteChildren)`                                                                                               | `RestoreFolder` with its entry, position and its children's prior positions                              |
-| `RestoreFolder(ExplorerEntryData entry, LayoutPosition, IReadOnlyList<LayoutEntryId> children)`                                              | `RemoveFolder`                                                                                           |
-| `RenameFolder(FolderId, string)`                                                                                                             | `RenameFolder` with the old name                                                                         |
-| `MoveLayoutEntries(IReadOnlyList<LayoutEntryId>, LayoutPosition to)`                                                                         | `PlaceLayoutEntries` with each entry's prior position                                                    |
-| `PlaceLayoutEntries(IReadOnlyList<LayoutEntryPosition>)`                                                                                     | `PlaceLayoutEntries` with the positions it replaced                                                      |
-| `AddComponent(NodeId, ComponentData, int index)`                                                                                             | `RemoveComponent`                                                                                        |
-| `RemoveComponent(NodeId, ComponentId)`                                                                                                       | `AddComponent` with its data at its old index                                                            |
-| `SetProperties`, `SetSceneProperties`                                                                                                        | the captured before values, coupled ones included; `SetSceneEnvironment` for the environment (5.11)      |
-| `SetGeometry(IReadOnlyCollection<NodeId>, AssetPath)`, or per node                                                                           | per node, the old geometry                                                                               |
-| `SetSurfaceMaterial(IReadOnlyCollection<NodeId>, SurfaceTarget, AssetPath?)`, or per node                                                    | per node, the old surface state                                                                          |
-| `RemoveSurfaceMaterials(IReadOnlyDictionary<NodeId, IReadOnlyList<SurfaceTarget>>)`                                                          | `RestoreSurfaceMaterials`, the surfaces at their positions                                               |
-| `SetStartingCamera(NodeId?)`, `SetStartingInputContexts(IReadOnlyList<StartingInputContextData>)`, `SetSceneReferences(SceneReferencesData)` | the old value                                                                                            |
-| `SetScriptSlots(NodeId, ImmutableArray<ScriptSlot>)`                                                                                         | the old slots                                                                                            |
-| `SetEditorHidden(IReadOnlyList<NodeId>, bool)` (`ChangesDocument = false`)                                                                   | the old flags                                                                                            |
-| `SceneEditBatch`                                                                                                                             | 5.6                                                                                                      |
+| Edit                                                                                                                                                                                                    | Revert                                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------- |
+| `InsertNodes(IReadOnlyList<NodeInsert>, string? label)`                                                                                                                                                 | `RemoveNodes(roots)`                                                                                     |
+| `RemoveNodes(IReadOnlyList<NodeId> roots)`                                                                                                                                                              | `InsertNodes` with each root's data, positions and layout entry subtree (folders under it, `IsExpanded`) |
+| `RenameNode(NodeId, string)`                                                                                                                                                                            | `RenameNode` with the old name                                                                           |
+| `ReparentNodes(IReadOnlyList<NodeId>, NodeId? parent, bool preserveWorld, NodeId? after)`                                                                                                               | `PlaceNodes` with each node's prior placement state                                                      |
+| `ReorderNode(NodeId, NodePosition, LayoutPosition)`                                                                                                                                                     | `PlaceNodes` with the prior state                                                                        |
+| `PlaceNodes(IReadOnlyList<NodePlacementState>)`                                                                                                                                                         | `PlaceNodes` with the states it replaced                                                                 |
+| `CreateFolder(FolderId, LayoutPosition, string name, bool? isExpanded)`                                                                                                                                 | `RemoveFolder(id, promoteChildren: false)`                                                               |
+| `RemoveFolder(FolderId, bool promoteChildren)`                                                                                                                                                          | `RestoreFolder` with its entry, position and its children's prior positions                              |
+| `RestoreFolder(ExplorerEntryData entry, LayoutPosition, IReadOnlyList<LayoutEntryId> children)`                                                                                                         | `RemoveFolder`                                                                                           |
+| `RenameFolder(FolderId, string)`                                                                                                                                                                        | `RenameFolder` with the old name                                                                         |
+| `MoveLayoutEntries(IReadOnlyList<LayoutEntryId>, LayoutPosition to)`                                                                                                                                    | `PlaceLayoutEntries` with each entry's prior position                                                    |
+| `PlaceLayoutEntries(IReadOnlyList<LayoutEntryPosition>)`                                                                                                                                                | `PlaceLayoutEntries` with the positions it replaced                                                      |
+| `AddComponent(NodeId, ComponentData, int index)`                                                                                                                                                        | `RemoveComponent`                                                                                        |
+| `RemoveComponent(NodeId, ComponentId)`                                                                                                                                                                  | `AddComponent` with its data at its old index                                                            |
+| `SetProperties`, `SetSceneProperties`                                                                                                                                                                   | the captured before values, coupled ones included; `SetSceneEnvironment` for the environment (5.11)      |
+| `SetGeometry(IReadOnlyCollection<NodeId>, AssetPath)`, or per node                                                                                                                                      | per node, the old geometry                                                                               |
+| `SetOverrides(IReadOnlyCollection<NodeId>, IReadOnlyList<OverrideWrite>)`, or per node, an `OverrideWrite(Property, Part, LayoutRevision, Value)` writing, or with a null value resetting, one override | `SetOverrides` with each node's previous overrides                                                       |
+| `SetStartingCamera(NodeId?)`, `SetStartingInputContexts(IReadOnlyList<StartingInputContextData>)`, `SetSceneReferences(SceneReferencesData)`                                                            | the old value                                                                                            |
+| `SetScriptSlots(NodeId, ImmutableArray<ScriptSlot>)`                                                                                                                                                    | the old slots                                                                                            |
+| `SetEditorHidden(IReadOnlyList<NodeId>, bool)` (`ChangesDocument = false`)                                                                                                                              | the old flags                                                                                            |
+| `SceneEditBatch`                                                                                                                                                                                        | 5.6                                                                                                      |
 
 `PlaceLayoutEntries` puts entries at positions captured from one layout, so they
 return exactly where they were; `RestoreFolder` takes back, in order, the
@@ -585,8 +584,8 @@ raises `LayoutChanged`.
   `IsExpanded`, to the destination scope; they never delete it. A
   `LayoutPosition` is therefore enough for `PlaceNodes` to put it back.
 - **Geometry.** `SetGeometry` refuses a missing asset ("Remove the component to
-  detach geometry."), and leaves override slots untouched; unresolved surface materials are
-  removed only by `RemoveSurfaceMaterials`.
+  detach geometry."), and leaves the overrides untouched; unresolved surface materials are
+  removed only by `SetOverrides` resetting them.
 - The compensated transforms of `ReparentNodes` with `preserveWorld` raise no
   `PropertiesChanged`: views read them from the scene, and LivePreview pushes
   them on `NodesPlaced`.
@@ -624,16 +623,17 @@ These build edits; they are not edits.
   `SceneNodeCopies.DuplicateInPlace` builds the `InsertNodes` of the viewport's
   duplicate.
 - **Surface inventories** are read before the edit, never by it.
-  `SurfaceMaterialEdits.SetAsync` and `ClearUnresolvedAsync` read the inventory
+  `SurfaceEdits.SetAsync` and `ClearUnresolvedAsync` read the inventory
   through ContentPipeline's `IGeometrySurfaceProvider` and build
-  `SetSurfaceMaterial` or `RemoveSurfaceMaterials` with the surface ids and the
-  inventory's `LayoutRevision`, refusing a surface the current inventory does not
-  have. `Validate` checks that each node still uses that geometry (a stale surface
-  is `Invalid` [`Surface.Stale`]; `Refused` is only for missing or locked
-  targets). An assignment replaces the node's override of the surface, the revision
+  `SetOverrides` with the surface ids and the inventory's `LayoutRevision`,
+  refusing a surface the current inventory does not have. `SetOverrides` checks
+  that the property is overridable, the part kind, and the value's type and rule
+  (`OverrideRules`), and that each node's component still uses the write's
+  `PartOwner` (otherwise `Invalid` [`Part.Stale`]; `Refused` is only for missing
+  or locked targets). Its undo writes back the previous overrides. An assignment replaces the node's override of the surface, the revision
   it records included, whichever inventory the override came from: as in other
   engines, a reimport never locks a surface the inspector shows. Overrides no surface
-  resolves show as unresolved, and `RemoveSurfaceMaterials` clears them.
+  resolves show as unresolved, and a null-valued write clears them.
 - **`LayoutScopes`** answers what callers need to build layout edits: the scope
   of a place or entry (`TryScopeOf`), an entry's place (`PositionOf`), a
   container's entries (`EntriesOf`) and its end (`EndOf`). A drop in the

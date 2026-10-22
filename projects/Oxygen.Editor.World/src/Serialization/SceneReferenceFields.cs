@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Serialization;
@@ -15,9 +16,7 @@ public static class SceneReferenceFields
     // Every component of every node, at any depth of the node tree.
     private const string Components = nameof(SceneData.RootNodes) + "/**/" + nameof(SceneNodeData.Components) + "/*/";
 
-    private const string OverrideSlots = nameof(GeometryComponentData.OverrideSlots) + "/*/";
-
-    private const string TargetedOverrideSlots = nameof(GeometryComponentData.TargetedOverrides) + "/*/" + nameof(TargetedOverrideData.OverrideSlots) + "/*/";
+    private const string Overrides = nameof(IOverridableComponent.Overrides) + "/";
 
     private const string ScriptSlots = nameof(ScriptingData.Slots) + "/*/";
 
@@ -29,10 +28,7 @@ public static class SceneReferenceFields
     public static IReadOnlyList<AssetReferenceField> All { get; } =
     [
         new(Components + nameof(GeometryComponentData.GeometryUri)),
-        new(Components + OverrideSlots + nameof(MaterialsSlotData.GeometryUri)),
-        new(Components + OverrideSlots + nameof(MaterialsSlotData.MaterialUri)),
-        new(Components + TargetedOverrideSlots + nameof(MaterialsSlotData.GeometryUri)),
-        new(Components + TargetedOverrideSlots + nameof(MaterialsSlotData.MaterialUri)),
+        .. OverrideFields(),
         new(Components + ScriptSlots + nameof(ScriptSlotData.Script)),
         new(Components + ScriptSlots + nameof(ScriptSlotData.Overrides) + "/*/" + nameof(ScriptValueData.Value))
         {
@@ -48,4 +44,16 @@ public static class SceneReferenceFields
         new(References + nameof(SceneReferencesData.ExtraAssets) + "/*"),
         new(nameof(SceneData.StartingInputContexts) + "/*/" + nameof(StartingInputContextData.Context)),
     ];
+
+    // One field per asset-typed overridable property, so that a string value of another property is never taken for
+    // an asset reference. The property's key is a JSON pointer, escaped as one path segment.
+    private static IEnumerable<AssetReferenceField> OverrideFields()
+        => SceneSchema.Overridable
+            .Where(static entry => entry.Value == typeof(AssetPath))
+            .Select(static entry => entry.Key)
+            .OrderBy(static property => property.Qualified(), StringComparer.Ordinal)
+            .Select(static property => new AssetReferenceField(
+                Components + Overrides
+                + (property.PartKind is null ? string.Empty : nameof(SourceOverridesData.Parts) + "/*/")
+                + nameof(SourceOverridesData.Values) + "/" + AssetReferenceField.Escape(property.JsonPointer)));
 }

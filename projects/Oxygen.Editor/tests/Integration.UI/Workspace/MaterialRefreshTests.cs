@@ -4,7 +4,6 @@
 
 using System.Numerics;
 using AwesomeAssertions;
-using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.TestSupport;
 using static Oxygen.Editor.TestSupport.NativeSceneAssertions;
 using static Oxygen.Editor.TestSupport.NativeSceneData;
@@ -30,7 +29,7 @@ public sealed partial class MaterialRefreshTests : DroidNet.Tests.VisualUserInte
         var (uri, key) = await fixture.CookTestMaterialAsync("Refresh", timeout.Token, red).ConfigureAwait(true);
         await fixture.InitializeAsync(timeout.Token, mountPublished: true).ConfigureAwait(true);
         var node = fixture.Source.RootNodes.Single();
-        _ = (await fixture.Authoring.ExecuteAsync(new SetSurfaceMaterial([node.Id], await fixture.ReadSingleSurfaceAsync(node.Id, timeout.Token).ConfigureAwait(true), uri)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Authoring.ExecuteAsync(NativeSceneFixture.SetSurfaceMaterial(node.Id, await fixture.ReadSingleSurfaceAsync(node.Id, timeout.Token).ConfigureAwait(true), uri)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = await WaitForNodeAsync(fixture, node.Id, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], red) < 0.001f, timeout.Token).ConfigureAwait(true);
         var source = fixture.Source;
         var revision = fixture.Document.History.Position;

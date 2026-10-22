@@ -6,7 +6,6 @@ using System.Diagnostics.CodeAnalysis;
 using System.Numerics;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.World.Tests.TestSupport;
@@ -190,20 +189,13 @@ internal static class SceneTestSupport
             Name = "Hero Mesh",
             Geometry = AssetPath.Parse("/Content/Meshes/Hero.geometry"),
         };
-        geometry.OverrideSlots.Add(new MaterialsSlot
-        {
-            Target = new SurfaceTarget(AssetPath.Parse("/Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000001"), "rev-1"),
-            Material = AssetPath.Parse("/Content/Materials/HeroSkin.omat.json"),
-        });
-
-        var targetedOverride = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 1 };
-        targetedOverride.OverrideSlots.Add(new MaterialsSlot
-        {
-            Target = new SurfaceTarget(AssetPath.Parse("/Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000002"), "rev-1"),
-            Material = AssetPath.Parse("/Content/Materials/HeroArmor.omat.json"),
-        });
-        geometry.TargetedOverrides.Add(targetedOverride);
+        var revision = new string('a', 64);
+        geometry.Overrides = geometry.Overrides
+            .With(SceneSchema.Geometry.Surface.Material, Surface("20000000-0000-0000-0000-000000000001"), revision, AssetPath.Parse("/Content/Materials/HeroSkin.omat.json"))
+            .With(SceneSchema.Geometry.Surface.Material, Surface("20000000-0000-0000-0000-000000000002"), revision, AssetPath.Parse("/Content/Materials/HeroArmor.omat.json"));
         return geometry;
+
+        static PartId Surface(string id) => new(SceneSchema.Geometry.Surface.Kind, Guid.Parse(id));
     }
 
     private static ScriptingComponent CreateHeroScripting(NodeId cameraNodeId)
@@ -252,20 +244,6 @@ internal static class SceneTestSupport
             OuterConeAngleRadians = 0.5f,
         });
         childNode.Hierarchy.AddChild(spotLightChild);
-
-        var renderingSlot = new RenderingSlot();
-        renderingSlot.IsVisible = renderingSlot.IsVisible.WithOverride(false);
-        childNode.OverrideSlots.Add(renderingSlot);
-
-        var lightingSlot = new LightingSlot();
-        lightingSlot.CastShadows = lightingSlot.CastShadows.WithOverride(false);
-        lightingSlot.ReceiveShadows = lightingSlot.ReceiveShadows.WithOverride(true);
-        childNode.OverrideSlots.Add(lightingSlot);
-
-        var lodSlot = new LevelOfDetailSlot();
-        lodSlot.LodPolicy = lodSlot.LodPolicy.WithOverride(new DistanceLodPolicy { Distances = [10f, 25f, 50f] });
-        childNode.OverrideSlots.Add(lodSlot);
-
         return childNode;
     }
 }

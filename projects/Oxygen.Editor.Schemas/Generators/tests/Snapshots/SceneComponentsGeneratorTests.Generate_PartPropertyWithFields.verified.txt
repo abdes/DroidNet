@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (41,12)-(41,18),
+      Message: Geometry.Surface property has an unknown key 'fields',
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC004,
+        Title: Scene components schema has an invalid entry,
+        MessageFormat: {0},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

@@ -9,7 +9,6 @@ using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Compatibility;
@@ -44,25 +43,27 @@ internal static class IncrementalCookScenario
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         var node = new SceneNode(workspace.Scene, "Cube");
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") };
-        geometry.OverrideSlots.Add(await CreateSurfaceMaterialOverrideAsync(
-            workspace, inspector, geometry.Geometry, AssetPath.Parse("/Content/Materials/Blue.omat")).ConfigureAwait(false));
+        await ApplySurfaceMaterialOverrideAsync(
+            workspace, inspector, geometry, AssetPath.Parse("/Content/Materials/Blue.omat")).ConfigureAwait(false);
         _ = node.AddComponent(geometry);
         workspace.Scene.RootNodes.Add(node);
         workspace.Scene.SetEnvironment(new SceneEnvironmentData { PostProcess = new PostProcessEnvironmentData { ExposureMode = ExposureMode.Auto } });
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
     }
 
-    // Reads the surface of a single-surface engine geometry from the workspace's engine content pak, as the inspector does.
-    internal static async Task<MaterialsSlot> CreateSurfaceMaterialOverrideAsync(CookWorkspace workspace, ICookedGeometryInspector inspector, AssetPath geometry, AssetPath material, CancellationToken cancellationToken = default)
+    // Reads the surface of a single-surface engine geometry from the workspace's engine content pak, as the inspector does,
+    // and overrides its material on the geometry component.
+    internal static async Task ApplySurfaceMaterialOverrideAsync(CookWorkspace workspace, ICookedGeometryInspector inspector, GeometryComponent component, AssetPath material, CancellationToken cancellationToken = default)
     {
+        var geometry = component.Geometry;
         var report = await inspector.InspectGeometryAsync(
             Path.Combine(workspace.Root, ".build", "inspection"), workspace.EngineContent.Path.FullPath, geometry.VirtualPath, cancellationToken).ConfigureAwait(false);
         var inventory = report.SingleOrDefault(geometry)
             ?? throw new InvalidOperationException("The engine content pak has no geometry " + geometry.VirtualPath + ".");
-        return new MaterialsSlot
-        {
-            Target = new(geometry, inventory.Surfaces.Single().SurfaceId, inventory.LayoutRevision),
-            Material = material,
-        };
+        component.Overrides = component.Overrides.With(
+            SceneSchema.Geometry.Surface.Material,
+            new PartId(SceneSchema.Geometry.Surface.Kind, inventory.Surfaces.Single().SurfaceId),
+            inventory.LayoutRevision,
+            material);
     }
 }

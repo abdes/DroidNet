@@ -9,9 +9,9 @@ using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Import;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.Projects;
+using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 
@@ -86,7 +86,7 @@ internal static class CatalogWorkload
             };
             var inventory = inventories[geometryUri];
             var target = new SurfaceTarget(geometryUri, inventory.Surfaces.Should().ContainSingle().Which.SurfaceId, inventory.LayoutRevision);
-            geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = WorkloadMaterialAsset(index % 2 == 0 ? 0 : index) });
+            geometry.Overrides = geometry.Overrides.With(SceneSchema.Geometry.Surface.Material, target.Part, target.LayoutRevision, WorkloadMaterialAsset(index % 2 == 0 ? 0 : index));
             _ = node.AddComponent(geometry);
             var position = new Vector3(index % 10, index / 10, 0);
             position *= 2;

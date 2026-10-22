@@ -13,7 +13,6 @@ using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -40,11 +39,11 @@ internal sealed partial class SceneDescriptorGeneratorTests
             Name = "Geometry",
             Geometry = geometryUri,
         };
-        geometry.OverrideSlots.Add(new MaterialsSlot
-        {
-            Target = new(geometryUri, Guid.NewGuid(), new string('a', 64)),
-            Material = EngineAssets.DefaultMaterial,
-        });
+        geometry.Overrides = geometry.Overrides.With(
+            SceneSchema.Geometry.Surface.Material,
+            new PartId(SceneSchema.Geometry.Surface.Kind, Guid.NewGuid()),
+            new string('a', 64),
+            EngineAssets.DefaultMaterial);
         _ = node.AddComponent(geometry);
         scene.RootNodes.Add(node);
         var generator = new SceneDescriptorGenerator();
@@ -72,11 +71,11 @@ internal sealed partial class SceneDescriptorGeneratorTests
             Geometry = EngineAssets.BasicShape("Cube"),
         };
         var surfaceId = Guid.Parse("146b1397-c3e0-bc20-fce3-c55e470b4086");
-        geometry.OverrideSlots.Add(new MaterialsSlot
-        {
-            Target = new(geometry.Geometry, surfaceId, new string('a', 64)),
-            Material = AssetPath.Parse("/Content/Materials/Red.omat"),
-        });
+        geometry.Overrides = geometry.Overrides.With(
+            SceneSchema.Geometry.Surface.Material,
+            new PartId(SceneSchema.Geometry.Surface.Kind, surfaceId),
+            new string('a', 64),
+            AssetPath.Parse("/Content/Materials/Red.omat"));
         _ = node.AddComponent(geometry);
         _ = node.AddComponent(new PerspectiveCamera { Name = "Camera" });
         _ = node.AddComponent(new DirectionalLightComponent
@@ -712,11 +711,11 @@ internal sealed partial class SceneDescriptorGeneratorTests
             Name = "Geometry",
             Geometry = geometryUri,
         };
-        geometry.OverrideSlots.Add(new MaterialsSlot
-        {
-            Target = new(geometryUri, Guid.NewGuid(), new string('a', 64)),
-            Material = AssetPath.Parse("/Content/Materials/Surface.omat"),
-        });
+        geometry.Overrides = geometry.Overrides.With(
+            SceneSchema.Geometry.Surface.Material,
+            new PartId(SceneSchema.Geometry.Surface.Kind, Guid.NewGuid()),
+            new string('a', 64),
+            AssetPath.Parse("/Content/Materials/Surface.omat"));
         _ = node.AddComponent(geometry);
         scene.RootNodes.Add(node);
 

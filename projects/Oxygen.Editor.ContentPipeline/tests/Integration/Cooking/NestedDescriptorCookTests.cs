@@ -7,7 +7,7 @@ using AwesomeAssertions;
 using Oxygen.Editor.ContentPipeline.Status;
 using Oxygen.Editor.ContentPipeline.TestSupport;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
+using Oxygen.Editor.World;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.ContentPipeline.TestSupport.CookScenario;
 using static Oxygen.Editor.ContentPipeline.TestSupport.DependencyScenario;
@@ -47,11 +47,12 @@ public sealed class NestedDescriptorCookTests
         var inventory = await service.ReadAsync(workspace.ProjectContext, geometryUri, this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = inventory.Should().NotBeNull();
         AddGeometryNode(workspace, geometryUri, "Mesh");
-        workspace.Scene.RootNodes[^1].Components.OfType<GeometryComponent>().Single().OverrideSlots.Add(new MaterialsSlot
-        {
-            Target = new(geometryUri, inventory!.Surfaces.Single().SurfaceId, inventory.LayoutRevision),
-            Material = AssetPath.Parse("/" + second[..^5]),
-        });
+        var component = workspace.Scene.RootNodes[^1].Components.OfType<GeometryComponent>().Single();
+        component.Overrides = component.Overrides.With(
+            SceneSchema.Geometry.Surface.Material,
+            new PartId(SceneSchema.Geometry.Surface.Kind, inventory!.Surfaces.Single().SurfaceId),
+            inventory.LayoutRevision,
+            AssetPath.Parse("/" + second[..^5]));
         await workspace.WriteSceneAsync(scene).ConfigureAwait(false);
         var result = await service.CookCurrentSceneAsync(AssetPath.Parse("/" + scene), this.TestContext.CancellationToken).ConfigureAwait(false);
         _ = result.IsPublished.Should().BeTrue(string.Join(Environment.NewLine, result.Diagnostics.Select(static issue => issue.TechnicalMessage ?? issue.Message)));

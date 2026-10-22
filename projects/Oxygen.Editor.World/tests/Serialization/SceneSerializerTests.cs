@@ -10,11 +10,6 @@ using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Editor.World.Tests.TestSupport;
 using Oxygen.Managed.Core;
-using DistanceLodPolicy = Oxygen.Editor.World.Slots.DistanceLodPolicy;
-using LevelOfDetailSlot = Oxygen.Editor.World.Slots.LevelOfDetailSlot;
-using LightingSlot = Oxygen.Editor.World.Slots.LightingSlot;
-using MaterialsSlot = Oxygen.Editor.World.Slots.MaterialsSlot;
-using RenderingSlot = Oxygen.Editor.World.Slots.RenderingSlot;
 
 namespace Oxygen.Editor.World.Tests.Serialization;
 
@@ -150,8 +145,7 @@ public sealed class SceneSerializerTests
 
         var geo = heroNode.Components.OfType<GeometryComponent>().Single();
         _ = geo.Geometry.Should().Be(AssetPath.Parse("/Content/Meshes/Hero.geometry"));
-        _ = geo.OverrideSlots.OfType<MaterialsSlot>().Should().ContainSingle();
-        _ = geo.TargetedOverrides.Should().ContainSingle();
+        _ = geo.Overrides.Assets.Should().Equal(AssetPath.Parse("/Content/Materials/HeroSkin.omat.json"), AssetPath.Parse("/Content/Materials/HeroArmor.omat.json"));
 
         _ = heroNode.Hierarchy.Children.Should().ContainSingle();
         AssertChildNode(heroNode.Hierarchy.Children[0]);
@@ -164,11 +158,6 @@ public sealed class SceneSerializerTests
         var pointLight = childNode.Components.OfType<PointLightComponent>().Single();
         _ = pointLight.LuminousFluxLumens.Should().Be(1200f);
         _ = pointLight.Range.Should().Be(15f);
-
-        _ = childNode.OverrideSlots.OfType<RenderingSlot>().Single().IsVisible.OverrideValue.Should().BeFalse();
-        _ = childNode.OverrideSlots.OfType<LightingSlot>().Single().ReceiveShadows.OverrideValue.Should().BeTrue();
-        var lodSlot = childNode.OverrideSlots.OfType<LevelOfDetailSlot>().Single();
-        _ = lodSlot.LodPolicy.OverrideValue.Should().BeOfType<DistanceLodPolicy>();
 
         _ = childNode.Hierarchy.Children.Should().ContainSingle();
         var spotNode = childNode.Hierarchy.Children[0];

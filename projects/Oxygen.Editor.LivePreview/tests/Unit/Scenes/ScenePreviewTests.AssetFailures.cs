@@ -4,10 +4,10 @@
 
 using AwesomeAssertions;
 using Oxygen.Editor.Runtime.Engine;
+using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -86,7 +86,7 @@ public sealed partial class ScenePreviewTests
         scene.RootNodes.Add(node);
         var target = new SurfaceTarget(EngineAssets.BasicShape("Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
-        geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = AssetPath.Parse("/Content/Materials/Missing.omat") });
+        geometry.Overrides = geometry.Overrides.With(SceneSchema.Geometry.Surface.Material, target.Part, target.LayoutRevision, AssetPath.Parse("/Content/Materials/Missing.omat"));
         node.Components.Add(geometry);
         return node;
     }

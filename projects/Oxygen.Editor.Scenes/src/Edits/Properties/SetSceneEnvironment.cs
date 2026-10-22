@@ -6,7 +6,6 @@ using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Assets;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Serialization;
 using Oxygen.Managed.Core;
 

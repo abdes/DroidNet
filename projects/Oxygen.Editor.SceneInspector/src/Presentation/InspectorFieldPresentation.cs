@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using CommunityToolkit.Mvvm.ComponentModel;
-using Oxygen.Editor.Schemas;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Presentation;
 

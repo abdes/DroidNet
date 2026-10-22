@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Numerics;
-using Oxygen.Editor.Schemas;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Properties;
 

@@ -167,10 +167,10 @@ Actors:
    referencing UI. Player log output is raised on `PlaySession` as
    `LogReceived`, which the `Output` module shows.
 7. **Content demand follows the scene change stream.** It demands every
-   reference (`SceneAssetReferences.Runtime`, covering both `OverrideSlots` and
-   `TargetedOverrides`) on open and on `Document.ContentReplaced`, then follows
+   reference (`SceneAssetReferences.Runtime`: the geometry plus the assets of its
+   overrides) on open and on `Document.ContentReplaced`, then follows
    `SceneAuthoring.Changed` (`NodesAdded`, `NodesRemoved`, `ComponentAdded`,
-   `ComponentRemoved`, `GeometryChanged`, `SurfaceMaterialsChanged`), and cancels
+   `ComponentRemoved`, `GeometryChanged`, `OverridesChanged`), and cancels
    only when the scene stops referencing the asset or the document closes.
    Selection never demands or cancels anything, and no view requests demand.
 8. **Events on the owner's thread, without WinUI dispatchers.** LivePreview
@@ -504,7 +504,7 @@ compose ContentPipeline's publication with the session use the public
 | Projection     | Every `SceneChange` kind sends its commands; gesture phases preview, commit and cancel; the directional light role order; relocated assets wait for their mount                                                                                                                                                                                                                                                  |
 | Wire           | Every descriptor of a projected kind has a `SceneWire` entry and every entry names a descriptor; encodings (field of view radians)                                                                                                                                                                                                                                                                               |
 | Engine states  | Not running: pending fields across all eight component kinds counted, superseded on component detach, and replayed on Running, without polling; faulted: outcome codes                                                                                                                                                                                                                                           |
-| Content demand | Open and reload demand every stale reference (`OverrideSlots` and `TargetedOverrides`); an assignment, component add or undo, or paste demands its asset; a selection change cancels nothing; removing the component, the last reference or closing cancels                                                                                                                                                      |
+| Content demand | Open and reload demand every stale reference (the geometry and the assets of its overrides); an assignment, component add or undo, or paste demands its asset; a selection change cancels nothing; removing the component, the last reference or closing cancels                                                                                                                                                 |
 | Session        | Start order, with startup settings applied before the engine starts; engine failure sets `EngineUnavailable` and content failure sets `ContentUnavailable`, with failure code and operation result; `RetryAsync` from both states; `ChangeMountsAsync` validates the candidate and updates the project; the publication preview pauses, mounts, resumes and clears `ContentUnavailable`; disposal releases roots |
 | Assets adapter | Status from the engine's content snapshot and asset requests; `Changed` on engine state changes                                                                                                                                                                                                                                                                                                                  |
 | Play           | Dirty document refused; stage of each failure; `LogReceived` on player output and session-start clear; `BringPlayerToFront`; `NodeOf` for a unique, duplicate and missing name; settings and settings sync                                                                                                                                                                                                       |

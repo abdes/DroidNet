@@ -14,7 +14,8 @@ namespace Oxygen.Managed.Core;
 /// <param name="Path">
 /// The field's path from the document root: property names separated by <c>/</c>, where <c>*</c> matches every
 /// element of an array or every property of an object, and <c>**</c> matches any number of levels, for a tree such as
-/// a scene's nodes (<c>RootNodes/**/Components/*/GeometryUri</c>).
+/// a scene's nodes (<c>RootNodes/**/Components/*/GeometryUri</c>). A property name holding <c>/</c> or <c>~</c> is
+/// escaped as in a JSON pointer (<see cref="Escape"/>).
 /// </param>
 public sealed record AssetReferenceField(string Path)
 {
@@ -30,15 +31,27 @@ public sealed record AssetReferenceField(string Path)
     /// <summary>Gets the value <see cref="WhenProperty"/> must hold.</summary>
     public string? WhenValue { get; init; }
 
+    /// <summary>Escapes a property name as one segment of a path: <c>~</c> as <c>~0</c> and <c>/</c> as <c>~1</c>.</summary>
+    /// <param name="name">The property name.</param>
+    /// <returns>The path segment.</returns>
+    public static string Escape(string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        return name.Replace("~", "~0", StringComparison.Ordinal).Replace("/", "~1", StringComparison.Ordinal);
+    }
+
     /// <summary>Finds the field's string values in a document.</summary>
     /// <param name="root">The document.</param>
     /// <returns>The values, each once, in document order.</returns>
     public IReadOnlyList<JsonValue> Select(JsonNode? root)
     {
         var found = new List<JsonValue>();
-        this.Collect(root, this.Path.Split('/'), 0, owner: null, found);
+        this.Collect(root, [.. this.Path.Split('/').Select(Unescape)], 0, owner: null, found);
         return [.. found.Distinct(ReferenceEqualityComparer.Instance).Cast<JsonValue>()];
     }
+
+    private static string Unescape(string segment)
+        => segment.Replace("~1", "/", StringComparison.Ordinal).Replace("~0", "~", StringComparison.Ordinal);
 
     // The members of an object, with the object as their owner, or the elements of an array, which have none.
     private static IEnumerable<(JsonNode? Child, JsonObject? Owner)> Children(JsonNode? node) => node switch

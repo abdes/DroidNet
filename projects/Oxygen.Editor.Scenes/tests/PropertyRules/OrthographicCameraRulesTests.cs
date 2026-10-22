@@ -5,8 +5,8 @@
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Properties;
-using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Tests.TestSupport;
+using Oxygen.Editor.World;
 
 namespace Oxygen.Editor.Scenes.Tests.PropertyRules;
 

@@ -5,8 +5,9 @@
 using System.Collections.Immutable;
 using System.Collections.ObjectModel;
 using Oxygen.Editor.Scenes.Properties;
-using Oxygen.Editor.Schemas;
+using Oxygen.Editor.World;
 using Oxygen.Editor.World.Serialization;
+using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneInspector.Presentation;
 

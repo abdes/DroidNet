@@ -54,6 +54,14 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
               - name: GeometryUri
                 key: /geometry_uri
                 type: asset
+            parts:
+              - name: Surface
+                kind: surface
+                properties:
+                  - name: Material
+                    key: /material
+                    type: asset
+                    sources: [asset]
         """;
 
     [TestMethod]
@@ -105,7 +113,7 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
 
     [TestMethod]
     public Task Generate_FieldsWithoutWire()
-        => this.Check(AllOutputs, Minimal.Replace("type: asset", "type: float\n        fields: [Range]", StringComparison.Ordinal));
+        => this.Check(AllOutputs, Minimal.Replace("key: /geometry_uri\n        type: asset", "key: /geometry_uri\n        type: float\n        fields: [Range]", StringComparison.Ordinal));
 
     [TestMethod]
     public Task Generate_UnknownEncoding()
@@ -114,6 +122,22 @@ public sealed class SceneComponentsGeneratorTests : VerifyBase
     [TestMethod]
     public Task Generate_Duplicates()
         => this.Check(AllOutputs, Minimal.Replace("{ name: FovRadians, id: 3 }", "{ name: FovRadians, id: 5 }", StringComparison.Ordinal).Replace("  - name: Geometry\n", "  - name: Lamp\n", StringComparison.Ordinal));
+
+    [TestMethod]
+    public Task Generate_PartPropertyWithoutSource()
+        => this.Check(AllOutputs, Minimal.Replace("\n            sources: [asset]", string.Empty, StringComparison.Ordinal));
+
+    [TestMethod]
+    public Task Generate_PartPropertyWithFields()
+        => this.Check(AllOutputs, Minimal.Replace("sources: [asset]", "sources: [asset]\n            fields: [Range]", StringComparison.Ordinal));
+
+    [TestMethod]
+    public Task Generate_UnknownSource()
+        => this.Check(AllOutputs, Minimal.Replace("sources: [asset]", "sources: [asset, prefab]", StringComparison.Ordinal));
+
+    [TestMethod]
+    public Task Generate_PartNamedLikeProperty()
+        => this.Check(AllOutputs, Minimal.Replace("- name: Surface", "- name: GeometryUri", StringComparison.Ordinal));
 
     private Task Check(string outputs, string? schema)
     {

@@ -11,7 +11,6 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
@@ -140,7 +139,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     internal Task<SyncOutcome> UpdateSurfacesAsync(
         Scene scene,
         SceneNode node,
-        IReadOnlyCollection<SurfaceTarget> cleared,
+        IReadOnlyCollection<SourceOverride> cleared,
         bool overrides,
         CancellationToken cancellationToken = default)
     {
@@ -166,18 +165,23 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
             LiveSyncDiagnosticCodes.GeometryFailed,
             world =>
             {
+                if (node.Components.OfType<GeometryComponent>().FirstOrDefault() is not { } geometry)
+                {
+                    return;
+                }
+
                 foreach (var surface in cleared)
                 {
                     world.Execute(new RuntimeSetMaterialOverride(
                         node.Id,
-                        GeometryPathMapper.ToEnginePath(surface.Geometry),
-                        surface.SurfaceId,
-                        surface.LayoutRevision,
+                        GeometryPathMapper.ToEnginePath(geometry.Geometry),
+                        surface.Part!.Value.Id,
+                        surface.LayoutRevision!,
                         MaterialPath: null,
                         SurfaceMaterialAssignmentIntent.RetainedAssignment));
                 }
 
-                if (overrides && node.Components.OfType<GeometryComponent>().FirstOrDefault() is { } geometry)
+                if (overrides)
                 {
                     ApplyMaterialOverrides(world, node, geometry);
                 }

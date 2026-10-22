@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (34,14)-(34,25),
+      Message: Duplicate part or property of Geometry: GeometryUri,
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC004,
+        Title: Scene components schema has an invalid entry,
+        MessageFormat: {0},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

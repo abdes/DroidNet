@@ -7,7 +7,6 @@ using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Properties;
 using Oxygen.Editor.Scenes.Interaction;
-using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.Scenes.Selection;
 using Oxygen.Editor.Scenes.Views;
 using Oxygen.Editor.Schemas;

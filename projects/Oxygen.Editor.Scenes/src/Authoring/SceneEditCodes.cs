@@ -85,8 +85,14 @@ public static class SceneEditCodes
     /// <summary>A warning: a restored reference names an asset deleted in this session, so it shows as missing.</summary>
     public const string AssetReferenceDeleted = DiagnosticCodes.ScenePrefix + "AssetReference.Deleted";
 
-    /// <summary>A surface material edit was built against another geometry or inventory revision.</summary>
+    /// <summary>A surface edit was built against another geometry or inventory revision.</summary>
     public const string SurfaceStale = DiagnosticCodes.ScenePrefix + "Surface.Stale";
+
+    /// <summary>An override names a part chosen from an asset the node's component no longer uses.</summary>
+    public const string PartStale = DiagnosticCodes.ScenePrefix + "Part.Stale";
+
+    /// <summary>An override does not fit its property: a missing or wrong part, an invalid layout revision, or a value of another type.</summary>
+    public const string OverrideInvalid = DiagnosticCodes.ScenePrefix + "Override.Invalid";
 
     /// <summary>The geometry's surface inventory could not be read.</summary>
     public const string SurfaceInventoryUnavailable = DiagnosticCodes.ScenePrefix + "Surface.InventoryUnavailable";

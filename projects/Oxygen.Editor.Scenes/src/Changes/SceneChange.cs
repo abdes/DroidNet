@@ -2,7 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using Oxygen.Editor.Schemas;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Scenes.Changes;
@@ -55,9 +54,10 @@ public abstract record SceneChange
     /// <param name="Node">The node.</param>
     public sealed record GeometryChanged(NodeId Node) : SceneChange;
 
-    /// <summary>A node's surface materials changed.</summary>
+    /// <summary>Overrides of a node's component, the values it stores over its sources, changed.</summary>
     /// <param name="Node">The node.</param>
-    public sealed record SurfaceMaterialsChanged(NodeId Node) : SceneChange;
+    /// <param name="Properties">The properties whose overrides changed, on any part.</param>
+    public sealed record OverridesChanged(NodeId Node, IReadOnlyList<PropertyId> Properties) : SceneChange;
 
     /// <summary>The explorer layout changed.</summary>
     public sealed record LayoutChanged : SceneChange;

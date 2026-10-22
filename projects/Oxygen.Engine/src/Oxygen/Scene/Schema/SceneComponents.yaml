@@ -16,6 +16,12 @@
 # into the component's authored record) and has one value type. The fields of
 # a property receive its value in order, one float each; `encoding` names a
 # unit conversion applied before the value goes to its fields.
+#
+# A property with `sources` may be supplied by a geometry asset (`asset`) or a
+# model template (`model`); a scene stores only its overrides of it. A part is
+# a piece of a component that the asset defining it identifies, such as a
+# surface of a geometry; its properties always have a source and are never
+# applied field by field.
 
 version: 1
 
@@ -209,6 +215,14 @@ components:
       - name: GeometryUri
         key: /geometry_uri
         type: asset
+    parts:
+      - name: Surface
+        kind: surface
+        properties:
+          - name: Material
+            key: /material
+            type: asset
+            sources: [asset]
 
   - name: PerspectiveCamera
     kind: perspective-camera

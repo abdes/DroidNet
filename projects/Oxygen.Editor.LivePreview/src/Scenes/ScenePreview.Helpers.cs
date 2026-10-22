@@ -7,7 +7,6 @@ using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
-using Oxygen.Editor.World.Slots;
 using Oxygen.Editor.World.Utils;
 using Oxygen.Managed.Core;
 using Oxygen.Managed.Core.Diagnostics;
@@ -257,19 +256,23 @@ internal sealed partial class ScenePreview
         ApplyMaterialOverrides(world, node, geometry);
     }
 
+    // The engine takes a surface's material through its own command until the override command replaces it.
     private static void ApplyMaterialOverrides(WorldDispatch world, SceneNode node, GeometryComponent geometry)
     {
-        foreach (var slot in geometry.OverrideSlots.OfType<MaterialsSlot>())
+        foreach (var surface in MaterialOverrides(geometry))
         {
             world.Execute(new RuntimeSetMaterialOverride(
                 node.Id,
-                GeometryPathMapper.ToEnginePath(slot.Target.Geometry),
-                slot.Target.SurfaceId,
-                slot.Target.LayoutRevision,
-                MaterialOverridePathMapper.ToEnginePath(slot.Material),
+                GeometryPathMapper.ToEnginePath(geometry.Geometry),
+                surface.Part!.Value.Id,
+                surface.LayoutRevision!,
+                MaterialOverridePathMapper.ToEnginePath((AssetPath)surface.Value),
                 SurfaceMaterialAssignmentIntent.RetainedAssignment));
         }
     }
+
+    private static IEnumerable<SourceOverride> MaterialOverrides(GeometryComponent geometry)
+        => geometry.Overrides.All.Where(static entry => entry.Property == SceneSchema.Geometry.Surface.Material.Id);
 
     private static void ApplyLight(WorldDispatch world, SceneNode node, LightComponent light)
     {

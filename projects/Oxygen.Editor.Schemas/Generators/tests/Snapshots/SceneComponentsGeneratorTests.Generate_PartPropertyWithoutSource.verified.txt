@@ -1,0 +1,17 @@
+﻿{
+  Diagnostics: [
+    {
+      Location: Schema\SceneComponents.yaml: (37,18)-(37,26),
+      Message: Geometry.Surface property has no 'sources',
+      Severity: Error,
+      Descriptor: {
+        Id: OXGNSC004,
+        Title: Scene components schema has an invalid entry,
+        MessageFormat: {0},
+        Category: Oxygen.Editor.Schemas.Generator,
+        DefaultSeverity: Error,
+        IsEnabledByDefault: true
+      }
+    }
+  ]
+}

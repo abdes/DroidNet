@@ -240,7 +240,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
         var project = this.session.Context;
         var nodeIds = picker.Nodes.ConvertAll(static node => node.Id);
-        var built = await SurfaceMaterialEdits.SetAsync(this.surfaces, project, nodeIds, picker.Target, choice.Asset).ConfigureAwait(true);
+        var built = await SurfaceEdits.SetAsync(this.surfaces, project, nodeIds, picker.Target, SceneSchema.Geometry.Surface.Material.Id, choice.Asset, "Edit Surface Material").ConfigureAwait(true);
         var succeeded = built.Edit is { } edit && (await picker.Authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded;
         if (!this.IsCurrentSelection(picker.Nodes))
         {

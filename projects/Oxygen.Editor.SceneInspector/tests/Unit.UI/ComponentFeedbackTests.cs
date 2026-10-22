@@ -12,7 +12,6 @@ using Oxygen.Editor.SceneInspector.Components.Cameras;
 using Oxygen.Editor.SceneInspector.Components.Lights;
 using Oxygen.Editor.SceneInspector.Components.Transform;
 using Oxygen.Editor.SceneInspector.TestSupport;
-using Oxygen.Editor.Schemas;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;

@@ -4,7 +4,6 @@
 
 using System.Collections.Specialized;
 using System.ComponentModel;
-using Oxygen.Editor.Scenes.Properties;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Editor.World.Serialization;

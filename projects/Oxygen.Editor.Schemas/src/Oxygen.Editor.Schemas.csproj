@@ -19,6 +19,10 @@
         <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
     </ItemGroup>
 
+    <ItemGroup>
+        <ProjectReference Include="$(ProjectsRoot)\Oxygen.Managed.Core\src\Oxygen.Managed.Core.csproj" />
+    </ItemGroup>
+
     <!--
       Bring the engine schemas (and editor overlays sitting next to them) into
       this assembly's output without copying them in source control.
