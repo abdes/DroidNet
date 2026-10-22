@@ -9,6 +9,7 @@ namespace DroidNet.Routing.Debugger.UI.Config;
 /// <summary>
 /// ViewModel for the <see cref="RoutesView" /> view.
 /// </summary>
+[RetainedViewModel]
 public partial class RoutesViewModel : TreeViewModelBase
 {
     /// <summary>

@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Hosting.WinUI;
+using DroidNet.Routing;
 using Oxygen.Editor.ContentPipeline;
 using Oxygen.Editor.ContentPipeline.Cooking;
 using Oxygen.Editor.Projects;
@@ -14,6 +15,7 @@ using Oxygen.Editor.Projects;
 namespace Oxygen.Editor.Cooking;
 
 /// <summary>Projects scoped cook history without moving selection for background updates.</summary>
+[RetainedViewModel]
 public sealed partial class CookingPanelViewModel : ObservableObject, IDisposable
 {
     private readonly ICookRunService runs;

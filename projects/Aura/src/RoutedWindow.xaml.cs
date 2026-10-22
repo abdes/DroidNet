@@ -70,11 +70,7 @@ public sealed partial class RoutedWindow : IOutletContainer, INotifyPropertyChan
     {
         if (this.ContentViewModel != viewModel)
         {
-            if (this.ContentViewModel is IDisposable resource)
-            {
-                resource.Dispose();
-            }
-
+            RoutedViewModels.Release(this.ContentViewModel);
             this.ContentViewModel = viewModel;
         }
     }

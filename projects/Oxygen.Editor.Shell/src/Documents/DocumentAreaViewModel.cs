@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Mvvm;
+using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI;
@@ -18,6 +19,7 @@ namespace Oxygen.Editor.Shell.Documents;
 ///     The session's document service owns the editors; the area only shows them. The view of the editor that leaves is deactivated
 ///     before the next one shows, so an editor that holds native surfaces releases them first.
 /// </remarks>
+[RetainedViewModel]
 public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposable
 {
     private readonly ILogger logger;

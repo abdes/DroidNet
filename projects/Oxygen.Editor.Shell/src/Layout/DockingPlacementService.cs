@@ -14,25 +14,35 @@ namespace Oxygen.Editor.Shell.Layout;
 /// <param name="area">The window's document area.</param>
 /// <param name="docker">The window's docker.</param>
 /// <param name="contributions">The window's panels, which keep the titles their features set.</param>
-public sealed class DockingPlacementService(IDocumentArea area, IDocker docker, ContributionRegistry contributions) : IPlacementService
+/// <param name="closedPanels">The panels closed in the window, which showing one docks back where it was.</param>
+public sealed class DockingPlacementService(IDocumentArea area, IDocker docker, ContributionRegistry contributions, ClosedPanels closedPanels) : IPlacementService
 {
     /// <inheritdoc/>
     public Task<DocumentPlacement> OpenDocumentAsync(AssetPath asset, WindowPlacement placement = WindowPlacement.Current, CancellationToken cancellationToken = default)
         => area.OpenAsync(asset, cancellationToken);
 
     /// <inheritdoc/>
-    /// <remarks>A minimized panel's dock is pinned, and the panel becomes the active one of its dock.</remarks>
-    public Task<bool> ShowPanelAsync(string panelId, WindowPlacement placement = WindowPlacement.Current)
+    /// <remarks>
+    ///     A closed panel is docked back where it was, with the view model the window kept; a minimized panel's dock is
+    ///     pinned; and the panel becomes the active one of its dock.
+    /// </remarks>
+    public async Task<bool> ShowPanelAsync(string panelId, WindowPlacement placement = WindowPlacement.Current)
     {
         ArgumentException.ThrowIfNullOrEmpty(panelId);
+        if (docker.FindDockable(panelId) is null
+            && (contributions.FindPanel(panelId) is not { } panel || !await closedPanels.ShowAsync(panelId, panel.ViewModelType).ConfigureAwait(true)))
+        {
+            return false;
+        }
+
         if (docker.FindDockable(panelId) is not { Owner: { } dock } dockable)
         {
-            return Task.FromResult(false);
+            return false;
         }
 
         docker.PinDock(dock);
         dockable.IsActive = true;
-        return Task.FromResult(true);
+        return true;
     }
 
     /// <inheritdoc/>

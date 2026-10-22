@@ -6,6 +6,7 @@ using System.Collections.ObjectModel;
 using System.Globalization;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Routing;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scripting;
@@ -24,6 +25,7 @@ namespace Oxygen.Editor.Problems;
 /// family's problem clears when its file is fixed or deleted; a runtime problem clears when the next session starts.
 /// Each source raises its changes on the UI thread, where the panel subscribes.
 /// </remarks>
+[RetainedViewModel]
 public sealed partial class ProblemsViewModel : ObservableObject, IDisposable
 {
     /// <summary>The panel name without counts.</summary>

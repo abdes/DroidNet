@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Controls.OutputConsole.Model;
+using DroidNet.Routing;
 
 namespace Oxygen.Editor.Output;
 
@@ -17,6 +18,7 @@ namespace Oxygen.Editor.Output;
 ///     The <see cref="OutputLogBuffer"/> is typically a signleton service shared across the
 ///     application, configured in the DI and auto-injected with this ViewModel is resolved.
 /// </remarks>
+[RetainedViewModel]
 public partial class OutputViewModel(OutputLogBuffer buffer) : ObservableObject
 {
     /// <summary>

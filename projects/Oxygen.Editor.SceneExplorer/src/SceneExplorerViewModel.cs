@@ -42,6 +42,7 @@ namespace Oxygen.Editor.SceneExplorer;
 /// <summary>
 ///     The ViewModel for the <see cref="SceneExplorer.SceneExplorerView" /> view.
 /// </summary>
+[RetainedViewModel]
 public partial class SceneExplorerViewModel : DynamicTreeViewModel
 {
     // The selection source of viewport picks; their rows scroll into view.

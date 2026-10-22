@@ -136,11 +136,8 @@ public abstract class AbstractOutletContainer : ObservableObject, IOutletContain
             return;
         }
 
-        // Dispose of the existing view model if it is IDisposable
-        if (outlet.viewModel is IDisposable resource)
-        {
-            resource.Dispose();
-        }
+        // Let go of the view model the outlet showed: disposed, unless its owner retains it.
+        RoutedViewModels.Release(outlet.viewModel);
 
         this.OnPropertyChanging(outlet.propertyName);
         this.Outlets[outletName] = (outlet.propertyName, viewModel);
@@ -158,8 +155,8 @@ public abstract class AbstractOutletContainer : ObservableObject, IOutletContain
     /// <remarks>
     /// The outlets in the outlet container may have been activated, and as a
     /// result, they would have a view model which may be disposable. When the
-    /// container is disposed of, we should dispose of all the activated outlet
-    /// view models as well.
+    /// container is disposed of, it lets go of all the activated outlet view
+    /// models as well, disposing those that their owner does not retain.
     /// </remarks>
     protected virtual void Dispose(bool disposing)
     {
@@ -172,10 +169,7 @@ public abstract class AbstractOutletContainer : ObservableObject, IOutletContain
         {
             foreach (var entry in this.Outlets)
             {
-                if (entry.Value.viewModel is IDisposable resource)
-                {
-                    resource.Dispose();
-                }
+                RoutedViewModels.Release(entry.Value.viewModel);
             }
         }
 

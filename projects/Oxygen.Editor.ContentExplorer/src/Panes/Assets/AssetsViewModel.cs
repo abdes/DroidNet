@@ -58,6 +58,7 @@ namespace Oxygen.Editor.ContentExplorer;
 /// <param name="unsavedInputs">Finds the unsaved documents a cook reads; without it a cook does not ask.</param>
 /// <param name="assetReveal">Shows the source of an imported asset; without it Show Source reports it unavailable.</param>
 /// <param name="cookedInspections">Inspects cooked output; without it Inspect and Validate report it unavailable.</param>
+[RetainedViewModel]
 public partial class AssetsViewModel(
     Oxygen.Editor.ContentPipeline.Cooking.IAutomaticCookService automaticCooking,
     ViewModelToView vmToViewConverter,

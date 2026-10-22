@@ -11,6 +11,7 @@ using DroidNet.Routing.Events;
 namespace DroidNet.Routing.Debugger.UI.UrlTree;
 
 /// <summary>ViewModel for the parsed URL tree.</summary>
+[RetainedViewModel]
 public partial class UrlTreeViewModel : TreeViewModelBase, IDisposable
 {
     private readonly IDisposable routerEventsSub;

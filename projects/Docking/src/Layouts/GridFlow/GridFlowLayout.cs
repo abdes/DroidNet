@@ -29,12 +29,20 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
     public ResizableVectorGrid CurrentGrid => ((GridFlow)this.CurrentFlow).Grid;
 
     /// <inheritdoc/>
+    /// <remarks>The views of the docks that left their docker since the previous layout are forgotten.</remarks>
     public override LayoutFlow StartLayout(ILayoutSegment segment)
-        => new GridFlow(segment)
+    {
+        foreach (var closed in this.cachedViews.Where(entry => entry.Value.Dock.Docker is null).Select(entry => entry.Key).ToList())
+        {
+            _ = this.cachedViews.Remove(closed);
+        }
+
+        return new GridFlow(segment)
         {
             Description = $"Root Grid {segment}",
             Grid = new ResizableVectorGrid(ToGridOrientation(segment.Orientation)) { Name = "Workspace Root" },
         };
+    }
 
     /// <inheritdoc/>
     public override void PlaceDock(IDock dock)
@@ -132,6 +140,7 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
             dock.Id,
             new CachedView()
             {
+                Dock = dock,
                 ParentGrid = this.CurrentGrid,
                 View = newView,
             });
@@ -153,6 +162,8 @@ public sealed class GridFlowLayout(IDockViewFactory dockViewFactory) : LayoutEng
 
     private sealed class CachedView
     {
+        public required IDock Dock { get; init; }
+
         public required ResizableVectorGrid ParentGrid { get; set; }
 
         public required UIElement View { get; init; }

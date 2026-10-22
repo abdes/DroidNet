@@ -8,6 +8,7 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Documents;
 using DroidNet.Hosting.WinUI;
 using DroidNet.Mvvm.Converters;
+using DroidNet.Routing;
 using DroidNet.TimeMachine;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -43,6 +44,7 @@ namespace Oxygen.Editor.SceneInspector;
 /// The Properties panel of a scene: the sections that edit the selected nodes' components, or the scene's settings when
 /// the scene itself is selected, each edit going through the scene document's authoring.
 /// </summary>
+[RetainedViewModel]
 public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNodeEdits, IDisposable
 {
     // The selection source of this inspector's "inspect this node" requests; the Scene Explorer reveals and focuses the row.

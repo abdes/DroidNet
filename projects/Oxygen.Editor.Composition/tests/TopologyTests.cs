@@ -84,7 +84,6 @@ public sealed class TopologyTests
     private static readonly Dictionary<string, string> PendingSingletonViews = new(StringComparer.Ordinal)
     {
         [nameof(DocumentAreaView)] = "S5.3 creates the window's document host per window",
-        [nameof(AssetsView)] = "S5.4 moves the Content Explorer onto the panel registry",
     };
 
     // Constructor arguments that the code creating the type passes through a Func<> factory.

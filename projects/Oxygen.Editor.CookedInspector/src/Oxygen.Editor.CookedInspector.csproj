@@ -25,6 +25,7 @@
     <ItemGroup>
         <ProjectReference Include="$(ProjectsRoot)/Controls/ToolBars/src/Controls.ToolBars.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Mvvm/src/Mvvm.csproj" />
+        <ProjectReference Include="$(ProjectsRoot)/Routing/Routing.Abstractions/src/Routing.Abstractions.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Assets/src/Oxygen.Editor.Assets.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.ContentPipeline/src/Oxygen.Editor.ContentPipeline.csproj" />
         <ProjectReference Include="$(ProjectsRoot)/Oxygen.Editor.Pickers/src/Oxygen.Editor.Pickers.csproj" />

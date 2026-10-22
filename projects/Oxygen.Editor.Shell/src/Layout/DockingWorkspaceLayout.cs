@@ -28,6 +28,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
     private readonly IDisposable routerEventsSub;
     private readonly IRouter router;
     private readonly IDocker docker;
+    private readonly ClosedPanels closedPanels;
     private readonly ILogger logger;
     private IDisposable? layoutChangedSub;
 
@@ -38,18 +39,21 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
     /// <param name="router">The router instance used for navigation and event subscription.</param>
     /// <param name="docker">The docker instance used for managing dockable layouts.</param>
     /// <param name="dockViewFactory">The factory used to create views for docks.</param>
+    /// <param name="closedPanels">Where the panels the user closes were docked.</param>
     /// <param name="loggerFactory">Optional factory for creating loggers. If provided, enables detailed logging of the recognition process. If <see langword="null"/>, logging is disabled. </param>
     public DockingWorkspaceLayout(
         HostingContext hostingContext,
         IRouter router,
         IDocker docker,
         IDockViewFactory dockViewFactory,
+        ClosedPanels closedPanels,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = loggerFactory?.CreateLogger<DockingWorkspaceLayout>() ?? NullLogger<DockingWorkspaceLayout>.Instance;
 
         this.router = router;
         this.docker = docker;
+        this.closedPanels = closedPanels;
 
         var layout = new GridFlowLayout(dockViewFactory);
 
@@ -121,7 +125,13 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
     public IActiveRoute? ActiveRoute { get; set; }
 
     /// <inheritdoc/>
-    public void Dispose() => this.routerEventsSub.Dispose();
+    /// <remarks>Layout changes after the window's scope closes, such as a last resize, no longer navigate its router.</remarks>
+    public void Dispose()
+    {
+        this.routerEventsSub.Dispose();
+        this.layoutChangedSub?.Dispose();
+        this.layoutChangedSub = null;
+    }
 
     private static bool CheckAndSetMinimized(DockingState dockState, IParameters active, Parameters next)
     {
@@ -315,14 +325,22 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
     {
         Debug.Assert(this.ActiveRoute is not null, "expecting to have an active route");
 
+        var closed = this.ActiveRoute.Children
+            .Where(dockableRoute => this.docker.FindDockable(dockableRoute.Outlet) == null)
+            .ToList();
+        if (closed.Count == 0)
+        {
+            return;
+        }
+
+        // Their routes go with the navigation; where they were docked stays, to show them there again.
+        this.closedPanels.Remember(closed);
         changes.AddRange(
-            from dockableRoute in this.ActiveRoute.Children
-            where this.docker.FindDockable(dockableRoute.Outlet) == null
-            select new RouteChangeItem()
+            closed.Select(dockableRoute => new RouteChangeItem()
             {
                 ChangeAction = RouteChangeAction.Delete,
                 Outlet = dockableRoute.Outlet,
-            });
+            }));
     }
 
     private record struct AdditionalInfo(bool RebuildLayout);

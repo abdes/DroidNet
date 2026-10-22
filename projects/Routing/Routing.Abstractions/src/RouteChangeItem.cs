@@ -74,8 +74,8 @@ public class RouteChangeItem
     /// Gets the view model type for the route.
     /// </summary>
     /// <remarks>
-    /// Required only for Add actions to specify which view model should be created for the new route.
-    /// Must match a view model type in the router's configuration.
+    /// Used only by Add actions: the added route is the child route configured for the change's
+    /// <see cref="Outlet"/>, and, when several are, the one whose view model type is this one.
     /// </remarks>
     public Type? ViewModelType { get; init; }
 }

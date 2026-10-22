@@ -100,8 +100,7 @@ public abstract partial class DockingWorkspaceViewModel(
         this.localRouterEventsSub = new CompositeDisposable(
             localRouter.Events.OfType<ActivationComplete>()
                 .Subscribe(
-                    @event =>
-                        this.PlaceDocks(@event.Options)),
+                    _ => this.PlaceDocks()),
             localRouter.Events.OfType<ActivationStarted>()
                 .Subscribe(
                     @event =>
@@ -270,14 +269,14 @@ public abstract partial class DockingWorkspaceViewModel(
     }
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "any exception is not fatal, we just continue with other docks")]
-    private void PlaceDocks(NavigationOptions options)
+    private void PlaceDocks()
     {
         Debug.Assert(this.Docker is not null, "docker should be setup by now");
 
-        // Called when activation is complete. If the navigation is partial, the docking tree is already built. Only
-        // changes will be applied. if the navigation mode is Full, all dockables and docks are created but no docks
-        // have been created yet and no docking took place.
-        if (options is not FullNavigation)
+        // Called when activation is complete. The dockables the navigation's activated routes loaded are created but
+        // not docked: all of them for a full navigation, which builds the docking tree, and those a partial
+        // navigation added, such as a closed panel shown again, which dock into the tree already built.
+        if (this.deferredDockables.Count == 0)
         {
             return;
         }

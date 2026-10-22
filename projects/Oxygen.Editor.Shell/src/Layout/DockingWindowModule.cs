@@ -29,6 +29,7 @@ public sealed class DockingWindowModule : IScopeModule<IWindowLayer>
         ArgumentNullException.ThrowIfNull(scope);
         scope.Register<IDocker, Docker>(Reuse.Singleton);
         scope.Register<IDockViewFactory, DockViewFactory>(Reuse.Singleton);
+        scope.Register<ClosedPanels>(Reuse.Singleton);
         scope.Register<DockingWorkspaceLayout>(Reuse.Singleton);
         scope.Register<DockPanelViewModel>(Reuse.Transient);
         scope.Register<DockPanel>(Reuse.Transient);

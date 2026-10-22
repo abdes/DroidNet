@@ -37,6 +37,7 @@ namespace Oxygen.Editor.ContentExplorer;
 ///     outlet for
 ///     the right pane.
 /// </remarks>
+[RetainedViewModel]
 public sealed partial class ContentExplorerViewModel(
     ScopeFactory scopes,
     ScopeHandle window,

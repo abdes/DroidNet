@@ -56,7 +56,7 @@ public sealed class ContentExplorerPanelModule : IScopeModule<IPanelLayer>
         scope.Register<Importing.SceneImportDialogView>(Reuse.Transient);
 
         scope.Register<AssetsViewModel>(Reuse.Singleton);
-        scope.Register<AssetsView>(Reuse.Singleton);
+        scope.Register<AssetsView>(Reuse.Transient);
         RegisterAssetLayouts(scope);
     }
 }

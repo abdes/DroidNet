@@ -6,6 +6,7 @@ using System.Globalization;
 using System.Reactive.Linq;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
+using DroidNet.Routing;
 using Microsoft.UI.Xaml;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.ContentPipeline;
@@ -24,6 +25,7 @@ namespace Oxygen.Editor.CookedInspector;
 /// <param name="assetProvider">Current shared catalog facts for a specifically opened asset.</param>
 /// <param name="session">The project session the panel lives in.</param>
 /// <param name="showAsset">Explicit navigation in the owning workspace.</param>
+[RetainedViewModel]
 public sealed partial class CookedInspectionViewModel(IContentPipelineService pipeline, IAssetFeed assetProvider, IProjectSession session, Func<AssetPath, Task<bool>> showAsset) : ObservableObject, IDisposable
 {
     private Func<Task>? cancelInspection;

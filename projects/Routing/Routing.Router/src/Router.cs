@@ -109,6 +109,7 @@ public sealed partial class Router : IRouter, IDisposable
         Justification = "All unhandled exceptions will be propagated via the router NavigationFailed event")]
     public async Task NavigateAsync(IList<RouteChangeItem> changes, PartialNavigation options)
     {
+        IReadOnlyList<IActiveRoute> removed = [];
         try
         {
             var activeRoute = options.RelativeTo as ActiveRoute ?? throw new ArgumentException(
@@ -132,7 +133,7 @@ public sealed partial class Router : IRouter, IDisposable
 
             this.eventSource.OnNext(new NavigationStart(url, options));
 
-            ApplyChangesToRouterState(changes, activeRoute);
+            removed = ApplyChangesToRouterState(changes, activeRoute);
 
             this.eventSource.OnNext(new RoutesRecognized(currentState.UrlTree));
 
@@ -158,6 +159,14 @@ public sealed partial class Router : IRouter, IDisposable
             this.LogNavigationFailed(ex);
             this.eventSource.OnNext(new NavigationError(options));
         }
+        finally
+        {
+            // The deleted routes' views went away with the navigation's end, so their view models can go too.
+            foreach (var route in removed)
+            {
+                this.ReleaseRouteTree(route);
+            }
+        }
     }
 
     /// <inheritdoc/>
@@ -178,11 +187,13 @@ public sealed partial class Router : IRouter, IDisposable
     /// </summary>
     /// <param name="changes">The list of changes to be applied to the router state.</param>
     /// <param name="activeRoute">The active route to which the changes will be applied.</param>
+    /// <returns>The routes the changes deleted, which still hold their view models.</returns>
     /// <exception cref="ArgumentOutOfRangeException">Thrown when an unexpected change action is encountered.</exception>
-    private static void ApplyChangesToRouterState(
+    private static List<IActiveRoute> ApplyChangesToRouterState(
         IList<RouteChangeItem> changes,
         ActiveRoute activeRoute)
     {
+        var removed = new List<IActiveRoute>();
         foreach (var change in changes)
         {
             switch (change.ChangeAction)
@@ -192,7 +203,7 @@ public sealed partial class Router : IRouter, IDisposable
                     break;
 
                 case RouteChangeAction.Delete:
-                    ApplyDeleteChange(activeRoute, change);
+                    removed.Add(ApplyDeleteChange(activeRoute, change));
                     break;
 
                 case RouteChangeAction.Update:
@@ -206,6 +217,8 @@ public sealed partial class Router : IRouter, IDisposable
                         nameof(change));
             }
         }
+
+        return removed;
     }
 
     /// <summary>
@@ -246,14 +259,14 @@ public sealed partial class Router : IRouter, IDisposable
     /// matches the outlet name specified in the change item. If the child route is found, it is
     /// removed from the active route's children.
     /// </remarks>
-    private static void ApplyDeleteChange(ActiveRoute activeRoute, RouteChangeItem change)
+    /// <returns>The removed route.</returns>
+    private static IActiveRoute ApplyDeleteChange(ActiveRoute activeRoute, RouteChangeItem change)
     {
         var route = activeRoute.Children.FirstOrDefault(
-            r => r.Outlet.Name.Equals(change.Outlet, StringComparison.Ordinal));
-        Debug.Assert(
-            route is not null,
-            $"expecting to find an active route with the outlet name `{change.Outlet}`");
+            r => r.Outlet.Name.Equals(change.Outlet, StringComparison.Ordinal))
+            ?? throw new NavigationFailedException($"cannot delete the route in outlet `{change.Outlet}`: no such child route");
         _ = activeRoute.RemoveChild(route);
+        return route;
     }
 
     /// <summary>
@@ -262,34 +275,39 @@ public sealed partial class Router : IRouter, IDisposable
     /// <param name="activeRoute">The active route to which the change will be applied.</param>
     /// <param name="change">The change item containing the add details.</param>
     /// <remarks>
-    /// This method adds a new child route to the active route based on the view model type and the
-    /// active route configuration. It computes the path for the new route, creates a new URL
-    /// segment group, and adds the new route as a child of the active route.
+    /// This method adds a new child route to the active route, configured by the child route of the
+    /// active route's configuration for the change's outlet. It computes the path for the new route,
+    /// creates a new URL segment group, and adds the new route as a child of the active route.
     /// </remarks>
     private static void ApplyAddChange(ActiveRoute activeRoute, RouteChangeItem change)
     {
-        // Compute the path based on the view model type and the active route config
-        Debug.Assert(change.ViewModelType != null, "Expecting ViewModelType not to be null");
-        var config = MatchViewModelType(activeRoute.Config, change);
-
-        var urlSegmentGroup = new UrlSegmentGroup(
-            config.Path?
-                .Split('/')
-                .Select(s => new UrlSegment(s)) ?? []);
-
-        Debug.Assert(
-            change.Parameters != null,
-            "change.Parameters != null when adding a new route");
+        var config = MatchRouteConfig(activeRoute.Config, change);
+        var parameters = change.Parameters ?? ReadOnlyParameters.Empty;
+        var urlSegmentGroup = NewSegmentGroup(config, parameters);
         activeRoute.AddChild(
             new ActiveRoute()
             {
                 Config = config,
-                Params = change.Parameters,
+                Params = parameters,
                 Outlet = change.Outlet,
                 QueryParams = activeRoute.QueryParams,
                 SegmentGroup = urlSegmentGroup,
                 Segments = urlSegmentGroup.Segments,
             });
+    }
+
+    /// <summary>
+    /// Creates the URL segment group of a route added by a change set: the segments of its path, with the change's
+    /// parameters on the last one, as a URL carries them.
+    /// </summary>
+    /// <param name="config">The added route's configuration.</param>
+    /// <param name="parameters">The added route's parameters.</param>
+    /// <returns>The segment group.</returns>
+    private static UrlSegmentGroup NewSegmentGroup(IRoute config, IParameters? parameters)
+    {
+        var paths = config.Path?.Split('/') ?? [];
+        return new UrlSegmentGroup(
+            paths.Select((path, index) => new UrlSegment(path, index == paths.Length - 1 ? parameters : null)));
     }
 
     /// <summary>
@@ -309,17 +327,7 @@ public sealed partial class Router : IRouter, IDisposable
             switch (change.ChangeAction)
             {
                 case RouteChangeAction.Add:
-                    // Compute the path based on the view model type and the active route config
-                    Debug.Assert(change.ViewModelType != null, "Expecting ViewModelType not to be null");
-                    var config = MatchViewModelType(activeRoute.Config, change);
-
-                    var urlSegmentGroup = new UrlSegmentGroup(
-                        config.Path?
-                            .Split('/')
-                            .Select(s => new UrlSegment(s)) ?? []);
-
-                    urlTree.AddChild(change.Outlet, urlSegmentGroup);
-
+                    urlTree.AddChild(change.Outlet, NewSegmentGroup(MatchRouteConfig(activeRoute.Config, change), change.Parameters));
                     break;
 
                 case RouteChangeAction.Delete:
@@ -360,28 +368,39 @@ public sealed partial class Router : IRouter, IDisposable
     }
 
     /// <summary>
-    /// Matches the specified view model type to a route configuration.
+    /// Finds the configuration of the route that a change set adds, among the children of the route it is relative to.
     /// </summary>
-    /// <param name="config">The route configuration to search within.</param>
-    /// <param name="change">The route change item containing the view model type to match.</param>
-    /// <returns>The matched route configuration.</returns>
-    /// <exception cref="ArgumentNullException">Thrown when the view model type in the change item is null.</exception>
-    /// <exception cref="InvalidOperationException">Thrown when no matching route configuration is found for the specified view model type.</exception>
-    private static IRoute MatchViewModelType(IRoute config, RouteChangeItem change)
+    /// <param name="config">The configuration of the route the change is relative to.</param>
+    /// <param name="change">The change that adds the route.</param>
+    /// <returns>The configuration of the child route for the change's outlet and view model type.</returns>
+    /// <remarks>
+    /// Children of an empty-path route without a view model are candidates too: such a route only groups its children
+    /// under the parent, which is how a URL like <c>/(a:a//b:b)</c> matches them.
+    /// </remarks>
+    /// <exception cref="NavigationFailedException">No child route has the change's outlet and view model type.</exception>
+    private static IRoute MatchRouteConfig(IRoute config, RouteChangeItem change)
     {
-        Debug.Assert(change.ViewModelType != null, "changemust have a valid ViewModel");
+        return Find(config.Children) ?? throw new NavigationFailedException(
+            $"no route under `{config}` shows `{change.ViewModelType}` in the outlet `{change.Outlet}`");
 
-        // The dock is under workspace under root
-        var workspaceConfig = config.Children[0].Children[0];
+        IRoute? Find(IRoutes routes)
+        {
+            foreach (var route in routes)
+            {
+                if (route.Outlet.Name.Equals(change.Outlet.Name, StringComparison.Ordinal) && route.ViewModelType is not null
+                    && (change.ViewModelType is null || route.ViewModelType == change.ViewModelType))
+                {
+                    return route;
+                }
 
-        var childConfig
-            = workspaceConfig.Children?.FirstOrDefault(configChild => configChild.ViewModelType == change.ViewModelType);
+                if (route is { Path.Length: 0, ViewModelType: null } && Find(route.Children) is { } grouped)
+                {
+                    return grouped;
+                }
+            }
 
-        Debug.Assert(
-            childConfig is not null,
-            $"No route config under `{config}` has a view model type `{change.ViewModelType}`");
-
-        return childConfig;
+            return null;
+        }
     }
 
     /// <summary>
@@ -481,7 +500,7 @@ public sealed partial class Router : IRouter, IDisposable
 
         try
         {
-            DisposeRouteTree(context.State.RootNode);
+            this.ReleaseRouteTree(context.State.RootNode);
             this.LogContextCleanupCompleted(targetName);
         }
         catch (Exception ex)
@@ -496,33 +515,39 @@ public sealed partial class Router : IRouter, IDisposable
                 navigationContext.RouteActivationObserver = null;
             }
         }
+    }
 
-        void DisposeRouteTree(IActiveRoute route)
+    /// <summary>
+    /// Lets go of the view models of a route tree that routing no longer shows, children first.
+    /// </summary>
+    /// <param name="route">The root of the route tree.</param>
+    /// <remarks>
+    /// Each view model is released by the rule of <see cref="RoutedViewModels.Release"/>: disposed, unless its owner
+    /// retains it. A failure to dispose one view model is logged and does not stop the others.
+    /// </remarks>
+    [System.Diagnostics.CodeAnalysis.SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Best effort cleanup, so catch all exceptions")]
+    private void ReleaseRouteTree(IActiveRoute route)
+    {
+        foreach (var child in route.Children)
         {
-            foreach (var child in route.Children)
-            {
-                DisposeRouteTree(child);
-            }
-
-            if (route is not ActiveRoute activeRoute)
-            {
-                return;
-            }
-
-            if (activeRoute.ViewModel is IDisposable disposable)
-            {
-                try
-                {
-                    disposable.Dispose();
-                }
-                catch (Exception ex)
-                {
-                    this.LogViewModelDisposeFailed(activeRoute, ex);
-                }
-            }
-
-            activeRoute.ViewModel = null;
-            activeRoute.IsActivated = false;
+            this.ReleaseRouteTree(child);
         }
+
+        if (route is not ActiveRoute activeRoute)
+        {
+            return;
+        }
+
+        try
+        {
+            RoutedViewModels.Release(activeRoute.ViewModel);
+        }
+        catch (Exception ex)
+        {
+            this.LogViewModelDisposeFailed(activeRoute, ex);
+        }
+
+        activeRoute.ViewModel = null;
+        activeRoute.IsActivated = false;
     }
 }

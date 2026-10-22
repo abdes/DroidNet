@@ -187,9 +187,12 @@ context)` route to the handlers of the view models around the context
     multiplicity, in registration order, with its title and icon, showing and
     activating it through `ShowPanelAsync`. View never hides a panel.
 13. **A closed panel is recreated** by `ShowPanelAsync` from its workspace
-    route, docked with that route's docking information through the code the
-    initial layout uses; when its anchor panel is closed too, it docks to the
-    root at its position, as the initial layout does for a missing anchor.
+    route, with the view model the window kept, docked with that route's
+    docking information through the code the initial layout uses. A panel
+    tabbed with another goes back into its former dock when one of that dock's
+    panels is shown, else where the dock was anchored; when its anchor panel is
+    closed too, it docks to the root at its position, as the initial layout
+    does for a missing anchor.
 14. **No keys open the bar.** F10 and Tab keep their meaning; once open, the bar
     is navigated with arrows, Enter, Esc and the mnemonics.
 

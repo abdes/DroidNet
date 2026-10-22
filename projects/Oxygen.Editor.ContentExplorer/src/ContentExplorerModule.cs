@@ -35,7 +35,9 @@ public sealed class ContentExplorerModule : IFeatureModule
     public void Register(IRegistrator scope)
     {
         ArgumentNullException.ThrowIfNull(scope);
-        scope.Register<ContentExplorerViewModel>(Reuse.Transient, setup: Setup.With(allowDisposableTransient: true));
+        // The window keeps the panel's view model, and its browsing state, while the panel is closed; a view is new
+        // each time the panel shows.
+        scope.Register<ContentExplorerViewModel>(Reuse.Singleton);
         scope.Register<ContentExplorerView>(Reuse.Transient);
 
         // The window's explorer shows the assets that parts ask to reveal, and creates the scripts they ask for.
