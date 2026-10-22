@@ -286,26 +286,6 @@ public class DocumentTabsEventTests
     }
 
     /// <summary>
-    /// Test that a refused detach raises no DocumentDetached event.
-    /// </summary>
-    /// <returns>The asynchronous test.</returns>
-    [TestMethod]
-    public async Task DetachDocumentAsync_IsRefusedWithoutAnEvent()
-    {
-        // Arrange
-        var metadata = new TestDocumentMetadata { Title = "Test Document" };
-        _ = await this.service!.OpenDocumentAsync(this.testWindowId, metadata).ConfigureAwait(false);
-        var eventRaised = false;
-        this.service.DocumentDetached += (sender, args) => eventRaised = true;
-
-        // Act
-        _ = await this.service.DetachDocumentAsync(this.testWindowId, metadata.DocumentId).ConfigureAwait(false);
-
-        // Assert
-        _ = eventRaised.Should().BeFalse();
-    }
-
-    /// <summary>
     /// Test that DocumentAttached event is raised when attaching a document.
     /// </summary>
     /// <returns>The asynchronous test.</returns>

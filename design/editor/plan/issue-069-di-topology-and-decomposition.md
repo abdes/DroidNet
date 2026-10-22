@@ -5,8 +5,8 @@ Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
 Scenes, LivePreview, Asset family modules, Cook on change over checked inputs,
 Shell, Unsaved documents, Features, Dissolve the World Editor, Test boundaries,
 Enforcement), Phase 2 (scope factory and topology), Phase 3 (registration
-modules), Phase 4 (project session), S5.1 (docking per docker) and S5.2
-(retained panels) are done; see
+modules), Phase 4 (project session) and Phase 5 (documents across windows,
+panels in one) are done; see
 the ledger in section 6.
 Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
@@ -921,7 +921,7 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S5.1 Docking per docker                      | `done`        | Each `Docker` creates and finds its docks and dockables and runs its own docking maneuver; no docking statics remain                                                                        |
 | S5.2 Retained panels in the workspace window | `done`        | Closed panels keep their view models and dock back where they were; an explicit cook reopens Cooking; accepted in the running editor                                                        |
 | S5.3 Document windows                        | `done`        | Tabs tear out into document windows and drag back; the tabs, their close coordinator and input commits are the session's; accepted in the running editor                                    |
-| S5.4 Lifetime tests                          | `not started` |                                                                                                                                                                                             |
+| S5.4 Lifetime tests                          | `done`        | Contract tests of the area's view switching, a moved document's history and a window's documents in its close; activation and view recreation were covered already                          |
 | S6.1 to S6.3 Service location and messenger  | `not started` |                                                                                                                                                                                             |
 | S7 Documentation                             | `not started` |                                                                                                                                                                                             |
 

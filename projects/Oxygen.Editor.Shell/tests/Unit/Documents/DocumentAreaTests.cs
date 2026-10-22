@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using AwesomeAssertions;
+using DroidNet.TimeMachine;
 using Microsoft.UI;
 using Moq;
 using Oxygen.Editor.Documents;
@@ -157,6 +158,30 @@ public sealed partial class DocumentAreaTests
         _ = first.Documents.Should().BeEmpty();
         _ = second.Documents.Should().Equal(intro);
         _ = second.ActiveDocument.Should().BeSameAs(intro);
+    }
+
+    /// <summary>
+    ///     A document moved to another window and back is the same document, with the history of its edits: its undo
+    ///     works wherever its tab is.
+    /// </summary>
+    /// <returns>The asynchronous test.</returns>
+    [TestMethod]
+    public async Task AMovedTabComesBackWithItsDocumentsHistory()
+    {
+        using var notes = new Notes();
+        var tabs = Tabs.New();
+        using var first = CreateArea(tabs, notes, Window);
+        using var second = CreateArea(tabs, notes, OtherWindow);
+        var intro = await notes.OpenAsync("Intro", this.TestContext.CancellationToken).ConfigureAwait(false);
+        intro.History.AddChange("Edit", static () => { });
+        _ = await first.ShowAsync(intro).ConfigureAwait(false);
+
+        _ = await tabs.AttachDocumentAsync(OtherWindow, (await tabs.DetachDocumentAsync(Window, intro.Id).ConfigureAwait(false))!).ConfigureAwait(false);
+        _ = await tabs.AttachDocumentAsync(Window, (await tabs.DetachDocumentAsync(OtherWindow, intro.Id).ConfigureAwait(false))!).ConfigureAwait(false);
+
+        _ = first.ActiveDocument.Should().BeSameAs(intro);
+        _ = second.Documents.Should().BeEmpty();
+        _ = intro.History.CanUndo.Should().BeTrue();
     }
 
     /// <summary>A document moved to another window closes there with its tab, as one opened there does.</summary>
