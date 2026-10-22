@@ -9,10 +9,9 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: item 5 (slice 77.4)**, the slot model removed
-([section 2.2](#22-77-implementation-slices)): the slot machinery is replaced
-by Material overrides on surface parts, materials keep working, and the cook
-keeps writing `MaterialOverrideRecord` until 77.5.
+**Next: item 6 (#94)**, session services own their project scope
+([section 3](#3-blocking-issues)): session services take a `ProjectContext` per call,
+so project and scope ownership are settled before the new work.
 
 | Order | Item                                                 | Needs        | State | Commit    |
 | ----- | ---------------------------------------------------- | ------------ | ----- | --------- |
@@ -20,7 +19,7 @@ keeps writing `MaterialOverrideRecord` until 77.5.
 | 2     | #77 slice 77.1: surface rename                       | 1            | done  | 9b1ba890f |
 | 3     | #77 slice 77.2: scene component schema and generator | 2            | done  | 4c4e10dec |
 | 4     | #77 slice 77.3: node components in the editor        | 3            | done  | 5069bfa45 |
-| 5     | #77 slice 77.4: slot model removed                   | 4            | open  | -         |
+| 5     | #77 slice 77.4: slot model removed                   | 4            | done  | 2dba3ac84 |
 | 6     | #94 session services own their project scope         | -            | open  | -         |
 | 7     | #95 Scene Explorer history without `UndoRedo`        | -            | open  | -         |
 | 8     | #74 one view per view model per host                 | -            | open  | -         |
@@ -155,7 +154,8 @@ The decision:
 - **Removed.** `RenderingSlot`, `LightingSlot`, `LevelOfDetailSlot`,
   `LodPolicy` and its editor subclasses, node-scope slots,
   `TargetedOverrides`, `GeometryOverrideTarget`, `OverrideSlot`,
-  `OverridableProperty`, `MaterialsSlot`, `SurfaceTarget`, their records,
+  `OverridableProperty`, `MaterialsSlot`, `SurfaceTarget` as stored data
+  (it remains the surface an edit picks from an inventory), their records,
   `SceneJsonContext` entries, reference-field paths and tests, and the
   never-called `LogLodPolicySyncUnsupported`. In the engine:
   `RenderableRecord.visible`, the index-keyed `SetSubmeshVisible` and
@@ -186,7 +186,7 @@ passes on its own.
 | 77.1 Surface rename       | E, I, Ed, docs | `MaterialSlot`, `MaterialSlotId`, `MaterialSlotInventory` and the slot provenance schema become `Surface`, `SurfaceId`, `SurfaceInventory` and surface provenance in data types, cooker, renderable, scripting bindings, Interop, editor names and documents. Binary layout unchanged                                                                                                                                                                                                                                                                                                                                                                                                                                                         | Decision approved   | Yes    |
 | 77.2 Schema and generator | E, I, Ed       | The scene component schema, `Scene/Schema/SceneComponents.yaml`, with its JSON Schema. Each platform generates its own code: the engine build runs a Python generator in the uv workspace, with unit tests, emitting the engine field enums; Interop includes that header; the editor's Roslyn generator, with Verify tests, emits Runtime's wire ids, the scene `PropertyId`s and LivePreview's wire table. Its first content is exactly today's components and properties, so generated code replaces `PropertyKeys.h`'s enums, `WireVocabulary.h`, `RuntimeComponentId` and the descriptor ids with no behavior change                                                                                                                     | 77.1                | No     |
 | 77.3 Node components      | Ed, I, E       | `MetadataComponent`, `HierarchyComponent` and `NodeFlagsComponent`; `SceneNode` keeps only its ID. Serializer, data migration, cook generator and Live Preview read the components; Rendering becomes a component-list entry for every node. The add-component kinds are the schema kinds. `NodeFlagsComponent` carries all six engine node flags, and Static, Ray-cast selectable and Ignore parent transform become authored: schema fields of the `Node` component (the engine header regenerates), the Interop applier and observer, Live Preview, Ignore parent transform in the Transform section and the other two under Rendering's Advanced, with tests. The engine node is already built from components                            | 77.2                | No     |
-| 77.4 Slot model removed   | Ed             | The slot machinery is replaced by Material overrides on surface parts; materials keep working. The cook keeps writing `MaterialOverrideRecord` until 77.5 replaces it in the same commit that changes the format                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                              | 77.3                | No     |
+| 77.4 Slot model removed   | E, Ed          | The slot machinery is replaced by the override store of [scene model section 5.7](../lld/scene-authoring-model.md#57-editor-representation-of-parts-and-overrides): the schema declares parts and sources (Geometry's `Surface` part with `Material`), validated by the engine's generator with no change to its output; `PropertyId` moves to `Oxygen.Managed.Core` and the generated `SceneSchema` to World; `SourceOverrides` on `GeometryComponent`, one `SetOverrides` edit, and the data migrated. Materials keep working; the cook keeps writing `MaterialOverrideRecord` until 77.5 replaces it in the same commit that changes the format                                                                                            | 77.3                | No     |
 | Inherit modes (section 2) | Ed, I          | Node flags become source-mode values; `NodePropertyApplier` gains the Inherit path; the cook writes the inherited bits the format already has                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                 | 77.3, #94, #95      | No     |
 | 77.5 Format and runtime   | E, I, Ed       | All format changes in one commit: the schema declares every component's cardinality (required or optional), the `Metadata` component with its name (a new `string` property type) and the `Hierarchy` component, and both generators read them; the engine schema generator's record codecs and default tables, which the override table reads; surface defaults and the default LOD policy in the geometry asset, the cooked override table, the renderable's LOD override, `RenderableRecord.visible` removed. `SceneInstantiation` applies the table; `SetSurfaceOverride` survives geometry replacement; scene preparation resolves surfaces; the index-keyed APIs go; Interop gets the typed override command; the cook writes the table | 77.4                | Yes    |
 | 77.6 Surface values       | Ed, R          | Visible and Cast Shadows edits with history, the Surfaces list in the inspector, Live Preview of both                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                         | 77.5, #95, #76      | No     |
@@ -197,7 +197,8 @@ Verification per layer: engine changes run explicit test executables with
 `--gtest_filter` (section 4.6); Interop runs its native tests; the generator
 runs its unit tests and a check that the committed generated files match its
 output; editor changes run filtered test runs of the touched projects. 77.3
-regenerates the engine schema header; 77.4 needs no engine build. The owner
+regenerates the engine schema header; 77.4 runs the engine generator's unit
+tests and checks its output is unchanged, with no engine build. The owner
 recooks after 77.1, 77.5 and 77.8.
 
 The editor Hide engine mask
