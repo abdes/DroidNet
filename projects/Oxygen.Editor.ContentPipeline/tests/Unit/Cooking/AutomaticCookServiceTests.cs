@@ -252,7 +252,7 @@ public sealed class AutomaticCookServiceTests
         _ = fixture.Calls.Reader.TryRead(out _).Should().BeFalse();
     }
 
-    /// <summary>A changed source that cannot be a cook input, such as a deleted script, is not cooked.</summary>
+    /// <summary>A changed source that cannot be a cook input is not cooked.</summary>
     /// <returns>The asynchronous unresolved-source regression.</returns>
     [TestMethod]
     public async Task SourceThatCannotBeACookInputIsNotCooked()

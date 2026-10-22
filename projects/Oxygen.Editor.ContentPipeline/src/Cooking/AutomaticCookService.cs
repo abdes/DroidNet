@@ -414,8 +414,8 @@ public sealed partial class AutomaticCookService : IAutomaticCookService, IDispo
             var read = await this.statuses.ReadAsync(current, sources, lifetime).ConfigureAwait(false);
             var cooked = read.Where(static status => status.Freshness == AssetCookFreshness.Current).Select(static status => status.AssetUri).ToHashSet();
 
-            // A source that is gone is cooked only to remove the output it published. One that cannot be a cook input,
-            // such as a deleted script, would only fail the run; the next cook removes what it published.
+            // A source that is gone, a deleted script included, is cooked only to remove the output it published. One
+            // that cannot be a cook input would only fail the run.
             var gone = read.Where(static status => (status.Freshness == AssetCookFreshness.MissingSource && !status.HasPublishedOutput)
                     || status.Diagnostics.Any(static issue => string.Equals(issue.Code, AssetCookStatusReader.InputUnresolvedCode, StringComparison.Ordinal)))
                 .Select(static status => status.AssetUri).ToHashSet();

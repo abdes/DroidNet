@@ -124,7 +124,8 @@ public sealed partial class ContentPipelineService(
     internal static bool IsCookableDescriptorFile(ProjectContext project, string path)
         => ContentCookAssetKinds.Of(path) switch
         {
-            ContentCookAssetKind.Unknown => false,
+            // A script is a source, not a descriptor: it cooks with the scenes that use it, or on its own when it changes.
+            ContentCookAssetKind.Unknown or ContentCookAssetKind.Script => false,
             ContentCookAssetKind.ForeignSource => project.FileSystem.File.Exists(path + AssetFileTypes.ImportSettings),
             _ => !AssetFileTypes.Is(path, AssetFileCategory.Cooked),
         };
@@ -266,11 +267,9 @@ public sealed partial class ContentPipelineService(
 
     private static ContentCookAssetKind GetAssetKind(AssetPath assetUri)
     {
-        // A script and an input source are named by their identity (Orbit.oscript, Player.input) and cook from their
-        // source, which the resolver finds.
+        // An input source is named by its identity (Player.input) and cooks from its source, which the resolver finds.
         var kind = ContentCookAssetKinds.Of(assetUri.Name);
         return kind != ContentCookAssetKind.Unknown ? kind
-            : assetUri.Name.EndsWith(AssetFileTypes.Script, StringComparison.Ordinal) ? ContentCookAssetKind.Script
             : ContentCookAssetKinds.Of(assetUri.WithAuthoringSuffix().Name) == ContentCookAssetKind.Input ? ContentCookAssetKind.Input
             : throw new ArgumentException($"Unsupported content cook asset URI '{assetUri}'.", nameof(assetUri));
     }

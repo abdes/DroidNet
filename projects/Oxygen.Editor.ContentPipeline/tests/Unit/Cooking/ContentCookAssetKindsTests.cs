@@ -21,7 +21,9 @@ public sealed class ContentCookAssetKindsTests
     [DataRow("/Content/Scenes/Main.oscene.json", ContentCookAssetKind.Scene)]
     [DataRow("/Content/Models/Ship.GLB", ContentCookAssetKind.ForeignSource)]
     [DataRow("/Content/Input/Player.input.json", ContentCookAssetKind.Input)]
-    [DataRow("/Content/Scripts/Door.lua", ContentCookAssetKind.Unknown)]
+    [DataRow("/Content/Scripts/Door.lua", ContentCookAssetKind.Script)]
+    [DataRow("/Content/Scripts/Door.luau", ContentCookAssetKind.Script)]
+    [DataRow("/Content/Scripts/Door.oscript", ContentCookAssetKind.Script)]
     [DataRow("/Content/Materials/Red.OMAT.json", ContentCookAssetKind.Unknown)]
     [DataRow("/Content/Notes/readme.md", ContentCookAssetKind.Unknown)]
     public void FileTypeGivesTheCookKind(string path, ContentCookAssetKind expected)

@@ -144,6 +144,41 @@ public sealed class CookRepairTests
     }
 
     /// <summary>
+    /// An automatic cook of a deleted script removes its cooked output, as for any deleted source, and keeps every
+    /// other asset without cooking it.
+    /// </summary>
+    /// <returns>The asynchronous native regression.</returns>
+    [TestMethod]
+    [TestCategory("NativeContent")]
+    public async Task AutomaticCookOfDeletedScriptRemovesItsOutput()
+    {
+        using var workspace = new CookWorkspace(engineContent: EngineContentPak.Installed());
+        workspace.WriteMaterial("Content/Materials/Red.omat.json", "Red");
+        workspace.WriteText("Content/Scripts/Orbit.lua", """
+            local Script = oxygen.script {}
+
+            return Script
+            """);
+        var script = AssetPath.Parse("/Content/Scripts/Orbit.lua");
+        using var compatibility = EditorNativeCompatibilityService.ForCooking();
+        var api = CreateRecordingApi(compatibility);
+        var pipeline = CreateIncrementalService(workspace, api, compatibility);
+        AssertCookSucceeded(await pipeline.CookSavedAssetAsync(AssetPath.Parse("/Content/Materials/Red.omat.json"), workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false));
+        AssertCookSucceeded(await pipeline.CookSavedAssetAsync(script, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false));
+        File.Delete(Path.Combine(workspace.Root, "Content/Scripts/Orbit.lua"));
+        api.Imported.Clear();
+
+        var result = await pipeline.CookSavedAssetAsync(script, workspace.ProjectContext, this.TestContext.CancellationToken).ConfigureAwait(false);
+
+        AssertCookSucceeded(result);
+        _ = api.Imported.Should().BeEmpty();
+        _ = api.Removed.Should().ContainSingle().Which.VirtualPaths.Should().Equal("/Content/Scripts/Orbit.oscript");
+        var paths = (await api.ReadInventoryAsync(workspace.CookedRoot("Content"), artifacts: null, this.TestContext.CancellationToken).ConfigureAwait(false))
+            .Assets.Select(static asset => asset.VirtualPath).ToArray();
+        _ = paths.Should().NotContain("/Content/Scripts/Orbit.oscript").And.Contain("/Content/Materials/Red.omat");
+    }
+
+    /// <summary>
     /// Deleting a material cooks the scene that uses it again: the scene reports the missing material, and nothing
     /// is published until it is fixed.
     /// </summary>

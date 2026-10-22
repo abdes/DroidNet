@@ -58,6 +58,23 @@ internal sealed partial class ScriptCookingTests : IDisposable
     }
 
     [TestMethod]
+    [DataRow("/Content/Player/move.oscript", "Content/Player/move.lua")]
+    [DataRow("/Content/Player/move.lua", "Content/Player/move.lua")]
+    [DataRow("/Content/Player/move.luau", "Content/Player/move.luau")]
+    public void ResolveDeletedScriptGivesItsMissingSource(string requested, string source)
+    {
+        File.Delete(Path.Combine(this.root, "Content", "Player", "move.lua"));
+
+        var input = CookInputResolver.Resolve(this.project, AssetPath.Parse(requested), ContentCookInputRole.Primary);
+
+        // The cook reports the source missing and removes what the script published, as for any deleted source.
+        _ = input.Kind.Should().Be(ContentCookAssetKind.Script);
+        _ = input.AssetUri.Should().Be(MoveScript);
+        _ = input.SourceRelativePath.Should().Be(source);
+        _ = File.Exists(input.SourceAbsolutePath.FullPath).Should().BeFalse();
+    }
+
+    [TestMethod]
     public void BuildJobCompilesTheScriptAndRecordsItsSourceUnderTheMount()
     {
         var input = CookInputResolver.Resolve(this.project, MoveScript, ContentCookInputRole.Dependency);

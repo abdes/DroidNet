@@ -10,8 +10,8 @@ namespace Oxygen.Editor.ContentPipeline;
 internal static class ContentCookAssetKinds
 {
     /// <summary>
-    /// Gets the cook kind of an authored descriptor or its cooked asset (texture, material, geometry, scene), a model or
-    /// an input file. Scripts are resolved from their sources separately, and are <see cref="ContentCookAssetKind.Unknown"/> here.
+    /// Gets the cook kind of an authored descriptor or its cooked asset (texture, material, geometry, scene), a script
+    /// source or its cooked script, a model or an input file.
     /// </summary>
     /// <param name="path">A file name, path or virtual path.</param>
     /// <returns>The kind, or <see cref="ContentCookAssetKind.Unknown"/> for any other file.</returns>
@@ -20,6 +20,7 @@ internal static class ContentCookAssetKinds
         {
             { Category: AssetFileCategory.Model } => ContentCookAssetKind.ForeignSource,
             { Category: AssetFileCategory.Input } => ContentCookAssetKind.Input,
+            { Category: AssetFileCategory.Script or AssetFileCategory.Cooked, CookedExtension: AssetFileTypes.Script } => ContentCookAssetKind.Script,
             { Category: AssetFileCategory.Descriptor or AssetFileCategory.Cooked, CookedExtension: AssetFileTypes.Texture } => ContentCookAssetKind.Texture,
             { Category: AssetFileCategory.Descriptor or AssetFileCategory.Cooked, CookedExtension: AssetFileTypes.Material } => ContentCookAssetKind.Material,
             { Category: AssetFileCategory.Descriptor or AssetFileCategory.Cooked, CookedExtension: AssetFileTypes.Geometry } => ContentCookAssetKind.Geometry,

@@ -55,8 +55,9 @@ internal static class CookInputResolver
             throw new InvalidDataException($"Cook dependency '{uri}' refers to an unknown authoring mount.");
         }
 
-        // A missing source is still the descriptor the asset would cook from, so the cook reports it missing.
-        var location = FindAuthoringFile(project.LocateSource(identity));
+        // A missing source is still the file the asset would cook from, so the cook reports it missing, and a cook of
+        // a deleted source retires what it published. A deleted script is the script source that was requested.
+        var location = FindAuthoringFile(uri != identity && AssetFileTypes.SourcesOf(identity).Contains(uri) ? project.Find(uri) : project.LocateSource(identity));
         var kind = location is null || AssetFileTypes.Is(location.Path.Name, AssetFileCategory.Cooked) ? ContentCookAssetKind.Unknown : ContentCookAssetKinds.Of(location.Path.Name);
         if (kind == ContentCookAssetKind.Unknown)
         {
@@ -103,7 +104,7 @@ internal static class CookInputResolver
     public static ContentCookInput? TryResolveScript(ProjectContext project, AssetPath uri, ContentCookInputRole role)
     {
         var identity = AssetFileTypes.ToIdentity(uri);
-        if (!identity.Name.EndsWith(AssetFileTypes.Script, StringComparison.Ordinal)
+        if (ContentCookAssetKinds.Of(identity.Name) != ContentCookAssetKind.Script
             || !VirtualPath.IsCanonical(identity.VirtualPath)
             || FindAuthoringFile(project.FindSource(identity)) is not { } source
             || !AssetFileTypes.Is(source.Path.Name, AssetFileCategory.Script)
