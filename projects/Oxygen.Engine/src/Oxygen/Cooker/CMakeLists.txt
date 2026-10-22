@@ -71,8 +71,8 @@ oxygen_embed_json_schemas(
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.texture-descriptor.schema.json"
     kMaterialDescriptorSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.material-descriptor.schema.json"
-    kMaterialSlotProvenanceSchema
-    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.material-slot-provenance.schema.json"
+    kSurfaceProvenanceSchema
+    "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.surface-provenance.schema.json"
     kRetainedModelImportSchema
     "${CMAKE_CURRENT_SOURCE_DIR}/Import/Schemas/oxygen.retained-model-import.schema.json"
     kGeometryDescriptorSchema
@@ -129,7 +129,7 @@ set(
   "Import/ImportProgress.h"
   "Loose/Validation.h"
   "Import/ImportReport.h"
-  "Import/MaterialSlotProvenance.h"
+  "Import/SurfaceProvenance.h"
   "Import/RetainedModelImport.h"
   "Import/ImportRequest.h"
   "Import/InputImportRequestBuilder.h"
@@ -227,7 +227,7 @@ set(
   "Import/Internal/Jobs/TextureImportPolicy.h"
   "Import/Internal/LooseCookedIndexRegistry.h"
   "Import/Internal/LooseCookedWriter.h"
-  "Import/Internal/MaterialSlotAllocation.h"
+  "Import/Internal/SurfaceAllocation.h"
   "Import/Internal/Pipelines/BufferPipeline.h"
   "Import/Internal/Pipelines/CollisionShapeImportPipeline.h"
   "Import/Internal/Pipelines/GeometryPipeline_tangents.h"
@@ -340,8 +340,8 @@ set(
   "Import/Internal/Pipelines/InputImportPipeline.cpp"
   "Import/Internal/Pipelines/MaterialPipeline.cpp"
   "Import/Internal/Pipelines/MeshBuildPipeline.cpp"
-  "Import/Internal/MaterialSlotAllocation.cpp"
-  "Import/MaterialSlotProvenance.cpp"
+  "Import/Internal/SurfaceAllocation.cpp"
+  "Import/SurfaceProvenance.cpp"
   "Import/RetainedModelImport.cpp"
   "Import/SceneImportSettings.cpp"
   "Import/Internal/ImportSourceSnapshot.cpp"
@@ -404,7 +404,7 @@ if(OXYGEN_BUILD_TESTS AND BUILD_SHARED_LIBS)
   add_library(
     oxygen-cooker-test-visible-internals
     STATIC
-    "Import/Internal/MaterialSlotAllocation.cpp"
+    "Import/Internal/SurfaceAllocation.cpp"
     "Import/Internal/ImportSourceSnapshot.cpp"
   )
   set_target_properties(

@@ -28,9 +28,9 @@
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/ExposureSettings.h>
 
 namespace oxygen::content::import::internal {
@@ -648,20 +648,21 @@ namespace {
           return std::nullopt;
         }
         if (document.contains("material_overrides")) {
-          auto assigned = std::unordered_set<data::MaterialSlotId> {};
+          auto assigned = std::unordered_set<data::SurfaceId> {};
           for (const auto& assignment : document.at("material_overrides")) {
-            const auto slot = data::MaterialSlotId::FromString(
-              assignment.at("slot_id").get<std::string>());
-            if (!slot || slot.value().IsNil()
-              || !assigned.insert(slot.value()).second) {
+            const auto surface = data::SurfaceId::FromString(
+              assignment.at("surface_id").get<std::string>());
+            if (!surface || surface.value().IsNil()
+              || !assigned.insert(surface.value()).second) {
               AddDiagnostic(context, ImportSeverity::kError,
-                "scene.descriptor.material_slot_invalid",
-                "Material assignment requires a non-nil, unique slot identity",
+                "scene.descriptor.surface_invalid",
+                "Material assignment requires a non-nil, unique surface "
+                "identity",
                 object_path + ".material_overrides");
               return std::nullopt;
             }
             renderable.materials.push_back({
-              .slot_id = slot.value(),
+              .surface_id = surface.value(),
               .material = assignment.at("material_ref").get<std::string>(),
               .layout_revision
               = assignment.at("layout_revision").get<std::string>(),

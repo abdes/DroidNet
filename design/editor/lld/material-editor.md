@@ -47,9 +47,9 @@ revisions require the normal explicit Save/discard flow.
   and gestures.
 - [documents-and-commands.md](documents-and-commands.md): document lifetime,
   history and saving.
-- [property-inspector.md](property-inspector.md): geometry slots and scene
+- [property-inspector.md](property-inspector.md): geometry surfaces and scene
   commands.
-- [content-pipeline.md](content-pipeline.md): native cooking, slot identity and
+- [content-pipeline.md](content-pipeline.md): native cooking, surface identity and
   publication.
 - [live-engine-sync.md](live-engine-sync.md): current runtime intent and async
   completion ownership.
@@ -72,7 +72,7 @@ descriptors and their format, including float32 emissive RGB.
 ```text
 Create/open material -> edit immutable source through commands -> explicit Save
   -> shared incremental cook -> validated publication -> refresh scene instances
-Assign/clear material -> scene command for a stable geometry slot -> live sync
+Assign/clear material -> scene command for a stable geometry surface -> live sync
 ```
 
 V0.1 supports base colour/opacity, metallic, roughness, Opaque/Mask/Blend,
@@ -88,15 +88,15 @@ promise light on nearby geometry.
 
 ## 6. Ownership
 
-| Owner                             | Responsibility                                                         |
-| --------------------------------- | ---------------------------------------------------------------------- |
-| MaterialEditor                    | Material documents, property commands, history and swatch UI.          |
-| Managed.Assets                    | Typed immutable material data and canonical source reader/writer.      |
-| ContentExplorer                   | Create/open entry points, asset identity and material picker.          |
-| ContentPipeline                   | Saved-input capture, native cook, provenance and publication.          |
-| WorldEditor                       | Per-instance geometry-slot assignments and explicit repair commands.   |
-| Native Data/Cooker/Content/Vortex | Slot inventory, binary formats, loaded materials and actual rendering. |
-| Runtime / Interop                 | Supported capability transport and lifetime-safe native application.   |
+| Owner                             | Responsibility                                                            |
+| --------------------------------- | ------------------------------------------------------------------------- |
+| MaterialEditor                    | Material documents, property commands, history and swatch UI.             |
+| Managed.Assets                    | Typed immutable material data and canonical source reader/writer.         |
+| ContentExplorer                   | Create/open entry points, asset identity and material picker.             |
+| ContentPipeline                   | Saved-input capture, native cook, provenance and publication.             |
+| WorldEditor                       | Per-instance geometry-surface assignments and explicit repair commands.   |
+| Native Data/Cooker/Content/Vortex | Surface inventory, binary formats, loaded materials and actual rendering. |
+| Runtime / Interop                 | Supported capability transport and lifetime-safe native application.      |
 
 No editor feature writes native material/geometry structs or owns another cook
 path. Development qualification depends on these production capabilities; the
@@ -216,28 +216,28 @@ rules. A missing material remains an authored reference with a visible
 diagnostic. A scene instance assignment never changes the shared material or
 mesh asset.
 
-### 7.5 Existing geometry slots and repair
+### 7.5 Existing geometry surfaces and repair
 
-Every existing mesh material slot is assignable. The native geometry inventory
-owns opaque 128-bit `MaterialSlotId` values (canonical UUID text in JSON),
+Every existing mesh surface is assignable. The native geometry inventory
+owns opaque 128-bit `SurfaceId` values (canonical UUID text in JSON),
 layout revision, labels, mesh defaults and per-LOD/submesh bindings. See
-[content-pipeline section 20](content-pipeline.md#20-canonical-material-slot-identity-and-reimport)
+[content-pipeline section 20](content-pipeline.md#20-canonical-surface-identity-and-reimport)
 for the complete identity, witness and publication contract.
 
-A scene override is keyed by geometry URI and SlotId, with its observed layout
-revision for stale-operation checks. Slot labels, list order and runtime indices
+A scene override is keyed by geometry URI and SurfaceId, with its observed layout
+revision for stale-operation checks. Surface labels, list order and runtime indices
 are presentation/transport facts, not authored identity. Clearing removes that
-slot's override and restores its mesh-assigned default. It does not assign an
-unrelated engine material or clear another slot. Explicitly choosing the engine
+surface's override and restores its mesh-assigned default. It does not assign an
+unrelated engine material or clear another surface. Explicitly choosing the engine
 default remains an ordinary material assignment.
 
 Unproven reimport continuity retains unresolved overrides, their material URIs
-and prior slot context. The inspector offers Reassign to an existing slot or
+and prior surface context. The inspector offers Reassign to an existing surface or
 Clear; each is one scene command with Undo/Redo. Do not guess a name/index
 match. Unresolved overrides block cooking and qualification of affected scenes,
 while unrelated scenes remain usable. Known missing material resources remain
-distinct from missing slot identity. Transient geometry loading is not a
-structural slot failure and must recover without restarting the editor.
+distinct from missing surface identity. Transient geometry loading is not a
+structural surface failure and must recover without restarting the editor.
 
 ## 8. Commands, Services, Or Adapters
 
@@ -253,14 +253,14 @@ pipeline.
 ### 8.2 Assignment to geometry
 
 The scene command takes explicit targets
-`(NodeId, GeometryUri, SlotId, ExpectedLayoutRevision)` plus the selected
+`(NodeId, GeometryUri, SurfaceId, ExpectedLayoutRevision)` plus the selected
 material URI, or null to clear. Validate all targets against the current
 inventories before mutation. A stale layout or incompatible multi-selection
-rejects the command atomically and names the affected target. Never apply a slot
+rejects the command atomically and names the affected target. Never apply a surface
 merely because it has the same visible row number on another selected mesh.
 
 The picker supplies material identity; the scene command owns source mutation,
-dirty state, history and live sync. All existing slots, including nonzero slots,
+dirty state, history and live sync. All existing surfaces, including nonzero surfaces,
 use the same native binding and clear route. Unsupported/missing native behavior
 is a failed capability/qualification gate, not the supported V0.1 outcome.
 
@@ -268,7 +268,7 @@ is a failed capability/qualification gate, not the supported V0.1 outcome.
 
 Reuse `Material.Create`, `Material.Open`, `Material.EditScalar`,
 `Material.Save`, `Material.Cook`, `Material.AssignToGeometry` and scene
-slot-edit operations. Slot repair is an explicit scene edit with target and
+surface-edit operations. Surface repair is an explicit scene edit with target and
 old/new identity evidence.
 
 ## 9. UI Surfaces
@@ -290,16 +290,16 @@ and successful publication; pending state explains this relationship.
 
 Create New chooses a name and target using project-layout-and-templates rules,
 writes canonical source and opens the document. Assignment is a separate
-explicit slot action. Each existing slot row shows its identity/label, default,
-override and resolution state; obsolete slot context is shown only for explicit
-repair. Slot topology creation/removal is not part of this editor.
+explicit surface action. Each existing surface row shows its identity/label, default,
+override and resolution state; obsolete surface context is shown only for explicit
+repair. Surface topology creation/removal is not part of this editor.
 
 ## 10. Persistence And Round Trip
 
 - Persist canonical source fields through the existing atomic file store.
 - Preserve linear colour/HDR values, alpha semantics and read-only texture refs.
-- Persist geometry/SlotId/material identities and unresolved repair context.
-- Do not persist runtime slot indices, loaded asset pointers or cooked paths.
+- Persist geometry/SurfaceId/material identities and unresolved repair context.
+- Do not persist runtime surface indices, loaded asset pointers or cooked paths.
 - Migrate useful pre-V0.1 data once and reject retired schemas thereafter.
 
 ## 11. Live Sync / Cook / Runtime Behavior
@@ -335,7 +335,7 @@ publication and mount state, including offline NotMounted.
 Assignment queues identity-based runtime intent. Native asset completion and
 geometry-layout acceptance remain generation checked. A transient unavailable
 geometry/material produces a visible pending/failure state, retains authored
-intent and can recover. Structural missing slots require repair, not retry
+intent and can recover. Structural missing surfaces require repair, not retry
 loops.
 
 Successful material publication refreshes every current instance of that
@@ -349,17 +349,17 @@ Use `MaterialAuthoring` for field/create errors, `Document` for persistence,
 `ContentPipeline`/`AssetCook` for cooking/publication, `AssetIdentity` for
 missing assets and `LiveSync` for native application. Preserve native technical
 codes. Diagnostics identify document/project lifetime, material URI and, for
-assignment, node, geometry URI, SlotId, expected/actual layout revision and
+assignment, node, geometry URI, SurfaceId, expected/actual layout revision and
 previous label.
 
 Distinguish invalid input, Needs save, missing material, loading geometry,
-missing/stale slot layout, rejected native application, cook failure and publish
+missing/stale surface layout, rejected native application, cook failure and publish
 failure. Never report a queued command as a loaded material or displayed frame.
 
 ## 13. Dependency Rules
 
 MaterialEditor uses managed material contracts and public ContentPipeline/picker
-services. Geometry UI consumes slot inventory through supported content APIs. It
+services. Geometry UI consumes surface inventory through supported content APIs. It
 does not decode native files or implement material asset editing. No editor
 feature calls native facades directly or creates a second history/save/cook
 path. Production modules have no dependency on development parity schemas or
@@ -372,9 +372,9 @@ drivers.
    invalid values fail without source/history mutation.
 3. Colour/slider gestures, cancellation, no-op, Undo/Redo and close/reopen
    preserve document history and newer unsaved revisions.
-4. Every existing slot supports assign/clear, nonzero-slot editing, multiple
+4. Every existing surface supports assign/clear, nonzero-surface editing, multiple
    instances, stable layout reload and missing-material recovery.
-5. Slot reimport tests cover exact unchanged layout, parameter/texture-only
+5. Surface reimport tests cover exact unchanged layout, parameter/texture-only
    edits, persistent source IDs, unproven reorder/removal, explicit repair and
    rollback.
 6. Native opaque/masked/blended emission works with lighting, exposure and bloom
@@ -387,7 +387,7 @@ drivers.
 
 Current requirements are above. Historical validation stays at its recorded
 scope in ED-M07A field/workflow results, ED-M07B content workflows and material
-sidedness/recovery. Those reports do not establish emission, all-slot identity
+sidedness/recovery. Those reports do not establish emission, all-surface identity
 or new-format parity. Implementation/evidence completion is recorded in the
 milestone status ledger.
 

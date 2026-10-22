@@ -112,8 +112,8 @@ sections 3 to 5; the inspector design is in
 [instance overrides inspector](../ui/instance-overrides-inspector.md). Facts it
 rests on:
 
-- Import allocates one material slot per distinct source material of a
-  geometry and one submesh per slot per LOD; separate source objects become
+- Import allocates one surface per distinct source material of a
+  geometry and one submesh per surface per LOD; separate source objects become
   separate nodes.
 - The cook writes `RenderableRecord.visible` from the node's own `IsVisible`,
   and `SceneInstantiation` skips the renderable when it is 0.
@@ -157,7 +157,7 @@ The decision:
 - **Removed.** `RenderingSlot`, `LightingSlot`, `LevelOfDetailSlot`,
   `LodPolicy` and its editor subclasses, node-scope slots,
   `TargetedOverrides`, `GeometryOverrideTarget`, `OverrideSlot`,
-  `OverridableProperty`, `MaterialsSlot`, `MaterialSlotTarget`, their records,
+  `OverridableProperty`, `MaterialsSlot`, `SurfaceTarget`, their records,
   `SceneJsonContext` entries, reference-field paths and tests, and the
   never-called `LogLodPolicySyncUnsupported`. In the engine:
   `RenderableRecord.visible`, the index-keyed `SetSubmeshVisible` and

@@ -10,6 +10,6 @@ internal enum InspectorSelectionChange
     /// <summary>The applicable component composition changed.</summary>
     Structure,
 
-    /// <summary>Values or material slots on selected components changed.</summary>
+    /// <summary>Values or surface materials on selected components changed.</summary>
     Values,
 }

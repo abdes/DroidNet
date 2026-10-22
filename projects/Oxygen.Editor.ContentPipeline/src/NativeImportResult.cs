@@ -24,6 +24,6 @@ public sealed record NativeImportResult(bool Succeeded, IReadOnlyList<Diagnostic
         = ImmutableDictionary<string, ImmutableHashSet<string>>.Empty;
 
     /// <summary>Gets native allocation records keyed by their captured source-relative paths.</summary>
-    public ImmutableDictionary<string, NativeMaterialSlotProvenance> MaterialSlotProvenance { get; init; }
-        = ImmutableDictionary<string, NativeMaterialSlotProvenance>.Empty;
+    public ImmutableDictionary<string, NativeSurfaceProvenance> SurfaceProvenance { get; init; }
+        = ImmutableDictionary<string, NativeSurfaceProvenance>.Empty;
 }

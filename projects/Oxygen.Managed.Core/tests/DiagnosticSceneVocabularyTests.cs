@@ -31,7 +31,7 @@ public sealed class DiagnosticSceneVocabularyTests
         _ = SceneOperationKinds.NodeDuplicate.Should().Be("Scene.Node.Duplicate");
         _ = SceneOperationKinds.EditTransform.Should().Be("Scene.Component.EditTransform");
         _ = SceneOperationKinds.EditGeometry.Should().Be("Scene.Component.EditGeometry");
-        _ = SceneOperationKinds.EditMaterialSlot.Should().Be("Scene.Component.EditMaterialSlot");
+        _ = SceneOperationKinds.EditSurfaceMaterial.Should().Be("Scene.Component.EditSurfaceMaterial");
         _ = SceneOperationKinds.EditPerspectiveCamera.Should().Be("Scene.Component.EditCamera");
         _ = SceneOperationKinds.EditDirectionalLight.Should().Be("Scene.Component.EditLight");
         _ = SceneOperationKinds.AddComponent.Should().Be("Scene.Component.Add");

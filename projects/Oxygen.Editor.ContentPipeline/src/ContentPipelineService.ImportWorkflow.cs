@@ -114,10 +114,10 @@ public sealed partial class ContentPipelineService
             operation, request.DestinationFolder, request.Name, token => discovery.DiscoverAsync(operation, source, recipe, token), cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task CreateImportSettingsAsync(ContentCookOperation operation, RetainedImportSource source, string name, NativeMaterialSlotProvenance provenance, CancellationToken cancellationToken)
+    private async Task CreateImportSettingsAsync(ContentCookOperation operation, RetainedImportSource source, string name, NativeSurfaceProvenance provenance, CancellationToken cancellationToken)
     {
         this.cookCoordinator.VerifyWriter(operation);
-        var settings = NativeSceneImportSettings.Create(source, name) with { MaterialSlotProvenance = provenance };
+        var settings = NativeSceneImportSettings.Create(source, name) with { SurfaceProvenance = provenance };
         var path = settings.ResolveFile(operation.Project.ProjectRoot.FullPath, settings.PrimaryRelativePath) + NativeSceneImportSettings.SidecarSuffix;
         var existing = await this.importSettingsFiles.ReadAsync(path, cancellationToken).ConfigureAwait(false);
         var bytes = settings.ToBytes();

@@ -18,7 +18,7 @@
 #include <Oxygen/Base/NoStd.h>
 #include <Oxygen/Core/Constants.h>
 #include <Oxygen/Data/GeometryIndices.h>
-#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/Detail/RenderableComponent.h>
 #include <Oxygen/Scene/SceneNode.h>
 #include <Oxygen/Scene/SceneNodeImpl.h>
@@ -398,18 +398,19 @@ auto SceneNode::Renderable::SetAllSubmeshesVisible(const bool visible) noexcept
 }
 
 auto SceneNode::Renderable::SetMaterialOverride(
-  const data::MaterialSlotId slot, MaterialAssetPtr material) noexcept -> bool
+  const data::SurfaceId surface, MaterialAssetPtr material) noexcept -> bool
 {
   return SafeCall(
     RequiresRenderable(), [&](const SafeCallState& state) noexcept -> bool {
-      return state.renderable->SetMaterialOverride(slot, std::move(material));
+      return state.renderable->SetMaterialOverride(
+        surface, std::move(material));
     });
 }
 
 auto SceneNode::Renderable::ClearMaterialOverride(
-  const data::MaterialSlotId slot) noexcept -> bool
+  const data::SurfaceId surface) noexcept -> bool
 {
-  return SetMaterialOverride(slot, nullptr);
+  return SetMaterialOverride(surface, nullptr);
 }
 
 auto SceneNode::Renderable::SetMaterialOverride(const data::LodIndex lod,

@@ -28,9 +28,9 @@ internal sealed class GeometryImportedOutputsTests : DroidNet.Tests.VisualUserIn
         var provider = new Mock<IAssetFeed>();
         _ = provider.SetupGet(value => value.Items).Returns(updates);
         _ = provider.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var slots = new FakeMaterialSlotProvider();
+        using var surfaces = new FakeSurfaceProvider();
         using var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
-        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, slots, session);
+        using var geometry = new GeometryViewModel(CreateStatusHosting(), provider.Object, surfaces, session);
         var view = new GeometryView
         {
             ViewModel = geometry,

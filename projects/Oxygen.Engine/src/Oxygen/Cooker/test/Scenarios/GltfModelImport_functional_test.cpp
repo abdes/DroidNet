@@ -60,11 +60,11 @@
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Unorm16.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -173,12 +173,12 @@ protected:
 
   //! Runs one import without per-test fixture state, for suite-level setup.
   static auto RunImportOnce(ImportRequest request,
-    std::shared_ptr<const oxygen::content::import::MaterialSlotProvenance>&
+    std::shared_ptr<const oxygen::content::import::SurfaceProvenance>&
       provenance) -> ImportRunResult
   {
     ImportRunResult result {};
-    if (!request.material_slot_provenance) {
-      request.material_slot_provenance = provenance;
+    if (!request.surface_provenance) {
+      request.surface_provenance = provenance;
     }
     oxygen::content::import::AsyncImportService service(
       MakeMaxConcurrencyConfig());
@@ -192,9 +192,9 @@ protected:
     result.report = *report;
     service.Stop();
     if (result.report.success
-      && !result.report.material_slot_provenance_json.empty()) {
-      provenance = oxygen::content::import::MaterialSlotProvenance::Parse(
-        result.report.material_slot_provenance_json);
+      && !result.report.surface_provenance_json.empty()) {
+      provenance = oxygen::content::import::SurfaceProvenance::Parse(
+        result.report.surface_provenance_json);
     }
     return result;
   }
@@ -229,7 +229,7 @@ protected:
   {
     using oxygen::content::import::NodePruningPolicy;
     auto provenance
-      = std::make_shared<const oxygen::content::import::MaterialSlotProvenance>(
+      = std::make_shared<const oxygen::content::import::SurfaceProvenance>(
         oxygen::Uuid::Generate());
     for (const auto pruning :
       { NodePruningPolicy::kKeepAll, NodePruningPolicy::kDropEmptyNodes }) {
@@ -926,7 +926,7 @@ NOLINT_TEST_F(
 // Namespace scope, not nested in the fixture: the fixture's inline static
 // `imported_` needs these default member initializers before the fixture is
 // complete.
-struct SlotBinding {
+struct SurfaceBinding {
   oxygen::data::pak::geometry::SubMeshDesc submesh {};
   oxygen::data::pak::geometry::MeshViewDesc view {};
   std::string name;
@@ -939,7 +939,7 @@ struct ImportedMaterials {
   oxygen::content::import::ImportJobId job_id
     = oxygen::content::import::kInvalidJobId;
   std::vector<oxygen::content::lc::Inspection::AssetEntry> materials;
-  std::array<SlotBinding, 2> slots {};
+  std::array<SurfaceBinding, 2> surfaces {};
 };
 
 class CaseOnlyMaterialsTest : public AsyncGltfImporterFullTest {
@@ -964,7 +964,7 @@ protected:
   }
 
   //! Cooks two materials whose names differ only by case, once for the suite,
-  //! then reads back the material entries and the geometry slot bindings.
+  //! then reads back the material entries and the geometry surface bindings.
   static auto ImportCaseOnlyMaterials(ImportedMaterials& imported) -> void
   {
     using oxygen::data::AssetType;
@@ -1028,7 +1028,7 @@ protected:
     request.options.import_content = ImportContentFlags::kAll;
 
     auto provenance
-      = std::make_shared<const oxygen::content::import::MaterialSlotProvenance>(
+      = std::make_shared<const oxygen::content::import::SurfaceProvenance>(
         oxygen::Uuid::Generate());
     const auto run_result = RunImportOnce(std::move(request), provenance);
     imported.finished_id = run_result.finished_id;
@@ -1080,14 +1080,15 @@ protected:
       return;
     }
 
-    for (size_t slot = 0; slot < imported.slots.size(); ++slot) {
-      auto& binding = imported.slots.at(slot);
+    for (size_t surface = 0; surface < imported.surfaces.size(); ++surface) {
+      auto& binding = imported.surfaces.at(surface);
       if (!geometry_reader.ReadBlobInto(std::as_writable_bytes(
             std::span<SubMeshDesc, 1>(&binding.submesh, 1)))
         || binding.submesh.mesh_view_count != 1U
         || !geometry_reader.ReadBlobInto(std::as_writable_bytes(
           std::span<MeshViewDesc, 1>(&binding.view, 1)))) {
-        error_ = "Failed to read submesh/view for slot " + std::to_string(slot);
+        error_ = "Failed to read submesh/view for surface "
+          + std::to_string(surface);
         return;
       }
       binding.name = oxygen::content::test::ReadDescriptorString(
@@ -1125,30 +1126,31 @@ NOLINT_TEST_F(CaseOnlyMaterialsTest,
     fold_ascii_case(materials.at(1).virtual_path));
 }
 
-NOLINT_TEST_F(
-  CaseOnlyMaterialsTest, CaseOnlyMaterialNamesKeepDistinctGeometrySlotBindings)
+NOLINT_TEST_F(CaseOnlyMaterialsTest,
+  CaseOnlyMaterialNamesKeepDistinctGeometrySurfaceBindings)
 {
   ASSERT_TRUE(error_.empty()) << error_;
   const auto& imported = imported_;
 
-  constexpr std::array expected_slot_names { "Paint", "paint" };
+  constexpr std::array expected_surface_names { "Paint", "paint" };
   std::array<oxygen::data::AssetKey, 2> bound_keys {};
-  std::array<oxygen::data::MaterialSlotId, 2> slot_ids {};
-  for (size_t slot = 0; slot < bound_keys.size(); ++slot) {
-    SCOPED_TRACE(slot);
-    const auto& submesh = imported.slots.at(slot).submesh;
-    EXPECT_EQ(imported.slots.at(slot).name, expected_slot_names.at(slot));
-    EXPECT_FALSE(submesh.slot_id.IsNil());
-    slot_ids.at(slot) = submesh.slot_id;
-    EXPECT_EQ(imported.slots.at(slot).view.index_count, 3U);
-    bound_keys.at(slot) = submesh.material_asset_key;
+  std::array<oxygen::data::SurfaceId, 2> surface_ids {};
+  for (size_t surface = 0; surface < bound_keys.size(); ++surface) {
+    SCOPED_TRACE(surface);
+    const auto& submesh = imported.surfaces.at(surface).submesh;
+    EXPECT_EQ(
+      imported.surfaces.at(surface).name, expected_surface_names.at(surface));
+    EXPECT_FALSE(submesh.surface_id.IsNil());
+    surface_ids.at(surface) = submesh.surface_id;
+    EXPECT_EQ(imported.surfaces.at(surface).view.index_count, 3U);
+    bound_keys.at(surface) = submesh.material_asset_key;
   }
   EXPECT_NE(bound_keys.at(0), bound_keys.at(1));
-  EXPECT_NE(slot_ids.at(0), slot_ids.at(1));
+  EXPECT_NE(surface_ids.at(0), surface_ids.at(1));
 }
 
 NOLINT_TEST_F(
-  CaseOnlyMaterialsTest, CaseOnlyMaterialSlotsBindMaterialsWithTheirOwnValues)
+  CaseOnlyMaterialsTest, CaseOnlySurfacesBindMaterialsWithTheirOwnValues)
 {
   using oxygen::data::pak::render::MaterialAssetDesc;
   using oxygen::serio::FileStream;
@@ -1162,9 +1164,9 @@ NOLINT_TEST_F(
     std::array { 0.1F, 0.8F, 0.3F, 1.0F },
   };
   constexpr std::array expected_roughness { 0.2F, 0.8F };
-  for (size_t slot = 0; slot < imported.slots.size(); ++slot) {
-    SCOPED_TRACE(slot);
-    const auto& submesh = imported.slots.at(slot).submesh;
+  for (size_t surface = 0; surface < imported.surfaces.size(); ++surface) {
+    SCOPED_TRACE(surface);
+    const auto& submesh = imported.surfaces.at(surface).submesh;
     const auto material_entry = std::ranges::find(imported.materials,
       submesh.material_asset_key, &Inspection::AssetEntry::key);
     ASSERT_NE(material_entry, imported.materials.end());
@@ -1176,13 +1178,13 @@ NOLINT_TEST_F(
     MaterialAssetDesc material {};
     ASSERT_TRUE(material_reader.ReadBlobInto(
       std::as_writable_bytes(std::span<MaterialAssetDesc, 1>(&material, 1))));
-    for (size_t channel = 0; channel < expected_colors.at(slot).size();
+    for (size_t channel = 0; channel < expected_colors.at(surface).size();
       ++channel) {
       EXPECT_FLOAT_EQ(CheckedAt(std::span(material.base_color), channel),
-        expected_colors.at(slot).at(channel));
+        expected_colors.at(surface).at(channel));
     }
-    EXPECT_EQ(
-      material.roughness, oxygen::data::Unorm16(expected_roughness.at(slot)));
+    EXPECT_EQ(material.roughness,
+      oxygen::data::Unorm16(expected_roughness.at(surface)));
   }
 }
 

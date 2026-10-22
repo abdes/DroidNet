@@ -357,18 +357,18 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                 return;
             }
 
-            var overrides = new List<NativeMaterialSlotOverride>();
-            var assignedSlots = new HashSet<Guid>();
+            var overrides = new List<NativeSurfaceMaterialOverride>();
+            var assignedSurfaces = new HashSet<Guid>();
             foreach (var slot in geometry.OverrideSlots.OfType<MaterialsSlot>())
             {
-                if (slot.Target.Geometry != geometry.Geometry || slot.Target.SlotId == Guid.Empty
-                    || !assignedSlots.Add(slot.Target.SlotId))
+                if (slot.Target.Geometry != geometry.Geometry || slot.Target.SurfaceId == Guid.Empty
+                    || !assignedSurfaces.Add(slot.Target.SurfaceId))
                 {
                     diagnostics.Add(CreateDiagnostic(
                         operationId,
                         DiagnosticSeverity.Error,
                         ContentPipelineDiagnosticCodes.SceneDescriptorGenerationFailed,
-                        $"Scene node '{node.Name}' has an invalid or unresolved material-slot assignment.",
+                        $"Scene node '{node.Name}' has an invalid or unresolved surface material assignment.",
                         descriptorPath,
                         descriptorVirtualPath));
                     return;
@@ -392,7 +392,7 @@ public sealed partial class SceneDescriptorGenerator : ISceneDescriptorGenerator
                 }
 
                 _ = materialRefs.Add(materialRef);
-                overrides.Add(new(slot.Target.SlotId, materialRef, slot.Target.LayoutRevision));
+                overrides.Add(new(slot.Target.SurfaceId, materialRef, slot.Target.LayoutRevision));
             }
 
             renderables.Add(new NativeRenderable(nodeIndex, geometryRef, overrides, node.IsVisible));

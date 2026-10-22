@@ -233,9 +233,9 @@
       "visible": true,
       "material_overrides": [
         {
-          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
           "material_ref": "/.cooked/Materials/MatCube.omat",
-          "layout_revision": "2d931c8e0852f74695f7d17d44942ab876335f098d8374d43c557e1217a08979"
+          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
         }
       ]
     },
@@ -245,9 +245,9 @@
       "visible": true,
       "material_overrides": [
         {
-          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
           "material_ref": "/.cooked/Materials/MatCubeB.omat",
-          "layout_revision": "2d931c8e0852f74695f7d17d44942ab876335f098d8374d43c557e1217a08979"
+          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
         }
       ]
     },
@@ -257,9 +257,9 @@
       "visible": true,
       "material_overrides": [
         {
-          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
           "material_ref": "/.cooked/Materials/MatCubeC.omat",
-          "layout_revision": "2d931c8e0852f74695f7d17d44942ab876335f098d8374d43c557e1217a08979"
+          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
         }
       ]
     },
@@ -269,9 +269,9 @@
       "visible": true,
       "material_overrides": [
         {
-          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
           "material_ref": "/.cooked/Materials/MatCubeD.omat",
-          "layout_revision": "2d931c8e0852f74695f7d17d44942ab876335f098d8374d43c557e1217a08979"
+          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
         }
       ]
     },
@@ -281,9 +281,9 @@
       "visible": true,
       "material_overrides": [
         {
-          "slot_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
+          "surface_id": "146b1397-c3e0-bc20-fce3-c55e470b4086",
           "material_ref": "/.cooked/Materials/MatCubeD.omat",
-          "layout_revision": "2d931c8e0852f74695f7d17d44942ab876335f098d8374d43c557e1217a08979"
+          "layout_revision": "70d2458daeb2184329ef81aef4e913cb828e2494a8cd5eda069969aff3f64aa6"
         }
       ]
     },

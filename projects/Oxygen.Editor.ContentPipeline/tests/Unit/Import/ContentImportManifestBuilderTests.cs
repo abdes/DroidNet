@@ -79,7 +79,7 @@ internal sealed partial class ContentImportManifestBuilderTests
             ContentCookInputRole.Primary);
         var settings = new ContentPipeline.Import.NativeSceneImportSettings(global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.CurrentSchemaVersion, global::Oxygen.Editor.ContentPipeline.Import.NativeSceneImportSettings.ImporterIdentity, "RetainedName", "Content/Vehicles/Ship", "model.gltf", new string('a', 64), ["model.gltf"])
         {
-            MaterialSlotProvenance = global::Oxygen.Editor.ContentPipeline.Import.NativeMaterialSlotProvenance.Create(),
+            SurfaceProvenance = global::Oxygen.Editor.ContentPipeline.Import.NativeSurfaceProvenance.Create(),
             BakeTransforms = true,
             NormalsPolicy = "preserve",
             TangentsPolicy = "generate",
@@ -93,7 +93,7 @@ internal sealed partial class ContentImportManifestBuilderTests
         _ = job.BakeTransforms.Should().BeTrue();
         _ = job.NormalsPolicy.Should().Be(settings.NormalsPolicy);
         _ = job.TangentsPolicy.Should().Be(settings.TangentsPolicy);
-        _ = job.MaterialSlotProvenance.Should().BeSameAs(settings.MaterialSlotProvenance);
+        _ = job.SurfaceProvenance.Should().BeSameAs(settings.SurfaceProvenance);
     }
 
     /// <summary>Scene exposure masks cook before the scene, at their own identity.</summary>

@@ -19,7 +19,7 @@
       "submeshes": [
         {
           "name": "CameraSwitchCube_surface",
-          "slot_id": "6f1c2a9e-3b47-4d58-9e21-0c7a8b5d4f13",
+          "surface_id": "6f1c2a9e-3b47-4d58-9e21-0c7a8b5d4f13",
           "material_ref": "/.cooked/Materials/CameraSwitchMat.omat",
           "views": [{ "view_ref": "__all__" }]
         }

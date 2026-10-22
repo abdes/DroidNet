@@ -236,13 +236,13 @@ same capture, cooking, error/progress and publication workflow as other inputs.
 `Oxygen.Managed.Assets` primitives are not user commands. They are called by
 editor services:
 
-| Consumer                       | Primitive used                                                                                     |
-| ------------------------------ | -------------------------------------------------------------------------------------------------- |
-| Material document service      | `MaterialSourceReader`, `MaterialSourceWriter`, `MaterialSource`.                                  |
-| Asset catalog (Editor.Assets)  | `IAssetCatalog`, `PakAssetCatalog`, `AssetQuery`, `AssetRecord`, `AssetChange`, `AssetChangeKind`. |
-| Asset identity reducer         | `AssetRecord`, `CookedAssetMetadata`, `AssetFileTypes`.                                            |
-| Content pipeline               | Material source records, asset URIs and current index metadata; native APIs produce cooked data.   |
-| Geometry material slot command | `AssetReference<MaterialAsset>` and `IAssetCatalog` resolution.                                    |
+| Consumer                      | Primitive used                                                                                     |
+| ----------------------------- | -------------------------------------------------------------------------------------------------- |
+| Material document service     | `MaterialSourceReader`, `MaterialSourceWriter`, `MaterialSource`.                                  |
+| Asset catalog (Editor.Assets) | `IAssetCatalog`, `PakAssetCatalog`, `AssetQuery`, `AssetRecord`, `AssetChange`, `AssetChangeKind`. |
+| Asset identity reducer        | `AssetRecord`, `CookedAssetMetadata`, `AssetFileTypes`.                                            |
+| Content pipeline              | Material source records, asset URIs and current index metadata; native APIs produce cooked data.   |
+| Geometry surface command      | `AssetReference<MaterialAsset>` and `IAssetCatalog` resolution.                                    |
 
 Adapters may be introduced in editor projects, but the underlying primitive
 contracts stay in `Oxygen.Managed.Assets`.
@@ -255,7 +255,7 @@ UI belongs to:
 
 - `material-editor.md` for material documents.
 - `content-explorer-asset-identity.md` for picker/browser views.
-- `property-inspector.md` for Geometry material slots.
+- `property-inspector.md` for Geometry surfaces.
 
 This LLD only requires UI consumers to preserve asset URI identity and not
 display raw cooked filesystem paths as the authored identity.
@@ -272,7 +272,7 @@ V0.1 persistence behavior:
   [material contract](material-editor.md) defines colour/HDR emission and the
   float32 compiled factor.
 - `MaterialSourceWriter` output must be readable by `MaterialSourceReader`.
-- scene overrides persist geometry identity, stable material SlotId and material
+- scene overrides persist geometry identity, stable material SurfaceId and material
   URI; the [content contract](content-pipeline.md) defines importer continuity,
   unresolved repair and atomic publication.
 - missing material URIs survive scene save/reopen unchanged.

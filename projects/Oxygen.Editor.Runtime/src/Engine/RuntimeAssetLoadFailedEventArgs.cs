@@ -10,7 +10,7 @@ namespace Oxygen.Editor.Runtime.Engine;
 /// <param name="message">The native load or application failure.</param>
 public sealed class RuntimeAssetLoadFailedEventArgs(RuntimeWorldRequest request, ulong generation, string message) : EventArgs
 {
-    /// <summary>Gets the original request, including scene, node, asset and slot identity.</summary>
+    /// <summary>Gets the original request, including scene, node, asset and surface identity.</summary>
     public RuntimeWorldRequest Request { get; } = request;
 
     /// <summary>Gets the request generation assigned by the native loader authority.</summary>

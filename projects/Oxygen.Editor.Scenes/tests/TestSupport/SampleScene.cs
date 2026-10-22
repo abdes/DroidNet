@@ -32,7 +32,7 @@ namespace Oxygen.Editor.Scenes.Tests.TestSupport;
 /// Lamp     point light, source radius 0.05     Spot, Fog, Mesh, Script
 /// Spot     spot light, cones 0.4 / 0.6
 /// Fog      local fog volume
-/// Mesh     Cube.ogeo, one material slot override (Red.omat)
+/// Mesh     Cube.ogeo, one surface material override (Red.omat)
 /// Script   two script slots: Move.oscript with "target" = node B, then Move.oscript with no values
 /// </code>
 /// Every id is fixed, so two builds are the same document. Ids end in readable tags: nodes are <c>...-0001-...</c>,
@@ -51,7 +51,7 @@ public static class SampleScene
 
     public static AssetPath PlayInput { get; } = AssetPath.Parse("/Content/Play.oimap");
 
-    /// <summary>Gets the layout revision of the cube's slot inventory: 64 hex digits, as a cooked inventory has.</summary>
+    /// <summary>Gets the layout revision of the cube's surface inventory: 64 hex digits, as a cooked inventory has.</summary>
     public static string CubeLayoutRevision { get; } = new('c', 64);
 
     public static SceneId Id { get; } = SceneId.FromValue(Tagged(0, "5CE"));
@@ -108,7 +108,7 @@ public static class SampleScene
 
     public static ComponentId ScriptScripting { get; } = ComponentTag("5C");
 
-    public static Guid CubeSlot { get; } = Tagged(4, "C1");
+    public static Guid CubeSurface { get; } = Tagged(4, "C1");
 
     public static Guid MoveSlot { get; } = Tagged(4, "51");
 
@@ -161,7 +161,7 @@ public static class SampleScene
             .Node(Lamp, "Lamp", components: [new PointLightData { Id = LampLight, Name = "Light", SourceRadius = 0.05f }])
             .Node(Spot, "Spot", components: [new SpotLightData { Id = SpotLight, Name = "Light", InnerConeAngleRadians = 0.4f, OuterConeAngleRadians = 0.6f }])
             .Node(Fog, "Fog", components: [new LocalFogVolumeData { Id = FogVolume, Name = "Fog" }])
-            .Node(Mesh, "Mesh", components: [CubeWithRedSlot()])
+            .Node(Mesh, "Mesh", components: [CubeWithRedSurface()])
             .Node(Script, "Script", components: [MoveTowardB()]);
 
     /// <summary>
@@ -199,7 +199,7 @@ public static class SampleScene
         return document.RootElement.Clone();
     }
 
-    private static GeometryComponentData CubeWithRedSlot()
+    private static GeometryComponentData CubeWithRedSurface()
         => new()
         {
             Id = MeshGeometry,
@@ -210,7 +210,7 @@ public static class SampleScene
                 new MaterialsSlotData
                 {
                     GeometryUri = CubeGeometry,
-                    SlotId = CubeSlot,
+                    SurfaceId = CubeSurface,
                     LayoutRevision = CubeLayoutRevision,
                     MaterialUri = RedMaterial,
                 },

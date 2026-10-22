@@ -52,7 +52,7 @@ public sealed class RuntimeAssetFailureTests
     }
 
     [TestMethod]
-    public async Task MaterialFailures_AreScopedToSlotAndInvalidatedByDetach()
+    public async Task MaterialFailures_AreScopedToSurfaceAndInvalidatedByDetach()
     {
         var native = CreateTransport();
         var sut = new RuntimeCommandDispatcher();
@@ -60,21 +60,21 @@ public sealed class RuntimeAssetFailureTests
         var target = new RuntimeSceneTarget(sut.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Scene", this.TestContext.CancellationToken).ConfigureAwait(false);
         var node = NodeId.New();
-        var first = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetMaterialOverride(node, "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), "/Content/First.omat", MaterialSlotAssignmentIntent.ObservedEdit));
-        var otherSlot = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetMaterialOverride(node, "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), "/Content/Other.omat", MaterialSlotAssignmentIntent.ObservedEdit));
+        var first = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetMaterialOverride(node, "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), "/Content/First.omat", SurfaceMaterialAssignmentIntent.ObservedEdit));
+        var otherSurface = new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeSetMaterialOverride(node, "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), "/Content/Other.omat", SurfaceMaterialAssignmentIntent.ObservedEdit));
         _ = sut.Execute(first, this.TestContext.CancellationToken);
-        _ = sut.Execute(otherSlot, this.TestContext.CancellationToken);
+        _ = sut.Execute(otherSurface, this.TestContext.CancellationToken);
         _ = sut.Execute(first with { OperationId = Guid.NewGuid() }, this.TestContext.CancellationToken);
 
         _ = sut.IsCurrentAssetRequest(first).Should().BeFalse();
-        _ = sut.IsCurrentAssetRequest(otherSlot).Should().BeTrue();
+        _ = sut.IsCurrentAssetRequest(otherSurface).Should().BeTrue();
         _ = sut.Execute(new RuntimeWorldRequest(Guid.NewGuid(), target, new RuntimeDetachGeometry(node)), this.TestContext.CancellationToken);
-        _ = sut.IsCurrentAssetRequest(otherSlot).Should().BeFalse();
+        _ = sut.IsCurrentAssetRequest(otherSurface).Should().BeFalse();
         _ = sut.AssetRequests.Should().BeEmpty();
     }
 
     [TestMethod]
-    public async Task MaterialRequestsKeepGeometryContextWhenSlotIdsMatch()
+    public async Task MaterialRequestsKeepGeometryContextWhenSurfaceIdsMatch()
     {
         var native = CreateTransport();
         var sut = new RuntimeCommandDispatcher();
@@ -82,15 +82,15 @@ public sealed class RuntimeAssetFailureTests
         var target = new RuntimeSceneTarget(sut.RunId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid());
         _ = await sut.ActivateSceneAsync(Guid.NewGuid(), target, "Scene", this.TestContext.CancellationToken).ConfigureAwait(false);
         var node = NodeId.New();
-        var slot = Guid.NewGuid();
+        var surface = Guid.NewGuid();
         var current = new RuntimeWorldRequest(
             Guid.NewGuid(),
             target,
-            new RuntimeSetMaterialOverride(node, "/Content/Sphere.ogeo", slot, new string('a', 64), "/Content/Red.omat", MaterialSlotAssignmentIntent.RetainedAssignment));
+            new RuntimeSetMaterialOverride(node, "/Content/Sphere.ogeo", surface, new string('a', 64), "/Content/Red.omat", SurfaceMaterialAssignmentIntent.RetainedAssignment));
         var foreign = new RuntimeWorldRequest(
             Guid.NewGuid(),
             target,
-            new RuntimeSetMaterialOverride(node, "/Content/Cube.ogeo", slot, new string('a', 64), "/Content/Blue.omat", MaterialSlotAssignmentIntent.RetainedAssignment));
+            new RuntimeSetMaterialOverride(node, "/Content/Cube.ogeo", surface, new string('a', 64), "/Content/Blue.omat", SurfaceMaterialAssignmentIntent.RetainedAssignment));
         _ = sut.Execute(current, this.TestContext.CancellationToken);
         _ = sut.Execute(foreign, this.TestContext.CancellationToken);
         native.Raise(value => value.AssetLoadFailed += null, new RuntimeAssetLoadFailedEventArgs(foreign, 2, "Different geometry"));

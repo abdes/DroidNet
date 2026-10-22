@@ -68,7 +68,7 @@ public static class EditSamples
 
     private static FolderId RestoredFolder { get; } = FolderId.FromValue(SampleScene.Tagged(3, "2B"));
 
-    private static Guid RestoredSlot { get; } = SampleScene.Tagged(4, "C2");
+    private static Guid RestoredSurface { get; } = SampleScene.Tagged(4, "C2");
 
     private static ScriptSlotId AddedSlot { get; } = ScriptSlotId.FromValue(SampleScene.Tagged(4, "C3"));
 
@@ -80,7 +80,7 @@ public static class EditSamples
 
     private static AssetPath JumpScript { get; } = AssetPath.Parse("/Content/Jump.oscript");
 
-    private static MaterialSlotTarget CubeSlotTarget => new(SampleScene.CubeGeometry, SampleScene.CubeSlot, SampleScene.CubeLayoutRevision);
+    private static SurfaceTarget CubeSurfaceTarget => new(SampleScene.CubeGeometry, SampleScene.CubeSurface, SampleScene.CubeLayoutRevision);
 
     private static IReadOnlyList<EditSample> Samples =>
     [
@@ -102,9 +102,9 @@ public static class EditSamples
         SetScenePropertiesSample,
         SetSceneEnvironmentSample,
         SetGeometrySample,
-        SetMaterialSlotSample,
-        RemoveMaterialSlotsSample,
-        RestoreMaterialSlotsSample,
+        SetSurfaceMaterialSample,
+        RemoveSurfaceMaterialsSample,
+        RestoreSurfaceMaterialsSample,
         SetStartingCameraSample,
         SetStartingInputContextsSample,
         SetSceneReferencesSample,
@@ -288,7 +288,7 @@ public static class EditSamples
                     () => slots.Add(new MaterialsSlotData
                     {
                         GeometryUri = SampleScene.SphereGeometry,
-                        SlotId = SampleScene.CubeSlot,
+                        SurfaceId = SampleScene.CubeSurface,
                         LayoutRevision = SampleScene.CubeLayoutRevision,
                         MaterialUri = SampleScene.RedMaterial,
                     }));
@@ -360,12 +360,12 @@ public static class EditSamples
             AssetNode = SampleScene.Mesh,
         };
 
-    private static EditSample SetMaterialSlotSample =>
+    private static EditSample SetSurfaceMaterialSample =>
         new(
-            nameof(SetMaterialSlot),
-            static _ => new SetMaterialSlot([SampleScene.Mesh], CubeSlotTarget, GreenMaterial),
-            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)],
-            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)])
+            nameof(SetSurfaceMaterial),
+            static _ => new SetSurfaceMaterial([SampleScene.Mesh], CubeSurfaceTarget, GreenMaterial),
+            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)],
+            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)])
         {
             HasTargets = true,
             CarriesAssetReference = true,
@@ -373,30 +373,30 @@ public static class EditSamples
             AssetNode = SampleScene.Mesh,
         };
 
-    private static EditSample RemoveMaterialSlotsSample =>
+    private static EditSample RemoveSurfaceMaterialsSample =>
         new(
-            nameof(RemoveMaterialSlots),
-            static _ => new RemoveMaterialSlots(new Dictionary<NodeId, IReadOnlyList<MaterialSlotTarget>> { [SampleScene.Mesh] = [CubeSlotTarget] }),
-            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)],
-            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)])
+            nameof(RemoveSurfaceMaterials),
+            static _ => new RemoveSurfaceMaterials(new Dictionary<NodeId, IReadOnlyList<SurfaceTarget>> { [SampleScene.Mesh] = [CubeSurfaceTarget] }),
+            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)],
+            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)])
         {
             HasTargets = true,
         };
 
-    private static EditSample RestoreMaterialSlotsSample =>
+    private static EditSample RestoreSurfaceMaterialsSample =>
         new(
-            nameof(RestoreMaterialSlots),
-            static _ => new RestoreMaterialSlots(new Dictionary<NodeId, IReadOnlyList<RestoredMaterialSlot>>
+            nameof(RestoreSurfaceMaterials),
+            static _ => new RestoreSurfaceMaterials(new Dictionary<NodeId, IReadOnlyList<RestoredSurfaceMaterial>>
             {
                 [SampleScene.Mesh] =
                 [
-                    new RestoredMaterialSlot(
-                        new MaterialSlotAssignment(new MaterialSlotTarget(SampleScene.CubeGeometry, RestoredSlot, SampleScene.CubeLayoutRevision), SampleScene.RedMaterial),
+                    new RestoredSurfaceMaterial(
+                        new SurfaceMaterialAssignment(new SurfaceTarget(SampleScene.CubeGeometry, RestoredSurface, SampleScene.CubeLayoutRevision), SampleScene.RedMaterial),
                         Index: 1),
                 ],
             }),
-            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)],
-            [new SceneChange.MaterialSlotsChanged(SampleScene.Mesh)])
+            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)],
+            [new SceneChange.SurfaceMaterialsChanged(SampleScene.Mesh)])
         {
             HasTargets = true,
         };

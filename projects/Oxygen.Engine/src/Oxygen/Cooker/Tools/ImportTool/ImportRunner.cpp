@@ -360,12 +360,11 @@ auto RunImportJob(const ImportRequest& request,
         },
       });
     }
-    if (report_copy.success
-      && !report_copy.material_slot_provenance_json.empty()) {
+    if (report_copy.success && !report_copy.surface_provenance_json.empty()) {
       job.update({
         {
-          "material_slot_provenance",
-          ordered_json::parse(report_copy.material_slot_provenance_json),
+          "surface_provenance",
+          ordered_json::parse(report_copy.surface_provenance_json),
         },
       });
     }
@@ -438,8 +437,8 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
         "source",
         "output",
         "name",
-        "material-slot-source-identity",
-        "material-slot-provenance",
+        "surface-source-identity",
+        "surface-provenance",
         "no-import-textures",
         "no-import-materials",
         "no-import-geometry",
@@ -474,9 +473,9 @@ auto RunSceneImportJob(const SceneImportSettings& settings,
         settings.content_root, settings.source_path);
     }
     if (!record_path.empty()) {
-      if (!settings.material_slot_source_identity.empty()
-        || !settings.material_slot_provenance_json.empty()
-        || !settings.material_slot_provenance_path.empty()) {
+      if (!settings.surface_source_identity.empty()
+        || !settings.surface_provenance_json.empty()
+        || !settings.surface_provenance_path.empty()) {
         throw std::invalid_argument(
           "Retained identity belongs to the record; omit source identity and "
           "provenance options");

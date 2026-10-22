@@ -276,7 +276,7 @@ canonical light assignment and complete light/shadow values. Preserve local flag
 value versus inheritance mode, not only an effective boolean. Update CPU/HLSL
 wire declarations, resource bindings and layout tests together; remove obsolete
 single-light/role/reader paths rather than maintain a compatibility execution
-branch. Canonical material-slot/precision extensions remain with their material
+branch. Canonical surface/precision extensions remain with their material
 and content owners.
 
 Implement in dependency order:

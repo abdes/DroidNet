@@ -19,7 +19,7 @@
 #include <Oxygen/Cooker/Import/ImportDiagnostics.h>
 #include <Oxygen/Cooker/Import/Internal/BufferSource.h>
 #include <Oxygen/Cooker/api_export.h>
-#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 namespace oxygen::content::import::internal {
 
@@ -62,7 +62,7 @@ struct GeometrySource final {
 
   struct Submesh final {
     std::string name;
-    data::MaterialSlotId slot_id {};
+    data::SurfaceId surface_id {};
     std::string material;
     Bounds bounds;
     std::vector<View> views;

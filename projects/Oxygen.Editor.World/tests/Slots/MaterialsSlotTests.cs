@@ -24,7 +24,7 @@ public sealed class MaterialsSlotTests
     [TestMethod]
     public void MaterialsSlot_RoundTrip_KeepsGeometryUriSlotIdLayoutRevisionAndMaterialUri()
     {
-        var target = new MaterialSlotTarget(
+        var target = new SurfaceTarget(
             AssetPath.Parse("/Content/Meshes/Gate.geometry"),
             Guid.Parse("40000000-0000-0000-0000-000000000001"),
             "rev-gate-42");
@@ -39,16 +39,16 @@ public sealed class MaterialsSlotTests
         var restored = (MaterialsSlot)OverrideSlot.CreateAndHydrate(dto);
 
         _ = restored.Target.Geometry.Should().Be(target.Geometry);
-        _ = restored.Target.SlotId.Should().Be(target.SlotId);
+        _ = restored.Target.SurfaceId.Should().Be(target.SurfaceId);
         _ = restored.Target.LayoutRevision.Should().Be(target.LayoutRevision);
         _ = restored.Material.Should().Be(AssetPath.Parse("/Content/Materials/Iron.omat.json"));
         _ = restored.Target.Should().Be(target);
     }
 
     [TestMethod]
-    public async Task GeometryMaterialSlot_SerializesStableTargetAndMaterialIdentityOnly()
+    public async Task GeometrySurface_SerializesStableTargetAndMaterialIdentityOnly()
     {
-        var scene = new Scene { Name = "Material Slot Scene" };
+        var scene = new Scene { Name = "Material Surface Scene" };
         var node = new SceneNode(scene) { Name = "Cube" };
         var geometry = new GeometryComponent
         {
@@ -56,9 +56,9 @@ public sealed class MaterialsSlotTests
             Node = node,
             Geometry = AssetPath.Parse("/Engine/Generated/BasicShapes/Cube"),
         };
-        var target = new MaterialSlotTarget(geometry.Geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
-        var materialSlot = new MaterialsSlot { Target = target, Material = AssetPath.Parse("/Content/Materials/Red.omat.json") };
-        geometry.OverrideSlots.Add(materialSlot);
+        var target = new SurfaceTarget(geometry.Geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+        var surface = new MaterialsSlot { Target = target, Material = AssetPath.Parse("/Content/Materials/Red.omat.json") };
+        geometry.OverrideSlots.Add(surface);
         node.Components.Add(geometry);
         scene.RootNodes.Add(node);
 
@@ -100,7 +100,7 @@ public sealed class MaterialsSlotTests
         var data = new MaterialsSlotData
         {
             GeometryUri = hasGeometry ? AssetPath.Parse("/Content/Meshes/Gate.geometry") : null!,
-            SlotId = Guid.Parse("40000000-0000-0000-0000-000000000001"),
+            SurfaceId = Guid.Parse("40000000-0000-0000-0000-000000000001"),
             LayoutRevision = "rev-gate-42",
             MaterialUri = hasMaterial ? AssetPath.Parse("/Content/Materials/Iron.omat") : null!,
         };
@@ -110,6 +110,6 @@ public sealed class MaterialsSlotTests
         _ = act.Should().Throw<JsonException>();
     }
 
-    private static MaterialSlotTarget GateTarget()
+    private static SurfaceTarget GateTarget()
         => new(AssetPath.Parse("/Content/Meshes/Gate.geometry"), Guid.Parse("40000000-0000-0000-0000-000000000001"), "rev-gate-42");
 }

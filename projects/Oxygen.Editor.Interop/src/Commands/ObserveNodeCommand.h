@@ -282,11 +282,11 @@ private:
     if (const auto mesh = geometry->MeshAt(lod)) {
       result.vertex_count = mesh->VertexCount();
       result.index_count = mesh->IndexCount();
-      const auto slot_count
+      const auto submesh_count
         = static_cast<std::uint32_t>(mesh->SubMeshes().size());
-      for (std::uint32_t slot = 0; slot < slot_count; ++slot) {
+      for (std::uint32_t submesh = 0; submesh < submesh_count; ++submesh) {
         const auto material = renderable.ResolveSubmeshMaterial(
-          lod, data::SubmeshIndex { slot });
+          lod, data::SubmeshIndex { submesh });
         result.material_keys.push_back(
           material ? data::to_string(material->GetAssetKey()) : std::string {});
         const auto color = material

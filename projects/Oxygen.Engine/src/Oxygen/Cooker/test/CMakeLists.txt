@@ -51,7 +51,7 @@ oxygen_cooker_test(
     "Import/ImportedLightSemantics_test.cpp"
     "Import/InputImportRequestBuilder_test.cpp"
     "Import/Jobs/TextureImportPolicy_test.cpp"
-    "Import/MaterialSlotProvenance_test.cpp"
+    "Import/SurfaceProvenance_test.cpp"
     "Import/MaterialSource_test.cpp"
     "Import/MeshTransformBake_test.cpp"
     "Import/Naming_test.cpp"

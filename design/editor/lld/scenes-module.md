@@ -276,7 +276,7 @@ edit:
     reference Scenes. Scenes uses its rules, not a port of them: the cook's
     post-process validation and canonical virtual paths (one rule for authoring
     and cooking), the relocation redirects contract (`IAssetRedirects`), and the
-    cooked geometry's material slot inventory.
+    cooked geometry's surface inventory.
 14. **A scene document kind belongs to one project session.**
     `ScenesSessionModule` registers it in the session's scope, with the
     session's node-interaction state and asset redirects, and it ends with the

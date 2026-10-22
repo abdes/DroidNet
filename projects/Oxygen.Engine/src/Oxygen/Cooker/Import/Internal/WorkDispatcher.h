@@ -65,7 +65,7 @@ public:
     ImportPlanner& planner;
     WorkPayloadStore& payloads;
     std::vector<PlanStep>& steps;
-    std::span<const PlanItemId> material_slots;
+    std::span<const PlanItemId> surfaces;
     std::span<const PlanItemId> geometry_items;
   };
 

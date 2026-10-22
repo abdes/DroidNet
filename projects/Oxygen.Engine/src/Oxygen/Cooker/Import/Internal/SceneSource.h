@@ -17,8 +17,8 @@
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Data/AssetType.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 namespace oxygen::content::import::internal {
 
@@ -32,7 +32,7 @@ inline constexpr uint32_t kSceneDescriptorVersion = 13;
 //! A scene's source values and symbolic dependencies, before cooked linking.
 struct SceneSource final {
   struct MaterialAssignment final {
-    data::MaterialSlotId slot_id;
+    data::SurfaceId surface_id;
     std::string material;
     std::string layout_revision;
   };

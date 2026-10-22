@@ -17,8 +17,8 @@
         <EmbeddedResource Include="Import\Schemas\*.schema.json" />
         <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Tools\Inspector\Schemas\oxygen.cooked-geometries.schema.json"
                           LogicalName="oxygen.cooked-geometries.schema.json" />
-        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.material-slot-provenance.schema.json"
-                          LogicalName="oxygen.material-slot-provenance.schema.json" />
+        <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Import\Schemas\oxygen.surface-provenance.schema.json"
+                          LogicalName="oxygen.surface-provenance.schema.json" />
         <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Tools\Inspector\Schemas\oxygen.cooked-scripts.schema.json"
                           LogicalName="oxygen.cooked-scripts.schema.json" />
         <EmbeddedResource Include="$(ProjectsRoot)\Oxygen.Engine\src\Oxygen\Cooker\Tools\Inspector\Schemas\oxygen.cooked-inventory.schema.json"

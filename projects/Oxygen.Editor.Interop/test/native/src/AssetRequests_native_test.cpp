@@ -56,16 +56,16 @@ void Require(bool condition, const char* message)
 
 constexpr auto kCube = std::string_view { "/Engine/Generated/BasicShapes/Cube.ogeo" };
 
-auto TestSlotId(std::size_t index) -> oxygen::data::MaterialSlotId
+auto TestSurfaceId(std::size_t index) -> oxygen::data::SurfaceId
 {
-  return oxygen::data::MaterialSlotId::FromStableIdentity(
+  return oxygen::data::SurfaceId::FromStableIdentity(
     "asset-request-test/declaration-" + std::to_string(index));
 }
 
-//! A two-slot geometry; `single_slot` keeps only the first slot.
+//! A two-surface geometry; `single_surface` keeps only the first surface.
 auto MakeGeometry(const std::string& name,
   Requests::Material material = oxygen::data::MaterialAsset::CreateDefault(),
-  const bool single_slot = false) -> Requests::Geometry
+  const bool single_surface = false) -> Requests::Geometry
 {
   auto [vertices, indices] = *oxygen::data::MakeCubeMeshAsset();
   oxygen::data::pak::geometry::MeshViewDesc view {};
@@ -75,12 +75,12 @@ auto MakeGeometry(const std::string& name,
   builder.WithVertices(vertices)
     .WithIndices(indices)
     .BeginSubMesh("first", material)
-    .WithMaterialSlotId(TestSlotId(0U))
+    .WithSurfaceId(TestSurfaceId(0U))
     .WithMeshView(view)
     .EndSubMesh();
-  if (!single_slot) {
+  if (!single_surface) {
     builder.BeginSubMesh("second", material)
-      .WithMaterialSlotId(TestSlotId(1U))
+      .WithSurfaceId(TestSurfaceId(1U))
       .WithMeshView(view)
       .EndSubMesh();
   }
@@ -108,7 +108,7 @@ struct Fixture {
   Requests::Geometry b = MakeGeometry("/b");
   Requests::Material red = MakeMaterial("/red");
   Requests::Material blue = MakeMaterial("/blue");
-  //! The engine Cube: an ordinary asset with one material slot, cached.
+  //! The engine Cube: an ordinary asset with one surface, cached.
   Requests::Geometry cube = MakeGeometry(std::string(kCube),
     oxygen::data::MaterialAsset::CreateDefault(), true);
   std::vector<Requests::GeometryCompletion> geometry_loads;
@@ -169,8 +169,8 @@ struct Fixture {
     SetGeometryCommand command(node.GetHandle(), uri);
     Execute(command);
   }
-  auto Target(std::size_t slot, std::string geometry_uri = {}) const
-    -> MaterialSlotTarget
+  auto Target(std::size_t surface, std::string geometry_uri = {}) const
+    -> SurfaceTarget
   {
     if (geometry_uri.empty()) {
       const auto found = geometry_uris.find(node.GetHandle());
@@ -181,16 +181,17 @@ struct Fixture {
       found != geometry_cache.end()) {
       geometry = found->second;
     }
-    const auto& inventory = geometry->MaterialSlots();
-    return MaterialSlotTarget { .geometry_uri = std::move(geometry_uri),
-      .slot_id = slot < inventory.slots.size() ? inventory.slots[slot].slot_id
-                                               : TestSlotId(slot),
+    const auto& inventory = geometry->Surfaces();
+    return SurfaceTarget { .geometry_uri = std::move(geometry_uri),
+      .surface_id = surface < inventory.surfaces.size()
+        ? inventory.surfaces[surface].surface_id
+        : TestSurfaceId(surface),
       .layout_revision = inventory.layout_revision };
   }
-  void Material(const std::optional<std::string>& uri, std::size_t slot = 0)
+  void Material(const std::optional<std::string>& uri, std::size_t surface = 0)
   {
-    SetMaterialOverrideCommand command(node.GetHandle(), Target(slot), uri,
-      MaterialSlotAssignmentIntent::kObservedEdit);
+    SetMaterialOverrideCommand command(node.GetHandle(), Target(surface), uri,
+      SurfaceMaterialAssignmentIntent::kObservedEdit);
     Execute(command);
   }
   void Detach()
@@ -203,10 +204,10 @@ struct Fixture {
   {
     return node.GetRenderable().GetGeometry();
   }
-  auto CurrentMaterial(const SubmeshIndex slot = {}) const
+  auto CurrentMaterial(const SubmeshIndex submesh = {}) const
     -> Requests::Material
   {
-    return node.GetRenderable().ResolveSubmeshMaterial(LodIndex {}, slot);
+    return node.GetRenderable().ResolveSubmeshMaterial(LodIndex {}, submesh);
   }
   void Attach()
   {
@@ -420,7 +421,7 @@ void SceneSessionLifetime()
   Require(f.Geometry() == f.a, "shutdown callback mutated scene");
 }
 
-void IndependentTargetsAndSlots()
+void IndependentTargetsAndSurfaces()
 {
   Fixture f;
   f.Attach();
@@ -437,7 +438,7 @@ void IndependentTargetsAndSlots()
   f.node = first;
   Require(f.CurrentMaterial(SubmeshIndex { 0U }) == f.red
       && f.CurrentMaterial(SubmeshIndex { 1U }) == f.blue,
-    "unrelated slot superseded");
+    "unrelated surface superseded");
 }
 
 void MaterialBeforeGeometry()
@@ -459,7 +460,7 @@ void MaterialBeforeGeometry()
     "unrelated geometry inherited an old override");
 }
 
-void RemovedSlotDoesNotReviveOverride()
+void RemovedSurfaceDoesNotReviveOverride()
 {
   Fixture f;
   f.Attach();
@@ -467,14 +468,14 @@ void RemovedSlotDoesNotReviveOverride()
   f.Material("red", 1);
   f.Drain();
   Require(f.CurrentMaterial(SubmeshIndex { 1U }) == f.red,
-    "initial slot override missing");
+    "initial surface override missing");
   f.Geometry(std::string(kCube));
   f.Drain();
   f.Geometry("B");
   f.geometry_loads[0](f.b, {});
   f.Drain();
   Require(f.CurrentMaterial(SubmeshIndex { 1U }) != f.red,
-    "override from a removed slot resurfaced when the index returned");
+    "override from a removed surface resurfaced when the index returned");
 }
 
 void ClearBeforeGeometry()
@@ -563,7 +564,7 @@ void CorrelatedFailureDelivery()
 
   SetMaterialOverrideCommand material(f.node.GetHandle(),
     f.Target(0, "current"), "missing",
-    MaterialSlotAssignmentIntent::kObservedEdit);
+    SurfaceMaterialAssignmentIntent::kObservedEdit);
   material.SetFailureCallback(on_failure);
   f.Execute(material);
   f.material_loads[0]({}, "failed");
@@ -645,7 +646,7 @@ void RefreshPreservesNewerEditsAndPreviousMaterialOnFailure()
   Require(f.CurrentMaterial() == f.blue, "refresh reversed a newer assignment");
 }
 
-void RefreshDoesNotReviveClearedOrRemovedSlots()
+void RefreshDoesNotReviveClearedOrRemovedSurfaces()
 {
   Fixture f;
   f.Attach();
@@ -660,7 +661,7 @@ void RefreshDoesNotReviveClearedOrRemovedSlots()
   f.requests->Refresh(*f.scene);
   f.Drain();
   Require(f.CurrentMaterial(SubmeshIndex { 1U }) != f.red,
-    "refresh resurrected a removed slot override");
+    "refresh resurrected a removed surface override");
   f.Material("red");
   f.Drain();
   f.Material(std::nullopt);
@@ -772,7 +773,7 @@ void SuccessfulRefreshAcknowledgesCurrentGeneration()
   uint64_t failed = 0;
   std::vector<uint64_t> applied;
   SetMaterialOverrideCommand material(f.node.GetHandle(), f.Target(0), "retry",
-    MaterialSlotAssignmentIntent::kObservedEdit);
+    SurfaceMaterialAssignmentIntent::kObservedEdit);
   material.SetFailureCallback(
     [&](uint64_t generation, const std::string&) { failed = generation; });
   material.SetSuccessCallback([&](uint64_t generation) {
@@ -809,7 +810,7 @@ void SuccessWaitsForCurrentGeometryAndMaterialApplication()
   });
   SetMaterialOverrideCommand material(f.node.GetHandle(),
     f.Target(0, "geometry"), "material",
-    MaterialSlotAssignmentIntent::kObservedEdit);
+    SurfaceMaterialAssignmentIntent::kObservedEdit);
   material.SetSuccessCallback([&](uint64_t) {
     Require(
       f.CurrentMaterial() == f.red, "material success preceded application");
@@ -849,7 +850,7 @@ void MaterialRecoversAfterGeometryFailure(bool material_first)
   });
   SetMaterialOverrideCommand material(f.node.GetHandle(),
     f.Target(0, "retry-geometry"), "red",
-    MaterialSlotAssignmentIntent::kObservedEdit);
+    SurfaceMaterialAssignmentIntent::kObservedEdit);
   material.SetFailureCallback(
     [&](uint64_t, const std::string&) { ++material_failures; });
   material.SetSuccessCallback([&](uint64_t generation) {
@@ -877,7 +878,7 @@ void MaterialRecoversAfterGeometryFailure(bool material_first)
   Require(geometry_failures.size() == 1 && material_successes.empty(),
     "failure acknowledged an unavailable material application");
   Require(
-    material_failures == 0, "unavailable geometry rejected an unverified slot");
+    material_failures == 0, "unavailable geometry rejected an unverified surface");
 
   // A failed publication refresh settles without discarding authored intent.
   f.requests->Refresh(*f.scene);
@@ -914,7 +915,7 @@ void MaterialRecoversAfterGeometryFailure(bool material_first)
     "obsolete completions produced another acknowledgement");
 }
 
-void FailedReplacementDoesNotValidateSlotsAgainstPreviousGeometry()
+void FailedReplacementDoesNotValidateSurfacesAgainstPreviousGeometry()
 {
   Fixture f;
   f.Geometry(std::string(kCube));
@@ -922,7 +923,7 @@ void FailedReplacementDoesNotValidateSlotsAgainstPreviousGeometry()
   const auto previous_geometry = f.Geometry();
   Require(
     previous_geometry && previous_geometry->MeshAt(oxygen::data::LodIndex {})->SubMeshes().size() == 1,
-    "replacement scenario needs a one-slot visible geometry");
+    "replacement scenario needs a one-surface visible geometry");
   f.material_cache["red"] = f.red;
   f.Material("red");
   f.Drain();
@@ -930,7 +931,7 @@ void FailedReplacementDoesNotValidateSlotsAgainstPreviousGeometry()
   int successes = 0;
   f.Geometry("replacement");
   SetMaterialOverrideCommand material(f.node.GetHandle(), f.Target(1), "blue",
-    MaterialSlotAssignmentIntent::kObservedEdit);
+    SurfaceMaterialAssignmentIntent::kObservedEdit);
   material.SetFailureCallback(
     [&](uint64_t, const std::string&) { ++failures; });
   material.SetSuccessCallback([&](uint64_t) {
@@ -945,14 +946,14 @@ void FailedReplacementDoesNotValidateSlotsAgainstPreviousGeometry()
   Require(f.Geometry() == previous_geometry && f.CurrentMaterial() == f.red,
     "failed replacement changed the visible content");
   Require(failures == 0 && successes == 0,
-    "old geometry decided the failed replacement's slot validity");
+    "old geometry decided the failed replacement's surface validity");
   f.geometry_cache["replacement"] = f.b;
   f.material_cache["blue"] = f.blue;
   f.requests->Refresh(*f.scene);
   f.Drain();
   Require(f.Geometry() == f.b
       && f.CurrentMaterial(SubmeshIndex { 1U }) == f.blue,
-    "replacement publication did not apply the pending slot");
+    "replacement publication did not apply the pending surface");
   Require(f.CurrentMaterial() != f.red && successes == 1 && failures == 0,
     "replacement recovery reused an unrelated geometry assignment");
 }
@@ -964,7 +965,7 @@ void LatestMaterialIntentWinsAfterGeometryFailure()
     f.Geometry("retry-geometry");
     int obsolete_successes = 0;
     SetMaterialOverrideCommand original(f.node.GetHandle(), f.Target(0), "red",
-      MaterialSlotAssignmentIntent::kObservedEdit);
+      SurfaceMaterialAssignmentIntent::kObservedEdit);
     original.SetSuccessCallback([&](uint64_t) { ++obsolete_successes; });
     f.Execute(original);
     const auto original_material = f.material_loads.back();
@@ -974,7 +975,7 @@ void LatestMaterialIntentWinsAfterGeometryFailure()
     int latest_successes = 0;
     SetMaterialOverrideCommand latest(f.node.GetHandle(), f.Target(0),
       clear ? std::nullopt : std::optional<std::string>("blue"),
-      MaterialSlotAssignmentIntent::kObservedEdit);
+      SurfaceMaterialAssignmentIntent::kObservedEdit);
     latest.SetSuccessCallback([&](uint64_t) { ++latest_successes; });
     f.Execute(latest);
     if (!clear) {
@@ -999,7 +1000,7 @@ void LatestMaterialIntentWinsAfterGeometryFailure()
   }
 }
 
-void ConfirmedInvalidSlotRequiresNewExplicitAssignment()
+void ConfirmedInvalidSurfaceRequiresNewExplicitAssignment()
 {
   Fixture f;
   f.Geometry(std::string(kCube));
@@ -1011,7 +1012,7 @@ void ConfirmedInvalidSlotRequiresNewExplicitAssignment()
   int successes = 0;
   auto assign = [&] {
     SetMaterialOverrideCommand material(f.node.GetHandle(), f.Target(1), "red",
-      MaterialSlotAssignmentIntent::kObservedEdit);
+      SurfaceMaterialAssignmentIntent::kObservedEdit);
     material.SetFailureCallback([&](uint64_t generation, const std::string&) {
       failed_generation = generation;
       ++failures;
@@ -1025,7 +1026,7 @@ void ConfirmedInvalidSlotRequiresNewExplicitAssignment()
   assign();
   f.Drain();
   Require(
-    failures == 1 && successes == 0, "known invalid slot was not rejected");
+    failures == 1 && successes == 0, "known invalid surface was not rejected");
   f.requests->Refresh(*f.scene);
   f.Drain();
   f.geometry_cache["replacement"] = f.b;
@@ -1035,7 +1036,7 @@ void ConfirmedInvalidSlotRequiresNewExplicitAssignment()
   f.Drain();
   Require(f.CurrentMaterial(SubmeshIndex { 1U }) != f.red && failures == 1
       && successes == 0,
-    "publication resurrected a terminally rejected slot");
+    "publication resurrected a terminally rejected surface");
   assign();
   f.Drain();
   Require(f.CurrentMaterial(SubmeshIndex { 1U }) == f.red && successes == 1
@@ -1054,18 +1055,18 @@ void StaleMaterialRevisionIsRejectedButAcceptedRefreshSurvives()
   f.Material("red", 1U);
   f.Drain();
   const auto replacement = MakeGeometry("/a", MakeMaterial("/new-default"));
-  Require(replacement->MaterialSlots().layout_revision
-      != f.a->MaterialSlots().layout_revision,
+  Require(replacement->Surfaces().layout_revision
+      != f.a->Surfaces().layout_revision,
     "refresh regression requires a changed native inventory revision");
   f.geometry_cache["initial"] = replacement;
   f.requests->Refresh(*f.scene);
   f.Drain();
   Require(f.Geometry() == replacement
       && f.CurrentMaterial(SubmeshIndex { 1U }) == f.red,
-    "compatible refresh discarded an accepted stable slot assignment");
+    "compatible refresh discarded an accepted stable surface assignment");
   int failures = 0;
   SetMaterialOverrideCommand stale(f.node.GetHandle(), old_target, "blue",
-    MaterialSlotAssignmentIntent::kObservedEdit);
+    SurfaceMaterialAssignmentIntent::kObservedEdit);
   stale.SetFailureCallback([&](uint64_t, const std::string&) { ++failures; });
   f.Execute(stale);
   f.material_loads.back()(f.blue, {});
@@ -1075,7 +1076,7 @@ void StaleMaterialRevisionIsRejectedButAcceptedRefreshSurvives()
 }
 
 void MaterialTargetCannotCrossGeometryIdentity(
-  const MaterialSlotAssignmentIntent intent)
+  const SurfaceMaterialAssignmentIntent intent)
 {
   Fixture f;
   f.Attach();
@@ -1100,7 +1101,7 @@ void MaterialTargetCannotCrossGeometryIdentity(
   valid_completion(f.red, {});
   f.Drain();
   Require(failures == 1 && successes == 1 && f.CurrentMaterial() == f.red,
-    "foreign geometry request discarded the valid pending slot assignment");
+    "foreign geometry request discarded the valid pending surface assignment");
 }
 
 void RetainedMaterialIdentitySurvivesInventoryRevisionChange()
@@ -1114,21 +1115,21 @@ void RetainedMaterialIdentitySurvivesInventoryRevisionChange()
   f.Drain();
   Require(f.Geometry() == replacement
       && original.layout_revision
-        != replacement->MaterialSlots().layout_revision,
+        != replacement->Surfaces().layout_revision,
     "retained assignment test requires a changed inventory");
   f.material_cache["blue"] = f.blue;
   SetMaterialOverrideCommand retained(f.node.GetHandle(), original, "blue",
-    MaterialSlotAssignmentIntent::kRetainedAssignment);
+    SurfaceMaterialAssignmentIntent::kRetainedAssignment);
   f.Execute(retained);
   f.Drain();
   Require(f.CurrentMaterial(SubmeshIndex { 1U }) == f.blue,
-    "retained stable slot was rejected after compatible inventory change");
+    "retained stable surface was rejected after compatible inventory change");
   SetMaterialOverrideCommand clear(f.node.GetHandle(), original, std::nullopt,
-    MaterialSlotAssignmentIntent::kRetainedAssignment);
+    SurfaceMaterialAssignmentIntent::kRetainedAssignment);
   f.Execute(clear);
   f.Drain();
   Require(f.CurrentMaterial(SubmeshIndex { 1U }) != f.blue,
-    "retained slot clear did not restore its current geometry default");
+    "retained surface clear did not restore its current geometry default");
 }
 
 void RetainedMaterialMissingIdentityRemainsUnresolved()
@@ -1136,18 +1137,18 @@ void RetainedMaterialMissingIdentityRemainsUnresolved()
   Fixture f;
   f.Attach();
   auto missing = f.Target(0U);
-  missing.slot_id = TestSlotId(9U);
+  missing.surface_id = TestSurfaceId(9U);
   f.material_cache["blue"] = f.blue;
   int failures = 0;
   SetMaterialOverrideCommand retained(f.node.GetHandle(), missing, "blue",
-    MaterialSlotAssignmentIntent::kRetainedAssignment);
+    SurfaceMaterialAssignmentIntent::kRetainedAssignment);
   retained.SetFailureCallback(
     [&](uint64_t, const std::string&) { ++failures; });
   f.Execute(retained);
   f.Drain();
   Require(failures == 1 && f.CurrentMaterial(SubmeshIndex { 0U }) != f.blue
       && f.CurrentMaterial(SubmeshIndex { 1U }) != f.blue,
-    "missing retained identity was rebound to another material slot");
+    "missing retained identity was rebound to another surface");
 }
 
 void MaterialRequestAppliesEveryDeclaredLodBinding()
@@ -1164,15 +1165,15 @@ void MaterialRequestAppliesEveryDeclaredLodBinding()
   f.Material("red", 1U);
   f.Drain();
   const auto renderable = f.node.GetRenderable();
-  const auto slot = SubmeshIndex { 1U };
-  Require(renderable.ResolveSubmeshMaterial(LodIndex { 0U }, slot) == f.red
-      && renderable.ResolveSubmeshMaterial(LodIndex { 1U }, slot) == f.red,
-    "native slot transport only applied its first LOD binding");
+  const auto submesh = SubmeshIndex { 1U };
+  Require(renderable.ResolveSubmeshMaterial(LodIndex { 0U }, submesh) == f.red
+      && renderable.ResolveSubmeshMaterial(LodIndex { 1U }, submesh) == f.red,
+    "native surface transport only applied its first LOD binding");
   f.Material(std::nullopt, 1U);
   f.Drain();
-  Require(renderable.ResolveSubmeshMaterial(LodIndex { 0U }, slot) != f.red
-      && renderable.ResolveSubmeshMaterial(LodIndex { 1U }, slot) != f.red,
-    "native slot clear left an LOD binding overridden");
+  Require(renderable.ResolveSubmeshMaterial(LodIndex { 0U }, submesh) != f.red
+      && renderable.ResolveSubmeshMaterial(LodIndex { 1U }, submesh) != f.red,
+    "native surface clear left an LOD binding overridden");
 }
 
 auto MakeMaskTexture() -> Requests::Texture
@@ -1415,7 +1416,7 @@ auto RunScenario(int scenario) -> const char*
       break;
     case 39:
       MaterialTargetCannotCrossGeometryIdentity(
-        MaterialSlotAssignmentIntent::kRetainedAssignment);
+        SurfaceMaterialAssignmentIntent::kRetainedAssignment);
       break;
     case 40:
       RetainedMaterialMissingIdentityRemainsUnresolved();
@@ -1425,7 +1426,7 @@ auto RunScenario(int scenario) -> const char*
       break;
     case 36:
       MaterialTargetCannotCrossGeometryIdentity(
-        MaterialSlotAssignmentIntent::kObservedEdit);
+        SurfaceMaterialAssignmentIntent::kObservedEdit);
       break;
     case 37:
       MaterialRequestAppliesEveryDeclaredLodBinding();
@@ -1443,13 +1444,13 @@ auto RunScenario(int scenario) -> const char*
       MaterialRecoversAfterGeometryFailure(false);
       break;
     case 30:
-      FailedReplacementDoesNotValidateSlotsAgainstPreviousGeometry();
+      FailedReplacementDoesNotValidateSurfacesAgainstPreviousGeometry();
       break;
     case 31:
       LatestMaterialIntentWinsAfterGeometryFailure();
       break;
     case 32:
-      ConfirmedInvalidSlotRequiresNewExplicitAssignment();
+      ConfirmedInvalidSurfaceRequiresNewExplicitAssignment();
       break;
     case 26:
       SuccessfulRefreshAcknowledgesCurrentGeneration();
@@ -1473,7 +1474,7 @@ auto RunScenario(int scenario) -> const char*
       RefreshPreservesNewerEditsAndPreviousMaterialOnFailure();
       break;
     case 22:
-      RefreshDoesNotReviveClearedOrRemovedSlots();
+      RefreshDoesNotReviveClearedOrRemovedSurfaces();
       break;
     case 0:
       GeometryOrdering(false);
@@ -1506,7 +1507,7 @@ auto RunScenario(int scenario) -> const char*
       SceneSessionLifetime();
       break;
     case 10:
-      IndependentTargetsAndSlots();
+      IndependentTargetsAndSurfaces();
       break;
     case 11:
       MaterialBeforeGeometry();
@@ -1530,7 +1531,7 @@ auto RunScenario(int scenario) -> const char*
       ClearWhileReplacementLoads();
       break;
     case 18:
-      RemovedSlotDoesNotReviveOverride();
+      RemovedSurfaceDoesNotReviveOverride();
       break;
     case 19:
       CorrelatedFailureDelivery();
@@ -1562,23 +1563,23 @@ private:
   }
 
 public:
-  [TestMethod] void RetainedAssignmentUsesCurrentStableSlot() { Check(38); }
+  [TestMethod] void RetainedAssignmentUsesCurrentStableSurface() { Check(38); }
 
     [TestMethod] void RetainedAssignmentCannotCrossGeometry()
   {
     Check(39);
   }
 
-  [TestMethod] void RetainedAssignmentCannotGuessMissingSlot() { Check(40); }
+  [TestMethod] void RetainedAssignmentCannotGuessMissingSurface() { Check(40); }
 
     [TestMethod] void StaleNewEditRejectsWhileAcceptedRefreshSurvives()
   {
     Check(35);
   }
 
-  [TestMethod] void MaterialSlotTargetIncludesGeometryIdentity() { Check(36); }
+  [TestMethod] void SurfaceTargetIncludesGeometryIdentity() { Check(36); }
 
-    [TestMethod] void MaterialSlotTransportAppliesAndClearsEveryLod()
+    [TestMethod] void SurfaceTransportAppliesAndClearsEveryLod()
   {
     Check(37);
   }
@@ -1615,7 +1616,7 @@ public:
     Check(29);
   }
 
-  [TestMethod] void FailedReplacementPreservesMaterialForItsOwnSlotLayout() {
+  [TestMethod] void FailedReplacementPreservesMaterialForItsOwnSurfaceLayout() {
     Check(30);
   }
 
@@ -1624,7 +1625,7 @@ public:
     Check(31);
   }
 
-  [TestMethod] void ConfirmedInvalidSlotRequiresExplicitReassignment() {
+  [TestMethod] void ConfirmedInvalidSurfaceRequiresExplicitReassignment() {
     Check(32);
   }
 
@@ -1660,7 +1661,7 @@ public:
     Check(21);
   }
 
-  [TestMethod] void RefreshDoesNotReviveClearedOrRemovedSlots() { Check(22); }
+  [TestMethod] void RefreshDoesNotReviveClearedOrRemovedSurfaces() { Check(22); }
 
     [TestMethod] void CorrelatedFailuresRespectGenerationAndLifetime()
   {
@@ -1702,7 +1703,7 @@ public:
     Check(9);
   }
 
-  [TestMethod] void IndependentNodesAndSlots() { Check(10); }
+  [TestMethod] void IndependentNodesAndSurfaces() { Check(10); }
 
     [TestMethod] void MaterialWaitsForGeometry()
   {
@@ -1730,7 +1731,7 @@ public:
     Check(17);
   }
 
-  [TestMethod] void RemovedSlotDoesNotRestoreHistoricalOverride() { Check(18); }
+  [TestMethod] void RemovedSurfaceDoesNotRestoreHistoricalOverride() { Check(18); }
 };
 
 } // namespace InteropTests

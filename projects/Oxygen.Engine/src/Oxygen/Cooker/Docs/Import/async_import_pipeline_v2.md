@@ -158,7 +158,7 @@ shared native provenance value.
 `Content/imports/<name>.import.json`; `Prepare` reserves one unique attempt,
 and `AsyncImportService::SubmitRetainedImport` executes it. The native
 `oxygen.retained-model-import.schema.json` record contains the recipe, native
-material-slot provenance, and selected generation ID/index digest. Generation
+surface provenance, and selected generation ID/index digest. Generation
 paths are derived, never copied into the authored recipe. A prepared attempt is
 submitted once. Staging imports reject writes into marked generation roots.
 Source bytes consumed during import are checked again before publication.
@@ -190,7 +190,7 @@ the selected generation without adding workspace-selection UI.
 Acceptance: interrupted/failed cooks preserve the selected record and all prior
 bytes; concurrent publishers cannot overwrite each other's accepted generation;
 source/settings edits invalidate an in-flight candidate; deleting derived
-generations preserves SlotIds after recook from retained provenance; old readers
+generations preserves SurfaceIds after recook from retained provenance; old readers
 remain valid through generation replacement.
 
 ### Core Principles
@@ -236,9 +236,9 @@ remain valid through generation replacement.
     dependencies are ready per the planner’s schedule.
 
 12. **Geometry Material Patching**: Mesh build captures a table of
-    `{slot, material_key_offset}` for each submesh while serializing the
+    `{surface, material_key_offset}` for each submesh while serializing the
     descriptor. Geometry finalization receives only the resolved material keys
-    for the mesh’s `material_slots_used` and patches
+    for the mesh’s `surfaces_used` and patches
     `SubMeshDesc::material_asset_key` directly by offset. The planner guarantees
     these materials are ready before geometry finalization runs.
 

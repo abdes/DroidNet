@@ -15,7 +15,7 @@ namespace Oxygen.Editor.Scenes.Nodes;
 /// <summary>Copies node subtrees as data with new node and component ids, for duplicates and the clipboard.</summary>
 /// <remarks>
 /// A node reference in a script slot that names a node copied in the same call follows the copy; any other reference is
-/// kept. Copied directional lights leave the atmosphere slot to their source. Asset references and material slot ids
+/// kept. Copied directional lights leave the atmosphere slot to their source. Asset references and surface ids
 /// are kept.
 /// </remarks>
 public static class SceneNodeCopies

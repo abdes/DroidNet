@@ -41,12 +41,12 @@ struct SceneImportSettings {
   std::string retained_record_path;
   std::string recipe_path;
   std::string content_root;
-  //! Retained UUIDv7 namespace for native material-slot allocation.
-  std::string material_slot_source_identity;
+  //! Retained UUIDv7 namespace for native surface allocation.
+  std::string surface_source_identity;
   //! Retained provenance supplied by a manifest or an API caller.
-  std::string material_slot_provenance_json;
+  std::string surface_provenance_json;
   //! Optional CLI input file, mutually exclusive with inline provenance.
-  std::string material_slot_provenance_path;
+  std::string surface_provenance_path;
   bool verbose = false;
 
   bool import_textures = true;

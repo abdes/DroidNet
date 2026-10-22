@@ -34,10 +34,10 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -256,15 +256,13 @@ auto ValidateRoot(
         continue; // Other mounted roots are outside this root's inventory.
       }
       const auto& geometry = *found->second;
-      if (geometry.FindMaterialSlot(assignment.slot_id) == nullptr) {
-        throw std::runtime_error("unknown material slot "
-          + data::to_string(assignment.slot_id) + " in scene "
+      if (geometry.FindSurface(assignment.surface_id) == nullptr) {
+        throw std::runtime_error("unknown surface "
+          + data::to_string(assignment.surface_id) + " in scene "
           + nostd::to_string(scene->GetAssetKey()));
       }
-      if (geometry.MaterialSlots().layout_revision
-        != assignment.layout_revision) {
-        throw std::runtime_error(
-          "material slot layout requires repair in scene "
+      if (geometry.Surfaces().layout_revision != assignment.layout_revision) {
+        throw std::runtime_error("surface layout requires repair in scene "
           + nostd::to_string(scene->GetAssetKey()));
       }
     }

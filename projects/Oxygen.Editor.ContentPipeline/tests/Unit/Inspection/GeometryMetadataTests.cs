@@ -22,25 +22,25 @@ public sealed class GeometryMetadataTests
 
     /// <summary>Opaque UUID text and omitted defaults survive the managed projection unchanged.</summary>
     [TestMethod]
-    public void GeometryMetadataPreservesOpaqueSlotsAndNilDefaults()
+    public void GeometryMetadataPreservesOpaqueSurfacesAndNilDefaults()
     {
         var uri = AssetPath.Parse("/Content/Geometry/Test.ogeo");
-        var result = CookedGeometryReport.Parse(SlotReport()).SingleOrDefault(uri)!;
+        var result = CookedGeometryReport.Parse(SurfaceReport()).SingleOrDefault(uri)!;
         _ = result.GeometryUri.Should().Be(uri);
         _ = result.NativeGeometryKey.Should().Be(Guid.Parse("10203040-5060-7080-90a0-b0c0d0e0f001"));
-        var slot = result.Slots.Should().ContainSingle().Subject;
-        _ = slot.SlotId.Should().Be(Guid.Parse("00000000-0000-0000-0000-000000000001"));
-        _ = slot.Bindings.Should().ContainSingle().Which.DefaultMaterialKey.Should().Be(Guid.Empty);
+        var surface = result.Surfaces.Should().ContainSingle().Subject;
+        _ = surface.SurfaceId.Should().Be(Guid.Parse("00000000-0000-0000-0000-000000000001"));
+        _ = surface.Bindings.Should().ContainSingle().Which.DefaultMaterialKey.Should().Be(Guid.Empty);
         _ = result.LayoutRevision.Should().Be(new string('a', 64));
     }
 
     /// <summary>Ambiguous identity data never reaches material authoring.</summary>
     [TestMethod]
-    public void GeometryMetadataRejectsDuplicateSlotIdentities()
+    public void GeometryMetadataRejectsDuplicateSurfaceIdentities()
     {
-        var source = JsonNode.Parse(SlotReport())!;
-        var slots = source["geometries"]![0]!["slots"]!.AsArray();
-        slots.Add(slots[0]!.DeepClone());
+        var source = JsonNode.Parse(SurfaceReport())!;
+        var surfaces = source["geometries"]![0]!["surfaces"]!.AsArray();
+        surfaces.Add(surfaces[0]!.DeepClone());
         Action read = () => CookedGeometryReport.Parse(source.ToJsonString());
         _ = read.Should().Throw<InvalidDataException>();
     }
@@ -60,14 +60,14 @@ public sealed class GeometryMetadataTests
         api.VerifyNoOtherCalls();
     }
 
-    private static string SlotReport() => """
+    private static string SurfaceReport() => """
         {
           "schema_version": 1,
           "geometries": [{
             "geometry_asset_key": "10203040-5060-7080-90a0-b0c0d0e0f001",
             "layout_revision": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-            "slots": [{
-              "slot_id": "00000000-0000-0000-0000-000000000001",
+            "surfaces": [{
+              "surface_id": "00000000-0000-0000-0000-000000000001",
               "display_name": "Surface",
               "bindings": [{"lod_index": 0, "submesh_index": 1,
                 "default_material_key": "00000000-0000-0000-0000-000000000000"}]

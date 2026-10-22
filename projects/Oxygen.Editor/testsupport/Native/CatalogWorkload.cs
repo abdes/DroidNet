@@ -54,24 +54,24 @@ internal static class CatalogWorkload
         }
 
         var scene = fixture.Source;
-        var inventories = new Dictionary<AssetPath, GeometryMaterialSlotMetadata>();
+        var inventories = new Dictionary<AssetPath, GeometrySurfaceMetadata>();
         foreach (var shape in EngineGeometries)
         {
-            var shapeSlots = await ((IGeometryMaterialSlotProvider)pipeline).ReadAsync(project, shape, cancellationToken).ConfigureAwait(true);
-            _ = shapeSlots.Should().NotBeNull();
-            inventories.Add(shape, shapeSlots!);
+            var shapeSurfaces = await ((IGeometrySurfaceProvider)pipeline).ReadAsync(project, shape, cancellationToken).ConfigureAwait(true);
+            _ = shapeSurfaces.Should().NotBeNull();
+            inventories.Add(shape, shapeSurfaces!);
         }
 
-        var importedSlots = await ((IGeometryMaterialSlotProvider)pipeline).ReadAsync(project, mesh, cancellationToken).ConfigureAwait(true);
-        _ = importedSlots.Should().NotBeNull();
-        inventories.Add(mesh, importedSlots!);
+        var importedSurfaces = await ((IGeometrySurfaceProvider)pipeline).ReadAsync(project, mesh, cancellationToken).ConfigureAwait(true);
+        _ = importedSurfaces.Should().NotBeNull();
+        inventories.Add(mesh, importedSurfaces!);
         SeedCatalogWorkloadScene(scene, mesh, inventories);
         await fixture.SaveSceneChangedInMemoryAsync(cancellationToken).ConfigureAwait(true);
         var cooked = await pipeline.CookProjectAsync(cancellationToken).ConfigureAwait(true);
         _ = cooked.IsPublished.Should().BeTrue(DescribeWorkloadCook(cooked));
     }
 
-    internal static void SeedCatalogWorkloadScene(Scene scene, AssetPath mesh, IReadOnlyDictionary<AssetPath, GeometryMaterialSlotMetadata> inventories)
+    internal static void SeedCatalogWorkloadScene(Scene scene, AssetPath mesh, IReadOnlyDictionary<AssetPath, GeometrySurfaceMetadata> inventories)
     {
         for (var index = 0; index < 98; index++)
         {
@@ -89,7 +89,7 @@ internal static class CatalogWorkload
                 Geometry = geometryUri,
             };
             var inventory = inventories[geometryUri];
-            var target = new MaterialSlotTarget(geometryUri, inventory.Slots.Should().ContainSingle().Which.SlotId, inventory.LayoutRevision);
+            var target = new SurfaceTarget(geometryUri, inventory.Surfaces.Should().ContainSingle().Which.SurfaceId, inventory.LayoutRevision);
             geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = WorkloadMaterialAsset(index % 2 == 0 ? 0 : index) });
             _ = node.AddComponent(geometry);
             var position = new Vector3(index % 10, index / 10, 0);

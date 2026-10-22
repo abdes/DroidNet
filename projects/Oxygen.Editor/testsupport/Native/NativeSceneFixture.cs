@@ -324,14 +324,14 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     public IDisposable CreateImportedAssetDemand(CatalogWorkloadServices services, AssetFeed provider)
         => ContentDemands.Start(this.OpenDocuments, provider, services.Pipeline, services.Session);
 
-    public async Task<MaterialSlotTarget> ReadSingleMaterialSlotAsync(NodeId nodeId, CancellationToken cancellationToken)
+    public async Task<SurfaceTarget> ReadSingleSurfaceAsync(NodeId nodeId, CancellationToken cancellationToken)
     {
         var node = this.Source.RootNodes.Select(root => SceneTraversal.FindNodeById(root, nodeId)).OfType<SceneNode>().Single();
         var uri = node.Components.OfType<GeometryComponent>().Single().Geometry;
         var inventory = await this.materialPipeline.Pipeline.ReadAsync(this.Session.Context, uri, cancellationToken).ConfigureAwait(true);
-        _ = inventory.Should().NotBeNull("the native fixture geometry must have a current slot inventory");
-        var slot = inventory!.Slots.Should().ContainSingle().Which;
-        return new(uri, slot.SlotId, inventory.LayoutRevision);
+        _ = inventory.Should().NotBeNull("the native fixture geometry must have a current surface inventory");
+        var surface = inventory!.Surfaces.Should().ContainSingle().Which;
+        return new(uri, surface.SurfaceId, inventory.LayoutRevision);
     }
 
     public async Task<FileSystemPath> GetCookedRootAsync(FileSystemPath projectRoot, CancellationToken token)

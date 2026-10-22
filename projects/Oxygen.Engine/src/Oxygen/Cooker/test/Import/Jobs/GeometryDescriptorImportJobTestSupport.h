@@ -79,7 +79,7 @@ inline auto MakeBounds() -> json
   };
 }
 
-inline constexpr std::string_view kAuthoredSlotId
+inline constexpr std::string_view kAuthoredSurfaceId
   = "018f8f8f-1111-7111-8111-111111111111";
 
 inline auto MakeGeometryRequest(const std::filesystem::path& source_path,
@@ -129,7 +129,7 @@ inline auto MakeStandardDescriptorDoc(std::string_view name,
             "submeshes",
             json::array({
               json {
-                { "slot_id", kAuthoredSlotId },
+                { "surface_id", kAuthoredSurfaceId },
                 { "material_ref", material_ref },
                 {
                   "views",

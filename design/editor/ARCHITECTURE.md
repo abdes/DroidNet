@@ -432,7 +432,7 @@ to live and how editor services interact with game project files.
 | `Projects` to content pipeline     | `Projects` owns project identity, manifest validation, content-root policy, and cook-scope facts. It does not execute import, cook, pak, mount, or content-pipeline jobs.                   |
 | `ContentPipeline` to projects      | `ContentPipeline` reads project facts through project-service contracts when it needs cook scope, authored roots, or project identity. It does not own project creation or manifest policy. |
 | `Scenes` to project layout         | `Scenes` opens and saves scene documents through project and document services. It does not decide global project layout or write cooked output directly.                                   |
-| `ContentExplorer` to scene editing | Content Explorer can return asset identity and diagnostics. It does not mutate scene components or material slots directly.                                                                 |
+| `ContentExplorer` to scene editing | Content Explorer can return asset identity and diagnostics. It does not mutate scene components or surfaces directly.                                                                       |
 | Native interop to authoring policy | Native code exposes capabilities. Managed editor modules own authoring defaults, game project policy, UI behavior, and workflow decisions.                                                  |
 
 ## 8. Workflow Architecture

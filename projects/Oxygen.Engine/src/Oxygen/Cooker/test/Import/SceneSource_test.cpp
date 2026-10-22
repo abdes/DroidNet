@@ -74,7 +74,7 @@ namespace {
     document.emplace("renderables", json::parse(R"([{
       "node":0,"geometry_ref":"/Content/Geometry/body.ogeo",
       "material_overrides":[{
-        "slot_id":"018f8f8f-1111-7111-8111-111111111111",
+        "surface_id":"018f8f8f-1111-7111-8111-111111111111",
         "material_ref":"/Content/Materials/paint.omat",
         "layout_revision":"0000000000000000000000000000000000000000000000000000000000000000"
       }]

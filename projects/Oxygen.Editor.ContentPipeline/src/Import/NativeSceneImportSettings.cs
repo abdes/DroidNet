@@ -63,7 +63,7 @@ public sealed record NativeSceneImportSettings(
     });
 
     /// <summary>Gets the native identities published with this source's geometry.</summary>
-    public required NativeMaterialSlotProvenance MaterialSlotProvenance { get; init; }
+    public required NativeSurfaceProvenance SurfaceProvenance { get; init; }
 
     /// <summary>Gets the required supported source-content policy.</summary>
     public string ContentPolicy { get; init; } = DefaultContentPolicy;
@@ -96,7 +96,7 @@ public sealed record NativeSceneImportSettings(
             source.Files.Single(file => string.Equals(file.RelativePath, source.PrimaryRelativePath, StringComparison.Ordinal)).Sha256,
             source.Files.Select(static file => file.RelativePath).ToImmutableArray())
         {
-            MaterialSlotProvenance = NativeMaterialSlotProvenance.Create(),
+            SurfaceProvenance = NativeSurfaceProvenance.Create(),
         };
         _ = settings.ToBytes();
         return settings;

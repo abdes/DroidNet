@@ -44,7 +44,7 @@ internal static class IncrementalCookScenario
         workspace.WriteMaterial("Content/Materials/Blue.omat.json", "Blue");
         var node = new SceneNode(workspace.Scene) { Name = "Cube" };
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = EngineAssets.BasicShape("Cube") };
-        geometry.OverrideSlots.Add(await CreateEngineMaterialSlotAsync(
+        geometry.OverrideSlots.Add(await CreateSurfaceMaterialOverrideAsync(
             workspace, inspector, geometry.Geometry, AssetPath.Parse("/Content/Materials/Blue.omat")).ConfigureAwait(false));
         _ = node.AddComponent(geometry);
         workspace.Scene.RootNodes.Add(node);
@@ -52,8 +52,8 @@ internal static class IncrementalCookScenario
         await workspace.WriteSceneAsync("Content/Scenes/Main.oscene.json").ConfigureAwait(false);
     }
 
-    // Reads the slot of a single-slot engine geometry from the workspace's engine content pak, as the inspector does.
-    internal static async Task<MaterialsSlot> CreateEngineMaterialSlotAsync(CookWorkspace workspace, ICookedGeometryInspector inspector, AssetPath geometry, AssetPath material, CancellationToken cancellationToken = default)
+    // Reads the surface of a single-surface engine geometry from the workspace's engine content pak, as the inspector does.
+    internal static async Task<MaterialsSlot> CreateSurfaceMaterialOverrideAsync(CookWorkspace workspace, ICookedGeometryInspector inspector, AssetPath geometry, AssetPath material, CancellationToken cancellationToken = default)
     {
         var report = await inspector.InspectGeometryAsync(
             Path.Combine(workspace.Root, ".build", "inspection"), workspace.EngineContent.Path.FullPath, geometry.VirtualPath, cancellationToken).ConfigureAwait(false);
@@ -61,7 +61,7 @@ internal static class IncrementalCookScenario
             ?? throw new InvalidOperationException("The engine content pak has no geometry " + geometry.VirtualPath + ".");
         return new MaterialsSlot
         {
-            Target = new(geometry, inventory.Slots.Single().SlotId, inventory.LayoutRevision),
+            Target = new(geometry, inventory.Surfaces.Single().SurfaceId, inventory.LayoutRevision),
             Material = material,
         };
     }

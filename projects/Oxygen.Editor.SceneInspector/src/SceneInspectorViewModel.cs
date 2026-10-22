@@ -93,7 +93,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
     /// <param name="assetProvider">The shared asset identity and availability feed.</param>
     /// <param name="scenePreview">The engine preview, which reports the fields still waiting for the engine.</param>
     /// <param name="selectionService">The authoritative document selection owner, used to hydrate the typed context at startup.</param>
-    /// <param name="materialSlots">The current native geometry slot inventories.</param>
+    /// <param name="surfaces">The current native geometry surface inventories.</param>
     /// <param name="session">The project session the inspector belongs to.</param>
     /// <param name="inputSources">The project's input sources, which declare the scene's starting input contexts.</param>
     /// <param name="loggerFactory">
@@ -113,7 +113,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         IAssetFeed assetProvider,
         IScenePreview scenePreview,
         ISceneSelectionService selectionService,
-        IGeometryMaterialSlotProvider materialSlots,
+        IGeometrySurfaceProvider surfaces,
         IProjectSession session,
         IInputSources inputSources,
         ILoggerFactory? loggerFactory = null,
@@ -141,7 +141,7 @@ public sealed partial class SceneInspectorViewModel : ObservableObject, ISceneNo
         this.propertyEditorFactories = InspectorEditorFactory.Create(
             hosting,
             assetProvider,
-            materialSlots,
+            surfaces,
             session,
             loggerFactory,
             this.AuthoringOf,

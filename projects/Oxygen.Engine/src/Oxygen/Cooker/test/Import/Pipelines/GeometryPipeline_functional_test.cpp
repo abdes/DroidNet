@@ -34,7 +34,7 @@
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/PipelineHarness.h>
@@ -110,7 +110,7 @@ namespace {
     buffers->indices = { 0, 1, 2 };
     buffers->ranges = {
       TriangleRange {
-        .material_slot = 0,
+        .surface = 0,
         .first_index = 0,
         .index_count = 3,
       },
@@ -194,8 +194,8 @@ namespace {
   {
     ImportRequest request;
     static const auto provenance
-      = std::make_shared<const MaterialSlotProvenance>(Uuid::Generate());
-    request.material_slot_provenance = provenance;
+      = std::make_shared<const SurfaceProvenance>(Uuid::Generate());
+    request.surface_provenance = provenance;
     request.source_path = "Geometry.fbx";
     return request;
   }
@@ -573,7 +573,7 @@ namespace {
     buffers->indices = { 0, 1, 2 };
     buffers->ranges = {
       TriangleRange {
-        .material_slot = 0,
+        .surface = 0,
         .first_index = 0,
         .index_count = 3,
       },
@@ -688,7 +688,7 @@ namespace {
     }
     buffers->ranges = {
       TriangleRange {
-        .material_slot = 0,
+        .surface = 0,
         .first_index = 0,
         .index_count = static_cast<uint32_t>(buffers->indices.size()),
       },

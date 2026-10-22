@@ -4,7 +4,7 @@
 
 namespace Oxygen.Editor.Runtime.Engine;
 
-/// <summary>Keeps current native outcomes with their owning scene, node, slot and generation.</summary>
+/// <summary>Keeps current native outcomes with their owning scene, node, surface and generation.</summary>
 internal sealed partial class RuntimeCommandDispatcher
 {
     /// <inheritdoc />

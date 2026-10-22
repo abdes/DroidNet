@@ -111,7 +111,7 @@ internal sealed class RelocationWorkspace : IDisposable
             new string('A', 64),
             ImmutableArray.Create(primary, "mesh.bin"))
         {
-            MaterialSlotProvenance = NativeMaterialSlotProvenance.Create(),
+            SurfaceProvenance = NativeSurfaceProvenance.Create(),
         };
         this.FileSystem.File.WriteAllBytes(this.PathOf(bundle + "/" + primary + NativeSceneImportSettings.SidecarSuffix), settings.ToBytes());
         return settings;

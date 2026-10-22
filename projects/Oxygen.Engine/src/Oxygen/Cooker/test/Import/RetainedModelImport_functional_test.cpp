@@ -27,8 +27,8 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportEventLoop.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/RetainedModelImport.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
 #include <Oxygen/Core/Types/Format.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -73,8 +73,8 @@ protected:
     auto report = oxygen::content::import::ImportReport {};
     report.cooked_root = cooked_root;
     report.source_key = source_key;
-    report.material_slot_provenance_json
-      = attempt.Request().material_slot_provenance->Serialize();
+    report.surface_provenance_json
+      = attempt.Request().surface_provenance->Serialize();
     report.success = true;
     return report;
   }
@@ -100,8 +100,8 @@ NOLINT_TEST_F(RetainedModelImportTest,
   const auto after = RetainedModelImport::Prepare(record_);
   EXPECT_EQ(
     after->Request().source_path, std::filesystem::path(settings_.source_path));
-  EXPECT_EQ(after->Request().material_slot_provenance->SourceIdentity(),
-    before->Request().material_slot_provenance->SourceIdentity());
+  EXPECT_EQ(after->Request().surface_provenance->SourceIdentity(),
+    before->Request().surface_provenance->SourceIdentity());
   EXPECT_TRUE(after->Request().options.texture_tuning.enabled);
   EXPECT_EQ(after->Request().options.texture_tuning.color_output_format,
     oxygen::Format::kBC7UNormSRGB);
@@ -138,8 +138,8 @@ NOLINT_TEST_F(
   EXPECT_EQ(report.retained_record_path, record_);
   auto next = RetainedModelImport::Prepare(record_);
   EXPECT_NE(next->Request().cooked_root, report.cooked_root);
-  EXPECT_EQ(next->Request().material_slot_provenance->SourceIdentity(),
-    attempt->Request().material_slot_provenance->SourceIdentity());
+  EXPECT_EQ(next->Request().surface_provenance->SourceIdentity(),
+    attempt->Request().surface_provenance->SourceIdentity());
   EXPECT_NE(next->Request().source_key, attempt->Request().source_key);
 }
 
@@ -256,12 +256,10 @@ NOLINT_TEST_F(
   auto report = Candidate(*attempt);
   attempt->ValidateCandidate(report);
   attempt->Publish(report);
-  const auto identity
-    = attempt->Request().material_slot_provenance->SourceIdentity();
+  const auto identity = attempt->Request().surface_provenance->SourceIdentity();
   std::filesystem::remove_all(report.cooked_root);
   auto recook = RetainedModelImport::Prepare(record_);
-  EXPECT_EQ(
-    recook->Request().material_slot_provenance->SourceIdentity(), identity);
+  EXPECT_EQ(recook->Request().surface_provenance->SourceIdentity(), identity);
   EXPECT_NE(recook->Request().source_key, attempt->Request().source_key);
 }
 
@@ -340,7 +338,7 @@ NOLINT_TEST_F(
   ASSERT_TRUE(report.success);
   EXPECT_EQ(
     RetainedModelImport::SelectedGeneration(record_), report.cooked_root);
-  EXPECT_FALSE(report.material_slot_provenance_json.empty());
+  EXPECT_FALSE(report.surface_provenance_json.empty());
 }
 
 NOLINT_TEST_F(

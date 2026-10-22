@@ -671,17 +671,17 @@ namespace {
   auto ApplySceneOverrides(const json& obj, SceneImportSettings& settings,
     std::ostream& errors) -> bool
   {
-    if (!ReadStringField(obj, "material_slot_source_identity",
-          settings.material_slot_source_identity, errors)) {
+    if (!ReadStringField(obj, "surface_source_identity",
+          settings.surface_source_identity, errors)) {
       return false;
     }
-    if (obj.contains("material_slot_provenance")) {
-      const auto& provenance = obj.at("material_slot_provenance");
+    if (obj.contains("surface_provenance")) {
+      const auto& provenance = obj.at("surface_provenance");
       if (!provenance.is_object()) {
-        errors << "ERROR: material_slot_provenance must be an object\n";
+        errors << "ERROR: surface_provenance must be an object\n";
         return false;
       }
-      settings.material_slot_provenance_json = provenance.dump();
+      settings.surface_provenance_json = provenance.dump();
     }
     ReadBoolField(
       obj, "content_hashing", settings.with_content_hashing, errors);

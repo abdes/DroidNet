@@ -39,12 +39,12 @@
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
-#include <Oxygen/Data/MaterialSlotId.h>
-#include <Oxygen/Data/MaterialSlotInventory.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Testing/GTest.h>
 
@@ -58,22 +58,22 @@ using oxygen::content::pak::test::AssetSpec;
 using oxygen::content::pak::test::FileSpec;
 using oxygen::data::AssetKey;
 using oxygen::data::AssetReferences;
-using oxygen::data::MaterialSlotId;
+using oxygen::data::SurfaceId;
 
 constexpr auto kGeometryPath = "/Content/Geometry/Inspection.ogeo";
 constexpr auto kSharedMaterialPath = "/Content/Materials/Shared.omat";
 constexpr uint32_t kTriangleSize = 3U;
 
-auto SlotId(const uint8_t value) -> MaterialSlotId
+auto MakeSurfaceId(const uint8_t value) -> SurfaceId
 {
-  MaterialSlotId::ByteArray bytes {};
+  SurfaceId::ByteArray bytes {};
   bytes.back() = value;
-  return MaterialSlotId::FromBytes(bytes);
+  return SurfaceId::FromBytes(bytes);
 }
 
 struct GeometryFixture {
   uint8_t version = geometry::kGeometryAssetVersion;
-  MaterialSlotId first_slot = SlotId(1);
+  SurfaceId first_surface = MakeSurfaceId(1);
 };
 
 template <typename T>
@@ -182,7 +182,8 @@ auto GeometryAsset(const GeometryFixture& fixture) -> AssetSpec
       ++submesh_index) {
       auto submesh = geometry::SubMeshDesc {};
       submesh.name_offset = strings.Add("Surface");
-      submesh.slot_id = submesh_index == 0 ? fixture.first_slot : SlotId(2);
+      submesh.surface_id
+        = submesh_index == 0 ? fixture.first_surface : MakeSurfaceId(2);
       submesh.material_asset_key
         = lod == 1 && submesh_index == 0 ? AssetKey {} : material;
       submesh.mesh_view_count = 1;
@@ -230,17 +231,17 @@ auto WriteGeometryRoot(const std::filesystem::path& root,
 auto ExpectedLayoutRevision() -> oxygen::base::Sha256Digest
 {
   const auto material = AssetKey::FromVirtualPath(kSharedMaterialPath);
-  const auto slots = std::array {
-    oxygen::data::MaterialSlot {
-      .slot_id = SlotId(1),
+  const auto surfaces = std::array {
+    oxygen::data::Surface {
+      .surface_id = MakeSurfaceId(1),
       .display_name = "Surface",
       .bindings = {
         { .lod_index = oxygen::data::LodIndex {}, .submesh_index = oxygen::data::SubmeshIndex {}, .default_material_key = material },
         { .lod_index = oxygen::data::LodIndex { 1U }, .submesh_index = oxygen::data::SubmeshIndex {}, .default_material_key = {} },
       },
     },
-    oxygen::data::MaterialSlot {
-      .slot_id = SlotId(2),
+    oxygen::data::Surface {
+      .surface_id = MakeSurfaceId(2),
       .display_name = "Surface",
       .bindings = {
         { .lod_index = oxygen::data::LodIndex {}, .submesh_index = oxygen::data::SubmeshIndex { 1U }, .default_material_key = material },
@@ -248,11 +249,11 @@ auto ExpectedLayoutRevision() -> oxygen::base::Sha256Digest
       },
     },
   };
-  return oxygen::data::ComputeMaterialSlotLayoutRevision(slots).value();
+  return oxygen::data::ComputeSurfaceLayoutRevision(surfaces).value();
 }
 
 //! Rewrites the root with the geometry and a scene overriding one of its
-//! slots on the scene's only renderable node.
+//! surfaces on the scene's only renderable node.
 auto WriteOverrideScene(const std::filesystem::path& root,
   const oxygen::data::pak::world::MaterialOverrideRecord& assignment) -> void
 {
@@ -356,7 +357,7 @@ protected:
   }
 };
 
-NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSeparateSlotsAcrossLods)
+NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSeparateSurfacesAcrossLods)
 {
   WriteGeometryRoot(Root());
   EXPECT_NO_THROW(ValidateRoot(Root()));
@@ -368,19 +369,21 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSeparateSlotsAcrossLods)
     oxygen::data::to_string(
       AssetKey::FromVirtualPath("/Content/Geometry/Inspection.ogeo")));
   EXPECT_NE(row.at("layout_revision"), std::string(64, '0'));
-  const auto& slots = row.at("slots");
-  ASSERT_EQ(slots.size(), 2U);
-  for (size_t slot_index = 0; slot_index < slots.size(); ++slot_index) {
-    const auto& slot = slots.at(slot_index);
-    EXPECT_EQ(slot.at("slot_id"),
-      oxygen::data::to_string(SlotId(static_cast<uint8_t>(slot_index + 1))));
-    EXPECT_EQ(slot.at("display_name"), "Surface");
-    ASSERT_EQ(slot.at("bindings").size(), 2U);
+  const auto& surfaces = row.at("surfaces");
+  ASSERT_EQ(surfaces.size(), 2U);
+  for (size_t surface_index = 0; surface_index < surfaces.size();
+    ++surface_index) {
+    const auto& surface = surfaces.at(surface_index);
+    EXPECT_EQ(surface.at("surface_id"),
+      oxygen::data::to_string(
+        MakeSurfaceId(static_cast<uint8_t>(surface_index + 1))));
+    EXPECT_EQ(surface.at("display_name"), "Surface");
+    ASSERT_EQ(surface.at("bindings").size(), 2U);
     for (size_t lod = 0; lod < 2; ++lod) {
-      const auto& binding = slot.at("bindings").at(lod);
+      const auto& binding = surface.at("bindings").at(lod);
       EXPECT_EQ(binding.at("lod_index"), lod);
-      EXPECT_EQ(binding.at("submesh_index"), slot_index);
-      const auto material = lod == 1 && slot_index == 0
+      EXPECT_EQ(binding.at("submesh_index"), surface_index);
+      const auto material = lod == 1 && surface_index == 0
         ? AssetKey {}
         : AssetKey::FromVirtualPath("/Content/Materials/Shared.omat");
       EXPECT_EQ(
@@ -411,9 +414,9 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, FiltersByNativeVirtualPath)
   EXPECT_TRUE(ReadReport().at("geometries").empty());
 }
 
-NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsNilSlotIdentity)
+NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsNilSurfaceIdentity)
 {
-  WriteGeometryRoot(Root(), { .first_slot = {} });
+  WriteGeometryRoot(Root(), { .first_surface = {} });
   EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
   EXPECT_EQ(Report(), 2);
   EXPECT_FALSE(std::filesystem::exists(Path("geometries.json")));
@@ -431,13 +434,13 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, DoesNotOverwriteSourceDescriptor)
   EXPECT_NO_THROW(ValidateRoot(Root()));
 }
 
-NOLINT_TEST_F(InspectorGeometryMetadataTest, AcceptsLocalSlotOverride)
+NOLINT_TEST_F(InspectorGeometryMetadataTest, AcceptsLocalSurfaceOverride)
 {
   WriteGeometryRoot(Root());
   WriteOverrideScene(Root(),
     {
       .node_index = 0,
-      .slot_id = SlotId(2),
+      .surface_id = MakeSurfaceId(2),
       .material_key
       = AssetKey::FromVirtualPath("/Content/Materials/Override.omat"),
       .layout_revision = ExpectedLayoutRevision(),
@@ -445,13 +448,13 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, AcceptsLocalSlotOverride)
   EXPECT_NO_THROW(ValidateRoot(Root()));
 }
 
-NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsUnknownLocalSlotOverride)
+NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsUnknownLocalSurfaceOverride)
 {
   WriteGeometryRoot(Root());
   WriteOverrideScene(Root(),
     {
       .node_index = 0,
-      .slot_id = SlotId(3),
+      .surface_id = MakeSurfaceId(3),
       .material_key
       = AssetKey::FromVirtualPath("/Content/Materials/Override.omat"),
       .layout_revision = ExpectedLayoutRevision(),
@@ -459,7 +462,7 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsUnknownLocalSlotOverride)
   EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
 }
 
-NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsStaleLocalSlotLayout)
+NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsStaleLocalSurfaceLayout)
 {
   WriteGeometryRoot(Root());
   auto revision = ExpectedLayoutRevision();
@@ -467,7 +470,7 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsStaleLocalSlotLayout)
   WriteOverrideScene(Root(),
     {
       .node_index = 0,
-      .slot_id = SlotId(2),
+      .surface_id = MakeSurfaceId(2),
       .material_key
       = AssetKey::FromVirtualPath("/Content/Materials/Override.omat"),
       .layout_revision = revision,
@@ -475,8 +478,9 @@ NOLINT_TEST_F(InspectorGeometryMetadataTest, RejectsStaleLocalSlotLayout)
   EXPECT_THROW(ValidateRoot(Root()), std::runtime_error);
 }
 
-//! A pak reports the same slot inventory as the loose root it was packed from.
-NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSlotsFromAPak)
+//! A pak reports the same surface inventory as the loose root it was packed
+//! from.
+NOLINT_TEST_F(InspectorGeometryMetadataTest, ReportsSurfacesFromAPak)
 {
   // Arrange
   const auto loose = Path("loose");

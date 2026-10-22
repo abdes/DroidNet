@@ -105,25 +105,25 @@ public sealed partial class NativeLoopCleanupTests
         _ = commands.Execute(replacement, this.TestContext.CancellationToken).Status.Should().Be(RuntimeCommandStatus.Accepted);
         await this.WaitForAppliedAssetAsync(commands, replacement).ConfigureAwait(false);
         _ = commands.IsCurrentAssetFailure(failure).Should().BeFalse();
-        var inventory = await this.ReadNativeCubeSlotsAsync().ConfigureAwait(false);
-        var slot = inventory.Slots.Single();
+        var inventory = await this.ReadNativeCubeSurfacesAsync().ConfigureAwait(false);
+        var surface = inventory.Surfaces.Single();
         var material = new RuntimeWorldRequest(
             Guid.NewGuid(),
             target,
             new RuntimeSetMaterialOverride(
                 nodeId,
                 inventory.GeometryUri.VirtualPath,
-                slot.SlotId,
+                surface.SurfaceId,
                 inventory.LayoutRevision,
                 EngineAssets.DefaultMaterial.VirtualPath,
-                MaterialSlotAssignmentIntent.ObservedEdit));
+                SurfaceMaterialAssignmentIntent.ObservedEdit));
         _ = commands.Execute(material, this.TestContext.CancellationToken).Status.Should().Be(RuntimeCommandStatus.Accepted);
         await this.WaitForAppliedAssetAsync(commands, material).ConfigureAwait(false);
     }
 
-    private async Task<GeometryMaterialSlotMetadata> ReadNativeCubeSlotsAsync()
+    private async Task<GeometrySurfaceMetadata> ReadNativeCubeSurfacesAsync()
     {
-        var root = Directory.CreateTempSubdirectory("Oxygen.NativeSlotCatalog.");
+        var root = Directory.CreateTempSubdirectory("Oxygen.NativeSurfaceCatalog.");
         try
         {
             using var compatibility = Oxygen.Managed.Core.Testing.TemporaryNativeArtifacts.ForInstalledEngine();

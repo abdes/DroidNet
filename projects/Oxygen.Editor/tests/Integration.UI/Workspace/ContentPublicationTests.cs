@@ -113,7 +113,7 @@ public sealed partial class ContentPublicationTests : DroidNet.Tests.VisualUserI
         }
         else if (string.Equals(action, "Clear", StringComparison.Ordinal))
         {
-            _ = (await fixture.Authoring.ExecuteAsync(new SetMaterialSlot([nodes[0].Id], await fixture.ReadSingleMaterialSlotAsync(nodes[0].Id, cancellationToken).ConfigureAwait(true), material: null)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+            _ = (await fixture.Authoring.ExecuteAsync(new SetSurfaceMaterial([nodes[0].Id], await fixture.ReadSingleSurfaceAsync(nodes[0].Id, cancellationToken).ConfigureAwait(true), material: null)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         }
         else
         {

@@ -26,7 +26,7 @@
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/GeometryIndices.h>
-#include <Oxygen/Data/MaterialSlotInventory.h>
+#include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Data/api_export.h>
 
@@ -174,9 +174,9 @@ private:
 class SubMesh {
 public:
   //! Semantic declaration identity; independent of its label or material.
-  [[nodiscard]] auto SlotId() const noexcept -> MaterialSlotId
+  [[nodiscard]] auto SurfaceIdentity() const noexcept -> SurfaceId
   {
-    return slot_id_;
+    return surface_id_;
   }
   ~SubMesh() = default;
 
@@ -249,7 +249,7 @@ protected:
   // Only for SubMeshBuilder: set PAK descriptor for bounding optimization
   void SetDescriptor(pak::geometry::SubMeshDesc desc)
   {
-    slot_id_ = desc.slot_id;
+    surface_id_ = desc.surface_id;
     desc_ = std::move(desc);
   }
 
@@ -277,7 +277,7 @@ private:
   std::shared_ptr<const MaterialAsset> material_;
 
   std::optional<pak::geometry::SubMeshDesc> desc_;
-  MaterialSlotId slot_id_;
+  SurfaceId surface_id_;
 };
 
 //! Immutable, shareable mesh asset containing geometry data and submeshes.
@@ -764,14 +764,13 @@ public:
     SourceOrigin source_origin = {});
 
   //! Immutable declaration inventory, resolved once when geometry is created.
-  [[nodiscard]] auto MaterialSlots() const noexcept
-    -> const MaterialSlotInventory&
+  [[nodiscard]] auto Surfaces() const noexcept -> const SurfaceInventory&
   {
-    return material_slots_;
+    return surfaces_;
   }
 
-  OXGN_DATA_NDAPI auto FindMaterialSlot(MaterialSlotId id) const noexcept
-    -> const MaterialSlot*;
+  OXGN_DATA_NDAPI auto FindSurface(SurfaceId id) const noexcept
+    -> const Surface*;
 
   ~GeometryAsset() override = default;
 
@@ -828,7 +827,7 @@ public:
 private:
   pak::geometry::GeometryAssetDesc desc_ {};
   std::vector<std::shared_ptr<Mesh>> lod_meshes_;
-  MaterialSlotInventory material_slots_ {};
+  SurfaceInventory surfaces_ {};
 };
 
 //! Builder for a single submesh within a MeshBuilder type-state API.
@@ -865,12 +864,12 @@ public:
 
   //! Supplies persistent producer-owned identity. Omission creates a fresh
   //! runtime declaration; its identity survives only while that mesh exists.
-  auto WithMaterialSlotId(MaterialSlotId id) -> SubMeshBuilder&
+  auto WithSurfaceId(SurfaceId id) -> SubMeshBuilder&
   {
     if (id.IsNil()) {
-      throw std::invalid_argument("Material slot identity must not be nil");
+      throw std::invalid_argument("Surface identity must not be nil");
     }
-    slot_id_ = id;
+    surface_id_ = id;
     return *this;
   }
 
@@ -908,7 +907,7 @@ private:
   std::shared_ptr<const MaterialAsset> material_;
   std::vector<pak::geometry::MeshViewDesc> mesh_views_;
   std::optional<pak::geometry::SubMeshDesc> desc_;
-  MaterialSlotId slot_id_;
+  SurfaceId surface_id_;
 
   friend class MeshBuilder;
 };
@@ -1106,7 +1105,7 @@ public:
       .material = submesh_builder.Material(),
       .mesh_views = submesh_builder.MeshViews(),
       .desc = submesh_builder.desc_,
-      .slot_id = submesh_builder.slot_id_,
+      .surface_id = submesh_builder.surface_id_,
     });
     submesh_in_progress_ = false;
     return *this;
@@ -1179,7 +1178,7 @@ private:
     std::shared_ptr<const MaterialAsset> material;
     std::vector<pak::geometry::MeshViewDesc> mesh_views;
     std::optional<pak::geometry::SubMeshDesc> desc;
-    MaterialSlotId slot_id;
+    SurfaceId surface_id;
   };
   std::vector<SubMeshSpec> submeshes_;
   std::optional<pak::geometry::MeshDesc> desc_;
@@ -1194,7 +1193,7 @@ private:
       .material = builder.Material(),
       .mesh_views = builder.MeshViews(),
       .desc = builder.desc_,
-      .slot_id = builder.slot_id_,
+      .surface_id = builder.surface_id_,
     });
   }
 };

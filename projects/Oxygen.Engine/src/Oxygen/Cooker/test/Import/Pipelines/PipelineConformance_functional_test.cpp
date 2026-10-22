@@ -37,9 +37,9 @@
 #include <Oxygen/Cooker/Import/Internal/Pipelines/ScenePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/TexturePipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/ScratchImage.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/Import/TextureImportDesc.h>
 #include <Oxygen/Cooker/Import/TextureImportTypes.h>
 #include <Oxygen/Cooker/Import/TextureSourceAssembly.h>
@@ -167,7 +167,7 @@ auto MakeGeometryWorkItem() -> MeshBuildPipeline::WorkItem
   owner->indices = { 0U, 1U, 2U };
   owner->ranges = {
     TriangleRange {
-      .material_slot = 0,
+      .surface = 0,
       .first_index = 0,
       .index_count = 3,
     },
@@ -212,8 +212,8 @@ auto MakeGeometryWorkItem() -> MeshBuildPipeline::WorkItem
   item.default_material_key = default_key;
   item.request.source_path = "Geometry.fbx";
   static const auto provenance
-    = std::make_shared<const MaterialSlotProvenance>(oxygen::Uuid::Generate());
-  item.request.material_slot_provenance = provenance;
+    = std::make_shared<const SurfaceProvenance>(oxygen::Uuid::Generate());
+  item.request.surface_provenance = provenance;
   item.stop_token = {};
   item.source_layout_witness
     = oxygen::content::import::test::FixtureSourceLayoutWitness(item.lods);

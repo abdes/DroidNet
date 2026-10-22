@@ -38,7 +38,7 @@ OXGN_COOK_NDAPI auto GetEngineShapes() noexcept -> std::span<const EngineShape>;
 //! Writes the engine content sources into `directory`: a material descriptor
 //! for the default material, a procedural geometry descriptor for every engine
 //! shape, and the import manifests that cook them into `cooked_root` under
-//! their `/Engine` virtual paths. Descriptor values, bounds and material slots
+//! their `/Engine` virtual paths. Descriptor values, bounds and surfaces
 //! come from Oxygen.Data. Throws std::runtime_error when a shape's generator
 //! cannot produce its geometry or a file cannot be written.
 OXGN_COOK_NDAPI auto WriteEngineContentSources(

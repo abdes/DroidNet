@@ -37,13 +37,13 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
-#include <Oxygen/Cooker/Import/Internal/MaterialSlotAllocation.h>
 #include <Oxygen/Cooker/Import/Internal/MeshTransformBake.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/GeometryPipeline_tangents.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
+#include <Oxygen/Cooker/Import/Internal/SurfaceAllocation.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ContentHashUtils.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/VirtualPathResolution.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Core/Types/Format.h>
@@ -93,7 +93,7 @@ namespace {
     std::vector<uint32_t> indices;
     std::vector<data::pak::geometry::SubMeshDesc> submeshes;
     std::vector<std::string> submesh_names;
-    std::vector<uint32_t> submesh_slots;
+    std::vector<uint32_t> submesh_surfaces;
     std::vector<data::pak::geometry::MeshViewDesc> views;
     std::vector<glm::uvec4> joint_indices;
     std::vector<glm::vec4> joint_weights;
@@ -220,12 +220,12 @@ namespace {
         continue;
       }
 
-      const auto material_key = (range.material_slot < material_keys.size())
-        ? material_keys.at(range.material_slot)
+      const auto material_key = (range.surface < material_keys.size())
+        ? material_keys.at(range.surface)
         : default_material_key;
 
       buckets.push_back(SubmeshBucket {
-        .scene_material_index = range.material_slot,
+        .scene_material_index = range.surface,
         .source_slot = range.source_slot,
         .material_key = material_key,
         .indices = {},
@@ -335,8 +335,7 @@ namespace {
   [[nodiscard]] auto BuildDescriptorBytes(const std::string_view mesh_name,
     const std::vector<LodBuildData>& lods, const Bounds3& bounds,
     const uint32_t attr_mask,
-    std::vector<MeshBuildPipeline::MaterialSlotPatchOffset>&
-      material_patch_offsets,
+    std::vector<MeshBuildPipeline::SurfacePatchOffset>& material_patch_offsets,
     std::vector<ImportDiagnostic>& diagnostics, std::string_view source_id)
     -> std::vector<std::byte>
   {
@@ -420,10 +419,10 @@ namespace {
         return {};
       }
 
-      if (lod.submesh_slots.size() != lod.submeshes.size()
+      if (lod.submesh_surfaces.size() != lod.submeshes.size()
         || lod.submesh_names.size() != lod.submeshes.size()) {
         diagnostics.push_back(MakeErrorDiagnostic("mesh.finalize_failed",
-          "Submesh slot or name list size does not match submesh count",
+          "Submesh surface or name list size does not match submesh count",
           source_id, mesh_name));
         return {};
       }
@@ -452,12 +451,11 @@ namespace {
             mesh_name));
           return {};
         }
-        material_patch_offsets.push_back(
-          MeshBuildPipeline::MaterialSlotPatchOffset {
-            .slot = lod.submesh_slots.at(i),
-            .material_key_offset
-            = static_cast<data::pak::core::DataBlobSizeT>(offset),
-          });
+        material_patch_offsets.push_back(MeshBuildPipeline::SurfacePatchOffset {
+          .surface = lod.submesh_surfaces.at(i),
+          .material_key_offset
+          = static_cast<data::pak::core::DataBlobSizeT>(offset),
+        });
 
         const auto sm_result = writer.WriteBlob(
           std::as_bytes(std::span<const SubMeshDesc, 1>(&sm, 1)));
@@ -564,7 +562,7 @@ namespace {
       auto* bucket = find_bucket(range.source_slot);
       if (bucket == nullptr) {
         diagnostics.push_back(MakeWarningDiagnostic("mesh.invalid_range",
-          "Triangle range references unknown material slot; skipping range",
+          "Triangle range references unknown surface; skipping range",
           source_id, object_path));
         continue;
       }
@@ -679,7 +677,7 @@ namespace {
    `kMaxMeshViewTriangles`. Vertices are expanded one per index, so when any
    bucket splits the vertices are laid out again in bucket and run order: each
    view then owns one contiguous index range and one contiguous vertex range.
-   Buckets, slots and material ranges are unchanged.
+   Buckets, surfaces and material ranges are unchanged.
   */
   auto SplitBucketsIntoViews(std::vector<data::Vertex>& vertices,
     std::vector<SubmeshBucket>& buckets) -> void
@@ -746,11 +744,11 @@ namespace {
 
   auto BuildSubmeshDescriptors(const std::vector<data::Vertex>& vertices,
     const std::vector<SubmeshBucket>& buckets,
-    const MaterialSlotGeometryProvenance& allocation,
-    const std::map<uint32_t, std::string>& slot_names,
+    const SurfaceGeometryProvenance& allocation,
+    const std::map<uint32_t, std::string>& surface_names,
     std::vector<data::pak::geometry::SubMeshDesc>& submeshes,
     std::vector<std::string>& submesh_names,
-    std::vector<uint32_t>& submesh_slots,
+    std::vector<uint32_t>& submesh_surfaces,
     std::vector<data::pak::geometry::MeshViewDesc>& views,
     std::vector<uint32_t>& merged_indices) -> Bounds3
   {
@@ -770,10 +768,10 @@ namespace {
     submeshes.clear();
     submesh_names.clear();
     views.clear();
-    submesh_slots.clear();
+    submesh_surfaces.clear();
     submeshes.reserve(buckets.size());
     submesh_names.reserve(buckets.size());
-    submesh_slots.reserve(buckets.size());
+    submesh_surfaces.reserve(buckets.size());
     views.reserve(buckets.size());
 
     MeshViewDesc::BufferIndexT index_cursor = 0;
@@ -792,14 +790,14 @@ namespace {
           static_cast<uint32_t>(bucket.indices.size() / 3U));
       }
 
-      const auto named = slot_names.find(bucket.source_slot);
-      const auto name = named != slot_names.end()
+      const auto named = surface_names.find(bucket.source_slot);
+      const auto name = named != surface_names.end()
         ? named->second
-        : "Slot " + std::to_string(bucket.source_slot);
+        : "Surface " + std::to_string(bucket.source_slot);
 
       SubMeshDesc submesh {};
       submesh.material_asset_key = bucket.material_key;
-      submesh.slot_id = allocation.allocations.at(bucket.source_slot);
+      submesh.surface_id = allocation.allocations.at(bucket.source_slot);
       submesh.mesh_view_count
         = static_cast<uint32_t>(view_triangle_counts.size());
       std::ranges::copy(
@@ -808,7 +806,7 @@ namespace {
         submesh_bounds.max, std::begin(submesh.bounding_box_max));
       submeshes.push_back(submesh);
       submesh_names.push_back(name);
-      submesh_slots.push_back(bucket.scene_material_index);
+      submesh_surfaces.push_back(bucket.scene_material_index);
 
       const auto bucket_indices = std::span(bucket.indices);
       size_t run_offset = 0;
@@ -864,7 +862,7 @@ namespace {
 
   [[nodiscard]] auto BuildLodData(const TriangleMesh& mesh,
     const MeshLod& lod_source, const WorkItem& item,
-    const MaterialSlotGeometryProvenance& allocation,
+    const SurfaceGeometryProvenance& allocation,
     const uint64_t max_data_blob_bytes,
     std::vector<ImportDiagnostic>& diagnostics, uint32_t& attr_mask)
     -> std::optional<LodBuildData>
@@ -1051,8 +1049,8 @@ namespace {
     }
 
     const auto computed_bounds = BuildSubmeshDescriptors(lod.vertices, buckets,
-      allocation, item.material_slot_names, lod.submeshes, lod.submesh_names,
-      lod.submesh_slots, lod.views, lod.indices);
+      allocation, item.surface_names, lod.submeshes, lod.submesh_names,
+      lod.submesh_surfaces, lod.views, lod.indices);
     DLOG_F(INFO, "Mesh '{}' LOD '{}' submesh_count={} view_count={}",
       item.mesh_name, lod.lod_name, lod.submeshes.size(), lod.views.size());
     std::size_t views_with_base_vertex = 0;
@@ -1323,7 +1321,7 @@ namespace {
     }
 
     auto material_patch_offsets
-      = std::vector<MeshBuildPipeline::MaterialSlotPatchOffset> {};
+      = std::vector<MeshBuildPipeline::SurfacePatchOffset> {};
     auto descriptor_bytes
       = BuildDescriptorBytes(item.mesh_name, lods, geom_bounds, attr_mask,
         material_patch_offsets, diagnostics, item.source_id);
@@ -1381,12 +1379,12 @@ namespace {
     auto lods = std::vector<LodBuildData> {};
     lods.reserve(item.lods.size());
 
-    MaterialSlotGeometryProvenance allocation;
+    SurfaceGeometryProvenance allocation;
     try {
-      allocation = AllocateMaterialSlots(item);
+      allocation = AllocateSurfaces(item);
     } catch (const std::exception& error) {
       out.diagnostics.push_back(
-        MakeErrorDiagnostic("mesh.slot_provenance_invalid", error.what(),
+        MakeErrorDiagnostic("mesh.surface_provenance_invalid", error.what(),
           item.source_id, item.mesh_name));
       return out;
     }
@@ -1422,7 +1420,7 @@ namespace {
     }
 
     out.cooked = std::move(*cooked_payload);
-    out.cooked->material_slot_provenance = std::move(allocation);
+    out.cooked->surface_provenance = std::move(allocation);
     out.success = true;
     return out;
   }

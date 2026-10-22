@@ -21,7 +21,7 @@ readable urban layout.
   until it is stable without temporal anti-aliasing.
 
 The scene uses unit procedural geometries (cube, cylinder, cone and
-icosphere) that share one material-slot layout, so every renderable selects
+icosphere) that share one surface layout, so every renderable selects
 its material through a scene override.
 
 ## Regenerate

@@ -46,7 +46,7 @@ automated evidence is retained; running-editor replay is not inferred.
 Already present, therefore not assigned for reimplementation: EnvironmentView
 has sky/sun/exposure/tone/bloom/color-grading/background sections;
 SceneNodeEditorViewModel constructs the environment editor for scene selection;
-material slot sync calls SetMaterialOverride with descriptor-to-cooked URI mapping;
+surface sync calls SetMaterialOverride with descriptor-to-cooked URI mapping;
 scene/property command validation, undo paths, schema catalogs, and the sync
 coalescer have implementations. Exercise these paths when closing the named gaps;
 do not replace them merely because the old ledger lacked complete evidence.
@@ -379,7 +379,7 @@ sun controls in the restarted Debug editor through Undo/Redo and Save/reopen.
 The 07A.6 gate passes.
 
 Run concrete cases through actual controls/commands: Transform primary axes;
-Geometry pick/missing URI and material slot pick/clear/mixed values; camera FOV,
+Geometry pick/missing URI and surface pick/clear/mixed values; camera FOV,
 near/far/aspect; directional color/intensity/sun/environment/shadows/affects-world/
 angular-size/exposure fields; and every editable SkyAtmosphere/PostProcess/
 Background field in the environment LLD. Include empty selection opening the

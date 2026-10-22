@@ -274,7 +274,7 @@ namespace {
       "lods":[{"name":"LOD0","mesh_type":"standard",
         "bounds":{"min":[-1,-1,-1],"max":[1,1,1]},
         "buffers":{"vb_ref":"/.cooked/Buffers/local.obuf","ib_ref":"/.cooked/Buffers/external.obuf"},
-        "submeshes":[{"slot_id":"018f8f8f-1111-7111-8111-111111111111",
+        "submeshes":[{"surface_id":"018f8f8f-1111-7111-8111-111111111111",
           "material_ref":"/.cooked/Materials/stone.omat","views":[{"view_ref":"__all__"}]}]}]})");
     auto manifest = ImportManifest {};
     auto job = ImportManifestJob {};
@@ -400,8 +400,7 @@ namespace {
       job.virtual_path
         = std::string("/.cooked/Props/static_scalar_triangle.") + type;
       settings.virtual_path = job.virtual_path;
-      settings.material_slot_source_identity
-        = "01990000-0000-7000-8000-000000000001";
+      settings.surface_source_identity = "01990000-0000-7000-8000-000000000001";
       manifest.jobs.push_back(job);
     }
     const auto report = manifest.AnalyzeSources();
@@ -451,8 +450,7 @@ namespace {
       job.gltf.source_path = source.string();
       job.virtual_path = identity;
       job.gltf.virtual_path = identity;
-      job.gltf.material_slot_source_identity
-        = "01990000-0000-7000-8000-000000000001";
+      job.gltf.surface_source_identity = "01990000-0000-7000-8000-000000000001";
       manifest.jobs.push_back(job);
       const auto report = manifest.AnalyzeSources();
       EXPECT_FALSE(report.complete);

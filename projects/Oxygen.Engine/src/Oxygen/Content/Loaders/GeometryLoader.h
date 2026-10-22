@@ -349,13 +349,13 @@ namespace detail {
     CheckResult(mat_key_result, "sm.material_asset_key");
     LOG_F(2, "material asset : {}", desc.material_asset_key);
 
-    data::MaterialSlotId::ByteArray slot_bytes {};
-    CheckResult(
-      desc_reader.ReadBlobInto(std::as_writable_bytes(std::span(slot_bytes))),
-      "sm.slot_id");
-    desc.slot_id = data::MaterialSlotId::FromBytes(slot_bytes);
-    if (desc.slot_id.IsNil()) {
-      throw std::runtime_error("Geometry material slot identity is nil");
+    data::SurfaceId::ByteArray surface_bytes {};
+    CheckResult(desc_reader.ReadBlobInto(
+                  std::as_writable_bytes(std::span(surface_bytes))),
+      "sm.surface_id");
+    desc.surface_id = data::SurfaceId::FromBytes(surface_bytes);
+    if (desc.surface_id.IsNil()) {
+      throw std::runtime_error("Geometry surface identity is nil");
     }
 
     // mesh_view_count

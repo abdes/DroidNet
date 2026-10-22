@@ -36,7 +36,7 @@ namespace Oxygen.Editor.SceneInspector.Components.Geometry;
 public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDisposable
 {
     private readonly IAssetFeed assetProvider;
-    private readonly IGeometryMaterialSlotProvider materialSlots;
+    private readonly IGeometrySurfaceProvider surfaces;
     private readonly IProjectSession session;
     private readonly Func<SceneAuthoring?>? authoringProvider;
     private readonly PropertyBinding<AssetPath?> geometryUriBinding = new(SceneProperties.Geometry.GeometryUriDescriptor);
@@ -55,21 +55,21 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// </summary>
     /// <param name="hosting">The WinUI hosting context used for UI-thread dispatch.</param>
     /// <param name="assetProvider">The shared asset identity, cook status and runtime availability feed.</param>
-    /// <param name="materialSlots">The native geometry slot inventory reader.</param>
+    /// <param name="surfaces">The native geometry surface inventory reader.</param>
     /// <param name="session">The project session this panel belongs to.</param>
     /// <param name="authoringProvider">The authoring of the scene being inspected.</param>
     /// <param name="loggerFactory">Creates the logger that reports asset feed failures.</param>
     public GeometryViewModel(
         HostingContext hosting,
         IAssetFeed assetProvider,
-        IGeometryMaterialSlotProvider materialSlots,
+        IGeometrySurfaceProvider surfaces,
         IProjectSession session,
         Func<SceneAuthoring?>? authoringProvider = null,
         ILoggerFactory? loggerFactory = null)
     {
         this.logger = (loggerFactory ?? NullLoggerFactory.Instance).CreateLogger<GeometryViewModel>();
         this.assetProvider = assetProvider;
-        this.materialSlots = materialSlots;
+        this.surfaces = surfaces;
         this.session = session;
         this.authoringProvider = authoringProvider;
         this.dispatcherQueue = hosting.Dispatcher;
@@ -81,7 +81,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <summary>Gets the geometries the picker offers, grouped as Engine, Packages and Content.</summary>
     public AssetPickerModel GeometryChoices { get; } = new(static asset => AssetChoice.For(asset, "Geometry", "\uF158"));
 
-    /// <summary>Gets the materials the slot picker offers, after the choice that clears the slot's override.</summary>
+    /// <summary>Gets the materials the surface picker offers, after the choice that clears the surface's override.</summary>
     public AssetPickerModel MaterialChoices { get; } = new(static asset => AssetChoice.For(asset, "Material", "\uE8B9"), ClearMaterialChoice);
 
     /// <inheritdoc />
@@ -219,7 +219,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         this.SelectedGeometry = geometry;
         this.SelectedAssetName = choice.Name;
         this.IsMixed = false;
-        await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
+        await this.RefreshSurfacesAsync().ConfigureAwait(true);
     }
 
     /// <summary>
@@ -240,7 +240,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
 
         var project = this.session.Context;
         var nodeIds = picker.Nodes.ConvertAll(static node => node.Id);
-        var built = await MaterialSlotEdits.SetAsync(this.materialSlots, project, nodeIds, picker.Target, choice.Asset).ConfigureAwait(true);
+        var built = await SurfaceMaterialEdits.SetAsync(this.surfaces, project, nodeIds, picker.Target, choice.Asset).ConfigureAwait(true);
         var succeeded = built.Edit is { } edit && (await picker.Authoring.ExecuteAsync(edit).ConfigureAwait(true)).Succeeded;
         if (!this.IsCurrentSelection(picker.Nodes))
         {
@@ -252,7 +252,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             this.UpdateMaterialDisplay(choice.Asset);
         }
 
-        await this.RefreshMaterialSlotsAsync().ConfigureAwait(true);
+        await this.RefreshSurfacesAsync().ConfigureAwait(true);
     }
 
     /// <summary>
@@ -261,9 +261,9 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
     /// <returns>A task that completes when the picker snapshot has been republished.</returns>
     public async Task RefreshMaterialPickerAsync()
     {
-        this.materialEdit = this.SelectedMaterialSlot is { } slot && this.CanEditMaterialSlot
+        this.materialEdit = this.SelectedSurface is { } surface && this.CanEditSurfaceMaterial
             && this.selectedItems is { Count: > 0 } nodes && this.authoringProvider?.Invoke() is { } authoring
-                ? new(authoring, nodes.ToList(), slot.Target) : null;
+                ? new(authoring, nodes.ToList(), surface.Target) : null;
         await this.assetProvider.RefreshAsync().ConfigureAwait(true);
         this.ApplyContentMaterials();
     }
@@ -299,16 +299,16 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
         }
 
         // Authored assignments change synchronously, including during undo/redo.
-        this.UpdateSelectedMaterialSlotDisplay();
-        _ = this.RefreshMaterialSlotsAsync();
+        this.UpdateSelectedSurfaceDisplay();
+        _ = this.RefreshSurfacesAsync();
     }
 
     /// <inheritdoc />
     public void Dispose()
     {
         this.disposed = true;
-        this.slotRefresh?.Cancel();
-        this.slotRefresh?.Dispose();
+        this.surfaceRefresh?.Cancel();
+        this.surfaceRefresh?.Dispose();
         this.assetChangesSubscription?.Dispose();
         this.materialResultsSubscription?.Dispose();
         GC.SuppressFinalize(this);
@@ -336,7 +336,7 @@ public sealed partial class GeometryViewModel : ComponentPropertyEditor, IDispos
             this.LogAssetFeedFailed);
     }
 
-    // Lists the materials the slot accepts, keeping the one assigned now even when it is gone.
+    // Lists the materials the surface accepts, keeping the one assigned now even when it is gone.
     private void ApplyContentMaterials()
         => this.MaterialChoices.Update(AssetRule.For(AssetKind.Material).Apply(this.latestMaterialAssets, this.IsMaterialMixed ? null : this.SelectedMaterial));
 

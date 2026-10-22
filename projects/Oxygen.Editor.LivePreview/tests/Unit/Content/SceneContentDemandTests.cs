@@ -180,7 +180,7 @@ public sealed partial class SceneContentDemandTests
             built.RootNodes.Add(node);
             if (withGeometry)
             {
-                var target = new MaterialSlotTarget(Geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+                var target = new SurfaceTarget(Geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
                 var geometry = new GeometryComponent { Name = "Geometry", Geometry = Geometry };
                 geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = Material });
                 if (withTargetedOverride)

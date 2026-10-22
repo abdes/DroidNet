@@ -24,7 +24,7 @@
 
 namespace oxygen::content::import {
 
-class MaterialSlotProvenance;
+class SurfaceProvenance;
 class CapturedInputSet;
 
 //! Supported authoring source formats.
@@ -178,7 +178,7 @@ struct ImportRequest final {
   std::optional<data::SourceKey> source_key {};
 
   //! Validated retained source identity, shared across mesh work items.
-  std::shared_ptr<const MaterialSlotProvenance> material_slot_provenance {};
+  std::shared_ptr<const SurfaceProvenance> surface_provenance {};
 
   //! Optional human-readable job name for logging and UI.
   std::optional<std::string> job_name {};

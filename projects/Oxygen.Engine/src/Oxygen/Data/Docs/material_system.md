@@ -83,9 +83,9 @@ supported fields in `MaterialShadingConstants`. Material assets do not allocate
 GPU resources or expose packed GPU state to editor clients.
 
 Use `MaterialAsset` accessors for native observations. Default/debug material
-factories return immutable assets with current descriptors. Per-instance material
-slot assignment belongs to geometry/scene slot contracts, not mutable copies of
-the cooked material descriptor.
+factories return immutable assets with current descriptors. Per-instance surface
+material assignment belongs to geometry/scene surface contracts, not mutable
+copies of the cooked material descriptor.
 
 ## Validation
 

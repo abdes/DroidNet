@@ -44,8 +44,8 @@ public sealed class ImportReplacementSyncTests : DroidNet.Tests.VisualUserInterf
         var first = await ImportTypedModelAsync(fixture, services, format, timeout.Token).ConfigureAwait(true);
         var material = first.CookedAssets.Single(static asset => asset.Kind == ContentCookAssetKind.Material).CookedAssetUri;
         var node = fixture.Source.RootNodes[0].Id;
-        var slot = await fixture.ReadSingleMaterialSlotAsync(node, timeout.Token).ConfigureAwait(true);
-        _ = (await fixture.Authoring.ExecuteAsync(new SetMaterialSlot([node], slot, material)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        var surface = await fixture.ReadSingleSurfaceAsync(node, timeout.Token).ConfigureAwait(true);
+        _ = (await fixture.Authoring.ExecuteAsync(new SetSurfaceMaterial([node], surface, material)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         var before = await WaitForNodeAsync(fixture, node, static value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], new(0.8f, 0.2f, 0.1f, 1)) < 0.001f, timeout.Token).ConfigureAwait(true);
         var revision = fixture.Document.History.Position;
         var history = fixture.Document.History.UndoStack.Count;

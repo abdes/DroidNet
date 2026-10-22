@@ -621,7 +621,7 @@ namespace {
       material_list = &material_node->materials;
     }
 
-    std::vector face_material_slots(mesh.num_faces, UFBX_NO_INDEX);
+    std::vector face_surfaces(mesh.num_faces, UFBX_NO_INDEX);
     if (mesh.material_parts.data != nullptr && mesh.material_parts.count > 0) {
       for (size_t part_i = 0; part_i < mesh.material_parts.count; ++part_i) {
         const auto& part = ItemAt(mesh.material_parts, part_i);
@@ -633,14 +633,14 @@ namespace {
         for (size_t fi = 0; fi < face_count; ++fi) {
           const auto face_index = ItemAt(part.face_indices, fi);
           if (face_index < mesh.num_faces) {
-            face_material_slots.at(face_index) = slot;
+            face_surfaces.at(face_index) = slot;
           }
         }
       }
     } else if (mesh.face_material.data != nullptr
       && mesh.face_material.count >= mesh.num_faces) {
       for (size_t face_i = 0; face_i < mesh.num_faces; ++face_i) {
-        face_material_slots.at(face_i) = ItemAt(mesh.face_material, face_i);
+        face_surfaces.at(face_i) = ItemAt(mesh.face_material, face_i);
       }
     } else {
       diagnostics.push_back(MakeWarningDiagnostic("mesh.face_material_missing",
@@ -658,15 +658,15 @@ namespace {
         continue;
       }
 
-      uint32_t material_slot = material_key_count;
-      const uint32_t source_slot = face_material_slots.at(face_i);
+      uint32_t surface = material_key_count;
+      const uint32_t source_slot = face_surfaces.at(face_i);
       if (material_list != nullptr && material_list->data != nullptr
         && source_slot != UFBX_NO_INDEX && source_slot < material_list->count) {
         const auto* material = ItemAt(*material_list, source_slot);
         if (material != nullptr) {
           if (const auto it = scene_material_index_by_ptr.find(material);
             it != scene_material_index_by_ptr.end()) {
-            material_slot = it->second;
+            surface = it->second;
           }
         }
       }
@@ -677,7 +677,7 @@ namespace {
                .emplace(source_slot,
                  MaterialRange {
                    .range = TriangleRange {
-                     .material_slot = material_slot,
+                     .surface = surface,
                      .source_slot = source_slot,
                      .first_index = 0,
                      .index_count = 0,
@@ -1665,24 +1665,24 @@ namespace {
           const auto* material = range.source_slot < material_list->count
             ? ItemAt(*material_list, range.source_slot)
             : nullptr;
-          item.material_slot_names.try_emplace(range.source_slot,
+          item.surface_names.try_emplace(range.source_slot,
             material != nullptr ? std::string(ToStringView(material->name))
                                 : "Default");
         }
-        uint32_t max_slot = 0;
+        uint32_t max_surface = 0;
         for (const auto& range : buffers->ranges) {
-          max_slot = (std::max)(max_slot, range.material_slot);
+          max_surface = (std::max)(max_surface, range.surface);
         }
 
-        std::vector<uint8_t> used(max_slot + 1, 0);
+        std::vector<uint8_t> used(max_surface + 1, 0);
         for (const auto& range : buffers->ranges) {
-          used.at(range.material_slot) = static_cast<uint8_t>(1);
+          used.at(range.surface) = static_cast<uint8_t>(1);
         }
 
-        item.material_slots_used.clear();
+        item.surfaces_used.clear();
         for (uint32_t i = 0; i < used.size(); ++i) {
           if (used.at(i) != 0U) {
-            item.material_slots_used.push_back(i);
+            item.surfaces_used.push_back(i);
           }
         }
       }

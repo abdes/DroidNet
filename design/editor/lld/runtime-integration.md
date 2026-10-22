@@ -434,8 +434,8 @@ Within `SceneMutation`, queued authoring commands execute before the completion
 inbox is drained. Generation validation and application occur on that same
 mutation path. Full node handles protect node identity, and the separate scene
 session lifetime prevents reused scene identifiers from accepting old results.
-The generation and material-slot semantics belong to
-[live-engine-sync.md](./live-engine-sync.md#82-material-slot-v01-behavior).
+The generation and surface semantics belong to
+[live-engine-sync.md](./live-engine-sync.md#82-surface-v01-behavior).
 Current asset failures reach the editor through the request's failure callback,
 which publishes them; the native trace logs them at verbose level only. They do
 not change the managed queue-acceptance contract or roll back authored edits.

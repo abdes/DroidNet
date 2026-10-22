@@ -37,13 +37,13 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/ComponentType.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatVersions.h>
 #include <Oxygen/Data/PhysicsResource.h>
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/TextureResource.h>
 #include <Oxygen/OxCo/Co.h>
 

@@ -18,7 +18,7 @@ public interface IRuntimeWorldCommands
     /// <summary>Gets the current run identity, or empty when unavailable.</summary>
     public Guid RunId { get; }
 
-    /// <summary>Gets current asset intents and outcomes; superseded scenes, nodes and slots are excluded.</summary>
+    /// <summary>Gets current asset intents and outcomes; superseded scenes, nodes and surfaces are excluded.</summary>
     public IReadOnlyList<RuntimeAssetRequestStatus> AssetRequests { get; }
 
     /// <summary>Checks that a failure still matches the current request and native completion generation.</summary>

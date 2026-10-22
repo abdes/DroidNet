@@ -284,7 +284,7 @@ helpers), VP-05 (path comparisons), and the physical path comparisons.
 - Pickers list `/Engine/Generated` from the catalog and hide `/Engine/Internal`.
   Every asset picker is one shared control, `AssetPicker` in
   `Oxygen.Editor.Pickers`, which groups choices as Engine, Packages and Content
-  in that order and hides empty groups. Slot inventories of engine geometry come
+  in that order and hides empty groups. Surface inventories of engine geometry come
   from the native geometry report on `engine.pak`, like any cooked geometry.
   `EngineAssets` (Managed.Assets) names the engine folders, basic shapes and
   default material the editor uses. `AssetPath.Generated` and `IsGenerated` go.
@@ -447,7 +447,7 @@ Decisions:
 - The Content Browser does not list container products, of models and input
   sources alike: a container shows as its one source file (`Ship.glb`,
   `Player.input`). Nothing a user does with a product goes through its row:
-  pickers list products from the catalog, a slot override is stored on the scene
+  pickers list products from the catalog, a surface override is stored on the scene
   node, and no asset is dragged out of the browser. The one loss is Edit on an
   input action or context, which opened the input file at the declaration's
   line; the input file itself opens at its first line. The container view, the
@@ -486,9 +486,9 @@ Engine (cooker):
   `LooseCookedLayout`, the `layout` keys of the import manifest schema except
   `virtual_mount_root` and `resources_dir`, their parsing
   (`ImportManifest.cpp:818-843`) and `MakeRecipe`'s copy.
-- Material slot provenance is keyed by the geometry's name inside its model, not
-  by the `AssetKey` of its virtual path (`MaterialSlotAllocation.cpp:31-52`,
-  `RetainedModelImport.cpp:679`). Slot ids then survive moving or renaming the
+- Surface provenance is keyed by the geometry's name inside its model, not
+  by the `AssetKey` of its virtual path (`SurfaceAllocation.cpp:31-52`,
+  `RetainedModelImport.cpp:679`). Surface ids then survive moving or renaming the
   model; the inventory's geometry key is recomputed on each cook. The anchor
   loses the `<SceneName>/` prefix.
 
@@ -543,7 +543,7 @@ Editor:
   states that path. Nothing else in the dialog changes.
 - Relocation: moving or renaming a model maps it as a container
   (`AssetRelocationPlanner.cs:64-70`), so referrers to its products follow; the
-  provenance re-key keeps its slot ids. The output-group moves go
+  provenance re-key keeps its surface ids. The output-group moves go
   (`ImportGroupMove`, `GroupMoves`, `ExpandImportGroups`, `CheckGroupOverlaps`,
   `RelocationPaths.ImportTypeFolders`, `PreviousGroups`, the Rename Output Group
   command and `AuthoredReferenceFormat.Relocate`'s output directory rewrite).
@@ -574,13 +574,13 @@ Tests:
   `a/diffuse.png` and `b/diffuse.png` in one model give `diffuse` and
   `diffuse_1`; a model job without `virtual_path`, or with one that does not end
   in the model's extension, is refused; a model's scene is named after the
-  model; moving a model's identity keeps its material slot ids.
+  model; moving a model's identity keeps its surface ids.
 - Editor: `ImportedOutputOwnershipTests` and
   `RetainedSourceCookTests.ImportDestinationCollisionPreservesExistingSourceOutputs`
   are rewritten to identity ownership; the output-group relocation tests go;
   new: a model imported from outside lands in the chosen folder, moving a model
   rewrites references to its products, renaming one product is refused, a
-  material slot override on a model's mesh survives moving the model, the
+  surface override on a model's mesh survives moving the model, the
   material picker lists a model's materials, and the Content Browser lists
   neither a model's nor an input source's products, in the project or a pak.
 - Gate: Cooker layout, model, naming and ImportTool tests, Content texture

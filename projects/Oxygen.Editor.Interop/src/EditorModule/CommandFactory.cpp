@@ -85,8 +85,8 @@ namespace Oxygen::Interop::World {
 
   SetMaterialOverrideCommand*
     CommandFactory::CreateSetMaterialOverride(oxygen::scene::NodeHandle handle,
-      oxygen::interop::module::MaterialSlotTarget target, std::optional<std::string> materialUri,
-      oxygen::interop::module::MaterialSlotAssignmentIntent intent) {
+      oxygen::interop::module::SurfaceTarget target, std::optional<std::string> materialUri,
+      oxygen::interop::module::SurfaceMaterialAssignmentIntent intent) {
     return new SetMaterialOverrideCommand(handle, std::move(target), std::move(materialUri), intent);
   }
 

@@ -92,12 +92,12 @@ internal sealed partial class CookPublicationTransaction
         var before = NativeSceneImportSettings.Parse(file.Before);
         var after = NativeSceneImportSettings.Parse(file.After);
         var expected = before.BundleRoot + "/" + before.PrimaryRelativePath + NativeSceneImportSettings.SidecarSuffix;
-        var permitted = before with { MaterialSlotProvenance = after.MaterialSlotProvenance };
+        var permitted = before with { SurfaceProvenance = after.SurfaceProvenance };
         if (!string.Equals(file.RelativePath, expected, StringComparison.Ordinal)
-            || before.MaterialSlotProvenance.SourceIdentity != after.MaterialSlotProvenance.SourceIdentity
+            || before.SurfaceProvenance.SourceIdentity != after.SurfaceProvenance.SourceIdentity
             || !permitted.ToBytes().AsSpan().SequenceEqual(after.ToBytes()))
         {
-            throw new InvalidDataException("Native publication may update only its retained material-slot provenance.");
+            throw new InvalidDataException("Native publication may update only its retained surface provenance.");
         }
 
         var primary = project.ProjectRoot.Combine(Path.Combine(before.BundleRoot, before.PrimaryRelativePath));

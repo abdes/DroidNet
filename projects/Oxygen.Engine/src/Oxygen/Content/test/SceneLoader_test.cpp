@@ -23,10 +23,10 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/ComponentType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h> // IWYU pragma: keep
 #include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Serio/Writer.h>
@@ -419,8 +419,8 @@ protected:
     if (has_override) {
       auto assignment = oxygen::data::pak::world::MaterialOverrideRecord {
         .node_index = 0,
-        .slot_id = oxygen::data::MaterialSlotId::FromStableIdentity(
-          "SceneLoaderTest/slot"),
+        .surface_id
+        = oxygen::data::SurfaceId::FromStableIdentity("SceneLoaderTest/slot"),
         .material_key = material_key,
         .layout_revision = {},
       };

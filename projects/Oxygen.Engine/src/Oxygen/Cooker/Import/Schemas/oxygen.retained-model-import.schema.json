@@ -7,14 +7,14 @@
     "schema_version",
     "content_root",
     "recipe",
-    "material_slot_provenance",
+    "surface_provenance",
     "published_generation"
   ],
   "properties": {
     "schema_version": { "const": 1 },
     "content_root": { "type": "string", "minLength": 1 },
     "recipe": { "type": "object" },
-    "material_slot_provenance": { "type": "object" },
+    "surface_provenance": { "type": "object" },
     "published_generation": {
       "oneOf": [
         { "type": "null" },

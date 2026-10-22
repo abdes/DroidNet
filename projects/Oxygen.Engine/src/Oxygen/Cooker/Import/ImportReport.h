@@ -129,7 +129,7 @@ struct ImportReport final {
 
   //! Candidate native provenance. Publish with successful geometry output;
   //! never overwrite retained source settings before the enclosing transaction.
-  std::string material_slot_provenance_json;
+  std::string surface_provenance_json;
   //! Set only after retained-record publication; staging reports leave these
   //! unset.
   std::optional<std::filesystem::path> retained_record_path {};

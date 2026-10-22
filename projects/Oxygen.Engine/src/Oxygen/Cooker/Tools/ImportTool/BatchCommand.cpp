@@ -1763,11 +1763,11 @@ auto BatchCommand::Run() -> std::expected<void, std::error_code>
           job_json.update(
             { { "products", BuildProductsJson(report_value.products) } });
           if (report_value.success
-            && !report_value.material_slot_provenance_json.empty()) {
+            && !report_value.surface_provenance_json.empty()) {
             job_json.update({
               {
-                "material_slot_provenance",
-                ordered_json::parse(report_value.material_slot_provenance_json),
+                "surface_provenance",
+                ordered_json::parse(report_value.surface_provenance_json),
               },
             });
           }

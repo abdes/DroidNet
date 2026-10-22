@@ -285,7 +285,7 @@ public sealed class SourceBundleDiscoveryTests
 
     private static Task<RetainedImportSource> RetainDiscoveredAsync(RetentionWorkspace workspace, string sourcePath, IEngineContentPipelineApi native, CancellationToken cancellationToken)
     {
-        var recipe = new ContentImportManifestBuilder().BuildModelJob(Path.GetFileName(sourcePath), [], "Model", AssetPath.Parse("/Content/Models/Model/" + Path.GetFileName(sourcePath)), NativeMaterialSlotProvenance.Create());
+        var recipe = new ContentImportManifestBuilder().BuildModelJob(Path.GetFileName(sourcePath), [], "Model", AssetPath.Parse("/Content/Models/Model/" + Path.GetFileName(sourcePath)), NativeSurfaceProvenance.Create());
         var discovery = new SceneImportSourceDiscovery(workspace.Coordinator, native);
         return workspace.Coordinator.RunAsync(
             (operation, token) => workspace.Retention.RetainAsync(operation, AssetPath.Parse("/Content/Models"), "Model", captureToken => discovery.DiscoverAsync(operation, sourcePath, recipe, captureToken), token),

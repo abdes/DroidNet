@@ -430,18 +430,18 @@ fakes against the real service. Other tests use the kit: they do not hand-build
 the module's types, re-mock its ports in each test or link its `testsupport`
 files.
 
-| Kit                                     | Holds                                                                                                                                                                                       |
-| --------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor.Projects.Testing`        | `TestProject` (a project and its mount folders on any `IFileSystem`), `TestSession`, `TestSessionHost`                                                                                      |
-| `Oxygen.Editor.Scripting.Testing`       | `FakeScripts`, `FakeScriptAnalyzer`, `FakeScriptLibrary`, `AnalysisHold`                                                                                                                    |
-| `Oxygen.Editor.Input.Testing`           | `FakeInputSources`                                                                                                                                                                          |
-| `Oxygen.Editor.Scenes.Testing`          | `TestSceneDocuments`, `TestScene`, `TestScenes`, `FakeNodeInteraction`                                                                                                                      |
-| `Oxygen.Editor.Assets.Testing`          | `TestAssetEntries`                                                                                                                                                                          |
-| `Oxygen.Editor.ContentPipeline.Testing` | Fakes of its ports (`FakeAssetRedirects`, `FakeContentCookCoordinator`, `FakeCookPublicationReader`, `FakeMaterialSlotProvider`), `NativeContentPipelineFixture`, `EngineContentPakFixture` |
-| `Oxygen.Editor.Shell.Testing`           | `TestDocumentArea`                                                                                                                                                                          |
-| `Oxygen.Editor.Interop.Testing`         | `NativeDllSearchPath`                                                                                                                                                                       |
-| `Oxygen.Managed.Assets.Testing`         | `LooseCookedIndexFixture`, `PakFixture`                                                                                                                                                     |
-| `Oxygen.Managed.Core.Testing`           | `TemporaryNativeArtifacts`                                                                                                                                                                  |
+| Kit                                     | Holds                                                                                                                                                                                  |
+| --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor.Projects.Testing`        | `TestProject` (a project and its mount folders on any `IFileSystem`), `TestSession`, `TestSessionHost`                                                                                 |
+| `Oxygen.Editor.Scripting.Testing`       | `FakeScripts`, `FakeScriptAnalyzer`, `FakeScriptLibrary`, `AnalysisHold`                                                                                                               |
+| `Oxygen.Editor.Input.Testing`           | `FakeInputSources`                                                                                                                                                                     |
+| `Oxygen.Editor.Scenes.Testing`          | `TestSceneDocuments`, `TestScene`, `TestScenes`, `FakeNodeInteraction`                                                                                                                 |
+| `Oxygen.Editor.Assets.Testing`          | `TestAssetEntries`                                                                                                                                                                     |
+| `Oxygen.Editor.ContentPipeline.Testing` | Fakes of its ports (`FakeAssetRedirects`, `FakeContentCookCoordinator`, `FakeCookPublicationReader`, `FakeSurfaceProvider`), `NativeContentPipelineFixture`, `EngineContentPakFixture` |
+| `Oxygen.Editor.Shell.Testing`           | `TestDocumentArea`                                                                                                                                                                     |
+| `Oxygen.Editor.Interop.Testing`         | `NativeDllSearchPath`                                                                                                                                                                  |
+| `Oxygen.Managed.Assets.Testing`         | `LooseCookedIndexFixture`, `PakFixture`                                                                                                                                                |
+| `Oxygen.Managed.Core.Testing`           | `TemporaryNativeArtifacts`                                                                                                                                                             |
 
 ### 13.3 Test rules
 

@@ -347,7 +347,7 @@ Architectural split:
 
 8. **Pipeline Types - Triangle Range:** `oxygen::content::import::TriangleRange`
    - file: `src/Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h`
-   - fields: `material_slot`, `first_index`, `index_count`.
+   - fields: `surface`, `first_index`, `index_count`.
 
 9. **Pipeline Types - Material Patch:**
    `oxygen::content::import::GeometryPipeline::MaterialKeyPatch`
@@ -851,7 +851,7 @@ Each union arm is padded to 72 bytes:
 struct SubMeshDesc {
   StringTableOffsetT name_offset     = 0;  // submesh name
   AssetKey       material_asset_key;       // material (embedded at cook)
-  MaterialSlotId slot_id;                  // semantic slot identity
+  SurfaceId      surface_id;               // semantic surface identity
   uint32_t       mesh_view_count     = 0;  // number of MeshViewDesc following
   float          bounding_box_min[3] = {};
   float          bounding_box_max[3] = {};

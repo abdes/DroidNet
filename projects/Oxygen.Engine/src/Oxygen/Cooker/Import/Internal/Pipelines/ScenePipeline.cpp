@@ -126,7 +126,7 @@ namespace {
         if (lhs.node_index != rhs.node_index) {
           return lhs.node_index < rhs.node_index;
         }
-        return lhs.slot_id < rhs.slot_id;
+        return lhs.surface_id < rhs.surface_id;
       });
     std::ranges::sort(build.renderables,
       [](const RenderableRecord& a, const RenderableRecord& b) -> bool {

@@ -58,7 +58,7 @@ Supporting context:
 - [content-pipeline.md](../lld/content-pipeline.md), for cooked descriptor
   and stale-state facts only. ED-M06 must not invoke cook workflows.
 - [property-inspector.md](../lld/property-inspector.md), for Geometry material
-  slot consumption of typed picker results.
+  surface consumption of typed picker results.
 
 ## 4. Scope
 
@@ -226,7 +226,7 @@ Tasks:
 - Move the ED-M05 `AssetState` type out of the material-specific namespace
   into a shared Content Browser asset-identity namespace before adding
   `Descriptor`. Migrate `MaterialPickerResult`, `MaterialPickerFilter`,
-  `MaterialPickerService`, Geometry material slot consumers, and tests in the
+  `MaterialPickerService`, Geometry surface consumers, and tests in the
   same slice.
 - Add `AssetKind`, `AssetRuntimeAvailability`, and `ContentBrowserAssetItem`
   in the same shared asset-identity namespace. `AssetRuntimeAvailability` has
@@ -408,7 +408,7 @@ Tasks:
 - Do not add `DisplayPath` or `ThumbnailKey` to `MaterialPickerResult` in
   ED-M06. Reconsider those projection fields in ED-M07 if a concrete consumer
   needs them.
-- Keep Geometry material slot persistence unchanged:
+- Keep Geometry surface persistence unchanged:
   - scene stores only the selected asset URI;
   - no browser state or cooked path is serialized.
 - Add picker tests:
@@ -433,7 +433,7 @@ Tasks:
 - Remove or narrow temporary ED-M05 picker-only reducer logic that has been
   replaced by the shared provider.
 - Audit persistence:
-  - scene material slots store only asset URI;
+  - scene surfaces store only asset URI;
   - material descriptors do not store browser state;
   - project state does not persist diagnostics.
 - Run targeted tests through the approved MSBuild workflow only when build
@@ -482,7 +482,7 @@ Likely test touch points:
 - `projects/Oxygen.Editor.ContentBrowser/tests/GameAssetTests.cs`
 - new Content Browser tests for reducer/provider/filter behavior.
 - `projects/Oxygen.Editor.World/tests/Oxygen.Editor.World.Tests.csproj` for
-  `SceneSerializer` material-slot JSON round-trip coverage.
+  `SceneSerializer` surface JSON round-trip coverage.
 - `projects/Oxygen.Editor.WorldEditor/tests/Unit/Oxygen.Editor.WorldEditor.Unit.Tests.csproj`
   only if the Geometry inspector consumer migration needs a focused test.
 - `projects/Oxygen.Editor.Projects/tests/Oxygen.Editor.Projects.Tests.csproj`
@@ -495,7 +495,7 @@ add browser UI state to `Oxygen.Managed.Assets`.
 
 | Risk                                                          | Mitigation                                                                                                                                                                                                            |
 | ------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `AssetState.Source` changes meaning for material descriptors. | Migrate MaterialPicker, Geometry material slot row, and browser row rendering in the same slice; descriptors become `Descriptor`, raw non-descriptor files remain `Source`.                                           |
+| `AssetState.Source` changes meaning for material descriptors. | Migrate MaterialPicker, Geometry surface row, and browser row rendering in the same slice; descriptors become `Descriptor`, raw non-descriptor files remain `Source`.                                                 |
 | Existing `GameAsset` drives invocation routing.               | Use an adapter only as a temporary bridge; `ContentBrowserAssetItem` is the ED-M06 row contract.                                                                                                                      |
 | Broken-state validation becomes slow or UI-thread bound.      | Validate descriptors off UI thread and cache by URI + last-write timestamp until `AssetChange`.                                                                                                                       |
 | Cooked-root paths drift from project policy.                  | Read `ProjectCookScope.CookedOutputRoot` through `IProjectCookScopeProvider` for browser display, diagnostics, and reducer paths; catalog composition may retain LLD-permitted `.cooked/<MountName>` index discovery. |
@@ -523,7 +523,7 @@ The user validates these scenarios in the running editor:
    picker shows descriptor/cooked/stale/broken state using the same identity
    vocabulary as the browser.
 8. Delete or move the assigned descriptor outside the editor, refresh, and
-   confirm the Geometry slot preserves the authored URI and shows a missing or
+   confirm the Geometry surface preserves the authored URI and shows a missing or
    broken state instead of silently clearing it.
 9. Use search and state filters for `Descriptor`, `Cooked`, `Stale`, `Missing`,
    and `Broken`. Confirm normal filter changes do not create noisy operation
@@ -549,7 +549,7 @@ Required non-UI gates:
 5. Material picker projection tests prove `MaterialPickerFilter` maps into
    `AssetBrowserFilter` and returns `PrimaryState`/`DerivedState`.
 6. `SceneSerializer` round-trip test in `Oxygen.Editor.World.Tests`
-   materializes a Geometry slot with an assigned material and asserts the
+   materializes a Geometry surface with an assigned material and asserts the
    produced scene JSON contains only the asset URI, never `DescriptorPath`,
    `CookedPath`, `PrimaryState`, `DerivedState`, `RuntimeAvailability`,
    `ThumbnailKey`, GUID copy value, or diagnostic fields.

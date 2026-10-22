@@ -40,7 +40,7 @@ namespace {
         "buffers":{"vb_ref":"/Content/Buffers/vertices.obuf",
           "ib_ref":"/Shared/Buffers/indices.obuf"},
         "submeshes":[{
-          "slot_id":"018f8f8f-1111-7111-8111-111111111111",
+          "surface_id":"018f8f8f-1111-7111-8111-111111111111",
           "material_ref":"/Content/Materials/stone.omat",
           "views":[{"view_ref":"surface"}]
         }]
@@ -190,17 +190,17 @@ namespace {
     EXPECT_EQ(procedural->parameters.size(), 8U);
   }
 
-  NOLINT_TEST(GeometrySourceTest, RejectsNilMaterialSlotBeforeResolvingAssets)
+  NOLINT_TEST(GeometrySourceTest, RejectsNilSurfaceBeforeResolvingAssets)
   {
     auto document = MakeDescriptor();
-    document.at("lods").at(0).at("submeshes").at(0).at("slot_id")
+    document.at("lods").at(0).at("submeshes").at(0).at("surface_id")
       = "00000000-0000-0000-0000-000000000000";
     auto diagnostics = std::vector<ImportDiagnostic> {};
     EXPECT_FALSE(GeometrySource::FromDescriptor(
       document.dump(), "geometry.json", diagnostics));
     EXPECT_TRUE(
       std::ranges::any_of(diagnostics, [](const auto& diagnostic) -> auto {
-        return diagnostic.code == "geometry.descriptor.slot_id_invalid";
+        return diagnostic.code == "geometry.descriptor.surface_id_invalid";
       }));
   }
 } // namespace

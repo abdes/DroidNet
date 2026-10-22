@@ -16,10 +16,10 @@ test projects reference it.
   serving the index document it was given, the output folder of each project
   mount and the products the project output holds. `HeldLeases` counts the
   leases not yet released.
-- `FakeMaterialSlotProvider` is an in-memory `IGeometryMaterialSlotProvider`.
+- `FakeSurfaceProvider` is an in-memory `IGeometrySurfaceProvider`.
   `Publish`, `Remove` and `Fail` set what reading a geometry's inventory
   returns; `HoldReads` holds every read until the returned
-  `MaterialSlotReadGate` is released, so a test can change a scene while a read
+  `SurfaceReadGate` is released, so a test can change a scene while a read
   is pending.
 - `EngineContentPakFixture` is an `IEngineContentPak` that declares its assets
   instead of reading a pak, for tests that run no native tool.

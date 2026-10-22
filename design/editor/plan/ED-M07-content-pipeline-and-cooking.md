@@ -205,7 +205,7 @@ Out of scope:
   - nodes and parent indexes.
   - transforms.
   - geometry renderables.
-  - first material slot as `material_ref`.
+  - first surface as `material_ref`.
   - perspective cameras.
   - directional lights and sun/environment flags.
   - supported environment fields.

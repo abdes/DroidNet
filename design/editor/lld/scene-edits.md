@@ -21,7 +21,7 @@ mandatory edit rules it implements, are in
 | `REQ-005`  | Add and remove component edits, and one property path for every component and the environment (5.11).            |
 | `REQ-006`  | Every change is an edit recorded into its document's history by one frame; batches leave no partial entry (5.4). |
 | `REQ-008`  | The change stream (5.8) is what the live preview projects; no edit calls the engine.                             |
-| `REQ-012`  | `SetMaterialSlot` and `RemoveMaterialSlots` against the geometry's slot inventory (5.16).                        |
+| `REQ-012`  | `SetSurfaceMaterial` and `RemoveSurfaceMaterials` against the geometry's surface inventory (5.16).               |
 | `REQ-043`  | `SetScriptSlots` with undo, and retargeting of asset references held in history (5.12).                          |
 | `REQ-044`  | `SetStartingCamera` and `SetStartingInputContexts` author what Play starts with.                                 |
 | `GOAL-006` | Every refusal is a result with coded diagnostics; an exception from an edit is a defect, never swallowed (5.9).  |
@@ -320,7 +320,7 @@ scene, which already holds them.
 | `ComponentRemoved(NodeId, ComponentId, string kind)`, the kind `SceneComponents.Add` takes | remove component                            |
 | `PropertiesChanged(NodeId? node, properties, EditPhase)`                                   | properties (`node` null: scene)             |
 | `GeometryChanged(NodeId)`                                                                  | geometry asset                              |
-| `MaterialSlotsChanged(NodeId)`                                                             | material slots                              |
+| `SurfaceMaterialsChanged(NodeId)`                                                          | surfaces                                    |
 | `LayoutChanged`                                                                            | every edit that changes the explorer layout |
 | `EditorVisibilityChanged(nodes)`                                                           | hide or show in editor                      |
 | `StartingCameraChanged`, `StartingInputContextsChanged`, `SceneReferencesChanged`          | scene settings                              |
@@ -351,7 +351,7 @@ Consumers:
   - reporting engine outcomes.
 - **LivePreview's content demand** follows `NodesAdded`, `NodesRemoved`,
   `ComponentAdded`, `ComponentRemoved`, `GeometryChanged` and
-  `MaterialSlotsChanged`.
+  `SurfaceMaterialsChanged`.
 - **Selection** drops removed nodes: the selection is reconciled with the scene
   when nodes are removed. Edits do not set the selection; a caller that wants
   created nodes selected selects the ids it put in the edit.
@@ -468,7 +468,7 @@ batch.
 
 - **In history.** An entry recorded before an asset moved holds the old
   `AssetPath`. Edits that carry asset references (`SetGeometry`,
-  `SetMaterialSlot`, `InsertNodes`, `SetStartingInputContexts`,
+  `SetSurfaceMaterial`, `InsertNodes`, `SetStartingInputContexts`,
   `SetSceneReferences`, `SetScriptSlots`, `SetSceneProperties`) retarget them
   through `scope.Redirects` in `Validate` and `Apply`, and report a reference to
   a deleted asset as an `AssetReference.Deleted` warning naming the node that
@@ -543,8 +543,8 @@ public readonly record struct LayoutEntryId(NodeId? Node, FolderId? Folder);    
 | `RemoveComponent(NodeId, ComponentId)`                                                                                                       | `AddComponent` with its data at its old index                                                            |
 | `SetProperties`, `SetSceneProperties`                                                                                                        | the captured before values, coupled ones included; `SetSceneEnvironment` for the environment (5.11)      |
 | `SetGeometry(IReadOnlyCollection<NodeId>, AssetPath)`, or per node                                                                           | per node, the old geometry                                                                               |
-| `SetMaterialSlot(IReadOnlyCollection<NodeId>, MaterialSlotTarget, AssetPath?)`, or per node                                                  | per node, the old slot state                                                                             |
-| `RemoveMaterialSlots(IReadOnlyDictionary<NodeId, IReadOnlyList<MaterialSlotTarget>>)`                                                        | `RestoreMaterialSlots`, the slots at their positions                                                     |
+| `SetSurfaceMaterial(IReadOnlyCollection<NodeId>, SurfaceTarget, AssetPath?)`, or per node                                                    | per node, the old surface state                                                                          |
+| `RemoveSurfaceMaterials(IReadOnlyDictionary<NodeId, IReadOnlyList<SurfaceTarget>>)`                                                          | `RestoreSurfaceMaterials`, the surfaces at their positions                                               |
 | `SetStartingCamera(NodeId?)`, `SetStartingInputContexts(IReadOnlyList<StartingInputContextData>)`, `SetSceneReferences(SceneReferencesData)` | the old value                                                                                            |
 | `SetScriptSlots(NodeId, ImmutableArray<ScriptSlot>)`                                                                                         | the old slots                                                                                            |
 | `SetEditorHidden(IReadOnlyList<NodeId>, bool)` (`ChangesDocument = false`)                                                                   | the old flags                                                                                            |
@@ -585,8 +585,8 @@ raises `LayoutChanged`.
   `IsExpanded`, to the destination scope; they never delete it. A
   `LayoutPosition` is therefore enough for `PlaceNodes` to put it back.
 - **Geometry.** `SetGeometry` refuses a missing asset ("Remove the component to
-  detach geometry."), and leaves override slots untouched; unresolved slots are
-  removed only by `RemoveMaterialSlots`.
+  detach geometry."), and leaves override slots untouched; unresolved surface materials are
+  removed only by `RemoveSurfaceMaterials`.
 - The compensated transforms of `ReparentNodes` with `preserveWorld` raise no
   `PropertiesChanged`: views read them from the scene, and LivePreview pushes
   them on `NodesPlaced`.
@@ -623,17 +623,17 @@ These build edits; they are not edits.
   batch's to refuse. Duplicating to a target is a capture and a paste;
   `SceneNodeCopies.DuplicateInPlace` builds the `InsertNodes` of the viewport's
   duplicate.
-- **Material slot inventories** are read before the edit, never by it.
-  `MaterialSlotEdits.SetAsync` and `ClearUnresolvedAsync` read the inventory
-  through ContentPipeline's `IGeometryMaterialSlotProvider` and build
-  `SetMaterialSlot` or `RemoveMaterialSlots` with the slot ids and the
-  inventory's `LayoutRevision`, refusing a slot the current inventory does not
-  have. `Validate` checks that each node still uses that geometry (a stale slot
-  is `Invalid` [`MaterialSlot.Stale`]; `Refused` is only for missing or locked
-  targets). An assignment replaces the node's override of the slot, the revision
+- **Surface inventories** are read before the edit, never by it.
+  `SurfaceMaterialEdits.SetAsync` and `ClearUnresolvedAsync` read the inventory
+  through ContentPipeline's `IGeometrySurfaceProvider` and build
+  `SetSurfaceMaterial` or `RemoveSurfaceMaterials` with the surface ids and the
+  inventory's `LayoutRevision`, refusing a surface the current inventory does not
+  have. `Validate` checks that each node still uses that geometry (a stale surface
+  is `Invalid` [`Surface.Stale`]; `Refused` is only for missing or locked
+  targets). An assignment replaces the node's override of the surface, the revision
   it records included, whichever inventory the override came from: as in other
-  engines, a reimport never locks a slot the inspector shows. Overrides no slot
-  resolves show as unresolved, and `RemoveMaterialSlots` clears them.
+  engines, a reimport never locks a surface the inspector shows. Overrides no surface
+  resolves show as unresolved, and `RemoveSurfaceMaterials` clears them.
 - **`LayoutScopes`** answers what callers need to build layout edits: the scope
   of a place or entry (`TryScopeOf`), an entry's place (`PositionOf`), a
   container's entries (`EntriesOf`) and its end (`EndOf`). A drop in the
@@ -676,7 +676,7 @@ Oxygen.Editor.Scenes
                 SceneHistoryEntry, SceneGesture, SceneEditResult, SceneDiagnostic, SceneEditValidation,
                 SceneEditCodes, SceneEditJson, ISceneNodeInteraction
   Changes/      SceneChange and its records, SceneChangedEventArgs, EditPhase
-  Edits/        Hierarchy/, Layout/, Components/, Properties/, Assets/ (geometry, material slots),
+  Edits/        Hierarchy/, Layout/, Components/, Properties/, Assets/ (geometry, surfaces),
                 Settings/ (play, references, scripts), EditorView/
   Properties/   descriptors and IComponentRules per kind
   Nodes/        SceneNodeTemplates, SceneNodeCopies, SceneClipboard, SceneComponents
@@ -691,7 +691,7 @@ explicit interface implementations. Hierarchy and layout logic lives in the
 hierarchy and layout edits; there is no separate mutator or organizer.
 
 Outside Scenes: the engine projection and content demand are LivePreview's
-(5.8); the material slot inventory is ContentPipeline's.
+(5.8); the surface inventory is ContentPipeline's.
 
 ## 7. Data Contracts
 

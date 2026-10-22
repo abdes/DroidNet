@@ -14,7 +14,7 @@ defined by the [rendering contract](../../lld/editor-rendering.md),
 
 Scope includes independent directional lights and shadows, explicit atmospheric
 slots, visibility/contribution/receiver behavior, contact shadows, qualification
-of delivered captured-sky lighting, exact cameras, grading, canonical material slots/emission and
+of delivered captured-sky lighting, exact cameras, grading, canonical surfaces/emission and
 procedural defaults. Qualification tools are opt-in development targets; normal
 engine/editor Debug and Release builds contain no qualification payload.
 

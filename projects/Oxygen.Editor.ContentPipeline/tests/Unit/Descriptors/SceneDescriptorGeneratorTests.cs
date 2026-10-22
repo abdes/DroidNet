@@ -71,10 +71,10 @@ internal sealed partial class SceneDescriptorGeneratorTests
             Name = "Geometry",
             Geometry = EngineAssets.BasicShape("Cube"),
         };
-        var slotId = Guid.Parse("146b1397-c3e0-bc20-fce3-c55e470b4086");
+        var surfaceId = Guid.Parse("146b1397-c3e0-bc20-fce3-c55e470b4086");
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
-            Target = new(geometry.Geometry, slotId, new string('a', 64)),
+            Target = new(geometry.Geometry, surfaceId, new string('a', 64)),
             Material = AssetPath.Parse("/Content/Materials/Red.omat"),
         });
         _ = node.AddComponent(geometry);
@@ -103,7 +103,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
         _ = result.Dependencies.Should().BeEmpty();
 
         using var document = JsonDocument.Parse(await File.ReadAllTextAsync(result.DescriptorPath, this.TestContext.CancellationToken).ConfigureAwait(false));
-        AssertSupportedSceneDescriptor(document.RootElement, slotId);
+        AssertSupportedSceneDescriptor(document.RootElement, surfaceId);
     }
 
     /// <summary>Emits orthographic framing as size, retained ratio and aspect mode, without diagnostics.</summary>
@@ -856,7 +856,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
             DisplayGamma = 2.4f,
         };
 
-    private static void AssertSupportedSceneDescriptor(JsonElement root, Guid slotId)
+    private static void AssertSupportedSceneDescriptor(JsonElement root, Guid surfaceId)
     {
         _ = root.GetProperty("version").GetInt32().Should().Be(13);
         _ = root.GetProperty("name").GetString().Should().Be("Main");
@@ -864,7 +864,7 @@ internal sealed partial class SceneDescriptorGeneratorTests
             .Should().Be(EngineAssets.BasicShape("Cube").VirtualPath);
         var assignments = root.GetProperty("renderables")[0].GetProperty("material_overrides");
         _ = assignments.GetArrayLength().Should().Be(1);
-        _ = assignments[0].GetProperty("slot_id").GetGuid().Should().Be(slotId);
+        _ = assignments[0].GetProperty("surface_id").GetGuid().Should().Be(surfaceId);
         _ = assignments[0].GetProperty("material_ref").GetString()
             .Should().Be("/Content/Materials/Red.omat");
         _ = root.GetProperty("references").GetProperty("materials")[0].GetString()

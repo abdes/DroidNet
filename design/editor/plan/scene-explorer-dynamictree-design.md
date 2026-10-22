@@ -580,7 +580,7 @@ establish identity.
 
 Remap node/component/folder IDs only inside the copied closure. Keep geometry/
 material/texture identities unchanged within the same project; do not import or
-clone assets. Preserve material-slot IDs because they belong to the referenced
+clone assets. Preserve surface IDs because they belong to the referenced
 geometry, not the duplicated node. Source scene Environment is never included.
 Copied directional lights become AtmosphereSlot.None, retaining other authored
 light properties: duplication must not steal Primary/Secondary roles. Report
@@ -871,7 +871,7 @@ Clipboard and selection context are landed: `ISceneSelectionService` now carries
 a typed `SceneSelectionContext` (scene/folder/node/mixed kind plus primary
 identity) published by the Explorer alongside the node subset, and
 `DuplicateNodesAsync` deep-copies node hierarchies with fresh node/component
-identities while preserving asset and material-slot references. Copy captures
+identities while preserving asset and surface references. Copy captures
 authored DTO/world-pose snapshots, Cut stages source root identities as a move,
 and Paste duplicates or moves at the resolved destination. Scene name search is
 landed (`SearchAsync`/`ClearSearchAsync`): it matches node and folder names

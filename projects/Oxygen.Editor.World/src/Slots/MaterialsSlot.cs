@@ -12,7 +12,7 @@ namespace Oxygen.Editor.World.Slots;
 /// </summary>
 /// <remarks>
 /// The native slot inventory determines every affected LOD/submesh binding.
-/// The retained geometry and slot identities prevent reimport from rebinding by index.
+/// The retained geometry and surface identities prevent reimport from rebinding by index.
 /// </remarks>
 public partial class MaterialsSlot : OverrideSlot
 {
@@ -42,7 +42,7 @@ public partial class MaterialsSlot : OverrideSlot
 
     /// <summary>Gets or sets the native slot target retained with this assignment.</summary>
     /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>
-    public required MaterialSlotTarget Target
+    public required SurfaceTarget Target
     {
         get;
         set
@@ -72,11 +72,11 @@ public partial class MaterialsSlot : OverrideSlot
         => new MaterialsSlotData
         {
             GeometryUri = this.Target.Geometry,
-            SlotId = this.Target.SlotId,
+            SurfaceId = this.Target.SurfaceId,
             LayoutRevision = this.Target.LayoutRevision,
             MaterialUri = this.Material,
         };
 
-    private static MaterialSlotTarget ReadTarget(MaterialsSlotData data)
-        => new(AssetPathData.Require(data.GeometryUri, nameof(data.GeometryUri)), data.SlotId, data.LayoutRevision);
+    private static SurfaceTarget ReadTarget(MaterialsSlotData data)
+        => new(AssetPathData.Require(data.GeometryUri, nameof(data.GeometryUri)), data.SurfaceId, data.LayoutRevision);
 }

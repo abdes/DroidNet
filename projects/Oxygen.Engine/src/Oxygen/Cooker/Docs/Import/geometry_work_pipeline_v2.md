@@ -1,6 +1,6 @@
 # Geometry Pipeline (v2)
 
-Read [material-slot provenance](#material-slot-provenance) and
+Read [surface provenance](#surface-provenance) and
 [buffer ownership](#buffer-ownership) for source and cooked identity rules.
 
 ## Buffer ownership
@@ -15,7 +15,7 @@ geometry from external source data, import its raw buffers into the destination
 root. Ordinary glTF/FBX import and library geometry references retain these
 workflows. Cross-root raw-buffer borrowing is not an authoring capability.
 
-## Material-slot provenance
+## Surface provenance
 
 Adapters preserve source declarations independently of default material keys.
 Mesh optimization may combine ranges of the same declaration; equal material
@@ -25,7 +25,7 @@ their payloads match. Unassigned primitives use a separate default declaration.
 FBX retains its mesh-local declarations before resolving global material
 references.
 
-The native importer allocates opaque SlotIds from a versioned retained geometry
+The native importer allocates opaque SurfaceIds from a versioned retained geometry
 namespace and durable declaration identity, or the complete source-layout
 witness when durable identity is unavailable. Witnesses cover source surface
 ownership, positions and connectivity before optimization; material parameters,
@@ -47,18 +47,18 @@ variants.
 Producer unit conversion, attribute generation and transform baking do not enter
 the raw witness. Identity still includes the geometry key and source anchor:
 changing bake or material-binding policy can split/rename output variants and
-therefore change their geometry identities and SlotIds. Equal raw witnesses do
+therefore change their geometry identities and SurfaceIds. Equal raw witnesses do
 not alias distinct output geometry. Unassigned surfaces use a dedicated
 declaration sentinel, independent of the number of imported material payloads.
 
 Retained import settings own provenance. Cooking returns candidate provenance to
 the publication owner and never overwrites source settings itself. The owner
 commits provenance and compatible geometry/scene outputs together. Runtime
-geometry stores SlotIds and bindings, not source witnesses.
+geometry stores SurfaceIds and bindings, not source witnesses.
 
-The built-in catalog's slot inventory describes its authored `asset_uri` and the
+The built-in catalog's surface inventory describes its authored `asset_uri` and the
 exact native runtime geometry. Its separate `virtual_path` and descriptor
-describe the cooked contribution. Both preserve the same semantic SlotIds; scene
+describe the cooked contribution. Both preserve the same semantic SurfaceIds; scene
 cooking resolves them against the contribution and records its current layout
 revision. Live edits validate the authored geometry's own revision.
 
@@ -349,7 +349,7 @@ boundaries.
    - **Not split.** Skinned and morphed submeshes stay one view: deformation can
      move triangles outside a run's bind-pose bounds.
    - **Unchanged by the split.** The output is deterministic for the same
-     source. Submeshes, slots and material ranges are unchanged; only the view
+     source. Submeshes, surfaces and material ranges are unchanged; only the view
      table grows.
 
 6. **Buffer payloads**
@@ -514,7 +514,7 @@ Adapters are responsible for **source acquisition**, **naming**, and
   - `MeshLod::source_owner` must keep source data alive.
 - **Material Mapping**
   - `material_keys` aligned with scene material array.
-  - `default_material_key` used when a slot is missing.
+  - `default_material_key` used when a surface is missing.
   - `want_textures` and `has_material_textures` set from importer material
     analysis to drive UV diagnostics.
 - **Coordinate Conversion**

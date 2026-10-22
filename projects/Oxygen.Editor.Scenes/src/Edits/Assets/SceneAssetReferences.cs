@@ -13,9 +13,9 @@ namespace Oxygen.Editor.Scenes.Edits.Assets;
 /// <summary>The assets a scene's nodes and environment reference.</summary>
 public static class SceneAssetReferences
 {
-    /// <summary>Gets the asset references the runtime shows for a node: its geometry and material slots.</summary>
+    /// <summary>Gets the asset references the runtime shows for a node: its geometry and surface materials.</summary>
     /// <param name="node">The node.</param>
-    /// <returns>The geometry and the materials of its component and targeted slots.</returns>
+    /// <returns>The geometry and the materials of its component and targeted overrides.</returns>
     public static IEnumerable<AssetPath> Runtime(SceneNode node)
     {
         ArgumentNullException.ThrowIfNull(node);

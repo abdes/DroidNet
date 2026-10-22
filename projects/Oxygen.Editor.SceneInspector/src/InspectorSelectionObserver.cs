@@ -11,7 +11,7 @@ using Oxygen.Editor.World.Slots;
 
 namespace Oxygen.Editor.SceneInspector;
 
-/// <summary>Owns selected component and material-slot observation, suppressing queued work from old selections.</summary>
+/// <summary>Owns selected component and surface material observation, suppressing queued work from old selections.</summary>
 internal sealed class InspectorSelectionObserver(DispatcherQueue? dispatcher, Action<InspectorSelectionChange> changed) : IDisposable
 {
     private readonly HashSet<INotifyCollectionChanged> collections = [];

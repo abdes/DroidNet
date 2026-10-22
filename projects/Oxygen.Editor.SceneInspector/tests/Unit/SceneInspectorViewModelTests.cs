@@ -42,8 +42,8 @@ internal sealed class SceneInspectorViewModelTests
         using var testScene = TestScenes.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
         _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(2);
-        using var slots = new FakeMaterialSlotProvider();
-        using var sut = CreateSut(preview.Object, slots, testScene, [node]);
+        using var surfaces = new FakeSurfaceProvider();
+        using var sut = CreateSut(preview.Object, surfaces, testScene, [node]);
 
         _ = sut.PendingLiveSyncEditCount.Should().Be(2);
         _ = sut.HasPendingLiveSyncEdits.Should().BeTrue();
@@ -69,8 +69,8 @@ internal sealed class SceneInspectorViewModelTests
         interaction.SetLocked(parent.Id, isLocked: true);
 
         using var testScene = TestScenes.Open(child.Scene);
-        using var slots = new FakeMaterialSlotProvider();
-        using var sut = CreateSut(Mock.Of<IScenePreview>(), slots, testScene, [child], interaction);
+        using var surfaces = new FakeSurfaceProvider();
+        using var sut = CreateSut(Mock.Of<IScenePreview>(), surfaces, testScene, [child], interaction);
 
         _ = sut.SelectedNode!.Id.Should().Be(child.Id);
         _ = sut.HasLockedSelection.Should().BeTrue();
@@ -85,8 +85,8 @@ internal sealed class SceneInspectorViewModelTests
         using var testScene = TestScenes.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
         _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(0);
-        using var slots = new FakeMaterialSlotProvider();
-        using var sut = CreateSut(preview.Object, slots, testScene, [node]);
+        using var surfaces = new FakeSurfaceProvider();
+        using var sut = CreateSut(preview.Object, surfaces, testScene, [node]);
         _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(1);
 
         preview.Raise(value => value.PendingFieldsChanged += null, preview.Object, new ScenePreviewEventArgs(testScene.DocumentId));
@@ -104,8 +104,8 @@ internal sealed class SceneInspectorViewModelTests
         using var testScene = TestScenes.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
         _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(1);
-        using var slots = new FakeMaterialSlotProvider();
-        using var sut = CreateSut(preview.Object, slots, testScene, [node]);
+        using var surfaces = new FakeSurfaceProvider();
+        using var sut = CreateSut(preview.Object, surfaces, testScene, [node]);
         _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(0);
 
         preview.Raise(value => value.PendingFieldsChanged += null, preview.Object, new ScenePreviewEventArgs(testScene.DocumentId));
@@ -122,8 +122,8 @@ internal sealed class SceneInspectorViewModelTests
         using var testScene = TestScenes.Open(node.Scene);
         var preview = new Mock<IScenePreview>();
         _ = preview.Setup(value => value.PendingFieldCount(testScene.DocumentId)).Returns(1);
-        using var slots = new FakeMaterialSlotProvider();
-        using var sut = CreateSut(preview.Object, slots, testScene, [node]);
+        using var surfaces = new FakeSurfaceProvider();
+        using var sut = CreateSut(preview.Object, surfaces, testScene, [node]);
         var other = DroidNet.Documents.DocumentId.New();
         _ = preview.Setup(value => value.PendingFieldCount(other)).Returns(0);
 
@@ -153,7 +153,7 @@ internal sealed class SceneInspectorViewModelTests
 
     private static SceneInspectorViewModel CreateSut(
         IScenePreview scenePreview,
-        FakeMaterialSlotProvider slots,
+        FakeSurfaceProvider surfaces,
         TestScene testScene,
         IList<SceneNode> selectedNodes,
         SceneNodeInteraction? interaction = null)
@@ -183,7 +183,7 @@ internal sealed class SceneInspectorViewModelTests
             Mock.Of<IAssetFeed>(feed => feed.Items == Observable.Never<IReadOnlyList<AssetEntry>>()),
             scenePreview,
             selectionService,
-            slots,
+            surfaces,
             Mock.Of<IProjectSession>(session => session.Context == testScene.Project),
             new FakeInputSources(),
             interaction: interaction);

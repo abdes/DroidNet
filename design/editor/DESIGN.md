@@ -222,7 +222,7 @@ Design contract:
 - Expected values come from verified saved sources and explicitly labelled
   library baselines. Embedded and standalone native observations are independent
   evidence compared against those expectations.
-- Qualification proves canonical scene/slot/material/camera/light/environment
+- Qualification proves canonical scene/surface/material/camera/light/environment
   semantics and completed-frame image parity through the real engine paths.
 - Qualification code, protocols, fixtures, instrumentation and runners are
   opt-in development targets outside normal Debug/Release product and SDK graphs.

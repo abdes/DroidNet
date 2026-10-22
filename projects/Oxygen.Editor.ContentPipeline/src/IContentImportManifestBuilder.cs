@@ -16,9 +16,9 @@ public interface IContentImportManifestBuilder
     /// <param name="dependsOn">Other jobs required in the batch.</param>
     /// <param name="name">The reviewed model name.</param>
     /// <param name="identity">The model's identity, the virtual path of its file; its products are named under it.</param>
-    /// <param name="provenance">The source's stable native slot identity.</param>
+    /// <param name="provenance">The source's stable native surface identity.</param>
     /// <returns>The native recipe shared with retained-source cooking.</returns>
-    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity, Import.NativeMaterialSlotProvenance provenance);
+    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity, Import.NativeSurfaceProvenance provenance);
 
     /// <summary>Builds one destination-free native recipe for discovery and execution.</summary>
     /// <param name="input">The logical source and output identity.</param>

@@ -36,7 +36,7 @@ opt-in development adapters; they are not production services or dependencies.
   environment/role semantics.
 - [material-editor.md](material-editor.md): source versus published material
   state.
-- [content-pipeline.md](content-pipeline.md): slot identity, publication and
+- [content-pipeline.md](content-pipeline.md): surface identity, publication and
   native readers.
 - [standalone-runtime-validation.md](standalone-runtime-validation.md):
   development-only capture ownership.
@@ -47,11 +47,11 @@ Reuse LivePreview's scene preview, `SyncOutcome`, the open-document
 registrations, `SceneSyncRevision`, the property replay/coalescing path and
 Runtime-owned world commands. Native `SceneAssetRequests` owns scene sessions,
 request generations, completion inboxes and scene-mutation acceptance. Extend
-these mechanisms for stable slot IDs and canonical camera/flag/light payloads;
+these mechanisms for stable surface IDs and canonical camera/flag/light payloads;
 do not create competing counters in an inspector or a second synchronization
 orchestrator.
 
-Current index-based slot transport and old sun/camera/boolean flag payloads are
+Current index-based surface transport and old sun/camera/boolean flag payloads are
 migration targets. The canonical runtime consumes only the replacement contract
 once useful content is migrated. Existing evidence is listed in section 16;
 source/API presence alone is not proof of the newly required rendered effects.
@@ -123,7 +123,7 @@ identity and immutable changed values. APIs use the same classified result path
 for full and granular delivery. Remove retired overload/adapter routes after
 callers are migrated; do not retain a second path for backward compatibility.
 
-Material intent additionally identifies GeometryUri, MaterialSlotId and expected
+Material intent additionally identifies GeometryUri, SurfaceId and expected
 current layout revision. Runtime indices are resolved against accepted geometry
 inside the native capability; they are never persisted or supplied as authored
 identity. See section 8.2.
@@ -137,8 +137,8 @@ identity. See section 8.2.
 | Transform / reparent            | Apply immutable local TRS and explicit reparent policy; resolve affected descendants and invalidate render/light products. Reject unrepresentable requested transforms before authoring mutation.                                           |
 | Scene Visibility                | Preserve Inherit/Shown/Hidden source mode. Geometry and light eligibility use the resolved native flag; a locally Shown child can override a hidden parent.                                                                                 |
 | Geometry Cast / Receive Shadows | Preserve each independent Inherit/On/Off flag. Cast controls opaque/masked occluder submission; Receive controls actual direct-light shadow attenuation, not AO or Unlit shading.                                                           |
-| Geometry attach/change/remove   | Dispatch canonical geometry identity and retire obsolete request/slot intent; obtain the accepted inventory before applying material overrides.                                                                                             |
-| Material slot assign/clear      | Apply the named SlotId's current native bindings; clear restores that slot's mesh default on every declared LOD/submesh binding.                                                                                                            |
+| Geometry attach/change/remove   | Dispatch canonical geometry identity and retire obsolete request/surface intent; obtain the accepted inventory before applying material overrides.                                                                                          |
+| Surface material assign/clear   | Apply the named SurfaceId's current native bindings; clear restores that surface's mesh default on every declared LOD/submesh binding.                                                                                                      |
 | Perspective camera              | Carry Auto/Fixed mode, stored Fixed ratio, vertical FOV, valid clipping and parented pose. Auto derives ratio per target; Fixed fits the complete image with bars. Resizing never edits source/history.                                     |
 | Directional light               | Carry runtime affects-world, light shadowing and supported values separately from AtmosphereLightSlot None/Primary/Secondary. Both atmospheric roles have full independent consumers; None still permits ordinary directional illumination. |
 | Atmosphere role edit            | Validate unique stored slot occupancy across hidden/off sources; reject conflicts. No promotion, brightest/first-light selection or coupled Sun pointer/boolean representation.                                                             |
@@ -151,12 +151,12 @@ modes are not introduced by these mappings. An explicitly selected camera
 remains usable when its node/representation is hidden. Runtime presence is
 derived; `IsActive` is not saved authored activation.
 
-### 8.2 Material-slot V0.1 behavior
+### 8.2 Surface V0.1 behavior
 
-The canonical slot and reimport contract is
-[ContentPipeline section 20](content-pipeline.md#20-canonical-material-slot-identity-and-reimport).
-Every existing slot, including nonzero slots and its declared LOD bindings, uses
-one identity-based transport. Remove the old first-slot/LOD-0-only route.
+The canonical surface and reimport contract is
+[ContentPipeline section 20](content-pipeline.md#20-canonical-surface-identity-and-reimport).
+Every existing surface, including nonzero surfaces and its declared LOD bindings, uses
+one identity-based transport. Remove the old first-surface/LOD-0-only route.
 
 Normalize a material source URI to the corresponding native `.omat` virtual path
 before dispatch. A null assignment clears the instance override; it does not
@@ -164,31 +164,31 @@ substitute another material. Retired empty-URI sentinels do not form another
 shipping execution path.
 
 Native requests are keyed by scene session, node, accepted geometry identity and
-SlotId. Each assignment/clear advances intent generation before any procedural,
+SurfaceId. Each assignment/clear advances intent generation before any procedural,
 cache or asynchronous lookup. Geometry replacement has its own generation. A
-callback is accepted only when node, geometry generation, SlotId, current layout
+callback is accepted only when node, geometry generation, SurfaceId, current layout
 and material intent still match. Fresh inventories can carry an established
-SlotId into a changed layout; a numeric position or matching label cannot.
+SurfaceId into a changed layout; a numeric position or matching label cannot.
 
 Callbacks enqueue immutable results through a weak inbox. They do not retain
 scene nodes, editor contexts or modules and do not mutate the scene directly.
 During SceneMutation, queued authoring commands execute before completion
 acceptance. Deleted descendants/dead handles and obsolete failures are
-discarded. Detach retires the renderable's pending geometry and all slot
+discarded. Detach retires the renderable's pending geometry and all surface
 intents. Scene replacement/shutdown retires its entire inbox.
 
-Material results wait for transient geometry readiness. A missing geometry/slot
+Material results wait for transient geometry readiness. A missing geometry/surface
 while replacement is still loading is not a permanent structural rejection. Once
-geometry is accepted, resolve SlotId using its verified inventory. A missing
+geometry is accepted, resolve SurfaceId using its verified inventory. A missing
 identity produces repair-required status and retains authored intent; it is not
 retried endlessly or applied to another surface. Resolution/load errors retain
-node/asset/slot context and recover through existing content-demand/publication
+node/asset/surface context and recover through existing content-demand/publication
 paths.
 
 Clear updates authored removal intent and supersedes pending material loads
 immediately. Native applied-success follows geometry identity and revision
 validation; unavailable geometry remains pending. New edits require the observed
-revision, while refreshes of accepted assignments can follow surviving SlotIds
+revision, while refreshes of accepted assignments can follow surviving SurfaceIds
 into a compatible revision. Undo/Redo uses the same commands. On publication,
 only identity-compatible current intents are reapplied; incompatible layouts are
 blocked by the publication contract before they can break saved scene consumers.
@@ -228,7 +228,7 @@ later convergence.
 
 Sync has no standalone panel. Consumers show current inline authoring errors,
 scoped pending/preview failures and technical operation details. Missing
-material or slot identity is visible on the corresponding slot row. Success does
+material or surface identity is visible on the corresponding surface row. Success does
 not add banner noise, and stale failures cannot replace current field state.
 
 ## 10. Persistence
@@ -257,8 +257,8 @@ current scene through the same projection and generation authority.
 | Cancelled         | That delivery stops; current intent remains authoritative where the document is live. |
 
 Diagnostics carry scene/document lifetime, node/component identity, asset URI,
-SlotId and expected/actual geometry layout where relevant. Preserve native codes
-and context. Unresolved slot repair, missing asset, stale completion,
+SurfaceId and expected/actual geometry layout where relevant. Preserve native codes
+and context. Unresolved surface repair, missing asset, stale completion,
 incompatible schema and device/runtime failure are different conditions.
 
 ## 13. Dependency Rules
@@ -277,7 +277,7 @@ values, source persistence, cooking or mounting occurs inside the sync adapter.
 - Verify camera Auto/Fixed fitting and exact selected/parented camera behavior.
 - Verify None/Primary/Secondary, secondary-only and two-source illumination,
   role conflicts, hidden/off sources and dependent sky-product invalidation.
-- Verify every material slot, per-LOD bindings, clear/Undo/Redo, delayed cache/
+- Verify every surface, per-LOD bindings, clear/Undo/Redo, delayed cache/
   procedural/async completion, geometry replacement and repair-required layouts.
 - Verify newer edits and document close/replacement defeat stale callbacks;
   restart and publication converge on current authoring without history changes.

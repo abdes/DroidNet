@@ -9,17 +9,17 @@ All `PakFormat_*.h` structures MUST follow these rules.
 
 Scope: this document defines binary format layout rules only.
 
-### Material-slot records
+### Surface records
 
-Geometry descriptors store a non-nil 16-byte `MaterialSlotId` in each
-`SubMeshDesc`. Repeated IDs explicitly bind one semantic slot across LODs; equal
+Geometry descriptors store a non-nil 16-byte `SurfaceId` in each
+`SubMeshDesc`. Repeated IDs explicitly bind one semantic surface across LODs; equal
 labels or default materials never establish identity. The loader builds and
 validates the geometry-owned inventory once, including its canonical layout
-revision. Slot provenance and source-layout witnesses are import data, not
+revision. Surface provenance and source-layout witnesses are import data, not
 runtime payloads.
 
 Scene descriptors store material assignments in a separate component table: node
-index, SlotId, material asset key and the last resolved layout revision.
+index, SurfaceId, material asset key and the last resolved layout revision.
 Renderable records contain geometry and visibility only. An absent assignment
 uses each binding's geometry default. Readers reject retired format versions;
 maintained source content is migrated and recooked.
@@ -223,7 +223,7 @@ publication.
 | Physics scene         | None                                                                           | Body/collider/character shape and material assets; soft-body topology and joint/vehicle constraint keys target physics resources; target-scene key is logical |
 
 Nil optional keys are omitted. Required-field validation remains with the typed
-owner. Node IDs, material-slot IDs, source IDs, node indices and
+owner. Node IDs, surface IDs, source IDs, node indices and
 descriptor-relative offsets are identities/ranges, not external dependency
 edges. Logical references are reported but neither eagerly loaded nor included
 in owning-cycle detection. Their classification does not deliver a missing

@@ -1,7 +1,7 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
   "$id": "https://oxygen-engine.org/schemas/oxygen.cooked-geometries.schema.json",
-  "title": "Oxygen Cooked Geometry Material Slots",
+  "title": "Oxygen Cooked Geometry Surfaces",
   "type": "object",
   "additionalProperties": false,
   "required": ["schema_version", "geometries"],
@@ -12,18 +12,18 @@
       "items": {
         "type": "object",
         "additionalProperties": false,
-        "required": ["geometry_asset_key", "layout_revision", "slots"],
+        "required": ["geometry_asset_key", "layout_revision", "surfaces"],
         "properties": {
           "geometry_asset_key": { "$ref": "#/definitions/nonNilKey" },
           "layout_revision": { "type": "string", "pattern": "^[0-9a-f]{64}$" },
-          "slots": {
+          "surfaces": {
             "type": "array",
             "items": {
               "type": "object",
               "additionalProperties": false,
-              "required": ["slot_id", "display_name", "bindings"],
+              "required": ["surface_id", "display_name", "bindings"],
               "properties": {
-                "slot_id": { "$ref": "#/definitions/nonNilKey" },
+                "surface_id": { "$ref": "#/definitions/nonNilKey" },
                 "display_name": { "type": "string" },
                 "bindings": {
                   "type": "array",

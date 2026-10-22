@@ -30,8 +30,8 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportPipeline.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/MeshType.h>
@@ -56,7 +56,7 @@ struct MeshStreamView {
 
 //! Range of triangle indices for a submesh.
 struct TriangleRange {
-  uint32_t material_slot = 0;
+  uint32_t surface = 0;
   uint32_t source_slot = 0;
   uint32_t first_index = 0;
   uint32_t index_count = 0;
@@ -133,9 +133,9 @@ public:
     Bounds3 bounds;
   };
 
-  //! Descriptor patch location for a material slot.
-  struct MaterialSlotPatchOffset {
-    uint32_t slot = 0;
+  //! Descriptor patch location for a surface.
+  struct SurfacePatchOffset {
+    uint32_t surface = 0;
     data::pak::core::DataBlobSizeT material_key_offset = 0;
   };
 
@@ -144,9 +144,9 @@ public:
     data::AssetKey geometry_key;
     std::string virtual_path;
     std::string descriptor_relpath;
-    std::optional<MaterialSlotGeometryProvenance> material_slot_provenance;
+    std::optional<SurfaceGeometryProvenance> surface_provenance;
     std::vector<std::byte> descriptor_bytes;
-    std::vector<MaterialSlotPatchOffset> material_patch_offsets;
+    std::vector<SurfacePatchOffset> material_patch_offsets;
     std::vector<CookedMeshPayload> lods;
   };
 
@@ -168,8 +168,8 @@ public:
     std::optional<glm::mat4> bake_transform;
 
     std::vector<data::AssetKey> material_keys;
-    std::map<uint32_t, std::string> material_slot_names;
-    std::vector<uint32_t> material_slots_used;
+    std::map<uint32_t, std::string> surface_names;
+    std::vector<uint32_t> surfaces_used;
     data::AssetKey default_material_key;
     bool want_textures = false;
     bool has_material_textures = false;

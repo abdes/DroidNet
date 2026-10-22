@@ -23,11 +23,11 @@ public sealed partial class ContentPipelineService
         var outputs = ImmutableArray.CreateBuilder<CookProducedSourceFile>();
         var sources = graph.Assets.Where(static input => input.Kind == ContentCookAssetKind.ForeignSource)
             .ToDictionary(static input => input.SourceRelativePath, StringComparer.Ordinal);
-        foreach (var (sourcePath, provenance) in result.MaterialSlotProvenance)
+        foreach (var (sourcePath, provenance) in result.SurfaceProvenance)
         {
             if (!sources.TryGetValue(sourcePath, out var source))
             {
-                throw new InvalidDataException("Native material-slot provenance names a source outside this cook.");
+                throw new InvalidDataException("Native surface provenance names a source outside this cook.");
             }
 
             var relative = source.SourceRelativePath + NativeSceneImportSettings.SidecarSuffix;
@@ -39,12 +39,12 @@ public sealed partial class ContentPipelineService
             }
 
             var settings = NativeSceneImportSettings.Parse(before);
-            if (settings.MaterialSlotProvenance.SourceIdentity != provenance.SourceIdentity)
+            if (settings.SurfaceProvenance.SourceIdentity != provenance.SourceIdentity)
             {
-                throw new InvalidDataException("Native material-slot provenance changed the retained source identity.");
+                throw new InvalidDataException("Native surface provenance changed the retained source identity.");
             }
 
-            var after = (settings with { MaterialSlotProvenance = provenance }).ToBytes();
+            var after = (settings with { SurfaceProvenance = provenance }).ToBytes();
             if (!before.AsSpan().SequenceEqual(after))
             {
                 outputs.Add(new(relative, before, after));

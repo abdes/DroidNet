@@ -16,7 +16,7 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 namespace oxygen::vortex::sceneprep::testing {
 
@@ -50,8 +50,8 @@ namespace pak = oxygen::data::pak;
   oxygen::data::pak::geometry::SubMeshDesc desc {
     .name_offset = 0,
     .material_asset_key = {},
-    // Cooked descriptors always declare their material slot.
-    .slot_id = oxygen::data::MaterialSlotId::Generate(),
+    // Cooked descriptors always declare their surface.
+    .surface_id = oxygen::data::SurfaceId::Generate(),
     .mesh_view_count = mesh_view_count,
     .bounding_box_min = { bounds_min.x, bounds_min.y, bounds_min.z },
     .bounding_box_max = { bounds_max.x, bounds_max.y, bounds_max.z },

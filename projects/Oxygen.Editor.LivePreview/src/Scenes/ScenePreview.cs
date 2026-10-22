@@ -127,20 +127,20 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     }
 
     /// <summary>
-    /// Sends a node's material overrides without attaching its geometry again: clears the slots whose overrides went away,
+    /// Sends a node's material overrides without attaching its geometry again: clears the surfaces whose overrides went away,
     /// then, when asked, sets the overrides the node has.
     /// </summary>
     /// <remarks>Attaching the geometry again would start a new geometry load and make the engine reject these as stale.</remarks>
     /// <param name="scene">The scene.</param>
     /// <param name="node">The node.</param>
-    /// <param name="cleared">The slots whose overrides went away.</param>
+    /// <param name="cleared">The surfaces whose overrides went away.</param>
     /// <param name="overrides">Whether to send the overrides the node has.</param>
     /// <param name="cancellationToken">Cancels the projection.</param>
     /// <returns>The engine's outcome.</returns>
-    internal Task<SyncOutcome> UpdateMaterialSlotsAsync(
+    internal Task<SyncOutcome> UpdateSurfacesAsync(
         Scene scene,
         SceneNode node,
-        IReadOnlyCollection<MaterialSlotTarget> cleared,
+        IReadOnlyCollection<SurfaceTarget> cleared,
         bool overrides,
         CancellationToken cancellationToken = default)
     {
@@ -166,15 +166,15 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
             LiveSyncDiagnosticCodes.GeometryFailed,
             world =>
             {
-                foreach (var slot in cleared)
+                foreach (var surface in cleared)
                 {
                     world.Execute(new RuntimeSetMaterialOverride(
                         node.Id,
-                        GeometryPathMapper.ToEnginePath(slot.Geometry),
-                        slot.SlotId,
-                        slot.LayoutRevision,
+                        GeometryPathMapper.ToEnginePath(surface.Geometry),
+                        surface.SurfaceId,
+                        surface.LayoutRevision,
                         MaterialPath: null,
-                        MaterialSlotAssignmentIntent.RetainedAssignment));
+                        SurfaceMaterialAssignmentIntent.RetainedAssignment));
                 }
 
                 if (overrides && node.Components.OfType<GeometryComponent>().FirstOrDefault() is { } geometry)

@@ -49,7 +49,7 @@ internal sealed partial class ScenePreview
         return [.. changes.Where(Releases), .. changes.Where(change => !Releases(change))];
     }
 
-    private static MaterialSlotTarget[] MaterialOverridesOf(SceneNode node)
+    private static SurfaceTarget[] MaterialOverridesOf(SceneNode node)
         => [.. node.Components.OfType<GeometryComponent>().SelectMany(static geometry => geometry.OverrideSlots.OfType<MaterialsSlot>()).Select(static slot => slot.Target)];
 
     private static void RecordMaterialOverrides(DocumentLifetime lifetime, IEnumerable<SceneNode> nodes)
@@ -184,8 +184,8 @@ internal sealed partial class ScenePreview
                 RecordMaterialOverrides(lifetime, [node]);
                 await this.AttachGeometryWhenMountedAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
                 break;
-            case SceneChange.MaterialSlotsChanged slots when FindNode(scene, slots.Node) is { } node:
-                await this.ProjectMaterialSlotsAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
+            case SceneChange.SurfaceMaterialsChanged surfaces when FindNode(scene, surfaces.Node) is { } node:
+                await this.ProjectSurfacesAsync(lifetime, node, cancellationToken).ConfigureAwait(true);
                 break;
             default:
                 // Layout, editor visibility, play, references and scripts have no engine projection.
@@ -193,13 +193,13 @@ internal sealed partial class ScenePreview
         }
     }
 
-    // The engine keeps a slot's material until told otherwise: an override that went away is cleared, and the overrides
+    // The engine keeps a surface's material until told otherwise: an override that went away is cleared, and the overrides
     // the node has are sent once their materials are mounted. The geometry stays attached.
-    private async Task ProjectMaterialSlotsAsync(DocumentLifetime lifetime, SceneNode node, CancellationToken cancellationToken)
+    private async Task ProjectSurfacesAsync(DocumentLifetime lifetime, SceneNode node, CancellationToken cancellationToken)
     {
         var current = MaterialOverridesOf(node);
-        MaterialSlotTarget[] cleared = [.. lifetime.MaterialOverrides.GetValueOrDefault(node.Id, [])
-            .Where(previous => !current.Any(target => target.Geometry == previous.Geometry && target.SlotId == previous.SlotId))];
+        SurfaceTarget[] cleared = [.. lifetime.MaterialOverrides.GetValueOrDefault(node.Id, [])
+            .Where(previous => !current.Any(target => target.Geometry == previous.Geometry && target.SurfaceId == previous.SurfaceId))];
         lifetime.MaterialOverrides[node.Id] = current;
         var mounted = this.IsMounted(SceneAssetReferences.Runtime(node));
         if (!mounted)
@@ -209,7 +209,7 @@ internal sealed partial class ScenePreview
 
         if (mounted || cleared.Length > 0)
         {
-            this.Report(await this.UpdateMaterialSlotsAsync(lifetime.Scene, node, cleared, overrides: mounted, cancellationToken).ConfigureAwait(true));
+            this.Report(await this.UpdateSurfacesAsync(lifetime.Scene, node, cleared, overrides: mounted, cancellationToken).ConfigureAwait(true));
         }
     }
 

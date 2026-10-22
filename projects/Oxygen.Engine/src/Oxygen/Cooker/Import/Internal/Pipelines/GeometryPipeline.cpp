@@ -452,7 +452,7 @@ auto GeometryPipeline::Worker() -> co::Co<>
       continue;
     }
 
-    if (finalized && item.cooked.material_slot_provenance) {
+    if (finalized && item.cooked.surface_provenance) {
       try {
         serio::ReadOnlyMemoryStream stream(finalized->bytes);
         serio::Reader reader(stream);
@@ -463,11 +463,10 @@ auto GeometryPipeline::Worker() -> co::Co<>
           .parse_only = true,
         };
         const auto geometry = loaders::LoadGeometryAsset(context);
-        item.cooked.material_slot_provenance->inventory
-          = geometry->MaterialSlots();
+        item.cooked.surface_provenance->inventory = geometry->Surfaces();
       } catch (const std::exception& error) {
         diagnostics.push_back(MakeErrorDiagnostic(
-          "mesh.slot_inventory_invalid", error.what(), item.source_id, ""));
+          "mesh.surface_inventory_invalid", error.what(), item.source_id, ""));
       }
     }
     const bool success = finalized.has_value() && diagnostics.empty();

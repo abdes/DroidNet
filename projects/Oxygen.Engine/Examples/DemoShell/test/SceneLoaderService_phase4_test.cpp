@@ -352,10 +352,10 @@ namespace {
       .geometry_key = keys.geometry,
       .visible = 1,
     };
-    const auto& inventory = geometry.MaterialSlots();
+    const auto& inventory = geometry.Surfaces();
     const auto assignment = pakw::MaterialOverrideRecord {
       .node_index = 1,
-      .slot_id = inventory.slots.at(0).slot_id,
+      .surface_id = inventory.surfaces.at(0).surface_id,
       .material_key = keys.material,
       .layout_revision = inventory.layout_revision,
     };

@@ -27,7 +27,7 @@
 #include <Oxygen/Cooker/Import/ImportProgress.h>
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Cooker/test/Support/FileIo.h>
@@ -385,9 +385,9 @@ protected:
     if (!report.has_value()) {
       return ImportReport {};
     }
-    if (report->success && !report->material_slot_provenance_json.empty()) {
+    if (report->success && !report->surface_provenance_json.empty()) {
       source_provenance_
-        = MaterialSlotProvenance::Parse(report->material_slot_provenance_json);
+        = SurfaceProvenance::Parse(report->surface_provenance_json);
     }
     return *report;
   }
@@ -400,7 +400,7 @@ protected:
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(source_path);
     request.cooked_root = cooked_root;
-    request.material_slot_provenance = source_provenance_;
+    request.surface_provenance = source_provenance_;
     return request;
   }
 
@@ -445,8 +445,8 @@ protected:
   }
 
 private:
-  std::shared_ptr<const MaterialSlotProvenance> source_provenance_
-    = std::make_shared<const MaterialSlotProvenance>(Uuid::Generate());
+  std::shared_ptr<const SurfaceProvenance> source_provenance_
+    = std::make_shared<const SurfaceProvenance>(Uuid::Generate());
 };
 
 } // namespace oxygen::content::import::test

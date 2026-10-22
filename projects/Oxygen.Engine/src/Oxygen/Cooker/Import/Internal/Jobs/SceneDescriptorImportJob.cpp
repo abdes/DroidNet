@@ -49,12 +49,12 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormatSerioWriters.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -271,7 +271,7 @@ namespace {
     co_return ListedDescriptor {};
   }
 
-  auto LoadSlotInventories(SceneDescriptorExecutionContext& context,
+  auto LoadSurfaceInventories(SceneDescriptorExecutionContext& context,
     const internal::SceneSource& source, IAsyncFileReader& file_reader)
     -> co::Co<bool>
   {
@@ -311,7 +311,7 @@ namespace {
       if (!bytes) {
         AddDiagnostic(context.session, context.request, ImportSeverity::kError,
           "scene.descriptor.geometry_inventory_unavailable",
-          "Cannot read geometry for slot validation", path);
+          "Cannot read geometry for surface validation", path);
         co_return false;
       }
       try {
@@ -558,10 +558,10 @@ namespace {
         const auto& geometry
           = *context.geometries.at(source_renderable.geometry);
         for (const auto& assignment : source_renderable.materials) {
-          if (geometry.FindMaterialSlot(assignment.slot_id) == nullptr) {
+          if (geometry.FindSurface(assignment.surface_id) == nullptr) {
             AddDiagnostic(context.session, context.request,
-              ImportSeverity::kError, "scene.descriptor.material_slot_invalid",
-              "Material assignment targets a missing slot",
+              ImportSeverity::kError, "scene.descriptor.surface_invalid",
+              "Material assignment targets a missing surface",
               object_path + ".material_overrides");
             return std::nullopt;
           }
@@ -573,9 +573,9 @@ namespace {
           }
           prepared.build.material_overrides.push_back({
             .node_index = source_renderable.node_index,
-            .slot_id = assignment.slot_id,
+            .surface_id = assignment.surface_id,
             .material_key = material->first,
-            .layout_revision = geometry.MaterialSlots().layout_revision,
+            .layout_revision = geometry.Surfaces().layout_revision,
           });
         }
       }
@@ -760,7 +760,7 @@ auto SceneDescriptorImportJob::ExecuteAsync() -> co::Co<ImportReport>
     session, Request(), "scene.descriptor.");
 
   if (!CookedReader()
-    || !co_await LoadSlotInventories(context, *source, *CookedReader())) {
+    || !co_await LoadSurfaceInventories(context, *source, *CookedReader())) {
     co_return co_await FinalizeWithTelemetry(session);
   }
 

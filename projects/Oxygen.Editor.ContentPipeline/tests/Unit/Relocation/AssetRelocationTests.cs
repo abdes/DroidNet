@@ -24,7 +24,7 @@ public sealed class AssetRelocationTests
     private const string Geometry = """
         { "name": "Box", "virtual_path": "/Content/Geometry/Box.ogeo",
           "buffers": [ { "uri": "mesh.bin", "virtual_path": "/Content/Geometry/Box.obuf" } ],
-          "lods": [ { "submeshes": [ { "slot_id": "a", "material_ref": "/Content/Materials/Red.omat", "views": [] } ] } ] }
+          "lods": [ { "submeshes": [ { "surface_id": "a", "material_ref": "/Content/Materials/Red.omat", "views": [] } ] } ] }
         """;
 
     private const string Scene = """
@@ -216,7 +216,7 @@ public sealed class AssetRelocationTests
 
     /// <summary>
     /// A model's products are named under it, so moving or renaming the model retargets every reference to them,
-    /// material slot overrides included.
+    /// surface material overrides included.
     /// </summary>
     /// <returns>The asynchronous test.</returns>
     [TestMethod]

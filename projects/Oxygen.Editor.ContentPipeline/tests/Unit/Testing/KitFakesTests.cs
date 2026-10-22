@@ -25,12 +25,12 @@ public sealed class KitFakesTests
     public TestContext TestContext { get; set; } = null!;
 
     [TestMethod]
-    public async Task MaterialSlotReads_WaitForTheGate()
+    public async Task SurfaceReads_WaitForTheGate()
     {
         var project = TestProject.Create(new MockFileSystem());
-        var slot = Guid.NewGuid();
-        using var provider = new FakeMaterialSlotProvider();
-        provider.Publish(Cube, new string('c', 64), slot);
+        var surface = Guid.NewGuid();
+        using var provider = new FakeSurfaceProvider();
+        provider.Publish(Cube, new string('c', 64), surface);
         var gate = provider.HoldReads();
 
         var read = provider.ReadAsync(project.Context, Cube, this.TestContext.CancellationToken);
@@ -39,7 +39,7 @@ public sealed class KitFakesTests
         gate.Release();
 
         _ = heldWhilePending.Should().BeFalse();
-        _ = (await read.ConfigureAwait(false))!.Slots.Should().ContainSingle().Which.SlotId.Should().Be(slot);
+        _ = (await read.ConfigureAwait(false))!.Surfaces.Should().ContainSingle().Which.SurfaceId.Should().Be(surface);
     }
 
     [TestMethod]

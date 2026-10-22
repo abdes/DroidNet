@@ -398,7 +398,7 @@ Normal execution keeps no obsolete aliases, fallback readers or dual meanings.
   behavior.
 - Convert single-slot overrides to stable IDs without remapping unresolved
   assignments or substituting engine Default.
-- Convert each material slot assignment into a Material override of its
+- Convert each surface material assignment into a Material override of its
   surface part. Remove rendering, lighting and level-of-detail slots,
   node-scope slots and LOD/submesh-targeted overrides from source; none had an
   authored or rendered effect.

@@ -27,9 +27,9 @@
 #include <Oxygen/Cooker/test/Support/DescriptorFixtures.h>
 #include <Oxygen/Cooker/test/Support/Diagnostics.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 #include <Oxygen/Testing/GTest.h>
@@ -40,14 +40,14 @@ namespace oxygen::content::import::test {
 
 namespace {
 
-  auto GeneratedSurfaceSlot(const std::string_view generator) -> std::string
+  auto GeneratedSurfaceId(const std::string_view generator) -> std::string
   {
     const auto mesh
       = data::GenerateMesh(std::string(generator) + "/surface", {});
     if (!mesh || mesh->SubMeshes().size() != 1U) {
       throw std::runtime_error("Expected a single-surface generated mesh");
     }
-    return data::to_string(mesh->SubMeshes().front().SlotId());
+    return data::to_string(mesh->SubMeshes().front().SurfaceIdentity());
   }
 
   auto MakeCapsuleDescriptor(
@@ -77,7 +77,7 @@ namespace {
               "submeshes",
               json::array({
                 {
-                  { "slot_id", GeneratedSurfaceSlot("Capsule") },
+                  { "surface_id", GeneratedSurfaceId("Capsule") },
                   { "material_ref", "/.cooked/Materials/default.omat" },
                   { "views", json::array({ { { "view_ref", "__all__" } } }) },
                 },
@@ -125,7 +125,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
             "submeshes",
             json::array({
               json {
-                { "slot_id", GeneratedSurfaceSlot("Cube") },
+                { "surface_id", GeneratedSurfaceId("Cube") },
                 { "material_ref", "/.cooked/Materials/default.omat" },
                 {
                   "views",
@@ -209,7 +209,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
             "submeshes",
             json::array({
               json {
-                { "slot_id", GeneratedSurfaceSlot("Plane") },
+                { "surface_id", GeneratedSurfaceId("Plane") },
                 { "material_ref", "/.cooked/Materials/default.omat" },
                 {
                   "views",
@@ -456,7 +456,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
             "submeshes",
             json::array({
               json {
-                { "slot_id", GeneratedSurfaceSlot("IcoSphere") },
+                { "surface_id", GeneratedSurfaceId("IcoSphere") },
                 { "material_ref", "/.cooked/Materials/default.omat" },
                 {
                   "views",
@@ -567,7 +567,7 @@ NOLINT_TEST(GeometryDescriptorImportJobProceduralTest,
             "submeshes",
             json::array({
               json {
-                { "slot_id", GeneratedSurfaceSlot("SubdividedCube") },
+                { "surface_id", GeneratedSurfaceId("SubdividedCube") },
                 { "material_ref", "/.cooked/Materials/default.omat" },
                 {
                   "views",

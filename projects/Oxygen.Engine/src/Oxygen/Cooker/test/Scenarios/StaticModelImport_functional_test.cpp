@@ -237,7 +237,7 @@ NOLINT_TEST_F(StaticImportTest, ManifestSelectsPolicyAndRejectsUnknownValues)
         << "{\"version\":1,\"output\":\"cooked\",\"jobs\":[{\"id\":\"model\","
            "\"type\":\"gltf\",\"source\":\"model.gltf\","
            "\"virtual_path\":\"/.cooked/model.gltf\","
-           "\"material_slot_source_identity\":\"01990000-0000-7000-8000-"
+           "\"surface_source_identity\":\"01990000-0000-7000-8000-"
            "000000000001\","
            "\"content_policy\":\""
         << policy << "\"}]}";

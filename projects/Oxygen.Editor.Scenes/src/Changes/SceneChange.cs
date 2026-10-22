@@ -55,9 +55,9 @@ public abstract record SceneChange
     /// <param name="Node">The node.</param>
     public sealed record GeometryChanged(NodeId Node) : SceneChange;
 
-    /// <summary>A node's material slots changed.</summary>
+    /// <summary>A node's surface materials changed.</summary>
     /// <param name="Node">The node.</param>
-    public sealed record MaterialSlotsChanged(NodeId Node) : SceneChange;
+    public sealed record SurfaceMaterialsChanged(NodeId Node) : SceneChange;
 
     /// <summary>The explorer layout changed.</summary>
     public sealed record LayoutChanged : SceneChange;

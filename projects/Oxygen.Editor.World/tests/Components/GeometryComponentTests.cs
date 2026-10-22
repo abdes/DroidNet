@@ -44,7 +44,7 @@ public sealed class GeometryComponentTests
         // component-level override
         var compMat = new MaterialsSlot
         {
-            Target = new MaterialSlotTarget(geo.Geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), "rev-1"),
+            Target = new SurfaceTarget(geo.Geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), "rev-1"),
             Material = AssetPath.Parse("/Engine/Generated/Materials/Default"),
         };
         geo.OverrideSlots.Add(compMat);
@@ -53,7 +53,7 @@ public sealed class GeometryComponentTests
         var target = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 1 };
         var mat = new MaterialsSlot
         {
-            Target = new MaterialSlotTarget(geo.Geometry, Guid.Parse("10000000-0000-0000-0000-000000000002"), "rev-1"),
+            Target = new SurfaceTarget(geo.Geometry, Guid.Parse("10000000-0000-0000-0000-000000000002"), "rev-1"),
             Material = AssetPath.Parse("/Engine/Generated/Materials/Gold"),
         };
         target.OverrideSlots.Add(mat);
@@ -94,7 +94,7 @@ public sealed class GeometryComponentTests
                 new MaterialsSlotData
                 {
                     GeometryUri = AssetPath.Parse("/Content/Meshes/Pillar.geometry"),
-                    SlotId = Guid.Parse("30000000-0000-0000-0000-000000000001"),
+                    SurfaceId = Guid.Parse("30000000-0000-0000-0000-000000000001"),
                     LayoutRevision = "rev-pillar-1",
                     MaterialUri = AssetPath.Parse("/Content/Materials/Stone.omat.json"),
                 },
@@ -110,7 +110,7 @@ public sealed class GeometryComponentTests
                         new MaterialsSlotData
                         {
                             GeometryUri = AssetPath.Parse("/Content/Meshes/Pillar.geometry"),
-                            SlotId = Guid.Parse("30000000-0000-0000-0000-000000000002"),
+                            SurfaceId = Guid.Parse("30000000-0000-0000-0000-000000000002"),
                             LayoutRevision = "rev-pillar-1",
                             MaterialUri = AssetPath.Parse("/Content/Materials/MossyStone.omat.json"),
                         },

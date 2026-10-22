@@ -226,14 +226,14 @@ void RenderableComponent::RebuildLocalBoundsCache()
 void RenderableComponent::RebuildSubmeshStateCache(
   const data::GeometryAsset* previous_geometry)
 {
-  auto previous_materials = std::move(slot_materials_);
-  slot_materials_.clear();
+  auto previous_materials = std::move(surface_materials_);
+  surface_materials_.clear();
   submesh_state_.clear();
   if (!geometry_asset_) {
     return;
   }
-  const auto& slots = geometry_asset_->MaterialSlots().slots;
-  slot_materials_.resize(slots.size());
+  const auto& surfaces = geometry_asset_->Surfaces().surfaces;
+  surface_materials_.resize(surfaces.size());
   const auto meshes = geometry_asset_->Meshes();
   submesh_state_.resize(meshes.size());
   for (auto&& [lod_states, mesh] : std::views::zip(submesh_state_, meshes)) {
@@ -243,20 +243,20 @@ void RenderableComponent::RebuildSubmeshStateCache(
     || previous_geometry->GetAssetKey() != geometry_asset_->GetAssetKey()) {
     return;
   }
-  const auto& previous_slots = previous_geometry->MaterialSlots().slots;
-  for (std::size_t index = 0; index < slots.size(); ++index) {
-    const auto previous = std::ranges::find(
-      previous_slots, slots.at(index).slot_id, &data::MaterialSlot::slot_id);
-    if (previous == previous_slots.end()) {
+  const auto& previous_surfaces = previous_geometry->Surfaces().surfaces;
+  for (std::size_t index = 0; index < surfaces.size(); ++index) {
+    const auto previous = std::ranges::find(previous_surfaces,
+      surfaces.at(index).surface_id, &data::Surface::surface_id);
+    if (previous == previous_surfaces.end()) {
       continue;
     }
     const auto previous_index = static_cast<std::size_t>(
-      std::distance(previous_slots.begin(), previous));
-    slot_materials_.at(index) = previous_materials.at(previous_index);
-    for (const auto& binding : slots.at(index).bindings) {
+      std::distance(previous_surfaces.begin(), previous));
+    surface_materials_.at(index) = previous_materials.at(previous_index);
+    for (const auto& binding : surfaces.at(index).bindings) {
       submesh_state_.at(binding.lod_index.get())
         .at(binding.submesh_index.get())
-        .override_material = slot_materials_.at(index);
+        .override_material = surface_materials_.at(index);
     }
   }
 }
@@ -458,33 +458,33 @@ void RenderableComponent::SetAllSubmeshesVisible(bool visible) noexcept
   }
 }
 
-auto RenderableComponent::SetMaterialOverride(const data::MaterialSlotId slot,
+auto RenderableComponent::SetMaterialOverride(const data::SurfaceId surface,
   std::shared_ptr<const data::MaterialAsset> material) noexcept -> bool
 {
   if (!geometry_asset_) {
     return false;
   }
-  const auto& slots = geometry_asset_->MaterialSlots().slots;
+  const auto& surfaces = geometry_asset_->Surfaces().surfaces;
   const auto declaration
-    = std::ranges::find(slots, slot, &data::MaterialSlot::slot_id);
-  if (declaration == slots.end()) {
+    = std::ranges::find(surfaces, surface, &data::Surface::surface_id);
+  if (declaration == surfaces.end()) {
     return false;
   }
   const auto index
-    = static_cast<std::size_t>(std::distance(slots.begin(), declaration));
+    = static_cast<std::size_t>(std::distance(surfaces.begin(), declaration));
   for (const auto& binding : declaration->bindings) {
     submesh_state_.at(binding.lod_index.get())
       .at(binding.submesh_index.get())
       .override_material = material;
   }
-  slot_materials_.at(index) = std::move(material);
+  surface_materials_.at(index) = std::move(material);
   return true;
 }
 
 auto RenderableComponent::ClearMaterialOverride(
-  const data::MaterialSlotId slot) noexcept -> bool
+  const data::SurfaceId surface) noexcept -> bool
 {
-  return SetMaterialOverride(slot, nullptr);
+  return SetMaterialOverride(surface, nullptr);
 }
 
 void RenderableComponent::SetMaterialOverride(const data::LodIndex lod,

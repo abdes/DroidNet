@@ -52,7 +52,7 @@ struct GlbImportJob::PlannedGlbImport final {
   std::unordered_map<std::string, PlanItemId> texture_by_source_id;
   std::vector<PlanItemId> texture_items;
   std::vector<PlanItemId> material_items;
-  std::vector<PlanItemId> material_slots;
+  std::vector<PlanItemId> surfaces;
   std::vector<PlanItemId> geometry_items;
   std::vector<PlanItemId> scene_items;
 };
@@ -201,7 +201,7 @@ auto GlbImportJob::ExecuteSessionAsync(ImportSession& session)
   }
 
   ReportPhaseProgress(ImportPhase::kFinalizing, 0.9F, "Finalizing import...");
-  session.MarkMaterialSlotSourceProcessed();
+  session.MarkSurfaceSourceProcessed();
   auto report = co_await FinalizeWithTelemetry(session);
 
   ReportPhaseProgress(
@@ -354,7 +354,7 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
       const auto id
         = plan_.planner.AddMaterialAsset(payload.item.material.name, handle);
       plan_.material_items.push_back(id);
-      plan_.material_slots.push_back(id);
+      plan_.surfaces.push_back(id);
 
       auto add_dep = [&](const MaterialTextureBinding& binding) -> void {
         if (!binding.assigned || binding.source_id.empty()) {
@@ -401,10 +401,9 @@ auto GlbImportJob::BuildPlan(ParsedGlbAsset& asset,
       const auto geometry_id = plan_.planner.AddGeometryAsset(
         payload.item.mesh_name, geometry_handle);
       plan_.planner.AddDependency(geometry_id, mesh_build_id);
-      for (const auto slot : payload.item.material_slots_used) {
-        if (slot < plan_.material_slots.size()) {
-          plan_.planner.AddDependency(
-            geometry_id, plan_.material_slots.at(slot));
+      for (const auto surface : payload.item.surfaces_used) {
+        if (surface < plan_.surfaces.size()) {
+          plan_.planner.AddDependency(geometry_id, plan_.surfaces.at(surface));
         }
       }
       plan_.geometry_items.push_back(geometry_id);
@@ -509,7 +508,7 @@ auto GlbImportJob::ExecutePlan(PlannedGlbImport& plan, ImportSession& session)
       .planner = plan.planner,
       .payloads = plan.payloads,
       .steps = plan.plan,
-      .material_slots = plan.material_slots,
+      .surfaces = plan.surfaces,
       .geometry_items = plan.geometry_items,
     };
 

@@ -52,8 +52,6 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/MaterialSlotId.h>
-#include <Oxygen/Data/MaterialSlotInventory.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
@@ -66,6 +64,8 @@
 #include <Oxygen/Data/ScriptResource.h>
 #include <Oxygen/Data/SourceKey.h>
 #include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/OxCo/Event.h>
 #include <Oxygen/OxCo/Nursery.h>
@@ -149,17 +149,17 @@ namespace {
       renderable.geometry_key
         = data::AssetKey::FromVirtualPath("/test/bound-cube.ogeo");
       assignment.material_key = material;
-      assignment.slot_id
-        = data::MaterialSlotId::FromStableIdentity("generation-test-slot");
-      const std::array slots { data::MaterialSlot {
-        .slot_id = assignment.slot_id,
+      assignment.surface_id
+        = data::SurfaceId::FromStableIdentity("generation-test-slot");
+      const std::array surfaces { data::Surface {
+        .surface_id = assignment.surface_id,
         .display_name = "fixture",
         .bindings = { { .lod_index = oxygen::data::LodIndex {},
           .submesh_index = oxygen::data::SubmeshIndex {},
           .default_material_key = material, }, }, }, };
-      const auto revision = data::ComputeMaterialSlotLayoutRevision(slots);
+      const auto revision = data::ComputeSurfaceLayoutRevision(surfaces);
       if (!revision) {
-        throw std::logic_error("Invalid fixture material slot layout");
+        throw std::logic_error("Invalid fixture surface layout");
       }
       assignment.layout_revision = revision.value();
     }
@@ -233,8 +233,8 @@ namespace {
       mesh.mesh_view_count = 1U;
       data::pak::geometry::SubMeshDesc submesh {};
       submesh.name_offset = strings.Add("fixture");
-      submesh.slot_id
-        = data::MaterialSlotId::FromStableIdentity("generation-test-slot");
+      submesh.surface_id
+        = data::SurfaceId::FromStableIdentity("generation-test-slot");
       submesh.material_asset_key = recipe.scene_material;
       submesh.mesh_view_count = 1U;
       constexpr data::pak::geometry::MeshViewDesc view {

@@ -77,7 +77,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, SceneDescriptorSchemaCaseTest,
     "renderables": [
       { "node": 1, "geometry_ref": "/.cooked/Geometry/cube.ogeo",
         "material_overrides": [{
-          "slot_id": "00000000-0000-0000-0000-000000000001",
+          "surface_id": "00000000-0000-0000-0000-000000000001",
           "material_ref": "/.cooked/Materials/cube.omat",
           "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001"
         }]

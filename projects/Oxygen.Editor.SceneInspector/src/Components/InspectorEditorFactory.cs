@@ -24,7 +24,7 @@ internal static class InspectorEditorFactory
     /// <summary>Creates construction operations while leaving cached instance ownership with the host.</summary>
     /// <param name="hosting">The existing WinUI hosting context.</param>
     /// <param name="assets">The shared asset catalog.</param>
-    /// <param name="slots">The geometry slot inventory.</param>
+    /// <param name="surfaces">The geometry surface inventory.</param>
     /// <param name="session">The project session the inspector belongs to.</param>
     /// <param name="logger">The scoped logging factory.</param>
     /// <param name="authoring">The authoring of the scene being inspected.</param>
@@ -33,7 +33,7 @@ internal static class InspectorEditorFactory
     internal static Dictionary<Type, Func<ComponentPropertyEditor>> Create(
         HostingContext hosting,
         IAssetFeed assets,
-        IGeometryMaterialSlotProvider slots,
+        IGeometrySurfaceProvider surfaces,
         IProjectSession session,
         ILoggerFactory? logger,
         Func<SceneAuthoring?> authoring,
@@ -41,7 +41,7 @@ internal static class InspectorEditorFactory
         => new()
         {
             [typeof(TransformComponent)] = () => new TransformViewModel(logger, authoring),
-            [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, slots, session, authoring, logger),
+            [typeof(GeometryComponent)] = () => new GeometryViewModel(hosting, assets, surfaces, session, authoring, logger),
             [typeof(PerspectiveCamera)] = () => new PerspectiveCameraViewModel(authoring),
             [typeof(OrthographicCamera)] = () => new OrthographicCameraViewModel(authoring),
             [typeof(DirectionalLightComponent)] = () => new DirectionalLightViewModel(authoring),

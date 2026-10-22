@@ -50,7 +50,7 @@ metadata.
 - `project-services.md`: project root, authoring roots, local roots, and
   cooked-root policy.
 - `material-editor.md`: material create/open/edit/cook workflow.
-- `property-inspector.md`: Geometry material slot consumes picker results.
+- `property-inspector.md`: Geometry surface consumes picker results.
 - `diagnostics-operation-results.md`: operation kinds, domains, and code
   prefixes.
 
@@ -313,7 +313,7 @@ identity and must update every authored referrer in one transaction.
 
 - **Reference index.** Built on demand from saved authored files, cached until a
   catalog change and rebuilt inside every relocation. Each file kind is read
-  structurally: scene component and material-slot geometry/material URIs
+  structurally: scene component and surface-override geometry/material URIs
   (component and targeted overrides), the exposure metering mask and
   `ExtraAssets`; material texture paths; geometry descriptor material, buffer
   and skeleton paths; texture descriptor `source`, `sources[].file` and
@@ -373,7 +373,7 @@ identity and must update every authored referrer in one transaction.
   catalog like any other change. Every move, rewrite, restore, delete and
   document change is logged.
 - **Open documents.** Nothing reloads or closes on a rename or move. A scene
-  re-points the references of the affected nodes, slot targets, environment mask
+  re-points the references of the affected nodes, surface targets, environment mask
   and `ExtraAssets` in memory; a material re-points its texture paths; a moved
   material document re-points its own path and keeps its history. These changes
   are outside undo history and leave the document clean: the owner records the
@@ -522,7 +522,7 @@ ED-M06 is complete when:
    default material-create target away from a valid authoring content root.
 9. `AssetChangeKind.Relocated` removes the previous URI row and adds/updates the
    new URI row.
-10. serializer round-trip test confirms scene material slots contain only asset
+10. serializer round-trip test confirms scene surface overrides contain only asset
     URIs, not browser state or filesystem paths.
 
 Expected tests:

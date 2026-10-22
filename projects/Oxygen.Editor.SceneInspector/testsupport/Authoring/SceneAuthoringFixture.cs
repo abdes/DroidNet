@@ -73,8 +73,8 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     /// <summary>Gets the shared selection authority wired into the Explorer and Inspector.</summary>
     public SceneSelectionService Selection { get; } = new();
 
-    /// <summary>Gets the material slot inventories the views read; only the geometry the fixture publishes is cooked.</summary>
-    public FakeMaterialSlotProvider Slots { get; } = new();
+    /// <summary>Gets the surface inventories the views read; only the geometry the fixture publishes is cooked.</summary>
+    public FakeSurfaceProvider Surfaces { get; } = new();
 
     public Scene Scene { get; }
 
@@ -85,12 +85,12 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     /// <summary>Gets the engine preview the views read.</summary>
     public Mock<IScenePreview> Preview { get; } = new();
 
-    public static MaterialSlotTarget TargetFor(AssetPath geometry) => new(geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+    public static SurfaceTarget TargetFor(AssetPath geometry) => new(geometry, Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
 
-    /// <summary>Publishes the inventory of a geometry as one "Surface" slot, the one <see cref="TargetFor"/> names.</summary>
+    /// <summary>Publishes the inventory of a geometry as one surface named "Surface", the one <see cref="TargetFor"/> names.</summary>
     /// <param name="geometry">The geometry.</param>
     public void PublishSurface(AssetPath geometry)
-        => this.Slots.Publish(new GeometryMaterialSlotMetadata(geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64), [new(TargetFor(geometry).SlotId, "Surface", [new(0, 0, Guid.Empty)])]));
+        => this.Surfaces.Publish(new GeometrySurfaceMetadata(geometry, Guid.Parse("20000000-0000-0000-0000-000000000001"), new string('a', 64), [new(TargetFor(geometry).SurfaceId, "Surface", [new(0, 0, Guid.Empty)])]));
 
     /// <summary>Writes the node selection of the fixture's document through the shared selection service, as the Explorer, a viewport or another panel does.</summary>
     /// <param name="nodes">The selected nodes, of which the last is primary; none clears the selection.</param>
@@ -100,7 +100,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
     public void Dispose()
     {
         this.Session.Dispose();
-        this.Slots.Dispose();
+        this.Surfaces.Dispose();
         this.TestScene.Dispose();
     }
 }

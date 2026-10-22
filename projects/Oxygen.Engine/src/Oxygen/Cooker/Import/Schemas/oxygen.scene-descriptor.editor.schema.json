@@ -462,10 +462,10 @@
           "x-editor-renderer": "asset-picker"
         },
         "material_overrides": {
-          "x-editor-label": "Material Slots",
+          "x-editor-label": "Surface Materials",
           "x-editor-group": "Geometry",
           "x-editor-order": 10,
-          "x-editor-renderer": "material-slots"
+          "x-editor-renderer": "surface-materials"
         }
       }
     },

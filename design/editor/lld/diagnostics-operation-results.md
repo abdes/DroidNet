@@ -544,7 +544,7 @@ ED-M05 producers and operation kinds:
 | material document service                    | `Material.EditScalar`       | `MaterialAuthoring`                             |
 | material document service                    | `Material.Save`             | `Document`                                      |
 | material document service / content pipeline | `Material.Cook`             | `ContentPipeline`                               |
-| geometry material slot command               | `Material.AssignToGeometry` | `SceneAuthoring` / `AssetIdentity` / `LiveSync` |
+| geometry surface command                     | `Material.AssignToGeometry` | `SceneAuthoring` / `AssetIdentity` / `LiveSync` |
 | material picker/content explorer             | `Asset.Query`               | `AssetIdentity`                                 |
 | material picker/content explorer             | `Asset.Resolve`             | `AssetIdentity`                                 |
 | material picker/content explorer             | `Material.Pick`             | `AssetIdentity`                                 |

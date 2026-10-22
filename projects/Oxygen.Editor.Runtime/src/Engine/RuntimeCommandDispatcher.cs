@@ -169,7 +169,7 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
         => command switch
         {
             RuntimeSetGeometry geometry => new(geometry.NodeId, AssetRequestKind.Geometry),
-            RuntimeSetMaterialOverride material when material.SlotId != Guid.Empty => new(material.NodeId, AssetRequestKind.Material, material.SlotId, material.GeometryPath),
+            RuntimeSetMaterialOverride material when material.SurfaceId != Guid.Empty => new(material.NodeId, AssetRequestKind.Material, material.SurfaceId, material.GeometryPath),
             RuntimeSetEnvironment => new(NodeId.Empty, AssetRequestKind.EnvironmentMask),
             _ => null,
         };
@@ -434,5 +434,5 @@ internal sealed partial class RuntimeCommandDispatcher : IRuntimeWorldCommands, 
                     ? new(operationId, requestedRun, RuntimeCommandStatus.Rejected, "The runtime run is no longer current.") : null;
 
     [StructLayout(LayoutKind.Auto)]
-    private readonly record struct AssetRequestTarget(NodeId NodeId, AssetRequestKind Kind, Guid SlotId = default, string? GeometryPath = null);
+    private readonly record struct AssetRequestTarget(NodeId NodeId, AssetRequestKind Kind, Guid SurfaceId = default, string? GeometryPath = null);
 }

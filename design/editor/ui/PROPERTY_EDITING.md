@@ -152,7 +152,7 @@ multipliers never expose a color picker.
 finite/increasing-EV validation and add/remove policy while borrowing the
 Exposure section's shared scene command, gesture and diagnostic owner. Its view
 receives the parent-owned instance and creates the preview points. Every
-asset-assigning flyout (geometry, material slots, cubemaps, the metering mask,
+asset-assigning flyout (geometry, surfaces, cubemaps, the metering mask,
 scene references, script slots, script asset parameters and material texture
 channels) uses the shared `AssetPicker` of
 [`Oxygen.Editor.Pickers`](../../../projects/Oxygen.Editor.Pickers/README.md),
@@ -176,7 +176,7 @@ wheel-idle work, edit serialization, pending completion and terminal disposal.
 Transform's model retains field values, mixed states and source diagnostics. The
 host uses `InspectorEditorFactory` with its existing scoped dependencies and
 preserves cached editor instances; `InspectorSelectionObserver` owns
-component/material-slot subscriptions and suppresses queued callbacks from old
+component/surface subscriptions and suppresses queued callbacks from old
 selections.
 
 Shared Editor.Controls is the sole PropertyCard/PropertiesExpander authority.

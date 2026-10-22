@@ -373,7 +373,7 @@ NOLINT_TEST(GeometryDescriptorImportJobTest,
             "submeshes",
             json::array({
               json {
-                { "slot_id", kAuthoredSlotId },
+                { "surface_id", kAuthoredSurfaceId },
                 { "material_ref", "/.cooked/Materials/default.omat" },
                 { "views", json::array({ json { { "view_ref", "lod0" } } }) },
               },

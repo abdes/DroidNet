@@ -85,11 +85,11 @@ public static class SceneEditCodes
     /// <summary>A warning: a restored reference names an asset deleted in this session, so it shows as missing.</summary>
     public const string AssetReferenceDeleted = DiagnosticCodes.ScenePrefix + "AssetReference.Deleted";
 
-    /// <summary>A material slot edit was built against another geometry or inventory revision.</summary>
-    public const string MaterialSlotStale = DiagnosticCodes.ScenePrefix + "MaterialSlot.Stale";
+    /// <summary>A surface material edit was built against another geometry or inventory revision.</summary>
+    public const string SurfaceStale = DiagnosticCodes.ScenePrefix + "Surface.Stale";
 
-    /// <summary>The geometry's material slot inventory could not be read.</summary>
-    public const string MaterialSlotInventoryUnavailable = DiagnosticCodes.ScenePrefix + "MaterialSlot.InventoryUnavailable";
+    /// <summary>The geometry's surface inventory could not be read.</summary>
+    public const string SurfaceInventoryUnavailable = DiagnosticCodes.ScenePrefix + "Surface.InventoryUnavailable";
 
     /// <summary>The starting camera is not a camera node of the scene.</summary>
     public const string StartingCameraInvalid = DiagnosticCodes.ScenePrefix + "StartingCamera.Invalid";

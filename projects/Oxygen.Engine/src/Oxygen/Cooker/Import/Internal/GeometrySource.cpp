@@ -25,8 +25,8 @@
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/BufferDescriptorSidecar.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/JsonSchemaValidation.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/ProceduralMeshDefaults.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
 
@@ -283,19 +283,19 @@ namespace {
         const auto& submesh_doc = submeshes.at(submesh_index);
         const auto submesh_path
           = lod_path + ".submeshes[" + std::to_string(submesh_index) + "]";
-        const auto slot = data::MaterialSlotId::FromString(
-          submesh_doc.at("slot_id").get<std::string>());
-        if (!slot || slot.value().IsNil()) {
+        const auto surface = data::SurfaceId::FromString(
+          submesh_doc.at("surface_id").get<std::string>());
+        if (!surface || surface.value().IsNil()) {
           AddDiagnostic(diagnostics, source_path, ImportSeverity::kError,
-            "geometry.descriptor.slot_id_invalid",
-            "Submesh requires a non-nil canonical material slot identity",
-            submesh_path + ".slot_id");
+            "geometry.descriptor.surface_id_invalid",
+            "Submesh requires a non-nil canonical surface identity",
+            submesh_path + ".surface_id");
           return std::nullopt;
         }
         auto submesh = GeometrySource::Submesh {
           .name = submesh_doc.value(
             "name", "submesh_" + std::to_string(submesh_index)),
-          .slot_id = slot.value(),
+          .surface_id = surface.value(),
           .material = submesh_doc.at("material_ref").get<std::string>(),
           .bounds = submesh_doc.contains("bounds")
             ? ReadBounds(submesh_doc.at("bounds"))

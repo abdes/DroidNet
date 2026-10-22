@@ -108,13 +108,13 @@ problem type per meaning, and one producer of facts for every window.
 
 - **World** holds the scene model only, and the value types a scene serializes
   when it references another family (`ScriptSlot`, `ScriptValue`,
-  `MaterialsSlot`, `MaterialSlotTarget`, `StartingInputContextData`). It knows
+  `MaterialsSlot`, `SurfaceTarget`, `StartingInputContextData`). It knows
   no family's rules, no project and no document.
 - **Projects** holds the project model: `IProject`, settings, mount points and
   categories. It references no scene type.
 - **Scenes** owns scene documents: their edits, their Explorer layout and their
   file. An edit that changes a reference to another family (a script slot, the
-  starting input contexts, a material slot) is a Scenes edit, validated by that
+  starting input contexts, a surface material) is a Scenes edit, validated by that
   family's rules.
 - **ContentPipeline** cooks, imports, publishes, relocates and inspects every
   family. It calls family rules (slot checks, input priorities) and never states
@@ -135,7 +135,7 @@ its own criterion:
 | Script   | Inspector, Problems, Content Explorer, cook                                                     | Analysis on every change, cook checks   | The analyzer      |
 | Input    | Inspector (Play), Content Explorer, Problems, cook, the future Input Editor                     | Checks on every change, cook priorities | No                |
 | Texture  | Content Explorer import, environment cubemap picker, Material Editor, the future Texture Editor | Import authoring                        | No                |
-| Material | Material Editor, inspector material slots and pickers, LivePreview overrides, relocation        | Relocation rewrites, cook dependencies  | No                |
+| Material | Material Editor, inspector surfaces and pickers, LivePreview overrides, relocation              | Relocation rewrites, cook dependencies  | No                |
 
 So the family modules are what decision 7 itself requires; editor-documents.md
 decisions 3 and 7 and the module catalogue of editor-module-architecture.md
@@ -368,7 +368,7 @@ classDiagram
     }
     class MaterialsSlot {
         Material: Uri of a .omat
-        Target: GeometryUri, SlotId, LayoutRevision
+        Target: GeometryUri, SurfaceId, LayoutRevision
     }
     class ScriptSlot {
         Id: Guid
@@ -416,14 +416,14 @@ classDiagram
 ```
 
 The scene's data stays in World; each reference is checked by the family it
-points to. Material slots are resolved against the geometry's layout, and Scenes
-owns that (`SetMaterialSlot`, `RemoveMaterialSlots`, `MaterialSlotEdits`);
+points to. Surfaces are resolved against the geometry's layout, and Scenes
+owns that (`SetSurfaceMaterial`, `RemoveSurfaceMaterials`, `SurfaceMaterialEdits`);
 script slots and starting contexts are checked the same way, by
 `ScriptSlotRules` and `StartingContextRules`, in the inspector and in the cook.
 
 The diagram leaves out the geometry's LOD-or-submesh slot scope: nothing authors
 or applies it (abdes/DroidNet#77), and material overrides target the engine's
-slot identity, which already covers every LOD and submesh the slot binds.
+surface identity, which already covers every LOD and submesh the surface binds.
 
 ### 5.7 From asset to editor
 

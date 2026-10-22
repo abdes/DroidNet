@@ -63,7 +63,7 @@ The code follows this design.
      inverse.
    - **A transaction** records one user action made of several changes, or one
      that can fail part way: moving, duplicating or pasting several nodes,
-     applying a material to many slots, a drag that changes a value
+     applying a material to many surfaces, a drag that changes a value
      continuously. Begin it, add the changes, commit when the action succeeds
      (one entry, one label in the Undo menu), roll back when it fails, so a
      failure leaves no partial entry. An inner transaction joins its outer one.

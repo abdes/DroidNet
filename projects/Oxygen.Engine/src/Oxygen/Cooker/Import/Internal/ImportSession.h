@@ -22,7 +22,7 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportSessionToken.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/api_export.h>
 #include <Oxygen/OxCo/Co.h>
 
@@ -224,14 +224,14 @@ public:
 
   //! Adds candidate identity metadata for an emitted geometry. Returned only
   //! with a successful final report; source publication remains caller-owned.
-  OXGN_COOK_API auto AddMaterialSlotProvenance(
-    MaterialSlotGeometryProvenance geometry) -> void;
+  OXGN_COOK_API auto AddSurfaceProvenance(SurfaceGeometryProvenance geometry)
+    -> void;
 
   //! The complete source geometry set was processed successfully, even if
   //! empty.
-  auto MarkMaterialSlotSourceProcessed() noexcept -> void
+  auto MarkSurfaceSourceProcessed() noexcept -> void
   {
-    material_slot_source_processed_ = true;
+    surface_source_processed_ = true;
   }
 
   //! Get all diagnostics collected so far.
@@ -286,9 +286,9 @@ private:
     resource_descriptor_emitter_;
 
   mutable std::mutex diagnostics_mutex_;
-  std::mutex slot_provenance_mutex_;
-  std::vector<MaterialSlotGeometryProvenance> slot_provenance_;
-  bool material_slot_source_processed_ = false;
+  std::mutex surface_provenance_mutex_;
+  std::vector<SurfaceGeometryProvenance> surface_provenance_;
+  bool surface_source_processed_ = false;
   std::optional<ImportSessionToken> table_participation_;
   std::optional<ImportSessionToken> index_participation_;
   std::vector<ImportDiagnostic> diagnostics_;

@@ -385,13 +385,13 @@ namespace {
           auto material
             = loader_->GetMaterialAsset(assignment->material_key, asset);
           const auto current = assignment->layout_revision
-            == geometry->MaterialSlots().layout_revision;
+            == geometry->Surfaces().layout_revision;
           if (!material || !current
             || !renderable.SetMaterialOverride(
-              assignment->slot_id, std::move(material))) {
+              assignment->surface_id, std::move(material))) {
             Issue(asset, node_index,
               "a material override is not loaded or no longer matches the "
-              "geometry's material slots");
+              "geometry's surfaces");
           }
         }
       }

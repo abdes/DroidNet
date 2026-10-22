@@ -40,7 +40,7 @@ public sealed partial class ContentPriorityTests : DroidNet.Tests.VisualUserInte
         await fixture.InitializeAsync(timeout.Token).ConfigureAwait(true);
         await fixture.ApplyContentPriorityAsync(project, timeout.Token).ConfigureAwait(true);
         var nodeId = fixture.Source.RootNodes.Single().Id;
-        _ = (await fixture.Authoring.ExecuteAsync(new SetMaterialSlot([nodeId], await fixture.ReadSingleMaterialSlotAsync(nodeId, this.TestContext.CancellationToken).ConfigureAwait(true), uri)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
+        _ = (await fixture.Authoring.ExecuteAsync(new SetSurfaceMaterial([nodeId], await fixture.ReadSingleSurfaceAsync(nodeId, this.TestContext.CancellationToken).ConfigureAwait(true), uri)).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = await WaitForNodeAsync(fixture, nodeId, value => value.MaterialBaseColors.Length == 1 && Vector4.Distance(value.MaterialBaseColors[0], red) < 0.001f, timeout.Token).ConfigureAwait(true);
         var revision = fixture.Document.History.Position;
         var history = fixture.Document.History.UndoStack.Count;

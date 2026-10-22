@@ -9,7 +9,7 @@
 #include <cstdint>
 #include <iterator>
 
-#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 
 // Project

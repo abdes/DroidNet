@@ -8,8 +8,8 @@
 
 #include <Oxygen/Base/Compilers.h>
 #include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
@@ -210,7 +210,7 @@ struct SubMeshDesc {
   //! Submesh name, in the geometry descriptor's string table.
   core::StringTableOffsetT name_offset = 0;
   AssetKey material_asset_key; // AssetKey reference to MaterialAsset
-  MaterialSlotId slot_id; // Semantic declaration, shared only explicitly
+  SurfaceId surface_id; // Semantic declaration, shared only explicitly
   uint32_t mesh_view_count = 0; // Number of MeshViews in this SubMesh
   float bounding_box_min[3] = {}; // AABB min coordinates
   float bounding_box_max[3] = {}; // AABB max coordinates

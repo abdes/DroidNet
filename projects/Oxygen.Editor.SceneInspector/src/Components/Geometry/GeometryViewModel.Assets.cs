@@ -49,7 +49,7 @@ public sealed partial class GeometryViewModel
             || previousGeometry?.CookStatus?.Freshness != currentGeometry?.CookStatus?.Freshness
             || previousGeometry?.CookStatus?.HasAvailableOutput != currentGeometry?.CookStatus?.HasAvailableOutput)
         {
-            _ = this.RefreshMaterialSlotsAsync();
+            _ = this.RefreshSurfacesAsync();
         }
 
         if (!this.IsMixed && this.SelectedGeometry is { } selected && assets.Find(selected) is { } current)

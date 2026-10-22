@@ -106,9 +106,7 @@ class RetainedImportCliTests(unittest.TestCase):
         self.assertNotIn("\\\\?\\", record.read_text(encoding="utf-8"))
         self.run_cli(["gltf", "--record", record], succeeds=True)
         replayed = json.loads(record.read_text(encoding="utf-8"))
-        self.assertEqual(
-            first["material_slot_provenance"], replayed["material_slot_provenance"]
-        )
+        self.assertEqual(first["surface_provenance"], replayed["surface_provenance"])
         self.assertNotEqual(
             first["published_generation"], replayed["published_generation"]
         )
@@ -118,7 +116,7 @@ class RetainedImportCliTests(unittest.TestCase):
             content
             / ".cooked"
             / "imports"
-            / replayed["material_slot_provenance"]["source_identity"]
+            / replayed["surface_provenance"]["source_identity"]
         )
         previous = generations / first["published_generation"]["id"]
         selected = generations / replayed["published_generation"]["id"]

@@ -170,7 +170,7 @@ Actors:
    reference (`SceneAssetReferences.Runtime`, covering both `OverrideSlots` and
    `TargetedOverrides`) on open and on `Document.ContentReplaced`, then follows
    `SceneAuthoring.Changed` (`NodesAdded`, `NodesRemoved`, `ComponentAdded`,
-   `ComponentRemoved`, `GeometryChanged`, `MaterialSlotsChanged`), and cancels
+   `ComponentRemoved`, `GeometryChanged`, `SurfaceMaterialsChanged`), and cancels
    only when the scene stops referencing the asset or the document closes.
    Selection never demands or cancels anything, and no view requests demand.
 8. **Events on the owner's thread, without WinUI dispatchers.** LivePreview

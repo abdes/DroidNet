@@ -44,10 +44,10 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 
 namespace oxygen::content::import::test {
@@ -600,8 +600,8 @@ namespace {
     mesh.info.standard.bounding_box_max[2] = descriptor.bounding_box_max[2];
 
     auto submesh = geometry::SubMeshDesc {};
-    submesh.slot_id
-      = data::MaterialSlotId::FromStableIdentity("PhysicsPhase3/cloth");
+    submesh.surface_id
+      = data::SurfaceId::FromStableIdentity("PhysicsPhase3/cloth");
     submesh.name_offset = strings.Add("cloth_submesh");
     submesh.mesh_view_count = 1U;
     submesh.bounding_box_min[0] = descriptor.bounding_box_min[0];

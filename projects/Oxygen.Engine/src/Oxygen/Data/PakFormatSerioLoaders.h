@@ -363,9 +363,9 @@ inline auto Load(AnyReader& reader,
 {
   auto pack = reader.ScopedAlignment(1);
   CHECK_RESULT(reader.ReadInto(record.node_index));
-  data::MaterialSlotId::ByteArray bytes {};
+  data::SurfaceId::ByteArray bytes {};
   CHECK_RESULT(reader.ReadBlobInto(std::as_writable_bytes(std::span(bytes))));
-  record.slot_id = data::MaterialSlotId::FromBytes(bytes);
+  record.surface_id = data::SurfaceId::FromBytes(bytes);
   CHECK_RESULT(reader.ReadInto(record.material_key));
   CHECK_RESULT(reader.ReadBlobInto(
     std::as_writable_bytes(std::span(record.layout_revision))));

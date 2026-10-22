@@ -20,9 +20,9 @@
 #include <Oxygen/Cooker/Import/ImportSourceDocument.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
 #include <Oxygen/Cooker/Import/Internal/Utils/ImportSettingsUtils.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/Naming.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 
 namespace oxygen::content::import {
 
@@ -129,10 +129,10 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
     return std::nullopt;
   }
   request.asset_virtual_path = settings.virtual_path;
-  auto provenance_json = settings.material_slot_provenance_json;
-  if (!settings.material_slot_provenance_path.empty()) {
+  auto provenance_json = settings.surface_provenance_json;
+  if (!settings.surface_provenance_path.empty()) {
     if (!provenance_json.empty()) {
-      error_stream << "ERROR: supply material-slot provenance inline or by "
+      error_stream << "ERROR: supply surface provenance inline or by "
                       "file, not both\n";
       return std::nullopt;
     }
@@ -140,36 +140,33 @@ auto SceneImportSettings::Prepare(const ImportFormat expected_format,
   }
   try {
     if (!provenance_json.empty()) {
-      request.material_slot_provenance
-        = MaterialSlotProvenance::Parse(provenance_json);
+      request.surface_provenance = SurfaceProvenance::Parse(provenance_json);
     }
-    if (!settings.material_slot_source_identity.empty()) {
-      const auto identity
-        = Uuid::FromString(settings.material_slot_source_identity);
+    if (!settings.surface_source_identity.empty()) {
+      const auto identity = Uuid::FromString(settings.surface_source_identity);
       if (!identity) {
-        error_stream << "ERROR: material_slot_source_identity must be a "
+        error_stream << "ERROR: surface_source_identity must be a "
                         "canonical UUIDv7\n";
         return std::nullopt;
       }
-      if (request.material_slot_provenance
-        && request.material_slot_provenance->SourceIdentity()
-          != identity.value()) {
-        error_stream << "ERROR: material-slot provenance belongs to another "
+      if (request.surface_provenance
+        && request.surface_provenance->SourceIdentity() != identity.value()) {
+        error_stream << "ERROR: surface provenance belongs to another "
                         "source identity\n";
         return std::nullopt;
       }
-      if (!request.material_slot_provenance) {
-        request.material_slot_provenance
-          = std::make_shared<const MaterialSlotProvenance>(identity.value());
+      if (!request.surface_provenance) {
+        request.surface_provenance
+          = std::make_shared<const SurfaceProvenance>(identity.value());
       }
     }
-    if (!request.material_slot_provenance) {
-      error_stream << "ERROR: model import requires retained material-slot "
+    if (!request.surface_provenance) {
+      error_stream << "ERROR: model import requires retained surface "
                       "provenance or source identity\n";
       return std::nullopt;
     }
   } catch (const std::exception& error) {
-    error_stream << "ERROR: invalid material-slot provenance: " << error.what()
+    error_stream << "ERROR: invalid surface provenance: " << error.what()
                  << '\n';
     return std::nullopt;
   }
@@ -286,15 +283,14 @@ namespace internal {
       return std::nullopt;
     }
     auto provenance = std::optional<ImportSourceDocument> {};
-    if (!settings.material_slot_provenance_path.empty()) {
-      if (!settings.material_slot_provenance_json.empty()) {
-        error_stream << "ERROR: supply material-slot provenance inline or by "
+    if (!settings.surface_provenance_path.empty()) {
+      if (!settings.surface_provenance_json.empty()) {
+        error_stream << "ERROR: supply surface provenance inline or by "
                         "file, not both\n";
         return std::nullopt;
       }
-      provenance
-        = ImportSourceDocument::Load(settings.material_slot_provenance_path,
-          "material-slot provenance", error_stream, captured_inputs.get());
+      provenance = ImportSourceDocument::Load(settings.surface_provenance_path,
+        "surface provenance", error_stream, captured_inputs.get());
       if (!provenance.has_value()) {
         return std::nullopt;
       }

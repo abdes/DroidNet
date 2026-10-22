@@ -664,34 +664,34 @@ namespace Oxygen::Interop::World {
   }
 
   void OxygenWorld::SetMaterialOverride(
-    System::Guid nodeId, String^ geometryUri, System::Guid slotId,
+    System::Guid nodeId, String^ geometryUri, System::Guid surfaceId,
     String^ layoutRevision, String^ materialUri, System::Byte intent,
     Action<System::UInt64, String^>^ onFailure) {
-    SetMaterialOverride(nodeId, geometryUri, slotId, layoutRevision, materialUri, intent,
+    SetMaterialOverride(nodeId, geometryUri, surfaceId, layoutRevision, materialUri, intent,
       onFailure, nullptr);
   }
 
   void OxygenWorld::SetMaterialOverride(
-    System::Guid nodeId, String^ geometryUri, System::Guid slotId,
+    System::Guid nodeId, String^ geometryUri, System::Guid surfaceId,
     String^ layoutRevision, String^ materialUri, System::Byte intent,
     Action<System::UInt64, String^>^ onFailure,
     Action<System::UInt64>^ onSuccess) {
-    const auto native_intent = static_cast<MaterialSlotAssignmentIntent>(intent);
-    if (native_intent != MaterialSlotAssignmentIntent::kObservedEdit
-      && native_intent != MaterialSlotAssignmentIntent::kRetainedAssignment) {
+    const auto native_intent = static_cast<SurfaceMaterialAssignmentIntent>(intent);
+    if (native_intent != SurfaceMaterialAssignmentIntent::kObservedEdit
+      && native_intent != SurfaceMaterialAssignmentIntent::kRetainedAssignment) {
       throw gcnew ArgumentOutOfRangeException("intent");
     }
     if (String::IsNullOrWhiteSpace(geometryUri)) {
       throw gcnew ArgumentException("Material assignment requires geometry identity.", "geometryUri");
     }
-    const auto native_slot = oxygen::data::MaterialSlotId::FromString(
-      msclr::interop::marshal_as<std::string>(slotId.ToString("D")));
-    if (!native_slot || native_slot.value().IsNil()) {
-      throw gcnew ArgumentException("Material slot identity must not be empty.", "slotId");
+    const auto native_surface = oxygen::data::SurfaceId::FromString(
+      msclr::interop::marshal_as<std::string>(surfaceId.ToString("D")));
+    if (!native_surface || native_surface.value().IsNil()) {
+      throw gcnew ArgumentException("Surface identity must not be empty.", "surfaceId");
     }
-    MaterialSlotTarget target {
+    SurfaceTarget target {
       .geometry_uri = msclr::interop::marshal_as<std::string>(geometryUri),
-      .slot_id = native_slot.value(),
+      .surface_id = native_surface.value(),
       .layout_revision = {},
     };
     constexpr auto kHexCharactersPerByte = 2U;

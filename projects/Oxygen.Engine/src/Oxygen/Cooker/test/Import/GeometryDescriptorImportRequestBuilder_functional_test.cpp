@@ -61,7 +61,7 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
           "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
           "submeshes": [
             {
-              "slot_id": "018f8f8f-1111-7111-8111-111111111111",
+              "surface_id": "018f8f8f-1111-7111-8111-111111111111",
               "material_ref": "/.cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__" } ]
             }
@@ -112,7 +112,7 @@ NOLINT_TEST(GeometryDescriptorImportRequestBuilderTest,
           "procedural": { "generator": "Cube", "mesh_name": "Cube" },
           "submeshes": [
             {
-              "slot_id": "018f8f8f-1111-7111-8111-111111111111",
+              "surface_id": "018f8f8f-1111-7111-8111-111111111111",
               "material_ref": "/.cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__", "unexpected": true } ]
             }
@@ -164,7 +164,7 @@ NOLINT_TEST(
           "procedural": { "generator": "Cube", "mesh_name": "CubeMesh" },
           "submeshes": [
             {
-              "slot_id": "018f8f8f-1111-7111-8111-111111111111",
+              "surface_id": "018f8f8f-1111-7111-8111-111111111111",
               "material_ref": "/.cooked/Materials/default.omat",
               "views": [ { "view_ref": "__all__" } ]
             }

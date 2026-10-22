@@ -109,7 +109,7 @@ public sealed class AssetRuntimeStatusSourceTests
 
     private static RuntimeAssetRequestStatus Request(Guid runId, Guid projectId, string materialPath, bool? succeeded, string? reason = null)
         => new(
-            new(Guid.NewGuid(), new(runId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid()) { ProjectId = projectId }, new RuntimeSetMaterialOverride(NodeId.New(), "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), materialPath, MaterialSlotAssignmentIntent.ObservedEdit)),
+            new(Guid.NewGuid(), new(runId, SceneId.New(), Guid.NewGuid(), Guid.NewGuid()) { ProjectId = projectId }, new RuntimeSetMaterialOverride(NodeId.New(), "/Content/Mesh.ogeo", Guid.NewGuid(), new string('0', 64), materialPath, SurfaceMaterialAssignmentIntent.ObservedEdit)),
             1,
             succeeded,
             reason);

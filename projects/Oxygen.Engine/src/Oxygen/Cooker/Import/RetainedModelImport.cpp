@@ -38,9 +38,9 @@
 #include <Oxygen/Cooker/Import/ImportReport.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/ImportManifest_schema.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/RetainedModelImport.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/Import/TextureImportSettings.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/Loose/LooseCookedLayout.h>
@@ -139,9 +139,8 @@ namespace {
         + errors.str());
     }
     const auto reject_identity = [](const json& object) -> void {
-      if (object.contains("material_slot_source_identity")
-        || object.contains("material_slot_provenance")
-        || object.contains("output")) {
+      if (object.contains("surface_source_identity")
+        || object.contains("surface_provenance") || object.contains("output")) {
         throw std::invalid_argument(
           "Retained recipe identity belongs to its provenance record");
       }
@@ -179,8 +178,8 @@ namespace {
     const auto content_root = Absolute(
       path.parent_path() / document.at("content_root").get<std::string>());
     RequireWithin(path, content_root);
-    static_cast<void>(MaterialSlotProvenance::Parse(
-      document.at("material_slot_provenance").dump()));
+    static_cast<void>(
+      SurfaceProvenance::Parse(document.at("surface_provenance").dump()));
     static_cast<void>(
       ValidateRecipe(document.at("recipe"), path.parent_path()));
     return document;
@@ -193,7 +192,7 @@ namespace {
       path.parent_path() / record.at("content_root").get<std::string>());
     const auto records = content_root / "imports";
     const auto& source_identity
-      = record.at("material_slot_provenance").at("source_identity");
+      = record.at("surface_provenance").at("source_identity");
     for (const auto& entry : std::filesystem::recursive_directory_iterator(
            base::ToNativePath(records))) {
       if (!entry.is_regular_file() || Absolute(entry.path()) == path
@@ -202,7 +201,7 @@ namespace {
       }
       const auto other_path = Absolute(entry.path());
       const auto other = ReadRecord(other_path, ReadText(other_path));
-      if (other.at("material_slot_provenance").at("source_identity")
+      if (other.at("surface_provenance").at("source_identity")
         == source_identity) {
         throw std::invalid_argument(
           "A retained source identity must have one authored import record");
@@ -215,8 +214,8 @@ namespace {
   {
     const auto root = Absolute(
       record_path.parent_path() / record.at("content_root").get<std::string>());
-    const auto provenance = MaterialSlotProvenance::Parse(
-      record.at("material_slot_provenance").dump());
+    const auto provenance
+      = SurfaceProvenance::Parse(record.at("surface_provenance").dump());
     const auto path
       = root / ".cooked" / "imports" / provenance->SourceIdentity().ToString();
     RequireWithin(path, root);
@@ -307,9 +306,9 @@ RetainedModelImport::~RetainedModelImport() = default;
 auto RetainedModelImport::MakeRecipe(const SceneImportSettings& settings,
   const LooseCookedLayout& layout) -> std::string
 {
-  if (!settings.material_slot_source_identity.empty()
-    || !settings.material_slot_provenance_json.empty()
-    || !settings.material_slot_provenance_path.empty()) {
+  if (!settings.surface_source_identity.empty()
+    || !settings.surface_provenance_json.empty()
+    || !settings.surface_provenance_path.empty()) {
     throw std::invalid_argument(
       "Retained identity is owned by the import record");
   }
@@ -447,14 +446,14 @@ auto RetainedModelImport::SaveRecipe(const std::filesystem::path& record_path,
         "Retained import belongs to another Content root");
     }
   } else {
-    const MaterialSlotProvenance provenance(Uuid::Generate());
+    const SurfaceProvenance provenance(Uuid::Generate());
     record = {
       { "schema_version", 1 },
       {
         "content_root",
         root.lexically_relative(path.parent_path()).generic_string(),
       },
-      { "material_slot_provenance", json::parse(provenance.Serialize()) },
+      { "surface_provenance", json::parse(provenance.Serialize()) },
       { "published_generation", nullptr },
     };
   }
@@ -520,8 +519,8 @@ auto RetainedModelImport::Prepare(const std::filesystem::path& record_path)
     state->record.at("recipe"), state->record_path.parent_path());
   auto& settings = job.job_type == "fbx" ? job.fbx : job.gltf;
   settings.cooked_root = root.string();
-  settings.material_slot_provenance_json
-    = state->record.at("material_slot_provenance").dump();
+  settings.surface_provenance_json
+    = state->record.at("surface_provenance").dump();
   std::ostringstream errors;
   auto request = job.BuildRequest(errors);
   if (!request) {
@@ -647,15 +646,15 @@ auto RetainedModelImport::ValidateCandidate(const ImportReport& report) -> void
   }
   const auto expected_source_key = *source_key;
   if (state_->published || !report.success
-    || report.material_slot_provenance_json.empty()
+    || report.surface_provenance_json.empty()
     || Absolute(report.cooked_root) != Absolute(*cooked_root)) {
     throw std::invalid_argument(
       "Only this attempt's successful native report can be published");
   }
   const auto provenance
-    = MaterialSlotProvenance::Parse(report.material_slot_provenance_json);
+    = SurfaceProvenance::Parse(report.surface_provenance_json);
   if (provenance->SourceIdentity()
-    != state_->request.material_slot_provenance->SourceIdentity()) {
+    != state_->request.surface_provenance->SourceIdentity()) {
     throw std::invalid_argument(
       "Native report changed its retained source identity");
   }
@@ -689,7 +688,7 @@ auto RetainedModelImport::ValidateCandidate(const ImportReport& report) -> void
       .work_offline = true,
       .parse_only = true,
     });
-    if (geometry->MaterialSlots().layout_revision
+    if (geometry->Surfaces().layout_revision
       != retained->inventory.layout_revision) {
       throw std::invalid_argument(
         "Retained inventory does not match its cooked geometry");
@@ -701,10 +700,10 @@ auto RetainedModelImport::ValidateCandidate(const ImportReport& report) -> void
   }
   state_->validated_index
     = base::ComputeFileSha256(report.cooked_root / "container.index.bin");
-  state_->validated_provenance = Digest(report.material_slot_provenance_json);
+  state_->validated_provenance = Digest(report.surface_provenance_json);
   auto record = state_->record;
   record.update(
-    { { "material_slot_provenance", json::parse(provenance->Serialize()) } });
+    { { "surface_provenance", json::parse(provenance->Serialize()) } });
   record.update({
     {
       "published_generation",
@@ -729,8 +728,7 @@ auto RetainedModelImport::Publish(
   const auto& cooked_root = state_->request.cooked_root;
   if (!cooked_root || state_->published || !report.success
     || !state_->validated_index || !state_->validated_provenance
-    || *state_->validated_provenance
-      != Digest(report.material_slot_provenance_json)
+    || *state_->validated_provenance != Digest(report.surface_provenance_json)
     || Absolute(report.cooked_root) != Absolute(*cooked_root)
     || *state_->validated_index
       != base::ComputeFileSha256(report.cooked_root / "container.index.bin")) {

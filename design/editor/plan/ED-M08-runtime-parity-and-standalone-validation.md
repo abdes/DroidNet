@@ -48,28 +48,28 @@ Each document owns the details listed below. This plan owns execution order and
 acceptance gates; field defaults and wire contracts are not independently
 redefined by the schedule.
 
-| Document                                                                                                                 | Implementation authority                                                                                |
-| ------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------- |
-| [PRD](../PRD.md), sections 8–10                                                                                          | Feature boundary, workload and release envelope                                                         |
-| [V0.1 capability boundary](../lld/scene-authoring-model.md#12-v01-capability-boundary)                                   | Complete scope, exclusions and rejected alternatives                                                    |
-| [Visibility and light participation](../lld/scene-authoring-model.md#visibility-participation-and-shadow-source-state)   | Local/Inherit flags, workspace Hide, contribution and shadow semantics                                  |
-| [Atmosphere assignment](../lld/environment-authoring.md#7-per-light-atmosphere-assignment)                               | None/Primary/Secondary ownership, two contributors and conflicts                                        |
-| [Scene authoring model](../lld/scene-authoring-model.md)                                                                 | Canonical scene/component identities, hierarchy and workspace-state separation                          |
-| [Property inspector](../lld/property-inspector.md)                                                                       | Exact fields, units, defaults, validation and conditional UI                                            |
-| [Material editor](../lld/material-editor.md)                                                                             | Scalar PBR/emission representation, editing, persistence and preview                                    |
-| [Environment authoring](../lld/environment-authoring.md)                                                                 | Atmosphere, captured sky light, exposure, grading and background                                        |
-| [Property pipeline](../lld/property-pipeline.md)                                                                         | Edit sessions, revisions, validation, mixed selection and history                                       |
-| [Live engine sync](../lld/live-engine-sync.md)                                                                           | Full projection, asset completion, native mutation and convergence                                      |
-| [Content pipeline](../lld/content-pipeline.md)                                                                           | Slot identity, migration, saved snapshots, provenance, publication, ordered mounts and native producers |
-| [Runtime integration](../lld/runtime-integration.md)                                                                     | Build compatibility, scene/view lifetimes and production capabilities                                   |
-| [Standalone qualification](../lld/standalone-runtime-validation.md)                                                      | Post-V0.1 development harness design; not executed by M08                                               |
-| [Settings architecture](../lld/settings-architecture.md)                                                                 | Authored settings, local workspace state, runtime-session and startup preferences                       |
-| [Script authoring](../lld/script-authoring.md)                                                                           | Script assets, Scripting component, parameters, script cooking, Play and Problems                       |
-| [Viewport and tools](../lld/viewport-and-tools.md)                                                                       | HUD, view modes, picking, outline, framing, gizmos, snapping, helpers and drag-and-drop placement       |
-| [Content Browser asset identity](../lld/content-explorer-asset-identity.md)                                              | Browser layout, views, commands, thumbnails and drag sources                                            |
-| [Documents and commands](../lld/documents-and-commands.md)                                                               | Save/close lifecycle, command outcomes and document ownership                                           |
-| [Cooking workflows](../lld/content-cooking-workflows.md)                                                                 | Save/Cook/reimport/recovery actions exposed by the scene toolbar and Content Browser                    |
-| [Engine deferred capabilities](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md) | Post-V0.1 exclusions and source-local TODO IDs                                                          |
+| Document                                                                                                                 | Implementation authority                                                                                   |
+| ------------------------------------------------------------------------------------------------------------------------ | ---------------------------------------------------------------------------------------------------------- |
+| [PRD](../PRD.md), sections 8–10                                                                                          | Feature boundary, workload and release envelope                                                            |
+| [V0.1 capability boundary](../lld/scene-authoring-model.md#12-v01-capability-boundary)                                   | Complete scope, exclusions and rejected alternatives                                                       |
+| [Visibility and light participation](../lld/scene-authoring-model.md#visibility-participation-and-shadow-source-state)   | Local/Inherit flags, workspace Hide, contribution and shadow semantics                                     |
+| [Atmosphere assignment](../lld/environment-authoring.md#7-per-light-atmosphere-assignment)                               | None/Primary/Secondary ownership, two contributors and conflicts                                           |
+| [Scene authoring model](../lld/scene-authoring-model.md)                                                                 | Canonical scene/component identities, hierarchy and workspace-state separation                             |
+| [Property inspector](../lld/property-inspector.md)                                                                       | Exact fields, units, defaults, validation and conditional UI                                               |
+| [Material editor](../lld/material-editor.md)                                                                             | Scalar PBR/emission representation, editing, persistence and preview                                       |
+| [Environment authoring](../lld/environment-authoring.md)                                                                 | Atmosphere, captured sky light, exposure, grading and background                                           |
+| [Property pipeline](../lld/property-pipeline.md)                                                                         | Edit sessions, revisions, validation, mixed selection and history                                          |
+| [Live engine sync](../lld/live-engine-sync.md)                                                                           | Full projection, asset completion, native mutation and convergence                                         |
+| [Content pipeline](../lld/content-pipeline.md)                                                                           | Surface identity, migration, saved snapshots, provenance, publication, ordered mounts and native producers |
+| [Runtime integration](../lld/runtime-integration.md)                                                                     | Build compatibility, scene/view lifetimes and production capabilities                                      |
+| [Standalone qualification](../lld/standalone-runtime-validation.md)                                                      | Post-V0.1 development harness design; not executed by M08                                                  |
+| [Settings architecture](../lld/settings-architecture.md)                                                                 | Authored settings, local workspace state, runtime-session and startup preferences                          |
+| [Script authoring](../lld/script-authoring.md)                                                                           | Script assets, Scripting component, parameters, script cooking, Play and Problems                          |
+| [Viewport and tools](../lld/viewport-and-tools.md)                                                                       | HUD, view modes, picking, outline, framing, gizmos, snapping, helpers and drag-and-drop placement          |
+| [Content Browser asset identity](../lld/content-explorer-asset-identity.md)                                              | Browser layout, views, commands, thumbnails and drag sources                                               |
+| [Documents and commands](../lld/documents-and-commands.md)                                                               | Save/close lifecycle, command outcomes and document ownership                                              |
+| [Cooking workflows](../lld/content-cooking-workflows.md)                                                                 | Save/Cook/reimport/recovery actions exposed by the scene toolbar and Content Browser                       |
+| [Engine deferred capabilities](../../../projects/Oxygen.Engine/design/vortex/milestones/ED-M08/deferred-capabilities.md) | Post-V0.1 exclusions and source-local TODO IDs                                                             |
 
 ### Native implementation references
 
@@ -94,8 +94,8 @@ implementation must produce new evidence for captured sky and specular lighting.
 - Ten canonical primitives, including Capsule, using shared native recipes and
   the metric centred defaults: horizontal Plane, upright Quad and 1 m outer
   Torus.
-- Stable per-geometry material-slot identities and independent instance
-  overrides for all existing slots; clearing restores the mesh material.
+- Stable per-geometry surface identities and independent instance
+  overrides for all existing surfaces; clearing restores the mesh material.
 - Scalar emission colour/intensity with float32 storage, explicit linear-colour
   conversion and finite HDR bounds in source and cooked records (editing is in
   [ED-M09](ED-M09-v01-gaps-and-blocking-issues.md)).
@@ -209,23 +209,23 @@ capability the editor exposes.
 
 Completed foundations: canonical primitives and axial Physics mapping;
 Local/Inherit native records; atmospheric role records, import and conflict
-validation; captured-sky toggle removal; native slot IDs, inventory validation
+validation; captured-sky toggle removal; native surface IDs, inventory validation
 and revision hashing. Their remaining rendered/editor qualification stays in the
 owning later slices.
 
 #### M08.1 remaining increments
 
-| Increment                        | State     | Deliverable and acceptance                                                                                                                                                                                                                                                                                                                                      |
-| -------------------------------- | --------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| M08.1.1 Slots                    | validated | Preserve source declarations through mesh optimization; native provenance, cooked inventories/assignments, Inspector metadata and identity-based instance APIs. Reimport/cache deletion preserve proven IDs; replacement never transfers overrides by ordinal. Test nonzero slots, distinct equal-material declarations, all LOD bindings and clear-to-default. |
-| M08.1.2 Cameras                  | validated | Auto/Fixed source, native/managed records and command transport; hydrate every camera. Resolve projection per target without rewriting authored ratio. Test imports, round trips, invalid inputs and target resize. Fixed bars/metering remain M08.2.                                                                                                           |
-| M08.1.3 Emission                 | validated | Float32 cooked RGB and canonical colour/intensity sources; native version rejection, editor templates/adapters and fixture producers. Retire the affected managed binary writer route. Test finite HDR, 9.7 precision and source colour preservation at zero intensity.                                                                                         |
-| M08.1.4 Cutover                  | validated | Publish standalone retained imports as immutable generations through Cooker/Content; upgrade maintained editor projects and retained settings, recook demo/source imports and PAKs, refresh SDK/Interop, and verify normal editor loading. Reject retired formats; retain no compatibility reader or dual source representation.                                |
-| M08.1.5 Runtime identities       | validated | Intern full typed identities with mounted-source instance identity; reuse opaque IDs in cache, dependencies and in-flight work. Remove hash-as-identity, duplicate reverse registries and packed runtime source IDs. Prove forced-collision separation, same-SourceKey refresh isolation, lazy reload after eviction and bounded locator metadata.              |
-| M08.1.6 Automatic load ownership | validated | Content-owned automatic checkout controls, explicit borrowing and residency pins; remove manual release balancing. Prove per-request ownership across coalesced loads, dependency transfers, cancellation, off-thread destruction and shutdown; preserve allocation-free IBL inspection.                                                                        |
-| M08.1.7 Integrity inventory      | validated | Native loose index owns complete file sizes/digests and membership; protected readers reuse verification. Remove duplicate managed output proofs. Reject tampering, missing/extra members and stale verification; bump the index format and recook.                                                                                                             |
-| M08.1.8 Project publication      | validated | Select one immutable ordered root set through an atomic project head; retain authored-source CAS and preview rollback. Remove cooked-directory swap/recovery phases. Keep existing incremental staging seed copies initially. Qualify multi-root crash recovery, conflicts and old readers.                                                                     |
-| M08.1.9 Native analysis          | validated | Batch native source dependency/output analysis against captured input proofs. Managed orchestration keeps project resolution, dirty state and snapshot ownership. Remove parallel descriptor dependency parsers; prove analyzed/cooked closure equality and bounded process launches.                                                                           |
+| Increment                        | State     | Deliverable and acceptance                                                                                                                                                                                                                                                                                                                                         |
+| -------------------------------- | --------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| M08.1.1 Surfaces                 | validated | Preserve source declarations through mesh optimization; native provenance, cooked inventories/assignments, Inspector metadata and identity-based instance APIs. Reimport/cache deletion preserve proven IDs; replacement never transfers overrides by ordinal. Test nonzero surfaces, distinct equal-material declarations, all LOD bindings and clear-to-default. |
+| M08.1.2 Cameras                  | validated | Auto/Fixed source, native/managed records and command transport; hydrate every camera. Resolve projection per target without rewriting authored ratio. Test imports, round trips, invalid inputs and target resize. Fixed bars/metering remain M08.2.                                                                                                              |
+| M08.1.3 Emission                 | validated | Float32 cooked RGB and canonical colour/intensity sources; native version rejection, editor templates/adapters and fixture producers. Retire the affected managed binary writer route. Test finite HDR, 9.7 precision and source colour preservation at zero intensity.                                                                                            |
+| M08.1.4 Cutover                  | validated | Publish standalone retained imports as immutable generations through Cooker/Content; upgrade maintained editor projects and retained settings, recook demo/source imports and PAKs, refresh SDK/Interop, and verify normal editor loading. Reject retired formats; retain no compatibility reader or dual source representation.                                   |
+| M08.1.5 Runtime identities       | validated | Intern full typed identities with mounted-source instance identity; reuse opaque IDs in cache, dependencies and in-flight work. Remove hash-as-identity, duplicate reverse registries and packed runtime source IDs. Prove forced-collision separation, same-SourceKey refresh isolation, lazy reload after eviction and bounded locator metadata.                 |
+| M08.1.6 Automatic load ownership | validated | Content-owned automatic checkout controls, explicit borrowing and residency pins; remove manual release balancing. Prove per-request ownership across coalesced loads, dependency transfers, cancellation, off-thread destruction and shutdown; preserve allocation-free IBL inspection.                                                                           |
+| M08.1.7 Integrity inventory      | validated | Native loose index owns complete file sizes/digests and membership; protected readers reuse verification. Remove duplicate managed output proofs. Reject tampering, missing/extra members and stale verification; bump the index format and recook.                                                                                                                |
+| M08.1.8 Project publication      | validated | Select one immutable ordered root set through an atomic project head; retain authored-source CAS and preview rollback. Remove cooked-directory swap/recovery phases. Keep existing incremental staging seed copies initially. Qualify multi-root crash recovery, conflicts and old readers.                                                                        |
+| M08.1.9 Native analysis          | validated | Batch native source dependency/output analysis against captured input proofs. Managed orchestration keeps project resolution, dirty state and snapshot ownership. Remove parallel descriptor dependency parsers; prove analyzed/cooked closure equality and bounded process launches.                                                                              |
 
 M08.1.7 also separates event-driven cooking freshness from integrity validation.
 Badge refreshes reuse status snapshots; they neither launch tools nor hash
@@ -508,24 +508,24 @@ these contracts so upgraded projects remain usable. New inspector/repair UX and
 the general migration/recovery workflow retain M08.4/M08.5 ownership. One-time
 cutover scripts and recoverable backups stay in ignored local output.
 
-Resolve slot identity at import, load, edit and geometry replacement, then use
+Resolve surface identity at import, load, edit and geometry replacement, then use
 the existing indexed render cache. Do not add UUID lookup, provenance hashing or
 extra allocations to draw submission. Separate source declarations retain
 independent bindings even when their default material matches.
 
 The implementation review uses UE5.7.4 at `F:/Epic Games/UE_5.7`:
-`StaticMesh.h`/`StaticMeshComponent.cpp` for slot/default ownership,
+`StaticMesh.h`/`StaticMeshComponent.cpp` for surface/default ownership,
 `CameraComponent.h`/`CameraStackTypes.cpp` for authored versus target aspect,
 and `Math/Color.h` for linear float32 colour. Importer-specific continuity and
 Oxygen's established vertical-FOV convention remain authoritative. Detailed
 contracts and reference rationale belong in the owner documents below.
 
-Implement engine-owned schemas/versioned records for flag source modes, slot
+Implement engine-owned schemas/versioned records for flag source modes, surface
 identity/overrides, camera aspect policy, atmospheric slots and float32
 emission. Schema validation covers shape/range/count limits; semantic validation
 covers identity, references, conflicts and representability.
 
-Implement importer-owned slot inventories/provenance and continuity rules from
+Implement importer-owned surface inventories/provenance and continuity rules from
 the content contract. Material parameter changes alone keep IDs. Structural
 changes without proven continuity retain explicit repair-required references; no
 name/index guessing rebinds an override. Update native hydration, Inspector
@@ -566,7 +566,7 @@ maps through `height = 2 * (half_height + radius)`. Qualify that relationship,
 including the sphere limit, body/shape transforms and affected maintained source
 recipes, before closing primitive parity.
 
-Checks: schema/round trips; slot continuity and structural changes; nonzero slot
+Checks: schema/round trips; surface continuity and structural changes; nonzero surface
 overrides; Local/Inherit; hidden/off role conflicts; Auto/Fixed records; finite
 HDR precision; primitive bounds/attributes/sidedness; obsolete format rejection.
 Cook and inspect through native tools, never managed binary decoding.
@@ -846,7 +846,7 @@ primary place to select.
 1. **Pick pass.** On request, Vortex renders node IDs and depth for a pick
    rectangle of one view (visible, non-hidden geometry; M08.6 adds icons) and
    reads them back asynchronously. A result carries the hit nodes, nearest
-   depth, world position and geometry slot. Requests carry the view and its
+   depth, world position and geometry surface. Requests carry the view and its
    generation; results for a recreated view, replaced scene or closed document
    are dropped. An idle viewport pays nothing.
 2. **Gestures.** Click selects the nearest hit node, Ctrl toggles, Shift adds
@@ -993,7 +993,7 @@ is therefore a reference-aware project transaction; the contract is
 [Content Browser LLD §9.5](../lld/content-explorer-asset-identity.md#95-asset-relocation).
 
 1. **Reference index.** Every authored outgoing reference, read structurally per
-   file kind rather than by text search: scene component and material-slot
+   file kind rather than by text search: scene component and surface-override
    geometry/material URIs, the exposure metering mask and `ExtraAssets`;
    material texture paths; geometry descriptor material, buffer and skeleton
    paths; texture descriptor sources and identity; import sidecar bundle and
@@ -1044,7 +1044,7 @@ is therefore a reference-aware project transaction; the contract is
 6. **Open documents.** No document is reloaded or closed by a rename or move.
    Before the writer is released, each open document that the relocation rewrote
    or moved updates itself in memory: a scene re-points the geometry and
-   material-slot references, slot targets, environment mask and `ExtraAssets` of
+   surface material references, surface targets, environment mask and `ExtraAssets` of
    the affected nodes only; a material re-points its texture paths, and a moved
    material document re-points its own path and keeps its history. Neither
    change enters undo history or marks the document dirty; the owner records the
@@ -1439,8 +1439,8 @@ work cleanly.
    undo entry; Escape cancels. Dropping on a Scene Explorer row creates the node
    under, before or after that row.
 2. **Materials onto objects.** Dragging a material highlights the object and
-   slot under the cursor and assigns that slot on drop, in one undo entry.
-   Dropping on an Inspector material slot assigns that slot.
+   surface under the cursor and assigns that surface on drop, in one undo entry.
+   Dropping on an Inspector surface assigns that surface.
 3. **Locate.** Inspector asset slots gain Locate, which reveals the asset in the
    Content Browser.
 4. **Models into the scene.** Dragging a model source or its scene output
@@ -1455,7 +1455,7 @@ work cleanly.
    editor viewport.
 
 Checks: drop placement on geometry, on empty space and in orthographic views;
-slot-accurate material drops on multi-slot meshes; undo and cancel; the
+surface-accurate material drops on multi-surface meshes; undo and cancel; the
 walkthrough completes without manual file repair.
 
 ## 5. Interaction defaults

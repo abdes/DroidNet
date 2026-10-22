@@ -1203,7 +1203,7 @@ namespace {
       const cgltf_accessor* colors = nullptr;
       const cgltf_accessor* joints = nullptr;
       const cgltf_accessor* weights = nullptr;
-      uint32_t material_slot = 0;
+      uint32_t surface = 0;
       uint32_t vertex_count = 0;
       uint32_t index_count = 0;
       bool has_normals = false;
@@ -1454,7 +1454,7 @@ namespace {
         any_colors = any_colors || has_colors;
         any_skin = any_skin || has_skin;
 
-        const auto material_slot = [&] -> uint32_t {
+        const auto surface = [&] -> uint32_t {
           if (prim.material == nullptr) {
             return static_cast<uint32_t>(data.materials_count);
           }
@@ -1466,11 +1466,10 @@ namespace {
         }();
 
         if (prim.material != nullptr && !input.material_keys.empty()
-          && material_slot >= input.material_keys.size()) {
-          result.diagnostics.push_back(
-            MakeWarningDiagnostic("mesh.material_slot_oob",
-              "glTF material slot exceeds imported material key count",
-              input.source_id_prefix, mesh_name));
+          && surface >= input.material_keys.size()) {
+          result.diagnostics.push_back(MakeWarningDiagnostic("mesh.surface_oob",
+            "glTF material index exceeds imported material key count",
+            input.source_id_prefix, mesh_name));
         }
 
         if (prim.material != nullptr && HasMaterialTextures(prim.material)) {
@@ -1501,7 +1500,7 @@ namespace {
           .colors = colors,
           .joints = joints,
           .weights = weights,
-          .material_slot = material_slot,
+          .surface = surface,
           .vertex_count = vertex_count,
           .index_count = index_count,
           .has_normals = has_normals,
@@ -1803,9 +1802,9 @@ namespace {
           owner->indices.end(), indices_vec.begin(), indices_vec.end());
 
         owner->ranges.push_back(TriangleRange {
-          .material_slot = prim_info.material_slot,
+          .surface = prim_info.surface,
           .source_slot = prim_info.prim->material != nullptr
-            ? prim_info.material_slot
+            ? prim_info.surface
             : std::numeric_limits<uint32_t>::max(),
           .first_index = first_index,
           .index_count = static_cast<uint32_t>(indices_vec.size()),
@@ -1890,20 +1889,20 @@ namespace {
       };
 
       if (!owner->ranges.empty()) {
-        uint32_t max_slot = 0;
+        uint32_t max_surface = 0;
         for (const auto& range : owner->ranges) {
-          max_slot = (std::max)(max_slot, range.material_slot);
+          max_surface = (std::max)(max_surface, range.surface);
         }
 
-        std::vector<uint8_t> used(max_slot + 1, 0);
+        std::vector<uint8_t> used(max_surface + 1, 0);
         for (const auto& range : owner->ranges) {
-          used.at(range.material_slot) = static_cast<uint8_t>(1);
+          used.at(range.surface) = static_cast<uint8_t>(1);
         }
 
-        item.material_slots_used.clear();
+        item.surfaces_used.clear();
         for (uint32_t i = 0; i < used.size(); ++i) {
           if (used.at(i) != 0U) {
-            item.material_slots_used.push_back(i);
+            item.surfaces_used.push_back(i);
             const auto authored = i < data.materials_count;
             const auto* label = authored
               ? base::CheckedAt(
@@ -1911,7 +1910,7 @@ namespace {
                   .name
               : nullptr;
             const auto* fallback = authored ? "Material" : "Default";
-            item.material_slot_names.emplace(
+            item.surface_names.emplace(
               authored ? i : std::numeric_limits<uint32_t>::max(),
               label != nullptr ? label : fallback);
           }

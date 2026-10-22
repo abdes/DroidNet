@@ -97,18 +97,18 @@ auto GltfCommand::BuildCommand() -> std::shared_ptr<clap::Command>
         .Build();
 
   auto source_identity
-    = Option::WithKey("material-slot-source-identity")
-        .Long("material-slot-source-identity")
+    = Option::WithKey("surface-source-identity")
+        .Long("surface-source-identity")
         .About("Retained UUIDv7 namespace; required when importing geometry")
         .WithValue<std::string>()
-        .StoreTo(&options_.material_slot_source_identity)
+        .StoreTo(&options_.surface_source_identity)
         .Build();
-  auto provenance = Option::WithKey("material-slot-provenance")
-                      .Long("material-slot-provenance")
-                      .About("JSON file containing retained material-slot "
+  auto provenance = Option::WithKey("surface-provenance")
+                      .Long("surface-provenance")
+                      .About("JSON file containing retained surface "
                              "provenance from an earlier import")
                       .WithValue<std::string>()
-                      .StoreTo(&options_.material_slot_provenance_path)
+                      .StoreTo(&options_.surface_provenance_path)
                       .Build();
 
   auto recipe

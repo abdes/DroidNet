@@ -79,12 +79,12 @@ public sealed partial class ScenePreviewTests
         _ = result.Diagnostics.Should().ContainSingle().Which.AffectedPath.Should().Be(mask.ToUriString());
     }
 
-    // A cube whose one material slot names a material that does not exist, so the engine reports the material's load.
+    // A cube whose one surface names a material that does not exist, so the engine reports the material's load.
     private static SceneNode AddCubeWithMissingMaterial(Scene scene)
     {
         var node = new SceneNode(scene) { Name = "Cube with a missing material" };
         scene.RootNodes.Add(node);
-        var target = new MaterialSlotTarget(EngineAssets.BasicShape("Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+        var target = new SurfaceTarget(EngineAssets.BasicShape("Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
         geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = AssetPath.Parse("/Content/Materials/Missing.omat") });
         node.Components.Add(geometry);

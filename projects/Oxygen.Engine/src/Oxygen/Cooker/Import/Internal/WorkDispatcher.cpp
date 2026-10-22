@@ -1303,9 +1303,9 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     }
 
     geometry_keys.emplace(*item_id, result.cooked->geometry_key);
-    if (result.cooked->material_slot_provenance) {
-      session_.AddMaterialSlotProvenance(
-        std::move(*result.cooked->material_slot_provenance));
+    if (result.cooked->surface_provenance) {
+      session_.AddSurfaceProvenance(
+        std::move(*result.cooked->surface_provenance));
     }
     const auto& item = context.planner.Item(*item_id);
     mark_complete(*item_id, item.kind, item.debug_name);
@@ -1642,8 +1642,8 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     auto& item = context.planner.Item(item_id);
     auto& payload = context.payloads.MeshBuild(item.work_handle);
     payload.item.material_keys.clear();
-    payload.item.material_keys.reserve(context.material_slots.size());
-    for (const auto material_item : context.material_slots) {
+    payload.item.material_keys.reserve(context.surfaces.size());
+    for (const auto material_item : context.surfaces) {
       const auto it = material_keys.find(material_item);
       if (it != material_keys.end()) {
         payload.item.material_keys.push_back(it->second);
@@ -1710,29 +1710,29 @@ auto WorkDispatcher::Run(PlanContext context, co::Nursery& nursery)
     geometry_item.material_patches.reserve(
       cooked_payload.material_patch_offsets.size());
     for (const auto& patch_offset : cooked_payload.material_patch_offsets) {
-      const auto slot = patch_offset.slot;
-      if (slot == context.material_slots.size()) {
+      const auto surface = patch_offset.surface;
+      if (surface == context.surfaces.size()) {
         // The separate unassigned declaration already carries the native
         // default-material sentinel and has no material dependency to patch.
         continue;
       }
-      if (slot >= context.material_slots.size()) {
+      if (surface >= context.surfaces.size()) {
         session_.AddDiagnostic(
-          MakeErrorDiagnostic("import.plan.material_slot_invalid",
-            "Material slot is outside the plan material list", item.debug_name,
-            std::to_string(slot)));
+          MakeErrorDiagnostic("import.plan.surface_invalid",
+            "Surface is outside the plan material list", item.debug_name,
+            std::to_string(surface)));
         missing_material = true;
         continue;
       }
 
       const auto material_item
-        = oxygen::base::CheckedAt(context.material_slots, slot);
+        = oxygen::base::CheckedAt(context.surfaces, surface);
       const auto it = material_keys.find(material_item);
       if (it == material_keys.end()) {
         session_.AddDiagnostic(
           MakeErrorDiagnostic("import.plan.material_key_missing",
             "Missing material key for geometry patch", item.debug_name,
-            std::to_string(slot)));
+            std::to_string(surface)));
         missing_material = true;
         continue;
       }

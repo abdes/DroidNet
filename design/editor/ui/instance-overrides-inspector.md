@@ -135,4 +135,4 @@ partial-presence counts.
 | Rendering appended in All mode for geometry or light nodes    | A component-list entry after Transform for every node    |
 | `GeometryView`: a `Slot` `ComboBox` and one `Material` picker | Removed; Level of detail row and the Surfaces list       |
 | Refresh and clear-unresolved buttons beside the picker        | Move to the Surfaces header                              |
-| `MaterialSlotChoice`, `GeometryViewModel.MaterialSlots`       | Surface view models, one per card                        |
+| `SurfaceChoice`, `GeometryViewModel.Surfaces`                 | Surface view models, one per card                        |

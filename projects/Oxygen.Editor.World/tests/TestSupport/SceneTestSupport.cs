@@ -165,14 +165,14 @@ internal static class SceneTestSupport
         };
         geometry.OverrideSlots.Add(new MaterialsSlot
         {
-            Target = new MaterialSlotTarget(AssetPath.Parse("/Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000001"), "rev-1"),
+            Target = new SurfaceTarget(AssetPath.Parse("/Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000001"), "rev-1"),
             Material = AssetPath.Parse("/Content/Materials/HeroSkin.omat.json"),
         });
 
         var targetedOverride = new GeometryOverrideTarget { LodIndex = 0, SubmeshIndex = 1 };
         targetedOverride.OverrideSlots.Add(new MaterialsSlot
         {
-            Target = new MaterialSlotTarget(AssetPath.Parse("/Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000002"), "rev-1"),
+            Target = new SurfaceTarget(AssetPath.Parse("/Content/Meshes/Hero.geometry"), Guid.Parse("20000000-0000-0000-0000-000000000002"), "rev-1"),
             Material = AssetPath.Parse("/Content/Materials/HeroArmor.omat.json"),
         });
         geometry.TargetedOverrides.Add(targetedOverride);

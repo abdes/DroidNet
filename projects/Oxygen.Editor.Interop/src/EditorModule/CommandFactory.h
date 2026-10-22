@@ -33,8 +33,8 @@ struct PropertyEntry;
 enum class ComponentId : std::uint16_t;
 class SetGeometryCommand;
 class SetMaterialOverrideCommand;
-struct MaterialSlotTarget;
-enum class MaterialSlotAssignmentIntent : std::uint8_t;
+struct SurfaceTarget;
+enum class SurfaceMaterialAssignmentIntent : std::uint8_t;
 class ReparentSceneNodeCommand;
 class ReparentSceneNodesCommand;
 class UpdateTransformsForNodesCommand;
@@ -82,8 +82,8 @@ namespace Oxygen::Interop::World {
 
     virtual oxygen::interop::module::SetMaterialOverrideCommand*
       CreateSetMaterialOverride(oxygen::scene::NodeHandle handle,
-        oxygen::interop::module::MaterialSlotTarget target, std::optional<std::string> materialUri,
-        oxygen::interop::module::MaterialSlotAssignmentIntent intent);
+        oxygen::interop::module::SurfaceTarget target, std::optional<std::string> materialUri,
+        oxygen::interop::module::SurfaceMaterialAssignmentIntent intent);
 
 
     virtual oxygen::interop::module::SetEnvironmentCommand*

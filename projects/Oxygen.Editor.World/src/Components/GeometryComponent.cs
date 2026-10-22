@@ -45,7 +45,7 @@ public partial class GeometryComponent : GameComponent
     /// </summary>
     /// <value>
     /// An absolute <c>asset:</c> URI. A geometry component always has a geometry: removing the component is how a node
-    /// loses its geometry. Facts about the geometry, such as its material slots, come from the services that own
+    /// loses its geometry. Facts about the geometry, such as its surfaces, come from the services that own
     /// geometry assets, by this URI.
     /// </value>
     /// <exception cref="ArgumentNullException">The value is <see langword="null"/>.</exception>

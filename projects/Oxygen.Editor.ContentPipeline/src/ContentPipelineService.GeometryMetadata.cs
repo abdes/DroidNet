@@ -13,11 +13,11 @@ using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.ContentPipeline;
 
-/// <summary>Reads authoritative slot inventories for the source selected by current project policy.</summary>
-public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvider
+/// <summary>Reads authoritative surface inventories for the source selected by current project policy.</summary>
+public sealed partial class ContentPipelineService : IGeometrySurfaceProvider
 {
     /// <inheritdoc />
-    public async Task<GeometryMaterialSlotMetadata?> ReadAsync(ProjectContext project, AssetPath geometryUri, CancellationToken cancellationToken = default)
+    public async Task<GeometrySurfaceMetadata?> ReadAsync(ProjectContext project, AssetPath geometryUri, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(geometryUri);
@@ -109,7 +109,7 @@ public sealed partial class ContentPipelineService : IGeometryMaterialSlotProvid
     private static bool HasCurrentGeometryOutput(AssetCookStatus status)
         => status.Freshness == AssetCookFreshness.Current && status.HasAvailableOutput && !status.HasUnsavedChanges;
 
-    private static GeometryMaterialSlotMetadata? VerifyInventoryKey(GeometryMaterialSlotMetadata? metadata, string expectedIndexKey)
+    private static GeometrySurfaceMetadata? VerifyInventoryKey(GeometrySurfaceMetadata? metadata, string expectedIndexKey)
     {
         if (metadata is not null && !string.Equals(metadata.NativeGeometryKey.ToString("D"), expectedIndexKey, StringComparison.OrdinalIgnoreCase))
         {

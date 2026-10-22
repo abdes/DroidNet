@@ -5,7 +5,7 @@
         <TargetFramework>net10.0-windows10.0.26100.0</TargetFramework>
 
         <Title>Oxygen Editor ContentPipeline Testing</Title>
-        <Description>Test kit of the ContentPipeline module: in-memory IAssetRedirects, ICookPublicationReader and IGeometryMaterialSlotProvider, a disk-free IContentCookCoordinator, an engine content pak that declares its assets, and the production native pipeline composed over a project, for the tests of the modules that use ContentPipeline.</Description>
+        <Description>Test kit of the ContentPipeline module: in-memory IAssetRedirects, ICookPublicationReader and IGeometrySurfaceProvider, a disk-free IContentCookCoordinator, an engine content pak that declares its assets, and the production native pipeline composed over a project, for the tests of the modules that use ContentPipeline.</Description>
         <PackageTags>oxygen;editor;contentpipeline;testing</PackageTags>
         <PackageReleaseNotes>Initial version.</PackageReleaseNotes>
         <RootNamespace>Oxygen.Editor.ContentPipeline.Testing</RootNamespace>

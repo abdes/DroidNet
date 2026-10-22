@@ -714,7 +714,7 @@ Invoke-OxygenTool -Context $tools -Target oxygen-cooker-importtool
                     "schema_version": 1,
                     "content_root": "..",
                     "recipe": {"jobs": [{"type": "gltf", "source": "original.gltf"}]},
-                    "material_slot_provenance": {},
+                    "surface_provenance": {},
                     "published_generation": None,
                 }
             ),

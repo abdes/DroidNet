@@ -14,7 +14,7 @@
 
 namespace oxygen::content::import::adapters {
 
-//! A named geometry variant before vertex/index materialization or slot
+//! A named geometry variant before vertex/index materialization or surface
 //! allocation.
 struct ModelGeometrySource final {
   internal::MeshBakeVariant variant;

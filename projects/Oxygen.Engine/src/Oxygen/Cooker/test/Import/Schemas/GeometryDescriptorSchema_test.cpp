@@ -53,7 +53,7 @@ auto CapsuleDescriptor(const json& params) -> json
       "bounds": { "min": [-0.5, -0.5, -1], "max": [0.5, 0.5, 1] },
       "procedural": { "generator": "Capsule", "mesh_name": "Capsule" },
       "submeshes": [{
-        "slot_id": "018f8f8f-1111-7111-8111-111111111111",
+        "surface_id": "018f8f8f-1111-7111-8111-111111111111",
         "material_ref": "/.cooked/Materials/default.omat",
         "views": [{ "view_ref": "__all__" }]
       }]
@@ -93,7 +93,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, GeometryDescriptorSchemaCaseTest,
         },
         "submeshes": [
           {
-            "slot_id": "018f8f8f-1111-7111-8111-111111111111",
+            "surface_id": "018f8f8f-1111-7111-8111-111111111111",
             "material_ref": "/.cooked/Materials/default.omat",
             "views": [ { "view_ref": "__all__" } ]
           }
@@ -123,7 +123,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, GeometryDescriptorSchemaCaseTest,
         },
         "submeshes": [
           {
-            "slot_id": "018f8f8f-1111-7111-8111-111111111111",
+            "surface_id": "018f8f8f-1111-7111-8111-111111111111",
             "material_ref": "/.cooked/Materials/default.omat",
             "views": [ { "view_ref": "__all__" } ]
           }
@@ -151,7 +151,7 @@ INSTANTIATE_TEST_SUITE_P(Cases, GeometryDescriptorSchemaCaseTest,
         },
         "submeshes": [
           {
-            "slot_id": "018f8f8f-1111-7111-8111-111111111111",
+            "surface_id": "018f8f8f-1111-7111-8111-111111111111",
             "material_ref": "/.cooked/Materials/default.omat",
             "views": [ { "view_ref": "__all__" } ]
           }
@@ -183,7 +183,7 @@ NOLINT_TEST(GeometryDescriptorSchemaTest, ValidatesIcoSphereParameters)
         },
         "submeshes": [
           {
-            "slot_id": "018f8f8f-1111-7111-8111-111111111111",
+            "surface_id": "018f8f8f-1111-7111-8111-111111111111",
             "material_ref": "/.cooked/Materials/default.omat",
             "views": [ { "view_ref": "__all__" } ]
           }

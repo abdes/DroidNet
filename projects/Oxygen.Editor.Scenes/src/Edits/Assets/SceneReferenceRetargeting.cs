@@ -12,8 +12,8 @@ using Oxygen.Managed.Core;
 namespace Oxygen.Editor.Scenes.Edits.Assets;
 
 /// <summary>
-/// Re-points a scene's asset references through an identity mapping, in place: geometry, material slots (component
-/// and targeted), slot targets, script slots, scene references, starting input contexts and the environment's metering mask. Used when an open scene follows
+/// Re-points a scene's asset references through an identity mapping, in place: geometry, surface materials (component
+/// and targeted), surface targets, script slots, scene references, starting input contexts and the environment's metering mask. Used when an open scene follows
 /// a relocation, and when undo, redo or paste restores references captured before a relocation.
 /// </summary>
 internal static class SceneReferenceRetargeting

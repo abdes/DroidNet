@@ -49,7 +49,7 @@ public sealed class NestedDescriptorCookTests
         AddGeometryNode(workspace, geometryUri, "Mesh");
         workspace.Scene.RootNodes[^1].Components.OfType<GeometryComponent>().Single().OverrideSlots.Add(new MaterialsSlot
         {
-            Target = new(geometryUri, inventory!.Slots.Single().SlotId, inventory.LayoutRevision),
+            Target = new(geometryUri, inventory!.Surfaces.Single().SurfaceId, inventory.LayoutRevision),
             Material = AssetPath.Parse("/" + second[..^5]),
         });
         await workspace.WriteSceneAsync(scene).ConfigureAwait(false);

@@ -117,7 +117,7 @@ Required:
   textures and scene are named flat under it (`/Content/Ship/Ship.glb/Paint.omat`,
   `/Content/Ship/Ship.glb/Ship.oscene`); its buffers are files beside its
   geometry (`Ship.glb/Hull.lod0.vertex.obuf`).
-- raw staging imports require `--material-slot-source-identity <uuid-v7>`
+- raw staging imports require `--surface-source-identity <uuid-v7>`
 
 Common options:
 
@@ -128,7 +128,7 @@ Common options:
 
 Scene controls:
 
-- `--material-slot-provenance <json-file>` (retained candidate from a prior
+- `--surface-provenance <json-file>` (retained candidate from a prior
   import)
 - `--no-import-textures`
 - `--no-import-materials`
@@ -164,8 +164,8 @@ Oxygen.Cooker.ImportTool fbx --record H:/Game/Content/imports/model.import.json
 Oxygen.Cooker.ImportTool fbx --recipe model.recipe.json --record H:/Game/Content/imports/model.import.json --content-root H:/Game/Content
 ```
 
-The record owns recipe and slot identity; do not combine retained options with
-`--output`, `--material-slot-source-identity` or `--material-slot-provenance`.
+The record owns recipe and surface identity; do not combine retained options with
+`--output`, `--surface-source-identity` or `--surface-provenance`.
 The native publisher selects a validated immutable generation and its provenance
 in one atomic record replacement. Failed or interrupted attempts keep the prior
 selection. External raw sources are read only. Records follow
@@ -201,16 +201,16 @@ Project transactions and SDK batches may use explicit output roots. Their host
 owns publication of cooked output together with the returned provenance.
 
 Keep the source identity with the source asset and reuse it on every reimport.
-Successful single and batch job reports include `material_slot_provenance` when
-the importer allocates slots. Preserve that object in the host-owned source
+Successful single and batch job reports include `surface_provenance` when
+the importer allocates surfaces. Preserve that object in the host-owned source
 metadata; pass it through the CLI file option or a manifest's
-`material_slot_provenance` property. The file contains the object itself, not
+`surface_provenance` property. The file contains the object itself, not
 the surrounding job report. Failed or canceled jobs do not publish a candidate.
 Clearing cooked output does not erase this retained authoring data. The object
-follows the installed `oxygen.material-slot-provenance.schema.json` schema.
+follows the installed `oxygen.surface-provenance.schema.json` schema.
 
 Manifest scene defaults and individual FBX/glTF jobs accept
-`material_slot_source_identity` and `material_slot_provenance`. Job values
+`surface_source_identity` and `surface_provenance`. Job values
 override defaults. Give independent source assets independent identities; do not
 derive identities from machine-local paths.
 

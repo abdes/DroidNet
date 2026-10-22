@@ -38,7 +38,7 @@ per draw, including translucent pipeline variants.
    and explicit diagnostics when authored transforms are necessary for fidelity.
    Unbaked meshes retain source-local winding and signed node transforms.
 6. After native engine validation, fix editor material-request recovery: absent
-   geometry is transient; a loaded geometry with an invalid slot is a real
+   geometry is transient; a loaded geometry with an invalid surface is a real
    rejection. Preserve authored overrides across cook/reload without resurrecting
    explicitly cleared requests.
 

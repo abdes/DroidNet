@@ -112,7 +112,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
         if (input.Kind == ContentCookAssetKind.ForeignSource)
         {
             ArgumentNullException.ThrowIfNull(modelSettings);
-            return this.BuildModelJob(input.SourceRelativePath, dependsOn, modelSettings.Name, input.AssetUri, modelSettings.MaterialSlotProvenance) with
+            return this.BuildModelJob(input.SourceRelativePath, dependsOn, modelSettings.Name, input.AssetUri, modelSettings.SurfaceProvenance) with
             {
                 ContentPolicy = modelSettings.ContentPolicy,
                 UnitPolicy = modelSettings.UnitPolicy,
@@ -151,7 +151,7 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
     }
 
     /// <inheritdoc />
-    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity, Import.NativeMaterialSlotProvenance provenance)
+    public ContentImportJob BuildModelJob(string sourceRelativePath, IReadOnlyList<string> dependsOn, string name, AssetPath identity, Import.NativeSurfaceProvenance provenance)
         => new(
             BuildJobId(ContentCookAssetKind.ForeignSource, sourceRelativePath),
             Path.GetExtension(sourceRelativePath).Equals(".fbx", StringComparison.OrdinalIgnoreCase) ? "fbx" : "gltf",
@@ -168,8 +168,8 @@ public sealed class ContentImportManifestBuilder : IContentImportManifestBuilder
             BakeTransforms = false,
             NormalsPolicy = Import.NativeSceneImportSettings.DefaultNormalsPolicy,
             TangentsPolicy = Import.NativeSceneImportSettings.DefaultTangentsPolicy,
-            MaterialSlotSourceIdentity = provenance.SourceIdentity.ToString("D"),
-            MaterialSlotProvenance = provenance,
+            SurfaceSourceIdentity = provenance.SourceIdentity.ToString("D"),
+            SurfaceProvenance = provenance,
         };
 
     /// <summary>Builds the job that attaches a scene's script slots to its cooked scene.</summary>

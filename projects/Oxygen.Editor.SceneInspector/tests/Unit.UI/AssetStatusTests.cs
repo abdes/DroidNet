@@ -36,9 +36,9 @@ internal sealed class AssetStatusTests : DroidNet.Tests.VisualUserInterfaceTests
         var catalog = new Mock<Oxygen.Editor.Assets.IAssetFeed>();
         _ = catalog.SetupGet(value => value.Items).Returns(updates);
         _ = catalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
-        using var slots = new FakeMaterialSlotProvider();
+        using var surfaces = new FakeSurfaceProvider();
         using var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
-        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, slots, session)
+        using var model = new GeometryViewModel(CreateStatusHosting(), catalog.Object, surfaces, session)
         {
             IsExpanded = true,
         };

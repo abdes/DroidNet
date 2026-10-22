@@ -22,7 +22,7 @@ public sealed class UnsavedCookInputsTests
     private const string Geometry = """
         { "name": "Box", "virtual_path": "/Content/Geometry/Box.ogeo",
           "buffers": [ { "uri": "mesh.bin", "virtual_path": "/Content/Geometry/Box.obuf" } ],
-          "lods": [ { "submeshes": [ { "slot_id": "a", "material_ref": "/Content/Materials/A.omat", "views": [] } ] } ] }
+          "lods": [ { "submeshes": [ { "surface_id": "a", "material_ref": "/Content/Materials/A.omat", "views": [] } ] } ] }
         """;
 
     private const string Scene = """

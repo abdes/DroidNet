@@ -107,9 +107,9 @@ Oxygen.Cooker.Inspector.exe index F:/path/to/loose_cooked_root --assets true --d
 
 `validate` checks scene, material and geometry descriptors through their native
 parse-only loaders in addition to index, type and file-size checks. Retired
-versions, malformed records, invalid material emission or slot identities fail
+versions, malformed records, invalid material emission or surface identities fail
 validation; content must be recooked. Scene material overrides are also checked
-against geometry inventories present in the same root: unknown slots or stale
+against geometry inventories present in the same root: unknown surfaces or stale
 layout revisions require repair. References to geometry in other mounted roots
 require validation with those roots available; this command does not invent
 missing inventories.
@@ -135,17 +135,17 @@ valid for a scene-free root. The output schema is
 `Schemas/oxygen.cooked-scenes.schema.json`, installed with Inspector tooling.
 This command contains no qualification hooks or payloads.
 
-### Geometry material-slot inventories
+### Geometry surface inventories
 
 ```powershell
 Oxygen.Cooker.Inspector.exe geometries <cooked_root> --output <geometries.json>
 ```
 
 Writes schema version 1 geometry inventories using
-`GeometryAsset::MaterialSlots()`. Each geometry reports its asset key, SHA-256
-layout revision and ordered slots. Each slot retains its opaque ID, display
+`GeometryAsset::Surfaces()`. Each geometry reports its asset key, SHA-256
+layout revision and ordered surfaces. Each surface retains its opaque ID, display
 label and exact LOD/submesh/default material bindings. Equal labels or material
-keys never merge slots. Nil default material keys remain the omitted-reference
+keys never merge surfaces. Nil default material keys remain the omitted-reference
 sentinel.
 
 The native loader supplies these records without loading vertex/index buffers or

@@ -40,8 +40,8 @@
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/Pipelines/MeshBuildPipeline.h>
 #include <Oxygen/Cooker/Import/Internal/SceneBuild.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
@@ -134,7 +134,7 @@ protected:
     const auto root = MakeTempDir("mesh_bake_" + test_name + "_" + extension
       + (bake ? "_baked" : "_retained"));
     ImportRequest request;
-    request.material_slot_provenance = source_provenance_;
+    request.surface_provenance = source_provenance_;
     request.source_path = root / ("fixture." + extension);
     request.asset_virtual_path
       = oxygen::cooker::test::ModelVirtualPath(request.source_path);
@@ -153,9 +153,9 @@ protected:
     if (!report.has_value()) {
       return result;
     }
-    if (report->success && !report->material_slot_provenance_json.empty()) {
+    if (report->success && !report->surface_provenance_json.empty()) {
       source_provenance_
-        = MaterialSlotProvenance::Parse(report->material_slot_provenance_json);
+        = SurfaceProvenance::Parse(report->surface_provenance_json);
     }
     result.diagnostics = report->diagnostics;
     EXPECT_TRUE(report->success);

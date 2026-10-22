@@ -69,7 +69,7 @@ public:
     //! Buffer bindings to patch into the descriptor.
     std::vector<MeshBufferBindings> bindings;
 
-    //! Material key patches for submesh slots.
+    //! Material key patches for submesh surfaces.
     std::vector<MaterialKeyPatch> material_patches;
 
     //! Callback fired when a worker starts processing this item.

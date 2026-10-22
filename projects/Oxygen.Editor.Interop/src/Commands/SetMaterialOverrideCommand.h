@@ -24,8 +24,8 @@ namespace oxygen::interop::module {
   class SetMaterialOverrideCommand final : public EditorCommand {
   public:
     SetMaterialOverrideCommand(oxygen::scene::NodeHandle node,
-      MaterialSlotTarget target, std::optional<std::string> material_uri,
-      MaterialSlotAssignmentIntent intent)
+      SurfaceTarget target, std::optional<std::string> material_uri,
+      SurfaceMaterialAssignmentIntent intent)
       : EditorCommand(oxygen::core::PhaseId::kSceneMutation)
       , node_(node)
       , target_(std::move(target))
@@ -36,7 +36,7 @@ namespace oxygen::interop::module {
 
     OXGN_EI_API void Execute(CommandContext& context) override;
 
-    //! Installs the observer carried by this specific material-slot intent.
+    //! Installs the observer carried by this specific surface material intent.
     void SetFailureCallback(SceneAssetRequests::FailureCallback callback) {
       failure_callback_ = std::move(callback);
     }
@@ -48,9 +48,9 @@ namespace oxygen::interop::module {
 
   private:
     oxygen::scene::NodeHandle node_;
-    MaterialSlotTarget target_;
+    SurfaceTarget target_;
     std::optional<std::string> material_uri_;
-    MaterialSlotAssignmentIntent intent_ = MaterialSlotAssignmentIntent::kObservedEdit;
+    SurfaceMaterialAssignmentIntent intent_ = SurfaceMaterialAssignmentIntent::kObservedEdit;
     SceneAssetRequests::FailureCallback failure_callback_;
     SceneAssetRequests::SuccessCallback success_callback_;
   };

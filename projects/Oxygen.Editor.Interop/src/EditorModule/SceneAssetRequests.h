@@ -20,7 +20,7 @@
 #include <Oxygen/Base/Sha256.h>
 #include <Oxygen/Content/ResourceKey.h>
 #include <Oxygen/Core/Types/AssetKey.h>
-#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Scene/Types/NodeHandle.h>
 #include <api_export.h>
 
@@ -40,7 +40,7 @@ class Scene;
 namespace oxygen::interop::module {
 
 //! New edits validate their observed revision; saved assignments retain identity.
-enum class MaterialSlotAssignmentIntent : std::uint8_t {
+enum class SurfaceMaterialAssignmentIntent : std::uint8_t {
   kObservedEdit = 0,
   kRetainedAssignment = 1,
 };
@@ -66,9 +66,9 @@ using EnvironmentTextureKeys
   = std::array<content::ResourceKey, kEnvironmentTextureSlotCount>;
 
 //! Native target captured from the currently observed authored geometry.
-struct MaterialSlotTarget final {
+struct SurfaceTarget final {
   std::string geometry_uri;
-  data::MaterialSlotId slot_id;
+  data::SurfaceId surface_id;
   base::Sha256Digest layout_revision {};
 };
 
@@ -117,8 +117,8 @@ public:
                      FailureCallback on_failure = {}, SuccessCallback on_success = {})
       -> GeometryCompletion;
   OXGN_EI_API void LoadGeometry(const std::string &uri, GeometryCompletion complete);
-  OXGN_EI_API void SetMaterial(scene::NodeHandle node, MaterialSlotTarget target,
-                   const std::optional<std::string>& uri, MaterialSlotAssignmentIntent intent,
+  OXGN_EI_API void SetMaterial(scene::NodeHandle node, SurfaceTarget target,
+                   const std::optional<std::string>& uri, SurfaceMaterialAssignmentIntent intent,
                    FailureCallback on_failure = {},
                    SuccessCallback on_success = {});
   OXGN_EI_API void Detach(scene::NodeHandle node);
@@ -145,8 +145,8 @@ public:
   OXGN_EI_API auto Drain(scene::Scene &scene) -> bool;
 
 private:
-  void QueueMaterial(scene::NodeHandle node, MaterialSlotTarget target,
-    const std::optional<std::string>& uri, MaterialSlotAssignmentIntent intent, FailureCallback on_failure,
+  void QueueMaterial(scene::NodeHandle node, SurfaceTarget target,
+    const std::optional<std::string>& uri, SurfaceMaterialAssignmentIntent intent, FailureCallback on_failure,
     SuccessCallback on_success, std::optional<data::AssetKey> accepted_geometry);
   struct State;
   std::unique_ptr<State> state_;

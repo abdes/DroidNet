@@ -18,10 +18,10 @@
 
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/ProceduralMeshDefaults.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
@@ -40,21 +40,20 @@ auto BuildMesh(std::string_view name,
 
   const auto vertex_count = static_cast<uint32_t>(vertices.size());
   const auto index_count = static_cast<uint32_t>(indices.size());
-  auto mesh
-    = MeshBuilder(oxygen::data::LodIndex {}, name)
-        .WithVertices(std::move(vertices))
-        .WithIndices(std::move(indices))
-        .BeginSubMesh("default", MaterialAsset::CreateDefault())
-        .WithMaterialSlotId(oxygen::data::MaterialSlotId::FromStableIdentity(
-          "oxygen.procedural.surface/v1"))
-        .WithMeshView(MeshViewDesc {
-          .first_index = 0,
-          .index_count = index_count,
-          .first_vertex = 0,
-          .vertex_count = vertex_count,
-        })
-        .EndSubMesh()
-        .Build();
+  auto mesh = MeshBuilder(oxygen::data::LodIndex {}, name)
+                .WithVertices(std::move(vertices))
+                .WithIndices(std::move(indices))
+                .BeginSubMesh("default", MaterialAsset::CreateDefault())
+                .WithSurfaceId(oxygen::data::SurfaceId::FromStableIdentity(
+                  "oxygen.procedural.surface/v1"))
+                .WithMeshView(MeshViewDesc {
+                  .first_index = 0,
+                  .index_count = index_count,
+                  .first_vertex = 0,
+                  .vertex_count = vertex_count,
+                })
+                .EndSubMesh()
+                .Build();
 
   return mesh;
 }

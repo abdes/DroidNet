@@ -206,31 +206,31 @@ public sealed class ProducedSourceMetadataTests
         var root = projectOwned ? "Content/Models" : "Content/Models/" + bundle;
         var source = new RetainedImportSource(root, primary, [new(primary, Convert.ToHexString(SHA256.HashData("source"u8)))]);
         var settings = NativeSceneImportSettings.Create(source, bundle);
-        var candidate = NativeMaterialSlotProvenance.Parse(JsonSerializer.SerializeToElement(new
+        var candidate = NativeSurfaceProvenance.Parse(JsonSerializer.SerializeToElement(new
         {
             schema_version = 1,
-            source_identity = settings.MaterialSlotProvenance.SourceIdentity,
+            source_identity = settings.SurfaceProvenance.SourceIdentity,
             geometries = new[]
             {
                 new
                 {
                     geometry_asset_key = "10000000-0000-0000-0000-000000000001", source_geometry_anchor = "mesh0",
                     source_layout_witness = new string('a', 64), layout_revision = new string('b', 64),
-                    slots = new[]
+                    surfaces = new[]
                     {
                         new
                         {
-                            slot_id = "20000000-0000-0000-0000-000000000001",
+                            surface_id = "20000000-0000-0000-0000-000000000001",
                             display_name = "Surface",
                             bindings = new[] { new { lod_index = 0, submesh_index = 0, default_material_key = "30000000-0000-0000-0000-000000000001" } },
                         },
                     },
-                    allocations = new[] { new { declaration_key = 0, slot_id = "20000000-0000-0000-0000-000000000001" } },
+                    allocations = new[] { new { declaration_key = 0, surface_id = "20000000-0000-0000-0000-000000000001" } },
                 },
             },
         }));
         var relative = settings.BundleRoot + "/" + settings.PrimaryRelativePath + ".import.json";
-        var update = new CookProducedSourceFile(relative, settings.ToBytes(), (settings with { MaterialSlotProvenance = candidate }).ToBytes());
+        var update = new CookProducedSourceFile(relative, settings.ToBytes(), (settings with { SurfaceProvenance = candidate }).ToBytes());
         var path = Path.Combine(project.Root, relative);
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
         await File.WriteAllBytesAsync(path, update.Before, this.TestContext.CancellationToken).ConfigureAwait(false);

@@ -9,7 +9,7 @@
       "type": "fbx",
       "source": "../../fbx/showcase/tableRound.fbx",
       "virtual_path": "/.cooked/fbx/showcase/tableRound.fbx",
-      "material_slot_source_identity": "01a0e7c7-f432-7586-8f04-212e9ac8d964",
+      "surface_source_identity": "01a0e7c7-f432-7586-8f04-212e9ac8d964",
       "name": "tableRound",
       "content_hashing": true
     },
@@ -18,7 +18,7 @@
       "type": "fbx",
       "source": "../../fbx/showcase/chair.fbx",
       "virtual_path": "/.cooked/fbx/showcase/chair.fbx",
-      "material_slot_source_identity": "01a0e7c7-f432-7586-8f04-212fc6337efe",
+      "surface_source_identity": "01a0e7c7-f432-7586-8f04-212fc6337efe",
       "name": "chair",
       "content_hashing": true
     },
@@ -27,7 +27,7 @@
       "type": "fbx",
       "source": "../../fbx/showcase/lampRoundTable.fbx",
       "virtual_path": "/.cooked/fbx/showcase/lampRoundTable.fbx",
-      "material_slot_source_identity": "01a0e7c7-f432-7586-8f04-2130dca8d325",
+      "surface_source_identity": "01a0e7c7-f432-7586-8f04-2130dca8d325",
       "name": "lampRoundTable",
       "content_hashing": true
     },
@@ -36,7 +36,7 @@
       "type": "fbx",
       "source": "../../fbx/showcase/pottedPlant.fbx",
       "virtual_path": "/.cooked/fbx/showcase/pottedPlant.fbx",
-      "material_slot_source_identity": "01a0e7c7-f432-7586-8f04-21318d102e68",
+      "surface_source_identity": "01a0e7c7-f432-7586-8f04-21318d102e68",
       "name": "pottedPlant",
       "content_hashing": true
     }

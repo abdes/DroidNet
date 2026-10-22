@@ -104,7 +104,7 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         }
     }
 
-    private static async Task CheckImportedAssetEditsAsync(NativeSceneFixture fixture, IGeometryMaterialSlotProvider inventories, AssetEntry geometry, AssetEntry material, CancellationToken cancellationToken)
+    private static async Task CheckImportedAssetEditsAsync(NativeSceneFixture fixture, IGeometrySurfaceProvider inventories, AssetEntry geometry, AssetEntry material, CancellationToken cancellationToken)
     {
         var node = fixture.Source.RootNodes[0];
         var original = await AssertGeometryAsync(fixture, node.Id, "Cube", cancellationToken).ConfigureAwait(true);
@@ -112,9 +112,9 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         var selected = await WaitForNodeAsync(fixture, node.Id, static value => value.IndexCount == 3, cancellationToken).ConfigureAwait(true);
         _ = selected.GeometryKey.Should().Be(ImportedNativeKey(geometry));
         _ = fixture.Document.History.UndoStack.Should().ContainSingle();
-        var slot = await ReadSingleSlotAsync(inventories, fixture.Session.Context, geometry.Identity, cancellationToken).ConfigureAwait(true);
-        var built = await MaterialSlotEdits.SetAsync(inventories, fixture.Session.Context, [node.Id], slot, material.Identity, cancellationToken).ConfigureAwait(true);
-        _ = built.Error.Should().BeNull("the current native slot must be editable");
+        var surface = await ReadSingleSurfaceAsync(inventories, fixture.Session.Context, geometry.Identity, cancellationToken).ConfigureAwait(true);
+        var built = await SurfaceMaterialEdits.SetAsync(inventories, fixture.Session.Context, [node.Id], surface, material.Identity, cancellationToken).ConfigureAwait(true);
+        _ = built.Error.Should().BeNull("the current native surface must be editable");
         _ = (await fixture.Authoring.ExecuteAsync(built.Edit!).ConfigureAwait(true)).Succeeded.Should().BeTrue();
         _ = fixture.Document.History.UndoStack.Should().HaveCount(2);
         _ = ReadMaterialAsset(node).Should().Be(material.Identity);
@@ -137,13 +137,13 @@ public sealed partial class ImportedModelTests : DroidNet.Tests.VisualUserInterf
         _ = ReadMaterialAsset(fixture.Source.RootNodes[0]).Should().Be(material.Identity);
     }
 
-    // The geometry's one material slot, as its current inventory names it.
-    private static async Task<MaterialSlotTarget> ReadSingleSlotAsync(IGeometryMaterialSlotProvider inventories, ProjectContext project, AssetPath geometry, CancellationToken cancellationToken)
+    // The geometry's one surface, as its current inventory names it.
+    private static async Task<SurfaceTarget> ReadSingleSurfaceAsync(IGeometrySurfaceProvider inventories, ProjectContext project, AssetPath geometry, CancellationToken cancellationToken)
     {
         var inventory = await inventories.ReadAsync(project, geometry, cancellationToken).ConfigureAwait(true);
-        _ = inventory.Should().NotBeNull("the imported geometry must have a current slot inventory");
-        var slot = inventory!.Slots.Should().ContainSingle().Which;
-        return new(geometry, slot.SlotId, inventory.LayoutRevision);
+        _ = inventory.Should().NotBeNull("the imported geometry must have a current surface inventory");
+        var surface = inventory!.Surfaces.Should().ContainSingle().Which;
+        return new(geometry, surface.SurfaceId, inventory.LayoutRevision);
     }
 
     private static string ImportedNativeKey(AssetEntry asset)

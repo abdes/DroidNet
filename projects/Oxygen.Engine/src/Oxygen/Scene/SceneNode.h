@@ -31,7 +31,7 @@ namespace oxygen::data {
 class Mesh;
 class GeometryAsset;
 class MaterialAsset; // forward declaration for material override APIs
-class MaterialSlotId;
+class SurfaceId;
 } // namespace oxygen::data
 
 namespace oxygen::scene {
@@ -761,8 +761,8 @@ public:
   OXGN_SCN_API void SetMaterialOverride(data::LodIndex lod,
     data::SubmeshIndex submesh, MaterialAssetPtr material) noexcept;
   OXGN_SCN_NDAPI auto SetMaterialOverride(
-    data::MaterialSlotId slot, MaterialAssetPtr material) noexcept -> bool;
-  OXGN_SCN_NDAPI auto ClearMaterialOverride(data::MaterialSlotId slot) noexcept
+    data::SurfaceId surface, MaterialAssetPtr material) noexcept -> bool;
+  OXGN_SCN_NDAPI auto ClearMaterialOverride(data::SurfaceId surface) noexcept
     -> bool;
   OXGN_SCN_API void ClearMaterialOverride(
     data::LodIndex lod, data::SubmeshIndex submesh) noexcept;

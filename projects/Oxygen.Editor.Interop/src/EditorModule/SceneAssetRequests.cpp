@@ -91,24 +91,24 @@ struct SceneAssetRequests::State {
   struct Completion {
     scene::NodeHandle node {};
     uint64_t generation = 0;
-    data::MaterialSlotId slot;
+    data::SurfaceId surface;
     bool geometry = false;
     Geometry geometry_asset;
     Material material_asset;
     std::string error;
   };
-  struct Slot {
+  struct SurfaceAssignment {
     uint64_t generation = 0;
     uint64_t geometry_generation = 0;
-    MaterialSlotTarget target;
-    MaterialSlotAssignmentIntent intent
-      = MaterialSlotAssignmentIntent::kObservedEdit;
+    SurfaceTarget target;
+    SurfaceMaterialAssignmentIntent intent
+      = SurfaceMaterialAssignmentIntent::kObservedEdit;
     std::optional<std::string> uri;
     Material material;
     std::optional<data::AssetKey> accepted_geometry;
     bool ready = false;
     bool apply = false;
-    bool rejected_slot = false;
+    bool rejected_surface = false;
     FailureCallback on_failure;
     SuccessCallback on_success;
   };
@@ -119,7 +119,7 @@ struct SceneAssetRequests::State {
     bool geometry_failed = false;
     FailureCallback geometry_failure;
     SuccessCallback geometry_success;
-    std::unordered_map<data::MaterialSlotId, Slot> slots;
+    std::unordered_map<data::SurfaceId, SurfaceAssignment> surfaces;
   };
 
   GeometryLoader geometry_loader;
@@ -164,14 +164,14 @@ struct SceneAssetRequests::State {
 
   void Report(scene::NodeHandle node, const std::string& uri,
     const std::string& error, bool geometry, uint64_t generation,
-    const FailureCallback& on_failure, data::MaterialSlotId slot = {})
+    const FailureCallback& on_failure, data::SurfaceId surface = {})
   {
     if (refresh_requests.contains(generation)) {
       refresh_error = fmt::format("{} '{}' could not be refreshed: {}",
         geometry ? "Geometry" : "Material", uri, error);
     }
-    diagnostic(fmt::format("{} request '{}' on node {} slot {}: {}",
-      geometry ? "Geometry" : "Material", uri, nostd::to_string(node), slot,
+    diagnostic(fmt::format("{} request '{}' on node {} surface {}: {}",
+      geometry ? "Geometry" : "Material", uri, nostd::to_string(node), surface,
       error));
     if (on_failure) {
       on_failure(generation, error);
@@ -253,7 +253,7 @@ auto SceneAssetRequests::BeginGeometry(scene::NodeHandle node,
 {
   auto& target = state_->targets[node];
   if (target.geometry_uri != uri) {
-    target.slots.clear();
+    target.surfaces.clear();
   }
   const auto generation = ++state_->generation;
   target.geometry_generation = generation;
@@ -267,7 +267,7 @@ auto SceneAssetRequests::BeginGeometry(scene::NodeHandle node,
     if (auto queue = inbox.lock()) {
       queue->Enqueue(State::Completion { .node = node,
         .generation = generation,
-        .slot = {},
+        .surface = {},
         .geometry = true,
         .geometry_asset = std::move(asset),
         .material_asset = {},
@@ -292,8 +292,8 @@ void SceneAssetRequests::LoadGeometry(
 }
 
 void SceneAssetRequests::SetMaterial(scene::NodeHandle node,
-  MaterialSlotTarget target, const std::optional<std::string>& uri,
-  const MaterialSlotAssignmentIntent intent, FailureCallback on_failure,
+  SurfaceTarget target, const std::optional<std::string>& uri,
+  const SurfaceMaterialAssignmentIntent intent, FailureCallback on_failure,
   SuccessCallback on_success)
 {
   QueueMaterial(node, std::move(target), uri, intent, std::move(on_failure),
@@ -301,21 +301,21 @@ void SceneAssetRequests::SetMaterial(scene::NodeHandle node,
 }
 
 void SceneAssetRequests::QueueMaterial(scene::NodeHandle node,
-  MaterialSlotTarget target, const std::optional<std::string>& uri,
-  const MaterialSlotAssignmentIntent intent, FailureCallback on_failure,
+  SurfaceTarget target, const std::optional<std::string>& uri,
+  const SurfaceMaterialAssignmentIntent intent, FailureCallback on_failure,
   SuccessCallback on_success, std::optional<data::AssetKey> accepted_geometry)
 {
   const auto generation = ++state_->generation;
   auto& node_target = state_->targets[node];
-  const auto slot_id = target.slot_id;
+  const auto surface_id = target.surface_id;
   if (node_target.geometry_uri != target.geometry_uri) {
     state_->Report(node, uri.value_or("geometry default"),
-      "material slot target belongs to a different geometry", false, generation,
-      on_failure, slot_id);
+      "surface target belongs to a different geometry", false, generation,
+      on_failure, surface_id);
     return;
   }
-  node_target.slots.insert_or_assign(slot_id,
-    State::Slot {
+  node_target.surfaces.insert_or_assign(surface_id,
+    State::SurfaceAssignment {
       .generation = generation,
       .geometry_generation = node_target.geometry_generation,
       .target = std::move(target),
@@ -325,17 +325,17 @@ void SceneAssetRequests::QueueMaterial(scene::NodeHandle node,
       .accepted_geometry = accepted_geometry,
       .ready = false,
       .apply = false,
-      .rejected_slot = false,
+      .rejected_surface = false,
       .on_failure = std::move(on_failure),
       .on_success = std::move(on_success),
     });
-  auto complete = [inbox = std::weak_ptr(state_->inbox), node, slot_id,
+  auto complete = [inbox = std::weak_ptr(state_->inbox), node, surface_id,
                     generation](Material asset, std::string error) {
     if (auto queue = inbox.lock()) {
       queue->Enqueue(State::Completion {
         .node = node,
         .generation = generation,
-        .slot = slot_id,
+        .surface = surface_id,
         .geometry = false,
         .geometry_asset = {},
         .material_asset = std::move(asset),
@@ -343,13 +343,13 @@ void SceneAssetRequests::QueueMaterial(scene::NodeHandle node,
       });
     }
   };
-  const auto& requested = node_target.slots.at(slot_id).target;
-  if (slot_id.IsNil() || requested.geometry_uri.empty()
+  const auto& requested = node_target.surfaces.at(surface_id).target;
+  if (surface_id.IsNil() || requested.geometry_uri.empty()
     || base::IsAllZero(requested.layout_revision) || (uri && uri->empty())
-    || (intent != MaterialSlotAssignmentIntent::kObservedEdit
-      && intent != MaterialSlotAssignmentIntent::kRetainedAssignment)) {
+    || (intent != SurfaceMaterialAssignmentIntent::kObservedEdit
+      && intent != SurfaceMaterialAssignmentIntent::kRetainedAssignment)) {
     complete(
-      {}, "material assignment requires geometry, slot and layout identities");
+      {}, "material assignment requires geometry, surface and layout identities");
     return;
   }
   if (state_->loads_paused) {
@@ -529,13 +529,13 @@ void SceneAssetRequests::Refresh(scene::Scene& scene)
       state_->refresh_requests.insert(state_->generation);
       LoadGeometry(target.geometry_uri, std::move(complete));
     }
-    // Copy the authored requests before SetMaterial replaces their slot state.
-    const auto slots = target.slots;
-    for (const auto& [index, slot] : slots) {
-      if (!slot.rejected_slot
-        && (!slot.uri || state_->CanRefresh(*slot.uri, true))) {
-        QueueMaterial(handle, slot.target, slot.uri, slot.intent,
-          slot.on_failure, slot.on_success, slot.accepted_geometry);
+    // Copy the authored requests before SetMaterial replaces their surface state.
+    const auto surfaces = target.surfaces;
+    for (const auto& [index, surface] : surfaces) {
+      if (!surface.rejected_surface
+        && (!surface.uri || state_->CanRefresh(*surface.uri, true))) {
+        QueueMaterial(handle, surface.target, surface.uri, surface.intent,
+          surface.on_failure, surface.on_success, surface.accepted_geometry);
         state_->refresh_requests.insert(state_->generation);
       }
     }
@@ -562,12 +562,12 @@ void SceneAssetRequests::ResumeLoads(scene::Scene& scene)
         target.geometry_failure, target.geometry_success);
       LoadGeometry(target.geometry_uri, std::move(complete));
     }
-    const auto slots = target.slots;
-    for (const auto& [index, slot] : slots) {
-      if (!slot.ready && !slot.rejected_slot && slot.uri
-        && !state_->IsAvailable(*slot.uri, true)) {
-        QueueMaterial(handle, slot.target, slot.uri, slot.intent,
-          slot.on_failure, slot.on_success, slot.accepted_geometry);
+    const auto surfaces = target.surfaces;
+    for (const auto& [index, surface] : surfaces) {
+      if (!surface.ready && !surface.rejected_surface && surface.uri
+        && !state_->IsAvailable(*surface.uri, true)) {
+        QueueMaterial(handle, surface.target, surface.uri, surface.intent,
+          surface.on_failure, surface.on_success, surface.accepted_geometry);
       }
     }
   }
@@ -585,8 +585,8 @@ auto SceneAssetRequests::IsRefreshPending() const -> bool
       && state_->refresh_requests.contains(target.geometry_generation)) {
       return true;
     }
-    for (const auto& [index, slot] : target.slots) {
-      if (!slot.ready && state_->refresh_requests.contains(slot.generation)) {
+    for (const auto& [index, surface] : target.surfaces) {
+      if (!surface.ready && state_->refresh_requests.contains(surface.generation)) {
         return true;
       }
     }
@@ -649,86 +649,86 @@ auto SceneAssetRequests::Drain(scene::Scene& scene) -> bool
         target.geometry_success(result.generation);
       }
       const auto geometry = node->GetRenderable().GetGeometry();
-      for (auto& [id, slot] : target.slots) {
-        if (slot.accepted_geometry
-          && (*slot.accepted_geometry != geometry->GetAssetKey()
-            || geometry->FindMaterialSlot(id) == nullptr)) {
-          slot.ready = true;
-          slot.apply = false;
-          slot.rejected_slot = true;
-          slot.material.reset();
-          state_->Report(result.node, slot.uri.value_or("geometry default"),
-            "material slot requires repair after geometry replacement", false,
-            slot.generation, slot.on_failure, id);
+      for (auto& [id, surface] : target.surfaces) {
+        if (surface.accepted_geometry
+          && (*surface.accepted_geometry != geometry->GetAssetKey()
+            || geometry->FindSurface(id) == nullptr)) {
+          surface.ready = true;
+          surface.apply = false;
+          surface.rejected_surface = true;
+          surface.material.reset();
+          state_->Report(result.node, surface.uri.value_or("geometry default"),
+            "material surface requires repair after geometry replacement", false,
+            surface.generation, surface.on_failure, id);
         }
       }
     } else {
-      const auto slot_found = target.slots.find(result.slot);
-      if (slot_found == target.slots.end()
-        || slot_found->second.generation != result.generation
-        || slot_found->second.ready) {
+      const auto surface_found = target.surfaces.find(result.surface);
+      if (surface_found == target.surfaces.end()
+        || surface_found->second.generation != result.generation
+        || surface_found->second.ready) {
         return;
       }
-      auto& slot = slot_found->second;
+      auto& surface = surface_found->second;
       if (!result.error.empty()
-        || (!result.material_asset && slot.uri.has_value())) {
-        slot.ready = true;
-        state_->Report(result.node, slot.uri.value_or("geometry default"),
+        || (!result.material_asset && surface.uri.has_value())) {
+        surface.ready = true;
+        state_->Report(result.node, surface.uri.value_or("geometry default"),
           result.error.empty() ? "asset load failed" : result.error, false,
-          result.generation, slot.on_failure, result.slot);
+          result.generation, surface.on_failure, result.surface);
         return;
       }
-      slot.material = std::move(result.material_asset);
-      slot.ready = true;
-      slot.apply = true;
+      surface.material = std::move(result.material_asset);
+      surface.ready = true;
+      surface.apply = true;
     }
   });
 
   for (auto& [handle, target] : state_->targets) {
     if (std::ranges::none_of(
-          target.slots, [](const auto& entry) { return entry.second.apply; })) {
+          target.surfaces, [](const auto& entry) { return entry.second.apply; })) {
       continue;
     }
     const auto node = scene.GetNode(handle);
     auto renderable = node->GetRenderable();
     const auto geometry = renderable.GetGeometry();
-    for (auto& [id, slot] : target.slots) {
-      if (!slot.apply || target.geometry_pending || target.geometry_failed
+    for (auto& [id, surface] : target.surfaces) {
+      if (!surface.apply || target.geometry_pending || target.geometry_failed
         || !geometry) {
         continue;
       }
-      slot.apply = false;
-      const bool same_target = target.geometry_uri == slot.target.geometry_uri
-        && slot.geometry_generation == target.geometry_generation;
-      const bool revision_valid = slot.accepted_geometry
-        ? *slot.accepted_geometry == geometry->GetAssetKey()
-        : slot.intent == MaterialSlotAssignmentIntent::kRetainedAssignment
-          || slot.target.layout_revision
-            == geometry->MaterialSlots().layout_revision;
-      const bool slot_exists = geometry->FindMaterialSlot(id) != nullptr;
-      if (!same_target || !revision_valid || (slot.material && !slot_exists)) {
-        state_->Report(handle, slot.uri.value_or("geometry default"),
-          "material slot target is stale or unavailable", false,
-          slot.generation, slot.on_failure, id);
-        slot.material.reset();
-        slot.rejected_slot = true;
+      surface.apply = false;
+      const bool same_target = target.geometry_uri == surface.target.geometry_uri
+        && surface.geometry_generation == target.geometry_generation;
+      const bool revision_valid = surface.accepted_geometry
+        ? *surface.accepted_geometry == geometry->GetAssetKey()
+        : surface.intent == SurfaceMaterialAssignmentIntent::kRetainedAssignment
+          || surface.target.layout_revision
+            == geometry->Surfaces().layout_revision;
+      const bool surface_exists = geometry->FindSurface(id) != nullptr;
+      if (!same_target || !revision_valid || (surface.material && !surface_exists)) {
+        state_->Report(handle, surface.uri.value_or("geometry default"),
+          "material surface target is stale or unavailable", false,
+          surface.generation, surface.on_failure, id);
+        surface.material.reset();
+        surface.rejected_surface = true;
         continue;
       }
-      if (slot_exists && !renderable.SetMaterialOverride(id, slot.material)) {
-        state_->Report(handle, slot.uri.value_or("geometry default"),
-          "material slot assignment could not be applied", false,
-          slot.generation, slot.on_failure, id);
-        slot.material.reset();
-        slot.rejected_slot = true;
+      if (surface_exists && !renderable.SetMaterialOverride(id, surface.material)) {
+        state_->Report(handle, surface.uri.value_or("geometry default"),
+          "material surface assignment could not be applied", false,
+          surface.generation, surface.on_failure, id);
+        surface.material.reset();
+        surface.rejected_surface = true;
         continue;
       }
-      changed = changed || slot_exists;
-      slot.accepted_geometry = geometry->GetAssetKey();
-      slot.target.layout_revision = geometry->MaterialSlots().layout_revision;
-      slot.material.reset();
-      slot.rejected_slot = !slot_exists;
-      if (slot.on_success) {
-        slot.on_success(slot.generation);
+      changed = changed || surface_exists;
+      surface.accepted_geometry = geometry->GetAssetKey();
+      surface.target.layout_revision = geometry->Surfaces().layout_revision;
+      surface.material.reset();
+      surface.rejected_surface = !surface_exists;
+      if (surface.on_success) {
+        surface.on_success(surface.generation);
       }
     }
   }

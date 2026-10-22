@@ -186,7 +186,7 @@ Do **not** defer physical-camera exposure authoring, point and spot light
 authoring and rendering, either atmosphere slot's real direct
 lighting/shadowing, ordinary directional fill lighting, captured-sky
 diffuse/specular lighting, functional Receive Shadows, correct visibility
-invalidation, all material slots, scalar emission, Capsule and canonical
+invalidation, all surfaces, scalar emission, Capsule and canonical
 primitive defaults, finite input validation, Auto/Fixed camera framing, or
 orthographic camera sync command. These are current obligations. A post-V0.1
 TODO cannot replace an implementation or validation gate for a retained V0.1

@@ -23,7 +23,7 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/MaterialSlotId.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 using oxygen::base::CheckedAt;
 
@@ -246,8 +246,8 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsUsed)
   oxygen::data::pak::geometry::SubMeshDesc desc {
     .name_offset = 0,
     .material_asset_key = {},
-    .slot_id
-    = oxygen::data::MaterialSlotId::FromStableIdentity("SubMeshTest/bounds"),
+    .surface_id
+    = oxygen::data::SurfaceId::FromStableIdentity("SubMeshTest/bounds"),
     .mesh_view_count = 1,
     .bounding_box_min = { 0.0F, 0.0F, 0.0F },
     .bounding_box_max = { 1.0F, 2.0F, 3.0F },
@@ -309,8 +309,8 @@ NOLINT_TEST_F(SubMeshBuilderFixture, DescriptorBoundsMatchExpected)
   oxygen::data::pak::geometry::SubMeshDesc desc {
     .name_offset = 0,
     .material_asset_key = {},
-    .slot_id
-    = oxygen::data::MaterialSlotId::FromStableIdentity("SubMeshTest/bounds"),
+    .surface_id
+    = oxygen::data::SurfaceId::FromStableIdentity("SubMeshTest/bounds"),
     .mesh_view_count = 1,
     .bounding_box_min = { -1.0F, -4.0F, -2.0F },
     .bounding_box_max = { 3.0F, 2.0F, 5.0F },

@@ -22,12 +22,12 @@
 #include <Oxygen/Data/AssetReferences.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 namespace oxygen::content::test {
 
@@ -107,7 +107,7 @@ inline auto GeometryDescriptor(const std::string_view name) -> DescriptorFixture
   mesh.submesh_count = 1U;
   mesh.mesh_view_count = 1U;
   data::pak::geometry::SubMeshDesc submesh {};
-  submesh.slot_id = data::MaterialSlotId::FromStableIdentity("fixture-slot");
+  submesh.surface_id = data::SurfaceId::FromStableIdentity("fixture-surface");
   submesh.mesh_view_count = 1U;
   constexpr data::pak::geometry::MeshViewDesc view {
     .first_index = 0U,

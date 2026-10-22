@@ -6,7 +6,7 @@ Status:
 Last Updated: 2026-10-20 01:32
 
 **Navigation:** [purpose](#1-purpose),
-[slot identity and reimport](#20-canonical-material-slot-identity-and-reimport),
+[surface identity and reimport](#20-canonical-surface-identity-and-reimport),
 [emission](#21-material-emission-precision).
 
 ## 1. Purpose
@@ -65,14 +65,14 @@ remain reusable; they are not alternative native-format cook/publication paths.
 
 The engine owns material, geometry, scene and manifest schemas and native binary
 formats. The canonical V0.1 changes require new descriptor/record versions for
-stable material slots, float32 emission, Auto/Fixed cameras and retained
+stable surfaces, float32 emission, Auto/Fixed cameras and retained
 Local/Inherit light/visibility semantics. Update engine-owned version constants,
 producers, readers and installed schema compatibility together; recook affected
 content. Normal readers reject retired formats. Useful pre-V0.1 migration is a
 separate one-time development operation, not a shipping legacy execution path.
 
 Existing integration/evidence is recorded in the milestone ledger. That
-historical scope does not establish the newly required material-slot or
+historical scope does not establish the newly required surface or
 rendering behavior.
 
 ## 5. Target Design
@@ -82,7 +82,7 @@ Explicit Cook / cook on change / import / saved-dependency demand
   -> project coordinator and saved scope
   -> coherent input snapshot and native descriptor/manifest generation
   -> native cook into staging
-  -> complete-root, reference, slot-layout and descriptor validation
+  -> complete-root, reference, surface-layout and descriptor validation
   -> journaled publication and runtime refresh
   -> shared catalog status and correlated operation result
 ```
@@ -201,8 +201,8 @@ in this production service.
 | Node identity/order/hierarchy                        | Deterministic depth-first records and parent indices; duplicate names are not identities.                                                                                      |
 | Local TRS                                            | Captured position, quaternion and scale without silent repairs.                                                                                                                |
 | Scene Visibility / geometry Cast and Receive Shadows | Each stored Local/Inherit mode and local value; never flatten inherited intent into the current effective boolean.                                                             |
-| Geometry URI                                         | Canonical geometry key/path and its native slot inventory.                                                                                                                     |
-| Instance material assignments                        | Explicit SlotId-keyed overrides and resolved material keys; every supplied slot/LOD binding is supported. No single material_ref or positional-only override path.             |
+| Geometry URI                                         | Canonical geometry key/path and its native surface inventory.                                                                                                                  |
+| Instance material assignments                        | Explicit SurfaceId-keyed overrides and resolved material keys; every supplied surface/LOD binding is supported. No single material_ref or positional-only override path.       |
 | Perspective camera                                   | Auto/Fixed mode, stored Fixed ratio, vertical FOV, near/far and parented pose. Auto ratio/content rectangle is derived per view, not saved on resize.                          |
 | Directional light                                    | Complete selected scalar/common/shadow values and canonical AtmosphereLightSlot None/Primary/Secondary.                                                                        |
 | Atmosphere roles                                     | Per-light assignment only; uniqueness checked across stored lights including hidden/off ones. No SunNodeId, IsSunLight/Contributes duplicate authority or automatic promotion. |
@@ -214,7 +214,7 @@ in this production service.
 The engine owns the changed schema and binary versions. Do not continue emitting
 old scene record layouts that cannot represent the selected contracts. Qualified
 imports reject excluded components instead of reporting success after dropping
-them. Reject invalid clipping/enum/role/slot data with the scene and field in
+them. Reject invalid clipping/enum/role/surface data with the scene and field in
 the diagnostic. Empty scenes are valid: emit an empty node array and preserve
 their environment and identity. Project cooking publishes them normally, without
 placeholder nodes. Components still require valid node references; runtime hosts
@@ -379,16 +379,16 @@ only.
 
 Use the installed native Inspector and native schemas through the existing
 process adapter. Reports contain container identity, asset keys/types/paths,
-protected files/digests, dependency information and canonical slot inventory.
+protected files/digests, dependency information and canonical surface inventory.
 Cache only verified reports against their producer/schema/container
 fingerprints. Managed feature code does not decode binary
 geometry/material/scene structures.
 
 Failures return complete scoped diagnostics with native codes/messages; invalid
 inspection cannot authorize reuse or publication. Validate every preserved and
-new descriptor/reference in the candidate generation, including SlotId bindings
+new descriptor/reference in the candidate generation, including SurfaceId bindings
 and physical-path uniqueness. Successful file hashes alone do not prove that a
-source material or slot was preserved.
+source material or surface was preserved.
 
 ## 8. Commands, Services, Or Adapters
 
@@ -398,7 +398,7 @@ Use the existing `IContentPipelineService` operations for current scene, asset,
 folder and project cooking, retained import/reimport, inspection and validation.
 Every target uses the same scope, snapshot, native execution, publication and
 status machinery. MaterialCookService is a typed caller of CookAssetAsync, not
-an independent writer. Invalid/missing slot identity is scoped to its affected
+an independent writer. Invalid/missing surface identity is scoped to its affected
 consumer closure, as specified in section 20.
 
 ### 8.2 Engine API Adapter
@@ -505,7 +505,7 @@ Derived artifacts:
 - optional inspect reports.
 
 Derived artifacts must not be used as authored identity in scene files, material
-slots, project manifests, or recent documents.
+surfaces, project manifests, or recent documents.
 
 ## 11. Live Sync / Cook / Runtime Behavior
 
@@ -589,7 +589,7 @@ Forbidden:
 The following production paths require regression coverage:
 
 1. `Cook Current Scene` generates a native `oxygen.scene` descriptor from the
-   editor scene with transform, geometry, material slot, perspective camera,
+   editor scene with transform, geometry, surface material, perspective camera,
    directional light, and supported environment data.
 2. engine content references needed by the scene resolve through the engine
    content pak or fail with visible diagnostics.
@@ -897,7 +897,7 @@ source cooking, replacement and captured-input execution. The retired
 recooked rather than carried through a compatibility path.
 
 Initial intake uses the same native `analyze-sources` recipes as cooking. The
-request owns its native material-slot source identity through discovery,
+request owns its native surface source identity through discovery,
 retention, settings creation and retries. Native declarations and observations
 identify the input closure; capture checks their existence, metadata and read
 proofs against private copies. Relative paths remain relative to the primary
@@ -926,7 +926,7 @@ one-time migration tool and cannot silently replace existing identities. Normals
 and tangents use native generation of missing attributes, preserving authored
 values. This supplies the UV-derived tangent basis required by normal maps in
 FBX files that omit tangents. Canonical retained settings also carry the
-engine-owned slot identity provenance defined in section 20. Creation uses the
+engine-owned surface identity provenance defined in section 20. Creation uses the
 ordinary atomic file store with a missing-file baseline.
 
 New imports follow the existing type folders: `/Content/Materials/<model>`,
@@ -1117,7 +1117,7 @@ product without the source fingerprint requires that explicit confirmation too.
 Importer version/options, source hashes, and source-relative dependency paths
 are retained in authored import descriptors/configuration. Reimport uses those
 facts; name/ID changes cannot silently redirect existing scene references.
-General file rename/move/reference repair UI is excluded; per-slot layout repair
+General file rename/move/reference repair UI is excluded; per-surface layout repair
 is required by section 20; externally missing references remain visible and
 retain their URIs. External source edits trigger stale state and an explicit
 reimport/cook; they cannot silently replace a dirty authored material.
@@ -1192,7 +1192,7 @@ The editor reads `engine.pak` through `IEngineContentPak`:
 - the preview mounts it beneath the project's content; a missing pak is reported
   loudly and leaves `/Engine` references unresolved without failing the engine.
 
-Geometry slot inventories of engine shapes come from the native Inspector
+Geometry surface inventories of engine shapes come from the native Inspector
 `geometries` report on `engine.pak`, as for any cooked geometry, so engine
 shapes have inventories without a project cook.
 
@@ -1206,39 +1206,39 @@ identity, and saved revision, and can navigate to the matching current node. If
 the node has been renamed/deleted since capture, explain that relationship
 instead of selecting a different node with a similar display name.
 
-## 20. Canonical Material-Slot Identity And Reimport
+## 20. Canonical Surface Identity And Reimport
 
 ### 20.1 Native inventory and authored assignments
 
-The engine owns slot identity and publishes it through geometry records and
+The engine owns surface identity and publishes it through geometry records and
 normal Inspector/content metadata. Extend the canonical geometry/scene formats
-and their schema versions; a managed decoder or editor-generated slot catalog is
+and their schema versions; a managed decoder or editor-generated surface catalog is
 not an alternative implementation.
 
-`MaterialSlotId` is an opaque 128-bit identifier: 16 bytes natively and
+`SurfaceId` is an opaque 128-bit identifier: 16 bytes natively and
 canonical lower-case UUID text in JSON. It is scoped by geometry identity.
-Labels and indices are not IDs. Separate declared slots remain separate even
+Labels and indices are not IDs. Separate declared surfaces remain separate even
 when their labels or default materials coincide. A native definition may bind
-one proven semantic slot to several LOD/submesh locations; ordinal coincidence
+one proven semantic surface to several LOD/submesh locations; ordinal coincidence
 across LODs is insufficient to establish that relation.
 
 The engine-owned inventory schema contains:
 
-| Field                  | Contract                                                                                                                                                            |
-| ---------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `schema_version`       | Inventory schema version, checked before use.                                                                                                                       |
-| `geometry_asset_key`   | Exact native geometry identity; authored callers retain its URI and winning source.                                                                                 |
-| `layout_revision`      | SHA-256 of canonical slot IDs, binding locations and default keys. Excludes display labels, material scalar/texture bytes, producer timestamps and temporary paths. |
-| `slots[].slot_id`      | Unique, nonempty MaterialSlotId.                                                                                                                                    |
-| `slots[].display_name` | Presentation only; may be duplicated or renamed.                                                                                                                    |
-| `slots[].bindings[]`   | Explicit `lod_index`, `submesh_index` and `default_material_key` for each existing binding. Each material-bearing surface belongs to exactly one declared slot.     |
+| Field                     | Contract                                                                                                                                                               |
+| ------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `schema_version`          | Inventory schema version, checked before use.                                                                                                                          |
+| `geometry_asset_key`      | Exact native geometry identity; authored callers retain its URI and winning source.                                                                                    |
+| `layout_revision`         | SHA-256 of canonical surface IDs, binding locations and default keys. Excludes display labels, material scalar/texture bytes, producer timestamps and temporary paths. |
+| `surfaces[].surface_id`   | Unique, nonempty SurfaceId.                                                                                                                                            |
+| `surfaces[].display_name` | Presentation only; may be duplicated or renamed.                                                                                                                       |
+| `surfaces[].bindings[]`   | Explicit `lod_index`, `submesh_index` and `default_material_key` for each existing binding. Each material-bearing submesh belongs to exactly one declared surface.     |
 
 Inventory order is display order only. The native canonical hash writer sorts
-slots by ID and each binding list by LOD/submesh before hashing the fixed-schema
+surfaces by ID and each binding list by LOD/submesh before hashing the fixed-schema
 UTF-8 record. Managed code transports the native revision and validates the
 report/record schema; it does not invent another canonical hash algorithm.
 
-`IGeometryMaterialSlotProvider.ReadAsync(project, geometryUri, cancellationToken)`
+`IGeometrySurfaceProvider.ReadAsync(project, geometryUri, cancellationToken)`
 is the editor's authoring entry point. The existing `ContentPipelineService`
 selects the winning project/library source, retains publication and file
 readers, and obtains typed inventory through native Inspector
@@ -1246,26 +1246,26 @@ readers, and obtains typed inventory through native Inspector
 checks before and after inspection; uncooked, stale or missing output yields no
 current inventory. Project replacement cancels the request. Engine geometry is
 read from `engine.pak` the same way, so its inventory exists before any cook. No
-managed code decodes geometry bytes or hashes slots.
+managed code decodes geometry bytes or hashes surfaces.
 
-Canonical scene assignments contain GeometryUri, SlotId, MaterialUri and the
+Canonical scene assignments contain GeometryUri, SurfaceId, MaterialUri and the
 last resolved layout revision. MaterialUri absence means no override; clearing
 removes that entry and restores the native default for every binding of that
-slot. If defaults differ across LOD bindings, show that fact rather than
+surface. If defaults differ across LOD bindings, show that fact rather than
 changing the mesh. Choosing the engine default is an explicit ordinary material
 assignment.
 
 The last resolved revision detects stale edit targets; it is not a demand to
-repair every revision change. A fresh inventory with established SlotId
+repair every revision change. A fresh inventory with established SurfaceId
 continuity can resolve the same authored assignment. Library priority changes
 must resolve against the winning geometry inventory and cannot reuse another
-source's slot merely because the URI, label or ordinal looks similar.
+source's surface merely because the URI, label or ordinal looks similar.
 
 ### 20.2 Retained continuity witness
 
-Retained source settings carry versioned native slot provenance as portable
+Retained source settings carry versioned native surface provenance as portable
 import data. Derived `.build` metadata alone cannot own these IDs: removing
-reproducible output/cache directories must not change slot identities. The
+reproducible output/cache directories must not change surface identities. The
 source/import-settings publication journal commits updated identity provenance
 with the produced geometry, never ahead of it.
 
@@ -1286,29 +1286,29 @@ dependency fingerprints, and no consumed hash is rewritten after cooking.
 For each source geometry, the native provenance schema records:
 
 - Retained source identity and source-geometry anchor.
-- Previous inventory revision and its SlotId allocations.
-- Stable source slot/surface/LOD IDs when the format supplies explicit durable
+- Previous inventory revision and its SurfaceId allocations.
+- Stable source surface/LOD IDs when the format supplies explicit durable
   identities; display names are not accepted as durable IDs.
 - A versioned `source_layout_witness` for layouts without sufficient durable
   IDs. It contains the ordered source LOD/mesh/surface ownership, declared
-  slot-to- surface binding relation, primitive modes, vertex/index counts and
+  surface-binding relation, primitive modes, vertex/index counts and
   hashes of source vertex positions and index connectivity for each bound
   surface.
-- Slot labels and prior binding context separately for diagnostics/repair.
+- Surface labels and prior binding context separately for diagnostics/repair.
 
 The witness excludes material scalar values, texture-reference payloads/image
 contents, render colours, normals/tangents, producer fingerprints, timestamps
 and temporary paths. Adapter-owned witnesses are captured before producer
 coordinate/unit conversion and optimization. Material parameter or
 texture-content edits therefore do not change it. Material
-assignment/slot-to-surface relations do participate; matching only material
+assignment/surface-binding relations do participate; matching only material
 names or list positions is never continuity proof.
 
 Transform-bake or instance-material policies may legitimately split or rename
-output geometry. Their changed geometry identity/anchor can change SlotIds even
+output geometry. Their changed geometry identity/anchor can change SurfaceIds even
 when the raw source-layout witness matches; witnesses do not merge different
 geometry assets. Format-specific capture and cost are owned by the native
-[geometry pipeline](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Import/geometry_work_pipeline_v2.md#material-slot-provenance).
+[geometry pipeline](../../../projects/Oxygen.Engine/src/Oxygen/Cooker/Docs/Import/geometry_work_pipeline_v2.md#surface-provenance).
 
 Resolve a reimport in this order:
 
@@ -1316,19 +1316,19 @@ Resolve a reimport in this order:
    recorded inventory and any available committed geometry. When derived output
    is absent, validate the retained allocations and recomputed source witness;
    do not allocate replacement IDs merely because the cache was deleted.
-2. Reuse a SlotId when unique durable source identities establish the same slot
+2. Reuse a SurfaceId when unique durable source identities establish the same surface
    and its surface ownership. The inventory revision may change while that
    semantic identity remains valid.
 3. Without such identities, reuse the recorded allocation only when the complete
    canonical source-layout witness matches exactly. This is a whole-layout
    proof, not a nearest-name/index matching heuristic. Parameter/texture-only
    changes preserve IDs under this rule.
-4. A new or structurally changed slot without proven continuity receives a new
+4. A new or structurally changed surface without proven continuity receives a new
    native ID. Record the old IDs as unresolved for affected authored overrides;
    do not pair them by name, ordinal, material equality or spatial proximity.
    Duplicate/ambiguous persistent IDs are errors, not an invitation to guess.
 
-Native IDs for first-seen slots are allocated deterministically within the
+Native IDs for first-seen surfaces are allocated deterministically within the
 retained source/geometry namespace from the proven durable anchor or complete
 witness plus declaration identity. The engine owns this versioned allocation
 policy. Retained mappings prevent later producer changes from reallocating
@@ -1337,24 +1337,24 @@ no shipping legacy resolver remains.
 
 ### 20.3 Repair state and affected publication
 
-Keep an unresolved scene override's GeometryUri, SlotId, MaterialUri, previous
-layout revision and human-readable prior slot context. These are useful authored
-intent, not a hidden compatibility binding. Show Missing slot / Layout changed
+Keep an unresolved scene override's GeometryUri, SurfaceId, MaterialUri, previous
+layout revision and human-readable prior surface context. These are useful authored
+intent, not a hidden compatibility binding. Show Missing surface / Layout changed
 on the instance and provide explicit Reassign or Clear commands. Reassign
-chooses an existing candidate SlotId; clear removes the obsolete override.
-Neither changes mesh topology, another slot, another instance or the shared
+chooses an existing candidate SurfaceId; clear removes the obsolete override.
+Neither changes mesh topology, another surface, another instance or the shared
 material. Both are ordinary undoable scene edits; failed validation changes no
 targets.
 
 Before publishing changed geometry, inspect its known saved/published consumer
 closure and validate all preserved scene overrides against the candidate
 inventories. A root with internally valid file hashes can still be semantically
-invalid if a scene references a removed slot. Include compatible regenerated
+invalid if a scene references a removed surface. Include compatible regenerated
 consumers in the same root transaction where needed.
 
 If a preserved consumer has unresolved assignments, retain the candidate as
-operation-owned evidence and end the attempt as Needs slot repair. Do not
-publish new geometry under an old scene's incompatible slot bindings. Do not
+operation-owned evidence and end the attempt as Needs surface repair. Do not
+publish new geometry under an old scene's incompatible surface bindings. Do not
 mutate or save affected authoring documents to unblock publication. Release the
 project writer and native/read ownership after drain; waiting for a user repair
 must not hold the shared coordinator indefinitely. Unrelated scenes and later
@@ -1364,7 +1364,7 @@ After explicit repair and Save, start a new owned cook of the affected source
 and dependent scene closure. Revalidate source/settings/layout baselines and the
 latest published root before reusing candidate work; never install a stale
 whole-root staging copy after another operation has published. Commit source
-slot provenance, changed geometry and compatible scene descriptors atomically
+surface provenance, changed geometry and compatible scene descriptors atomically
 under section 16. Cancel/failure/rollback restores the previous complete
 generation and identity provenance. Read-only external consumers that cannot be
 repaired are reported with their owning source; do not rewrite a library
@@ -1376,17 +1376,17 @@ stale/pending status. Transient geometry/material loading is a different
 condition and retains generation-checked recovery without demanding structural
 repair.
 
-### 20.4 Required slot regressions
+### 20.4 Required surface regressions
 
-- Two instances share a multi-slot mesh; editing a nonzero slot changes only the
-  selected instance/slot, including all declared LOD bindings.
-- Separate slots with equal names/default materials remain independently
+- Two instances share a multi-surface mesh; editing a nonzero surface changes only the
+  selected instance/surface, including all declared LOD bindings.
+- Separate surfaces with equal names/default materials remain independently
   editable.
 - Clear restores each native mesh default; Undo/Redo and pending callbacks
   cannot restore a superseded assignment.
 - Unchanged source, producer-only recook with the same structural layout,
   derived-cache deletion and material/texture-only edits retain established
-  SlotIds.
+  SurfaceIds.
 - Proven durable-ID changes retain correct assignments through surface
   reordering; unproven structural changes/removal produce repair state without
   guessed remaps.

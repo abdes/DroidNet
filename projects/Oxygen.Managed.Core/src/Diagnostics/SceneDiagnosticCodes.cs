@@ -12,11 +12,11 @@ public static class SceneDiagnosticCodes
     /// <summary>A new scene could not be created: its name was rejected, a file exists there, or it could not be written.</summary>
     public const string CreateFailed = DiagnosticCodes.ScenePrefix + "Asset.Create.Failed";
 
-    /// <summary>The observed material slot no longer matches an editable native inventory.</summary>
-    public const string MaterialSlotTargetInvalid = DiagnosticCodes.ScenePrefix + "MaterialSlot.Target.Invalid";
+    /// <summary>The observed surface no longer matches an editable native inventory.</summary>
+    public const string SurfaceTargetInvalid = DiagnosticCodes.ScenePrefix + "Surface.Target.Invalid";
 
-    /// <summary>The native slot inventory is currently unavailable.</summary>
-    public const string MaterialSlotInventoryUnavailable = DiagnosticCodes.ScenePrefix + "MaterialSlot.Inventory.Unavailable";
+    /// <summary>The native surface inventory is currently unavailable.</summary>
+    public const string SurfaceInventoryUnavailable = DiagnosticCodes.ScenePrefix + "Surface.Inventory.Unavailable";
 
     /// <summary>Transform scale has a zero axis.</summary>
     public const string TransformScaleZeroAxis = DiagnosticCodes.ScenePrefix + "TransformComponent.Scale.ZeroAxis";

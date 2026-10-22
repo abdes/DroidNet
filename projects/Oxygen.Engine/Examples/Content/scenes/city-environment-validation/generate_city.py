@@ -24,11 +24,11 @@ from pathlib import Path
 
 HERE = Path(__file__).resolve().parent
 SCENE_NAME = "CityEnvironmentValidation"
-SLOT_ID = "146b1397-c3e0-bc20-fce3-c55e470b4086"
+SURFACE_ID = "146b1397-c3e0-bc20-fce3-c55e470b4086"
 DEFAULT_MATERIAL = "MatCityConcreteWarm"
-# Every geometry has one slot with this id and the same default material, so
-# they share one material-slot layout revision.
-LAYOUT_REVISION = "9aac2a2118c954ed5bbbd610708bef719ae518444cba5162086fcc2885a73713"
+# Every geometry has one surface with this id and the same default material, so
+# they share one surface layout revision.
+LAYOUT_REVISION = "5a938348d075862cca8af3cd4d64b76921951ae654ec8a9e4729f3904e069ca4"
 
 # --- Materials: muted, physically plausible albedos ------------------------
 
@@ -159,7 +159,7 @@ class SceneBuilder:
         if material != DEFAULT_MATERIAL:
             renderable["material_overrides"] = [
                 {
-                    "slot_id": SLOT_ID,
+                    "surface_id": SURFACE_ID,
                     "material_ref": f"/.cooked/Materials/{material}.omat",
                     "layout_revision": LAYOUT_REVISION,
                 }
@@ -854,7 +854,7 @@ def geometry_document(name: str, generator: str, params: dict | None, bounds) ->
                 "submeshes": [
                     {
                         "name": f"{name}_surface",
-                        "slot_id": SLOT_ID,
+                        "surface_id": SURFACE_ID,
                         "material_ref": f"/.cooked/Materials/{DEFAULT_MATERIAL}.omat",
                         "views": [{"view_ref": "__all__"}],
                     }

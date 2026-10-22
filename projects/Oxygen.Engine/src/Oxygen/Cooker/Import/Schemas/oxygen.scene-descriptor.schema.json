@@ -244,9 +244,9 @@
           "items": {
             "type": "object",
             "additionalProperties": false,
-            "required": ["slot_id", "material_ref", "layout_revision"],
+            "required": ["surface_id", "material_ref", "layout_revision"],
             "properties": {
-              "slot_id": {
+              "surface_id": {
                 "type": "string",
                 "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
               },

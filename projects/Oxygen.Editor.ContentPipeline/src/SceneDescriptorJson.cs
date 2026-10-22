@@ -71,11 +71,11 @@ internal sealed record NativeNodeTransform(
 internal sealed record NativeRenderable(
     [property: JsonPropertyName("node")] int Node,
     [property: JsonPropertyName("geometry_ref")] string GeometryRef,
-    [property: JsonPropertyName("material_overrides")] IReadOnlyList<NativeMaterialSlotOverride> MaterialOverrides,
+    [property: JsonPropertyName("material_overrides")] IReadOnlyList<NativeSurfaceMaterialOverride> MaterialOverrides,
     [property: JsonPropertyName("visible")] bool Visible);
 
-internal sealed record NativeMaterialSlotOverride(
-    [property: JsonPropertyName("slot_id")] Guid SlotId,
+internal sealed record NativeSurfaceMaterialOverride(
+    [property: JsonPropertyName("surface_id")] Guid SurfaceId,
     [property: JsonPropertyName("material_ref")] string MaterialRef,
     [property: JsonPropertyName("layout_revision")] string LayoutRevision);
 

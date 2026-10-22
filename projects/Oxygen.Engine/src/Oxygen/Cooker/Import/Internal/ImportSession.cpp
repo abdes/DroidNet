@@ -43,7 +43,7 @@
 #include <Oxygen/Cooker/Import/Internal/LooseCookedIndexRegistry.h>
 #include <Oxygen/Cooker/Import/Internal/LooseCookedWriter.h>
 #include <Oxygen/Cooker/Import/Internal/ResourceTableRegistry.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/LooseCookedIndexFormat.h>
@@ -540,11 +540,11 @@ auto ImportSession::FinalizeDuration() const noexcept
   return finalize_duration_;
 }
 
-auto ImportSession::AddMaterialSlotProvenance(
-  MaterialSlotGeometryProvenance geometry) -> void
+auto ImportSession::AddSurfaceProvenance(SurfaceGeometryProvenance geometry)
+  -> void
 {
-  const std::scoped_lock lock(slot_provenance_mutex_);
-  slot_provenance_.push_back(std::move(geometry));
+  const std::scoped_lock lock(surface_provenance_mutex_);
+  surface_provenance_.push_back(std::move(geometry));
 }
 
 auto ImportSession::AddDiagnostic(ImportDiagnostic diagnostic) -> void
@@ -953,15 +953,15 @@ auto ImportSession::Finalize() -> co::Co<ImportReport>
     }
 
     report.success = !had_errors;
-    if (report.success && request_.material_slot_provenance) {
-      if (material_slot_source_processed_) {
-        const MaterialSlotProvenance provenance(
-          request_.material_slot_provenance->SourceIdentity(),
-          std::move(slot_provenance_));
-        report.material_slot_provenance_json = provenance.Serialize();
+    if (report.success && request_.surface_provenance) {
+      if (surface_source_processed_) {
+        const SurfaceProvenance provenance(
+          request_.surface_provenance->SourceIdentity(),
+          std::move(surface_provenance_));
+        report.surface_provenance_json = provenance.Serialize();
       } else {
-        report.material_slot_provenance_json
-          = request_.material_slot_provenance->Serialize();
+        report.surface_provenance_json
+          = request_.surface_provenance->Serialize();
       }
     }
     report.packaging = BuildPackagingSummary(report, write_result);

@@ -17,7 +17,7 @@ The contract answers the questions a user's actions raise:
 
 - I rename `Red.omat.json`, move a folder or move `Ship.glb`: which references
   follow, and why does nothing else change?
-- I import a model and assign one of its materials to a mesh slot in a scene:
+- I import a model and assign one of its materials to a mesh surface in a scene:
   what does the scene store, and does it survive moving the model?
 - I add `move.luau` beside `move.lua`, or `red.omat.json` beside
   `Red.omat.json`: what stops two files from becoming one cooked asset?
@@ -29,7 +29,7 @@ The contract answers the questions a user's actions raise:
 | ID            | Coverage                                                                                                                                        |
 | ------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
 | `GOAL-005`    | Sources, cooked output and browser selection share one identity that the user can read.                                                         |
-| `REQ-012`     | Material slot assignments store the material's identity and a slot id that survives moving the model.                                           |
+| `REQ-012`     | Surface assignments store the material's identity and a surface id that survives moving the model.                                              |
 | `REQ-016`     | Imported models name their products under the model's identity.                                                                                 |
 | `REQ-017`     | Generated descriptors and manifests carry the identity of every job.                                                                            |
 | `REQ-018`     | The cook writes each asset at its identity and keeps one producing source per identity.                                                         |
@@ -331,16 +331,16 @@ hold:
 
 ## 6. Ownership
 
-| Owner                           | Owns                                                                                                                                                        | Refuses to own                                                             |
-| ------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
-| Engine Content                  | `VirtualPath.h` rules, `ToSegmentName`, `FoldCase`, the cases table, the loose index reader, the virtual path resolver                                      | Naming products                                                            |
-| Engine Cooker                   | Product naming (`NamingService`), placing every output at its identity, the producer of each index entry, `LooseCookedWriter`'s identity rules, model slots | Deciding where a model's identity is                                       |
-| Engine Data                     | `LooseCookedIndexFormat.h`, `AssetKey`                                                                                                                      | Validating names                                                           |
-| `Oxygen.Managed.Core`           | `AssetPath`, `VirtualPath`, `VirtualPathComparer`, `AssetReferenceField`, diagnostic code prefixes                                                          | Knowing file types                                                         |
-| `Oxygen.Managed.Assets`         | `AssetFileTypes` (identity, containers, reference fields), the formats, the loose index reader                                                              | Knowing projects                                                           |
-| `Oxygen.Editor.World`           | `SceneReferenceFields` (the scene document's reference fields)                                                                                              | Rules of other families                                                    |
-| `Oxygen.Editor.ContentPipeline` | Cook input resolution, the provenance map, the producer check, `SourceCollisions`, relocation, import retention and its identities                          | Presenting containers ([#80](https://github.com/abdes/DroidNet/issues/80)) |
-| `Oxygen.Editor.ContentExplorer` | Listing a container as one asset, not its products                                                                                                          | Ownership rules                                                            |
+| Owner                           | Owns                                                                                                                                                           | Refuses to own                                                             |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------- |
+| Engine Content                  | `VirtualPath.h` rules, `ToSegmentName`, `FoldCase`, the cases table, the loose index reader, the virtual path resolver                                         | Naming products                                                            |
+| Engine Cooker                   | Product naming (`NamingService`), placing every output at its identity, the producer of each index entry, `LooseCookedWriter`'s identity rules, model surfaces | Deciding where a model's identity is                                       |
+| Engine Data                     | `LooseCookedIndexFormat.h`, `AssetKey`                                                                                                                         | Validating names                                                           |
+| `Oxygen.Managed.Core`           | `AssetPath`, `VirtualPath`, `VirtualPathComparer`, `AssetReferenceField`, diagnostic code prefixes                                                             | Knowing file types                                                         |
+| `Oxygen.Managed.Assets`         | `AssetFileTypes` (identity, containers, reference fields), the formats, the loose index reader                                                                 | Knowing projects                                                           |
+| `Oxygen.Editor.World`           | `SceneReferenceFields` (the scene document's reference fields)                                                                                                 | Rules of other families                                                    |
+| `Oxygen.Editor.ContentPipeline` | Cook input resolution, the provenance map, the producer check, `SourceCollisions`, relocation, import retention and its identities                             | Presenting containers ([#80](https://github.com/abdes/DroidNet/issues/80)) |
+| `Oxygen.Editor.ContentExplorer` | Listing a container as one asset, not its products                                                                                                             | Ownership rules                                                            |
 
 ## 7. Data Contracts
 
@@ -379,12 +379,12 @@ virtual root and the resources directory.
 
 `Ship.glb.import.json` (`NativeSceneImportSettings`, schema version 5) holds the
 recipe of a retained import: importer, name, bundle root, primary file, source
-hash, bundle files and the material slot provenance. It holds no mount and no
-output folder: the model's identity is its path. Material slot provenance is
-keyed by each geometry's name in the model (`source_geometry_anchor`). A slot id
+hash, bundle files and the surface provenance. It holds no mount and no
+output folder: the model's identity is its path. Surface provenance is
+keyed by each geometry's name in the model (`source_geometry_anchor`). A surface id
 derives from the retained source identity, that anchor, the source layout
-witness and the slot declaration (`oxygen.material-slot/v2`): it does not depend
-on where the model is, so moving or renaming the model keeps every slot
+witness and the surface declaration (`oxygen.material-slot/v2`): it does not depend
+on where the model is, so moving or renaming the model keeps every surface
 override.
 
 ### 7.5 Loose index entry
@@ -408,17 +408,17 @@ for any depth, and may require a sibling property to hold a value
 identity field repeats it for the engine's tools, and relocation rewrites it
 with the file.
 
-| Format                  | Own identity                     | Products                                                                                    | Reference fields                                                                                                                                                                                      |
-| ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Material `.omat.json`   | path, repeated in `virtual_path` |                                                                                             | `textures/*/virtual_path`                                                                                                                                                                             |
-| Geometry `.ogeo.json`   | path, repeated in `virtual_path` |                                                                                             | `buffers/*/virtual_path`, `lods/*/buffers/*`, `lods/*/skinning/*`, `lods/*/submeshes/*/material_ref`                                                                                                  |
-| Collision shape         | path, repeated in `virtual_path` |                                                                                             | `material_ref`                                                                                                                                                                                        |
-| Physics material        | path, repeated in `virtual_path` |                                                                                             |                                                                                                                                                                                                       |
-| Physics scene sidecar   | path                             |                                                                                             | `bindings/*/*/{shape_ref, inner_shape_ref, material_ref, source_mesh_ref, collision_mesh_ref}`                                                                                                        |
-| Texture `.otex.json`    | path, repeated in `virtual_path` |                                                                                             | none; its images are file-relative, read through `TextureSource`                                                                                                                                      |
-| Input source            | path (`Player.input`)            | `actions/*/name` (`.oiact`), `contexts/*/name` (`.oimap`), each under the source's identity | `contexts/*/mappings/*/action`: a local action name, or another source's action by virtual path                                                                                                       |
-| Model                   | path (`Ship.glb`)                | named by the cooker (5.3), under the model's identity                                       | none in the editor; the import settings name the bundle's files                                                                                                                                       |
-| Scene document (editor) | path                             |                                                                                             | geometry, material slots, script slots, asset-typed script parameters (`Type` is `asset`), environment cubemaps and metering mask, scene references, starting input contexts (`SceneReferenceFields`) |
+| Format                  | Own identity                     | Products                                                                                    | Reference fields                                                                                                                                                                                |
+| ----------------------- | -------------------------------- | ------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Material `.omat.json`   | path, repeated in `virtual_path` |                                                                                             | `textures/*/virtual_path`                                                                                                                                                                       |
+| Geometry `.ogeo.json`   | path, repeated in `virtual_path` |                                                                                             | `buffers/*/virtual_path`, `lods/*/buffers/*`, `lods/*/skinning/*`, `lods/*/submeshes/*/material_ref`                                                                                            |
+| Collision shape         | path, repeated in `virtual_path` |                                                                                             | `material_ref`                                                                                                                                                                                  |
+| Physics material        | path, repeated in `virtual_path` |                                                                                             |                                                                                                                                                                                                 |
+| Physics scene sidecar   | path                             |                                                                                             | `bindings/*/*/{shape_ref, inner_shape_ref, material_ref, source_mesh_ref, collision_mesh_ref}`                                                                                                  |
+| Texture `.otex.json`    | path, repeated in `virtual_path` |                                                                                             | none; its images are file-relative, read through `TextureSource`                                                                                                                                |
+| Input source            | path (`Player.input`)            | `actions/*/name` (`.oiact`), `contexts/*/name` (`.oimap`), each under the source's identity | `contexts/*/mappings/*/action`: a local action name, or another source's action by virtual path                                                                                                 |
+| Model                   | path (`Ship.glb`)                | named by the cooker (5.3), under the model's identity                                       | none in the editor; the import settings name the bundle's files                                                                                                                                 |
+| Scene document (editor) | path                             |                                                                                             | geometry, surfaces, script slots, asset-typed script parameters (`Type` is `asset`), environment cubemaps and metering mask, scene references, starting input contexts (`SceneReferenceFields`) |
 
 Renaming a product of an input source rewrites its `name` field and every
 reference to it (`InputProductRename`); a model's product names change only
@@ -459,7 +459,7 @@ through its import (5.2).
 Scene documents store asset URIs; engine descriptors and input sources store
 virtual paths; cooked records store keys. A relocation rewrites the reference
 fields of every affected file in one transaction, so references stay valid
-across save and reopen. Retained imports re-cook to the same identities and slot
+across save and reopen. Retained imports re-cook to the same identities and surface
 ids. Data in an older format is migrated by editing it or re-importing, never by
 code that reads the old form.
 
@@ -504,7 +504,7 @@ code that reads the old form.
   Managed.Core `VirtualPathCasesTests`.
 - Cooker naming and model tests (`AssetNamingTest`, `NamingServiceTest`,
   `GltfModelImport_functional_test` `CaseOnlyMaterialsTest`,
-  `GltfTexturesAreNamedPerImageWithUsage`, `MovingTheModelKeepsItsSlotIds`,
+  `GltfTexturesAreNamedPerImageWithUsage`, `MovingTheModelKeepsItsSurfaceIds`,
   `ModelsShareACookedRootByIdentity`, `ModelJobRequiresItsIdentity`).
 - Loose index writer tests (`LooseCookedWriter_update_functional_test`: producer
   recorded, same-source replacement, other-source and case-only refusal, sidecar

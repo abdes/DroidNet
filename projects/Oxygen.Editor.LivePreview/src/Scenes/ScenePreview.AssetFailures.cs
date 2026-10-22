@@ -63,7 +63,7 @@ internal sealed partial class ScenePreview
         var (nodeId, assetPath, operationKind, code) = request.Command switch
         {
             RuntimeSetGeometry geometry => (geometry.NodeId, geometry.AssetPath, SceneOperationKinds.EditGeometry, LiveSyncDiagnosticCodes.GeometryUnresolvedAtRuntime),
-            RuntimeSetMaterialOverride material => (material.NodeId, material.MaterialPath, SceneOperationKinds.EditMaterialSlot, LiveSyncDiagnosticCodes.MaterialFailed),
+            RuntimeSetMaterialOverride material => (material.NodeId, material.MaterialPath, SceneOperationKinds.EditSurfaceMaterial, LiveSyncDiagnosticCodes.MaterialFailed),
             RuntimeSetEnvironment environment => (NodeId.Empty, SoleEnvironmentTexture(environment), SceneOperationKinds.EditEnvironment, LiveSyncDiagnosticCodes.EnvironmentFailed),
             _ => (NodeId.Empty, null, string.Empty, string.Empty),
         };

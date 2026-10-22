@@ -57,8 +57,8 @@ public sealed record ContentCookResult(
     internal global::Oxygen.Editor.ContentPipeline.Inspection.CookedInventoryReport? NativeInventory { get; init; }
 
     /// <summary>Gets native source-allocation candidates awaiting journaled publication.</summary>
-    internal ImmutableDictionary<string, NativeMaterialSlotProvenance> MaterialSlotProvenance { get; init; }
-        = ImmutableDictionary<string, NativeMaterialSlotProvenance>.Empty;
+    internal ImmutableDictionary<string, NativeSurfaceProvenance> SurfaceProvenance { get; init; }
+        = ImmutableDictionary<string, NativeSurfaceProvenance>.Empty;
 
     /// <summary>Gets native-reported auxiliary file ownership for imported source products.</summary>
     internal ImmutableDictionary<AssetPath, ImmutableArray<string>> AuxiliaryFilesBySource { get; init; }

@@ -14,8 +14,8 @@ public record MaterialsSlotData : OverrideSlotData
     /// <summary>Gets the geometry identity retained with this assignment.</summary>
     public required AssetPath GeometryUri { get; init; }
 
-    /// <summary>Gets the native slot identity, independent of display order.</summary>
-    public required Guid SlotId { get; init; }
+    /// <summary>Gets the native surface identity, independent of display order.</summary>
+    public required Guid SurfaceId { get; init; }
 
     /// <summary>Gets the last resolved native inventory revision.</summary>
     public required string LayoutRevision { get; init; }

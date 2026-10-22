@@ -448,7 +448,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                             "type": extension,
                             "source": name,
                             "virtual_path": f"/.cooked/{name}",
-                            "material_slot_source_identity": "01990000-0000-7000-8000-000000000001",
+                            "surface_source_identity": "01990000-0000-7000-8000-000000000001",
                         }
                     ]
                 )
@@ -491,7 +491,7 @@ class CapturedInputBatchCliTests(unittest.TestCase):
                     "buffers": {"vb_ref": vb, "ib_ref": ib},
                     "submeshes": [
                         {
-                            "slot_id": "018f8f8f-1111-7111-8111-111111111111",
+                            "surface_id": "018f8f8f-1111-7111-8111-111111111111",
                             "material_ref": "/.cooked/Materials/Stone.omat",
                             "views": [{"view_ref": "surface"}],
                         }

@@ -503,7 +503,7 @@ internal sealed partial class ScenePreview
         public bool EnvironmentAwaitsMount { get; set; }
 
         // The material overrides each node had when the projector last saw it; an override that goes away is cleared.
-        public Dictionary<NodeId, MaterialSlotTarget[]> MaterialOverrides { get; } = [];
+        public Dictionary<NodeId, SurfaceTarget[]> MaterialOverrides { get; } = [];
     }
 
     private sealed record SceneProjection(DocumentLifetime Lifetime, Scene Snapshot, SceneSyncRevision Boundary)

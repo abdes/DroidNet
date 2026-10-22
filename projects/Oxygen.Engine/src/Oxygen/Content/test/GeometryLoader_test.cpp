@@ -19,9 +19,9 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Testing/GTest.h>
 
 using oxygen::content::loaders::LoadGeometryAsset;
@@ -75,8 +75,8 @@ protected:
     mesh.mesh_view_count = 1;
     mesh.info.procedural.params_size = static_cast<uint32_t>(parameters.size());
     SubMeshDesc submesh {};
-    submesh.slot_id = oxygen::data::MaterialSlotId::FromStableIdentity(
-      "GeometryLoaderTest/slot");
+    submesh.surface_id
+      = oxygen::data::SurfaceId::FromStableIdentity("GeometryLoaderTest/slot");
     submesh.material_asset_key
       = oxygen::data::AssetKey::FromVirtualPath("/Art/Materials/Shared.omat");
     submesh.mesh_view_count = 1;
@@ -235,8 +235,8 @@ NOLINT_TEST_F(
   mesh.mesh_view_count = 2;
   SubMeshDesc submesh {};
   submesh.material_asset_key = material;
-  submesh.slot_id = oxygen::data::MaterialSlotId::FromStableIdentity(
-    "GeometryLoaderTest/slot");
+  submesh.surface_id
+    = oxygen::data::SurfaceId::FromStableIdentity("GeometryLoaderTest/slot");
   submesh.mesh_view_count = 1;
   const MeshViewDesc view {
     .first_index = 0,

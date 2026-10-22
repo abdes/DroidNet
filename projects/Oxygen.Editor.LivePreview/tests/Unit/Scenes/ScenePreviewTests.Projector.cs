@@ -87,7 +87,7 @@ public sealed partial class ScenePreviewTests
         var built = new Scene { Name = "Test Scene" };
         var cube = new SceneNode(built) { Name = "Cube" };
         built.RootNodes.Add(cube);
-        var target = new MaterialSlotTarget(EngineAssets.BasicShape("Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
+        var target = new SurfaceTarget(EngineAssets.BasicShape("Cube"), Guid.Parse("10000000-0000-0000-0000-000000000001"), new string('a', 64));
         var geometry = new GeometryComponent { Name = "Geometry", Geometry = target.Geometry };
         geometry.OverrideSlots.Add(new MaterialsSlot { Target = target, Material = AssetPath.Parse("/Content/Materials/Red.omat") });
         cube.Components.Add(geometry);
@@ -95,10 +95,10 @@ public sealed partial class ScenePreviewTests
         _ = await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false);
         fixture.Requests.Clear();
 
-        _ = await PreviewFixture.AuthoringOf(document).ExecuteAsync(new SetMaterialSlot([cube.Id], target, material: null)).ConfigureAwait(false);
+        _ = await PreviewFixture.AuthoringOf(document).ExecuteAsync(new SetSurfaceMaterial([cube.Id], target, material: null)).ConfigureAwait(false);
 
         var cleared = fixture.World.Commands.OfType<RuntimeSetMaterialOverride>().Should().ContainSingle().Subject;
-        _ = (cleared.SlotId, cleared.MaterialPath).Should().Be((target.SlotId, null));
+        _ = (cleared.SurfaceId, cleared.MaterialPath).Should().Be((target.SurfaceId, null));
     }
 
     [TestMethod]

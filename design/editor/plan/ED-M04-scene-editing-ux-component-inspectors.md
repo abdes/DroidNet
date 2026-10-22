@@ -13,11 +13,11 @@ Make the V0.1 scene component set authorable through production-quality
 inspector UI. ED-M04 moves the current Transform/Geometry inspector baseline
 onto the ED-M03 command/document foundation, adds production editors for
 PerspectiveCamera, DirectionalLight, and scene Environment, introduces the
-Geometry material identity slot, and routes supported edits through dirty,
+Geometry surface material identity, and routes supported edits through dirty,
 undo/redo, persistence, diagnostics, and live-sync result handling.
 
 ED-M04 is not a material editor or content-pipeline milestone. It prepares the
-scene-side material slot and authoring data that ED-M05 and ED-M07 consume.
+scene-side surface and authoring data that ED-M05 and ED-M07 consume.
 
 ## 2. Planning Prompt Used
 
@@ -32,22 +32,22 @@ of this milestone unless an ED-M04 LLD explicitly requires a seam.
 
 ## 3. PRD Traceability
 
-| ID            | ED-M04 Coverage                                                                                |
-| ------------- | ---------------------------------------------------------------------------------------------- |
-| `GOAL-002`    | V0.1 component and environment values become persisted authoring data.                         |
-| `GOAL-003`    | Supported inspector edits request live preview sync when runtime is available.                 |
-| `GOAL-006`    | Invalid edits and sync/settings failures produce visible diagnostics.                          |
-| `REQ-005`     | Add/remove/edit behavior for scoped V0.1 components.                                           |
-| `REQ-007`     | Supported component and environment edits save and reopen.                                     |
-| `REQ-008`     | Supported edits request live sync or visible unsupported/skipped result.                       |
-| `REQ-009`     | Transform, Geometry, PerspectiveCamera, DirectionalLight, Environment, material slot identity. |
-| `REQ-022`     | Inspector/save/sync/settings failures are visible.                                             |
-| `REQ-024`     | Diagnostics distinguish scene authoring, asset identity, live sync, settings, runtime causes.  |
-| `REQ-026`     | Embedded preview reflects supported edits where engine APIs exist.                             |
-| `REQ-037`     | Supported data round-trips without manual repair.                                              |
-| `SUCCESS-002` | Supported scene edits survive save/reopen.                                                     |
-| `SUCCESS-003` | Live preview is updated or visibly explains why it could not update.                           |
-| `SUCCESS-004` | Environment/material-slot authoring data is available for later cook/parity.                   |
+| ID            | ED-M04 Coverage                                                                               |
+| ------------- | --------------------------------------------------------------------------------------------- |
+| `GOAL-002`    | V0.1 component and environment values become persisted authoring data.                        |
+| `GOAL-003`    | Supported inspector edits request live preview sync when runtime is available.                |
+| `GOAL-006`    | Invalid edits and sync/settings failures produce visible diagnostics.                         |
+| `REQ-005`     | Add/remove/edit behavior for scoped V0.1 components.                                          |
+| `REQ-007`     | Supported component and environment edits save and reopen.                                    |
+| `REQ-008`     | Supported edits request live sync or visible unsupported/skipped result.                      |
+| `REQ-009`     | Transform, Geometry, PerspectiveCamera, DirectionalLight, Environment, surface identity.      |
+| `REQ-022`     | Inspector/save/sync/settings failures are visible.                                            |
+| `REQ-024`     | Diagnostics distinguish scene authoring, asset identity, live sync, settings, runtime causes. |
+| `REQ-026`     | Embedded preview reflects supported edits where engine APIs exist.                            |
+| `REQ-037`     | Supported data round-trips without manual repair.                                             |
+| `SUCCESS-002` | Supported scene edits survive save/reopen.                                                    |
+| `SUCCESS-003` | Live preview is updated or visibly explains why it could not update.                          |
+| `SUCCESS-004` | Environment/surface authoring data is available for later cook/parity.                        |
 
 ## 4. Required LLDs
 
@@ -62,7 +62,7 @@ Only these LLDs gate ED-M04 implementation:
 
 Supporting context, not ED-M04 implementation gates:
 
-- [material-editor.md](../lld/material-editor.md), for the ED-M04 to ED-M05 material-slot seam.
+- [material-editor.md](../lld/material-editor.md), for the ED-M04 to ED-M05 surface seam.
 - [content-explorer-asset-identity.md](../lld/content-explorer-asset-identity.md), for future material picker compatibility.
 - [documents-and-commands.md](../lld/documents-and-commands.md), for ED-M03 command/dirty/undo contracts.
 
@@ -78,7 +78,7 @@ ED-M04 includes:
   DirectionalLight using the existing Transform/Geometry section style.
 - Add scene-level Environment authoring data, inspector section, command,
   serialization, undo/redo, dirty state, and live-sync request boundary.
-- Add Geometry material slot identity editing for component-level slot index 0,
+- Add Geometry surface identity editing for component-level slot index 0,
   including unresolved/missing state preservation. ED-M04 implements a local
   identity field: list existing `MaterialAsset` records from `IAssetCatalog`
   when present and provide a raw/paste URI fallback so unresolved identity can
@@ -115,14 +115,14 @@ ED-M04 does not include:
   raw/read-only or "not implemented in V0.1" block.
 - A generic Settings panel.
 - `IMaterialPickerService`, `MaterialPickerResult`, or any other ED-M05
-  picker types. The ED-M04 material slot consumes `IAssetCatalog` directly
+  picker types. The ED-M04 surface consumes `IAssetCatalog` directly
   with an `AssetReference<MaterialAsset>` filter; pre-paving ED-M05 picker
   contracts is forbidden.
 - Per-component live-sync sub-adapters (`TransformSyncAdapter`,
   `LightSyncAdapter`, etc.). ED-M04 keeps a single `SceneEngineSync` per
   [live-engine-sync.md §15](../lld/live-engine-sync.md).
 - Adding `FailureDomain.MaterialAuthoring`. That domain is owned by ED-M05
-  ([material-editor.md §12.1](../lld/material-editor.md)). Material-slot
+  ([material-editor.md §12.1](../lld/material-editor.md)). Surface
   authoring validation in ED-M04 uses `FailureDomain.SceneAuthoring`
   because the slot lives in scene data.
 
@@ -191,7 +191,7 @@ Audit result:
     and mostly log or swallow failures.
   - Material override, targeted material override, LOD, rendering, and lighting
     slot update methods throw `NotImplementedException`; ED-M04 must convert
-    material-slot behavior to typed `Unsupported` outcomes instead of throws.
+    surface behavior to typed `Unsupported` outcomes instead of throws.
   - Per-call sync methods do not yet enforce the ED-M04 four-precondition
     runtime-readiness contract consistently (`Running`, non-null `World`,
     non-`Faulted`, non-cancelled).
@@ -220,7 +220,7 @@ Tasks:
 - Extend `ISceneDocumentCommandService` with:
   - `EditTransformAsync`
   - `EditGeometryAsync`
-  - `EditMaterialSlotAsync`
+  - `EditSurfaceMaterialAsync`
   - `EditPerspectiveCameraAsync`
   - `EditDirectionalLightAsync`
   - `AddComponentAsync`
@@ -243,7 +243,7 @@ Tasks:
 - Add operation constants to `SceneOperationKinds`:
   - `Scene.Component.EditTransform`
   - `Scene.Component.EditGeometry`
-  - `Scene.Component.EditMaterialSlot`
+  - `Scene.Component.EditSurfaceMaterial`
   - `Scene.Component.EditCamera`
   - `Scene.Component.EditLight`
   - `Scene.Component.Add`
@@ -345,7 +345,7 @@ Tasks:
     models.
 - Convert current material override paths to typed `Accepted`/`Rejected`/`Failed`
   outcomes.
-- Add `UpdateMaterialSlotAsync` that maps descriptor URIs to cooked `.omat`
+- Add `UpdateSurfaceAsync` that maps descriptor URIs to cooked `.omat`
   engine paths and queues the runtime material override with the material URI
   in affected scope.
 - Add `UpdateEnvironmentAsync` with per-field `Unsupported` outcomes where
@@ -358,7 +358,7 @@ Tasks:
   - runtime not running maps to `SkippedNotRunning`;
   - `World == null` (engine in `Running` but world reference torn down) maps
     to `SkippedNotRunning`, not exception;
-  - material slot maps descriptor URI to cooked `.omat` path and does not throw;
+  - surface maps descriptor URI to cooked `.omat` path and does not throw;
   - cancellation maps to `Cancelled`;
   - environment missing APIs aggregate unsupported fields;
   - coalescer test: 100 sub-commits across 100 ms produce ≤7 engine calls
@@ -397,11 +397,11 @@ Tasks:
   - update `GeometryComponent.Geometry`;
   - preserve unresolved geometry URIs;
   - request geometry attach/detach sync.
-- Implement `EditMaterialSlotAsync`:
+- Implement `EditSurfaceMaterialAsync`:
   - ensure `MaterialsSlot` at component override slot index 0 exists as needed;
   - set/clear `AssetReference<MaterialAsset>`;
   - preserve unresolved URI verbatim;
-  - request material slot sync through the runtime override path.
+  - request surface sync through the runtime override path.
 - Implement `EditPerspectiveCameraAsync`:
   - clamp FOV to `[1,179]`;
   - reject `NearPlane <= 0`;
@@ -434,7 +434,7 @@ Tasks:
   - `OXE.SCENE.ENVIRONMENT.<Field>.Invalid` for each environment enum/value
     field.
     Tests assert against these constants, never against magic strings.
-- Material-slot validation diagnostics (e.g. malformed URI on paste) use
+- Surface validation diagnostics (e.g. malformed URI on paste) use
   `FailureDomain.SceneAuthoring`. Do **not** introduce
   `FailureDomain.MaterialAuthoring` in ED-M04; that is owned by ED-M05.
 
@@ -447,11 +447,11 @@ Implementation note:
 
 - `SceneDocumentCommandService` implements the ED-M04 component/environment
   command set for one-shot and committed sessions: Transform, Geometry,
-  Material slot, PerspectiveCamera, DirectionalLight, Environment,
+  Surface, PerspectiveCamera, DirectionalLight, Environment,
   AddComponent, and RemoveComponent.
 - Geometry asset clear is rejected because `GeometryComponent` cannot dehydrate
   without a geometry reference; users detach geometry by removing the component.
-- Material slot clear persists the `MaterialsSlot` sentinel URI so the authored
+- Surface clear persists the `MaterialsSlot` sentinel URI so the authored
   slot shape remains stable for ED-M05.
 - Live-sync outcomes are reduced per `live-engine-sync.md`: accepted publishes
   no result; skipped/unsupported publish warnings; rejected/failed publish
@@ -460,7 +460,7 @@ Implementation note:
   responsibility. ED-M04.5 no-ops uncommitted sessions so preview samples do
   not create false history, dirty state, or terminal sync.
 - Targeted tests cover locked transform removal denial, geometry clear
-  rejection, material-slot sentinel persistence, directional sun exclusivity,
+  rejection, surface sentinel persistence, directional sun exclusivity,
   and directional-light component add behavior.
 - Subagent review completed; the only remaining re-review item was a stale
   `GeometryEdit` XML comment, now fixed. ED-M04.6 may start.
@@ -505,7 +505,7 @@ Exit:
 - Transform and Geometry editors look at least as good as the current UI and
   invoke commands for supported edits.
 
-### ED-M04.7 - Transform, Geometry, And Material Slot UI
+### ED-M04.7 - Transform, Geometry, And Surface Material UI
 
 Goal: complete the upgraded existing sections.
 
@@ -521,7 +521,7 @@ Tasks:
   - apply geometry URI through `EditGeometryAsync`;
   - show raw persisted URI in Raw/Diagnostics disclosure;
   - show missing/unresolved geometry warning without clearing the URI.
-- Material slot:
+- Surface:
   - render slot 0 in Geometry section as `[swatch/placeholder] [name/uri] [v]`;
   - flat list of `MaterialAsset` records pulled directly from
     `IAssetCatalog.QueryAsync(new AssetQuery(AssetQueryScope.All))` filtered
@@ -529,7 +529,7 @@ Tasks:
     `IMaterialPickerService` / `MaterialPickerResult`; those types are owned
     by ED-M05;
   - support `<None>` / clear action that calls
-    `EditMaterialSlotAsync(ctx, nodeId, slotIndex: 0, materialUri: null, ct)`;
+    `EditSurfaceMaterialAsync(ctx, nodeId, slotIndex: 0, materialUri: null, ct)`;
   - preserve unresolved URI verbatim across save/reopen;
   - provide a raw/paste URI fallback for unresolved material identities
     until ED-M05 ships the reusable picker;
@@ -616,12 +616,12 @@ Tasks:
 - Add or update `Oxygen.Editor.World.Tests`:
   - `SceneEnvironmentData` defaults and all-field round trip;
   - `DirectionalLightData` / `PerspectiveCameraData` round-trip if uncovered;
-  - material slot URI round-trip through `GeometryComponentData.OverrideSlots`.
+  - surface URI round-trip through `GeometryComponentData.OverrideSlots`.
 - Add or update WorldEditor tests where WinUI-independent:
   - command validation rejects invalid scale;
   - command validation rejects camera near/far conflict;
   - directional light sun exclusivity and undo/redo;
-  - material slot unresolved URI persists and produces unsupported sync outcome;
+  - surface unresolved URI persists and produces unsupported sync outcome;
   - sync outcome mapping for not-running, faulted, unsupported, cancelled.
 - Do not write tests that only assert comments, file existence, or source text.
 - Prepare manual validation script for the user with exact expected visuals.
@@ -689,12 +689,12 @@ Likely test files:
 | Inspector VMs keep direct mutation and sync calls.                          | ED-M04-supported fields must route through command service. Direct message handlers are deleted or made temporary command adapters.                                                                                                     |
 | Edit-session batching breaks `VectorBox` UX.                                | Preserve existing controls and add command/session behavior around them. Do not replace with lower-quality controls.                                                                                                                    |
 | Sync throttling creates many undo entries.                                  | Undo is owned by `EditSessionToken`; preview sync cadence never determines undo granularity.                                                                                                                                            |
-| Material slot turns into a hidden material editor.                          | ED-M04 stores identity only. No scalar material fields, no material document UI, no material cook.                                                                                                                                      |
+| Surface turns into a hidden material editor.                                | ED-M04 stores identity only. No scalar material fields, no material document UI, no material cook.                                                                                                                                      |
 | Environment schema drifts from engine concepts.                             | ED-M04 fields use engine-aligned names/units and persist as scene authoring data; ED-M07 chooses cooked descriptor shape.                                                                                                               |
 | Runtime not running blocks authoring.                                       | Commands commit authoring state and publish `LiveSync.SkippedNotRunning` warning.                                                                                                                                                       |
 | Settings changes cross persistence scopes or break startup/project loading. | Follow the settings placement matrix and validate startup/project loading when a durable setting is migrated. Scene, workspace, editor preference, project policy, and runtime-session state keep their own mutation and storage paths. |
 | Validation reruns full scans or presents duplicate failures.                | Review incremental invalidation and result publication together in the ED-M04/ED-M08.4–M08.6 design work; scoped field messages and operation summaries must remain usable without a new validation dashboard.                          |
-| Unsupported engine APIs throw.                                              | Unsupported environment paths return `SyncOutcome.Unsupported`; material slots use the runtime override path and classify rejection/failure.                                                                                            |
+| Unsupported engine APIs throw.                                              | Unsupported environment paths return `SyncOutcome.Unsupported`; surfaces use the runtime override path and classify rejection/failure.                                                                                                  |
 | Point/spot/orthographic editor scope creeps in.                             | Existing add/remove can remain. Production editors are deferred unless trivial raw/read-only blocks are added.                                                                                                                          |
 | Tests become fake because WinUI is hard to automate.                        | Test pure command/domain/sync seams. Mark true visual checks as manual with exact expected result.                                                                                                                                      |
 | ED-M02 multi-viewport remains deferred.                                     | ED-M04 validates only the supported single live viewport path.                                                                                                                                                                          |
@@ -723,14 +723,14 @@ The user should validate these visually after implementation and build:
    - save/reopen: geometry identity persists;
    - load a seeded scene containing an unresolved geometry URI; the field
      shows a warning badge and preserves the URI verbatim.
-6. Material slot:
+6. Surface:
    - Geometry section shows a Material row;
    - pick an existing material identity from the `IAssetCatalog` flat list
      when the catalog has one;
    - load a seeded scene containing an unresolved material URI such as
      `asset:///Content/Materials/Missing.omat`; the field shows the URI with
      a missing badge;
-   - clear the material slot via `<None>`;
+   - clear the surface via `<None>`;
    - multi-select two geometry nodes with different material URIs: the slot
      shows `--`; picking an asset assigns it to both with one undo entry;
      `<None>` clears both;
@@ -779,7 +779,7 @@ ED-M04 cannot be called landed until these are true:
    lights in the same scene and undo restores the prior state.
 6. Environment serialization test: all fields round-trip, including stale
    `SunNodeId`.
-7. Material slot test: unresolved URI persists through
+7. Surface test: unresolved URI persists through
    `GeometryComponentData.OverrideSlots` and sync returns `Unsupported`.
 8. Sync mapping tests: not-running, faulted, unsupported, cancelled, rejected,
    and failed outcomes reduce to the documented operation statuses.

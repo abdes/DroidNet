@@ -167,7 +167,7 @@ public sealed partial class ContentPipelineService(
             inspection,
             validation)
         {
-            MaterialSlotProvenance = results.SelectMany(static result => result.MaterialSlotProvenance)
+            SurfaceProvenance = results.SelectMany(static result => result.SurfaceProvenance)
                 .ToImmutableDictionary(static entry => entry.Key, static entry => entry.Value, StringComparer.Ordinal),
             AuxiliaryFilesBySource = results.SelectMany(static result => result.AuxiliaryFilesBySource)
                 .ToImmutableDictionary(static entry => entry.Key, static entry => entry.Value),
@@ -381,7 +381,7 @@ public sealed partial class ContentPipelineService(
             .Select(static file => file.Key).ToHashSet(StringComparer.Ordinal) ?? new HashSet<string>(StringComparer.Ordinal);
         return validated with
         {
-            MaterialSlotProvenance = importResult.MaterialSlotProvenance,
+            SurfaceProvenance = importResult.SurfaceProvenance,
             AuxiliaryFilesBySource = scope.Inputs.Where(input => importResult.OutputsBySource.ContainsKey(input.SourceRelativePath))
                 .ToImmutableDictionary(
                     static input => input.AssetUri,

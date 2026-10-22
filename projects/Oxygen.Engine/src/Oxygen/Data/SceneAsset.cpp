@@ -26,11 +26,11 @@
 #include <Oxygen/Core/Types/AssetKey.h>
 #include <Oxygen/Data/Asset.h>
 #include <Oxygen/Data/ComponentType.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_scripting.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -641,7 +641,7 @@ auto SceneAsset::ParseAndValidate() -> void
         "SceneAsset environment block contains trailing bytes");
     }
   }
-  std::set<std::pair<pak::world::SceneNodeIndexT, MaterialSlotId>> assignments;
+  std::set<std::pair<pak::world::SceneNodeIndexT, SurfaceId>> assignments;
   std::unordered_set<pak::world::SceneNodeIndexT> renderable_nodes;
   for (const auto& renderable : GetComponents<pak::world::RenderableRecord>()) {
     renderable_nodes.insert(renderable.node_index);
@@ -649,9 +649,9 @@ auto SceneAsset::ParseAndValidate() -> void
   for (const auto& assignment :
     GetComponents<pak::world::MaterialOverrideRecord>()) {
     if (!renderable_nodes.contains(assignment.node_index)
-      || assignment.slot_id.IsNil() || assignment.material_key.IsNil()
+      || assignment.surface_id.IsNil() || assignment.material_key.IsNil()
       || base::IsAllZero(assignment.layout_revision)
-      || !assignments.emplace(assignment.node_index, assignment.slot_id)
+      || !assignments.emplace(assignment.node_index, assignment.surface_id)
         .second) {
       throw std::runtime_error(
         "SceneAsset contains an invalid material assignment");

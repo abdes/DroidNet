@@ -29,15 +29,15 @@ public sealed record ContentImportJob(
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? VirtualPath { get; init; }
 
-    /// <summary>Gets the retained source namespace used by native slot allocation.</summary>
-    [JsonPropertyName("material_slot_source_identity")]
+    /// <summary>Gets the retained source namespace used by native surface allocation.</summary>
+    [JsonPropertyName("surface_source_identity")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public string? MaterialSlotSourceIdentity { get; init; }
+    public string? SurfaceSourceIdentity { get; init; }
 
     /// <summary>Gets the native record carried unchanged between successful imports.</summary>
-    [JsonPropertyName("material_slot_provenance")]
+    [JsonPropertyName("surface_provenance")]
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
-    public Import.NativeMaterialSlotProvenance? MaterialSlotProvenance { get; init; }
+    public Import.NativeSurfaceProvenance? SurfaceProvenance { get; init; }
 
     /// <summary>Gets per-job descriptor folders while retaining the manifest's shared cooked root.</summary>
     [JsonPropertyName("layout")]

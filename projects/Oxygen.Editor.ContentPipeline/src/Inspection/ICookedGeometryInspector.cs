@@ -6,7 +6,7 @@ using Oxygen.Managed.Core.Compatibility;
 
 namespace Oxygen.Editor.ContentPipeline.Inspection;
 
-/// <summary>Reads geometry slot inventories through the installed native Inspector.</summary>
+/// <summary>Reads geometry surface inventories through the installed native Inspector.</summary>
 public interface ICookedGeometryInspector
 {
     /// <summary>Inspects one virtual geometry path in a protected cooked root.</summary>

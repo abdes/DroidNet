@@ -31,14 +31,14 @@ Design owners: [live-engine-sync.md](../lld/live-engine-sync.md) and
 1. Every geometry request supersedes the previous geometry request for that
    node, including cached, procedural, unresolved, and failed requests.
 2. Every material request or clear supersedes the previous request for that
-   node and slot. Independent slots and nodes remain independent.
+   node and surface. Independent surfaces and nodes remain independent.
 3. Detach invalidates pending geometry and all material requests for that
    renderable, even when the component has not yet been attached. Reattachment
    cannot revive requests from the detached component lifetime.
-4. Geometry replacement preserves the existing slot-index override contract.
+4. Geometry replacement preserves the existing surface-index override contract.
    It must not indiscriminately cancel unrelated material intent. A current
    material result awaiting the requested geometry must not be silently lost
-   merely because its slot does not exist in the previous geometry.
+   merely because its surface does not exist in the previous geometry.
 5. Destroyed nodes, deleted descendants, replaced scenes, and shutdown reject
    pending completions. Callbacks must neither retain the scene/module nor
    dereference them after their lifetime ends.
@@ -52,7 +52,7 @@ Design owners: [live-engine-sync.md](../lld/live-engine-sync.md) and
 ## Implementation Plan
 
 1. Add scene-session-owned asset request state in the interop editor module:
-   geometry generations per node, material generations per node/LOD/slot,
+   geometry generations per node, material generations per node/LOD/surface,
    renderable lifetime invalidation, and a lifetime-safe completion inbox.
    Reuse the existing thread-safe queue abstraction. Keep the state bounded by
    removing dead targets and retiring scene sessions.
@@ -63,7 +63,7 @@ Design owners: [live-engine-sync.md](../lld/live-engine-sync.md) and
 3. Drain results on the scene-mutation path and revalidate before applying.
    Process pending authoring commands before accepting completion results so
    newer commands already waiting for that phase supersede earlier loads.
-   Preserve current material intent across geometry readiness and validate slot
+   Preserve current material intent across geometry readiness and validate surface
    availability against the accepted geometry.
 4. Invalidate component requests in detach, retire node requests on deletion
    (including descendants), and retire the entire session on scene teardown,
@@ -90,9 +90,9 @@ drain, with actual scene nodes. Avoid timing sleeps and tests of counters alone.
 - Undo and redo represented by the actual replacement/clear/detach commands.
 - Node deletion/recreation, descendant deletion, scene replacement, and late
   callback after session shutdown.
-- Independent nodes and material slots; material completion before geometry
+- Independent nodes and surfaces; material completion before geometry
   readiness; existing override preservation during geometry replacement;
-  removed slots do not revive historical overrides if their index returns.
+  removed surfaces do not revive historical overrides if their index returns.
 - Current load failure and superseded failure diagnostic behavior.
 - A callback invoked outside scene mutation changes no scene state until the
   mutation drain; a newer queued authoring command wins before that drain.
@@ -133,6 +133,6 @@ the user to do that if engine source/API changes become necessary.
 - `git diff --check` passed. Design-owner documents reflect the implemented
   contract. Clear acts immediately on visible geometry; successful material
   overrides are subsequently owned by the renderable, avoiding both retained
-  asset ownership and historical override restoration after slot removal.
+  asset ownership and historical override restoration after surface removal.
 - No engine source files changed and no engine rebuild/reinstall was performed.
   Running-editor interaction replay has not been performed.

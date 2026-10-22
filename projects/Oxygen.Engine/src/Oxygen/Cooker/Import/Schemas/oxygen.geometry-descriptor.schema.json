@@ -723,7 +723,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
-        "slot_id": {
+        "surface_id": {
           "type": "string",
           "pattern": "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
         },
@@ -744,7 +744,7 @@
           }
         }
       },
-      "required": ["slot_id", "material_ref", "views"]
+      "required": ["surface_id", "material_ref", "views"]
     },
     "lod_descriptor": {
       "type": "object",

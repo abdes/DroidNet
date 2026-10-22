@@ -25,8 +25,8 @@
 #include <Oxygen/Cooker/Import/ImportManifest.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
 #include <Oxygen/Cooker/Import/Internal/SceneImportRequestBuilder.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/SceneImportSettings.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Pak/PakTestSupport.h>
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Testing/GTest.h>
@@ -59,7 +59,7 @@ protected:
     settings.source_path = Path("model.gltf").string();
     settings.virtual_path = "/.cooked/model.gltf";
     settings.cooked_root = Path("cooked").string();
-    settings.material_slot_source_identity = kSourceIdentity;
+    settings.surface_source_identity = kSourceIdentity;
     return settings;
   }
 };
@@ -68,12 +68,11 @@ NOLINT_TEST_F(
   SceneImportRequestBuilderTest, RequiresRetainedModelSourceIdentity)
 {
   auto settings = Settings();
-  settings.material_slot_source_identity.clear();
+  settings.surface_source_identity.clear();
   std::ostringstream errors;
   EXPECT_FALSE(
     BuildSceneRequest(settings, ImportFormat::kGltf, errors).has_value());
-  EXPECT_THAT(
-    errors.str(), testing::HasSubstr("requires retained material-slot"));
+  EXPECT_THAT(errors.str(), testing::HasSubstr("requires retained surface"));
 }
 
 //! A job's source sits in the folder of what it cooks: the index records it as
@@ -120,23 +119,23 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, CarriesTheModelIdentity)
 NOLINT_TEST_F(SceneImportRequestBuilderTest, ForwardsCanonicalProvenance)
 {
   auto settings = Settings();
-  settings.material_slot_provenance_json = RetainedProvenance().dump();
+  settings.surface_provenance_json = RetainedProvenance().dump();
   std::ostringstream errors;
   const auto request = BuildSceneRequest(settings, ImportFormat::kGltf, errors);
   ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << errors.str();
-  EXPECT_EQ(request->material_slot_provenance->SourceIdentity().ToString(),
-    kSourceIdentity);
-  EXPECT_EQ(json::parse(request->material_slot_provenance->Serialize()),
+  EXPECT_EQ(
+    request->surface_provenance->SourceIdentity().ToString(), kSourceIdentity);
+  EXPECT_EQ(json::parse(request->surface_provenance->Serialize()),
     RetainedProvenance());
 }
 
 NOLINT_TEST_F(SceneImportRequestBuilderTest, ReadsExplicitProvenanceFile)
 {
   auto settings = Settings();
-  settings.material_slot_provenance_path = Path("slots.json").string();
+  settings.surface_provenance_path = Path("surfaces.json").string();
   {
-    std::ofstream output(settings.material_slot_provenance_path);
+    std::ofstream output(settings.surface_provenance_path);
     output << RetainedProvenance().dump();
     ASSERT_TRUE(output.good());
   }
@@ -144,15 +143,15 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, ReadsExplicitProvenanceFile)
   const auto request = BuildSceneRequest(settings, ImportFormat::kGltf, errors);
   ASSERT_HAS_VALUE(request)
     << "Expected request to contain a value" << errors.str();
-  EXPECT_EQ(json::parse(request->material_slot_provenance->Serialize()),
+  EXPECT_EQ(json::parse(request->surface_provenance->Serialize()),
     RetainedProvenance());
 }
 
 NOLINT_TEST_F(SceneImportRequestBuilderTest, RejectsCompetingProvenanceInputs)
 {
   auto settings = Settings();
-  settings.material_slot_provenance_json = RetainedProvenance().dump();
-  settings.material_slot_provenance_path = Path("slots.json").string();
+  settings.surface_provenance_json = RetainedProvenance().dump();
+  settings.surface_provenance_path = Path("surfaces.json").string();
   std::ostringstream errors;
   EXPECT_FALSE(
     BuildSceneRequest(settings, ImportFormat::kGltf, errors).has_value());
@@ -165,7 +164,7 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, RejectsProvenanceFromAnotherSource)
   auto provenance = RetainedProvenance();
   provenance.update(
     { { "source_identity", "01990000-0000-7000-8000-000000000002" } });
-  settings.material_slot_provenance_json = provenance.dump();
+  settings.surface_provenance_json = provenance.dump();
   std::ostringstream errors;
   EXPECT_FALSE(
     BuildSceneRequest(settings, ImportFormat::kGltf, errors).has_value());
@@ -177,12 +176,11 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest, RejectsMalformedProvenanceShape)
   auto settings = Settings();
   auto provenance = RetainedProvenance();
   provenance.update({ { "geometries", { { "unexpected", true } } } });
-  settings.material_slot_provenance_json = provenance.dump();
+  settings.surface_provenance_json = provenance.dump();
   std::ostringstream errors;
   EXPECT_FALSE(
     BuildSceneRequest(settings, ImportFormat::kGltf, errors).has_value());
-  EXPECT_THAT(
-    errors.str(), testing::HasSubstr("invalid material-slot provenance"));
+  EXPECT_THAT(errors.str(), testing::HasSubstr("invalid surface provenance"));
 }
 
 NOLINT_TEST_F(SceneImportRequestBuilderTest,
@@ -199,8 +197,8 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest,
           {
             "scene",
             {
-              { "material_slot_source_identity", kSourceIdentity },
-              { "material_slot_provenance", RetainedProvenance() },
+              { "surface_source_identity", kSourceIdentity },
+              { "surface_provenance", RetainedProvenance() },
             },
           },
         },
@@ -235,9 +233,9 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest,
     const auto request = job.BuildRequest(errors);
     ASSERT_HAS_VALUE(request)
       << "Expected request to contain a value" << errors.str();
-    EXPECT_EQ(request->material_slot_provenance->SourceIdentity().ToString(),
+    EXPECT_EQ(request->surface_provenance->SourceIdentity().ToString(),
       kSourceIdentity);
-    EXPECT_EQ(json::parse(request->material_slot_provenance->Serialize()),
+    EXPECT_EQ(json::parse(request->surface_provenance->Serialize()),
       RetainedProvenance());
   }
 }
@@ -247,7 +245,7 @@ NOLINT_TEST_F(
 {
   auto settings = Settings();
   settings.import_geometry = false;
-  settings.material_slot_source_identity.clear();
+  settings.surface_source_identity.clear();
   std::ostringstream errors;
   EXPECT_FALSE(BuildSceneRequest(settings, ImportFormat::kGltf, errors));
   EXPECT_THAT(
@@ -259,25 +257,25 @@ NOLINT_TEST_F(SceneImportRequestBuilderTest,
 {
   auto settings = Settings();
   settings.cooked_root.clear();
-  settings.material_slot_provenance_path = Path("not-on-disk.json").string();
+  settings.surface_provenance_path = Path("not-on-disk.json").string();
   std::ostringstream errors;
   const auto request = settings.Prepare(
     ImportFormat::kGltf, RetainedProvenance().dump(), errors);
   ASSERT_HAS_VALUE(request) << errors.str();
   EXPECT_FALSE(request->cooked_root.has_value());
   EXPECT_EQ(request->source_path, std::filesystem::path(settings.source_path));
-  ASSERT_NE(request->material_slot_provenance, nullptr);
-  EXPECT_EQ(request->material_slot_provenance->SourceIdentity().ToString(),
-    kSourceIdentity);
+  ASSERT_NE(request->surface_provenance, nullptr);
+  EXPECT_EQ(
+    request->surface_provenance->SourceIdentity().ToString(), kSourceIdentity);
 }
 
 NOLINT_TEST_F(
   SceneImportRequestBuilderTest, CapturedProvenanceDoesNotRequireTheOriginal)
 {
   auto settings = Settings();
-  const auto logical = Path("authored-slots.json");
-  const auto physical = Path("captured-slots.json");
-  settings.material_slot_provenance_path = logical.string();
+  const auto logical = Path("authored-surfaces.json");
+  const auto physical = Path("captured-surfaces.json");
+  settings.surface_provenance_path = logical.string();
   const auto text = RetainedProvenance().dump();
   {
     std::ofstream output(physical, std::ios::binary);
@@ -310,9 +308,9 @@ NOLINT_TEST_F(
   EXPECT_EQ(proof.path, logical);
   ASSERT_EQ(proof.reads.size(), 1U);
   EXPECT_EQ(proof.reads.front().digest, digest);
-  ASSERT_NE(request->material_slot_provenance, nullptr);
-  EXPECT_EQ(request->material_slot_provenance->SourceIdentity().ToString(),
-    kSourceIdentity);
+  ASSERT_NE(request->surface_provenance, nullptr);
+  EXPECT_EQ(
+    request->surface_provenance->SourceIdentity().ToString(), kSourceIdentity);
   EXPECT_FALSE(std::filesystem::exists(logical));
 }
 } // namespace

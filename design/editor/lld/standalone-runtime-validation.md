@@ -403,21 +403,21 @@ back.
 Identity maps contain the complete node roster (`source_node_id`,
 `native_node_index`, `parent_native_node_index`) and asset resolutions
 (`asset_uri`, `asset_key`, `root_id`, content hash). Node indices are identity
-associations, not property expectations. Engine-owned material `slot_id`,
+associations, not property expectations. Engine-owned material `surface_id`,
 geometry identity, layout revision and per-LOD bindings identify material
 assignments; array positions are lookup coordinates only. An unresolved
-slot/layout identity fails preparation rather than being omitted or guessed from
+surface/layout identity fails preparation rather than being omitted or guessed from
 names/indices.
 
 Expected and observed state each contain a complete `nodes` list, independently
 of `fields`, so missing/extra nodes fail even when no scalar field mentions
 them. Every field record has `field_id`, `subject`, and `value: { kind, data }`.
 The subject is `scene`, `node` or `asset`, with its corresponding stable UUID or
-asset URI/key and optional material `slot_id`. The unique key is subject
+asset URI/key and optional material `surface_id`. The unique key is subject
 identity plus `field_id`; ordering cannot mask duplicates.
 
 Validate unique node associations and a complete acyclic parent forest before
-comparison. Parent references, root references and material slot bindings must
+comparison. Parent references, root references and surface bindings must
 resolve inside their declared roster/layout. Native handles are diagnostic
 process-local values, never authored identities. Checkpoints are unique positive
 scene-frame numbers in increasing order. Shared byte/hash vectors verify that
@@ -489,7 +489,7 @@ The required field set is the final V0.1 surface in PRD section 8, the
 and its owning authoring LLDs. The field catalog covers that surface exactly.
 Include component presence, authored names/flags, every authored camera (not
 just the selected one), parent relationships/transforms, geometry and resolved
-slot identities. Map required fields to source, stored native and effective
+surface identities. Map required fields to source, stored native and effective
 observations explicitly. Missing support for a required field fails
 qualification; no test adapter silently excludes it.
 

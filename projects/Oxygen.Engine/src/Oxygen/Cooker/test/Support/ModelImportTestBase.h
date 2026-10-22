@@ -19,7 +19,7 @@
 #include <Oxygen/Base/Uuid.h>
 #include <Oxygen/Cooker/Import/AsyncImportService.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Cooker/test/Support/ImportHarness.h>
 #include <Oxygen/Cooker/test/Support/TempDir.h>
@@ -138,13 +138,13 @@ protected:
 
   // Each fixture owns one logical source across repeat imports and copied
   // paths.
-  std::shared_ptr<const MaterialSlotProvenance> source_provenance_
-    = std::make_shared<const MaterialSlotProvenance>(Uuid::Generate());
+  std::shared_ptr<const SurfaceProvenance> source_provenance_
+    = std::make_shared<const SurfaceProvenance>(Uuid::Generate());
 
   [[nodiscard]] auto RunImport(ImportRequest request) -> ImportRunResult
   {
-    if (!request.material_slot_provenance) {
-      request.material_slot_provenance = source_provenance_;
+    if (!request.surface_provenance) {
+      request.surface_provenance = source_provenance_;
     }
     AsyncImportService service(MakeMaxConcurrencyConfig());
     ImportRunResult result {};
@@ -166,9 +166,9 @@ protected:
     service.Stop();
 
     if (result.report.success
-      && !result.report.material_slot_provenance_json.empty()) {
-      source_provenance_ = MaterialSlotProvenance::Parse(
-        result.report.material_slot_provenance_json);
+      && !result.report.surface_provenance_json.empty()) {
+      source_provenance_
+        = SurfaceProvenance::Parse(result.report.surface_provenance_json);
     }
 
     return result;

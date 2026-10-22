@@ -77,9 +77,9 @@ public static class SceneOperationKinds
     public const string EditGeometry = "Scene.Component.EditGeometry";
 
     /// <summary>
-    /// Geometry material slot edit.
+    /// Geometry surface material edit.
     /// </summary>
-    public const string EditMaterialSlot = "Scene.Component.EditMaterialSlot";
+    public const string EditSurfaceMaterial = "Scene.Component.EditSurfaceMaterial";
 
     /// <summary>
     /// Perspective camera component edit.

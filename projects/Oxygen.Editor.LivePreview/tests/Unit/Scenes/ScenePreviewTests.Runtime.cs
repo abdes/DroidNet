@@ -114,7 +114,7 @@ public sealed partial class ScenePreviewTests
         var built = new Scene { Name = "Test Scene" };
         var node = new SceneNode(built) { Name = "Saved geometry" };
         built.RootNodes.Add(node);
-        var target = new MaterialSlotTarget(
+        var target = new SurfaceTarget(
             EngineAssets.BasicShape("Cube"),
             Guid.Parse("10000000-0000-0000-0000-000000000001"),
             new string('a', 64));
@@ -126,8 +126,8 @@ public sealed partial class ScenePreviewTests
         _ = (await fixture.Preview.SyncSceneAsync(PreviewFixture.SceneOf(document), this.TestContext.CancellationToken).ConfigureAwait(false)).Should().BeTrue();
 
         var projected = fixture.World.Commands.OfType<RuntimeSetMaterialOverride>().Should().ContainSingle().Which;
-        _ = projected.Intent.Should().Be(MaterialSlotAssignmentIntent.RetainedAssignment);
-        _ = projected.SlotId.Should().Be(target.SlotId);
+        _ = projected.Intent.Should().Be(SurfaceMaterialAssignmentIntent.RetainedAssignment);
+        _ = projected.SurfaceId.Should().Be(target.SurfaceId);
         _ = projected.LayoutRevision.Should().Be(target.LayoutRevision);
     }
 }

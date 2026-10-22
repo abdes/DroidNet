@@ -34,21 +34,21 @@ public sealed class CookedGeometryReport
             var key = row.GetProperty("geometry_asset_key").GetGuid();
             var ids = new HashSet<Guid>();
             var locations = new HashSet<(uint lod, uint submesh)>();
-            var slots = ImmutableArray.CreateBuilder<GeometryMaterialSlot>();
-            foreach (var slot in row.GetProperty("slots").EnumerateArray())
+            var surfaces = ImmutableArray.CreateBuilder<GeometrySurface>();
+            foreach (var surface in row.GetProperty("surfaces").EnumerateArray())
             {
-                var slotId = slot.GetProperty("slot_id").GetGuid();
-                var bindings = slot.GetProperty("bindings").EnumerateArray().Select(static binding => new GeometryMaterialSlotBinding(
+                var surfaceId = surface.GetProperty("surface_id").GetGuid();
+                var bindings = surface.GetProperty("bindings").EnumerateArray().Select(static binding => new GeometrySurfaceBinding(
                     binding.GetProperty("lod_index").GetUInt32(), binding.GetProperty("submesh_index").GetUInt32(), binding.GetProperty("default_material_key").GetGuid())).ToImmutableArray();
-                if (!ids.Add(slotId) || bindings.Any(binding => !locations.Add((binding.LodIndex, binding.SubmeshIndex))))
+                if (!ids.Add(surfaceId) || bindings.Any(binding => !locations.Add((binding.LodIndex, binding.SubmeshIndex))))
                 {
-                    throw new InvalidDataException("The native geometry inventory contains duplicate slot identities or surface bindings.");
+                    throw new InvalidDataException("The native geometry inventory contains duplicate surface identities or surface bindings.");
                 }
 
-                slots.Add(new(slotId, slot.GetProperty("display_name").GetString()!, bindings));
+                surfaces.Add(new(surfaceId, surface.GetProperty("display_name").GetString()!, bindings));
             }
 
-            if (!geometries.TryAdd(key, new(row.GetProperty("layout_revision").GetString()!, slots.ToImmutable())))
+            if (!geometries.TryAdd(key, new(row.GetProperty("layout_revision").GetString()!, surfaces.ToImmutable())))
             {
                 throw new InvalidDataException("The native geometry report contains duplicate asset keys.");
             }
@@ -61,13 +61,13 @@ public sealed class CookedGeometryReport
     /// <param name="geometryUri">The authored identity.</param>
     /// <param name="nativeGeometryKey">The native key to resolve.</param>
     /// <returns>The matching inventory, or null.</returns>
-    public GeometryMaterialSlotMetadata? Find(AssetPath geometryUri, Guid nativeGeometryKey)
-        => this.geometries.TryGetValue(nativeGeometryKey, out var inventory) ? new(geometryUri, nativeGeometryKey, inventory.LayoutRevision, inventory.Slots) : null;
+    public GeometrySurfaceMetadata? Find(AssetPath geometryUri, Guid nativeGeometryKey)
+        => this.geometries.TryGetValue(nativeGeometryKey, out var inventory) ? new(geometryUri, nativeGeometryKey, inventory.LayoutRevision, inventory.Surfaces) : null;
 
     /// <summary>Reads a native command result scoped to one virtual path.</summary>
     /// <param name="geometryUri">The authored identity.</param>
     /// <returns>The sole inventory, or null when the root has no matching geometry.</returns>
-    public GeometryMaterialSlotMetadata? SingleOrDefault(AssetPath geometryUri)
+    public GeometrySurfaceMetadata? SingleOrDefault(AssetPath geometryUri)
         => this.geometries.Count switch
         {
             0 => null,
@@ -83,5 +83,5 @@ public sealed class CookedGeometryReport
         return JsonSchema.FromText(reader.ReadToEnd());
     }
 
-    private sealed record Inventory(string LayoutRevision, ImmutableArray<GeometryMaterialSlot> Slots);
+    private sealed record Inventory(string LayoutRevision, ImmutableArray<GeometrySurface> Surfaces);
 }

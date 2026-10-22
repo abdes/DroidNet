@@ -45,7 +45,7 @@ internal static class NativeImportReportReader
         var outputsBySource = ImmutableDictionary.CreateBuilder<string, ImmutableArray<string>>(StringComparer.Ordinal);
         var productsBySource = ImmutableDictionary.CreateBuilder<string, ImmutableHashSet<string>>(StringComparer.Ordinal);
         var diagnostics = new List<DiagnosticRecord>();
-        var provenance = ImmutableDictionary.CreateBuilder<string, NativeMaterialSlotProvenance>(StringComparer.Ordinal);
+        var provenance = ImmutableDictionary.CreateBuilder<string, NativeSurfaceProvenance>(StringComparer.Ordinal);
         var succeeded = exitCode == 0;
         var indices = new HashSet<int>();
         foreach (var job in jobs)
@@ -70,18 +70,18 @@ internal static class NativeImportReportReader
                 productsBySource.Add(source, ReadProducts(job));
             }
 
-            if (requested.MaterialSlotProvenance is { } previous
+            if (requested.SurfaceProvenance is { } previous
                 && string.Equals(job.GetProperty("status").GetString(), "succeeded", StringComparison.Ordinal))
             {
-                if (!job.TryGetProperty("material_slot_provenance", out var candidate))
+                if (!job.TryGetProperty("surface_provenance", out var candidate))
                 {
-                    throw new InvalidDataException("Successful model import omitted its material-slot provenance.");
+                    throw new InvalidDataException("Successful model import omitted its surface provenance.");
                 }
 
-                var retained = NativeMaterialSlotProvenance.Parse(candidate);
+                var retained = NativeSurfaceProvenance.Parse(candidate);
                 if (requested.Source is null || retained.SourceIdentity != previous.SourceIdentity || provenance.ContainsKey(requested.Source))
                 {
-                    throw new InvalidDataException("Native slot provenance does not identify the requested source uniquely.");
+                    throw new InvalidDataException("Native surface provenance does not identify the requested source uniquely.");
                 }
 
                 provenance.Add(requested.Source, retained);
@@ -118,7 +118,7 @@ internal static class NativeImportReportReader
         {
             OutputsBySource = outputsBySource.ToImmutable(),
             ProductsBySource = productsBySource.ToImmutable(),
-            MaterialSlotProvenance = succeeded ? provenance.ToImmutable() : ImmutableDictionary<string, NativeMaterialSlotProvenance>.Empty,
+            SurfaceProvenance = succeeded ? provenance.ToImmutable() : ImmutableDictionary<string, NativeSurfaceProvenance>.Empty,
         };
     }
 

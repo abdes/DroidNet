@@ -20,8 +20,8 @@
 #include <Oxygen/Core/Types/CameraAspectMode.h>
 #include <Oxygen/Core/Types/PostProcess.h>
 #include <Oxygen/Data/AssetReferences.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_core.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 // packed structs intentionally embed unaligned NamedType ResourceIndexT fields
 OXYGEN_DIAGNOSTIC_PUSH
@@ -264,7 +264,7 @@ static_assert(sizeof(StartingInputContextRecord) == 20);
 //! One instance assignment. Absence restores the geometry's binding defaults.
 struct MaterialOverrideRecord {
   SceneNodeIndexT node_index = 0;
-  MaterialSlotId slot_id;
+  SurfaceId surface_id;
   AssetKey material_key;
   base::Sha256Digest layout_revision {};
 };

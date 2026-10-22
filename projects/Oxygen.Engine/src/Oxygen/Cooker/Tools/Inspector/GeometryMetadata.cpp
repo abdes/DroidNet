@@ -29,8 +29,8 @@
 #include <Oxygen/Cooker/Loose/Inspection.h>
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/GeometryAsset.h>
-#include <Oxygen/Data/MaterialSlotId.h>
-#include <Oxygen/Data/MaterialSlotInventory.h>
+#include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Reader.h>
 
@@ -47,7 +47,7 @@ auto BuildGeometryMetadataCommand(GeometryMetadataOptions& options)
                 .Build();
   auto output = clap::Option::WithKey("output")
                   .Long("output")
-                  .About("Destination JSON geometry material-slot inventory")
+                  .About("Destination JSON geometry surface inventory")
                   .Required()
                   .WithValue<std::string>()
                   .StoreTo(&options.output)
@@ -59,7 +59,7 @@ auto BuildGeometryMetadataCommand(GeometryMetadataOptions& options)
                         .StoreTo(&options.virtual_path)
                         .Build();
   return clap::CommandBuilder("geometries")
-    .About("Inspect native geometry material-slot identities and bindings.")
+    .About("Inspect native geometry surface identities and bindings.")
     .WithPositionalArguments(root)
     .WithOption(std::move(output))
     .WithOption(std::move(virtual_path));
@@ -120,11 +120,11 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
           .parse_only = true,
         };
         const auto geometry = loaders::LoadGeometryAsset(context);
-        const auto& inventory = geometry->MaterialSlots();
-        auto slots = json::array();
-        for (const auto& slot : inventory.slots) {
+        const auto& inventory = geometry->Surfaces();
+        auto surfaces = json::array();
+        for (const auto& surface : inventory.surfaces) {
           auto bindings = json::array();
-          for (const auto& binding : slot.bindings) {
+          for (const auto& binding : surface.bindings) {
             bindings.push_back({
               { "lod_index", binding.lod_index.get() },
               { "submesh_index", binding.submesh_index.get() },
@@ -134,9 +134,9 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
               },
             });
           }
-          slots.push_back({
-            { "slot_id", data::to_string(slot.slot_id) },
-            { "display_name", slot.display_name },
+          surfaces.push_back({
+            { "surface_id", data::to_string(surface.surface_id) },
+            { "display_name", surface.display_name },
             { "bindings", std::move(bindings) },
           });
         }
@@ -149,7 +149,7 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
             "layout_revision",
             fmt::format("{:02x}", fmt::join(inventory.layout_revision, "")),
           },
-          { "slots", std::move(slots) },
+          { "surfaces", std::move(surfaces) },
         });
       } catch (const std::exception& error) {
         throw std::runtime_error("invalid geometry '" + entry.virtual_path
@@ -157,7 +157,7 @@ auto RunGeometryMetadataReport(const GeometryMetadataOptions& options) -> int
       }
     }
     const auto report = json {
-      { "schema_version", data::kMaterialSlotInventorySchemaVersion },
+      { "schema_version", data::kSurfaceInventorySchemaVersion },
       { "geometries", std::move(geometries) },
     };
     std::ofstream output(output_path, std::ios::binary | std::ios::trunc);

@@ -27,12 +27,12 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/InputMappingContextAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_input.h>
 #include <Oxygen/Data/PakFormat_render.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Data/Vertex.h>
 #include <Oxygen/Data/test/Fixtures/SceneAssetBuilder.h>
 #include <Oxygen/Input/Action.h>
@@ -93,8 +93,8 @@ namespace {
     return record;
   }
 
-  //! A one-triangle geometry whose only submesh uses `slot`.
-  auto MakeGeometry(const AssetKey& key, const data::MaterialSlotId slot)
+  //! A one-triangle geometry whose only submesh uses `surface`.
+  auto MakeGeometry(const AssetKey& key, const data::SurfaceId surface)
     -> std::shared_ptr<data::GeometryAsset>
   {
     constexpr uint32_t kTriangleSize = 3U;
@@ -106,7 +106,7 @@ namespace {
     auto builder = data::MeshBuilder(data::LodIndex { 0U }, "mesh");
     builder.WithVertices(std::move(vertices)).WithIndices(kIndices);
     builder.BeginSubMesh("submesh", data::MaterialAsset::CreateDefault())
-      .WithMaterialSlotId(slot)
+      .WithSurfaceId(surface)
       .WithMeshView({
         .first_index = 0U,
         .index_count = kTriangleSize,
@@ -373,8 +373,8 @@ NOLINT_TEST_F(SceneInstantiationTest, InstancedScenesLoadUnderTheirNodes)
 //! kind and local fog volumes are attached with their authored values.
 NOLINT_TEST_F(SceneInstantiationTest, AttachesEveryNodeRecordFamily)
 {
-  const auto slot = data::MaterialSlotId::FromStableIdentity("test/slot");
-  const auto geometry = MakeGeometry(Key("/test/Mesh.ogeo"), slot);
+  const auto surface = data::SurfaceId::FromStableIdentity("test/slot");
+  const auto geometry = MakeGeometry(Key("/test/Mesh.ogeo"), surface);
   const auto material_key = Key("/test/Override.omat");
   Loader().AddGeometry(geometry);
   const auto material = Loader().AddMaterial(material_key);
@@ -395,9 +395,9 @@ NOLINT_TEST_F(SceneInstantiationTest, AttachesEveryNodeRecordFamily)
     std::vector {
       world::MaterialOverrideRecord {
         .node_index = mesh,
-        .slot_id = slot,
+        .surface_id = surface,
         .material_key = material_key,
-        .layout_revision = geometry->MaterialSlots().layout_revision,
+        .layout_revision = geometry->Surfaces().layout_revision,
       },
     });
   auto perspective = Camera(eye);
@@ -616,17 +616,17 @@ NOLINT_TEST_F(SceneInstantiationTest, MissingGeometryIsAnIssue)
 }
 
 //! A record the scene cannot apply is an issue on its node and the rest of
-//! the node loads: here a material override cooked against an older slot
+//! the node loads: here a material override cooked against an older surface
 //! layout.
 NOLINT_TEST_F(SceneInstantiationTest, StaleMaterialOverrideIsAnIssue)
 {
-  const auto slot = data::MaterialSlotId::FromStableIdentity("test/slot");
-  const auto geometry = MakeGeometry(Key("/test/Mesh.ogeo"), slot);
+  const auto surface = data::SurfaceId::FromStableIdentity("test/slot");
+  const auto geometry = MakeGeometry(Key("/test/Mesh.ogeo"), surface);
   const auto material_key = Key("/test/Override.omat");
   Loader().AddGeometry(geometry);
   static_cast<void>(Loader().AddMaterial(material_key));
 
-  auto stale_revision = geometry->MaterialSlots().layout_revision;
+  auto stale_revision = geometry->Surfaces().layout_revision;
   stale_revision.front() ^= 1U;
 
   auto builder = SceneAssetBuilder {};
@@ -638,7 +638,7 @@ NOLINT_TEST_F(SceneInstantiationTest, StaleMaterialOverrideIsAnIssue)
     std::vector {
       world::MaterialOverrideRecord {
         .node_index = 0U,
-        .slot_id = slot,
+        .surface_id = surface,
         .material_key = material_key,
         .layout_revision = stale_revision,
       },

@@ -47,13 +47,13 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/CookedSource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat_core.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/PakFormat_world.h>
 #include <Oxygen/Data/SceneAsset.h>
 #include <Oxygen/Data/SourceKey.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/Serio/FileStream.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
@@ -70,7 +70,7 @@ namespace {
   using oxygen::cooker::test::WriteBytes;
   using oxygen::cooker::test::WriteText;
 
-  auto WriteSlotGeometry(const std::filesystem::path& path) -> void
+  auto WriteSurfaceGeometry(const std::filesystem::path& path) -> void
   {
     namespace geometry = data::pak::geometry;
     std::filesystem::create_directories(path.parent_path());
@@ -88,8 +88,8 @@ namespace {
     mesh.submesh_count = 1;
     mesh.mesh_view_count = 1;
     auto submesh = geometry::SubMeshDesc {};
-    submesh.slot_id
-      = data::MaterialSlotId::FromString("00000000-0000-0000-0000-000000000001")
+    submesh.surface_id
+      = data::SurfaceId::FromString("00000000-0000-0000-0000-000000000001")
           .value();
     submesh.mesh_view_count = 1;
     const auto view = geometry::MeshViewDesc {
@@ -730,7 +730,7 @@ namespace {
     const auto cooked_root = TempDir() / "resolves_and_emits";
     std::filesystem::create_directories(cooked_root);
     ASSERT_NO_FATAL_FAILURE(
-      WriteSlotGeometry(cooked_root / "Geometry" / "cube.ogeo"));
+      WriteSurfaceGeometry(cooked_root / "Geometry" / "cube.ogeo"));
     WriteText(cooked_root / "Materials" / "cube.omat", "omat");
     WriteText(cooked_root / "Scripts" / "spin.oscript", "oscript");
     WriteText(cooked_root / "Input" / "jump.oiact", "oiact");
@@ -748,7 +748,7 @@ namespace {
           "node": 1,
           "geometry_ref": "/.cooked/Geometry/cube.ogeo",
           "material_overrides": [{
-            "slot_id": "00000000-0000-0000-0000-000000000001",
+            "surface_id": "00000000-0000-0000-0000-000000000001",
             "material_ref": "/.cooked/Materials/cube.omat",
             "layout_revision": "0000000000000000000000000000000000000000000000000000000000000001"
           }],
@@ -1279,7 +1279,7 @@ namespace {
       report->diagnostics, "scene.descriptor.recook_required"));
   }
 
-  //! Packs a procedural geometry with one material slot and a material under
+  //! Packs a procedural geometry with one surface and a material under
   //! /Engine, the way the engine content pak ships them.
   auto WriteEnginePak(const std::filesystem::path& work)
     -> std::filesystem::path
@@ -1321,22 +1321,22 @@ namespace {
   }
 
   //! A project scene resolves /Engine geometry and material, and validates a
-  //! material override against the geometry's slots, from a pak context.
+  //! material override against the geometry's surfaces, from a pak context.
   NOLINT_TEST_F(
     SceneDescriptorImportJobTest, ResolvesEngineReferencesFromAPakContext)
   {
     // Arrange
     const auto output = TempDir() / "pak_context_output";
     std::filesystem::create_directories(output);
-    const auto slot = data::to_string(
-      data::MaterialSlotId::FromStableIdentity("fixture-slot"));
+    const auto surface
+      = data::to_string(data::SurfaceId::FromStableIdentity("fixture-surface"));
     auto request = MakeRequest(output,
       R"({"name":"Scene",
       "nodes":[{"name":"Mesh"}],
       "renderables":[{"node":0,
         "geometry_ref":"/Engine/Generated/BasicShapes/Cube.ogeo",
-        "material_overrides":[{"slot_id":")"
-        + slot + R"(",
+        "material_overrides":[{"surface_id":")"
+        + surface + R"(",
           "material_ref":"/Engine/Generated/Materials/Default.omat",
           "layout_revision":"0000000000000000000000000000000000000000000000000000000000000001"
         }]}]})");

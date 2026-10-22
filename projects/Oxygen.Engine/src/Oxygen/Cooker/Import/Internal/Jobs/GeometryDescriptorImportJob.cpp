@@ -47,10 +47,10 @@
 #include <Oxygen/Data/AssetType.h>
 #include <Oxygen/Data/BufferResource.h>
 #include <Oxygen/Data/DescriptorStrings.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/MeshType.h>
 #include <Oxygen/Data/PakFormat.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/SurfaceId.h>
 #include <Oxygen/OxCo/Co.h>
 #include <Oxygen/Serio/MemoryStream.h>
 #include <Oxygen/Serio/Writer.h>
@@ -698,7 +698,7 @@ namespace {
         const auto submesh_path
           = lod_path + ".submeshes[" + std::to_string(submesh_i) + "]";
         auto submesh_desc = data::pak::geometry::SubMeshDesc {};
-        submesh_desc.slot_id = submesh.slot_id;
+        submesh_desc.surface_id = submesh.surface_id;
         const auto& submesh_name = submesh.name;
         submesh_desc.name_offset = strings.Add(submesh_name);
 

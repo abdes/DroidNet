@@ -25,8 +25,8 @@
 #include <Oxygen/Content/Loaders/GeometryLoader.h>
 #include <Oxygen/Cooker/Import/ImportOptions.h>
 #include <Oxygen/Cooker/Import/ImportRequest.h>
-#include <Oxygen/Cooker/Import/MaterialSlotProvenance.h>
 #include <Oxygen/Cooker/Import/Naming.h>
+#include <Oxygen/Cooker/Import/SurfaceProvenance.h>
 #include <Oxygen/Cooker/test/Support/ModelImportTestBase.h>
 #include <Oxygen/Cooker/test/Support/TestPaths.h>
 #include <Oxygen/Data/AssetType.h>
@@ -40,7 +40,7 @@ namespace {
 using namespace oxygen::content::import;
 
 struct SourceCapture {
-  std::shared_ptr<const MaterialSlotProvenance> provenance;
+  std::shared_ptr<const SurfaceProvenance> provenance;
   glm::vec3 bounds_max {};
 };
 
@@ -239,13 +239,13 @@ NOLINT_TEST_F(
   request.cooked_root = MakeTempDir("source_witness_rejected_mode");
   const auto failed = RunImport(std::move(request));
   EXPECT_FALSE(failed.report.success);
-  EXPECT_TRUE(failed.report.material_slot_provenance_json.empty());
+  EXPECT_TRUE(failed.report.surface_provenance_json.empty());
   EXPECT_EQ(source_provenance_->Serialize(), original.provenance->Serialize());
 }
 
-//! A geometry's slot ids are found by its name inside its model, so moving or
-//! renaming the model keeps them; only the inventory's key follows the move.
-NOLINT_TEST_F(SourceLayoutWitnessTest, MovingTheModelKeepsItsSlotIds)
+//! A geometry's surface ids are found by its name inside its model, so moving
+//! or renaming the model keeps them; only the inventory's key follows the move.
+NOLINT_TEST_F(SourceLayoutWitnessTest, MovingTheModelKeepsItsSurfaceIds)
 {
   const auto original
     = Capture(FixturePath("gltf"), CoordinateConversionPolicy {});

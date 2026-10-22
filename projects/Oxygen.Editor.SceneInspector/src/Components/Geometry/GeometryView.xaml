@@ -74,14 +74,14 @@
 
                 <editorcontrols:PropertyCard
                     HorizontalContentAlignment="Stretch"
-                    PropertyName="Slot"
-                    Visibility="{x:Bind ViewModel.ShowMaterialSlotSelector, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                    PropertyName="Surface"
+                    Visibility="{x:Bind ViewModel.ShowSurfaceSelector, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                     <ComboBox
-                        x:Name="MaterialSlotSelector"
+                        x:Name="SurfaceSelector"
                         HorizontalAlignment="Stretch"
                         DisplayMemberPath="DisplayName"
-                        ItemsSource="{x:Bind ViewModel.MaterialSlots, Mode=OneWay}"
-                        SelectedItem="{x:Bind ViewModel.SelectedMaterialSlot, Mode=TwoWay}" />
+                        ItemsSource="{x:Bind ViewModel.Surfaces, Mode=OneWay}"
+                        SelectedItem="{x:Bind ViewModel.SelectedSurface, Mode=TwoWay}" />
                 </editorcontrols:PropertyCard>
 
                 <editorcontrols:PropertyCard HorizontalContentAlignment="Stretch" PropertyName="Material">
@@ -111,7 +111,7 @@
                                 x:Name="MaterialSplitButton"
                                 HorizontalAlignment="Stretch"
                                 Content="{x:Bind ViewModel.MaterialButtonLabel, Mode=OneWay}"
-                                IsEnabled="{x:Bind ViewModel.CanEditMaterialSlot, Mode=OneWay}"
+                                IsEnabled="{x:Bind ViewModel.CanEditSurfaceMaterial, Mode=OneWay}"
                                 ToolTipService.ToolTip="{x:Bind ViewModel.MaterialToolTip, Mode=OneWay}">
                                 <muxc:SplitButton.Flyout>
                                     <Flyout x:Name="MaterialPickerFlyout" Opening="OnMaterialPickerOpening">
@@ -124,17 +124,17 @@
                             Grid.Column="2"
                             Padding="6"
                             VerticalAlignment="Center"
-                            AutomationProperties.Name="Refresh material slots"
+                            AutomationProperties.Name="Refresh surfaces"
                             Background="Transparent"
                             BorderThickness="0"
-                            Command="{x:Bind ViewModel.RefreshMaterialSlotsCommand}"
-                            ToolTipService.ToolTip="Refresh material slots: read this geometry's slots again from its cooked output, for example after a cook or reimport.">
+                            Command="{x:Bind ViewModel.RefreshSurfacesCommand}"
+                            ToolTipService.ToolTip="Refresh surfaces: read this geometry's surfaces again from its cooked output, for example after a cook or reimport.">
                             <FontIcon
                                 FontSize="14"
                                 Glyph="&#xE72C;"
                                 RenderTransformOrigin="0.5,0.5">
                                 <FontIcon.RenderTransform>
-                                    <RotateTransform x:Name="RefreshMaterialSlotsRotation" />
+                                    <RotateTransform x:Name="RefreshSurfacesRotation" />
                                 </FontIcon.RenderTransform>
                             </FontIcon>
                         </Button>
@@ -145,9 +145,9 @@
                             AutomationProperties.Name="Clear unresolved material assignments"
                             Background="Transparent"
                             BorderThickness="0"
-                            Command="{x:Bind ViewModel.ClearUnresolvedMaterialSlotsCommand}"
-                            ToolTipService.ToolTip="Clear unresolved assignments: remove material overrides that target another geometry or a slot this geometry no longer has. Resolved overrides are kept; Undo restores them."
-                            Visibility="{x:Bind ViewModel.HasUnresolvedMaterialSlots, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
+                            Command="{x:Bind ViewModel.ClearUnresolvedSurfacesCommand}"
+                            ToolTipService.ToolTip="Clear unresolved assignments: remove material overrides that target another geometry or a surface this geometry no longer has. Resolved overrides are kept; Undo restores them."
+                            Visibility="{x:Bind ViewModel.HasUnresolvedSurfaces, Mode=OneWay, Converter={StaticResource BoolToVisibilityConverter}}">
                             <FontIcon FontSize="14" Glyph="&#xE894;" />
                         </Button>
                     </Grid>
@@ -155,27 +155,27 @@
             </editorcontrols:PropertiesExpander.Items>
         </editorcontrols:PropertiesExpander>
         <VisualStateManager.VisualStateGroups>
-            <VisualStateGroup x:Name="MaterialSlotStatus">
-                <VisualState x:Name="MaterialSlotsResolved" />
-                <VisualState x:Name="MaterialSlotsInError">
+            <VisualStateGroup x:Name="SurfaceStatus">
+                <VisualState x:Name="SurfacesResolved" />
+                <VisualState x:Name="SurfacesInError">
                     <VisualState.StateTriggers>
-                        <StateTrigger IsActive="{x:Bind ViewModel.HasMaterialSlotError, Mode=OneWay}" />
+                        <StateTrigger IsActive="{x:Bind ViewModel.HasSurfaceError, Mode=OneWay}" />
                     </VisualState.StateTriggers>
                     <VisualState.Setters>
                         <Setter Target="MaterialValueBorder.BorderBrush" Value="{ThemeResource SystemFillColorCriticalBrush}" />
                     </VisualState.Setters>
                 </VisualState>
             </VisualStateGroup>
-            <VisualStateGroup x:Name="MaterialSlotLoading">
-                <VisualState x:Name="MaterialSlotsIdle" />
-                <VisualState x:Name="MaterialSlotsLoading">
+            <VisualStateGroup x:Name="SurfaceLoading">
+                <VisualState x:Name="SurfacesIdle" />
+                <VisualState x:Name="SurfacesLoading">
                     <VisualState.StateTriggers>
-                        <StateTrigger IsActive="{x:Bind ViewModel.IsMaterialSlotLoading, Mode=OneWay}" />
+                        <StateTrigger IsActive="{x:Bind ViewModel.IsSurfaceLoading, Mode=OneWay}" />
                     </VisualState.StateTriggers>
                     <Storyboard>
                         <DoubleAnimation
                             RepeatBehavior="Forever"
-                            Storyboard.TargetName="RefreshMaterialSlotsRotation"
+                            Storyboard.TargetName="RefreshSurfacesRotation"
                             Storyboard.TargetProperty="Angle"
                             From="0"
                             To="360"

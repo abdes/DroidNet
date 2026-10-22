@@ -29,7 +29,7 @@ the feed, the identity rules and the rules of properties that reference assets.
 | ID         | Coverage                                                                                                  |
 | ---------- | --------------------------------------------------------------------------------------------------------- |
 | `GOAL-005` | One entry per logical asset, with its source, cooked, cook and preview state, for every surface.          |
-| `REQ-012`  | Material slots pick materials through `AssetRule.For(AssetKind.Material)`.                                |
+| `REQ-012`  | Surfaces pick materials through `AssetRule.For(AssetKind.Material)`.                                      |
 | `REQ-013`  | Pickers and the explorer show a material's base colour (`MaterialPreviewColor`).                          |
 | `REQ-020`  | Each entry carries source, cooked and cook state; `AssetStatusText` is the one wording of it.             |
 | `REQ-021`  | References resolve by `AssetPath` through `IAssetFeed.ResolveAsync`; pickers never use cooked path text.  |

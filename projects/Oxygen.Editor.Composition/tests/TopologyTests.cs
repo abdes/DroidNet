@@ -115,7 +115,7 @@ public sealed class TopologyTests
     private static readonly (string Service, object? Key)[] SessionDelegates =
     [
         (nameof(IContentPipelineService), null),
-        (nameof(IGeometryMaterialSlotProvider), null),
+        (nameof(IGeometrySurfaceProvider), null),
         (nameof(IScriptLibrary), null),
         (nameof(SceneNodeInteraction), null),
         (nameof(ISceneNodeInteraction), null),

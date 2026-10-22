@@ -21,8 +21,8 @@
 #include <Oxygen/Core/Types/DescriptorExtensions.h>
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/MaterialSlotId.h>
 #include <Oxygen/Data/ProceduralMeshes.h>
+#include <Oxygen/Data/SurfaceId.h>
 
 namespace {
 
@@ -134,8 +134,8 @@ auto GeometryDescriptor(const EngineShape& shape) -> json
               {
                 { "name", "Main" },
                 {
-                  "slot_id",
-                  to_string(mesh->SubMeshes().front().SlotId()),
+                  "surface_id",
+                  to_string(mesh->SubMeshes().front().SurfaceIdentity()),
                 },
                 {
                   "material_ref",

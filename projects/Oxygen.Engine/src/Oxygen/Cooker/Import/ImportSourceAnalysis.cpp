@@ -591,9 +591,9 @@ namespace {
       const auto& settings = job.job_type == "gltf" ? job.gltf : job.fbx;
       report.source_path = settings.source_path;
       auto provenance = std::string {};
-      if (!settings.material_slot_provenance_path.empty()) {
+      if (!settings.surface_provenance_path.empty()) {
         provenance
-          = co_await context.ReadText(settings.material_slot_provenance_path);
+          = co_await context.ReadText(settings.surface_provenance_path);
       }
       auto errors = std::ostringstream {};
       auto request = settings.Prepare(

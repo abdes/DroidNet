@@ -28,10 +28,10 @@
 #include <Oxygen/Data/GeometryAsset.h>
 #include <Oxygen/Data/GeometryIndices.h>
 #include <Oxygen/Data/MaterialAsset.h>
-#include <Oxygen/Data/MaterialSlotId.h>
-#include <Oxygen/Data/MaterialSlotInventory.h>
 #include <Oxygen/Data/PakFormat_geometry.h>
 #include <Oxygen/Data/SourceOrigin.h>
+#include <Oxygen/Data/SurfaceId.h>
+#include <Oxygen/Data/SurfaceInventory.h>
 #include <Oxygen/Data/Vertex.h>
 
 using oxygen::data::Mesh;
@@ -266,8 +266,8 @@ auto SubMesh::ComputeBounds() -> void
   bounding_sphere_ = glm::vec4(center, radius);
 }
 
-using oxygen::data::MaterialSlotId;
 using oxygen::data::MeshBuilder;
+using oxygen::data::SurfaceId;
 
 oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
   pak::geometry::GeometryAssetDesc desc,
@@ -276,11 +276,11 @@ oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
   , desc_(desc)
   , lod_meshes_(std::move(lod_meshes))
 {
-  material_slots_.geometry_asset_key = asset_key;
+  surfaces_.geometry_asset_key = asset_key;
   if (lod_meshes_.size() > std::numeric_limits<uint32_t>::max()) {
     throw std::invalid_argument("Geometry has too many LODs");
   }
-  std::unordered_map<MaterialSlotId, size_t> slot_indices;
+  std::unordered_map<SurfaceId, size_t> surface_indices;
   for (size_t lod = 0; lod < lod_meshes_.size(); ++lod) {
     const auto& mesh = lod_meshes_.at(lod);
     if (!mesh) {
@@ -292,15 +292,16 @@ oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
     }
     for (size_t index = 0; index < submeshes.size(); ++index) {
       const auto& submesh = oxygen::base::CheckedAt(submeshes, index);
-      const auto id = submesh.SlotId();
+      const auto id = submesh.SurfaceIdentity();
       if (id.IsNil()) {
-        throw std::invalid_argument("Geometry material slot must not be nil");
+        throw std::invalid_argument(
+          "Geometry surface identity must not be nil");
       }
       const auto [location, inserted]
-        = slot_indices.try_emplace(id, material_slots_.slots.size());
+        = surface_indices.try_emplace(id, surfaces_.surfaces.size());
       if (inserted) {
-        material_slots_.slots.push_back(MaterialSlot {
-          .slot_id = id,
+        surfaces_.surfaces.push_back(Surface {
+          .surface_id = id,
           .display_name = std::string(submesh.GetName()),
           .bindings = {},
         });
@@ -311,28 +312,27 @@ oxygen::data::GeometryAsset::GeometryAsset(AssetKey asset_key,
       } else if (submesh.Material()) {
         key = submesh.Material()->GetAssetKey();
       }
-      material_slots_.slots.at(location->second)
-        .bindings.push_back(MaterialSlotBinding {
+      surfaces_.surfaces.at(location->second)
+        .bindings.push_back(SurfaceBinding {
           .lod_index = LodIndex { static_cast<uint32_t>(lod) },
           .submesh_index = SubmeshIndex { static_cast<uint32_t>(index) },
           .default_material_key = key,
         });
     }
   }
-  const auto revision
-    = ComputeMaterialSlotLayoutRevision(material_slots_.slots);
+  const auto revision = ComputeSurfaceLayoutRevision(surfaces_.surfaces);
   if (!revision) {
-    throw std::invalid_argument("Geometry material slot layout is invalid");
+    throw std::invalid_argument("Geometry surface layout is invalid");
   }
-  material_slots_.layout_revision = revision.value();
+  surfaces_.layout_revision = revision.value();
 }
 
-auto oxygen::data::GeometryAsset::FindMaterialSlot(
-  const MaterialSlotId id) const noexcept -> const MaterialSlot*
+auto oxygen::data::GeometryAsset::FindSurface(const SurfaceId id) const noexcept
+  -> const Surface*
 {
   const auto found
-    = std::ranges::find(material_slots_.slots, id, &MaterialSlot::slot_id);
-  return found == material_slots_.slots.end() ? nullptr : &*found;
+    = std::ranges::find(surfaces_.surfaces, id, &Surface::surface_id);
+  return found == surfaces_.surfaces.end() ? nullptr : &*found;
 }
 
 //! Builds and returns the immutable Mesh.
@@ -396,8 +396,8 @@ auto MeshBuilder::Build() -> std::unique_ptr<Mesh>
     if (spec.desc.has_value()) {
       submesh.SetDescriptor(spec.desc.value());
     } else {
-      submesh.slot_id_
-        = spec.slot_id.IsNil() ? MaterialSlotId::Generate() : spec.slot_id;
+      submesh.surface_id_
+        = spec.surface_id.IsNil() ? SurfaceId::Generate() : spec.surface_id;
     }
 
     for (const auto& view_desc : spec.mesh_views) {

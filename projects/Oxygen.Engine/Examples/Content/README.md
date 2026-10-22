@@ -18,14 +18,14 @@ Run the commands below from this **Content directory**:
 - Checkout: `projects/Oxygen.Engine/Examples/Content`.
 - Installed SDK: `share/oxygen/Content`.
 
-| Path under Content                       | Owner and purpose                                                            |
-| ---------------------------------------- | ---------------------------------------------------------------------------- |
-| `scenes/<name>/import-manifest.json`     | Authored scene recipes and their source descriptors                          |
-| `imports/<name>.import.json`             | Native retained model recipe, source/slot identities and selected generation |
-| `.cooked/main/container.index.bin`       | Shared cooked scenes from `cook_scenes.ps1`                                  |
-| `.cooked/imports/<source>/<generation>/` | Immutable external glTF/GLB/FBX generations                                  |
-| `pak/`                                   | Packaged shared scenes, catalog and manifest                                 |
-| `import-sources.local.json`              | Optional ignored list of original model paths for applying new recipes       |
+| Path under Content                       | Owner and purpose                                                               |
+| ---------------------------------------- | ------------------------------------------------------------------------------- |
+| `scenes/<name>/import-manifest.json`     | Authored scene recipes and their source descriptors                             |
+| `imports/<name>.import.json`             | Native retained model recipe, source/surface identities and selected generation |
+| `.cooked/main/container.index.bin`       | Shared cooked scenes from `cook_scenes.ps1`                                     |
+| `.cooked/imports/<source>/<generation>/` | Immutable external glTF/GLB/FBX generations                                     |
+| `pak/`                                   | Packaged shared scenes, catalog and manifest                                    |
+| `import-sources.local.json`              | Optional ignored list of original model paths for applying new recipes          |
 
 `.cooked` itself is a container directory, **not a cooked root**. Mount the main
 index or a retained `.import.json` record. Never mount old generation indexes
@@ -70,7 +70,7 @@ installed SDK uses its `share/oxygen/engine.pak`; a source checkout builds the
 `oxygen-engine-content` target with the importer and uses the pak the selected
 build tree records. `-EnginePak` selects another pak and is required with an
 explicit `-ToolPath` outside an SDK. `engine-assets` shows every `/Engine` asset
-on a large floor, with the example materials overriding the shapes' slot.
+on a large floor, with the example materials overriding the shapes' surface.
 
 `-All` processes each `scenes/*/import-manifest.json` in name order, including
 its materials, geometry, textures, scripts, inputs and physics sidecars. It does
@@ -145,7 +145,7 @@ file inventory, including digests, and fails if any issue is reported. Temporary
 recipes/reports are removed. Camera, environment and other demo settings are not
 part of this workflow.
 
-Keep the authored record across recooks: it owns stable source and material-slot
+Keep the authored record across recooks: it owns stable source and surface
 identity. Do not edit publication fields, duplicate records to create
 independent assets, or hand-write cooked files. Mount the printed record through
 RenderScene's Library. Interactive model imports use the same Content records

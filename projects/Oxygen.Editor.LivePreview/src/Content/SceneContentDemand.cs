@@ -81,7 +81,7 @@ internal sealed partial class SceneContentDemand : IDisposable
 
     private static bool ChangesReferences(SceneChange change)
         => change is SceneChange.NodesAdded or SceneChange.NodesRemoved or SceneChange.ComponentAdded
-            or SceneChange.ComponentRemoved or SceneChange.GeometryChanged or SceneChange.MaterialSlotsChanged;
+            or SceneChange.ComponentRemoved or SceneChange.GeometryChanged or SceneChange.SurfaceMaterialsChanged;
 
     private void OnDocumentOpened(object? sender, DocumentEventArgs args)
     {

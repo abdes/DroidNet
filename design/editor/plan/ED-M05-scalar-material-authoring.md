@@ -47,7 +47,7 @@ milestone work, not polish.
 | `REQ-021`     | Material picker exposes asset state without raw cooked-path authoring.                                 |
 | `REQ-022`     | Save/cook/picker failures produce visible operation results.                                           |
 | `REQ-024`     | Diagnostics distinguish material authoring, document, asset identity, content pipeline, and live sync. |
-| `REQ-037`     | Supported material and material-slot data round-trips without manual repair.                           |
+| `REQ-037`     | Supported material and surface data round-trips without manual repair.                                 |
 | `SUCCESS-002` | Material assignment and scene data survive save/reopen.                                                |
 | `SUCCESS-004` | Scalar material data is available for later cook/parity milestones.                                    |
 | `SUCCESS-007` | Material assets can be created, edited, assigned, cooked, and previewed at V0.1 baseline level.        |
@@ -64,7 +64,7 @@ Only these LLDs gate ED-M05 implementation:
 
 Supporting context:
 
-- [property-inspector.md](../lld/property-inspector.md), for the Geometry material slot command seam from ED-M04.
+- [property-inspector.md](../lld/property-inspector.md), for the Geometry surface command seam from ED-M04.
 - [documents-and-commands.md](../lld/documents-and-commands.md), for dirty/undo command patterns.
 - [project-services.md](../lld/project-services.md), for active project root and content roots.
 
@@ -138,7 +138,7 @@ ED-M05 does not include:
 - Broad Content Browser redesign beyond the material create/open/picker slice.
 - Full ED-M06 source/generated/cooked/pak/broken browser views.
 - Full ED-M07 content pipeline inspect/manifest/mount work.
-- Viewport material override live preview. The scene material-slot sync result
+- Viewport material override live preview. The scene surface sync result
   remains `Unsupported` by V0.1 editor policy.
 - Adding new editor-only material JSON schemas unless the LLDs are reopened.
 
@@ -189,7 +189,7 @@ Tasks:
     loose cooked build service.
   - `ProjectAssetCatalog`, generated/default material catalog entries, and
     current Content Browser asset panes.
-  - ED-M04 `GeometryViewModel` material slot UI and command usage.
+  - ED-M04 `GeometryViewModel` surface UI and command usage.
 - Decide physical placement before code:
   - `projects/Oxygen.Editor.MaterialEditor` for material document UI/service.
   - `projects/Oxygen.Editor.ContentPipeline` for material cook orchestration.
@@ -197,7 +197,7 @@ Tasks:
     codebase already has a better content-browser contracts location.
 - Confirm test hosts. If a new project is created, create the matching tests
   project only when it has real non-UI seams to test.
-- Record any existing temporary ED-M04 material-slot behavior that ED-M05 will
+- Record any existing temporary ED-M04 surface behavior that ED-M05 will
   replace.
 
 Exit:
@@ -374,9 +374,9 @@ Tasks:
   - `/Content/Materials` is the fallback for project-root and invalid
     authoring-target selections;
   - create/open material document;
-  - assign only if launched from a material slot and the user confirms.
+  - assign only if launched from a surface and the user confirms.
 - Ensure missing/broken current assignment row is shown when picker opens from
-  that slot even when `IncludeMissing = false`.
+  that surface even when `IncludeMissing = false`.
 - Add non-UI tests for filtering, missing resolution, change-stream refresh,
   and persistence-neutral picker result fields.
 
@@ -387,12 +387,12 @@ Exit:
 
 ### ED-M05.6 - Geometry Material Assignment Integration
 
-Goal: replace the ED-M04 temporary material slot affordance with the ED-M05
+Goal: replace the ED-M04 temporary surface affordance with the ED-M05
 picker flow.
 
 Tasks:
 
-- Update Geometry material slot UI to open `IMaterialPickerService`.
+- Update Geometry surface UI to open `IMaterialPickerService`.
 - Keep the ED-M04 visual quality:
   - row in Geometry section;
   - swatch/placeholder;
@@ -400,8 +400,8 @@ Tasks:
   - state badge;
   - warning icon for missing/broken.
 - Assign selected URI through existing
-  `EditMaterialSlotAsync(ctx, nodeIds, slotIndex: 0, materialUri, session)`.
-- `<None>` calls `EditMaterialSlotAsync(..., materialUri: null)`.
+  `EditSurfaceMaterialAsync(ctx, nodeIds, slotIndex: 0, materialUri, session)`.
+- `<None>` calls `EditSurfaceMaterialAsync(..., materialUri: null)`.
 - Multi-selection:
   - same URI shows value;
   - different URIs show `--`;
@@ -458,7 +458,7 @@ Goal: close ED-M05 with real evidence and no hidden deferred work.
 Tasks:
 
 - Run targeted tests through MSBuild only. Do not use `dotnet`.
-- Remove or explicitly mark temporary ED-M04 material-slot code that was
+- Remove or explicitly mark temporary ED-M04 surface code that was
   replaced.
 - Update `IMPLEMENTATION_STATUS.md` after implementation and manual validation.
 - Prepare exact manual validation scenarios for the user.
@@ -515,7 +515,7 @@ Likely existing files/projects:
 | UI becomes a generic JSON form.                             | Build a focused material editor with grouped scalar controls, swatch preview, state strip, and advanced/raw disclosure. |
 | Missing material references get auto-cleared.               | Missing URI remains persisted; picker/slot show missing state and re-pick/clear affordances.                            |
 | Filesystem watcher refresh is flaky.                        | Test service/catalog state directly; validate visible row transitions manually.                                         |
-| Engine material preview scope leaks in.                     | CPU swatch only; scene preview uses the Geometry material slot override path, not a material-editor preview renderer.   |
+| Engine material preview scope leaks in.                     | CPU swatch only; scene preview uses the Geometry surface override path, not a material-editor preview renderer.         |
 
 ## 9. Manual Validation Script
 
@@ -539,13 +539,13 @@ The user should validate these visually after implementation and build:
    `DescriptorDirty` result.
 8. Save, then Cook. Cook state becomes `Cooked`; the picker/catalog row updates
    to cooked or an explicit visible limitation is shown.
-9. Select a geometry node. Open the material slot picker.
+9. Select a geometry node. Open the surface picker.
 10. Pick `Gold`. The Geometry material row shows swatch/name/state, and the
-    scene material slot persists after save/reopen.
-11. Multi-select two geometry nodes with different materials. The material slot
+    scene surface persists after save/reopen.
+11. Multi-select two geometry nodes with different materials. The surface
     shows `--`; picking one material assigns it to both with one undo entry.
 12. Delete or rename the material descriptor outside the editor, then reopen or
-    refresh. The assigned slot shows missing/broken state but preserves the URI.
+    refresh. The assigned surface shows missing/broken state but preserves the URI.
 13. Verify live material override sync does not block the scene edit; runtime
     rejection/failure appears as a warning/error operation result.
 
@@ -563,7 +563,7 @@ ED-M05 cannot be called landed until these are true:
    descriptor write until Save.
 3. Invalid field test: non-numeric or invalid name returns
    `MaterialAuthoring` diagnostics and leaves source unchanged.
-4. Static persistence check on `SceneJsonContext` output: scene material slot
+4. Static persistence check on `SceneJsonContext` output: scene surface
    JSON contains the asset URI only, never `DescriptorPath`, `CookedPath`,
    `ThumbnailKey`, or other picker fields.
 5. Picker test: generated default material is returned in a fresh project.
@@ -577,7 +577,7 @@ ED-M05 cannot be called landed until these are true:
    build phase produces loose cooked output, and exposes cooked material through
    `LooseCookedIndexAssetCatalog`.
 10. Geometry assignment test: picker result URI flows into
-    `EditMaterialSlotAsync`, persists round-trip, and live sync maps the
+    `EditSurfaceMaterialAsync`, persists round-trip, and live sync maps the
     descriptor URI to the cooked `.omat` runtime path without blocking the edit.
 11. Manual validation script above is completed by the user.
 

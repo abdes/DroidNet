@@ -113,9 +113,9 @@ value struct PropertyValueEntry {
     void SetGeometry(System::Guid nodeId, String^ assetUri,
       Action<System::UInt64, String^>^ onFailure, Action<System::UInt64>^ onSuccess);
     void SetMaterialOverride(System::Guid nodeId, String^ geometryUri,
-      System::Guid slotId, String^ layoutRevision, String^ materialUri, System::Byte intent, Action<System::UInt64, String^>^ onFailure);
+      System::Guid surfaceId, String^ layoutRevision, String^ materialUri, System::Byte intent, Action<System::UInt64, String^>^ onFailure);
     void SetMaterialOverride(System::Guid nodeId, String^ geometryUri,
-      System::Guid slotId, String^ layoutRevision, String^ materialUri, System::Byte intent, Action<System::UInt64, String^>^ onFailure,
+      System::Guid surfaceId, String^ layoutRevision, String^ materialUri, System::Byte intent, Action<System::UInt64, String^>^ onFailure,
       Action<System::UInt64>^ onSuccess);
 
     //! Reads native atmosphere and post-process values after preceding mutations.

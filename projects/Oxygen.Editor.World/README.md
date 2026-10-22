@@ -223,7 +223,7 @@ one light per node and one directional light per atmosphere light.
 
 A scene links to an asset by its URI, an absolute `asset:` URI such as
 `asset:///Content/Geometry/Crate.ogeo`. `GeometryComponent.Geometry`,
-`MaterialsSlot.Material` and `MaterialSlotTarget.GeometryUri` are required and
+`MaterialsSlot.Material` and `SurfaceTarget.GeometryUri` are required and
 check the form when set (`AssetUris.EnsureAssetUri`), so neither code nor a file
 can put a missing link, a file path or a web address in a scene. A link to an
 asset that does not exist is still a valid link: Live Preview and the cook
@@ -231,14 +231,14 @@ report the missing asset.
 
 The scene holds no facts about the linked asset. Code that needs them asks the
 module that owns the asset's family, by the URI: the asset feed for its kind,
-files and availability, and the content pipeline for a mesh's material slots.
+files and availability, and the content pipeline for a mesh's surfaces.
 
 ### Override slots
 
 #### Why slots exist
 
 A geometry asset is shared. Every node that shows the same mesh gets that mesh's
-own values: the material on each of its material slots, and its rendering and
+own values: the material on each of its surfaces, and its rendering and
 LOD defaults. A level designer often wants _this_ crate painted red while every
 other crate keeps the material it was imported with. Changing the mesh asset
 would repaint every crate; copying the mesh would lose the link to it.
@@ -255,30 +255,30 @@ differ from what the asset supplies, and nothing else:
   the mesh supplies. Choosing the engine's default material is a separate,
   explicit assignment, not a clear.
 
-#### Material overrides follow the engine's slot identity
+#### Material overrides follow the engine's surface identity
 
-A mesh's material slots belong to the engine. Its geometry inventory gives each
-slot an opaque `MaterialSlotId`, says which LODs and submeshes the slot binds,
+A mesh's surfaces belong to the engine. Its geometry inventory gives each
+surface an opaque `SurfaceId`, says which LODs and submeshes the surface binds,
 and carries a layout revision. A `MaterialsSlot` holds the `Material` to use and
-a `MaterialSlotTarget` naming the slot it replaces:
+a `SurfaceTarget` naming the surface it replaces:
 
 | Target field     | Purpose                                                                                        |
 | ---------------- | ---------------------------------------------------------------------------------------------- |
-| `GeometryUri`    | The geometry whose inventory owns the slot                                                     |
-| `SlotId`         | The engine's identity of the slot; names, list order and indices are for display only          |
+| `GeometryUri`    | The geometry whose inventory owns the surface                                                  |
+| `SurfaceId`      | The engine's identity of the surface; names, list order and indices are for display only       |
 | `LayoutRevision` | The inventory revision seen when the override was chosen, so stale assignments can be detected |
 
-Because the engine maps the slot to every LOD and submesh it binds, one override
-covers all of them. The editor never derives a slot from a name or an index, so
-a reimport that reorders or renames slots cannot silently move an override to
+Because the engine maps the surface to every LOD and submesh it binds, one override
+covers all of them. The editor never derives a surface from a name or an index, so
+a reimport that reorders or renames surfaces cannot silently move an override to
 another part of the mesh.
 
 ```mermaid
 flowchart LR
     subgraph asset["Shared mesh asset"]
         direction TB
-        a1["<b>Crate.geometry, slot A</b><br/>id 3f2c…<br/>default: Wood<br/>LODs 0–2, submesh 0"]
-        a2["<b>Crate.geometry, slot B</b><br/>id 91be…<br/>default: Metal<br/>LODs 0–2, submesh 1"]
+        a1["<b>Crate.geometry, surface A</b><br/>id 3f2c…<br/>default: Wood<br/>LODs 0–2, submesh 0"]
+        a2["<b>Crate.geometry, surface B</b><br/>id 91be…<br/>default: Metal<br/>LODs 0–2, submesh 1"]
     end
 
     subgraph instance["Scene instance"]
@@ -287,8 +287,8 @@ flowchart LR
 
     subgraph result["Rendered for this node"]
         direction TB
-        r1["Slot A → Wood"]
-        r2["Slot B → RedPaint"]
+        r1["Surface A → Wood"]
+        r2["Surface B → RedPaint"]
     end
 
     a1 --> r1
@@ -298,17 +298,17 @@ flowchart LR
 
 What each module does with a material override:
 
-| Module                          | Role                                                                                                                                        |
-| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------- |
-| `Oxygen.Editor.Scenes`          | `SetMaterialSlot` sets or clears it after checking the slot against the current inventory; `SetGeometry` keeps those the new mesh still has |
-| `Oxygen.Editor.LivePreview`     | Sends it to the engine with its slot id and layout revision                                                                                 |
-| `Oxygen.Editor.ContentPipeline` | Writes it into the scene descriptor; an override with no matching geometry or slot id fails the scene's cook                                |
-| `Oxygen.Editor.SceneInspector`  | Lists the mesh's slots in the inspector and offers Reassign or Clear for overrides whose slot no longer resolves                            |
+| Module                          | Role                                                                                                                                              |
+| ------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Oxygen.Editor.Scenes`          | `SetSurfaceMaterial` sets or clears it after checking the surface against the current inventory; `SetGeometry` keeps those the new mesh still has |
+| `Oxygen.Editor.LivePreview`     | Sends it to the engine with its surface id and layout revision                                                                                    |
+| `Oxygen.Editor.ContentPipeline` | Writes it into the scene descriptor; an override with no matching geometry or surface id fails the scene's cook                                   |
+| `Oxygen.Editor.SceneInspector`  | Lists the mesh's surfaces in the inspector and offers Reassign or Clear for overrides whose surface no longer resolves                            |
 
-An override whose slot no longer exists after a reimport is kept, with its
-material and slot context, until it is reassigned or cleared. It blocks only the
+An override whose surface no longer exists after a reimport is kept, with its
+material and surface context, until it is reassigned or cleared. It blocks only the
 cook of the scenes that hold it. The full identity and reimport contract is in
-[content-pipeline.md §20][slot-identity].
+[content-pipeline.md §20][surface-identity].
 
 #### Where slots attach
 
@@ -324,7 +324,7 @@ flowchart TB
 ```
 
 Material overrides live on the geometry scope. They do not need the narrowest
-scope: the engine's slot identity already says which LODs and submeshes are
+scope: the engine's surface identity already says which LODs and submeshes are
 affected.
 
 #### Slot types
@@ -343,7 +343,7 @@ change notification when the value is replaced.
 
 | Slot                | Overrides                                                   | Used today                                              |
 | ------------------- | ----------------------------------------------------------- | ------------------------------------------------------- |
-| `MaterialsSlot`     | The material of one engine material slot                    | Yes, on the geometry scope, by every module above       |
+| `MaterialsSlot`     | The material of one engine surface                          | Yes, on the geometry scope, by every module above       |
 | `RenderingSlot`     | Visibility                                                  | Stored and round-tripped; nothing authors or applies it |
 | `LightingSlot`      | Shadow casting and receiving                                | Stored and round-tripped; nothing authors or applies it |
 | `LevelOfDetailSlot` | The LOD policy: fixed, by distance or by screen-space error | Stored and round-tripped; nothing authors or applies it |
@@ -487,4 +487,4 @@ Distributed under the MIT License. See [LICENSE](../../LICENSE) or
 [opensource.org/licenses/MIT](https://opensource.org/licenses/MIT).
 
 [ser]: src/Serialization/README.md
-[slot-identity]: ../../design/editor/lld/content-pipeline.md#20-canonical-material-slot-identity-and-reimport
+[surface-identity]: ../../design/editor/lld/content-pipeline.md#20-canonical-surface-identity-and-reimport

@@ -8,7 +8,7 @@ Last Updated: 2026-10-20 01:32
 
 ## 1. Purpose and scope
 
-The inspector edits Transform, Geometry/all existing material slots, basic
+The inspector edits Transform, Geometry/all existing surfaces, basic
 PerspectiveCamera, DirectionalLight and scene environment/post-processing. Every
 editable field in this contract must work through command, Undo/Redo,
 Save/reopen, cooking/loading and live native rendering. Advanced means supported
@@ -41,7 +41,7 @@ control/edit buffer -> field VM -> shared edit session
 | World                  | Canonical node/component/source DTOs and invariants                            |
 | Schemas                | Property identities, scalar/range/enum validation and annotations              |
 | Runtime/Interop/engine | Current-revision projection and actual rendering                               |
-| Asset/material owners  | Discovery, picker, slot inventory, material create/open and publication        |
+| Asset/material owners  | Discovery, picker, surface inventory, material create/open and publication     |
 
 VMs do not call Runtime, Interop or SceneEngineSync directly. They do not write
 JSON, mutate catalog state or dehydrate scenes. A valid source edit survives
@@ -118,12 +118,12 @@ quaternion, rotation-order, pivot and generic activation controls are absent.
 
 ## 6. Geometry and primitive recipes
 
-| Field                                              | Source/default                                             | Behavior                                                                    |
-| -------------------------------------------------- | ---------------------------------------------------------- | --------------------------------------------------------------------------- |
-| Geometry                                           | Geometry asset URI; explicit chosen native recipe/import   | Shared catalog picker, loading/error state and correct native geometry      |
-| Existing material slots                            | Instance override by MaterialSlotId; no override initially | Assign/clear each slot independently; Clear restores mesh-assigned material |
-| Geometry Cast/Receive Shadows                      | Node modes from section 4                                  | Full independent effects; no material-editing substitute                    |
-| Resolved LOD/submesh/slot counts, bounds, identity | Read-only                                                  | Useful diagnostics, not topology/LOD generation controls                    |
+| Field                                                 | Source/default                                           | Behavior                                                                       |
+| ----------------------------------------------------- | -------------------------------------------------------- | ------------------------------------------------------------------------------ |
+| Geometry                                              | Geometry asset URI; explicit chosen native recipe/import | Shared catalog picker, loading/error state and correct native geometry         |
+| Existing surfaces                                     | Instance override by SurfaceId; no override initially    | Assign/clear each surface independently; Clear restores mesh-assigned material |
+| Geometry Cast/Receive Shadows                         | Node modes from section 4                                | Full independent effects; no material-editing substitute                       |
+| Resolved LOD/submesh/surface counts, bounds, identity | Read-only                                                | Useful diagnostics, not topology/LOD generation controls                       |
 
 ### Primitive recipes
 
@@ -147,27 +147,27 @@ tool resource, not a creation choice. IcoSphere has one canonical identity.
 Useful old ArrowGizmo scene uses migrate to ordinary geometry. Recipe changes
 require matching API prose and native/editor rendered evidence.
 
-### Existing material slots
+### Existing surfaces
 
-`MaterialSlotId` is engine-owned, opaque 128-bit identity, serialized as a UUID;
-indices/names are presentation metadata. The native inventory provides slot IDs,
+`SurfaceId` is engine-owned, opaque 128-bit identity, serialized as a UUID;
+indices/names are presentation metadata. The native inventory provides surface IDs,
 layout revision and per-LOD/submesh bindings. Assignment stores the geometry
-URI, slot ID, witnessed layout revision and material identity on that instance.
+URI, surface ID, witnessed layout revision and material identity on that instance.
 
 Clear removes the override; engine Default is an explicit separate choice. The
-current Inspector uses one slot selector and one assignment picker. It offers
-only slots reported by the native inventory, keeps mixed assignment values for
+current Inspector uses one surface selector and one assignment picker. It offers
+only surfaces reported by the native inventory, keeps mixed assignment values for
 instances of the same geometry, and requires matching geometry before a batch
-edit. The picker captures geometry/SlotId/revision before its asynchronous work;
+edit. The picker captures geometry/SurfaceId/revision before its asynchronous work;
 the command revalidates that target before mutating any selected instance.
 Unavailable inventories and unresolved assignments appear beside the picker. New
 edits use `ObservedEdit` validation; saved scene projection and history use
-`RetainedAssignment`, resolving the same geometry and surviving SlotId against
+`RetainedAssignment`, resolving the same geometry and surviving SurfaceId against
 the current native inventory. This transport intent is not persisted authoring
 data. Missing or foreign identities remain unresolved; revision drift alone does
-not invalidate proven slot continuity. Every nonzero slot receives the same
-command/history/Save/cook/live-binding and failure recovery as slot zero. No
-adding/removing slots or modifying shared mesh or material data is offered.
+not invalidate proven surface continuity. Every nonzero surface receives the same
+command/history/Save/cook/live-binding and failure recovery as surface zero. No
+adding/removing surfaces or modifying shared mesh or material data is offered.
 
 Reimport retains only proven identity continuity. Unproven matching keeps the
 unresolved override and old context and blocks affected scene cook/qualification
@@ -452,9 +452,9 @@ and 100%/150%/200% scale with real controls.
 ## 12. Commands, history and results
 
 Use existing typed property/document command entry points. Extend their payloads
-for node source modes, stable MaterialSlotId and per-light AtmosphereLightSlot;
+for node source modes, stable SurfaceId and per-light AtmosphereLightSlot;
 old slotIndex is not canonical assignment identity. Operation kinds remain owned
-string constants for transform, geometry, slot, camera, light, component
+string constants for transform, geometry, surface, camera, light, component
 add/remove and environment edits.
 
 One committed drag, text edit or menu pick produces one history entry.
@@ -474,7 +474,7 @@ feedback.
 
 ## 13. Persistence, migration and dependencies
 
-Canonical DTOs preserve node source modes, local transforms, geometry/all-slot
+Canonical DTOs preserve node source modes, local transforms, geometry/all-surface
 assignments, camera Auto/Fixed state, per-light assignment/settings and scene
 systems. Save is coherent/atomic; later edits remain dirty. Migrate useful prior
 intent once, regenerate derived content and remove obsolete readers/aliases. Old
@@ -489,7 +489,7 @@ editing; Runtime/Interop remain behind their owning boundary.
 
 Every field has a meaningful non-default source case, native observation and
 rendered effect where applicable. Test complete Undo/Redo/Save/cook/reopen,
-finite/cross-field rejection, mixed edits, late callbacks, all slot identities,
+finite/cross-field rejection, mixed edits, late callbacks, all surface identities,
 primitive recipes, Auto/Fixed/hidden cameras, local visibility overrides,
 independent light/mesh shadows and receiver effect, both atmosphere sources,
 ordinary fill, and workspace Hide without source/cook changes. Engine rendered
@@ -497,7 +497,7 @@ cases precede editor cases; existing unit or storage checks are not presentation
 proof. Invalidate resolver/captured products on all contributing changes.
 
 Rejected alternatives: one scene Sun pointer loses two-source assignment;
-ancestor-AND loses local overrides; name/index slot mapping can redirect
+ancestor-AND loses local overrides; name/index surface mapping can redirect
 materials; Mixed/Baked without baking advertises no-ops; automatic Raw rows turn
 internal storage into accidental product scope. Retained Advanced fields are
 implemented and qualified rather than removed merely because their current path
