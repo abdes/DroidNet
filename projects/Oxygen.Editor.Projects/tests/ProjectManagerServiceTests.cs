@@ -214,16 +214,6 @@ public partial class ProjectManagerServiceTests : TestSuiteWithAssertions
     }
 
     [TestMethod]
-    public void GetCurrentProjectStorageProvider_ShouldReturnStorageProvider()
-    {
-        // Act
-        var result = this.projectManagerService.GetCurrentProjectStorageProvider();
-
-        // Assert
-        _ = result.Should().Be(this.mockStorage.Object);
-    }
-
-    [TestMethod]
     public void Ctor_DefaultGeneratesNonEmptyId()
     {
         var pi = new ProjectInfo("name", Category.Games, "loc", "thumb");

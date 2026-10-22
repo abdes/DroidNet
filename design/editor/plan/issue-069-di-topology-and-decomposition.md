@@ -4,7 +4,9 @@ Status: `in progress` — Phase 0, S1.1 to S1.15 (Assets, Cook on change,
 Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
 Scenes, LivePreview, Asset family modules, Cook on change over checked inputs,
 Shell, Unsaved documents, Features, Dissolve the World Editor, Test boundaries,
-Enforcement), Phase 2 (scope factory and topology) and Phase 3 (registration modules) are done; see the ledger in section 6. Phase 1 follows
+Enforcement), Phase 2 (scope factory and topology), Phase 3 (registration
+modules) and Phase 4 (project session) are done; see the ledger in section 6.
+Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
 "shell design"), with documents, histories, saving and cooking in
@@ -892,7 +894,7 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S1.15 Enforcement                                    | `done`        | Boundary test and project construction; the editor's hand-built test containers are `HostContainer`s, and the topology tests compose the registration modules over one                      |
 | S2.1 to S2.3 Scope factory and topology              | `done`        | `DroidNet.Composition`; the composition root in `Oxygen.Editor.Composition` with its topology and project-switch tests; workspace and Content Explorer scopes on the factory                |
 | S3.1 Registration modules                            | `done`        | Modules per subsystem and layer; `EditorModule` composes the editor scope through `ScopeFactory.CreateRoot`; the App references only what its host and XAML use                             |
-| S4.1 to S4.4 Project Session                         | `in progress` | S4.1, S4.3, S4.4 and the S4.2 clusters landed in `6e9621d0e`; the document service and editors moved into the session after it (decision 14)                                                |
+| S4.1 to S4.4 Project Session                         | `done`        | Landed in `6e9621d0e`; the document service and editors moved into the session after it (decision 14); `EditorCloseTests` is the open check                                                 |
 | S5.1 to S5.4 Documents across windows, panels in one | `not started` |                                                                                                                                                                                             |
 | S6.1 to S6.3 Service location and messenger          | `not started` |                                                                                                                                                                                             |
 | S7 Documentation                                     | `not started` |                                                                                                                                                                                             |

@@ -45,7 +45,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
     private IPlacementService? placement;
     private IAssetCatalog? assetCatalog;
     private PreviewSession? previewSession;
-    private IProject? initialSceneProject;
+    private bool initialSceneOpened;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="WorkspaceViewModel"/> class.
@@ -177,7 +177,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         if (this.session is not { } session
             || this.assetCatalog is not { } catalog
             || !session.Context.OpenInitialScene
-            || ReferenceEquals(session.Project, this.initialSceneProject))
+            || this.initialSceneOpened)
         {
             return;
         }
@@ -185,7 +185,7 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
         var project = session.Project;
         var context = session.Context;
 
-        this.initialSceneProject = project;
+        this.initialSceneOpened = true;
 
         // Seed the default scene for projects that predate DefaultSceneId before resolving it.
         await this.MigrateDefaultSceneAsync(catalog, project, context).ConfigureAwait(true);

@@ -2,8 +2,6 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
-using DroidNet.Storage;
-
 namespace Oxygen.Editor.Projects;
 
 /// <summary>
@@ -75,12 +73,4 @@ public interface IProjectManagerService
     /// <returns>The newly active project.</returns>
     /// <exception cref="InvalidOperationException">The snapshot is foreign, already accepted, or stale.</exception>
     public IProject AcceptProjectLoad(ProjectLoadSnapshot snapshot);
-
-    /// <summary>
-    /// Gets the current project's storage provider.
-    /// </summary>
-    /// <returns>
-    /// An object implementing the <see cref="IStorageProvider"/> interface, which provides methods for managing storage items in the storage system.
-    /// </returns>
-    public IStorageProvider GetCurrentProjectStorageProvider();
 }

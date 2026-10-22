@@ -36,9 +36,6 @@ public partial class ProjectManagerService(IStorageProvider storage, ILoggerFact
     private IAtomicFileStore AtomicFiles => atomicFiles ?? storage.AtomicFiles;
 
     /// <inheritdoc />
-    public IStorageProvider GetCurrentProjectStorageProvider() => storage;
-
-    /// <inheritdoc />
     [SuppressMessage(
         "Design",
         "CA1031:Do not catch general exception types",
