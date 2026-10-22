@@ -106,4 +106,15 @@ public abstract partial class FileSettingsSource
 
     private void LogRestoredOriginal(string backupPath, string destinationPath)
         => LogRestoredOriginal(this.Logger, this.Id, backupPath, destinationPath);
+
+    [LoggerMessage(
+        EventId = 31010,
+        Level = LogLevel.Warning,
+        Message = "Could not replace '{DestinationPath}' in place for source '{SourceId}' ({Reason}); moving the new file into place instead")]
+    [ExcludeFromCodeCoverage]
+    private static partial void LogReplaceFallback(ILogger logger, string sourceId, string destinationPath, string reason);
+
+    // The fallback recovers, so the failure is a warning without its stack; a failed fallback logs its own error.
+    private void LogReplaceFallback(string destinationPath, Exception ex)
+        => LogReplaceFallback(this.Logger, this.Id, destinationPath, ex.Message);
 }

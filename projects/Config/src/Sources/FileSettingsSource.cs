@@ -381,7 +381,7 @@ public abstract partial class FileSettingsSource : SettingsSource, IDisposable
         }
         catch (Exception ex)
         {
-            this.LogFileIoError($"FileReplace ({sourcePath} -> {destinationPath})", ex);
+            this.LogReplaceFallback(destinationPath, ex);
             return false;
         }
     }

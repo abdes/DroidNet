@@ -541,6 +541,38 @@ public class FileSettingsSourceTests : IDisposable
     }
 
     [TestMethod]
+    public async Task WriteAllTextAsync_FileReplaceThrows_MovesIntoPlaceAndWarnsWithoutStack()
+    {
+        var path = this.fs.Path.Combine(this.fs.Path.GetTempPath(), "atomic-replace-fallback.txt");
+        var directory = this.fs.Path.GetDirectoryName(path) ?? this.fs.Path.GetTempPath();
+        if (!this.fs.Directory.Exists(directory))
+        {
+            _ = this.fs.Directory.CreateDirectory(directory);
+        }
+
+        await this.fs.File.WriteAllTextAsync(path, "original-content", CancellationToken.None).ConfigureAwait(true);
+
+        // Another process holds the file open: Windows refuses the in-place replace.
+        var mockFs = this.CreateDelegatingMockFileSystem(mockFile
+            => _ = mockFile.Setup(f => f.Replace(It.IsAny<string>(), It.IsAny<string>(), It.IsAny<string>()))
+                .Throws(new IOException("Unable to remove the file to be replaced.")));
+        var logs = new RecordingLoggerFactory();
+
+        using var source = new TestFileSettingsSource("atomic-replace-fallback", path, mockFs.Object, crypto: null, loggerFactory: logs);
+
+        await source.WriteAllTextAsync("new-content", this.TestContext.CancellationToken).ConfigureAwait(true);
+
+        var diskContent = await this.fs.File.ReadAllTextAsync(path, CancellationToken.None).ConfigureAwait(true);
+        _ = diskContent.Should().Be("new-content");
+        _ = this.fs.Directory.GetFiles(directory, "*.bak.*").Should().BeEmpty();
+
+        // The fallback recovered: one warning without the exception's stack, and no error.
+        _ = logs.Records.Should().NotContain(record => record.Level >= LogLevel.Error);
+        _ = logs.Records.Where(record => record.Level == LogLevel.Warning).Should().ContainSingle()
+            .Which.Exception.Should().BeNull();
+    }
+
+    [TestMethod]
     public async Task WriteAllTextAsync_FinalMoveThrows_RestoresOriginalFromBackup()
     {
         var path = this.fs.Path.Combine(this.fs.Path.GetTempPath(), "atomic-final-move-fail.txt");
@@ -862,6 +894,39 @@ public class FileSettingsSourceTests : IDisposable
             => this.decryptThrows
                 ? throw new System.Security.Cryptography.CryptographicException("decrypt fail")
                 : data;
+    }
+
+    // Records the level and exception of every log entry, for assertions on how a source reports what happened.
+    private sealed class RecordingLoggerFactory : ILoggerFactory
+    {
+        public List<(LogLevel Level, Exception? Exception)> Records { get; } = [];
+
+        public ILogger CreateLogger(string categoryName) => new RecordingLogger(this.Records);
+
+        public void AddProvider(ILoggerProvider provider)
+        {
+        }
+
+        public void Dispose()
+        {
+        }
+
+        private sealed class RecordingLogger(List<(LogLevel Level, Exception? Exception)> records) : ILogger
+        {
+            public IDisposable? BeginScope<TState>(TState state)
+                where TState : notnull
+                => null;
+
+            public bool IsEnabled(LogLevel logLevel) => true;
+
+            public void Log<TState>(LogLevel logLevel, EventId eventId, TState state, Exception? exception, Func<TState, Exception?, string> formatter)
+            {
+                lock (records)
+                {
+                    records.Add((logLevel, exception));
+                }
+            }
+        }
     }
 
     // Minimal concrete implementation used for tests. It stores the file content as a single
