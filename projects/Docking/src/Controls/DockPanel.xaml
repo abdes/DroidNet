@@ -207,7 +207,8 @@
                 </s:PanelButtonRow>
             </Grid>
 
-            <ContentPresenter Grid.Row="1" Content="{x:Bind ViewModel.ActiveDockable.ViewModel, Mode=OneWay, Converter={StaticResource VmToViewConverter}}" />
+            <!--  Content is the active dockable's view, kept per dockable by the code behind (see ShowActiveDockable).  -->
+            <ContentPresenter x:Name="ActiveDockableContent" Grid.Row="1" />
 
             <Border
                 Grid.Row="1"

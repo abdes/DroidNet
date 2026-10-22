@@ -81,3 +81,8 @@ windows, can use the same dockable ids.
 - Active view tracking
 - View state management
 - Multiple view support within docks
+- One view per dockable: a `DockPanel` converts each dockable's view model
+  once and keeps that view while the dockable stays in its dock, so switching
+  tabs moves the same view out of and back into the visual tree. Closing a
+  dockable, or moving it to another dock, releases its view
+  (`DroidNet.Mvvm.HostedViews`)

@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Specialized;
 using System.ComponentModel;
 using System.Diagnostics;
 using System.Reactive.Linq;
@@ -45,6 +46,9 @@ public sealed partial class DockPanel
 
     private const double ResizeThrottleInMs = 50.0;
 
+    private const string VmToViewConverterResourceKey = "VmToViewConverter";
+
+    private readonly HostedViews views = new();
     private readonly PointerEventHandler pointerEnterEventHandler;
     private readonly PointerEventHandler pointerExitEventHandler;
 
@@ -62,16 +66,21 @@ public sealed partial class DockPanel
             if (args.OldValue is not null)
             {
                 args.OldValue.PropertyChanged -= this.OnIsInDockingModePropertyChanged;
+                args.OldValue.PropertyChanged -= this.OnActiveDockablePropertyChanged;
+                ((INotifyCollectionChanged)args.OldValue.Dockables).CollectionChanged -= this.OnDockablesChanged;
                 args.OldValue.IsActive = false;
             }
 
-            if (this.ViewModel is null)
+            if (this.ViewModel is not null)
             {
-                return;
+                this.ViewModel.PropertyChanged += this.OnIsInDockingModePropertyChanged;
+                this.ViewModel.PropertyChanged += this.OnActiveDockablePropertyChanged;
+                ((INotifyCollectionChanged)this.ViewModel.Dockables).CollectionChanged += this.OnDockablesChanged;
+                this.ViewModel.IsActive = true;
             }
 
-            this.ViewModel.PropertyChanged += this.OnIsInDockingModePropertyChanged;
-            this.ViewModel.IsActive = true;
+            this.ShowActiveDockable();
+            this.ReleaseDepartedViews();
         };
 
         this.Loaded += this.OnLoaded;
@@ -98,16 +107,16 @@ public sealed partial class DockPanel
     }
 
     /// <summary>
-    /// Gets or sets the converter used to get an icon for the dockable entity.
+    /// Gets or sets the converter that makes the view of a dockable's view model.
     /// </summary>
     /// <remarks>
     /// Setting this property on a DockPanel is particularly important when the docking workspace uses
     /// a child IoC container, in which the view models and views are registered. The global converter
     /// in this situation will not be able to resolve view models to views correctly.
     /// <para>
-    /// When a value is set, it is also set as a resource in the control's resources dictionary with
-    /// the key "VmToViewConverter". If the value set is <see langword="null"/>, the resource falls
-    /// back to the Application resource with the same key.
+    /// When it is <see langword="null"/>, the panel uses the Application resource with the key
+    /// "VmToViewConverter". The panel converts each dockable's view model once and keeps that view
+    /// while the dockable stays in its dock, so a view already made is kept when the converter changes.
     /// </para>
     /// </remarks>
     public IValueConverter VmToViewConverter
@@ -121,16 +130,52 @@ public sealed partial class DockPanel
 
     private static void OnVmToViewConverterChange(DependencyObject d, DependencyPropertyChangedEventArgs args)
     {
-        if (d is not DockPanel dockPanel)
-        {
-            return;
-        }
+        _ = args;
 
-        var converter = args.NewValue as IValueConverter ?? Application.Current.Resources["VmToViewConverter"];
-        if (converter is not null)
+        if (d is DockPanel dockPanel)
         {
-            dockPanel.Resources["VmToViewConverter"] = converter;
+            dockPanel.ShowActiveDockable();
         }
+    }
+
+    /// <summary>
+    /// Shows the view of the active dockable: the one this panel already made for its view model, or a new one from
+    /// the converter. A dockable that already left the dock shows nothing.
+    /// </summary>
+    private void ShowActiveDockable()
+    {
+        var active = this.ViewModel?.ActiveDockable;
+        var viewModel = active is not null && this.ViewModel!.Dockables.Contains(active) ? active.ViewModel : null;
+        this.ActiveDockableContent.Content = viewModel is null
+            ? null
+            : this.views.GetOrCreate(viewModel, this.VmToViewConverter ?? DefaultVmToViewConverter());
+
+        static IValueConverter? DefaultVmToViewConverter()
+            => Application.Current.Resources.TryGetValue(VmToViewConverterResourceKey, out var converter)
+                ? converter as IValueConverter
+                : null;
+    }
+
+    /// <summary>
+    /// Releases the views of dockables that are no longer in the dock, such as a closed dockable or one moved to
+    /// another dock, which makes its own view there.
+    /// </summary>
+    private void ReleaseDepartedViews()
+        => this.views.RetainOnly(this.ViewModel?.Dockables.Select(dockable => dockable.ViewModel) ?? []);
+
+    private void OnActiveDockablePropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName is nameof(DockPanelViewModel.ActiveDockable) or null or "")
+        {
+            this.ShowActiveDockable();
+        }
+    }
+
+    private void OnDockablesChanged(object? sender, NotifyCollectionChangedEventArgs args)
+    {
+        // The active dockable may be the one that left: replace it on screen before its view is released.
+        this.ShowActiveDockable();
+        this.ReleaseDepartedViews();
     }
 
     private void OnLoaded(object o, RoutedEventArgs routedEventArgs)
