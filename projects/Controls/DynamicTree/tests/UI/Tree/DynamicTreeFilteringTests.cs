@@ -184,7 +184,7 @@ public sealed partial class DynamicTreeFilteringTests : VisualUserInterfaceTests
             _ = control.FilterText.Should().Be("R");
             _ = control.IsFilteringEnabled.Should().BeTrue();
             _ = vm.FilterPredicate.Should().BeSameAs(predicate);
-            _ = ((DisplayedTreeItems)control.DisplayedItems!).Source.Should().BeSameAs(vm.FilteredItems);
+            _ = control.DisplayedItems.Should().BeSameAs(vm.FilteredItems);
 
             control.IsFilterBarEnabled = true;
             control.IsFilterBarVisible = true;

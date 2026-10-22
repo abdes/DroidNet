@@ -48,7 +48,6 @@ public partial class DynamicTree : Control
     private const double DropReorderBand = 0.25;
     private static readonly TimeSpan HoverExpandDelay = TimeSpan.FromMilliseconds(600);
     private static readonly TimeSpan TypeAheadResetDelay = TimeSpan.FromMilliseconds(1000);
-    private readonly DisplayedTreeItems displayed = new();
     private ILogger logger = NullLogger<DynamicTree>.Instance;
 
     private DynamicTree? dragOwner;
@@ -84,9 +83,9 @@ public partial class DynamicTree : Control
             this.ItemIndentWidth = configuredIndentWidth;
         }
 
-        // Set once: the repeater keeps this view as its source for the control's whole life. Switching rows and
-        // stopping on unload happen inside the view, never by changing this property (see DisplayedTreeItems).
-        this.DisplayedItems = this.displayed;
+        // Followed for the control's whole life, so a host that clears the view model also clears the rows of an
+        // unloaded tree.
+        this.ViewModelChanged += this.OnViewModelChanged;
         this.Loaded += this.OnLoaded;
         this.Unloaded += this.OnUnloaded;
     }
@@ -752,8 +751,7 @@ public partial class DynamicTree : Control
         this.itemsRepeater?.RemoveHandler(KeyDownEvent, new KeyEventHandler(this.ItemsRepeater_OnKeyDown));
         this.itemsRepeater?.AddHandler(KeyDownEvent, new KeyEventHandler(this.ItemsRepeater_OnKeyDown), handledEventsToo: true);
 
-        // Subscribe to view model change notifications and attach to any existing ViewModel
-        this.ViewModelChanged += this.OnViewModelChanged;
+        // Attach to the view model now that the tree is live.
         this.OnViewModelChanged(this, new ViewModelChangedEventArgs<DynamicTreeViewModel>(oldValue: null));
     }
 
@@ -767,18 +765,11 @@ public partial class DynamicTree : Control
 
         this.itemsRepeater?.RemoveHandler(KeyDownEvent, new KeyEventHandler(this.ItemsRepeater_OnKeyDown));
 
-        // The view model may outlive this control. Stop passing its rows' changes to this repeater, or a discarded
-        // tree would keep failing on them and stop the rows from notifying the live tree. Detach touches no XAML, so
-        // it is safe while a closing window tears the tree down; Loaded attaches again (see DisplayedTreeItems).
-        this.displayed.Detach();
-
-        // Remove subscriptions to the ViewModel
+        // The repeater keeps its rows: a closing window raises Unloaded while its XAML is torn down, so nothing here
+        // changes a XAML property. The view model's interaction state is released for the next tree.
         this.ViewModel?.PropertyChanged -= this.ViewModel_OnPropertyChanged;
         this.ViewModel?.BringIntoViewRequested -= this.ViewModel_OnBringIntoViewRequested;
         this.ViewModel?.DetachTree(this);
-
-        // Stop listening to the ViewModelChanged event while unloaded
-        this.ViewModelChanged -= this.OnViewModelChanged;
 
         this.ClearDragState();
 
@@ -1174,12 +1165,15 @@ public partial class DynamicTree : Control
         args.OldValue?.BringIntoViewRequested -= this.ViewModel_OnBringIntoViewRequested;
         args.OldValue?.DetachTree(this);
 
-        // A view model has one live tree; a tree it rejects shows no rows and follows none of its requests.
-        if (this.ViewModel is not null && this.ViewModel.TryAttachTree(this))
+        // A view model has one live tree; a tree it rejects shows no rows and follows none of its requests. An
+        // unloaded tree attaches when it loads.
+        if (this.IsLoaded && this.ViewModel is not null && this.ViewModel.TryAttachTree(this))
         {
             this.logger = this.ViewModel.LoggerFactory?.CreateLogger<DynamicTree>() ?? NullLogger<DynamicTree>.Instance;
 
+            this.ViewModel.PropertyChanged -= this.ViewModel_OnPropertyChanged;
             this.ViewModel.PropertyChanged += this.ViewModel_OnPropertyChanged;
+            this.ViewModel.BringIntoViewRequested -= this.ViewModel_OnBringIntoViewRequested;
             this.ViewModel.BringIntoViewRequested += this.ViewModel_OnBringIntoViewRequested;
         }
 
@@ -1188,11 +1182,12 @@ public partial class DynamicTree : Control
 
     private void UpdateDisplayedItems()
     {
-        // Only the attached tree shows the rows and supplies the view model's interaction state; an unloaded or rejected
-        // tree changing its scope or filtering leaves both alone.
-        if (this.ViewModel is null || !this.ViewModel.IsAttachedTree(this))
+        // A loaded tree the view model rejected shows nothing. An unloaded tree keeps showing its own view model's
+        // rows, so loading it again rebuilds nothing.
+        var isAttached = this.ViewModel?.IsAttachedTree(this) == true;
+        if (this.ViewModel is null || (this.IsLoaded && !isAttached))
         {
-            this.displayed.Attach(rows: null);
+            this.DisplayedItems = null;
             return;
         }
 
@@ -1204,9 +1199,11 @@ public partial class DynamicTree : Control
         var displayedItems = useFiltered
             ? this.ViewModel.FilteredItems
             : this.ViewModel.ShownItems;
-        // Both sources are lists with change notifications (ShownItems is an ObservableCollection, FilteredItems a
-        // FilteredObservableCollection), which the repeater needs for indexed reads.
-        this.displayed.Attach((System.Collections.IList)displayedItems);
+        this.DisplayedItems = displayedItems;
+        if (!isAttached)
+        {
+            return;
+        }
 
         // Keyboard navigation, typeahead and range extension follow the same scope the pointer
         // paths already honour, so one control switch describes every interaction surface.

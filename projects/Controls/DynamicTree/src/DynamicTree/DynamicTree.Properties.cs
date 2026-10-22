@@ -243,11 +243,11 @@ public partial class DynamicTree
     }
 
     /// <summary>
-    ///     Gets the rows the tree's ItemsRepeater shows, as an <see cref="IEnumerable{T}"/> of
-    ///     <see cref="ITreeItem"/>. It is the same object for the control's whole life, a view over the view model's
-    ///     shown or filtered rows, and it is never <see langword="null"/>: it shows no rows while there is no view
-    ///     model. The view exists so that unloading the tree changes no XAML property; see
-    ///     <see cref="DisplayedTreeItems"/>.
+    ///     Gets the rows the tree's ItemsRepeater shows: the view model's <see cref="DynamicTreeViewModel.ShownItems"/>,
+    ///     or its <see cref="DynamicTreeViewModel.FilteredItems"/> while filtering is enabled and a predicate is set.
+    ///     It is <see langword="null"/> without a view model and in a loaded tree the view model rejected, because a
+    ///     view model has one live tree. It changes only when the tree loads or its view model, filtering or scope
+    ///     changes, never when the tree unloads: a closing window unloads its trees while their XAML is torn down.
     /// </summary>
     public object? DisplayedItems
     {
