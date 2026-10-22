@@ -82,6 +82,8 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     /// </summary>
     /// <param name="data">DTO containing scene data.</param>
     /// <returns>A hydrated <see cref="Scene"/> instance.</returns>
+    /// <exception cref="System.Text.Json.JsonException">A node lacks or repeats a required component.</exception>
+    /// <exception cref="ArgumentException">The scene model rejects a value, such as an empty name or invalid lights.</exception>
     public static Scene CreateAndHydrate(Serialization.SceneData data)
     {
         ArgumentNullException.ThrowIfNull(data);
@@ -96,6 +98,8 @@ public partial class Scene : GameObject, IPersistent<Serialization.SceneData>
     ///     were set by the factory. It only restores the scene contents.
     /// </summary>
     /// <param name="data">DTO containing scene data.</param>
+    /// <exception cref="System.Text.Json.JsonException">A node lacks or repeats a required component.</exception>
+    /// <exception cref="ArgumentException">The scene model rejects a value, such as an empty name or invalid lights.</exception>
     public void Hydrate(Serialization.SceneData data)
     {
         Serialization.SceneSerializer.EnsureFactories();

@@ -42,20 +42,23 @@ public sealed class SceneDocumentKind(
         ArgumentNullException.ThrowIfNull(context);
 
         SceneFileData data;
+        Scene scene;
         try
         {
             var stream = new MemoryStream(content.ToArray(), writable: false);
             await using var lifetime = stream.ConfigureAwait(true);
             data = await JsonSerializer.DeserializeAsync(stream, SceneFileJsonContext.Default.SceneFileData, cancellationToken).ConfigureAwait(true)
                 ?? throw new JsonException("The file holds no scene.");
+            cancellationToken.ThrowIfCancellationRequested();
+            scene = Scene.CreateAndHydrate(data);
         }
-        catch (JsonException exception)
+        catch (Exception exception) when (exception is JsonException or ArgumentException)
         {
+            // Malformed JSON, a node without its required components or a value the scene model rejects: the file is
+            // not a scene this editor opens, and the document fails to open with the reason.
             return DocumentDecodeResult.Failed($"'{file.Path.Name}' is not a valid scene: {exception.Message}");
         }
 
-        cancellationToken.ThrowIfCancellationRequested();
-        var scene = Scene.CreateAndHydrate(data);
         var layout = data.ExplorerLayout ?? [];
         var nodeIds = new HashSet<NodeId>();
         if (scene.AllNodes.Any(node => node.Id.IsEmpty || !nodeIds.Add(node.Id)))
