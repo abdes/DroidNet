@@ -109,7 +109,7 @@ public sealed class ProjectScriptToolingTests
     }
 
     private ProjectContext CreateProject()
-        => TestProject.Create(this.files, ProjectRoot).Context with { ProjectId = Guid.Empty, Name = "Test" };
+        => TestProject.Create(this.files, ProjectRoot).Context with { Name = "Test" };
 
     private ProjectScriptTooling CreateTooling()
         => new(new ScriptToolingPaths(DefinitionsPath, Path.Combine(Root, "Sdk", "schemas")), new RecordingResults(this.published), this.files);

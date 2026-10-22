@@ -15,7 +15,7 @@ internal static class TestProblems
     /// <summary>Creates the session of a project with no files.</summary>
     /// <returns>The session, which the caller disposes.</returns>
     internal static TestSession CreateSession()
-        => new(TestProject.Create(new MockFileSystem()).Context with { ProjectId = Guid.Empty, Name = "Test", AuthoringMounts = [] });
+        => new(TestProject.Create(new MockFileSystem()).Context with { Name = "Test", AuthoringMounts = [] });
 
     /// <summary>Creates the view model of a project with no files.</summary>
     /// <param name="session">The project's session, which the caller owns.</param>
