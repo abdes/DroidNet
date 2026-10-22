@@ -2,6 +2,52 @@
 
 Status: `planned`
 
+## Completion Ledger
+
+One row per item that needs work, in the order of work. The issues keep the
+owner's order from section 3; the LLD gaps of section 2 start once their
+dependencies are closed. An item is `done` only when the done gate of section 6
+holds; its row then names the commit.
+
+**Next: #77.** It is first because it decides where a node's visibility and
+shadow choices live, so the Inherit source modes cannot be designed before it.
+Its first step is a design proposal per unused part (wire end to end or
+remove), argued from user scenarios and the engine's capabilities; the proposal
+goes to the owner before any code changes.
+
+| Order | Item                                              | Needs         | State | Commit |
+| ----- | ------------------------------------------------- | ------------- | ----- | ------ |
+| 1     | #77 fate of unused override slots and scopes      | -             | open  | -      |
+| 2     | #94 session services own their project scope      | -             | open  | -      |
+| 3     | #95 Scene Explorer history without `UndoRedo`     | -             | open  | -      |
+| 4     | #74 one view per view model per host              | -             | open  | -      |
+| 5     | #76 LivePreview leaves Ready on engine fault      | -             | open  | -      |
+| 6     | Inherit source modes (section 2)                  | #77, #94, #95 | open  | -      |
+| 7     | Light collection by resolved visibility           | 6             | open  | -      |
+| 8     | Hide mask step 1: engine hidden-root snapshot     | 7             | open  | -      |
+| 9     | Hide mask step 2: Interop editing-view mask       | 8             | open  | -      |
+| 10    | Hide mask step 3: Runtime port                    | 9             | open  | -      |
+| 11    | Hide mask step 4: editor dispatch and checks      | #76, 10       | open  | -      |
+| 12    | Material emission editing                         | #95, #76      | open  | -      |
+| 13    | #81 producer identity of same-named sources       | -             | open  | -      |
+| 14    | #97 moved output group retires old cooked outputs | -             | open  | -      |
+| 15    | #86 consistent editing commands across parts      | -             | open  | -      |
+| 16    | #96 one file access model                         | -             | open  | -      |
+| 17    | #93 badge text in `AssetStatusText`               | -             | open  | -      |
+| 18    | #73 Content Browser keyboard focus                | #86           | open  | -      |
+| 19    | #72 Content Explorer tree context menu            | #86           | open  | -      |
+| 20    | #87 texture cooker formats and settings           | -             | open  | -      |
+
+Ordering decisions:
+
+- Items 7 and 8 change engine scene traversal in order: light collection first
+  reads the visibility that item 6 resolves, then the Hide mask skips subtrees
+  in the scene preparation path, so each engine change is tested against the
+  final resolution rule.
+- The LLD gaps start after #94, as section 3 requires, and after #76, because
+  the Hide mask checks and the emission preview need a LivePreview that
+  reports engine faults.
+
 ## 1. Purpose
 
 Close what V0.1 still lacks before input authoring and release qualification:
