@@ -9,17 +9,17 @@ namespace Oxygen.Editor.World.Serialization;
 /// <summary>Authored asset references owned by a scene.</summary>
 public sealed record SceneReferencesData
 {
-    /// <summary>Gets the scene's script asset references.</summary>
-    public IList<AssetPath> Scripts { get; init; } = [];
+    /// <summary>Gets or sets the scene's script asset references.</summary>
+    public IList<AssetPath> Scripts { get; set; } = [];
 
-    /// <summary>Gets the scene's input action references.</summary>
-    public IList<AssetPath> InputActions { get; init; } = [];
+    /// <summary>Gets or sets the scene's input action references.</summary>
+    public IList<AssetPath> InputActions { get; set; } = [];
 
-    /// <summary>Gets the scene's physics sidecar references.</summary>
-    public IList<AssetPath> PhysicsSidecars { get; init; } = [];
+    /// <summary>Gets or sets the scene's physics sidecar references.</summary>
+    public IList<AssetPath> PhysicsSidecars { get; set; } = [];
 
-    /// <summary>Gets additional assets the scene requires, which its cooked descriptor lists by virtual path.</summary>
-    public IList<AssetPath> ExtraAssets { get; init; } = [];
+    /// <summary>Gets or sets additional assets the scene requires, which its cooked descriptor lists by virtual path.</summary>
+    public IList<AssetPath> ExtraAssets { get; set; } = [];
 
     /// <summary>Gets a value indicating whether the scene has no authored references.</summary>
     [System.Text.Json.Serialization.JsonIgnore]

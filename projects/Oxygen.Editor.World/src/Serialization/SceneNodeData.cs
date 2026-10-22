@@ -22,14 +22,14 @@ public record SceneNodeData
     public required NodeId Id { get; init; }
 
     /// <summary>
-    /// Gets or initializes the node's components, required ones included.
+    /// Gets or sets the node's components, required ones included.
     /// </summary>
-    public IList<ComponentData> Components { get; init; } = [];
+    public IList<ComponentData> Components { get; set; } = [];
 
     /// <summary>
-    /// Gets or initializes the list of override slots for this node.
+    /// Gets or sets the list of override slots for this node.
     /// </summary>
-    public IList<OverrideSlotData> OverrideSlots { get; init; } = [];
+    public IList<OverrideSlotData> OverrideSlots { get; set; } = [];
 
     /// <summary>
     /// Gets the node's name, held by its metadata component.

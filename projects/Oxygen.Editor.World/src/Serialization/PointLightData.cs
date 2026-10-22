@@ -13,14 +13,14 @@ namespace Oxygen.Editor.World.Serialization;
 public sealed record PointLightData : LightComponentData
 {
     /// <summary>
-    /// Gets luminous flux, in lumens.
+    /// Gets or sets luminous flux, in lumens.
     /// </summary>
-    public float LuminousFluxLumens { get; init; } = 800f;
+    public float LuminousFluxLumens { get; set; } = 800f;
 
     /// <summary>
-    /// Gets the influence range, in meters.
+    /// Gets or sets the influence range, in meters.
     /// </summary>
-    public float Range { get; init; } = 10f;
+    public float Range { get; set; } = 10f;
 
     /// <summary>
     /// Gets the source radius, in meters.

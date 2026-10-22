@@ -452,4 +452,21 @@ public class SerializationTests
         _ = root.TryGetProperty("category", out var catEl).Should().BeTrue();
         _ = catEl.GetString().Should().Be(WindowCategory.Tool.Value);
     }
+
+    [TestMethod]
+    public void TitleBarOptions_AbsentValues_TakeTheDeclaredDefaults()
+        => _ = JsonSerializer.Deserialize<TitleBarOptions>("{}", this.jsonOptions).Should().Be(new TitleBarOptions());
+
+    [TestMethod]
+    public void WindowButtonsOptions_AbsentValues_TakeTheDeclaredDefaults()
+        => _ = JsonSerializer.Deserialize<WindowButtonsOptions>("{}", this.jsonOptions).Should().Be(new WindowButtonsOptions());
+
+    [TestMethod]
+    public void WindowDecorationOptions_AbsentValues_TakeTheDeclaredDefaults()
+    {
+        var declared = new WindowDecorationOptions { Category = WindowCategory.Tool };
+        var json = $$"""{ "category": "{{WindowCategory.Tool.Value}}" }""";
+
+        _ = JsonSerializer.Deserialize<WindowDecorationOptions>(json, this.jsonOptions).Should().Be(declared);
+    }
 }

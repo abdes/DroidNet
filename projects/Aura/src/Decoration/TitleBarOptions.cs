@@ -36,30 +36,30 @@ public sealed record TitleBarOptions
     public static readonly TitleBarOptions Default = new();
 
     /// <summary>
-    ///     Gets the height of the title bar in device-independent pixels.
+    ///     Gets or sets the height of the title bar in device-independent pixels.
     /// </summary>
     /// <value>
     ///     The title bar height. Default is 32.0 pixels. Must be greater than zero.
     /// </value>
-    public double Height { get; init; } = 32.0;
+    public double Height { get; set; } = 32.0;
 
     /// <summary>
-    ///     Gets a value indicating whether the window title text is displayed in the title bar.
+    ///     Gets or sets a value indicating whether the window title text is displayed in the title bar.
     /// </summary>
     /// <value>
     ///     <see langword="true"/> to display the window title; otherwise, <see langword="false"/>.
     ///     Default is <see langword="true"/>.
     /// </value>
-    public bool ShowTitle { get; init; } = true;
+    public bool ShowTitle { get; set; } = true;
 
     /// <summary>
-    ///     Gets a value indicating whether the window icon is displayed in the title bar.
+    ///     Gets or sets a value indicating whether the window icon is displayed in the title bar.
     /// </summary>
     /// <value>
     ///     <see langword="true"/> to display the window icon; otherwise, <see langword="false"/>.
     ///     Default is <see langword="true"/>.
     /// </value>
-    public bool ShowIcon { get; init; } = true;
+    public bool ShowIcon { get; set; } = true;
 
     /// <summary>
     ///     Gets a value indicating whether document tabs are shown in the title bar area.
@@ -71,19 +71,19 @@ public sealed record TitleBarOptions
     public bool WithDocumentTabs { get; init; }
 
     /// <summary>
-    ///     Gets the relative path to the window icon file, resolved at runtime by looking for an
+    ///     Gets or sets the relative path to the window icon file, resolved at runtime by looking for an
     ///     asset under the application's `Assets` directory, or in Aura's assembly Assets.
     /// </summary>
     /// <value>
     ///    The icon file path. Default is `"DroidNet.png"`.
     /// </value>
-    public string IconPath { get; init; } = "DroidNet.png";
+    public string IconPath { get; set; } = "DroidNet.png";
 
     /// <summary>
-    ///     Gets the drag region behavior for window movement interaction.
+    ///     Gets or sets the drag region behavior for window movement interaction.
     /// </summary>
     /// <value>
     ///     A <see cref="DragRegionBehavior"/> value. Default is <see cref="DragRegionBehavior.Default"/>.
     /// </value>
-    public DragRegionBehavior DragBehavior { get; init; } = DragRegionBehavior.Default;
+    public DragRegionBehavior DragBehavior { get; set; } = DragRegionBehavior.Default;
 }

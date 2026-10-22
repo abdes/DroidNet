@@ -17,9 +17,9 @@ public record ExplorerEntryData
     private IList<ExplorerEntryData>? children;
 
     /// <summary>
-    /// Gets one of: "Node" or "Folder". Kept as a string for forward-compatibility.
+    /// Gets or sets one of: "Node" or "Folder". Kept as a string for forward-compatibility.
     /// </summary>
-    public string Type { get; init; } = "Node";
+    public string Type { get; set; } = "Node";
 
     /// <summary>
     /// Gets when Type == "Node", the referenced SceneNode Id.

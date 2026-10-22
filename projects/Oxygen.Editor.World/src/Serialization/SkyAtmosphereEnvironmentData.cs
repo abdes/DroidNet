@@ -12,62 +12,62 @@ namespace Oxygen.Editor.World.Serialization;
 public sealed record SkyAtmosphereEnvironmentData
 {
     /// <summary>
-    /// Gets planet radius in meters.
+    /// Gets or sets planet radius in meters.
     /// </summary>
-    public float PlanetRadiusMeters { get; init; } = 6_360_000.0f;
+    public float PlanetRadiusMeters { get; set; } = 6_360_000.0f;
 
     /// <summary>
-    /// Gets atmosphere height in meters.
+    /// Gets or sets atmosphere height in meters.
     /// </summary>
-    public float AtmosphereHeightMeters { get; init; } = 100_000.0f;
+    public float AtmosphereHeightMeters { get; set; } = 100_000.0f;
 
     /// <summary>
-    /// Gets linear RGB ground albedo.
+    /// Gets or sets linear RGB ground albedo.
     /// </summary>
-    public Vector3 GroundAlbedoRgb { get; init; } = new(0.4f, 0.4f, 0.4f);
+    public Vector3 GroundAlbedoRgb { get; set; } = new(0.4f, 0.4f, 0.4f);
 
     /// <summary>
-    /// Gets Rayleigh scattering scale height in meters.
+    /// Gets or sets Rayleigh scattering scale height in meters.
     /// </summary>
-    public float RayleighScaleHeightMeters { get; init; } = 8_000.0f;
+    public float RayleighScaleHeightMeters { get; set; } = 8_000.0f;
 
     /// <summary>
-    /// Gets Mie scattering scale height in meters.
+    /// Gets or sets Mie scattering scale height in meters.
     /// </summary>
-    public float MieScaleHeightMeters { get; init; } = 1_200.0f;
+    public float MieScaleHeightMeters { get; set; } = 1_200.0f;
 
     /// <summary>
-    /// Gets Mie anisotropy g.
+    /// Gets or sets Mie anisotropy g.
     /// </summary>
-    public float MieAnisotropy { get; init; } = 0.8f;
+    public float MieAnisotropy { get; set; } = 0.8f;
 
     /// <summary>
-    /// Gets sky luminance multiplier.
+    /// Gets or sets sky luminance multiplier.
     /// </summary>
-    public Vector3 SkyLuminanceFactorRgb { get; init; } = Vector3.One;
+    public Vector3 SkyLuminanceFactorRgb { get; set; } = Vector3.One;
 
     /// <summary>
-    /// Gets aerial perspective distance scale.
+    /// Gets or sets aerial perspective distance scale.
     /// </summary>
-    public float AerialPerspectiveDistanceScale { get; init; } = 1.0f;
+    public float AerialPerspectiveDistanceScale { get; set; } = 1.0f;
 
     /// <summary>
-    /// Gets aerial perspective scattering strength.
+    /// Gets or sets aerial perspective scattering strength.
     /// </summary>
-    public float AerialScatteringStrength { get; init; } = 1.0f;
+    public float AerialScatteringStrength { get; set; } = 1.0f;
 
     /// <summary>
-    /// Gets aerial perspective start depth in meters.
+    /// Gets or sets aerial perspective start depth in meters.
     /// </summary>
-    public float AerialPerspectiveStartDepthMeters { get; init; } = 100.0f;
+    public float AerialPerspectiveStartDepthMeters { get; set; } = 100.0f;
 
     /// <summary>
-    /// Gets height fog contribution.
+    /// Gets or sets height fog contribution.
     /// </summary>
-    public float HeightFogContribution { get; init; } = 1.0f;
+    public float HeightFogContribution { get; set; } = 1.0f;
 
     /// <summary>
-    /// Gets a value indicating whether the sun disk is rendered by the sky model.
+    /// Gets or sets a value indicating whether the sun disk is rendered by the sky model.
     /// </summary>
-    public bool SunDiskEnabled { get; init; } = true;
+    public bool SunDiskEnabled { get; set; } = true;
 }

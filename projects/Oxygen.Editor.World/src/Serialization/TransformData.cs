@@ -19,14 +19,14 @@ public record TransformData : ComponentData
     public Vector3 Position { get; init; }
 
     /// <summary>
-    /// Gets or initializes the local rotation (as a quaternion). Default is <see cref="Quaternion.Identity" />.
+    /// Gets or sets the local rotation (as a quaternion). Default is <see cref="Quaternion.Identity" />.
     /// </summary>
     [JsonPropertyName("LocalRotation")]
-    public Quaternion Rotation { get; init; } = Quaternion.Identity;
+    public Quaternion Rotation { get; set; } = Quaternion.Identity;
 
     /// <summary>
-    /// Gets or initializes the local scale. Default is <see cref="Vector3.One" />.
+    /// Gets or sets the local scale. Default is <see cref="Vector3.One" />.
     /// </summary>
     [JsonPropertyName("LocalScale")]
-    public Vector3 Scale { get; init; } = Vector3.One;
+    public Vector3 Scale { get; set; } = Vector3.One;
 }

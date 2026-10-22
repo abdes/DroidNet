@@ -19,14 +19,14 @@ public record SceneData : NamedData
     public required SceneId Id { get; init; }
 
     /// <summary>
-    /// Gets or initializes the list of root nodes in the scene.
+    /// Gets or sets the list of root nodes in the scene.
     /// </summary>
-    public IList<SceneNodeData> RootNodes { get; init; } = [];
+    public IList<SceneNodeData> RootNodes { get; set; } = [];
 
     /// <summary>
-    /// Gets scene-level environment authoring data.
+    /// Gets or sets scene-level environment authoring data.
     /// </summary>
-    public SceneEnvironmentData Environment { get; init; } = new();
+    public SceneEnvironmentData Environment { get; set; } = new();
 
     /// <summary>
     /// Gets optional scene-level native asset references.

@@ -15,56 +15,56 @@ namespace Oxygen.Editor.World.Serialization;
 public sealed record DirectionalLightData : LightComponentData
 {
     /// <summary>
-    /// Gets directional-light illuminance, in lux.
+    /// Gets or sets directional-light illuminance, in lux.
     /// </summary>
-    public float IntensityLux { get; init; } = 100_000f;
+    public float IntensityLux { get; set; } = 100_000f;
 
     /// <summary>
-    /// Gets the apparent angular size, in radians.
+    /// Gets or sets the apparent angular size, in radians.
     /// </summary>
-    public float AngularSizeRadians { get; init; } = 0.00935f;
+    public float AngularSizeRadians { get; set; } = 0.00935f;
 
-    /// <summary>Gets the explicitly assigned atmosphere source slot.</summary>
-    public AtmosphereLightSlot AtmosphereSlot { get; init; } = AtmosphereLightSlot.None;
+    /// <summary>Gets or sets the explicitly assigned atmosphere source slot.</summary>
+    public AtmosphereLightSlot AtmosphereSlot { get; set; } = AtmosphereLightSlot.None;
 
     /// <summary>Gets a value indicating whether surfaces evaluate atmosphere transmittance per pixel.</summary>
     public bool UsePerPixelAtmosphereTransmittance { get; init; }
 
-    /// <summary>Gets the RGB luminance multiplier for the analytic disk.</summary>
-    public Vector3 AtmosphereDiskLuminanceScaleRgb { get; init; } = Vector3.One;
+    /// <summary>Gets or sets the RGB luminance multiplier for the analytic disk.</summary>
+    public Vector3 AtmosphereDiskLuminanceScaleRgb { get; set; } = Vector3.One;
 
     /// <summary>
-    /// Gets the number of directional shadow cascades.
+    /// Gets or sets the number of directional shadow cascades.
     /// </summary>
-    public int CascadeCount { get; init; } = 4;
+    public int CascadeCount { get; set; } = 4;
 
     /// <summary>
-    /// Gets how CSM split distances are produced.
+    /// Gets or sets how CSM split distances are produced.
     /// </summary>
-    public DirectionalCsmSplitMode SplitMode { get; init; } = DirectionalCsmSplitMode.Generated;
+    public DirectionalCsmSplitMode SplitMode { get; set; } = DirectionalCsmSplitMode.Generated;
 
     /// <summary>
-    /// Gets the maximum directional shadow distance, in meters.
+    /// Gets or sets the maximum directional shadow distance, in meters.
     /// </summary>
-    public float MaxShadowDistance { get; init; } = 160f;
+    public float MaxShadowDistance { get; set; } = 160f;
 
     /// <summary>
-    /// Gets the manual cascade distances, in meters.
+    /// Gets or sets the manual cascade distances, in meters.
     /// </summary>
-    public Vector4 CascadeDistances { get; init; } = new(8f, 24f, 64f, 160f);
+    public Vector4 CascadeDistances { get; set; } = new(8f, 24f, 64f, 160f);
 
     /// <summary>
-    /// Gets the generated CSM distribution exponent.
+    /// Gets or sets the generated CSM distribution exponent.
     /// </summary>
-    public float DistributionExponent { get; init; } = 3f;
+    public float DistributionExponent { get; set; } = 3f;
 
     /// <summary>
-    /// Gets the cascade transition fraction.
+    /// Gets or sets the cascade transition fraction.
     /// </summary>
-    public float TransitionFraction { get; init; } = 0.1f;
+    public float TransitionFraction { get; set; } = 0.1f;
 
     /// <summary>
-    /// Gets the shadow distance fadeout fraction.
+    /// Gets or sets the shadow distance fadeout fraction.
     /// </summary>
-    public float DistanceFadeoutFraction { get; init; } = 0.1f;
+    public float DistanceFadeoutFraction { get; set; } = 0.1f;
 }

@@ -13,19 +13,19 @@ namespace Oxygen.Editor.World.Serialization;
 public sealed record PostProcessEnvironmentData
 {
     /// <summary>
-    /// Gets the tone mapper.
+    /// Gets or sets the tone mapper.
     /// </summary>
-    public ToneMappingMode ToneMapper { get; init; } = ToneMappingMode.AcesFitted;
+    public ToneMappingMode ToneMapper { get; set; } = ToneMappingMode.AcesFitted;
 
     /// <summary>
-    /// Gets the exposure mode.
+    /// Gets or sets the exposure mode.
     /// </summary>
-    public ExposureMode ExposureMode { get; init; } = ExposureMode.Manual;
+    public ExposureMode ExposureMode { get; set; } = ExposureMode.Manual;
 
     /// <summary>
-    /// Gets a value indicating whether exposure is applied.
+    /// Gets or sets a value indicating whether exposure is applied.
     /// </summary>
-    public bool ExposureEnabled { get; init; } = true;
+    public bool ExposureEnabled { get; set; } = true;
 
     /// <summary>
     /// Gets exposure compensation in EV stops.
@@ -33,81 +33,81 @@ public sealed record PostProcessEnvironmentData
     public float ExposureCompensationEv { get; init; }
 
     /// <summary>
-    /// Gets the display key scale applied after EV-to-linear calibration.
+    /// Gets or sets the display key scale applied after EV-to-linear calibration.
     /// </summary>
-    public float ExposureKey { get; init; } = 12.5f;
+    public float ExposureKey { get; set; } = 12.5f;
 
     /// <summary>
-    /// Gets manual exposure in EV100.
+    /// Gets or sets manual exposure in EV100.
     /// </summary>
-    public float ManualExposureEv { get; init; } = 13.0f;
+    public float ManualExposureEv { get; set; } = 13.0f;
 
     /// <summary>
-    /// Gets the minimum auto-exposure EV.
+    /// Gets or sets the minimum auto-exposure EV.
     /// </summary>
-    public float AutoExposureMinEv { get; init; } = -6.0f;
+    public float AutoExposureMinEv { get; set; } = -6.0f;
 
     /// <summary>
-    /// Gets the maximum auto-exposure EV.
+    /// Gets or sets the maximum auto-exposure EV.
     /// </summary>
-    public float AutoExposureMaxEv { get; init; } = 16.0f;
+    public float AutoExposureMaxEv { get; set; } = 16.0f;
 
     /// <summary>
-    /// Gets auto-exposure speed up in EV per second.
+    /// Gets or sets auto-exposure speed up in EV per second.
     /// </summary>
-    public float AutoExposureSpeedUp { get; init; } = 3.0f;
+    public float AutoExposureSpeedUp { get; set; } = 3.0f;
 
     /// <summary>
-    /// Gets auto-exposure speed down in EV per second.
+    /// Gets or sets auto-exposure speed down in EV per second.
     /// </summary>
-    public float AutoExposureSpeedDown { get; init; } = 1.0f;
+    public float AutoExposureSpeedDown { get; set; } = 1.0f;
 
     /// <summary>
-    /// Gets auto-exposure metering mode.
+    /// Gets or sets auto-exposure metering mode.
     /// </summary>
-    public MeteringMode AutoExposureMeteringMode { get; init; } = MeteringMode.Average;
+    public MeteringMode AutoExposureMeteringMode { get; set; } = MeteringMode.Average;
 
     /// <summary>
-    /// Gets the low histogram percentile used by auto exposure.
+    /// Gets or sets the low histogram percentile used by auto exposure.
     /// </summary>
-    public float AutoExposureLowPercentile { get; init; } = 0.1f;
+    public float AutoExposureLowPercentile { get; set; } = 0.1f;
 
     /// <summary>
-    /// Gets the high histogram percentile used by auto exposure.
+    /// Gets or sets the high histogram percentile used by auto exposure.
     /// </summary>
-    public float AutoExposureHighPercentile { get; init; } = 0.9f;
+    public float AutoExposureHighPercentile { get; set; } = 0.9f;
 
     /// <summary>
-    /// Gets the minimum log2 luminance used by auto exposure.
+    /// Gets or sets the minimum log2 luminance used by auto exposure.
     /// </summary>
-    public float AutoExposureMinLogLuminance { get; init; } = -12.0f;
+    public float AutoExposureMinLogLuminance { get; set; } = -12.0f;
 
     /// <summary>
-    /// Gets the log2 luminance range used by auto exposure.
+    /// Gets or sets the log2 luminance range used by auto exposure.
     /// </summary>
-    public float AutoExposureLogLuminanceRange { get; init; } = 25.0f;
+    public float AutoExposureLogLuminanceRange { get; set; } = 25.0f;
 
     /// <summary>
-    /// Gets the target average luminance used by auto exposure.
+    /// Gets or sets the target average luminance used by auto exposure.
     /// </summary>
-    public float AutoExposureTargetLuminance { get; init; } = 0.18f;
+    public float AutoExposureTargetLuminance { get; set; } = 0.18f;
 
     /// <summary>
-    /// Gets the spot-meter radius used by auto exposure.
+    /// Gets or sets the spot-meter radius used by auto exposure.
     /// </summary>
-    public float AutoExposureSpotMeterRadius { get; init; } = 0.2f;
+    public float AutoExposureSpotMeterRadius { get; set; } = 0.2f;
 
     /// <summary>Gets the influence of dark histogram samples in [0, 1].</summary>
     public float AutoExposureBlackInfluence { get; init; }
 
-    /// <summary>Gets the hybrid adaptation transition distance in EV stops.</summary>
-    public float AutoExposureTransitionDistanceEv { get; init; } = 1.5f;
+    /// <summary>Gets or sets the hybrid adaptation transition distance in EV stops.</summary>
+    public float AutoExposureTransitionDistanceEv { get; set; } = 1.5f;
 
     /// <summary>Gets the authored texture descriptor URI, or null for no mask.</summary>
     public AssetPath? AutoExposureMeteringMask { get; init; }
 
-    /// <summary>Gets the ordered exposure compensation keys.</summary>
-    public ImmutableArray<ExposureCompensationKeyData> AutoExposureCompensationCurve { get; init; } = [];
+    /// <summary>Gets or sets the ordered exposure compensation keys.</summary>
+    public ImmutableArray<ExposureCompensationKeyData> AutoExposureCompensationCurve { get; set; } = [];
 
     /// <summary>
     /// Gets bloom intensity.
@@ -115,19 +115,19 @@ public sealed record PostProcessEnvironmentData
     public float BloomIntensity { get; init; }
 
     /// <summary>
-    /// Gets bloom threshold in linear HDR units.
+    /// Gets or sets bloom threshold in linear HDR units.
     /// </summary>
-    public float BloomThreshold { get; init; } = 1.0f;
+    public float BloomThreshold { get; set; } = 1.0f;
 
     /// <summary>
-    /// Gets color grading saturation multiplier.
+    /// Gets or sets color grading saturation multiplier.
     /// </summary>
-    public float Saturation { get; init; } = 1.0f;
+    public float Saturation { get; set; } = 1.0f;
 
     /// <summary>
-    /// Gets color grading contrast multiplier.
+    /// Gets or sets color grading contrast multiplier.
     /// </summary>
-    public float Contrast { get; init; } = 1.0f;
+    public float Contrast { get; set; } = 1.0f;
 
     /// <summary>
     /// Gets vignette intensity in [0, 1].
@@ -135,7 +135,7 @@ public sealed record PostProcessEnvironmentData
     public float VignetteIntensity { get; init; }
 
     /// <summary>
-    /// Gets display gamma applied after tone mapping.
+    /// Gets or sets display gamma applied after tone mapping.
     /// </summary>
-    public float DisplayGamma { get; init; } = 2.2f;
+    public float DisplayGamma { get; set; } = 2.2f;
 }

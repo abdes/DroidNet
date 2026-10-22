@@ -16,14 +16,14 @@ namespace Oxygen.Editor.World.Serialization;
 public abstract record LightComponentData : ComponentData
 {
     /// <summary>
-    /// Gets a value indicating whether the light contributes to world lighting.
+    /// Gets or sets a value indicating whether the light contributes to world lighting.
     /// </summary>
-    public bool AffectsWorld { get; init; } = true;
+    public bool AffectsWorld { get; set; } = true;
 
     /// <summary>
-    /// Gets the light color multiplier in linear RGB.
+    /// Gets or sets the light color multiplier in linear RGB.
     /// </summary>
-    public Vector3 Color { get; init; } = Vector3.One;
+    public Vector3 Color { get; set; } = Vector3.One;
 
     /// <summary>
     /// Gets a value indicating whether the light casts shadows.
@@ -31,9 +31,9 @@ public abstract record LightComponentData : ComponentData
     public bool CastsShadows { get; init; }
 
     /// <summary>
-    /// Gets the authored shadow settings.
+    /// Gets or sets the authored shadow settings.
     /// </summary>
-    public LightShadowSettingsData? Shadow { get; init; } = new();
+    public LightShadowSettingsData? Shadow { get; set; } = new();
 
     /// <summary>
     /// Gets exposure compensation in EV stops.

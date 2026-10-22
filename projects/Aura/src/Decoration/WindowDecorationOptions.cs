@@ -35,7 +35,7 @@ public sealed record WindowDecorationOptions
     public WindowCategory Category { get; init; }
 
     /// <summary>
-    ///     Gets a value indicating whether Aura-provided window chrome is enabled.
+    ///     Gets or sets a value indicating whether Aura-provided window chrome is enabled.
     /// </summary>
     /// <value>
     ///     <see langword="true"/> to use Aura chrome with custom title bar; <see langword="false"/>
@@ -45,34 +45,34 @@ public sealed record WindowDecorationOptions
     ///     When <see langword="false"/> is specified, most other decoration options are ignored.
     ///     Menus require <see langword="true"/> to be displayed.
     /// </remarks>
-    public bool ChromeEnabled { get; init; } = true;
+    public bool ChromeEnabled { get; set; } = true;
 
     /// <summary>
-    ///     Gets a value indicating whether a border is drawn around the window.
+    ///     Gets or sets a value indicating whether a border is drawn around the window.
     /// </summary>
     /// <value>
     ///     <see langword="true"/> to draw a border; otherwise, <see langword="false"/>. Default is
     ///     <see langword="true"/>.
     /// </value>
-    public bool WithBorder { get; init; } = true;
+    public bool WithBorder { get; set; } = true;
 
     /// <summary>
-    ///     Gets a value indicating whether the winbdow will have rounded corners.
+    ///     Gets or sets a value indicating whether the winbdow will have rounded corners.
     /// </summary>
     /// <value>
     ///     <see langword="true"/> to enable rounded corners; otherwise, <see langword="false"/>. Default is
     ///     <see langword="true"/>.
     /// </value>
-    public bool RoundedCorners { get; init; } = true;
+    public bool RoundedCorners { get; set; } = true;
 
     /// <summary>
-    ///     Gets a value indicating whether the window can be resized by the user.
+    ///     Gets or sets a value indicating whether the window can be resized by the user.
     /// </summary>
     /// <value>
     ///     <see langword="true"/> if the window is resizable; otherwise, <see langword="false"/>.
     ///     Default is <see langword="true"/>.
     /// </value>
-    public bool IsResizable { get; init; } = true;
+    public bool IsResizable { get; set; } = true;
 
     /// <summary>
     ///     Gets the title bar configuration options.
@@ -84,7 +84,7 @@ public sealed record WindowDecorationOptions
     public TitleBarOptions? TitleBar { get; init; }
 
     /// <summary>
-    ///     Gets the window control buttons configuration options.
+    ///     Gets or sets the window control buttons configuration options.
     /// </summary>
     /// <value>
     ///     A <see cref="WindowButtonsOptions"/> instance. Default is <see
@@ -94,7 +94,7 @@ public sealed record WindowDecorationOptions
     ///     Only applied when <see cref="ChromeEnabled"/> is <see langword="true"/>. Primary windows
     ///     must have the Close button enabled.
     /// </remarks>
-    public WindowButtonsOptions Buttons { get; init; } = WindowButtonsOptions.Default;
+    public WindowButtonsOptions Buttons { get; set; } = WindowButtonsOptions.Default;
 
     /// <summary>
     ///     Gets the menu configuration options, or <see langword="null"/> if no menu should be displayed.
@@ -110,7 +110,7 @@ public sealed record WindowDecorationOptions
     public MenuOptions? Menu { get; init; }
 
     /// <summary>
-    ///     Gets the backdrop material effect override for this window.
+    ///     Gets or sets the backdrop material effect override for this window.
     /// </summary>
     /// <value>
     ///     A <see cref="BackdropKind"/> value. Default is <see cref="BackdropKind.None"/>.
@@ -118,7 +118,7 @@ public sealed record WindowDecorationOptions
     /// <remarks>
     ///     Set to <see cref="BackdropKind.None"/> to disable backdrop for this window.
     /// </remarks>
-    public BackdropKind Backdrop { get; init; } = BackdropKind.None;
+    public BackdropKind Backdrop { get; set; } = BackdropKind.None;
 
     /// <summary>
     ///     Validates the decoration options and throws an exception if the configuration is invalid.

@@ -10,9 +10,9 @@ namespace Oxygen.Editor.World.Serialization;
 public record NodeFlagsData : ComponentData
 {
     /// <summary>
-    /// Gets a value indicating whether the node is visible.
+    /// Gets or sets a value indicating whether the node is visible.
     /// </summary>
-    public bool IsVisible { get; init; } = true;
+    public bool IsVisible { get; set; } = true;
 
     /// <summary>
     /// Gets a value indicating whether the node's geometry casts shadows.
@@ -30,9 +30,9 @@ public record NodeFlagsData : ComponentData
     public bool IsStatic { get; init; }
 
     /// <summary>
-    /// Gets a value indicating whether ray casting can select the node.
+    /// Gets or sets a value indicating whether ray casting can select the node.
     /// </summary>
-    public bool IsRayCastingSelectable { get; init; } = true;
+    public bool IsRayCastingSelectable { get; set; } = true;
 
     /// <summary>
     /// Gets a value indicating whether the node ignores its parent's transform.

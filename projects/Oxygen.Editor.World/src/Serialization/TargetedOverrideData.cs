@@ -10,14 +10,14 @@ namespace Oxygen.Editor.World.Serialization;
 public record TargetedOverrideData
 {
     /// <summary>
-    /// Gets or initializes the LOD index (-1 for all LODs).
+    /// Gets or sets the LOD index (-1 for all LODs).
     /// </summary>
-    public int LodIndex { get; init; } = -1;
+    public int LodIndex { get; set; } = -1;
 
     /// <summary>
-    /// Gets or initializes the submesh index (-1 for all submeshes).
+    /// Gets or sets the submesh index (-1 for all submeshes).
     /// </summary>
-    public int SubmeshIndex { get; init; } = -1;
+    public int SubmeshIndex { get; set; } = -1;
 
     /// <summary>
     /// Gets or initializes the override slots for this target.

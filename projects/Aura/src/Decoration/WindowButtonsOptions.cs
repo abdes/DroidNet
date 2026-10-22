@@ -43,20 +43,20 @@ public sealed record WindowButtonsOptions
     public static readonly WindowButtonsOptions Default = new();
 
     /// <summary>
-    ///     Gets a value indicating whether the minimize button is displayed.
+    ///     Gets or sets a value indicating whether the minimize button is displayed.
     /// </summary>
     /// <value>
     ///     <see langword="true"/> to show the minimize button; otherwise, <see langword="false"/>.
     ///     Default is <see langword="true"/>.
     /// </value>
-    public bool ShowMinimize { get; init; } = true;
+    public bool ShowMinimize { get; set; } = true;
 
     /// <summary>
-    ///     Gets a value indicating whether the maximize/restore button is displayed.
+    ///     Gets or sets a value indicating whether the maximize/restore button is displayed.
     /// </summary>
     /// <value>
     ///     <see langword="true"/> to show the maximize button; otherwise, <see langword="false"/>.
     ///     Default is <see langword="true"/>.
     /// </value>
-    public bool ShowMaximize { get; init; } = true;
+    public bool ShowMaximize { get; set; } = true;
 }

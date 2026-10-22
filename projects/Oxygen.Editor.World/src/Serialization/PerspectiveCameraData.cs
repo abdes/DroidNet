@@ -13,14 +13,14 @@ namespace Oxygen.Editor.World.Serialization;
 public record PerspectiveCameraData : CameraComponentData
 {
     /// <summary>
-    /// Gets the vertical field of view in degrees.
+    /// Gets or sets the vertical field of view in degrees.
     /// </summary>
-    public float FieldOfView { get; init; } = PerspectiveCamera.DefaultFieldOfViewDegrees;
+    public float FieldOfView { get; set; } = PerspectiveCamera.DefaultFieldOfViewDegrees;
 
     /// <summary>
-    /// Gets the camera aspect ratio (width / height).
+    /// Gets or sets the camera aspect ratio (width / height).
     /// </summary>
-    public float AspectRatio { get; init; } = PerspectiveCamera.DefaultAspectRatio;
+    public float AspectRatio { get; set; } = PerspectiveCamera.DefaultAspectRatio;
 
     /// <summary>Gets the authored framing policy.</summary>
     public required CameraAspectMode AspectMode { get; init; }

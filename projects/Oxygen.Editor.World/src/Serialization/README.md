@@ -27,6 +27,11 @@ Follow these rules when adding or modifying serialization behaviour:
     in the domain types and are not serialized.
   - Hydration must be performed with notifications suppressed (so
     property-change observers don't get noisy events while building objects).
+  - A property with a default other than its type's default is `{ get; set; }`.
+    The source-generated `SceneJsonContext` assigns every `init` property when
+    it reads a record, so the type's default replaces the initializer of an
+    `init` property its JSON leaves out. `SceneJsonDefaultsTests` checks that
+    every record read from JSON with absent values matches the declared record.
 
 - `SceneSerializer.ReadId` is the one reader of the identity a scene file holds.
   Finding a scene by id, guarding the start scene and creating a project from a

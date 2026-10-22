@@ -14,39 +14,39 @@ namespace Oxygen.Editor.World.Serialization;
 public sealed record SceneEnvironmentData
 {
     /// <summary>
-    /// Gets a value indicating whether atmosphere rendering is enabled.
+    /// Gets or sets a value indicating whether atmosphere rendering is enabled.
     /// </summary>
-    public bool AtmosphereEnabled { get; init; } = true;
+    public bool AtmosphereEnabled { get; set; } = true;
 
     /// <summary>
-    /// Gets authored sky atmosphere parameters mirrored by the native scene descriptor.
+    /// Gets or sets authored sky atmosphere parameters mirrored by the native scene descriptor.
     /// </summary>
-    public SkyAtmosphereEnvironmentData SkyAtmosphere { get; init; } = new();
+    public SkyAtmosphereEnvironmentData SkyAtmosphere { get; set; } = new();
 
     /// <summary>
-    /// Gets authored post-process parameters mirrored from Oxygen's native PostProcessVolume.
+    /// Gets or sets authored post-process parameters mirrored from Oxygen's native PostProcessVolume.
     /// </summary>
-    public PostProcessEnvironmentData PostProcess { get; init; } = new();
+    public PostProcessEnvironmentData PostProcess { get; set; } = new();
 
     /// <summary>
-    /// Gets authored height fog and volumetric fog mirrored by the native scene descriptor.
+    /// Gets or sets authored height fog and volumetric fog mirrored by the native scene descriptor.
     /// </summary>
-    public FogEnvironmentData Fog { get; init; } = new();
+    public FogEnvironmentData Fog { get; set; } = new();
 
     /// <summary>
-    /// Gets the authored Sky Sphere backdrop mirrored by the native scene descriptor.
+    /// Gets or sets the authored Sky Sphere backdrop mirrored by the native scene descriptor.
     /// </summary>
-    public SkySphereEnvironmentData SkySphere { get; init; } = new();
+    public SkySphereEnvironmentData SkySphere { get; set; } = new();
 
     /// <summary>
-    /// Gets the authored Sky Light image-based lighting mirrored by the native scene descriptor.
+    /// Gets or sets the authored Sky Light image-based lighting mirrored by the native scene descriptor.
     /// </summary>
-    public SkyLightEnvironmentData SkyLight { get; init; } = new();
+    public SkyLightEnvironmentData SkyLight { get; set; } = new();
 
     /// <summary>
-    /// Gets the authored display-only background mirrored by the native scene descriptor.
+    /// Gets or sets the authored display-only background mirrored by the native scene descriptor.
     /// </summary>
-    public BackgroundEnvironmentData Background { get; init; } = new();
+    public BackgroundEnvironmentData Background { get; set; } = new();
 
     /// <summary>
     /// Gets the background color of a scene saved before <see cref="Background"/> had its

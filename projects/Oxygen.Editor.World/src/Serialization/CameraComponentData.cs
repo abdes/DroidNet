@@ -24,12 +24,12 @@ public abstract record CameraComponentData : ComponentData
     /// </summary>
     public float FarPlane { get; init; }
 
-    /// <summary>Gets the authored aperture as an f-number.</summary>
-    public float ApertureF { get; init; } = CameraComponent.DefaultApertureF;
+    /// <summary>Gets or sets the authored aperture as an f-number.</summary>
+    public float ApertureF { get; set; } = CameraComponent.DefaultApertureF;
 
-    /// <summary>Gets the authored shutter rate in reciprocal seconds.</summary>
-    public float ShutterRate { get; init; } = CameraComponent.DefaultShutterRate;
+    /// <summary>Gets or sets the authored shutter rate in reciprocal seconds.</summary>
+    public float ShutterRate { get; set; } = CameraComponent.DefaultShutterRate;
 
-    /// <summary>Gets the authored ISO sensitivity.</summary>
-    public float Iso { get; init; } = CameraComponent.DefaultIso;
+    /// <summary>Gets or sets the authored ISO sensitivity.</summary>
+    public float Iso { get; set; } = CameraComponent.DefaultIso;
 }

@@ -26,7 +26,7 @@ namespace Oxygen.Editor.World.Serialization;
 public abstract record ComponentData : NamedData
 {
     /// <summary>
-    /// Gets the stable component identity.
+    /// Gets or sets the stable component identity.
     /// </summary>
-    public ComponentId Id { get; init; } = ComponentId.New();
+    public ComponentId Id { get; set; } = ComponentId.New();
 }

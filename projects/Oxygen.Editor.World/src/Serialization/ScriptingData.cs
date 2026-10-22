@@ -14,8 +14,8 @@ namespace Oxygen.Editor.World.Serialization;
 [JsonUnmappedMemberHandling(JsonUnmappedMemberHandling.Disallow)]
 public sealed record ScriptingData : ComponentData
 {
-    /// <summary>Gets the slots; list order is the slot position.</summary>
-    public IList<ScriptSlotData> Slots { get; init; } = [];
+    /// <summary>Gets or sets the slots; list order is the slot position.</summary>
+    public IList<ScriptSlotData> Slots { get; set; } = [];
 }
 
 /// <summary>Persisted state of one script slot.</summary>

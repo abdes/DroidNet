@@ -13,14 +13,14 @@ namespace Oxygen.Editor.World.Serialization;
 public sealed record SpotLightData : LightComponentData
 {
     /// <summary>
-    /// Gets luminous flux, in lumens.
+    /// Gets or sets luminous flux, in lumens.
     /// </summary>
-    public float LuminousFluxLumens { get; init; } = 800f;
+    public float LuminousFluxLumens { get; set; } = 800f;
 
     /// <summary>
-    /// Gets the influence range, in meters.
+    /// Gets or sets the influence range, in meters.
     /// </summary>
-    public float Range { get; init; } = 10f;
+    public float Range { get; set; } = 10f;
 
     /// <summary>
     /// Gets the source radius, in meters.
@@ -28,12 +28,12 @@ public sealed record SpotLightData : LightComponentData
     public float SourceRadius { get; init; }
 
     /// <summary>
-    /// Gets the inner cone angle, in radians.
+    /// Gets or sets the inner cone angle, in radians.
     /// </summary>
-    public float InnerConeAngleRadians { get; init; } = 0.4f;
+    public float InnerConeAngleRadians { get; set; } = 0.4f;
 
     /// <summary>
-    /// Gets the outer cone angle, in radians.
+    /// Gets or sets the outer cone angle, in radians.
     /// </summary>
-    public float OuterConeAngleRadians { get; init; } = 0.6f;
+    public float OuterConeAngleRadians { get; set; } = 0.6f;
 }

@@ -12,11 +12,11 @@ namespace Oxygen.Editor.World.Serialization;
 /// </summary>
 public record OrthographicCameraData : CameraComponentData
 {
-    /// <summary>Gets half of the visible height, in meters.</summary>
-    public float OrthographicSize { get; init; } = OrthographicCamera.DefaultOrthographicSize;
+    /// <summary>Gets or sets half of the visible height, in meters.</summary>
+    public float OrthographicSize { get; set; } = OrthographicCamera.DefaultOrthographicSize;
 
-    /// <summary>Gets the retained Fixed aspect ratio (width / height).</summary>
-    public float AspectRatio { get; init; } = OrthographicCamera.DefaultAspectRatio;
+    /// <summary>Gets or sets the retained Fixed aspect ratio (width / height).</summary>
+    public float AspectRatio { get; set; } = OrthographicCamera.DefaultAspectRatio;
 
     /// <summary>Gets the authored framing policy.</summary>
     public required CameraAspectMode AspectMode { get; init; }

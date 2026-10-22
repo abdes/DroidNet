@@ -47,8 +47,8 @@ public sealed record SkySphereEnvironmentData
     /// <summary>Gets a value indicating whether the sky sphere may show.</summary>
     public bool Enabled { get; init; }
 
-    /// <summary>Gets what the sky sphere shows.</summary>
-    public SkySphereSource Source { get; init; } = SkySphereSource.Cubemap;
+    /// <summary>Gets or sets what the sky sphere shows.</summary>
+    public SkySphereSource Source { get; set; } = SkySphereSource.Cubemap;
 
     /// <summary>Gets the authored cube texture descriptor URI, or null for none.</summary>
     public AssetPath? Cubemap { get; init; }
@@ -64,14 +64,14 @@ public sealed record SkySphereEnvironmentData
     /// </summary>
     public float IlluminanceLux { get; init; }
 
-    /// <summary>Gets the radiance multiplier of the view.</summary>
-    public float Intensity { get; init; } = 1.0f;
+    /// <summary>Gets or sets the radiance multiplier of the view.</summary>
+    public float Intensity { get; set; } = 1.0f;
 
     /// <summary>Gets the rotation of the cubemap around the up axis, in radians.</summary>
     public float RotationRadians { get; init; }
 
-    /// <summary>Gets the linear tint multiplied into the shown radiance.</summary>
-    public Vector3 TintRgb { get; init; } = Vector3.One;
+    /// <summary>Gets or sets the linear tint multiplied into the shown radiance.</summary>
+    public Vector3 TintRgb { get; set; } = Vector3.One;
 
     /// <summary>
     /// Gets the cube texture the renderer uses: the cubemap of an enabled cubemap source, else null.
@@ -87,11 +87,11 @@ public sealed record SkySphereEnvironmentData
 /// <remarks>Defaults match the native system.</remarks>
 public sealed record SkyLightEnvironmentData
 {
-    /// <summary>Gets a value indicating whether the sky lights the scene.</summary>
-    public bool Enabled { get; init; } = true;
+    /// <summary>Gets or sets a value indicating whether the sky lights the scene.</summary>
+    public bool Enabled { get; set; } = true;
 
-    /// <summary>Gets where the sky light takes its radiance from.</summary>
-    public SkyLightSource Source { get; init; } = SkyLightSource.CapturedScene;
+    /// <summary>Gets or sets where the sky light takes its radiance from.</summary>
+    public SkyLightSource Source { get; set; } = SkyLightSource.CapturedScene;
 
     /// <summary>Gets the authored cube texture descriptor URI used by the specified cubemap source, or null for none.</summary>
     public AssetPath? Cubemap { get; init; }
@@ -102,17 +102,17 @@ public sealed record SkyLightEnvironmentData
     /// </summary>
     public float CubemapIlluminanceLux { get; init; }
 
-    /// <summary>Gets the multiplier applied to both diffuse and specular contributions.</summary>
-    public float Intensity { get; init; } = 1.0f;
+    /// <summary>Gets or sets the multiplier applied to both diffuse and specular contributions.</summary>
+    public float Intensity { get; set; } = 1.0f;
 
-    /// <summary>Gets the linear tint multiplied into the sky radiance.</summary>
-    public Vector3 TintRgb { get; init; } = Vector3.One;
+    /// <summary>Gets or sets the linear tint multiplied into the sky radiance.</summary>
+    public Vector3 TintRgb { get; set; } = Vector3.One;
 
-    /// <summary>Gets the diffuse (irradiance) multiplier.</summary>
-    public float DiffuseIntensity { get; init; } = 1.0f;
+    /// <summary>Gets or sets the diffuse (irradiance) multiplier.</summary>
+    public float DiffuseIntensity { get; set; } = 1.0f;
 
-    /// <summary>Gets the specular (reflection) multiplier.</summary>
-    public float SpecularIntensity { get; init; } = 1.0f;
+    /// <summary>Gets or sets the specular (reflection) multiplier.</summary>
+    public float SpecularIntensity { get; set; } = 1.0f;
 
     /// <summary>Gets the rotation of the specified cubemap around the up axis, in radians.</summary>
     public float CubemapAngleRadians { get; init; }
@@ -120,17 +120,17 @@ public sealed record SkyLightEnvironmentData
     /// <summary>Gets the linear color of the lower hemisphere.</summary>
     public Vector3 LowerHemisphereColor { get; init; }
 
-    /// <summary>Gets a value indicating whether the lower hemisphere is replaced by <see cref="LowerHemisphereColor"/>.</summary>
-    public bool LowerHemisphereIsSolidColor { get; init; } = true;
+    /// <summary>Gets or sets a value indicating whether the lower hemisphere is replaced by <see cref="LowerHemisphereColor"/>.</summary>
+    public bool LowerHemisphereIsSolidColor { get; set; } = true;
 
-    /// <summary>Gets how much of the lower hemisphere the solid color replaces, from 0 to 1.</summary>
-    public float LowerHemisphereBlendAlpha { get; init; } = 1.0f;
+    /// <summary>Gets or sets how much of the lower hemisphere the solid color replaces, from 0 to 1.</summary>
+    public float LowerHemisphereBlendAlpha { get; set; } = 1.0f;
 
-    /// <summary>Gets the multiplier of sky light scattered by volumetric fog.</summary>
-    public float VolumetricScatteringIntensity { get; init; } = 1.0f;
+    /// <summary>Gets or sets the multiplier of sky light scattered by volumetric fog.</summary>
+    public float VolumetricScatteringIntensity { get; set; } = 1.0f;
 
-    /// <summary>Gets a value indicating whether the sky light contributes to reflections.</summary>
-    public bool AffectReflections { get; init; } = true;
+    /// <summary>Gets or sets a value indicating whether the sky light contributes to reflections.</summary>
+    public bool AffectReflections { get; set; } = true;
 
     /// <summary>
     /// Gets the cube texture the renderer uses: the cubemap of an enabled specified cubemap source,
