@@ -9,43 +9,41 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: owner review of the #77 decision (item 1)** in the
-[scene model](../lld/scene-authoring-model.md#5-geometry-surfaces-overrides-and-primitives),
-sections 2.1 and 2.2 and the
-[instance overrides inspector](../ui/instance-overrides-inspector.md). Once
-approved, item 2 (slice 77.1) is the first code change: the rename is
-mechanical and every later item names surfaces.
+**Next: item 3 (slice 77.2)**, the scene component schema and its generator
+([section 2.2](#22-77-implementation-slices)): its first content is exactly
+today's components and properties, so generated code replaces the hand
+mirrors with no behavior change.
 
-| Order | Item                                                 | Needs        | State  | Commit |
-| ----- | ---------------------------------------------------- | ------------ | ------ | ------ |
-| 1     | #77 decision in the scene model LLD and inspector    | -            | review | -      |
-| 2     | #77 slice 77.1: surface rename                       | 1            | open   | -      |
-| 3     | #77 slice 77.2: scene component schema and generator | 2            | open   | -      |
-| 4     | #77 slice 77.3: node components in the editor        | 3            | open   | -      |
-| 5     | #77 slice 77.4: slot model removed                   | 4            | open   | -      |
-| 6     | #94 session services own their project scope         | -            | open   | -      |
-| 7     | #95 Scene Explorer history without `UndoRedo`        | -            | open   | -      |
-| 8     | #74 one view per view model per host                 | -            | open   | -      |
-| 9     | #76 LivePreview leaves Ready on engine fault         | -            | open   | -      |
-| 10    | Inherit source modes (section 2)                     | 4, #94, #95  | open   | -      |
-| 11    | #77 slice 77.5: format and runtime                   | 5            | open   | -      |
-| 12    | #77 slice 77.6: surface values in the editor         | 11, #95, #76 | open   | -      |
-| 13    | #77 slice 77.7: LOD policy in the editor             | 11, #95, #76 | open   | -      |
-| 14    | #77 slice 77.8: model instances                      | 11, 12, 10   | open   | -      |
-| 15    | Light collection by resolved visibility              | 10, 11       | open   | -      |
-| 16    | Hide mask step 1: engine hidden-root snapshot        | 15           | open   | -      |
-| 17    | Hide mask step 2: Interop editing-view mask          | 16           | open   | -      |
-| 18    | Hide mask step 3: Runtime port                       | 17           | open   | -      |
-| 19    | Hide mask step 4: editor dispatch and checks         | #76, 18      | open   | -      |
-| 20    | Material emission editing                            | 3, #95, #76  | open   | -      |
-| 21    | #81 producer identity of same-named sources          | -            | open   | -      |
-| 22    | #97 moved output group retires old cooked outputs    | -            | open   | -      |
-| 23    | #86 consistent editing commands across parts         | -            | open   | -      |
-| 24    | #96 one file access model                            | -            | open   | -      |
-| 25    | #93 badge text in `AssetStatusText`                  | -            | open   | -      |
-| 26    | #73 Content Browser keyboard focus                   | #86          | open   | -      |
-| 27    | #72 Content Explorer tree context menu               | #86          | open   | -      |
-| 28    | #87 texture cooker formats and settings              | -            | open   | -      |
+| Order | Item                                                 | Needs        | State | Commit    |
+| ----- | ---------------------------------------------------- | ------------ | ----- | --------- |
+| 1     | #77 decision in the scene model LLD and inspector    | -            | done  | 0fd1e1a58 |
+| 2     | #77 slice 77.1: surface rename                       | 1            | done  | 9b1ba890f |
+| 3     | #77 slice 77.2: scene component schema and generator | 2            | open  | -         |
+| 4     | #77 slice 77.3: node components in the editor        | 3            | open  | -         |
+| 5     | #77 slice 77.4: slot model removed                   | 4            | open  | -         |
+| 6     | #94 session services own their project scope         | -            | open  | -         |
+| 7     | #95 Scene Explorer history without `UndoRedo`        | -            | open  | -         |
+| 8     | #74 one view per view model per host                 | -            | open  | -         |
+| 9     | #76 LivePreview leaves Ready on engine fault         | -            | open  | -         |
+| 10    | Inherit source modes (section 2)                     | 4, #94, #95  | open  | -         |
+| 11    | #77 slice 77.5: format and runtime                   | 5            | open  | -         |
+| 12    | #77 slice 77.6: surface values in the editor         | 11, #95, #76 | open  | -         |
+| 13    | #77 slice 77.7: LOD policy in the editor             | 11, #95, #76 | open  | -         |
+| 14    | #77 slice 77.8: model instances                      | 11, 12, 10   | open  | -         |
+| 15    | Light collection by resolved visibility              | 10, 11       | open  | -         |
+| 16    | Hide mask step 1: engine hidden-root snapshot        | 15           | open  | -         |
+| 17    | Hide mask step 2: Interop editing-view mask          | 16           | open  | -         |
+| 18    | Hide mask step 3: Runtime port                       | 17           | open  | -         |
+| 19    | Hide mask step 4: editor dispatch and checks         | #76, 18      | open  | -         |
+| 20    | Material emission editing                            | 3, #95, #76  | open  | -         |
+| 21    | #81 producer identity of same-named sources          | -            | open  | -         |
+| 22    | #97 moved output group retires old cooked outputs    | -            | open  | -         |
+| 23    | #86 consistent editing commands across parts         | -            | open  | -         |
+| 24    | #96 one file access model                            | -            | open  | -         |
+| 25    | #93 badge text in `AssetStatusText`                  | -            | open  | -         |
+| 26    | #73 Content Browser keyboard focus                   | #86          | open  | -         |
+| 27    | #72 Content Explorer tree context menu               | #86          | open  | -         |
+| 28    | #87 texture cooker formats and settings              | -            | open  | -         |
 
 Ordering decisions:
 
