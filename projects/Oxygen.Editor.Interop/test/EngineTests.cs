@@ -297,33 +297,28 @@ public sealed class EngineTests
     }
 
     [TestMethod]
-    public async Task RegisterSurfaceAsync_FromNonUiThread_ThrowsInvalidOperationException()
+    public void RegisterSurfaceAsync_FromNonUiThread_ThrowsInvalidOperationException()
     {
         var ctx = this.CreateEngineUnderTest(new EngineConfig());
 
         var documentId = Guid.NewGuid();
         var viewportId = Guid.NewGuid();
 
-        var exception = await Task.Run(async () =>
+        // A dedicated thread is never the one that created the engine; a thread-pool thread can be.
+        InvalidOperationException? exception = null;
+        var caller = new Thread(() =>
         {
             try
             {
-                _ = await this.runner.TryRegisterSurfaceAsync(
-                    ctx,
-                    documentId,
-                    viewportId,
-                    "Viewport",
-                    new nint(1),
-                    0u,
-                    0u,
-                    1.0f).ConfigureAwait(false);
-                return null as InvalidOperationException;
+                _ = this.runner.TryRegisterSurfaceAsync(ctx, documentId, viewportId, "Viewport", new nint(1), 0u, 0u, 1.0f);
             }
             catch (InvalidOperationException ex)
             {
-                return ex;
+                exception = ex;
             }
-        }).ConfigureAwait(false);
+        });
+        caller.Start();
+        caller.Join();
 
         _ = exception.Should().NotBeNull("RegisterSurfaceAsync should enforce UI-thread invocation.");
     }
