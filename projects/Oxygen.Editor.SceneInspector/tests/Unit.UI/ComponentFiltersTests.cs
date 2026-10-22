@@ -127,6 +127,32 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
         _ = fixture.Document.IsDirty.Should().BeFalse();
     });
 
+    /// <summary>
+    /// A section filtered out and back in shows the same view: the inspector keeps one view per section for as long as
+    /// the section exists, instead of building a new one over it each time it shows.
+    /// </summary>
+    /// <returns>The asynchronous UI regression.</returns>
+    [TestMethod]
+    public Task SectionFilteredOutAndBackShowsItsSameView() => EnqueueAsync(async () =>
+    {
+        using var fixture = new SceneAuthoringFixture();
+        MakeGeometryOnly(fixture);
+        using var model = fixture.CreateInspectorHost("Transform", realizeViews: true);
+        var view = new SceneInspectorView { ViewModel = model, Width = 360, Height = 600 };
+        await LoadTestContentAsync(view).ConfigureAwait(true);
+        var geometry = model.PropertyEditors.OfType<GeometryViewModel>().Single();
+        var shown = view.FindDescendant<GeometryView>()!;
+
+        Toggle(ComponentButton(view, typeof(TransformComponent)));
+        await WaitForRenderAsync().ConfigureAwait(true);
+        _ = view.FindDescendant<GeometryView>().Should().BeNull();
+        Toggle(ComponentButton(view, typeof(TransformComponent)));
+        await WaitForRenderAsync().ConfigureAwait(true);
+
+        _ = view.FindDescendant<GeometryView>().Should().BeSameAs(shown);
+        _ = shown.ViewModel.Should().BeSameAs(geometry);
+    });
+
     /// <summary>Multi-node filters preserve target applicability and explain components missing from some nodes.</summary>
     /// <returns>The asynchronous selection regression.</returns>
     [TestMethod]

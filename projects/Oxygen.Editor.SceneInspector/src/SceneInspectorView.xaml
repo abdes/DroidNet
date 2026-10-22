@@ -199,29 +199,12 @@
                 HorizontalScrollMode="Disabled"
                 VerticalScrollBarVisibility="Auto"
                 Visibility="{x:Bind ViewModel.HasItems, Mode=OneWay, Converter={StaticResource HasSelectionToVisibilityConverter}, ConverterParameter=False}">
-                <ItemsControl
+                <!--  The shown sections' views, one per section and kept while the section exists (see ShowSections).  -->
+                <StackPanel
                     x:Name="PropertySections"
                     HorizontalAlignment="Stretch"
-                    IsTabStop="False"
-                    ItemsSource="{x:Bind ViewModel.PropertyEditors}"
-                    TabFocusNavigation="Local">
-                    <ItemsControl.ItemsPanel>
-                        <ItemsPanelTemplate>
-                            <StackPanel Spacing="4" />
-                        </ItemsPanelTemplate>
-                    </ItemsControl.ItemsPanel>
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="local:InspectorSection">
-                            <!--  Each section fills the inspector's width; sized to its content, a section's width would follow its own layout.  -->
-                            <ContentPresenter
-                                HorizontalContentAlignment="Stretch"
-                                Content="{x:Bind Converter={StaticResource VmToViewConverter}}"
-                                Loaded="OnPropertySectionLoaded"
-                                Tag="{x:Bind}"
-                                Unloaded="OnPropertySectionUnloaded" />
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                    Spacing="4"
+                    TabFocusNavigation="Local" />
             </ScrollViewer>
             <TextBlock
                 Grid.Row="4"

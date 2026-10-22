@@ -2,6 +2,7 @@
 // at https://opensource.org/licenses/MIT.
 // SPDX-License-Identifier: MIT
 
+using System.Collections.Specialized;
 using System.ComponentModel;
 using CommunityToolkit.WinUI;
 using DroidNet.Mvvm;
@@ -19,7 +20,9 @@ namespace Oxygen.Editor.SceneInspector;
 [ViewModel(typeof(SceneInspectorViewModel))]
 public sealed partial class SceneInspectorView : UserControl
 {
+    private readonly HostedViews sectionViews = new();
     private SceneInspectorViewModel? observedModel;
+    private SceneInspectorViewModel? sectionsOwner;
 
     /// <summary>
     ///     Initializes a new instance of the <see cref="SceneInspectorView" /> class.
@@ -31,32 +34,59 @@ public sealed partial class SceneInspectorView : UserControl
         this.ViewModelChanged += (_, _) =>
         {
             this.ObserveModel();
-            if (this.ViewModel is null)
-            {
-                return;
-            }
-
-            this.Resources["VmToViewConverter"] = this.ViewModel.VmToViewConverter;
+            this.HostSections();
         };
         this.Loaded += (_, _) => this.ObserveModel();
         this.Unloaded += (_, _) => this.StopObservingModel();
     }
 
-    // A section's view holds its model while it is in the tree, and lets go of it when it leaves, so a cached model
-    // never keeps a discarded view alive.
-    private void OnPropertySectionLoaded(object sender, RoutedEventArgs args)
+    /// <summary>
+    ///     Follows the sections of the current model. The model keeps its sections for its whole life and only hides the
+    ///     ones that do not apply, so a section's view is kept while hidden and shown again when the section returns; the
+    ///     views of a previous model's sections are released.
+    /// </summary>
+    private void HostSections()
     {
-        if (sender is ContentPresenter { Content: IViewFor view, Tag: InspectorSection model })
-        {
-            view.ViewModel = model;
-        }
+        this.sectionsOwner?.PropertyEditors.CollectionChanged -= this.OnPropertyEditorsChanged;
+        this.sectionsOwner = this.ViewModel;
+        this.sectionsOwner?.PropertyEditors.CollectionChanged += this.OnPropertyEditorsChanged;
+
+        this.ShowSections();
+        this.sectionViews.RetainOnly(this.sectionsOwner?.PropertyEditors ?? []);
     }
 
-    private void OnPropertySectionUnloaded(object sender, RoutedEventArgs args)
+    private void OnPropertyEditorsChanged(object? sender, NotifyCollectionChangedEventArgs args) => this.ShowSections();
+
+    /// <summary>Puts the views of the shown sections in the panel, in the model's order.</summary>
+    private void ShowSections()
     {
-        if (sender is ContentPresenter { Content: IViewFor view })
+        var children = this.PropertySections.Children;
+        var converter = this.sectionsOwner?.VmToViewConverter;
+        var index = 0;
+        foreach (var section in this.sectionsOwner?.PropertyEditors ?? [])
         {
-            view.ViewModel = null;
+            if (this.sectionViews.GetOrCreate(section, converter) is not UIElement view)
+            {
+                continue;
+            }
+
+            var current = children.IndexOf(view);
+            if (current != index)
+            {
+                if (current >= 0)
+                {
+                    children.RemoveAt(current);
+                }
+
+                children.Insert(index, view);
+            }
+
+            ++index;
+        }
+
+        while (children.Count > index)
+        {
+            children.RemoveAt(children.Count - 1);
         }
     }
 
