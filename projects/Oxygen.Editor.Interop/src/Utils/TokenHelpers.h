@@ -7,40 +7,41 @@
 #pragma once
 #pragma managed(push, off)
 
+#include <atomic>
+#include <cstdint>
 #include <functional>
 #include <mutex>
 #include <unordered_map>
 
-#include "EditorModule/SurfaceRegistry.h"
-
 namespace Oxygen::Interop {
 
-// Token storage: native map keyed by the registry GuidKey, storing a pointer
-// to a GCHandle (via IntPtr.ToPointer()). The GCHandle holds the
-// TaskCompletionSource kept alive until the engine module processes the
-// pending destruction/resize and we resolve the token.
-using TokenKey = oxygen::interop::module::SurfaceRegistry::GuidKey;
+// Token storage for the asynchronous surface operations (register, unregister,
+// resize): one token per operation, mapped to a pointer to a GCHandle (via
+// IntPtr.ToPointer()). The GCHandle keeps the operation's TaskCompletionSource
+// alive until the engine module processes the operation and the token resolves.
+// Operations on one surface overlap (a resize staged while its removal is
+// pending), so a token never names the surface.
+using TokenId = std::uint64_t;
 
-// SurfaceRegistry::GuidHasher is a private helper; provide an internal
-// TokenHasher for use in this compilation unit.
-struct TokenHasher {
-  inline auto operator()(const TokenKey &key) const noexcept -> std::size_t {
-    std::size_t hash = 1469598103934665603ULL;
-    for (auto byte : key) {
-      hash ^= static_cast<std::size_t>(byte);
-      hash *= 1099511628211ULL;
-    }
-    return hash;
-  }
-};
-inline std::unordered_map<TokenKey, void*, TokenHasher> tokens_map;
+inline std::unordered_map<TokenId, void*> tokens_map;
 inline std::mutex tokens_mutex;
+inline std::atomic<TokenId> next_token_id { 1 };
 
-void ResolveToken(const TokenKey &nativeKey, bool ok);
+//! Resolves an operation's token with its outcome and forgets it.
+void ResolveToken(TokenId token, bool ok);
 
-// Helper that returns a native callback which resolves the given token.
-std::function<void(bool)> MakeResolveCallback(const TokenKey &k);
+//! A native callback that resolves the given token when invoked.
+auto MakeResolveCallback(TokenId token) -> std::function<void(bool)>;
 
 } // namespace Oxygen::Interop
 
 #pragma managed(pop)
+
+namespace Oxygen::Interop {
+
+//! Keeps an operation's completion alive under a new token, for its callback.
+auto StoreToken(
+  System::Threading::Tasks::TaskCompletionSource<bool>^ completion)
+  -> TokenId;
+
+} // namespace Oxygen::Interop

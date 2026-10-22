@@ -7,10 +7,9 @@
 #include "pch_clr.h"
 
 #pragma managed(push, off)
+#include <atomic>
 #include <functional>
-#include <list>
 #include <mutex>
-#include <utility>
 #pragma managed(pop)
 
 #pragma managed
@@ -19,35 +18,9 @@
 
 namespace Oxygen::Interop {
 
-  void Oxygen::Interop::ResolveToken(const TokenKey& nativeKey, bool ok) {
-
-#if 0
-    using oxygen::engine::interop::LogInfoMessage;
-    // Helpful diagnostic message for interop troubleshooting: include a
-    // short hex representation of the token key and whether resolution
-    // succeeded.
-    auto tokenToHex = [](const TokenKey& k) -> std::string {
-      std::string out;
-      out.reserve(k.size() * 3);
-      for (size_t i = 0; i < k.size(); ++i) {
-        out += fmt::format("{:02x}", static_cast<unsigned int>(
-          static_cast<unsigned char>(k[i])));
-        if (i + 1 < k.size() && (i % 4 == 3))
-          out.push_back('-');
-      }
-      return out;
-      };
-    try {
-      auto msg = fmt::format("ResolveToken: key={} ok={}", tokenToHex(nativeKey),
-        ok ? "true" : "false");
-      LogInfoMessage(msg.c_str());
-    }
-    catch (...) { /* keep resolving even if logging fails */
-    }
-#endif // 0
-
+  void ResolveToken(const TokenId token, const bool ok) {
     std::lock_guard<std::mutex> lg(tokens_mutex);
-    auto it = tokens_map.find(nativeKey);
+    auto it = tokens_map.find(token);
     if (it == tokens_map.end()) {
       return;
     }
@@ -74,11 +47,23 @@ namespace Oxygen::Interop {
   }
 
   // Return a native callback that resolves the token when invoked.
-  std::function<void(bool)> MakeResolveCallback(const TokenKey& k) {
-    // Capture the key by value and call ResolveToken when the callback is
+  auto MakeResolveCallback(const TokenId token) -> std::function<void(bool)> {
+    // Capture the token by value and call ResolveToken when the callback is
     // invoked. Keeping the lambda simple and noexcept-friendly avoids
     // unnecessary exceptions crossing native/managed boundaries.
-    return [k](bool ok) noexcept { ResolveToken(k, ok); };
+    return [token](bool ok) noexcept { ResolveToken(token, ok); };
+  }
+
+  auto StoreToken(
+    System::Threading::Tasks::TaskCompletionSource<bool>^ completion)
+    -> TokenId {
+    auto gh = System::Runtime::InteropServices::GCHandle::Alloc(
+      completion, System::Runtime::InteropServices::GCHandleType::Normal);
+    auto ip = System::Runtime::InteropServices::GCHandle::ToIntPtr(gh);
+    const auto token = next_token_id.fetch_add(1, std::memory_order_relaxed);
+    std::lock_guard<std::mutex> lg(tokens_mutex);
+    tokens_map[token] = ip.ToPointer();
+    return token;
   }
 
 } // namespace Oxygen::Interop

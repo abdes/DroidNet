@@ -17,22 +17,12 @@ public sealed partial class Viewport
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "[Viewport] Loaded invoked. activeLoadCount={ActiveLoadCount}")]
-    private static partial void LogLoadedInvoked(ILogger logger, int activeLoadCount);
+        Message = "[Viewport] Loaded invoked.")]
+    private static partial void LogLoadedInvoked(ILogger logger);
 
     [Conditional("DEBUG")]
-    private void LogLoadedInvoked(int activeLoadCount)
-        => LogLoadedInvoked(this.logger, activeLoadCount);
-
-    [LoggerMessage(
-        SkipEnabledCheck = true,
-        Level = LogLevel.Debug,
-        Message = "[Viewport] Load count changed. newValue={ActiveLoadCount}")]
-    private static partial void LogLoadCountChanged(ILogger logger, int activeLoadCount);
-
-    [Conditional("DEBUG")]
-    private void LogLoadCountChanged(int activeLoadCount)
-        => LogLoadCountChanged(this.logger, activeLoadCount);
+    private void LogLoadedInvoked()
+        => LogLoadedInvoked(this.logger);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -126,22 +116,22 @@ public sealed partial class Viewport
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "[Viewport] Unloaded invoked. activeLoadCount={ActiveLoadCount}")]
-    private static partial void LogUnloadedInvoked(ILogger logger, int activeLoadCount);
+        Message = "[Viewport] Unloaded invoked.")]
+    private static partial void LogUnloadedInvoked(ILogger logger);
 
     [Conditional("DEBUG")]
-    private void LogUnloadedInvoked(int activeLoadCount)
-        => LogUnloadedInvoked(this.logger, activeLoadCount);
+    private void LogUnloadedInvoked()
+        => LogUnloadedInvoked(this.logger);
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Debug,
-        Message = "[Viewport] Unload ignored because active references remain. count={ActiveLoadCount}")]
-    private static partial void LogUnloadIgnored(ILogger logger, int activeLoadCount);
+        Message = "[Viewport] Unload ignored because the control is in a live tree again.")]
+    private static partial void LogUnloadIgnored(ILogger logger);
 
     [Conditional("DEBUG")]
-    private void LogUnloadIgnored(int activeLoadCount)
-        => LogUnloadIgnored(this.logger, activeLoadCount);
+    private void LogUnloadIgnored()
+        => LogUnloadIgnored(this.logger);
 
     [LoggerMessage(
         SkipEnabledCheck = true,

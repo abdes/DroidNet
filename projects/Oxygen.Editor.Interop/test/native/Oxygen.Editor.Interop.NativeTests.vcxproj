@@ -79,6 +79,7 @@
     <ClCompile Include="src\InputAccumulator_native_test.cpp" />
     <ClCompile Include="src\PaneRenderPolicy_native_test.cpp" />
     <ClCompile Include="src\SceneHelpers_native_test.cpp" />
+    <ClCompile Include="src\SurfaceRegistry_native_test.cpp" />
     <ClCompile Include="src\TransformGizmo_native_test.cpp" />
     <ClCompile Include="src\ViewFraming_native_test.cpp" />
   </ItemGroup>

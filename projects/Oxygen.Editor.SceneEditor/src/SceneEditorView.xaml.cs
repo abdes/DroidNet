@@ -53,10 +53,23 @@ public sealed partial class SceneEditorView : UserControl, IDocumentEditorView
             }).ConfigureAwait(true);
     }
 
-    private async void OnUnloaded(object sender, RoutedEventArgs e)
+    private void OnUnloaded(object sender, RoutedEventArgs e)
     {
         _ = sender;
         _ = e;
+
+        // A layout that moves the view, as the workspace does when it rebuilds its docks, raises Unloaded and Loaded
+        // in either order. Only a view still out of the tree once that layout settles has left, and releases its
+        // viewports; a moved view keeps them.
+        _ = this.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, this.DeactivateIfLeft);
+    }
+
+    private async void DeactivateIfLeft()
+    {
+        if (this.IsLoaded || this.isDeactivated)
+        {
+            return;
+        }
 
         await this.DeactivateAsync().ConfigureAwait(true);
     }

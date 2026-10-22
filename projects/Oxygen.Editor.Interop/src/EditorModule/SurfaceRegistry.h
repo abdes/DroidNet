@@ -115,7 +115,9 @@ namespace oxygen::interop::module {
 
     //! Commit the given surface into the live entries map (engine-thread only)
     /*
-      This method inserts or replaces the entry for the supplied key.
+      This method inserts or replaces the entry for the supplied key. A
+      surface it replaces is retired like a removed one, so that it and what
+      the engine module keeps for its key are released.
       It is intended to be called only from the engine thread while
       processing pending registrations; external callers should use
       the public RegisterSurface(...) overload to stage a registration.
@@ -126,7 +128,14 @@ namespace oxygen::interop::module {
       if (!surface)
         return;
       std::scoped_lock lock(mutex_);
-      entries_[key] = std::move(surface);
+      auto& live = entries_[key];
+      if (live && live != surface) {
+        PendingDestruction retired;
+        retired.key = key;
+        retired.surface = std::move(live);
+        pending_destructions_.emplace_back(std::move(retired));
+      }
+      live = std::move(surface);
     }
 
     //! Mark the specified surface for destruction.
@@ -139,11 +148,50 @@ namespace oxygen::interop::module {
     auto RemoveSurface(const GuidKey& key,
       std::function<void(bool)> onProcessed = {}) -> void {
       std::scoped_lock lock(mutex_);
+
+      // A registration still pending for the key is withdrawn: its surface is
+      // destroyed instead of committed, and its caller learns it failed.
+      PendingDestruction* last_withdrawn = nullptr;
+      for (auto pending = pending_registrations_.begin();
+        pending != pending_registrations_.end();) {
+        if (pending->key != key) {
+          ++pending;
+          continue;
+        }
+
+        PendingDestruction withdrawn;
+        withdrawn.key = key;
+        withdrawn.surface = std::move(pending->surface);
+        if (pending->callback) {
+          withdrawn.callback
+            = [registered = std::move(pending->callback)](
+                bool /*destroyed*/) { registered(false); };
+        }
+        last_withdrawn
+          = &pending_destructions_.emplace_back(std::move(withdrawn));
+        pending = pending_registrations_.erase(pending);
+      }
+
       auto iter = entries_.find(key);
       if (iter == entries_.end()) {
+        if (last_withdrawn == nullptr) {
+          if (onProcessed) {
+            // Notify caller that the surface was not found.
+            onProcessed(false);
+          }
+          return;
+        }
+
+        // The removal completes with the withdrawn surface's destruction.
         if (onProcessed) {
-          // Notify caller that the surface was not found.
-          onProcessed(false);
+          last_withdrawn->callback
+            = [registered = std::move(last_withdrawn->callback),
+                removed = std::move(onProcessed)](bool destroyed) {
+                if (registered) {
+                  registered(destroyed);
+                }
+                removed(destroyed);
+              };
         }
         return;
       }

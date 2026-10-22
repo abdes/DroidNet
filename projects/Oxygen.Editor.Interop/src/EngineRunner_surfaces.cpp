@@ -145,54 +145,14 @@ namespace Oxygen::Interop {
     auto tcs = gcnew TaskCompletionSource<bool>(
       TaskCreationOptions::RunContinuationsAsynchronously);
 
-    // Store the TaskCompletionSource in the native tokens_map keyed by the
-    // native GuidKey (array of bytes). Use tokens_mutex for thread safety.
-    TokenKey nativeKey{};
-    for (size_t i = 0; i < nativeKey.size(); ++i) {
-      nativeKey[i] = key[i];
-    }
-
-    // Create a native callback that resolves the stored TaskCompletionSource
-    // when the engine module processes the pending destruction. Use the
-    // MakeResolveCallback helper (outside the managed member function) so
-    // no local class is defined inside this managed method.
-    std::function<void(bool)> cb = MakeResolveCallback(nativeKey);
-
-    try {
-      auto msg = fmt::format(
-        fmt::runtime("UnregisterSurfaceAsync: stored token for viewport={}"),
-        msclr::interop::marshal_as<std::string>(viewportId.ToString()));
-      LogInfoMessage(msg.c_str());
-    }
-    catch (...) { /* swallow logging errors */
-    }
-
-    // Pin the managed TaskCompletionSource using a GCHandle and store the
-    // IntPtr -> pointer value in the native map so callbacks can resolve it
-    // without holding managed references. Keep hold of the IntPtr so we can
-    // free it if staging into the registry fails.
-    System::IntPtr ip = IntPtr::Zero;
-    {
-      auto gh = System::Runtime::InteropServices::GCHandle::Alloc(
-        tcs, System::Runtime::InteropServices::GCHandleType::Normal);
-      ip = System::Runtime::InteropServices::GCHandle::ToIntPtr(gh);
-      std::lock_guard<std::mutex> lg(tokens_mutex);
-      tokens_map[nativeKey] = ip.ToPointer();
-    }
-
-    try {
-      auto msg = fmt::format(
-        fmt::runtime("UnregisterSurfaceAsync: stored token for viewport={}"),
-        msclr::interop::marshal_as<std::string>(viewportId.ToString()));
-      LogInfoMessage(msg.c_str());
-    }
-    catch (...) { /* swallow logging errors */
-    }
+    // The operation's own token, resolved when the engine module processes
+    // the pending destruction.
+    const auto token = StoreToken(tcs);
+    std::function<void(bool)> cb = MakeResolveCallback(token);
 
     // Stage the removal into the registry; callback will be invoked by the
     // engine module when it drains pending destructions. If staging fails we
-    // must cleanup the pinned GCHandle and remove the entry from tokens_map
-    // to avoid leaking.
+    // fail the token, which also frees its GCHandle.
     try {
       registry->RemoveSurface(key, std::move(cb));
       try {
@@ -217,31 +177,8 @@ namespace Oxygen::Interop {
       }
       catch (...) { /* swallow */
       }
-      std::lock_guard<std::mutex> lg(tokens_mutex);
-      auto it = tokens_map.find(nativeKey);
-      if (it != tokens_map.end()) {
-        void* hv = it->second;
-        if (hv != nullptr) {
-          try {
-            System::IntPtr stored(hv);
-            auto gh =
-              System::Runtime::InteropServices::GCHandle::FromIntPtr(stored);
-            if (gh.IsAllocated)
-              gh.Free();
-          }
-          catch (...) { /* swallow */
-          }
-        }
-        tokens_map.erase(it);
-      }
-
-      // Fail the TaskCompletionSource so the caller does not hang
-      try {
-        tcs->TrySetResult(false);
-      }
-      catch (...) { /* swallow */
-      }
-
+      // Fail the operation so the caller does not hang.
+      ResolveToken(token, false);
       return tcs->Task;
     }
 
@@ -266,19 +203,8 @@ namespace Oxygen::Interop {
 
     auto tcs = gcnew TaskCompletionSource<bool>(
       TaskCreationOptions::RunContinuationsAsynchronously);
-    TokenKey nativeKey{};
-    for (size_t i = 0; i < nativeKey.size(); ++i)
-      nativeKey[i] = key[i];
-    System::IntPtr ip = IntPtr::Zero;
-    {
-      auto gh = System::Runtime::InteropServices::GCHandle::Alloc(
-        tcs, System::Runtime::InteropServices::GCHandleType::Normal);
-      ip = System::Runtime::InteropServices::GCHandle::ToIntPtr(gh);
-      std::lock_guard<std::mutex> lg(tokens_mutex);
-      tokens_map[nativeKey] = ip.ToPointer();
-    }
-
-    std::function<void(bool)> cb = MakeResolveCallback(nativeKey);
+    const auto token = StoreToken(tcs);
+    std::function<void(bool)> cb = MakeResolveCallback(token);
 
     try {
       registry->RegisterResizeCallback(key, std::move(cb));
@@ -294,30 +220,8 @@ namespace Oxygen::Interop {
       }
     }
     catch (...) {
-      // cleanup pinned handle + native entry if registration fails
-      std::lock_guard<std::mutex> lg(tokens_mutex);
-      auto it = tokens_map.find(nativeKey);
-      if (it != tokens_map.end()) {
-        void* hv = it->second;
-        if (hv != nullptr) {
-          try {
-            System::IntPtr stored(hv);
-            auto gh =
-              System::Runtime::InteropServices::GCHandle::FromIntPtr(stored);
-            if (gh.IsAllocated)
-              gh.Free();
-          }
-          catch (...) { /* swallow */
-          }
-        }
-        tokens_map.erase(it);
-      }
-
-      try {
-        tcs->TrySetResult(false);
-      }
-      catch (...) { /* swallow */
-      }
+      // Fail the operation so the caller does not hang.
+      ResolveToken(token, false);
       return tcs->Task;
     }
 
@@ -403,20 +307,8 @@ namespace Oxygen::Interop {
     auto tcs = gcnew TaskCompletionSource<bool>(
       TaskCreationOptions::RunContinuationsAsynchronously);
 
-    TokenKey nativeKey{};
-    for (size_t i = 0; i < nativeKey.size(); ++i)
-      nativeKey[i] = key[i];
-
-    System::IntPtr ip = IntPtr::Zero;
-    {
-      auto gh = System::Runtime::InteropServices::GCHandle::Alloc(
-        tcs, System::Runtime::InteropServices::GCHandleType::Normal);
-      ip = System::Runtime::InteropServices::GCHandle::ToIntPtr(gh);
-      std::lock_guard<std::mutex> lg(tokens_mutex);
-      tokens_map[nativeKey] = ip.ToPointer();
-    }
-
-    std::function<void(bool)> cb = MakeResolveCallback(nativeKey);
+    const auto token = StoreToken(tcs);
+    std::function<void(bool)> cb = MakeResolveCallback(token);
 
     try {
       registry->RegisterSurface(key, surface, std::move(cb));
@@ -431,30 +323,8 @@ namespace Oxygen::Interop {
       }
     }
     catch (...) {
-      // cleanup pinned handle + native entry if staging fails
-      std::lock_guard<std::mutex> lg(tokens_mutex);
-      auto it = tokens_map.find(nativeKey);
-      if (it != tokens_map.end()) {
-        void* hv = it->second;
-        if (hv != nullptr) {
-          try {
-            System::IntPtr stored(hv);
-            auto gh =
-              System::Runtime::InteropServices::GCHandle::FromIntPtr(stored);
-            if (gh.IsAllocated)
-              gh.Free();
-          }
-          catch (...) { /* swallow */
-          }
-        }
-        tokens_map.erase(it);
-      }
-
-      try {
-        tcs->TrySetResult(false);
-      }
-      catch (...) { /* swallow */
-      }
+      // Fail the operation so the caller does not hang.
+      ResolveToken(token, false);
       return tcs->Task;
     }
 

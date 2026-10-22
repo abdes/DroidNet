@@ -60,6 +60,9 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
     // The view model whose view presents through the lease; the control's view model may already
     // have been replaced when the lease is released.
     private ViewportViewModel? leaseViewModel;
+
+    // The last detach: detaches run in order, and an attach starts only after the last one.
+    private Task pendingDetach = Task.CompletedTask;
     private bool swapChainSizeHooked;
 
     /* NOTE: composition-scale handling was intentionally removed in favor of
@@ -67,7 +70,6 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
        markup predictable and avoids dynamic flicker caused by composition-scale
        oscillation. */
 
-    private int activeLoadCount;
     private CancellationTokenSource? attachCancellationSource;
     private ILogger logger = NullLoggerFactory.Instance.CreateLogger(LoggerCategoryName);
     private ViewportViewModel? currentViewModel;
@@ -566,9 +568,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         _ = sender;
         _ = e;
 
-        this.LogLoadedInvoked(this.activeLoadCount);
-        this.activeLoadCount++;
-        this.LogLoadCountChanged(this.activeLoadCount);
+        this.LogLoadedInvoked();
 
         if (this.surfaceLease != null)
         {
@@ -699,7 +699,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
     }
 
-    private async void OnUnloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
+    private void OnUnloaded(object sender, Microsoft.UI.Xaml.RoutedEventArgs e)
     {
         if (this.isDisposed)
         {
@@ -709,16 +709,23 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         _ = sender;
         _ = e;
 
-        this.LogUnloadedInvoked(this.activeLoadCount);
-        if (this.activeLoadCount > 0)
+        this.LogUnloadedInvoked();
+
+        // A layout that moves the control raises Unloaded and Loaded in either order. Only a control still out of
+        // the tree once that layout settles has left, and releases its surface; a moved control keeps it.
+        _ = this.DispatcherQueue.TryEnqueue(Microsoft.UI.Dispatching.DispatcherQueuePriority.Low, this.DetachIfLeft);
+    }
+
+    private async void DetachIfLeft()
+    {
+        if (this.isDisposed)
         {
-            this.activeLoadCount--;
-            this.LogLoadCountChanged(this.activeLoadCount);
+            return;
         }
 
-        if (this.activeLoadCount > 0)
+        if (this.IsLoaded)
         {
-            this.LogUnloadIgnored(this.activeLoadCount);
+            this.LogUnloadIgnored();
             return;
         }
 
@@ -727,7 +734,7 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         this.UnregisterInputHandlers();
         this.StopStatisticsTimer();
 
-        await this.DetachSurfaceAsync("ActiveLoadCountZero").ConfigureAwait(true);
+        await this.DetachSurfaceAsync("Unloaded").ConfigureAwait(true);
     }
 
     private void RegisterInputHandlers()
@@ -1320,6 +1327,8 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
             return;
         }
 
+        // A load that follows an unload while its detach releases the engine view attaches once that is done.
+        await this.pendingDetach.ConfigureAwait(true);
         await this.CancelPendingAttachAsync().ConfigureAwait(true);
         this.attachCancellationSource = new CancellationTokenSource();
         var cancellationToken = this.attachCancellationSource.Token;
@@ -1348,17 +1357,30 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         }
     }
 
-    private async Task DetachSurfaceAsync(string reason = "General")
+    private Task DetachSurfaceAsync(string reason = "General")
     {
         if (this.isDisposed && !string.Equals(reason, "Dispose", StringComparison.Ordinal))
         {
-            return;
+            return Task.CompletedTask;
         }
 
+        // The detach takes the lease now: from here the control holds none, so a load during the detach attaches
+        // anew once it is done, and resizes skip the surface going away.
+        var lease = this.surfaceLease;
+        var viewModel = this.leaseViewModel;
+        this.surfaceLease = null;
+        this.leaseViewModel = null;
+        var detach = this.DetachSurfaceCoreAsync(this.pendingDetach, reason, lease, viewModel);
+        this.pendingDetach = detach;
+        return detach;
+    }
+
+    private async Task DetachSurfaceCoreAsync(Task previous, string reason, IViewportSurfaceLease? lease, ViewportViewModel? viewModel)
+    {
         this.LogDetachRequested(reason);
         await this.CancelPendingAttachAsync().ConfigureAwait(true);
-
-        if (this.surfaceLease == null)
+        await previous.ConfigureAwait(true);
+        if (lease == null)
         {
             return;
         }
@@ -1366,22 +1388,17 @@ public sealed partial class Viewport : UserControl, IAsyncDisposable // TODO: xa
         try
         {
             // The pane keeps its camera state for the view it creates on its next attach.
-            if (this.leaseViewModel is { } viewModel)
+            if (viewModel is not null)
             {
                 await viewModel.ReleaseViewAsync().ConfigureAwait(true);
             }
 
-            await this.surfaceLease.DisposeAsync().ConfigureAwait(true);
-            this.LogLeaseDisposed(GetViewportId(this.leaseViewModel));
+            await lease.DisposeAsync().ConfigureAwait(true);
+            this.LogLeaseDisposed(GetViewportId(viewModel));
         }
         catch (Exception ex) when (Oxygen.Editor.Runtime.Diagnostics.EngineInteropExceptionPolicy.IsRecoverable(ex))
         {
             this.LogLeaseDisposeFailed(ex);
-        }
-        finally
-        {
-            this.surfaceLease = null;
-            this.leaseViewModel = null;
         }
     }
 
