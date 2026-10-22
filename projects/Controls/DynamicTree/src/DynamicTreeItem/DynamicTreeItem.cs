@@ -4,6 +4,7 @@
 
 using System.Collections.Specialized;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -289,7 +290,7 @@ public partial class DynamicTreeItem : ContentControl
     /// </summary>
     public const string NotCutVisualState = "NotCut";
 
-    private ILogger? logger;
+    private ILogger logger = NullLogger<DynamicTreeItem>.Instance;
 
     private long ancestorTreeThumbnailTemplateSelectorChangeCallbackToken;
     private long ancestorTreeTrailingContentTemplateSelectorChangeCallbackToken;

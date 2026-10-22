@@ -8,7 +8,7 @@ using Microsoft.Extensions.Logging;
 namespace DroidNet.Controls;
 
 /// <summary>
-///     Logging extensions for <see cref="TreeDisplayHelper"/>.
+///     Logging helpers for <see cref="TreeDisplayHelper"/>.
 /// </summary>
 internal sealed partial class TreeDisplayHelper
 {
@@ -18,6 +18,7 @@ internal sealed partial class TreeDisplayHelper
         Message = "Move request was vetoed by a handler; aborting move.")]
     private static partial void LogMoveRequestVetoed(ILogger logger);
 
+    [Conditional("DEBUG")]
     private void LogMoveRequestVetoed()
         => LogMoveRequestVetoed(this.logger);
 
@@ -28,7 +29,15 @@ internal sealed partial class TreeDisplayHelper
     private static partial void LogMoveVetoed(ILogger logger, string reason);
 
     private void LogMoveVetoed(string? reason)
-        => LogMoveVetoed(this.logger, reason ?? "move vetoed");
+    {
+        if (!this.logger.IsEnabled(LogLevel.Warning))
+        {
+            return;
+        }
+
+        var shown = reason ?? "move vetoed";
+        LogMoveVetoed(this.logger, shown);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -36,8 +45,22 @@ internal sealed partial class TreeDisplayHelper
         Message = "InsertItem requested: item='{item}' into parent '{parent}' at relativeIndex={relativeIndex} (parentDepth={parentDepth}, children={childrenCount}, parentIsExpanded={isExpanded}, shownItems={shownCount})")]
     private static partial void LogInsertItemRequested(ILogger logger, string parent, string item, int relativeIndex, int parentDepth, int childrenCount, bool isExpanded, int shownCount);
 
+    [Conditional("DEBUG")]
     private void LogInsertItemRequested(ITreeItem parent, int relativeIndex, ITreeItem item)
-        => LogInsertItemRequested(this.logger, parent.Label, item.Label, relativeIndex, parent.Depth, parent.ChildrenCount, parent.IsExpanded, this.shownItems.Count);
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var parentLabel = parent.Label;
+        var itemLabel = item.Label;
+        var parentDepth = parent.Depth;
+        var childrenCount = parent.ChildrenCount;
+        var isExpanded = parent.IsExpanded;
+        var shownCount = this.shownItems.Count;
+        LogInsertItemRequested(this.logger, parentLabel, itemLabel, relativeIndex, parentDepth, childrenCount, isExpanded, shownCount);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -45,8 +68,20 @@ internal sealed partial class TreeDisplayHelper
         Message = "RemoveItem requested: item='{item}' (IsRoot={isRoot}, IsLocked={isLocked}) (shownItems={shownCount})")]
     private static partial void LogRemoveItemRequested(ILogger logger, string item, bool isRoot, bool isLocked, int shownCount);
 
+    [Conditional("DEBUG")]
     private void LogRemoveItemRequested(ITreeItem item)
-        => LogRemoveItemRequested(this.logger, item.Label, item.IsRoot, item.IsLocked, this.shownItems.Count);
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var label = item.Label;
+        var isRoot = item.IsRoot;
+        var isLocked = item.IsLocked;
+        var shownCount = this.shownItems.Count;
+        LogRemoveItemRequested(this.logger, label, isRoot, isLocked, shownCount);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -54,17 +89,35 @@ internal sealed partial class TreeDisplayHelper
         Message = "Completed removal of item '{item}' (removedShownItems={removedCount}, wasShown={wasShown})")]
     private static partial void LogRemoveItemCompleted(ILogger logger, string item, int removedCount, bool wasShown);
 
+    [Conditional("DEBUG")]
     private void LogRemoveItemCompleted(ITreeItem item, int removedCount, bool wasShown)
-        => LogRemoveItemCompleted(this.logger, item.Label, removedCount, wasShown);
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var label = item.Label;
+        LogRemoveItemCompleted(this.logger, label, removedCount, wasShown);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
         Level = LogLevel.Warning,
-        Message = "Relative iundex {originalIndex} for parent '{parent}' was out of range and adjusted to {clamped} (valid range [0, {childrenCount}])")]
+        Message = "Relative index {originalIndex} for parent '{parent}' was out of range and adjusted to {clamped} (valid range [0, {childrenCount}])")]
     private static partial void LogRelativeIndexAdjusted(ILogger logger, string parent, int originalIndex, int clamped, int childrenCount);
 
     private void LogRelativeIndexAdjusted(ITreeItem parent, int originalIndex, int clamped)
-        => LogRelativeIndexAdjusted(this.logger, parent.Label, originalIndex, clamped, parent.ChildrenCount);
+    {
+        if (!this.logger.IsEnabled(LogLevel.Warning))
+        {
+            return;
+        }
+
+        var label = parent.Label;
+        var childrenCount = parent.ChildrenCount;
+        LogRelativeIndexAdjusted(this.logger, label, originalIndex, clamped, childrenCount);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -77,6 +130,20 @@ internal sealed partial class TreeDisplayHelper
         int relativeIndex,
         int index,
         int childrenCount);
+
+    [Conditional("DEBUG")]
+    private void LogFindNewItemIndexComputedNoSibling(ITreeItem parent, int relativeIndex, int index)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Trace))
+        {
+            return;
+        }
+
+        var label = parent.Label;
+        var depth = parent.Depth;
+        var childrenCount = parent.ChildrenCount;
+        LogFindNewItemIndexComputedNoSibling(this.logger, label, depth, relativeIndex, index, childrenCount);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -93,15 +160,33 @@ internal sealed partial class TreeDisplayHelper
         string siblingLabel,
         int siblingDepth);
 
+    [Conditional("DEBUG")]
+    private void LogFindNewItemIndexComputedWithSibling(ITreeItem parent, int relativeIndex, int index, string siblingRole, ITreeItem sibling)
+    {
+        if (!this.logger.IsEnabled(LogLevel.Trace))
+        {
+            return;
+        }
+
+        var label = parent.Label;
+        var depth = parent.Depth;
+        var childrenCount = parent.ChildrenCount;
+        var siblingLabel = sibling.Label;
+        var siblingDepth = sibling.Depth;
+        LogFindNewItemIndexComputedWithSibling(this.logger, label, depth, relativeIndex, index, childrenCount, siblingRole, siblingLabel, siblingDepth);
+    }
+
+    [Conditional("DEBUG")]
     private void LogFindNewItemIndexComputed(ITreeItem parent, int relativeIndex, int index, string siblingRole, ITreeItem? sibling)
     {
         if (sibling is null)
         {
-            LogFindNewItemIndexComputedNoSibling(this.logger, parent.Label, parent.Depth, relativeIndex, index, parent.ChildrenCount);
-            return;
+            this.LogFindNewItemIndexComputedNoSibling(parent, relativeIndex, index);
         }
-
-        LogFindNewItemIndexComputedWithSibling(this.logger, parent.Label, parent.Depth, relativeIndex, index, parent.ChildrenCount, siblingRole, sibling.Label, sibling.Depth);
+        else
+        {
+            this.LogFindNewItemIndexComputedWithSibling(parent, relativeIndex, index, siblingRole, sibling);
+        }
     }
 
     [LoggerMessage(
@@ -110,6 +195,7 @@ internal sealed partial class TreeDisplayHelper
         Message = "RemoveChildren: Processing {childrenCount} children (itemIsShown={itemIsShown}, itemIsExpanded={itemIsExpanded})")]
     private static partial void LogRemoveChildrenStarted(ILogger logger, int childrenCount, bool itemIsShown, bool itemIsExpanded);
 
+    [Conditional("DEBUG")]
     private void LogRemoveChildrenStarted(int childrenCount, bool itemIsShown, bool itemIsExpanded)
         => LogRemoveChildrenStarted(this.logger, childrenCount, itemIsShown, itemIsExpanded);
 
@@ -121,7 +207,16 @@ internal sealed partial class TreeDisplayHelper
 
     [Conditional("DEBUG")]
     private void LogShownItemsInsert(int index, ITreeItem item)
-        => LogShownItemsInsert(this.logger, index, item.Label, this.shownItems.Count + 1);
+    {
+        if (!this.logger.IsEnabled(LogLevel.Trace))
+        {
+            return;
+        }
+
+        var label = item.Label;
+        var newCount = this.shownItems.Count + 1;
+        LogShownItemsInsert(this.logger, index, label, newCount);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -132,8 +227,14 @@ internal sealed partial class TreeDisplayHelper
     [Conditional("DEBUG")]
     private void LogShownItemsRemoveAt(int index)
     {
-        var item = this.shownItems[index];
-        LogShownItemsRemoveAt(this.logger, index, item.Label, this.shownItems.Count - 1);
+        if (!this.logger.IsEnabled(LogLevel.Trace))
+        {
+            return;
+        }
+
+        var label = this.shownItems[index].Label;
+        var newCount = this.shownItems.Count - 1;
+        LogShownItemsRemoveAt(this.logger, index, label, newCount);
     }
 
     [LoggerMessage(
@@ -144,7 +245,16 @@ internal sealed partial class TreeDisplayHelper
 
     [Conditional("DEBUG")]
     private void LogItemBeingAddedDecision(ITreeItem parent, ITreeItem item, bool proceed)
-        => LogItemBeingAddedDecision(this.logger, parent.Label, item.Label, proceed);
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var parentLabel = parent.Label;
+        var itemLabel = item.Label;
+        LogItemBeingAddedDecision(this.logger, parentLabel, itemLabel, proceed);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -154,7 +264,15 @@ internal sealed partial class TreeDisplayHelper
 
     [Conditional("DEBUG")]
     private void LogItemBeingRemovedDecision(ITreeItem item, bool proceed)
-        => LogItemBeingRemovedDecision(this.logger, item.Label, proceed);
+    {
+        if (!this.logger.IsEnabled(LogLevel.Debug))
+        {
+            return;
+        }
+
+        var label = item.Label;
+        LogItemBeingRemovedDecision(this.logger, label, proceed);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -164,7 +282,16 @@ internal sealed partial class TreeDisplayHelper
 
     [Conditional("DEBUG")]
     private void LogRemoveSingleSelectedItem(ITreeItem item)
-        => LogRemoveSingleSelectedItem(this.logger, item.Label, item.IsLocked);
+    {
+        if (!this.logger.IsEnabled(LogLevel.Trace))
+        {
+            return;
+        }
+
+        var label = item.Label;
+        var isLocked = item.IsLocked;
+        LogRemoveSingleSelectedItem(this.logger, label, isLocked);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -174,7 +301,15 @@ internal sealed partial class TreeDisplayHelper
 
     [Conditional("DEBUG")]
     private void LogRemoveMultipleSelectionItemsStarted(int selectedCount)
-        => LogRemoveMultipleSelectionItemsStarted(this.logger, selectedCount, this.shownItems.Count);
+    {
+        if (!this.logger.IsEnabled(LogLevel.Trace))
+        {
+            return;
+        }
+
+        var shownCount = this.shownItems.Count;
+        LogRemoveMultipleSelectionItemsStarted(this.logger, selectedCount, shownCount);
+    }
 
     [LoggerMessage(
         SkipEnabledCheck = true,
@@ -194,5 +329,14 @@ internal sealed partial class TreeDisplayHelper
 
     [Conditional("DEBUG")]
     private void LogParentAutoExpanded(ITreeItem parent)
-        => LogParentAutoExpanded(this.logger, parent.Label, parent.IsExpanded);
+    {
+        if (!this.logger.IsEnabled(LogLevel.Trace))
+        {
+            return;
+        }
+
+        var label = parent.Label;
+        var wasExpanded = parent.IsExpanded;
+        LogParentAutoExpanded(this.logger, label, wasExpanded);
+    }
 }

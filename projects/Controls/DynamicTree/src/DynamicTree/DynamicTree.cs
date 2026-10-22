@@ -7,6 +7,7 @@ using System.Diagnostics.CodeAnalysis;
 using DroidNet.Mvvm;
 using DroidNet.Mvvm.Generators;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Input;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
@@ -47,13 +48,8 @@ public partial class DynamicTree : Control
     private const double DropReorderBand = 0.25;
     private static readonly TimeSpan HoverExpandDelay = TimeSpan.FromMilliseconds(600);
     private static readonly TimeSpan TypeAheadResetDelay = TimeSpan.FromMilliseconds(1000);
-    private static readonly Action<ILogger, Exception?> DropRejectedLog = LoggerMessage.Define(
-        LogLevel.Warning,
-        new EventId(0, nameof(DropRejectedLog)),
-        "The dynamic tree rejected a drop request.");
-
     private readonly DisplayedTreeItems displayed = new();
-    private ILogger? logger;
+    private ILogger logger = NullLogger<DynamicTree>.Instance;
 
     private DynamicTree? dragOwner;
     private List<ITreeItem>? draggedItems;
@@ -248,10 +244,7 @@ public partial class DynamicTree : Control
         }
         catch (Exception exception) when (exception is InvalidOperationException or ArgumentException)
         {
-            if (this.logger is ILogger logger)
-            {
-                DropRejectedLog(logger, exception);
-            }
+            this.LogDropRejected(exception);
 
             return DataPackageOperation.None;
         }
@@ -955,7 +948,7 @@ public partial class DynamicTree : Control
 
             this.LogFocusApplyAttempt(item, index, focusState, this.focusOperationPending);
             var result = await FocusManager.TryFocusAsync(focusTarget, focusState);
-            this.LogFocusResult(item, index, focusTarget.GetType().Name, result.Succeeded);
+            this.LogFocusResult(item, index, focusTarget, result.Succeeded);
         }
         finally
         {
@@ -1184,7 +1177,7 @@ public partial class DynamicTree : Control
         // A view model has one live tree; a tree it rejects shows no rows and follows none of its requests.
         if (this.ViewModel is not null && this.ViewModel.TryAttachTree(this))
         {
-            this.logger = this.ViewModel.LoggerFactory?.CreateLogger<DynamicTree>();
+            this.logger = this.ViewModel.LoggerFactory?.CreateLogger<DynamicTree>() ?? NullLogger<DynamicTree>.Instance;
 
             this.ViewModel.PropertyChanged += this.ViewModel_OnPropertyChanged;
             this.ViewModel.BringIntoViewRequested += this.ViewModel_OnBringIntoViewRequested;
@@ -1206,10 +1199,7 @@ public partial class DynamicTree : Control
         var hasPredicate = this.ViewModel.FilterPredicate is not null;
         var useFiltered = this.IsFilteringEnabled && hasPredicate;
 
-        this.LogDisplayedItemsSource(
-            isFilteringEnabled: this.IsFilteringEnabled,
-            hasPredicate: hasPredicate,
-            displayedSource: useFiltered ? nameof(DynamicTreeViewModel.FilteredItems) : nameof(DynamicTreeViewModel.ShownItems));
+        this.LogDisplayedItemsSource(hasPredicate, useFiltered);
 
         var displayedItems = useFiltered
             ? this.ViewModel.FilteredItems
@@ -1371,7 +1361,7 @@ public partial class DynamicTree : Control
         }
 
         args.Handled = true;
-        this.LogDoubleTapped(args.OriginalSource);
+        this.LogDoubleTapped();
         if (sender is FrameworkElement { DataContext: ITreeItem item })
         {
             this.ViewModel?.InvokeItem(item);

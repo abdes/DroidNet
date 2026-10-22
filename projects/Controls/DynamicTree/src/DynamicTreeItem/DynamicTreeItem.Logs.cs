@@ -21,11 +21,15 @@ public partial class DynamicTreeItem
     [Conditional("DEBUG")]
     private void LogItemMarginUpdated(double extraLeftMargin)
     {
-        if (this.logger is ILogger logger)
+        if (!this.logger.IsEnabled(LogLevel.Trace))
         {
-            var itemAdapter = this.ItemAdapter;
-            Debug.Assert(itemAdapter is not null, "ItemAdapter is null in LogItemMarginUpdated");
-            LogItemMarginUpdated(logger, itemAdapter.Label, itemAdapter.Depth, extraLeftMargin);
+            return;
         }
+
+        var itemAdapter = this.ItemAdapter;
+        Debug.Assert(itemAdapter is not null, "ItemAdapter is null in LogItemMarginUpdated");
+        var label = itemAdapter.Label;
+        var depth = itemAdapter.Depth;
+        LogItemMarginUpdated(this.logger, label, depth, extraLeftMargin);
     }
 }

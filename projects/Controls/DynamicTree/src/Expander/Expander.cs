@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Input;
@@ -56,7 +57,7 @@ public partial class Expander : Control
     /// </summary>
     public const string ActiveElement = "PART_ActiveElement";
 
-    private ILogger? logger;
+    private ILogger logger = NullLogger<Expander>.Instance;
 
     private UIElement? activeElement;
 

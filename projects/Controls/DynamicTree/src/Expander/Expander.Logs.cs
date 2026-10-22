@@ -21,9 +21,14 @@ public partial class Expander
     [Conditional("DEBUG")]
     private void LogToggle()
     {
-        if (this.logger is ILogger logger)
+        if (!this.logger.IsEnabled(LogLevel.Trace))
         {
-            LogToggle(logger, this.IsExpanded ? ExpandedVisualState : CollapsedVisualState, this.IsExpanded ? CollapsedVisualState : ExpandedVisualState);
+            return;
         }
+
+        var isExpanded = this.IsExpanded;
+        var before = isExpanded ? ExpandedVisualState : CollapsedVisualState;
+        var after = isExpanded ? CollapsedVisualState : ExpandedVisualState;
+        LogToggle(this.logger, before, after);
     }
 }
