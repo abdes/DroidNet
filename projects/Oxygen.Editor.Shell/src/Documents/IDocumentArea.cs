@@ -34,6 +34,12 @@ public interface IDocumentArea
     public event EventHandler<DocumentPlacedEventArgs>? Placed;
 
     /// <summary>
+    ///     Raised on the UI thread after <see cref="Documents"/> changes: a tab was added to this area, closed, or moved
+    ///     to another window.
+    /// </summary>
+    public event EventHandler? DocumentsChanged;
+
+    /// <summary>
     ///     Gets the documents that have a tab in this area.
     /// </summary>
     public IReadOnlyList<Document> Documents { get; }

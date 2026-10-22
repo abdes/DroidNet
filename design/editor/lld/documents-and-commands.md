@@ -49,7 +49,11 @@ Useful existing pieces:
   when a scene opens, and selects an already-open document. The editors belong
   to the project session's `IDocumentService`.
 - The Shell's `DocumentAreaViewModel` resolves the active editor view and
-  deactivates the leaving editor's view during document switches.
+  deactivates the leaving editor's view during document switches. It makes one
+  view per editor and shows that view again whenever its document becomes
+  active; when a document's tab closes or moves to another window
+  (`IDocumentArea.DocumentsChanged`), its view is released once it no longer
+  shows.
 - `SceneEditorViewModel` implements `IAsyncSaveable`, tracks document metadata,
   updates dirty state from the undo stack, and saves through its scene
   document, of the Scenes module's document kind.

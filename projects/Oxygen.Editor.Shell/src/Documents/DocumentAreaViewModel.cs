@@ -4,6 +4,7 @@
 
 using CommunityToolkit.Mvvm.ComponentModel;
 using DroidNet.Mvvm;
+using DroidNet.Mvvm.Converters;
 using DroidNet.Routing;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
@@ -18,6 +19,11 @@ namespace Oxygen.Editor.Shell.Documents;
 /// <remarks>
 ///     The session's document service owns the editors; the area only shows them. The view of the editor that leaves is deactivated
 ///     before the next one shows, so an editor that holds native surfaces releases them first.
+///     <para>
+///     The area makes one view per editor and shows it again whenever its document becomes active, for as long as the
+///     document has a tab in the window; the view of a document whose tab closed or moved to another window is released
+///     once it no longer shows (see <see cref="HostedViews"/>).
+///     </para>
 /// </remarks>
 [RetainedViewModel]
 public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposable
@@ -27,12 +33,14 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
     private readonly IDocumentArea area;
     private readonly IDocumentConfirmations confirmations;
     private readonly WindowId window;
-    private readonly IViewLocator viewLocator;
+    private readonly ViewModelToView viewConverter;
+    private readonly HostedViews views = new();
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "A view switch in flight releases the gate after Dispose; the gate holds no wait handle.")]
     private readonly SemaphoreSlim activeEditorViewGate = new(initialCount: 1, maxCount: 1);
 
     private long activeEditorViewRequestId;
+    private object? shownEditor;
     private bool disposed;
 
     /// <summary>
@@ -61,10 +69,11 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
         this.area = area;
         this.confirmations = confirmations;
         this.window = window;
-        this.viewLocator = viewLocator;
+        this.viewConverter = new ViewModelToView(viewLocator);
 
         this.area.ActiveEditorChanged += this.OnActiveEditorChanged;
         this.area.ActiveDocumentChanged += this.OnActiveDocumentChanged;
+        this.area.DocumentsChanged += this.OnDocumentsChanged;
         this.ActiveEditor = this.area.ActiveEditor;
         this.ObserveActiveDocument(this.area.ActiveDocument);
     }
@@ -84,6 +93,10 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
     /// <summary>
     ///     Stops following the area. The editors belong to the session's document service.
     /// </summary>
+    /// <remarks>
+    ///     The editors' views are not released here: the area is disposed with its window, while the window's XAML may
+    ///     be torn down, and releasing a view changes its <c>ViewModel</c> property.
+    /// </remarks>
     public void Dispose()
     {
         if (this.disposed)
@@ -94,11 +107,20 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
         this.disposed = true;
         this.area.ActiveEditorChanged -= this.OnActiveEditorChanged;
         this.area.ActiveDocumentChanged -= this.OnActiveDocumentChanged;
+        this.area.DocumentsChanged -= this.OnDocumentsChanged;
         this.ObserveActiveDocument(document: null);
         _ = Interlocked.Increment(ref this.activeEditorViewRequestId);
     }
 
     private void OnActiveEditorChanged(object? sender, EventArgs e) => this.ActiveEditor = this.area.ActiveEditor;
+
+    private void OnDocumentsChanged(object? sender, EventArgs e)
+    {
+        if (!this.disposed)
+        {
+            this.ReleaseClosedEditorViews();
+        }
+    }
 
     partial void OnActiveEditorChanged(object? value)
     {
@@ -141,15 +163,11 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
 
             if (value is null)
             {
-                this.ActiveEditorView = null;
+                this.ShowEditorView(editor: null, view: null);
                 return;
             }
 
-            var view = this.viewLocator.ResolveView(value);
-            if (view is IViewFor nonGeneric)
-            {
-                nonGeneric.ViewModel = value;
-            }
+            var view = this.views.GetOrCreate(value, this.viewConverter);
 
             if (!this.IsCurrent(value, requestId))
             {
@@ -161,13 +179,27 @@ public sealed partial class DocumentAreaViewModel : ObservableObject, IDisposabl
                 return;
             }
 
-            this.ActiveEditorView = view;
+            this.ShowEditorView(value, view);
         }
         finally
         {
             _ = this.activeEditorViewGate.Release();
         }
     }
+
+    private void ShowEditorView(object? editor, object? view)
+    {
+        this.ActiveEditorView = view;
+        this.shownEditor = editor;
+        this.ReleaseClosedEditorViews();
+    }
+
+    /// <summary>
+    ///     Releases the views of editors whose documents no longer have a tab in this area, except the view still shown,
+    ///     which goes once the next view replaces it.
+    /// </summary>
+    private void ReleaseClosedEditorViews()
+        => this.views.RetainOnly(this.area.Documents.Select(this.documents.EditorOf).Append(this.shownEditor));
 
     private bool IsCurrent(object? value, long requestId)
         => !this.disposed && requestId == Volatile.Read(ref this.activeEditorViewRequestId) && ReferenceEquals(value, this.ActiveEditor);

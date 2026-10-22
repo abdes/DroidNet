@@ -97,6 +97,9 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
     /// <inheritdoc/>
     public event EventHandler<DocumentPlacedEventArgs>? Placed;
 
+    /// <inheritdoc/>
+    public event EventHandler? DocumentsChanged;
+
     /// <summary>
     ///     Raised when a document's tab is added to this area, opened or moved here, before it is selected.
     /// </summary>
@@ -401,6 +404,7 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
         if (args.WindowId == this.window && args.Metadata is DocumentTab tab && this.shown.Contains(tab))
         {
             this.TabAdded?.Invoke(this, new DocumentTabEventArgs(tab));
+            this.DocumentsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -411,6 +415,7 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
         {
             this.shown.Add(tab);
             this.TabAdded?.Invoke(this, new DocumentTabEventArgs(tab));
+            this.DocumentsChanged?.Invoke(this, EventArgs.Empty);
             this.LogTabMoved(tab.Document.Title, entered: true);
         }
     }
@@ -429,6 +434,7 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
         }
 
         this.TabRemoved?.Invoke(this, new DocumentTabEventArgs(tab));
+        this.DocumentsChanged?.Invoke(this, EventArgs.Empty);
         this.LogTabMoved(tab.Document.Title, entered: false);
     }
 
@@ -454,6 +460,7 @@ public sealed partial class DocumentArea : IDocumentArea, IDisposable
         }
 
         this.TabRemoved?.Invoke(this, new DocumentTabEventArgs(tab));
+        this.DocumentsChanged?.Invoke(this, EventArgs.Empty);
         tab.Dispose();
 
         this.LogDocumentClosed(tab.Document.Kind.Name, tab.Document.Title, tab.Document.IsDirty);

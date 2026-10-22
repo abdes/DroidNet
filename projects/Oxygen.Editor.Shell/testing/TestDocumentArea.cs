@@ -34,6 +34,9 @@ public sealed class TestDocumentArea : IDocumentArea
     public event EventHandler? ActiveEditorChanged;
 
     /// <inheritdoc/>
+    public event EventHandler? DocumentsChanged;
+
+    /// <inheritdoc/>
     /// <remarks>Never raised: this area does not open documents.</remarks>
     public event EventHandler<DocumentPlacedEventArgs>? Placed
     {
@@ -71,6 +74,7 @@ public sealed class TestDocumentArea : IDocumentArea
         if (!this.documents.Contains(document))
         {
             this.documents.Add(document);
+            this.DocumentsChanged?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -81,6 +85,7 @@ public sealed class TestDocumentArea : IDocumentArea
         if (document is not null && !this.documents.Contains(document))
         {
             this.documents.Add(document);
+            this.DocumentsChanged?.Invoke(this, EventArgs.Empty);
         }
 
         this.ActiveDocument = document;
@@ -117,11 +122,17 @@ public sealed class TestDocumentArea : IDocumentArea
     /// <inheritdoc/>
     public Task<bool> CloseAsync(Document document, bool force = false)
     {
-        _ = this.documents.Remove(document);
+        if (!this.documents.Remove(document))
+        {
+            return Task.FromResult(true);
+        }
+
         if (ReferenceEquals(this.ActiveDocument, document))
         {
             this.Activate(document: null);
         }
+
+        this.DocumentsChanged?.Invoke(this, EventArgs.Empty);
 
         return Task.FromResult(true);
     }
