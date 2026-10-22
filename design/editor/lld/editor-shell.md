@@ -67,11 +67,14 @@ Not built yet:
   ([#89](https://github.com/abdes/DroidNet/issues/89)).
 - `WindowPlacement` has only `Current`
   ([#90](https://github.com/abdes/DroidNet/issues/90)).
-- The context service, the activity service, the clipboard and drag service,
-  context-menu contributions and Aura's per-window dialog gate (Aura's
-  `DialogService` has one gate for the process)
-  ([#91](https://github.com/abdes/DroidNet/issues/91)); the clipboard commands'
-  behavior is [#86](https://github.com/abdes/DroidNet/issues/86).
+- The activity service, the clipboard and drag service, context-menu
+  contributions and Aura's per-window dialog gate (Aura's `DialogService` has
+  one gate for the process)
+  ([#91](https://github.com/abdes/DroidNet/issues/91)).
+- The context service, the `Rename` and `Duplicate` commands and the Delete
+  gesture, the sources tree's and the scene viewport's handling of the editing
+  commands, and the active part's visual
+  ([#86](https://github.com/abdes/DroidNet/issues/86)).
 - Panels across windows, with the panel registry and `IPanelHost`
   ([#88](https://github.com/abdes/DroidNet/issues/88)).
 - Notifications ([#92](https://github.com/abdes/DroidNet/issues/92)).
