@@ -9,9 +9,8 @@ owner's order from section 3; the LLD gaps of section 2 start once their
 dependencies are closed. An item is `done` only when the done gate of section 6
 holds; its row then names the commit.
 
-**Next: item 6 (#94)**, session services own their project scope
-([section 3](#3-blocking-issues)): session services take a `ProjectContext` per call,
-so project and scope ownership are settled before the new work.
+**Next: item 7 (#95)**, Scene Explorer history without `UndoRedo`
+([section 3](#3-blocking-issues)): the Inherit edits need correct history.
 
 | Order | Item                                                 | Needs        | State | Commit    |
 | ----- | ---------------------------------------------------- | ------------ | ----- | --------- |
@@ -20,7 +19,7 @@ so project and scope ownership are settled before the new work.
 | 3     | #77 slice 77.2: scene component schema and generator | 2            | done  | 4c4e10dec |
 | 4     | #77 slice 77.3: node components in the editor        | 3            | done  | 5069bfa45 |
 | 5     | #77 slice 77.4: slot model removed                   | 4            | done  | 2dba3ac84 |
-| 6     | #94 session services own their project scope         | -            | open  | -         |
+| 6     | #94 session services own their project scope         | -            | done  | b5f0cccb2 |
 | 7     | #95 Scene Explorer history without `UndoRedo`        | -            | open  | -         |
 | 8     | #74 one view per view model per host                 | -            | open  | -         |
 | 9     | #76 LivePreview leaves Ready on engine fault         | -            | open  | -         |
