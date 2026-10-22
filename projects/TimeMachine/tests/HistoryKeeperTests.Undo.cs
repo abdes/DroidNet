@@ -82,14 +82,11 @@ public partial class HistoryKeeperTests
         var historyKeeper = UndoRedo.Default[new object()];
         historyKeeper.AddChange(new Mock<IChange>().Object);
 
-        const HistoryKeeper.States initialState = HistoryKeeper.States.Redoing; // Set an initial state
-        historyKeeper.State = initialState;
-
         // Act
         historyKeeper.Undo();
 
         // Assert
-        _ = historyKeeper.State.Should().Be(initialState);
+        _ = historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
     }
 
     [TestMethod]
@@ -102,15 +99,12 @@ public partial class HistoryKeeperTests
         _ = change.Setup(cs => cs.Apply()).Throws<Exception>();
         historyKeeper.AddChange(change.Object);
 
-        const HistoryKeeper.States initialState = HistoryKeeper.States.Redoing; // Set an initial state
-        historyKeeper.State = initialState;
-
         // Act
         var undone = historyKeeper.Undo();
 
         // Assert
         _ = undone.Should().BeFalse();
-        _ = historyKeeper.State.Should().Be(initialState);
+        _ = historyKeeper.State.Should().Be(HistoryKeeper.States.Idle);
         change.Verify(cs => cs.Apply(), Times.Once);
         _ = historyKeeper.RedoStack.Should().BeEmpty();
     }
