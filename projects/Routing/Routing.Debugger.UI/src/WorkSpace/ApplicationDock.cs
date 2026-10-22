@@ -29,10 +29,4 @@ public partial class ApplicationDock : SingleItemDock
     /// Gets the ViewModel of the first dockable in the dock.
     /// </summary>
     public object? ApplicationViewModel => this.Dockables.FirstOrDefault()?.ViewModel;
-
-    /// <summary>
-    /// Creates a new instance of the <see cref="ApplicationDock"/> class.
-    /// </summary>
-    /// <returns>A new instance of <see cref="ApplicationDock"/> if successful; otherwise, null.</returns>
-    public static new ApplicationDock? New() => Factory.CreateDock(typeof(ApplicationDock)) as ApplicationDock;
 }

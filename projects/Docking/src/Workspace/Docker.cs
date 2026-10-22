@@ -21,6 +21,10 @@ namespace DroidNet.Docking.Workspace;
 /// <para>
 /// This class also handles the layout changes and triggers events to notify when the layout is updated.
 /// </para>
+/// <para>
+/// Each docker owns the docks and dockables it creates: their identifiers are unique within it, so several dockers, one per
+/// window, can use the same dockable identifiers at the same time.
+/// </para>
 /// </remarks>
 /// <example>
 /// <para>
@@ -28,7 +32,7 @@ namespace DroidNet.Docking.Workspace;
 /// </para>
 /// <code><![CDATA[
 /// var docker = new Docker();
-/// var centerDock = CenterDock.New();
+/// var centerDock = docker.CreateDock<CenterDock>();
 /// var anchor = new Anchor(AnchorPosition.Center);
 /// docker.Dock(centerDock, anchor);
 /// ]]></code>
@@ -96,6 +100,7 @@ public partial class Docker : IDocker
             /* Dispose of managed resources */
             this.root.Dispose();
             this.center.Dispose(); // For completeness, but should have been disposed of already in the root
+            this.DisposeDockables();
         }
 
         /* Dispose of unmanaged resources */

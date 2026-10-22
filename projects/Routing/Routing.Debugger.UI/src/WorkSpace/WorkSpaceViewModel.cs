@@ -192,21 +192,10 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
 
     private void LoadApp(object viewModel)
     {
-        this.centerDock = ApplicationDock.New() ?? throw new ContentLoadingException(
-            $"could not create a dock to load content for route `{this.activeRoute!.Config.Path}`")
-        {
-            OutletName = DebuggerConstants.AppOutletName,
-            ViewModel = viewModel,
-        };
+        this.centerDock = this.docker.CreateDock<ApplicationDock>();
 
         // Dock at the center
-        var dockable = Dockable.New(DebuggerConstants.AppOutletName) ??
-                       throw new ContentLoadingException(
-                           $"could not create a dockable object while loading content for route `{this.activeRoute!.Config.Path}`")
-                       {
-                           OutletName = DebuggerConstants.AppOutletName,
-                           ViewModel = viewModel,
-                       };
+        var dockable = this.docker.CreateDockable<Dockable>(DebuggerConstants.AppOutletName);
         dockable.ViewModel = viewModel;
         this.centerDock.AdoptDockable(dockable);
 
@@ -234,7 +223,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
              */
 
             var dockableActiveRoute = this.activeRoute!.Children.First(c => c.Outlet == dockableId);
-            var dockable = RoutedDockable.New(dockableId, dockableActiveRoute);
+            var dockable = this.docker.CreateDockable<RoutedDockable>(dockableId, dockableActiveRoute);
 
             this.deferredDockables.Add(dockable);
         }
@@ -303,7 +292,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
 
         // Find the relative dock, it must have been already created above, or the ID used for the
         // anchor is invalid.
-        var relativeDockable = Dockable.FromId(dockingInfo.AnchorId);
+        var relativeDockable = this.docker.FindDockable(dockingInfo.AnchorId);
         if (relativeDockable == null)
         {
             // Log an error
@@ -318,7 +307,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
 
     private void DockToRoot(Dockable dockable, RoutedDockable.DockingInfo dockingInfo)
     {
-        var dock = ToolDock.New();
+        var dock = this.docker.CreateDock<ToolDock>();
         dock.AdoptDockable(dockable);
         var anchor = new Anchor(dockingInfo.Position);
         try
@@ -355,7 +344,7 @@ public partial class WorkSpaceViewModel : IOutletContainer, IRoutingAware, IDisp
             var anchor = new Anchor(dockingInfo.Position, relativeDockable);
             try
             {
-                var dock = ToolDock.New();
+                var dock = this.docker.CreateDock<ToolDock>();
                 dock.AdoptDockable(dockable);
                 this.docker.Dock(dock, anchor, dockingInfo.IsMinimized);
                 anchor = null;

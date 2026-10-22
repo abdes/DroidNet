@@ -43,7 +43,7 @@ public partial class DockerTests : TestSuiteWithAssertions
         {
             // Setup
             using var anchorDock = new SimpleDock();
-            anchorDock.AdoptDockable(Dockable.New("anchor"));
+            anchorDock.AdoptDockable(this.sut.CreateDockable<Dockable>("anchor"));
             using var anchor = new AnchorLeft(anchorDock.Dockables[0]);
 
             using var dock = new SimpleDock();
@@ -66,7 +66,7 @@ public partial class DockerTests : TestSuiteWithAssertions
         // Setup
         using var anchorDock = new SimpleDock();
         this.sut.Dock(anchorDock, new AnchorLeft());
-        anchorDock.AdoptDockable(Dockable.New("anchor"));
+        anchorDock.AdoptDockable(this.sut.CreateDockable<Dockable>("anchor"));
         using var anchor = new AnchorLeft(anchorDock.Dockables[0]);
         using var dock = new SimpleDock();
 

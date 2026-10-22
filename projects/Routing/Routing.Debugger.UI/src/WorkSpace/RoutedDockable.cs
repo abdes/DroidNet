@@ -46,15 +46,6 @@ internal sealed partial class RoutedDockable : Dockable
     internal DockingInfo DeferredDockingInfo { get; }
 
     /// <summary>
-    /// Creates a new instance of the <see cref="RoutedDockable"/> class.
-    /// </summary>
-    /// <param name="id">A unique identifier for the <see cref="RoutedDockable"/>.</param>
-    /// <param name="route">The active route providing the parameters for this dockable.</param>
-    /// <returns>A new instance of the <see cref="RoutedDockable"/> class.</returns>
-    internal static RoutedDockable New(string id, IActiveRoute route)
-        => (RoutedDockable)Factory.CreateDockable(typeof(RoutedDockable), id, route);
-
-    /// <summary>
     /// Contains information abot a dockable's docking position and state.
     /// </summary>
     internal readonly record struct DockingInfo

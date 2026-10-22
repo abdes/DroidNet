@@ -25,7 +25,7 @@ public sealed class DockingPlacementService(IDocumentArea area, IDocker docker, 
     public Task<bool> ShowPanelAsync(string panelId, WindowPlacement placement = WindowPlacement.Current)
     {
         ArgumentException.ThrowIfNullOrEmpty(panelId);
-        if (Dockable.FromId(panelId) is not { Owner: { } dock } dockable)
+        if (docker.FindDockable(panelId) is not { Owner: { } dock } dockable)
         {
             return Task.FromResult(false);
         }
@@ -39,7 +39,7 @@ public sealed class DockingPlacementService(IDocumentArea area, IDocker docker, 
     public async Task<bool> ShowPanelsAsync(IReadOnlyList<string> panelIds, WindowPlacement placement = WindowPlacement.Current)
     {
         ArgumentNullException.ThrowIfNull(panelIds);
-        var dockables = panelIds.Select(Dockable.FromId).ToArray();
+        var dockables = panelIds.Select(docker.FindDockable).ToArray();
         for (var index = 0; index < dockables.Length - 1; index++)
         {
             if (dockables[index] is { } earlier && dockables.Skip(index + 1).Any(later => later is not null && ReferenceEquals(later.Owner, earlier.Owner)))
@@ -62,7 +62,7 @@ public sealed class DockingPlacementService(IDocumentArea area, IDocker docker, 
     {
         ArgumentException.ThrowIfNullOrEmpty(panelId);
         contributions.SetTitle(panelId, title);
-        if (Dockable.FromId(panelId) is { } dockable)
+        if (docker.FindDockable(panelId) is { } dockable)
         {
             dockable.Title = title;
         }
@@ -76,7 +76,7 @@ public sealed class DockingPlacementService(IDocumentArea area, IDocker docker, 
         }
 
         shared.DisownDockable(dockable);
-        var dock = ToolDock.New();
+        var dock = docker.CreateDock<ToolDock>();
         dock.AdoptDockable(dockable);
         var anchor = new Anchor(AnchorPosition.Right);
         try

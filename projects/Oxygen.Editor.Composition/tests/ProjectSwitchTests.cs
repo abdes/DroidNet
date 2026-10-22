@@ -5,6 +5,7 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.Composition;
+using DroidNet.Docking;
 using DryIoc;
 using Oxygen.Editor.Composition.UI.Tests.TestSupport;
 using Oxygen.Editor.Data;
@@ -13,6 +14,7 @@ using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Editor.Scenes.Interaction;
 using Oxygen.Editor.Scenes.Nodes;
 using Oxygen.Editor.Shell.Documents;
+using Oxygen.Editor.Shell.Windows;
 
 namespace Oxygen.Editor.Composition.UI.Tests;
 
@@ -20,6 +22,7 @@ namespace Oxygen.Editor.Composition.UI.Tests;
 ///     Switching projects closes the project's session, with its workspace window, and opens another session and window.
 ///     The session's global history and the preferences stored per project are the next project's own, and the session's
 ///     state database contexts end with it; the gizmo preferences, kept across projects, are the editor's (spec 6.2).
+///     The previous and the next workspace windows, open together during the switch, each have their own panels.
 /// </summary>
 [TestClass]
 [ExcludeFromCodeCoverage]
@@ -100,6 +103,28 @@ public sealed class ProjectSwitchTests
     }
 
     [TestMethod]
+    public async Task SwitchProject_WhileThePreviousWorkspaceIsOpen_EachWindowHasItsOwnPanels()
+    {
+        // Arrange: the router activates the next workspace before the previous window closes, and both use the same
+        // panel ids.
+        await using var scopes = await EditorScopes.CreateAsync().ConfigureAwait(false);
+        var previous = scopes.CreateWindow(scopes.CreateSession());
+        var next = scopes.CreateWindow(scopes.CreateSession());
+        var previousLog = DockMinimizedPanel(previous, "log");
+        var nextLog = DockMinimizedPanel(next, "log");
+
+        // Act
+        var shown = await next.Resolver.Resolve<IPlacementService>().ShowPanelAsync("log").ConfigureAwait(false);
+
+        // Assert
+        _ = shown.Should().BeTrue();
+        _ = next.Resolver.Resolve<IDocker>().FindDockable("log").Should().BeSameAs(nextLog);
+        _ = previous.Resolver.Resolve<IDocker>().FindDockable("log").Should().BeSameAs(previousLog);
+        _ = nextLog.Owner!.State.Should().Be(DockingState.Pinned);
+        _ = previousLog.Owner!.State.Should().Be(DockingState.Minimized);
+    }
+
+    [TestMethod]
     public async Task SwitchProject_GizmoPreferences_AreTheEditors()
     {
         // Arrange
@@ -130,5 +155,25 @@ public sealed class ProjectSwitchTests
         _ = ProjectPreferences.Where(type => ScopeRegistrations.CanProvide(scopes.Root, type, serviceKey: null)).Should().BeEmpty();
         _ = ScopeRegistrations.CanProvide(scopes.Root, typeof(IEditorSettingsManager), nameof(PreviewSettingsService)).Should().BeFalse();
         _ = ProjectPreferences.Where(type => !ScopeTopology.Owned(session).Any(registration => registration.ServiceType == type)).Should().BeEmpty();
+    }
+
+    private static Dockable DockMinimizedPanel(ScopeHandle window, string panelId)
+    {
+        var docker = window.Resolver.Resolve<IDocker>();
+        var dock = docker.CreateDock<ToolDock>();
+        var panel = docker.CreateDockable<Dockable>(panelId);
+        dock.AdoptDockable(panel);
+        var anchor = new AnchorBottom();
+        try
+        {
+            docker.Dock(dock, anchor, minimized: true);
+            anchor = null;
+        }
+        finally
+        {
+            anchor?.Dispose();
+        }
+
+        return panel;
     }
 }

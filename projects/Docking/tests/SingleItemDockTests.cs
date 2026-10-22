@@ -4,33 +4,33 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using AwesomeAssertions.Execution;
+using DroidNet.Docking.Workspace;
 
 namespace DroidNet.Docking.Tests;
 
 [TestClass]
 [ExcludeFromCodeCoverage]
 [TestCategory(nameof(SingleItemDock))]
-public class SingleItemDockTests
+public sealed class SingleItemDockTests : IDisposable
 {
-    private readonly Dockable dockable1
-        = Dockable.New("dockable1") ?? throw new AssertionFailedException("could not allocate a new object");
+    private readonly Docker docker = new();
+    private readonly Dockable dockable1;
+    private readonly Dockable dockable2;
 
-    private readonly Dockable dockable2
-        = Dockable.New("dockable2") ?? throw new AssertionFailedException("could not allocate a new object");
+    public SingleItemDockTests()
+    {
+        this.dockable1 = this.docker.CreateDockable<Dockable>("dockable1");
+        this.dockable2 = this.docker.CreateDockable<Dockable>("dockable2");
+    }
 
     [TestCleanup]
-    public void Dispose()
-    {
-        this.dockable1.Dispose();
-        this.dockable2.Dispose();
-    }
+    public void Dispose() => this.docker.Dispose();
 
     [TestMethod]
     public void AddDockable_WhenDockIsEmpty_ShouldAddDockable()
     {
         // Arrange
-        var dock = SingleItemDock.New() ?? throw new AssertionFailedException("could not allocate a new object");
+        var dock = this.docker.CreateDock<SingleItemDock>();
 
         // Act
         dock.AdoptDockable(this.dockable1);
@@ -48,8 +48,7 @@ public class SingleItemDockTests
         var act = () =>
         {
             // Arrange
-            using var dock = SingleItemDock.New() ??
-                             throw new AssertionFailedException("could not allocate a new object");
+            using var dock = this.docker.CreateDock<SingleItemDock>();
             dock.AdoptDockable(this.dockable1);
 
             // Act

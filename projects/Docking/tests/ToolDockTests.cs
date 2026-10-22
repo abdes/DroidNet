@@ -4,6 +4,7 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using DroidNet.Docking.Workspace;
 
 namespace DroidNet.Docking.Tests;
 
@@ -16,7 +17,8 @@ public class ToolDockTests
     public void CanCreate()
     {
         // Arrange / Act
-        using var dock = ToolDock.New();
+        using var docker = new Docker();
+        using var dock = docker.CreateDock<ToolDock>();
 
         // Assert
         _ = dock.Should().NotBeNull();

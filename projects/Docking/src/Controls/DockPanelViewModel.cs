@@ -7,7 +7,6 @@ using System.ComponentModel;
 using System.Diagnostics;
 using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
-using CommunityToolkit.Mvvm.Messaging;
 using DroidNet.Docking.Detail;
 using Windows.Foundation;
 
@@ -117,11 +116,9 @@ public partial class DockPanelViewModel : ObservableRecipient
     /// </summary>
     /// <remarks>
     /// This method registers the view model to listen for docking mode messages.
-    /// It ensures that the view model can participate in docking maneuvers by handling
-    /// <see cref="EnterDockingModeMessage"/> and <see cref="LeaveDockingModeMessage"/>.
+    /// It ensures that the view model can participate in the docking maneuvers of its docker by handling
+    /// <see cref="IDocker.DockingModeChanged"/>.
     /// </remarks>
-    /// <seealso cref="EnterDockingModeMessage"/>
-    /// <seealso cref="LeaveDockingModeMessage"/>
     protected override void OnActivated()
     {
         base.OnActivated();
@@ -129,18 +126,15 @@ public partial class DockPanelViewModel : ObservableRecipient
         this.dock.PropertyChanged += this.OnDockPropertyChanged;
         this.ActiveDockable = this.dock.ActiveDockable;
 
-        // Listen for the docking mode messages to participate during a docking maneuver.
-        StrongReferenceMessenger.Default.Register<EnterDockingModeMessage>(
-            this,
-            (_, message) => this.EnterDockingMode(message.Value));
-        StrongReferenceMessenger.Default.Register<LeaveDockingModeMessage>(this, this.LeaveDockingMode);
+        // Listen for the docker's docking maneuvers to participate in them.
+        this.docker.DockingModeChanged += this.OnDockingModeChanged;
     }
 
     /// <inheritdoc/>
     protected override void OnDeactivated()
     {
         this.dock.PropertyChanged -= this.OnDockPropertyChanged;
-        StrongReferenceMessenger.Default.UnregisterAll(this);
+        this.docker.DockingModeChanged -= this.OnDockingModeChanged;
         base.OnDeactivated();
     }
 
@@ -168,18 +162,18 @@ public partial class DockPanelViewModel : ObservableRecipient
     /// Toggles the docking mode.
     /// </summary>
     /// <remarks>
-    /// This command toggles the docking mode for the dock panel. If the panel is in docking mode, it sends a <see cref="LeaveDockingModeMessage"/>; otherwise, it sends an <see cref="EnterDockingModeMessage"/>.
+    /// This command toggles the docking mode for the dock panel. If the panel is in docking mode, it ends the docker's docking maneuver; otherwise, it starts one for its dock.
     /// </remarks>
     [RelayCommand(CanExecute = nameof(CanToggleDockingMode))]
     private void ToggleDockingMode()
     {
         if (this.IsInDockingMode)
         {
-            _ = StrongReferenceMessenger.Default.Send(new LeaveDockingModeMessage());
+            this.docker.LeaveDockingMode();
         }
         else
         {
-            _ = StrongReferenceMessenger.Default.Send(new EnterDockingModeMessage(this.dock));
+            this.docker.EnterDockingMode(this.dock);
         }
     }
 
@@ -235,7 +229,19 @@ public partial class DockPanelViewModel : ObservableRecipient
         }
     }
 
-    private void LeaveDockingMode(object recipient, LeaveDockingModeMessage message)
+    private void OnDockingModeChanged(object? sender, DockingModeChangedEventArgs args)
+    {
+        if (args.DockBeingDocked is { } forDock)
+        {
+            this.EnterDockingMode(forDock);
+        }
+        else
+        {
+            this.LeaveDockingMode();
+        }
+    }
+
+    private void LeaveDockingMode()
     {
         this.IsBeingDocked = false;
         this.IsInDockingMode = false;
@@ -283,12 +289,13 @@ public partial class DockPanelViewModel : ObservableRecipient
     /// Closes the dock.
     /// </summary>
     /// <remarks>
-    /// This command closes the dock by calling the <see cref="IDocker.CloseDock"/> method and unregisters all messages for this ViewModel.
+    /// This command closes the dock by calling the <see cref="IDocker.CloseDock"/> method, after it stops listening to the
+    /// docker's docking maneuvers.
     /// </remarks>
     [RelayCommand(CanExecute = nameof(CanClose))]
     private void Close()
     {
-        StrongReferenceMessenger.Default.UnregisterAll(this);
+        this.docker.DockingModeChanged -= this.OnDockingModeChanged;
         this.docker.CloseDock(this.dock);
     }
 

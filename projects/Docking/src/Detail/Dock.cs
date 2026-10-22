@@ -14,17 +14,11 @@ namespace DroidNet.Docking.Detail;
 /// Represents a Dock, which holds a <see cref="Dockable"/>, and must be inside a <see cref="LayoutDockGroup"/>.
 /// </summary>
 /// <remarks>
-/// <para>
-/// Dock is an abstract type. Instances of a concrete `Dock` can only be created through its <see cref="Factory"/>, to ensure
-/// that each one of them has a unique ID.
-/// </para>
-/// <para>
-/// The <c>Factory</c> itself is for internal use only. However, each concrete `Dock` class will offer a simple and straightforward
-/// way to create instances of that specific type. Internally, the implementation will have to use the <c>Factory</c>.
-/// </para>
+/// Dock is an abstract type. Instances of a concrete `Dock` are created by <see cref="IDocker.CreateDock{TDock}" />, which
+/// gives each one an ID unique in that docker.
 /// <example>
 /// <code><![CDATA[
-/// var dock = ToolDock.New();
+/// var dock = docker.CreateDock<ToolDock>();
 /// ]]></code>
 /// </example>
 /// </remarks>
@@ -73,7 +67,7 @@ public abstract partial class Dock : ObservableObject, IDock
     public DockingState State { get; internal set; } = DockingState.Undocked;
 
     /// <inheritdoc/>
-    public DockId Id { get; private set; }
+    public DockId Id { get; internal set; }
 
     /// <inheritdoc/>
     public IDocker? Docker { get; internal set; }

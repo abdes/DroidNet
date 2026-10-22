@@ -299,9 +299,9 @@ public sealed partial class CookingPanelControlTests : VisualUserInterfaceTests
         using var session = CreateSession();
         using var model = CreateModel(session, runService: runs);
         using var docker = new Docker();
-        var dock = ToolDock.New();
-        var browser = Dockable.New(Guid.NewGuid().ToString("N"));
-        var cooking = Dockable.New(Guid.NewGuid().ToString("N"));
+        var dock = docker.CreateDock<ToolDock>();
+        var browser = docker.CreateDockable<Dockable>("browser");
+        var cooking = docker.CreateDockable<Dockable>("cooking");
         var browserView = new TextBlock { Text = "Content Explorer" };
         var cookingView = new CookingPanelView { ViewModel = model };
         browser.ViewModel = browserView;

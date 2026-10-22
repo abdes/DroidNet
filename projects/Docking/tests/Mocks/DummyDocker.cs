@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.Diagnostics.CodeAnalysis;
+using DroidNet.Docking.Detail;
 
 namespace DroidNet.Docking.Tests.Mocks;
 
@@ -18,7 +19,13 @@ public partial class DummyDocker : IDocker
     /// <inheritdoc/>
     public event EventHandler<LayoutChangedEventArgs>? LayoutChanged;
 
+    /// <inheritdoc/>
+    public event EventHandler<DockingModeChangedEventArgs>? DockingModeChanged;
+
 #pragma warning restore CS0067 // Event is never used
+
+    /// <inheritdoc/>
+    public IReadOnlyCollection<Dockable> Dockables => [];
 
     /// <inheritdoc/>
     public void Dispose()
@@ -50,6 +57,25 @@ public partial class DummyDocker : IDocker
 
     /// <inheritdoc/>
     public void CloseDock(IDock dock) => throw new NotSupportedException();
+
+    /// <inheritdoc/>
+    public Dockable? FindDockable(string id) => throw new NotSupportedException();
+
+    /// <inheritdoc/>
+    public TDock CreateDock<TDock>(params object[] args)
+        where TDock : Dock
+        => throw new NotSupportedException();
+
+    /// <inheritdoc/>
+    public TDockable CreateDockable<TDockable>(string id, params object[] args)
+        where TDockable : Dockable
+        => throw new NotSupportedException();
+
+    /// <inheritdoc/>
+    public void EnterDockingMode(IDock dock) => throw new NotSupportedException();
+
+    /// <inheritdoc/>
+    public void LeaveDockingMode() => throw new NotSupportedException();
 
     protected virtual void Dispose(bool disposing)
     {

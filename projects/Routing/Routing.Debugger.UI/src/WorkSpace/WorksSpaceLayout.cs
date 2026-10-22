@@ -271,7 +271,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
     {
         Debug.Assert(this.ActiveRoute is not null, "expecting to have an active route");
 
-        foreach (var dockable in Dockable.All)
+        foreach (var dockable in this.docker.Dockables)
         {
             var dock = dockable.Owner;
             Debug.Assert(
@@ -327,7 +327,7 @@ public sealed partial class WorkSpaceLayout : ObservableObject, IDisposable
 
         changes.AddRange(
             from dockableRoute in this.ActiveRoute.Children
-            where Dockable.FromId(dockableRoute.Outlet) == null
+            where this.docker.FindDockable(dockableRoute.Outlet) == null
             select new RouteChangeItem()
             {
                 ChangeAction = RouteChangeAction.Delete,

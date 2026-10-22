@@ -27,6 +27,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
 
     private readonly IDisposable routerEventsSub;
     private readonly IRouter router;
+    private readonly IDocker docker;
     private readonly ILogger logger;
     private IDisposable? layoutChangedSub;
 
@@ -48,6 +49,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
         this.logger = loggerFactory?.CreateLogger<DockingWorkspaceLayout>() ?? NullLogger<DockingWorkspaceLayout>.Instance;
 
         this.router = router;
+        this.docker = docker;
 
         var layout = new GridFlowLayout(dockViewFactory);
 
@@ -259,7 +261,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
     {
         Debug.Assert(this.ActiveRoute is not null, "expecting to have an active route");
 
-        foreach (var dockable in Dockable.All)
+        foreach (var dockable in this.docker.Dockables)
         {
             var dock = dockable.Owner;
             Debug.Assert(
@@ -315,7 +317,7 @@ public sealed partial class DockingWorkspaceLayout : ObservableObject, IDisposab
 
         changes.AddRange(
             from dockableRoute in this.ActiveRoute.Children
-            where Dockable.FromId(dockableRoute.Outlet) == null
+            where this.docker.FindDockable(dockableRoute.Outlet) == null
             select new RouteChangeItem()
             {
                 ChangeAction = RouteChangeAction.Delete,

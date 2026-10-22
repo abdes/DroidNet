@@ -20,26 +20,26 @@ public class LayoutEngineTests : VerifyBase
     {
         using var docker = new Docker();
 
-        docker.Dock(CenterDock.New(), new Anchor(AnchorPosition.Center));
+        docker.Dock(docker.CreateDock<CenterDock>(), new Anchor(AnchorPosition.Center));
 
-        using var left1 = ToolDock.New();
-        left1.AdoptDockable(Dockable.New("left1"));
+        using var left1 = docker.CreateDock<ToolDock>();
+        left1.AdoptDockable(docker.CreateDockable<Dockable>("left1"));
         docker.Dock(left1, new AnchorLeft());
 
-        using var left2 = ToolDock.New();
-        left2.AdoptDockable(Dockable.New("left2"));
+        using var left2 = docker.CreateDock<ToolDock>();
+        left2.AdoptDockable(docker.CreateDockable<Dockable>("left2"));
         docker.Dock(left2, new AnchorBottom(left1.Dockables[0]));
 
-        docker.Dock(ToolDock.New(), new AnchorLeft(), minimized: true);
-        docker.Dock(ToolDock.New(), new AnchorLeft());
-        docker.Dock(ToolDock.New(), new AnchorTop());
-        docker.Dock(ToolDock.New(), new AnchorBottom(), minimized: true);
+        docker.Dock(docker.CreateDock<ToolDock>(), new AnchorLeft(), minimized: true);
+        docker.Dock(docker.CreateDock<ToolDock>(), new AnchorLeft());
+        docker.Dock(docker.CreateDock<ToolDock>(), new AnchorTop());
+        docker.Dock(docker.CreateDock<ToolDock>(), new AnchorBottom(), minimized: true);
 
-        using var right1 = ToolDock.New();
-        right1.AdoptDockable(Dockable.New("right1"));
+        using var right1 = docker.CreateDock<ToolDock>();
+        right1.AdoptDockable(docker.CreateDockable<Dockable>("right1"));
         docker.Dock(right1, new AnchorRight());
-        docker.Dock(ToolDock.New(), new Anchor(AnchorPosition.Right, right1.Dockables[0]));
-        docker.Dock(ToolDock.New(), new Anchor(AnchorPosition.Bottom, right1.Dockables[0]));
+        docker.Dock(docker.CreateDock<ToolDock>(), new Anchor(AnchorPosition.Right, right1.Dockables[0]));
+        docker.Dock(docker.CreateDock<ToolDock>(), new Anchor(AnchorPosition.Bottom, right1.Dockables[0]));
 
         docker.DumpWorkspace();
 

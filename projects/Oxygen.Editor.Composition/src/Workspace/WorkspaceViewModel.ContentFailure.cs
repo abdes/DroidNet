@@ -34,7 +34,7 @@ public partial class WorkspaceViewModel
     [RelayCommand]
     private void ShowContentFailureDetails()
     {
-        if (Dockable.FromId("log") is { } output)
+        if (this.Docker?.FindDockable("log") is { } output)
         {
             this.RevealTool(output);
         }

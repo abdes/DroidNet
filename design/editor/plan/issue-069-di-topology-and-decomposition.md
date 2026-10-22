@@ -5,7 +5,8 @@ Foreground cooks, Global history, Pipeline workflows out of UI, Document kinds,
 Scenes, LivePreview, Asset family modules, Cook on change over checked inputs,
 Shell, Unsaved documents, Features, Dissolve the World Editor, Test boundaries,
 Enforcement), Phase 2 (scope factory and topology), Phase 3 (registration
-modules) and Phase 4 (project session) are done; see the ledger in section 6.
+modules), Phase 4 (project session) and S5.1 (docking per docker) are done; see
+the ledger in section 6.
 Phase 1 follows
 [editor-module-architecture.md](../lld/editor-module-architecture.md) (the
 "architecture" below) and [editor-shell.md](../review/editor-shell.md) (the
@@ -15,7 +16,7 @@ replace section 7 of the spec: there are no `Authoring` or
 `Authoring.Abstractions` projects, `Oxygen.Editor.WorldEditor` is dissolved, and
 the Shell is the application frame.
 
-Last Updated: 2026-10-21
+Last Updated: 2026-10-22
 
 Issue: [#69](https://github.com/abdes/DroidNet/issues/69)
 
@@ -37,7 +38,7 @@ against the current tree:
 | Inspector 118 files, 15.5k lines               | 124 files, 16.2k lines after the responsive-row rebuild and script slots                                                                                                                                                | None; the Inspector stays one project                           |
 | About 147 `ActiveProject` references, 40 files | 263 references (tests included) in about 43 production files                                                                                                                                                            | Phase 4 cluster sizes grow; migration stays compile-enforced    |
 | Phase 0 sites                                  | All still present: `Program.cs` second `RegisterViewsAndViewModels` (124), swallowed `ContainerException` (126), duplicate locator and converter (312, 313), eager `AssetRedirects` (482-484)                           | Done in Phase 0                                                 |
-| F13 Docking statics                            | `Dockable.Factory` static registry still present                                                                                                                                                                        | Phase 5 unchanged                                               |
+| F13 Docking statics                            | `Dockable.Factory` static registry still present                                                                                                                                                                        | Done in S5.1                                                    |
 
 Tooling facts the spec does not mention, which shape every new UI project:
 
@@ -895,7 +896,8 @@ that lands the work. Checked against the tree on 2026-10-20.
 | S2.1 to S2.3 Scope factory and topology              | `done`        | `DroidNet.Composition`; the composition root in `Oxygen.Editor.Composition` with its topology and project-switch tests; workspace and Content Explorer scopes on the factory                |
 | S3.1 Registration modules                            | `done`        | Modules per subsystem and layer; `EditorModule` composes the editor scope through `ScopeFactory.CreateRoot`; the App references only what its host and XAML use                             |
 | S4.1 to S4.4 Project Session                         | `done`        | Landed in `6e9621d0e`; the document service and editors moved into the session after it (decision 14); `EditorCloseTests` is the open check                                                 |
-| S5.1 to S5.4 Documents across windows, panels in one | `not started` |                                                                                                                                                                                             |
+| S5.1 Docking per docker                              | `done`        | Each `Docker` creates and finds its docks and dockables and runs its own docking maneuver; no docking statics remain                                                                        |
+| S5.2 to S5.4 Documents across windows, panels in one | `not started` |                                                                                                                                                                                             |
 | S6.1 to S6.3 Service location and messenger          | `not started` |                                                                                                                                                                                             |
 | S7 Documentation                                     | `not started` |                                                                                                                                                                                             |
 

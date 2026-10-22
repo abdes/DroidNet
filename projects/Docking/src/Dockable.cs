@@ -10,8 +10,13 @@ namespace DroidNet.Docking;
 /// <summary>
 /// Represents content (a <see cref="ViewModel" />) that can be docked in a <see cref="IDock">dock</see>.
 /// </summary>
+/// <remarks>
+/// Dockables are created by <see cref="IDocker.CreateDockable{TDockable}" />, which keeps their identifiers unique in that
+/// docker.
+/// </remarks>
 public partial class Dockable : INotifyPropertyChanged, IDockable
 {
+    private bool disposed;
     private bool isActive;
     private string? title;
 
@@ -30,6 +35,9 @@ public partial class Dockable : INotifyPropertyChanged, IDockable
 
     /// <inheritdoc/>
     public event PropertyChangedEventHandler? PropertyChanged;
+
+    /// <inheritdoc/>
+    public event EventHandler<EventArgs>? OnDisposed;
 
     /// <inheritdoc/>
     public string Title
@@ -85,6 +93,9 @@ public partial class Dockable : INotifyPropertyChanged, IDockable
     /// <inheritdoc/>
     public IDock? Owner { get; set; }
 
+    /// <summary>Gets or sets what releases this dockable from its docker, once its disposal subscribers ran.</summary>
+    internal Action<Dockable>? Release { get; set; }
+
     /// <summary>Gets or sets a value indicating whether this dockable is active.</summary>
     /// <remarks>
     /// It is only possible to mark a dockable as active or inactive when it has a valid <see cref="Owner" />. This is to ensure
@@ -108,8 +119,41 @@ public partial class Dockable : INotifyPropertyChanged, IDockable
     }
 
     /// <inheritdoc />
+    public void Dispose()
+    {
+        this.Dispose(disposing: true);
+        GC.SuppressFinalize(this);
+    }
+
+    /// <inheritdoc />
     public override string ToString()
         => $"[{this.Id}] {(this.Owner == null ? string.Empty : $"Owner={this.Owner.Id} ")}";
+
+    /// <summary>
+    /// Releases the unmanaged resources used by the <see cref="Dockable" /> and optionally releases
+    /// the managed resources.
+    /// </summary>
+    /// <param name="disposing">
+    /// <see langword="true" /> to release both managed and unmanaged resources; <see langword="false" />
+    /// to release only unmanaged resources.
+    /// </param>
+    protected virtual void Dispose(bool disposing)
+    {
+        if (this.disposed)
+        {
+            return;
+        }
+
+        if (disposing)
+        {
+            // Subscribers may still need to use the dockable, and find it in its docker, before it is disposed.
+            this.OnDisposed?.Invoke(this, EventArgs.Empty);
+            this.Release?.Invoke(this);
+            this.Release = null;
+        }
+
+        this.disposed = true;
+    }
 
     /// <summary>Raises the PropertyChanged event for the specified property.</summary>
     /// <param name="propertyName">

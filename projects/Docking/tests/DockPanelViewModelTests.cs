@@ -15,10 +15,10 @@ public sealed class DockPanelViewModelTests
     public void ActivationSynchronizesTheModelAndResumesAfterReactivation()
     {
         using var docker = new Docker();
-        var dock = ToolDock.New();
-        var browser = Dockable.New(Guid.NewGuid().ToString("N"));
-        var logs = Dockable.New(Guid.NewGuid().ToString("N"));
-        var cooking = Dockable.New(Guid.NewGuid().ToString("N"));
+        var dock = docker.CreateDock<ToolDock>();
+        var browser = docker.CreateDockable<Dockable>("browser");
+        var logs = docker.CreateDockable<Dockable>("logs");
+        var cooking = docker.CreateDockable<Dockable>("cooking");
         dock.AdoptDockable(browser);
         dock.AdoptDockable(logs);
         dock.AdoptDockable(cooking);

@@ -5,20 +5,26 @@
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
 using DroidNet.Docking.Tests.Mocks;
+using DroidNet.Docking.Workspace;
 
 namespace DroidNet.Docking.Tests;
 
 [TestClass]
 [TestCategory(nameof(Dockable))]
 [ExcludeFromCodeCoverage]
-public class DockableTests
+public sealed class DockableTests : IDisposable
 {
+    private readonly Docker docker = new();
+
+    [TestCleanup]
+    public void Dispose() => this.docker.Dispose();
+
     [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Properties")]
     public void TitleSetterShouldTriggerPropertyChangeForMinimizedTitleWhenCurrentValueIsNull()
     {
         // Arrange
-        using var dockable = Dockable.New("testId");
+        using var dockable = this.docker.CreateDockable<Dockable>("testId");
         var eventTriggered = false;
 
         dockable.PropertyChanged += (_, e) =>
@@ -52,7 +58,7 @@ public class DockableTests
     public void TitleSetterShouldTriggerPropertyChangeForTabbedTitleWhenCurrentValueIsNull()
     {
         // Arrange
-        using var dockable = Dockable.New("testId");
+        using var dockable = this.docker.CreateDockable<Dockable>("testId");
         var eventTriggered = false;
 
         dockable.PropertyChanged += (_, e) =>
@@ -86,7 +92,7 @@ public class DockableTests
     public void TitleSetterShouldNotTriggerPropertyChangeIfNotDifferentValue()
     {
         // Arrange
-        using var dockable = Dockable.New("testId");
+        using var dockable = this.docker.CreateDockable<Dockable>("testId");
         dockable.Title = "Title";
         var eventTriggered = false;
 
@@ -106,56 +112,16 @@ public class DockableTests
     }
 
     [TestMethod]
-    [TestCategory($"{nameof(Dockable)}.Collection")]
-    public void AllReturnsAllManagedDockables()
-    {
-        // Arrange
-        using var dockable1 = Dockable.New("1");
-        using var dockable2 = Dockable.New("2");
-
-        // Assert
-        _ = Dockable.All.Should().HaveCount(2).And.Contain(dockable1).And.Contain(dockable2);
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(Dockable)}.Collection")]
-    public void FromIdReturnsDockableWhenIdIsManaged()
-    {
-        // Arrange
-        using var dockable = Dockable.New("1");
-
-        // Act
-        var fromId = Dockable.FromId("1");
-
-        // Assert
-        _ = fromId.Should().Be(dockable);
-    }
-
-    [TestMethod]
-    [TestCategory($"{nameof(Dockable)}.Collection")]
-    public void FromIdReturnsNullWhenIdIsIsNotManaged()
-    {
-        // Arrange
-        using var dockable = Dockable.New("1");
-
-        // Act
-        var fromId = Dockable.FromId("__");
-
-        // Assert
-        _ = fromId.Should().BeNull();
-    }
-
-    [TestMethod]
     [TestCategory($"{nameof(Dockable)}.Dispose")]
     public void DisposeInvokesOnDisposedBeforeDisposing()
     {
         // Arrange
-        var dockable = Dockable.New("1");
+        var dockable = this.docker.CreateDockable<Dockable>("1");
         var invoked = false;
         dockable.OnDisposed += (_, _) =>
         {
             invoked = true;
-            var fromId = Dockable.FromId("1");
+            var fromId = this.docker.FindDockable("1");
             _ = fromId.Should().NotBeNull();
         };
 
@@ -173,7 +139,7 @@ public class DockableTests
         var act = () =>
         {
             // Arrange
-            using var dockable = Dockable.New("1");
+            using var dockable = this.docker.CreateDockable<Dockable>("1");
 
             // Act
             dockable.IsActive = true;
@@ -188,7 +154,7 @@ public class DockableTests
     public void IsActiveSetterShouldTriggerPropertyChange()
     {
         // Arrange
-        using var dockable = Dockable.New("testId");
+        using var dockable = this.docker.CreateDockable<Dockable>("testId");
         using var owner = new SimpleDock();
         dockable.Owner = owner;
         var eventTriggered = false;
@@ -214,7 +180,7 @@ public class DockableTests
     public void IsActiveSetterShouldNotTriggerPropertyChangeIfNotDifferentValue()
     {
         // Arrange
-        using var dockable = Dockable.New("testId");
+        using var dockable = this.docker.CreateDockable<Dockable>("testId");
         using var owner = new SimpleDock();
         dockable.Owner = owner;
         var eventTriggered = false;

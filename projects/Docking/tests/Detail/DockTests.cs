@@ -4,9 +4,9 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
-using AwesomeAssertions.Execution;
 using DroidNet.Docking.Detail;
 using DroidNet.Docking.Tests.Mocks;
+using DroidNet.Docking.Workspace;
 
 namespace DroidNet.Docking.Tests.Detail;
 
@@ -19,12 +19,9 @@ namespace DroidNet.Docking.Tests.Detail;
 public sealed partial class DockTests : IDisposable
 {
     private readonly SimpleDock dock = new();
-
-    private readonly Dockable dockable1
-        = Dockable.New("dockable1") ?? throw new AssertionFailedException("could not allocate a new object");
-
-    private readonly Dockable dockable2
-        = Dockable.New("dockable2") ?? throw new AssertionFailedException("could not allocate a new object");
+    private readonly Docker docker = new();
+    private readonly Dockable dockable1;
+    private readonly Dockable dockable2;
 
     private bool dockable1Disposed;
     private bool dockable2Disposed;
@@ -34,6 +31,8 @@ public sealed partial class DockTests : IDisposable
     /// </summary>
     public DockTests()
     {
+        this.dockable1 = this.docker.CreateDockable<Dockable>("dockable1");
+        this.dockable2 = this.docker.CreateDockable<Dockable>("dockable2");
         this.dockable1.PropertyChanged += this.OnDockableDisposed;
         this.dockable2.PropertyChanged += this.OnDockableDisposed;
     }
@@ -47,6 +46,7 @@ public sealed partial class DockTests : IDisposable
         this.dockable2.PropertyChanged -= this.OnDockableDisposed;
         this.dockable2.Dispose();
         this.dock.Dispose();
+        this.docker.Dispose();
 
         GC.SuppressFinalize(this);
     }

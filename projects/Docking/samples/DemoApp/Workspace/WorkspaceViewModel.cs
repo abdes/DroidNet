@@ -88,35 +88,35 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         try
         {
             anchor = new Anchor(AnchorPosition.Center);
-            newDocker.Dock(CenterDock.New(), anchor);
+            newDocker.Dock(newDocker.CreateDock<CenterDock>(), anchor);
 
-            var left1 = MakeDockWithVerticalDockable(resolver, "A long left1");
+            var left1 = MakeDockWithVerticalDockable(newDocker, resolver, "A long left1");
             anchor = new AnchorLeft();
             newDocker.Dock(left1, anchor);
 
-            var left2 = MakeDockWithVerticalDockable(resolver, "Very long title for left 2");
+            var left2 = MakeDockWithVerticalDockable(newDocker, resolver, "Very long title for left 2");
             anchor = new AnchorBottom(left1.Dockables[0]);
             newDocker.Dock(left2, anchor);
             anchor = new AnchorLeft();
-            newDocker.Dock(MakeDockWithVerticalDockable(resolver, "left3"), anchor, minimized: true);
+            newDocker.Dock(MakeDockWithVerticalDockable(newDocker, resolver, "left3"), anchor, minimized: true);
             anchor = new AnchorLeft();
-            newDocker.Dock(MakeDockWithVerticalDockable(resolver, "left4"), anchor);
+            newDocker.Dock(MakeDockWithVerticalDockable(newDocker, resolver, "left4"), anchor);
 
             anchor = new AnchorTop();
-            newDocker.Dock(MakeDockWithHorizontalDockable(resolver, "top1"), anchor);
+            newDocker.Dock(MakeDockWithHorizontalDockable(newDocker, resolver, "top1"), anchor);
 
             anchor = new AnchorBottom();
-            newDocker.Dock(MakeDockWithHorizontalDockable(resolver, "bottom1"), anchor, minimized: true);
+            newDocker.Dock(MakeDockWithHorizontalDockable(newDocker, resolver, "bottom1"), anchor, minimized: true);
 
-            var right1 = MakeDockWithVerticalDockable(resolver, "right1");
+            var right1 = MakeDockWithVerticalDockable(newDocker, resolver, "right1");
             anchor = new AnchorRight();
             newDocker.Dock(right1, anchor);
 
             anchor = new Anchor(AnchorPosition.Right, right1.Dockables[0]);
-            newDocker.Dock(MakeDockWithVerticalDockable(resolver, "right2"), anchor);
+            newDocker.Dock(MakeDockWithVerticalDockable(newDocker, resolver, "right2"), anchor);
 
             anchor = new Anchor(AnchorPosition.Bottom, right1.Dockables[0]);
-            newDocker.Dock(MakeDockWithVerticalDockable(resolver, "right3"), anchor);
+            newDocker.Dock(MakeDockWithVerticalDockable(newDocker, resolver, "right3"), anchor);
 
             anchor = null; // Dispose ownership all transferred
         }
@@ -130,20 +130,20 @@ public sealed partial class WorkspaceViewModel : ObservableObject, IDisposable
         return newDocker;
     }
 
-    private static ToolDock MakeDockWithVerticalDockable(IResolver resolver, string dockableId)
+    private static ToolDock MakeDockWithVerticalDockable(Docker docker, IResolver resolver, string dockableId)
     {
-        var dock = ToolDock.New();
-        var dockable = Dockable.New(dockableId);
+        var dock = docker.CreateDock<ToolDock>();
+        var dockable = docker.CreateDockable<Dockable>(dockableId);
         dockable.ViewModel = resolver.Resolve<Func<IDockable, DockableInfoViewModel>>()(dockable);
         dockable.PreferredWidth = new Width(300);
         dock.AdoptDockable(dockable);
         return dock;
     }
 
-    private static ToolDock MakeDockWithHorizontalDockable(IResolver resolver, string dockableId)
+    private static ToolDock MakeDockWithHorizontalDockable(Docker docker, IResolver resolver, string dockableId)
     {
-        var dock = ToolDock.New();
-        var dockable = Dockable.New(dockableId);
+        var dock = docker.CreateDock<ToolDock>();
+        var dockable = docker.CreateDockable<Dockable>(dockableId);
         dockable.ViewModel = resolver.Resolve<Func<IDockable, DockableInfoViewModel>>()(dockable);
         dockable.PreferredHeight = new Height(200);
         dock.AdoptDockable(dockable);

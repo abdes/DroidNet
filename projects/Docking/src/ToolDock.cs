@@ -24,7 +24,7 @@ namespace DroidNet.Docking;
 /// To create a new instance of <see cref="ToolDock"/>, use the following code:
 /// </para>
 /// <code><![CDATA[
-/// var toolDock = ToolDock.New();
+/// var toolDock = docker.CreateDock<ToolDock>();
 /// ]]></code>
 /// </example>
 public partial class ToolDock : Dock
@@ -35,24 +35,4 @@ public partial class ToolDock : Dock
     protected ToolDock()
     {
     }
-
-    /// <summary>
-    /// Creates a new instance of the <see cref="ToolDock"/> class.
-    /// </summary>
-    /// <returns>A new instance of <see cref="ToolDock"/>.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses the internal <see cref="Dock.Factory"/> to create an instance of <see cref="ToolDock"/>. It ensures that the dock is properly
-    /// managed and assigned a unique ID.
-    /// </para>
-    /// </remarks>
-    /// <example>
-    /// <para>
-    /// To create a new <see cref="ToolDock"/>, use the following code:
-    /// </para>
-    /// <code><![CDATA[
-    /// var toolDock = ToolDock.New();
-    /// ]]></code>
-    /// </example>
-    public static ToolDock New() => (ToolDock)Factory.CreateDock(typeof(ToolDock));
 }

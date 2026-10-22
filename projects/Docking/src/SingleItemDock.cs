@@ -24,7 +24,7 @@ namespace DroidNet.Docking;
 /// To create a new instance of <see cref="SingleItemDock"/>, use the following code:
 /// </para>
 /// <code><![CDATA[
-/// var singleItemDock = SingleItemDock.New();
+/// var singleItemDock = docker.CreateDock<SingleItemDock>();
 /// ]]></code>
 /// </example>
 public partial class SingleItemDock : Dock
@@ -35,26 +35,6 @@ public partial class SingleItemDock : Dock
     protected SingleItemDock()
     {
     }
-
-    /// <summary>
-    /// Creates a new instance of the <see cref="SingleItemDock"/> class.
-    /// </summary>
-    /// <returns>A new instance of <see cref="SingleItemDock"/>.</returns>
-    /// <remarks>
-    /// <para>
-    /// This method uses the internal <see cref="Dock.Factory"/> to create an instance of <see cref="SingleItemDock"/>. It ensures that the dock is properly
-    /// managed and assigned a unique ID.
-    /// </para>
-    /// </remarks>
-    /// <example>
-    /// <para>
-    /// To create a new <see cref="SingleItemDock"/>, use the following code:
-    /// </para>
-    /// <code><![CDATA[
-    /// var singleItemDock = SingleItemDock.New();
-    /// ]]></code>
-    /// </example>
-    public static SingleItemDock New() => (SingleItemDock)Factory.CreateDock(typeof(SingleItemDock));
 
     /// <summary>
     /// Adopts a dockable entity into the dock, replacing any existing dockable.
@@ -73,7 +53,7 @@ public partial class SingleItemDock : Dock
     /// To adopt a dockable entity into a <see cref="SingleItemDock"/>, use the following code:
     /// </para>
     /// <code><![CDATA[
-    /// var singleItemDock = SingleItemDock.New();
+    /// var singleItemDock = docker.CreateDock<SingleItemDock>();
     /// var dockable = new CustomDockable();
     /// singleItemDock.AdoptDockable(dockable);
     /// ]]></code>

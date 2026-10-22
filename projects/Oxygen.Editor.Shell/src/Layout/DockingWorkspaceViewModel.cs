@@ -159,7 +159,7 @@ public abstract partial class DockingWorkspaceViewModel(
             // Release the center dock dockable
             if (this.centerDock is not null)
             {
-                Dockable.FromId(this.CenterOutletName)?.Dispose();
+                this.Docker?.FindDockable(this.CenterOutletName)?.Dispose();
                 this.centerDock.Dispose();
             }
 
@@ -213,8 +213,8 @@ public abstract partial class DockingWorkspaceViewModel(
 
         try
         {
-            this.centerDock = CenterDock.New();
-            var dockable = Dockable.New(this.CenterOutletName);
+            this.centerDock = this.Docker.CreateDock<CenterDock>();
+            var dockable = this.Docker.CreateDockable<Dockable>(this.CenterOutletName);
             dockable.ViewModel = viewModel;
             this.centerDock.AdoptDockable(dockable);
         }
@@ -251,7 +251,7 @@ public abstract partial class DockingWorkspaceViewModel(
         try
         {
             var dockableActiveRoute = this.activeRoute!.Children.First(c => c.Outlet == dockableId);
-            var dockable = RoutedDockable.New(dockableId, dockableActiveRoute);
+            var dockable = this.Docker.CreateDockable<RoutedDockable>(dockableId, dockableActiveRoute);
             if (this.scope?.Resolver.Resolve<ContributionRegistry>(IfUnresolved.ReturnDefault)?.TitleOf(dockableId) is { } title)
             {
                 dockable.Title = title;
@@ -318,6 +318,8 @@ public abstract partial class DockingWorkspaceViewModel(
 
     private void PlaceDockable(RoutedDockable dockable)
     {
+        Debug.Assert(this.Docker is not null, "docker should be setup by now");
+
         var dockingInfo = dockable.DeferredDockingInfo;
 
         if (dockingInfo.AnchorId == null)
@@ -328,7 +330,7 @@ public abstract partial class DockingWorkspaceViewModel(
 
         // Find the relative dock, it must have been already created above, or the ID used for the
         // anchor is invalid.
-        var relativeDockable = Dockable.FromId(dockingInfo.AnchorId);
+        var relativeDockable = this.Docker.FindDockable(dockingInfo.AnchorId);
         if (relativeDockable == null)
         {
             // Log an error
@@ -345,7 +347,7 @@ public abstract partial class DockingWorkspaceViewModel(
     {
         Debug.Assert(this.Docker is not null, "docker should be setup by now");
 
-        var dock = ToolDock.New();
+        var dock = this.Docker.CreateDock<ToolDock>();
         dock.AdoptDockable(dockable);
         var anchor = new Anchor(dockingInfo.Position);
         try
@@ -384,7 +386,7 @@ public abstract partial class DockingWorkspaceViewModel(
             var anchor = new Anchor(dockingInfo.Position, relativeDockable);
             try
             {
-                var dock = ToolDock.New();
+                var dock = this.Docker.CreateDock<ToolDock>();
                 dock.AdoptDockable(dockable);
                 this.Docker.Dock(dock, anchor, dockingInfo.IsMinimized);
                 anchor = null;

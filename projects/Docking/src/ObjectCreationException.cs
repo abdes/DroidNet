@@ -5,12 +5,12 @@
 namespace DroidNet.Docking;
 
 /// <summary>
-/// Represents an exception that is thrown when the creation of an instance of a factory-managed type, such as dockables and docks, fails.
+/// Represents an exception that is thrown when the creation of an instance of a docker-created type, such as dockables and docks, fails.
 /// </summary>
 /// <remarks>
 /// <para>
 /// The <see cref="ObjectCreationException"/> is used internally to signal that an error occurred during the instantiation of an object
-/// managed by the factory. This could happen due to various reasons such as invalid constructor arguments, missing dependencies, or
+/// created by a docker. This could happen due to various reasons such as invalid constructor arguments, missing dependencies, or
 /// other runtime issues.
 /// </para>
 /// <para>
@@ -24,7 +24,7 @@ namespace DroidNet.Docking;
 /// <code><![CDATA[
 /// try
 /// {
-///     var dock = Dock.Factory.CreateDock(typeof(CustomDock), invalidArgs);
+///     var dock = docker.CreateDock<CustomDock>(invalidArgs);
 /// }
 /// catch (ObjectCreationException ex)
 /// {
