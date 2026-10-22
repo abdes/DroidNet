@@ -12,7 +12,6 @@
         <PackageReference Include="Moq" />
         <PackageReference Include="Testably.Abstractions.Testing" />
         <Compile Include="$(MyTopLevelDirectory)projects/UITests.Shared/testsupport/UiTestHosting.cs" Link="Support/UiTestHosting.cs" />
-        <Compile Include="$(ProjectsRoot)/UITests.Shared/tests/TestHostLifecycleTests.cs" Link="TestHostLifecycleTests.cs" />
     </ItemGroup>
     <Import Project="$(ProjectsRoot)/UITests.Shared/src/UITests.Shared.projitems" Label="Shared" />
 </Project>

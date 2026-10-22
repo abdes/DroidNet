@@ -4,9 +4,10 @@
 
 using System.Diagnostics.CodeAnalysis;
 using AwesomeAssertions;
+using DroidNet.Tests;
 using Microsoft.UI.Xaml.Controls;
 
-namespace DroidNet.Tests;
+namespace DroidNet.UITests.Shared.Tests;
 
 /// <summary>Exercises window-free dispatch and realized-content reuse in the shared host.</summary>
 [TestClass]
