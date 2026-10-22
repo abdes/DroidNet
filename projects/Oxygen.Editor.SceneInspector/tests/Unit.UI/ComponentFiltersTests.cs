@@ -8,7 +8,6 @@ using DroidNet.Controls;
 using Microsoft.UI.Xaml.Controls;
 using Moq;
 using Oxygen.Editor.Data.Services;
-using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.SceneInspector.Components.Cameras;
 using Oxygen.Editor.SceneInspector.Components.Geometry;
 using Oxygen.Editor.SceneInspector.Components.Lights;
@@ -24,7 +23,6 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core.Diagnostics;
-using Testably.Abstractions.Testing;
 using static Oxygen.Editor.SceneInspector.TestSupport.InspectorControls;
 using static Oxygen.Editor.SceneInspector.TestSupport.SceneTestData;
 using NumberBox = DroidNet.Controls.NumberBox;
@@ -42,14 +40,13 @@ internal sealed class ComponentFiltersTests : DroidNet.Tests.VisualUserInterface
     [TestMethod]
     public Task LockChangeAndComponentFilterKeepInspectorInputsDisabled() => EnqueueAsync(async () =>
     {
-        var interaction = new SceneNodeInteraction(
+        using var fixture = new SceneAuthoringFixture(session => new SceneNodeInteraction(
+            session,
             Mock.Of<IEditorSettingsManager>(),
             Mock.Of<IOperationResultPublisher>(),
-            new OperationStatusReducer());
-        using var fixture = new SceneAuthoringFixture(interaction);
-        await interaction.RestoreAsync(
-            TestProject.Create(new MockFileSystem()).Context,
-            fixture.Scene.Id).ConfigureAwait(true);
+            new OperationStatusReducer()));
+        var interaction = fixture.Interaction!;
+        await interaction.RestoreAsync(fixture.Scene.Id).ConfigureAwait(true);
         using var model = fixture.CreateInspectorHost("Light", realizeViews: true);
         var view = new SceneInspectorView { ViewModel = model, Width = 420, Height = 600 };
         await LoadTestContentAsync(view).ConfigureAwait(true);

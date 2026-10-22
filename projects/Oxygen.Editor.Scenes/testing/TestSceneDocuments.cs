@@ -40,7 +40,7 @@ public sealed partial class TestSceneDocuments : IDisposable
         this.Project = project;
         this.Files = new GatedFileStore(new NativeAtomicFileStore(project.Context.FileSystem), this);
         this.Session = new TestSession(project.Context);
-        this.Kind = new SceneDocumentKind(this.Session, interaction, redirects);
+        this.Kind = new SceneDocumentKind(interaction, redirects);
         this.Open = new OpenDocuments([this.Kind, .. otherKinds ?? []], this.Files);
     }
 

@@ -102,7 +102,7 @@ internal sealed class PreviewSettingsTests
     /// <summary>Each project's session restores the project's own preferences on the same running engine.</summary>
     /// <returns>The verification task.</returns>
     [TestMethod]
-    public async Task ProjectSwitchKeepsPreferencesSeparate()
+    public async Task SessionsOfTwoProjectsKeepTheirOwnPreferences()
     {
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);

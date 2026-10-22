@@ -57,11 +57,6 @@ public partial class SceneExplorerViewModel
     {
         var content = SceneContent.Of(document);
         var scene = content.Scene;
-        if (this.session is { } session && session.Context.ProjectId != content.Project.ProjectId)
-        {
-            return false;
-        }
-
         if (this.sceneDocument is { } previous && !ReferenceEquals(previous, document))
         {
             this.ReleaseShownScene(previous);

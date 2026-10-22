@@ -2157,7 +2157,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
     /// <returns>The task completing once the restored state is visible on the rows.</returns>
     /// <remarks>
     /// Without this the persistence is write-only: state saved by a previous session would never
-    /// come back. A project-less explorer (no <see cref="IProjectSession"/> composed) simply starts clean, and in-session toggles still work.
+    /// come back. An explorer composed without the interaction service has no hide or lock state.
     /// </remarks>
     private async Task RestoreWorkspaceInteractionAsync(Scene loadedScene)
     {
@@ -2166,12 +2166,7 @@ public partial class SceneExplorerViewModel : DynamicTreeViewModel
             return;
         }
 
-        if (this.session?.Context is not { } project)
-        {
-            return;
-        }
-
-        await service.RestoreAsync(project, loadedScene.Id).ConfigureAwait(true);
+        await service.RestoreAsync(loadedScene.Id).ConfigureAwait(true);
     }
 
     /// <summary>

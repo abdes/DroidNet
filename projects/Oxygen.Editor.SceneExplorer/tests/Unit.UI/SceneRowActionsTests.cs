@@ -29,6 +29,7 @@ using Oxygen.Editor.Shell.Testing;
 using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Core.Diagnostics;
+using Testably.Abstractions.Testing;
 using Windows.Foundation;
 
 namespace Oxygen.Editor.SceneExplorer.Unit.UI.Tests;
@@ -450,23 +451,24 @@ public sealed partial class SceneRowActionsTests : VisualUserInterfaceTests
     /// <returns>The disposable host with the view-model, scene and realized row.</returns>
     internal static async Task<RowHost> CreateRowHostAsync()
     {
-        var interaction = new SceneNodeInteraction(
-            Mock.Of<IEditorSettingsManager>(),
-            Mock.Of<IOperationResultPublisher>(),
-            new OperationStatusReducer());
+        var project = TestProject.Create(new MockFileSystem());
         TestScene? testScene = null;
-        TestSession? session = null;
+        TestSession? session = new(project.Context);
         SceneExplorerViewModel? viewModel = null;
         try
         {
-            testScene = TestScenes.Open(RowScene(), interaction);
+            var interaction = new SceneNodeInteraction(
+                session,
+                Mock.Of<IEditorSettingsManager>(),
+                Mock.Of<IOperationResultPublisher>(),
+                new OperationStatusReducer());
+            testScene = TestScenes.Open(RowScene(), interaction, project: project);
             var scene = testScene.Scene;
             var node = scene.RootNodes[0];
             var secondaryNode = new SceneNode(scene, "Secondary");
             var childNode = new SceneNode(scene, "Nested child");
             scene.RootNodes.Add(secondaryNode);
             node.Hierarchy.AddChild(childNode);
-            session = new TestSession(testScene.Project);
             viewModel = new SceneExplorerViewModel(
                 Mock.Of<IRouter>(),
                 new TestDocumentArea(testScene.Document),

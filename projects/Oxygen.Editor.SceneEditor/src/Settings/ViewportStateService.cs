@@ -27,16 +27,20 @@ namespace Oxygen.Editor.SceneEditor.Settings;
 /// holding per-scene records, guarded by the project identity and a payload version.
 /// </para>
 /// <para>
-/// The service loads a project's state once and then serves it from memory, which is always at
-/// least as new as the stored state: a load that completes after an update never replaces the
-/// updated scene. Writes are serialized, so a fast sequence of updates cannot interleave.
+/// The service belongs to a project session and serves its one project, which it reads from the
+/// session when it loads, saves or reports. It loads the project's state once and then serves it
+/// from memory, which is always at least as new as the stored state: a load that completes after
+/// an update never replaces the updated scene. Writes are serialized, so a fast sequence of updates
+/// cannot interleave.
 /// </para>
 /// </remarks>
+/// <param name="session">The project session whose scenes the state belongs to.</param>
 /// <param name="settings">The editor settings manager, accessed serially by this service.</param>
 /// <param name="results">The visible diagnostic publisher.</param>
 /// <param name="status">The workspace diagnostic status.</param>
 /// <param name="loggerFactory">The optional logger factory.</param>
 public sealed partial class ViewportStateService(
+    IProjectSession session,
     IEditorSettingsManager settings,
     IOperationResultPublisher results,
     IStatusReducer status,
@@ -51,54 +55,42 @@ public sealed partial class ViewportStateService(
     private readonly ILogger logger = loggerFactory?.CreateLogger<ViewportStateService>()
         ?? NullLogger<ViewportStateService>.Instance;
 
-    private readonly Dictionary<string, PendingWrite> pendingWrites = new(StringComparer.Ordinal);
+    private readonly Dictionary<SceneId, SceneViewportState> scenes = [];
 
     // Loads and writes run one at a time, in request order.
     private Task persistence = Task.CompletedTask;
-    private ProjectContext? activeProject;
-    private Dictionary<SceneId, SceneViewportState> scenes = [];
-    private long activation;
+    private bool loadStarted;
+    private bool writePending;
+
+    private ProjectContext Project => session.Context;
 
     /// <summary>Gets the state kept for a scene, loading the project's state on first use.</summary>
-    /// <param name="project">The project that owns the scene.</param>
     /// <param name="sceneId">The scene identity.</param>
     /// <returns>The kept state, or <see langword="null"/> when the scene has none.</returns>
-    public async Task<SceneViewportState?> RestoreAsync(ProjectContext project, SceneId sceneId)
+    public async Task<SceneViewportState?> RestoreAsync(SceneId sceneId)
     {
-        ArgumentNullException.ThrowIfNull(project);
-        var scenesOfProject = this.Activate(project);
+        this.EnsureLoadStarted();
         await this.persistence.ConfigureAwait(true);
-        return scenesOfProject.GetValueOrDefault(sceneId);
+        return this.scenes.GetValueOrDefault(sceneId);
     }
 
-    /// <summary>Keeps a scene's state and schedules a write of its project's state.</summary>
-    /// <param name="project">The project that owns the scene.</param>
+    /// <summary>Keeps a scene's state and schedules a write of the project's state.</summary>
     /// <param name="sceneId">The scene identity.</param>
     /// <param name="state">The scene's current viewport state.</param>
-    public void Update(ProjectContext project, SceneId sceneId, SceneViewportState state)
+    public void Update(SceneId sceneId, SceneViewportState state)
     {
-        ArgumentNullException.ThrowIfNull(project);
         ArgumentNullException.ThrowIfNull(state);
-        var scenesOfProject = this.Activate(project);
-        scenesOfProject[sceneId] = state;
+        this.EnsureLoadStarted();
+        this.scenes[sceneId] = state;
 
         // The write runs after the project's load, so it carries every stored scene too.
-        this.pendingWrites[RootOf(project)] = new PendingWrite(project, scenesOfProject);
+        this.writePending = true;
         this.persistence = this.WritePendingAfterAsync(this.persistence);
     }
 
     /// <summary>Waits until every update made so far is written.</summary>
     /// <returns>A task that completes when the writes are done.</returns>
     public Task FlushAsync() => this.persistence;
-
-    // The project scope id is the normalized project root, the same identity the other workspace
-    // settings use; the stored ProjectId inside the value is what rejects a reused path.
-    private static string RootOf(ProjectContext project)
-        => project.ProjectRoot.FullPath.ToUpperInvariant();
-
-    private static bool IsSameProject(ProjectContext? left, ProjectContext right)
-        => left is not null && left.ProjectId == right.ProjectId
-            && string.Equals(RootOf(left), RootOf(right), StringComparison.Ordinal);
 
     private static bool IsValid(SceneViewportState? scene)
         => scene is { Panes: { } panes }
@@ -109,38 +101,35 @@ public sealed partial class ViewportStateService(
                 && Enum.IsDefined(pane.ViewMode)
                 && pane.EditorCamera?.IsFinite() != false);
 
-    private Dictionary<SceneId, SceneViewportState> Activate(ProjectContext project)
+    private void EnsureLoadStarted()
     {
-        if (IsSameProject(this.activeProject, project))
+        if (this.loadStarted)
         {
-            return this.scenes;
+            return;
         }
 
-        this.activeProject = project;
-        this.scenes = [];
-        var generation = ++this.activation;
-        this.persistence = this.LoadAfterAsync(this.persistence, project, this.scenes, generation);
-        return this.scenes;
+        this.loadStarted = true;
+        this.persistence = this.LoadAfterAsync(this.persistence);
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "Unreadable viewport state is discarded with a warning; it must never block opening a scene.")]
-    private async Task LoadAfterAsync(Task previous, ProjectContext project, Dictionary<SceneId, SceneViewportState> target, long generation)
+    private async Task LoadAfterAsync(Task previous)
     {
         await previous.ConfigureAwait(true);
         ProjectViewports? stored;
         try
         {
-            stored = await settings.LoadSettingAsync(Key, SettingContext.Project(RootOf(project))).ConfigureAwait(true);
+            stored = await settings.LoadSettingAsync(Key, this.Project.SettingsScope).ConfigureAwait(true);
         }
         catch (Exception failure)
         {
-            this.ReportDiscarded(project, "VIEWPORT_STATE_UNREADABLE", "The saved viewport state could not be read.", failure);
+            this.ReportDiscarded("VIEWPORT_STATE_UNREADABLE", "The saved viewport state could not be read.", failure);
             return;
         }
 
         // A record written for another project is ignored outright: the settings scope is reused by
         // path, and a copied project must not inherit a stranger's viewports.
-        if (stored is null || stored.ProjectId != project.ProjectId)
+        if (stored is null || stored.ProjectId != this.Project.ProjectId)
         {
             return;
         }
@@ -148,18 +137,17 @@ public sealed partial class ViewportStateService(
         if (stored.Version != CurrentVersion || stored.Scenes is null || !stored.Scenes.Values.All(IsValid))
         {
             this.ReportDiscarded(
-                project,
                 "VIEWPORT_STATE_UNSUPPORTED",
                 $"The saved viewport state (version {stored.Version}) is not supported.",
                 new InvalidDataException("Viewport state payload is unsupported or invalid."));
             return;
         }
 
-        this.LogRestored(stored.Scenes.Count, project.ProjectRoot, generation);
+        this.LogRestored(stored.Scenes.Count);
         foreach (var (sceneId, scene) in stored.Scenes)
         {
             // State updated while the load was in flight is newer than the stored one.
-            _ = target.TryAdd(sceneId, scene);
+            _ = this.scenes.TryAdd(sceneId, scene);
         }
     }
 
@@ -167,18 +155,18 @@ public sealed partial class ViewportStateService(
     private async Task WritePendingAfterAsync(Task previous)
     {
         await previous.ConfigureAwait(true);
-        while (this.pendingWrites.Count > 0)
+        while (this.writePending)
         {
-            var (root, write) = this.pendingWrites.First();
-            _ = this.pendingWrites.Remove(root);
-            var value = new ProjectViewports(write.Project.ProjectId, CurrentVersion, new Dictionary<SceneId, SceneViewportState>(write.Scenes));
+            this.writePending = false;
+            var project = this.Project;
+            var value = new ProjectViewports(project.ProjectId, CurrentVersion, new Dictionary<SceneId, SceneViewportState>(this.scenes));
             try
             {
-                await settings.SaveSettingAsync(Key, value, SettingContext.Project(root)).ConfigureAwait(true);
+                await settings.SaveSettingAsync(Key, value, project.SettingsScope).ConfigureAwait(true);
             }
             catch (Exception failure)
             {
-                this.LogWriteFailed(failure, write.Project.ProjectRoot);
+                this.LogWriteFailed(failure);
                 RuntimeOperationResults.PublishWarning(
                     results,
                     status,
@@ -187,15 +175,15 @@ public sealed partial class ViewportStateService(
                     DiagnosticCodes.SettingsPrefix + "VIEWPORT_STATE_SAVE_FAILED",
                     "Viewport layout was not saved",
                     "The scene's viewports keep working, but reopen with their previous layout.",
-                    new AffectedScope { ProjectId = write.Project.ProjectId, ProjectName = write.Project.Name, ProjectPath = write.Project.ProjectRoot.FullPath },
+                    this.AffectedProject(),
                     exception: failure);
             }
         }
     }
 
-    private void ReportDiscarded(ProjectContext project, string code, string reason, Exception exception)
+    private void ReportDiscarded(string code, string reason, Exception exception)
     {
-        this.LogDiscarded(exception, code, project.ProjectRoot);
+        this.LogDiscarded(exception, code);
         RuntimeOperationResults.PublishWarning(
             results,
             status,
@@ -204,8 +192,14 @@ public sealed partial class ViewportStateService(
             DiagnosticCodes.SettingsPrefix + code,
             "Viewport layout was not restored",
             reason + " Scenes open with the default viewports.",
-            new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot.FullPath },
+            this.AffectedProject(),
             exception: exception);
+    }
+
+    private AffectedScope AffectedProject()
+    {
+        var project = this.Project;
+        return new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot.FullPath };
     }
 
     /// <summary>The saved viewport state of a project, guarded by project identity and version.</summary>
@@ -216,8 +210,6 @@ public sealed partial class ViewportStateService(
         Guid ProjectId,
         int Version,
         IReadOnlyDictionary<SceneId, SceneViewportState> Scenes);
-
-    private readonly record struct PendingWrite(ProjectContext Project, Dictionary<SceneId, SceneViewportState> Scenes);
 }
 
 /// <summary>The kept viewport state of one scene.</summary>

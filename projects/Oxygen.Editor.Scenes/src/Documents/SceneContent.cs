@@ -5,7 +5,6 @@
 using System.Text.Json;
 using Oxygen.Editor.ContentPipeline.Relocation;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
 using Oxygen.Editor.Scenes.Edits.Assets;
@@ -28,25 +27,17 @@ public sealed partial class SceneContent : IDocumentContent, IDisposable
     /// <summary>Initializes a new instance of the <see cref="SceneContent"/> class.</summary>
     /// <param name="scene">The decoded scene.</param>
     /// <param name="layout">The scene's explorer layout, with an entry for every node.</param>
-    /// <param name="project">The project the scene is opened in.</param>
     /// <param name="document">The identity and history of the document the scene is decoded for.</param>
     /// <param name="interaction">The nodes hidden and locked in the editor, if the editor keeps them.</param>
     /// <param name="redirects">The session's asset renames and moves, if the editor tracks them.</param>
-    internal SceneContent(Scene scene, IList<ExplorerEntryData> layout, ProjectContext project, DocumentDecodeContext document, ISceneNodeInteraction? interaction, IAssetRedirects? redirects)
+    internal SceneContent(Scene scene, IList<ExplorerEntryData> layout, DocumentDecodeContext document, ISceneNodeInteraction? interaction, IAssetRedirects? redirects)
     {
         this.Scene = scene;
-        this.Project = project;
         this.Authoring = new SceneAuthoring(document, scene, layout, interaction, redirects);
     }
 
     /// <summary>Gets the scene.</summary>
     public Scene Scene { get; }
-
-    /// <summary>Gets the project the scene is opened in.</summary>
-    /// <remarks>
-    /// Work that outlives a project switch compares it with the active project before it touches the scene.
-    /// </remarks>
-    public ProjectContext Project { get; }
 
     /// <summary>Gets the authoring that executes every change to the scene.</summary>
     public SceneAuthoring Authoring { get; }

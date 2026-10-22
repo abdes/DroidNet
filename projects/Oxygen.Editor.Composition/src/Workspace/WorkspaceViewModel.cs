@@ -94,9 +94,9 @@ public partial class WorkspaceViewModel : DockingWorkspaceViewModel
 
         // The preview starts the engine and mounts the project's content; the start scene opens even when it fails, so
         // authoring still works and the workspace shows why the preview is unavailable.
-        if (this.previewSession is { } preview && this.session is { } session)
+        if (this.previewSession is { } preview)
         {
-            _ = await preview.StartAsync(session.Context).ConfigureAwait(true);
+            _ = await preview.StartAsync().ConfigureAwait(true);
         }
 
         await this.OpenInitialSceneAsync().ConfigureAwait(true);

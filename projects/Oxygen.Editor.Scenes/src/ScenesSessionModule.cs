@@ -6,6 +6,7 @@ using DroidNet.Composition;
 using DryIoc;
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Data.Services;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Documents;
 using Oxygen.Editor.Scenes.Interaction;
@@ -36,6 +37,7 @@ public sealed class ScenesSessionModule : IScopeModule<ISessionLayer>
         // Editor hide / lock workspace state: one owner, project-scoped typed settings, serialized writes.
         scope.RegisterDelegate(
             resolver => new SceneNodeInteraction(
+                resolver.Resolve<IProjectSession>(),
                 resolver.Resolve<IEditorSettingsManager>(),
                 resolver.Resolve<IOperationResultPublisher>(),
                 resolver.Resolve<IStatusReducer>(),

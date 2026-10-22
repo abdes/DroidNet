@@ -6,7 +6,6 @@ using CommunityToolkit.Mvvm.ComponentModel;
 using CommunityToolkit.Mvvm.Input;
 using DroidNet.Documents;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.SceneEditor.Settings;
 using Oxygen.Managed.Core;
 
@@ -35,8 +34,6 @@ public partial class SceneEditorViewModel
     public partial ViewportViewModel? MaximizedViewport { get; private set; }
 
     private ViewportStateService ViewportStates => this.services.ViewportStates;
-
-    private ProjectContext ActiveProject => this.services.Session.Context;
 
     /// <summary>
     /// Marks the given viewport as focused and clears focus from all other viewports.
@@ -89,7 +86,7 @@ public partial class SceneEditorViewModel
         try
         {
             stored = this.Viewports.Count == 0 && this.scene is { } scene
-                ? await this.ViewportStates.RestoreAsync(this.ActiveProject, scene.Id).ConfigureAwait(true)
+                ? await this.ViewportStates.RestoreAsync(scene.Id).ConfigureAwait(true)
                 : null;
         }
         finally
@@ -295,7 +292,6 @@ public partial class SceneEditorViewModel
         // Viewport state belongs to the scene, not to one opening of it: it is kept under the scene's own id.
         var focused = this.Viewports.ToList().FindIndex(viewport => viewport.ViewportId == this.FocusedViewportId);
         this.ViewportStates.Update(
-            this.ActiveProject,
             scene.Id,
             new SceneViewportState(this.CurrentLayout, Math.Max(focused, 0), [.. this.Viewports.Select(static viewport => viewport.CaptureState())]));
     }

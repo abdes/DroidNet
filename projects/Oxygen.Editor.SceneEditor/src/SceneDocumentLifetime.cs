@@ -107,12 +107,6 @@ public sealed partial class SceneDocumentLifetime : ISceneAvailability, IDisposa
     private async Task MarkSceneActivatedAsync(SceneContent content)
     {
         var project = this.session.Context;
-        if (content.Project.ProjectId != project.ProjectId
-            || content.Project.ProjectRoot != project.ProjectRoot)
-        {
-            return;
-        }
-
         try
         {
             await this.projectUsage.UpdateLastOpenedSceneAsync(project.Name, project.ProjectRoot.FullPath, content.Scene.Id.ToString()).ConfigureAwait(true);

@@ -50,10 +50,7 @@ window kinds (the three windows are keyed `Window` registrations, `wnd-pe`,
 placement beyond the part's own window
 ([#90](https://github.com/abdes/DroidNet/issues/90)), and panels across
 windows with their panel scopes
-([#88](https://github.com/abdes/DroidNet/issues/88)). `SceneNodeInteraction`,
-`ViewportStateService` and `PreviewSettingsService` still take a
-`ProjectContext` with each call and reset on another project
-([#94](https://github.com/abdes/DroidNet/issues/94)), and the Scene Explorer
+([#88](https://github.com/abdes/DroidNet/issues/88)). The Scene Explorer
 falls back to the static `UndoRedo.Default` without a scene document
 ([#95](https://github.com/abdes/DroidNet/issues/95)).
 

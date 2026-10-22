@@ -54,7 +54,6 @@ public sealed partial class PreviewSession(
     private readonly OwnerThread owner = OwnerThread.Capture();
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "A start under way at disposal still releases it; it never allocates a wait handle.")]
     private readonly SemaphoreSlim startGate = new(1, 1);
-    private ProjectContext? project;
     private IDisposable? publicationRegistration;
     private bool disposed;
 
@@ -66,15 +65,15 @@ public sealed partial class PreviewSession(
     [ObservableProperty]
     public partial PreviewFailure? Failure { get; private set; }
 
-    /// <summary>Starts the preview of a project: the publication preview, the engine, then the project's content.</summary>
-    /// <param name="project">The project.</param>
+    /// <summary>
+    /// Starts the preview of the session's project: the publication preview, the engine, then the project's content.
+    /// </summary>
     /// <param name="cancellationToken">Cancels waiting for a start already under way.</param>
     /// <returns><see langword="true"/> when the engine runs and shows the project's content.</returns>
-    public async Task<bool> StartAsync(ProjectContext project, CancellationToken cancellationToken = default)
+    public async Task<bool> StartAsync(CancellationToken cancellationToken = default)
     {
-        ArgumentNullException.ThrowIfNull(project);
         ObjectDisposedException.ThrowIf(this.disposed, this);
-        this.project = project;
+        var project = session.Context;
         this.publicationRegistration?.Dispose();
         this.publicationRegistration = publication.RegisterPreview(project, () => this.CreatePublicationPreviewAsync(project));
         return await this.StartEngineAndContentAsync(cancellationToken).ConfigureAwait(true);
@@ -84,7 +83,7 @@ public sealed partial class PreviewSession(
     /// <param name="cancellationToken">Cancels waiting for a start already under way.</param>
     /// <returns><see langword="true"/> when the preview is ready.</returns>
     public Task<bool> RetryAsync(CancellationToken cancellationToken = default)
-        => this.project is null || this.disposed
+        => this.publicationRegistration is null || this.disposed
             ? Task.FromResult(false)
             : this.State switch
             {
@@ -174,7 +173,6 @@ public sealed partial class PreviewSession(
         this.publicationRegistration = publication.RegisterPreview(next, () => this.CreatePublicationPreviewAsync(next));
         MountChange.UpdateLoadedMounts(session.Project.ProjectInfo, candidate);
 
-        this.project = next;
         sessions.ChangeContext(next);
         this.LogMountsChanged(next.ProjectRoot.FullPath, next.LocalFolderMounts.Count, next.CookedContentOrder.Count);
         await catalog.UsePublicationAsync(accepted, CancellationToken.None).ConfigureAwait(true);

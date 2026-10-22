@@ -59,16 +59,17 @@ internal sealed class SceneInspectorViewModelTests
         var child = new SceneNode(scene, "Child");
         parent.Hierarchy.AddChild(child);
         scene.RootNodes.Add(parent);
+        var project = TestProject.Create(new MockFileSystem());
+        using var session = new TestSession(project.Context);
         var interaction = new SceneNodeInteraction(
+            session,
             new Mock<IEditorSettingsManager>(MockBehavior.Loose).Object,
             Mock.Of<IOperationResultPublisher>(),
             new OperationStatusReducer());
-        await interaction.RestoreAsync(
-            TestProject.Create(new MockFileSystem()).Context,
-            scene.Id).ConfigureAwait(false);
+        await interaction.RestoreAsync(scene.Id).ConfigureAwait(false);
         interaction.SetLocked(parent.Id, isLocked: true);
 
-        using var testScene = TestScenes.Open(child.Scene);
+        using var testScene = TestScenes.Open(child.Scene, project: project);
         using var surfaces = new FakeSurfaceProvider();
         using var sut = CreateSut(Mock.Of<IScenePreview>(), surfaces, testScene, [child], interaction);
 

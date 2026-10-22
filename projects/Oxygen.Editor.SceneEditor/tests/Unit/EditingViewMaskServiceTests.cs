@@ -21,16 +21,16 @@ internal sealed partial class EditingViewMaskServiceTests
     [TestMethod]
     public async Task EditingViewMaskService_WarnsOncePerSceneActivation()
     {
-        var project = TestProject.Create(new MockFileSystem()).Context;
+        using var session = new TestSession(TestProject.Create(new MockFileSystem()).Context);
         var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
-        var interaction = new SceneNodeInteraction(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var interaction = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
         var results = new CapturingOperationResultPublisher();
 
         using var mask = new EditingViewMaskService(interaction, results, new OperationStatusReducer());
         _ = mask.Start();
 
         var sceneA = SceneId.New();
-        await interaction.RestoreAsync(project, sceneA).ConfigureAwait(false);
+        await interaction.RestoreAsync(sceneA).ConfigureAwait(false);
 
         // First change on the active scene reports the pending native suppression once (Q2), even
         // though several hidden entries follow within the same activation.
@@ -40,7 +40,7 @@ internal sealed partial class EditingViewMaskServiceTests
 
         // A different scene activation is allowed to warn again.
         var sceneB = SceneId.New();
-        await interaction.RestoreAsync(project, sceneB).ConfigureAwait(false);
+        await interaction.RestoreAsync(sceneB).ConfigureAwait(false);
         interaction.SetHidden(NodeId.New(), isHidden: true);
         _ = MaskWarnings(results).Should().Be(2, "a new activation re-reports");
     }

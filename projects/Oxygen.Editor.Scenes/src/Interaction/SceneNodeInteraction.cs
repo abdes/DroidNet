@@ -33,12 +33,18 @@ namespace Oxygen.Editor.Scenes.Interaction;
 /// per-scene subrecords: one atomic write survives a restart, and a scene that is no longer in the
 /// project is dropped when the project is next restored.
 /// </para>
+/// <para>
+/// The service belongs to a project session and serves its one project, which it reads from the
+/// session when it loads, saves or reports.
+/// </para>
 /// </remarks>
+/// <param name="session">The project session whose scenes the state belongs to.</param>
 /// <param name="settings">The editor settings manager, accessed serially by this service.</param>
 /// <param name="results">The visible diagnostic publisher.</param>
 /// <param name="status">The diagnostic status reducer.</param>
 /// <param name="loggerFactory">The optional logger factory.</param>
 public sealed partial class SceneNodeInteraction(
+    IProjectSession session,
     IEditorSettingsManager settings,
     IOperationResultPublisher results,
     IStatusReducer status,
@@ -51,11 +57,10 @@ public sealed partial class SceneNodeInteraction(
     private readonly ILogger logger = loggerFactory?.CreateLogger<SceneNodeInteraction>()
         ?? NullLogger<SceneNodeInteraction>.Instance;
 
-    // Serializes database access across project switches, exactly like the preview preferences.
+    // Loads and writes run one at a time, in request order.
     private Task persistence = Task.CompletedTask;
-    private PendingWrite? pendingWrite;
+    private ProjectInteraction? pendingWrite;
 
-    private ProjectContext? activeProject;
     private SceneId activeSceneId;
     private HashSet<NodeId> hiddenNodeIds = [];
     private HashSet<NodeId> lockedNodeIds = [];
@@ -72,22 +77,13 @@ public sealed partial class SceneNodeInteraction(
     public SceneId ActiveSceneId => this.activeSceneId;
 
     /// <summary>
-    /// Loads the stored interaction state for a scene of <paramref name="project"/>, replacing any
+    /// Loads the stored interaction state for a scene of the session's project, replacing any
     /// previously active scene.
     /// </summary>
-    /// <param name="project">The project that owns the state.</param>
     /// <param name="sceneId">The scene whose state is being presented.</param>
     /// <returns>The restoration task.</returns>
-    public Task RestoreAsync(ProjectContext project, SceneId sceneId)
+    public Task RestoreAsync(SceneId sceneId)
     {
-        ArgumentNullException.ThrowIfNull(project);
-        if (this.activeProject?.ProjectId != project.ProjectId
-            || this.activeProject?.ProjectRoot != project.ProjectRoot)
-        {
-            this.scenes = [];
-        }
-
-        this.activeProject = project;
         this.activeSceneId = sceneId;
         this.hiddenNodeIds = [];
         this.lockedNodeIds = [];
@@ -95,7 +91,7 @@ public sealed partial class SceneNodeInteraction(
         var generation = ++this.activationGeneration;
         this.RaiseStateChanged();
 
-        var restoration = this.RestoreAfterAsync(this.persistence, project, sceneId, generation);
+        var restoration = this.RestoreAfterAsync(this.persistence, sceneId, generation);
         this.persistence = restoration.ContinueWith(
             static completed => _ = completed.Exception,
             CancellationToken.None,
@@ -216,11 +212,6 @@ public sealed partial class SceneNodeInteraction(
         this.ScheduleSave();
     }
 
-    // The project scope id is the normalized project root, the same identity the preview
-    // preferences use; the stored ProjectId inside the value is what rejects a reused path.
-    private static SettingContext Context(ProjectContext project)
-        => SettingContext.Project(project.ProjectRoot.FullPath.ToUpperInvariant());
-
     private void Mutate(NodeId nodeId, bool requested, HashSet<NodeId> target, string appliedMessage, string reversedMessage)
     {
         if (nodeId.IsEmpty)
@@ -241,14 +232,11 @@ public sealed partial class SceneNodeInteraction(
 
     private void RaiseStateChanged() => this.StateChanged?.Invoke(this, EventArgs.Empty);
 
+    private bool IsActive(SceneId sceneId, long generation)
+        => generation == this.activationGeneration && this.activeSceneId == sceneId;
+
     private void ScheduleSave()
     {
-        var project = this.activeProject;
-        if (project is null)
-        {
-            return;
-        }
-
         if (this.activeSceneId.IsEmpty)
         {
             return;
@@ -256,9 +244,7 @@ public sealed partial class SceneNodeInteraction(
 
         this.scenes[this.activeSceneId] = new SceneInteraction(
             [.. this.hiddenNodeIds], [.. this.lockedNodeIds], this.Categories);
-        this.pendingWrite = new PendingWrite(
-            project,
-            new ProjectInteraction(project.ProjectId, new Dictionary<SceneId, SceneInteraction>(this.scenes)));
+        this.pendingWrite = new ProjectInteraction(session.Context.ProjectId, new Dictionary<SceneId, SceneInteraction>(this.scenes));
 
         // Chain onto the serialized queue so a fast sequence of toggles cannot interleave writes.
         this.persistence = this.SavePendingAfterAsync(this.persistence);
@@ -273,12 +259,11 @@ public sealed partial class SceneNodeInteraction(
             this.pendingWrite = null;
             try
             {
-                await settings.SaveSettingAsync(Key, write.Value, Context(write.Project)).ConfigureAwait(true);
+                await settings.SaveSettingAsync(Key, write, session.Context.SettingsScope).ConfigureAwait(true);
             }
             catch (Exception failure)
             {
                 this.ReportFailure(
-                    write.Project,
                     "SAVE_FAILED",
                     "Editor hide and lock state was not saved",
                     "Applied for this session, but could not save. Toggle again to retry.",
@@ -288,10 +273,10 @@ public sealed partial class SceneNodeInteraction(
     }
 
     [SuppressMessage("Design", "CA1031:Do not catch general exception types", Justification = "A stored state that cannot be read, whatever the settings store fails with, is reported and the scene starts with nothing hidden or locked instead of failing to open.")]
-    private async Task RestoreAfterAsync(Task previous, ProjectContext project, SceneId sceneId, long generation)
+    private async Task RestoreAfterAsync(Task previous, SceneId sceneId, long generation)
     {
         await previous.ConfigureAwait(true);
-        if (generation != this.activationGeneration || !ReferenceEquals(this.activeProject, project) || this.activeSceneId != sceneId)
+        if (!this.IsActive(sceneId, generation))
         {
             // A newer scene took over while this load was in flight; its state must not be replaced.
             return;
@@ -300,22 +285,22 @@ public sealed partial class SceneNodeInteraction(
         ProjectInteraction? stored;
         try
         {
-            stored = await settings.LoadSettingAsync(Key, Context(project)).ConfigureAwait(true);
+            stored = await settings.LoadSettingAsync(Key, session.Context.SettingsScope).ConfigureAwait(true);
         }
         catch (Exception failure)
         {
-            this.ReportFailure(project, "LOAD_FAILED", "Editor hide and lock state was not restored", "The scene starts with nothing hidden or locked.", failure);
+            this.ReportFailure("LOAD_FAILED", "Editor hide and lock state was not restored", "The scene starts with nothing hidden or locked.", failure);
             return;
         }
 
-        if (generation != this.activationGeneration || !ReferenceEquals(this.activeProject, project) || this.activeSceneId != sceneId)
+        if (!this.IsActive(sceneId, generation))
         {
             return;
         }
 
         // A record written for another project is ignored outright: the settings scope is reused by
         // path, and a copied project must not inherit a stranger's hidden set.
-        if (stored is null || stored.ProjectId != project.ProjectId)
+        if (stored is null || stored.ProjectId != session.Context.ProjectId)
         {
             return;
         }
@@ -324,7 +309,6 @@ public sealed partial class SceneNodeInteraction(
                 || entry.Value.HiddenNodeIds is null || entry.Value.LockedNodeIds is null || entry.Value.Categories is null) != false)
         {
             this.ReportFailure(
-                project,
                 "INVALID_STATE",
                 "Editor interaction state was not restored",
                 "The saved interaction state is invalid. Scene visibility, locks and Explorer category filters use their defaults.",
@@ -342,8 +326,9 @@ public sealed partial class SceneNodeInteraction(
         }
     }
 
-    private void ReportFailure(ProjectContext project, string code, string title, string message, Exception exception)
+    private void ReportFailure(string code, string title, string message, Exception exception)
     {
+        var project = session.Context;
         this.LogInteractionFailure(exception, code, project.ProjectRoot);
         _ = SceneOperationResults.PublishFailure(
             results,
@@ -356,8 +341,6 @@ public sealed partial class SceneNodeInteraction(
             new AffectedScope { ProjectId = project.ProjectId, ProjectName = project.Name, ProjectPath = project.ProjectRoot.FullPath },
             exception: exception);
     }
-
-    private readonly record struct PendingWrite(ProjectContext Project, ProjectInteraction Value);
 
     /// <summary>The saved interaction state, guarded by project identity.</summary>
     /// <param name="ProjectId">The project owning this state.</param>

@@ -174,7 +174,7 @@ internal sealed partial class MountTransactionTests : DroidNet.Tests.VisualUserI
             _ = (await this.manager.SaveProjectInfoAsync(TestProject.InfoOf(context)).ConfigureAwait(true)).Should().BeTrue();
 
             // Starting publishes the mounted library, the publication the change starts from.
-            _ = (await this.Session.StartAsync(context).ConfigureAwait(true)).Should().BeTrue();
+            _ = (await this.Session.StartAsync().ConfigureAwait(true)).Should().BeTrue();
 
             // Only the changes after the preview started count.
             this.ProjectSession.ContextChanged += this.OnContextChanged;

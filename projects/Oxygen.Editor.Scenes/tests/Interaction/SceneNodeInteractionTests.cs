@@ -15,21 +15,21 @@ using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.Scenes.Tests.Interaction;
 
-/// <summary>Node lock and visibility persistence, reload and scene activation.</summary>
+/// <summary>Node lock and visibility persistence, reload and scene activation within a project session.</summary>
 [TestClass]
 public sealed partial class SceneNodeInteractionTests
 {
     [TestMethod]
     public async Task RestoreAsync_LoadsStoredHiddenAndLock()
     {
-        var project = TestProject.Create(new MockFileSystem()).Context;
+        using var session = OpenSession();
         var sceneId = SceneId.New();
         var hidden = NodeId.New();
         var locked = NodeId.New();
 
         var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
         var stored = new SceneNodeInteraction.ProjectInteraction(
-            project.ProjectId,
+            session.Context.ProjectId,
             new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
             {
                 [sceneId] = new([hidden], [locked], SceneCategories.All),
@@ -42,8 +42,8 @@ public sealed partial class SceneNodeInteractionTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(stored);
 
-        var service = new SceneNodeInteraction(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
-        await service.RestoreAsync(project, sceneId).ConfigureAwait(false);
+        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(sceneId).ConfigureAwait(false);
 
         _ = service.IsHidden(hidden).Should().BeTrue("a stored hidden id reloads on scene restore");
         _ = service.IsLocked(locked).Should().BeTrue("a stored locked id reloads on scene restore");
@@ -52,7 +52,7 @@ public sealed partial class SceneNodeInteractionTests
     [TestMethod]
     public async Task GetLockOwner_ResolvesNearestAncestorOnlyInActiveScene()
     {
-        var project = TestProject.Create(new MockFileSystem()).Context;
+        using var session = OpenSession();
         var scene = CreateScene();
         var parent = new SceneNode(scene, "Locked Parent");
         var child = new SceneNode(scene, "Child");
@@ -61,8 +61,8 @@ public sealed partial class SceneNodeInteractionTests
         var otherSceneNode = new SceneNode(CreateScene(), "Other Scene Node");
 
         var settings = new Mock<IEditorSettingsManager>(MockBehavior.Loose);
-        var service = new SceneNodeInteraction(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
-        await service.RestoreAsync(project, scene.Id).ConfigureAwait(false);
+        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(scene.Id).ConfigureAwait(false);
         service.SetLocked(parent.Id, isLocked: true);
 
         _ = service.GetLockOwner(child).Should().BeSameAs(parent);
@@ -73,7 +73,7 @@ public sealed partial class SceneNodeInteractionTests
     [TestMethod]
     public async Task RestoreAsync_IgnoresAnotherProjectsRecord()
     {
-        var project = TestProject.Create(new MockFileSystem()).Context;
+        using var session = OpenSession();
         var sceneId = SceneId.New();
         var hidden = NodeId.New();
 
@@ -95,8 +95,8 @@ public sealed partial class SceneNodeInteractionTests
                 It.IsAny<CancellationToken>()))
             .ReturnsAsync(stored);
 
-        var service = new SceneNodeInteraction(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
-        await service.RestoreAsync(project, sceneId).ConfigureAwait(false);
+        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(sceneId).ConfigureAwait(false);
 
         _ = service.IsHidden(hidden).Should().BeFalse("a record whose ProjectId differs is rejected");
     }
@@ -104,69 +104,98 @@ public sealed partial class SceneNodeInteractionTests
     [TestMethod]
     public async Task SceneSwitchAndRestart_PreservesIndependentStates()
     {
-        var project = TestProject.Create(new MockFileSystem()).Context;
+        using var session = OpenSession();
         var sceneA = SceneId.New();
         var sceneB = SceneId.New();
         var nodeA = NodeId.New();
         var nodeB = NodeId.New();
-        SceneNodeInteraction.ProjectInteraction? stored = null;
-        var settings = new Mock<IEditorSettingsManager>();
-        _ = settings.Setup(value => value.LoadSettingAsync(
-                SceneNodeInteraction.Key,
-                It.IsAny<SettingContext>(),
-                It.IsAny<IProgress<SettingsProgress>>(),
-                It.IsAny<CancellationToken>()))
-            .Returns(() => Task.FromResult(stored));
-        _ = settings.Setup(value => value.SaveSettingAsync(
-                SceneNodeInteraction.Key,
-                It.IsAny<SceneNodeInteraction.ProjectInteraction>(),
-                It.IsAny<SettingContext>(),
-                It.IsAny<IProgress<SettingsProgress>>(),
-                It.IsAny<CancellationToken>()))
-            .Callback((
-                SettingKey<SceneNodeInteraction.ProjectInteraction> _,
-                SceneNodeInteraction.ProjectInteraction value,
-                SettingContext _,
-                IProgress<SettingsProgress> _,
-                CancellationToken _) => stored = value)
-            .Returns(Task.CompletedTask);
-        var service = new SceneNodeInteraction(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
-        await service.RestoreAsync(project, sceneA).ConfigureAwait(false);
+        var store = new Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction>();
+        var settings = CreateStore(store);
+        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(sceneA).ConfigureAwait(false);
         service.SetHidden(nodeA, isHidden: true);
         service.SetCategories(new SceneCategories(ShowMeshes: false, ShowLights: true, ShowCameras: false));
-        await service.RestoreAsync(project, sceneB).ConfigureAwait(false);
+        await service.RestoreAsync(sceneB).ConfigureAwait(false);
         _ = service.HiddenNodeIds().Should().BeEmpty();
         _ = service.Categories.Should().Be(SceneCategories.All);
         service.SetLocked(nodeB, isLocked: true);
         service.SetCategories(new SceneCategories(ShowMeshes: true, ShowLights: false, ShowCameras: true));
-        await service.RestoreAsync(project, sceneA).ConfigureAwait(false);
+        await service.RestoreAsync(sceneA).ConfigureAwait(false);
 
         _ = service.IsHidden(nodeA).Should().BeTrue();
         _ = service.IsLocked(nodeB).Should().BeFalse();
         _ = service.Categories.Should().Be(new SceneCategories(ShowMeshes: false, ShowLights: true, ShowCameras: false));
-        _ = stored!.Scenes.Keys.Should().BeEquivalentTo([sceneA, sceneB]);
-        var restarted = new SceneNodeInteraction(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
-        await restarted.RestoreAsync(project, sceneB).ConfigureAwait(false);
+        _ = store[session.Context.SettingsScope].Scenes.Keys.Should().BeEquivalentTo([sceneA, sceneB]);
+        var restarted = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await restarted.RestoreAsync(sceneB).ConfigureAwait(false);
         _ = restarted.IsLocked(nodeB).Should().BeTrue();
         _ = restarted.IsHidden(nodeA).Should().BeFalse();
         _ = restarted.Categories.Should().Be(new SceneCategories(ShowMeshes: true, ShowLights: false, ShowCameras: true));
     }
 
     [TestMethod]
+    public async Task SessionsOfTwoProjects_KeepTheirOwnState()
+    {
+        using var first = OpenSession("First");
+        using var second = OpenSession("Second");
+        var sceneId = SceneId.New();
+        var node = NodeId.New();
+        var store = new Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction>();
+        var settings = CreateStore(store);
+
+        var firstService = new SceneNodeInteraction(first, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await firstService.RestoreAsync(sceneId).ConfigureAwait(false);
+        firstService.SetHidden(node, isHidden: true);
+
+        var secondService = new SceneNodeInteraction(second, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await secondService.RestoreAsync(sceneId).ConfigureAwait(false);
+        _ = secondService.IsHidden(node).Should().BeFalse("another project's session has its own state");
+        secondService.SetLocked(node, isLocked: true);
+        await secondService.RestoreAsync(sceneId).ConfigureAwait(false);
+
+        var reopened = new SceneNodeInteraction(first, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await reopened.RestoreAsync(sceneId).ConfigureAwait(false);
+        _ = reopened.IsHidden(node).Should().BeTrue();
+        _ = reopened.IsLocked(node).Should().BeFalse("the other session's write does not reach this project");
+        _ = store.Keys.Should().BeEquivalentTo([first.Context.SettingsScope, second.Context.SettingsScope]);
+    }
+
+    [TestMethod]
+    public async Task MountChange_KeepsTheProjectsState()
+    {
+        using var session = OpenSession();
+        var sceneId = SceneId.New();
+        var node = NodeId.New();
+        var store = new Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction>();
+        var settings = CreateStore(store);
+        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(sceneId).ConfigureAwait(false);
+        var before = session.Context;
+
+        // A mount change replaces the context with the same project id and root (scope topology, decision 7).
+        session.ChangeContext(before with { CookedContentOrder = [] });
+        service.SetHidden(node, isHidden: true);
+        await service.RestoreAsync(sceneId).ConfigureAwait(false);
+
+        _ = service.IsHidden(node).Should().BeTrue();
+        _ = store.Keys.Should().Equal([before.SettingsScope], "the project's settings scope is its root, which a mount change keeps");
+    }
+
+    [TestMethod]
     public async Task InvalidSavedState_PublishesFailureAndKeepsDefaults()
     {
-        var project = TestProject.Create(new MockFileSystem()).Context;
+        using var session = OpenSession();
         var settings = new Mock<IEditorSettingsManager>();
         _ = settings.Setup(value => value.LoadSettingAsync(
                 SceneNodeInteraction.Key,
                 It.IsAny<SettingContext>(),
                 It.IsAny<IProgress<SettingsProgress>>(),
                 It.IsAny<CancellationToken>()))
-            .ReturnsAsync(new SceneNodeInteraction.ProjectInteraction(project.ProjectId, null!));
+            .ReturnsAsync(new SceneNodeInteraction.ProjectInteraction(session.Context.ProjectId, null!));
         var results = new CapturingOperationResultPublisher();
-        var service = new SceneNodeInteraction(settings.Object, results, new OperationStatusReducer());
+        var service = new SceneNodeInteraction(session, settings.Object, results, new OperationStatusReducer());
 
-        await service.RestoreAsync(project, SceneId.New()).ConfigureAwait(false);
+        await service.RestoreAsync(SceneId.New()).ConfigureAwait(false);
 
         _ = service.HiddenNodeIds().Should().BeEmpty();
         _ = service.Categories.Should().Be(SceneCategories.All);
@@ -177,7 +206,7 @@ public sealed partial class SceneNodeInteractionTests
     [TestMethod]
     public async Task StaleRestoreAfterClear_DoesNotReapplyPriorState()
     {
-        var project = TestProject.Create(new MockFileSystem()).Context;
+        using var session = OpenSession();
         var sceneId = SceneId.New();
         var hidden = NodeId.New();
         var load = new TaskCompletionSource<SceneNodeInteraction.ProjectInteraction?>(
@@ -189,11 +218,11 @@ public sealed partial class SceneNodeInteractionTests
                 It.IsAny<IProgress<SettingsProgress>>(),
                 It.IsAny<CancellationToken>()))
             .Returns(load.Task);
-        var service = new SceneNodeInteraction(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
-        var restoration = service.RestoreAsync(project, sceneId);
+        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        var restoration = service.RestoreAsync(sceneId);
         service.ClearActiveScene();
         load.SetResult(new SceneNodeInteraction.ProjectInteraction(
-            project.ProjectId,
+            session.Context.ProjectId,
             new Dictionary<SceneId, SceneNodeInteraction.SceneInteraction>
             {
                 [sceneId] = new([hidden], [], new SceneCategories(ShowMeshes: false, ShowLights: false, ShowCameras: false)),
@@ -209,9 +238,10 @@ public sealed partial class SceneNodeInteractionTests
     [TestMethod]
     public async Task ClearActiveScene_ResetsCategoriesWithoutSavingEmptyScene()
     {
+        using var session = OpenSession();
         var settings = new Mock<IEditorSettingsManager>();
-        var service = new SceneNodeInteraction(settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
-        await service.RestoreAsync(TestProject.Create(new MockFileSystem()).Context, SceneId.New()).ConfigureAwait(false);
+        var service = new SceneNodeInteraction(session, settings.Object, new CapturingOperationResultPublisher(), new OperationStatusReducer());
+        await service.RestoreAsync(SceneId.New()).ConfigureAwait(false);
         service.SetCategories(new SceneCategories(ShowMeshes: false, ShowLights: false, ShowCameras: false));
 
         service.ClearActiveScene();
@@ -222,6 +252,36 @@ public sealed partial class SceneNodeInteractionTests
     }
 
     private static Scene CreateScene() => new() { Name = "Test Scene" };
+
+    private static TestSession OpenSession(string name = "Project")
+        => new(TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), "Oxygen.SceneInteraction", name)).Context);
+
+    // A settings store that keeps one interaction record per settings scope.
+    private static Mock<IEditorSettingsManager> CreateStore(Dictionary<SettingContext, SceneNodeInteraction.ProjectInteraction> store)
+    {
+        var settings = new Mock<IEditorSettingsManager>();
+        _ = settings.Setup(value => value.LoadSettingAsync(
+                SceneNodeInteraction.Key,
+                It.IsAny<SettingContext>(),
+                It.IsAny<IProgress<SettingsProgress>>(),
+                It.IsAny<CancellationToken>()))
+            .Returns((SettingKey<SceneNodeInteraction.ProjectInteraction> _, SettingContext context, IProgress<SettingsProgress> _, CancellationToken _)
+                => Task.FromResult(store.GetValueOrDefault(context)));
+        _ = settings.Setup(value => value.SaveSettingAsync(
+                SceneNodeInteraction.Key,
+                It.IsAny<SceneNodeInteraction.ProjectInteraction>(),
+                It.IsAny<SettingContext>(),
+                It.IsAny<IProgress<SettingsProgress>>(),
+                It.IsAny<CancellationToken>()))
+            .Callback((
+                SettingKey<SceneNodeInteraction.ProjectInteraction> _,
+                SceneNodeInteraction.ProjectInteraction value,
+                SettingContext context,
+                IProgress<SettingsProgress> _,
+                CancellationToken _) => store[context] = value)
+            .Returns(Task.CompletedTask);
+        return settings;
+    }
 
     private sealed class CapturingOperationResultPublisher : IOperationResultPublisher
     {

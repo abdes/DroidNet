@@ -13,6 +13,7 @@ using Oxygen.Editor.LivePreview.Assets;
 using Oxygen.Editor.LivePreview.Play;
 using Oxygen.Editor.LivePreview.Scenes;
 using Oxygen.Editor.LivePreview.Session;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Assets.Diagnostics;
 using Oxygen.Managed.Core.Diagnostics;
@@ -58,6 +59,7 @@ public sealed class LivePreviewSessionModule : IScopeModule<ISessionLayer>
             resolver => ScenePreviews.Create(
                 resolver.Resolve<IEngineService>(),
                 resolver.Resolve<OpenDocuments>(),
+                resolver.Resolve<IProjectSession>(),
                 resolver.Resolve<ILoggerFactory>(),
                 resolver.Resolve<IOperationResultPublisher>(),
                 resolver.Resolve<IAssetFeed>()),

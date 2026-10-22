@@ -23,11 +23,15 @@ public static class TestScenes
     /// <param name="interaction">The lock and hide state the document's edits respect, if any.</param>
     /// <param name="redirects">The asset moves and deletions the document's edits see, if any.</param>
     /// <param name="layout">The explorer layout the file records beside the scene, if any.</param>
+    /// <param name="project">
+    /// The project the scene's file belongs to, when the test already made it for a service of the project's session;
+    /// otherwise a new in-memory project.
+    /// </param>
     /// <returns>The scene's document; the caller disposes it.</returns>
-    public static TestScene Open(Scene scene, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IList<ExplorerEntryData>? layout = null)
+    public static TestScene Open(Scene scene, ISceneNodeInteraction? interaction = null, IAssetRedirects? redirects = null, IList<ExplorerEntryData>? layout = null, TestProject? project = null)
     {
         ArgumentNullException.ThrowIfNull(scene);
-        var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\TestScenes"), interaction, redirects);
+        var documents = new TestSceneDocuments(project ?? TestProject.Create(new MockFileSystem(), @"C:\TestScenes"), interaction, redirects);
         try
         {
             var name = string.IsNullOrEmpty(scene.Name) ? "Scene" : scene.Name;

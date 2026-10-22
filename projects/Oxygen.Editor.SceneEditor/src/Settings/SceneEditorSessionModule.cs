@@ -55,6 +55,7 @@ public sealed class SceneEditorSessionModule : IScopeModule<ISessionLayer>
         // Scene viewport layout and pane cameras: user-local workspace state, serialized writes.
         scope.RegisterDelegate(
             resolver => new ViewportStateService(
+                resolver.Resolve<IProjectSession>(),
                 resolver.Resolve<IEditorSettingsManager>(),
                 resolver.Resolve<IOperationResultPublisher>(),
                 resolver.Resolve<IStatusReducer>(),

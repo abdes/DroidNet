@@ -4,7 +4,6 @@
 
 using DroidNet.Documents;
 using Oxygen.Editor.Documents;
-using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Changes;
@@ -88,7 +87,7 @@ internal sealed partial class ScenePreview
     {
         ArgumentNullException.ThrowIfNull(content);
         var authoring = content.Authoring;
-        if (!this.Register(authoring.Scene, authoring.Document, documentOwner, content.Project))
+        if (!this.Register(authoring.Scene, authoring.Document, documentOwner))
         {
             return false;
         }
@@ -259,7 +258,7 @@ internal sealed partial class ScenePreview
         }
     }
 
-    private bool Register(Scene scene, DocumentId documentId, OwnerThread documentOwner, ProjectContext project)
+    private bool Register(Scene scene, DocumentId documentId, OwnerThread documentOwner)
     {
         lock (this.documentGate)
         {
@@ -278,7 +277,7 @@ internal sealed partial class ScenePreview
                 this.RetireDocument(previous, ReferenceEquals(previous.Scene, scene) ? "another document opened the scene" : "its content was replaced");
             }
 
-            var lifetime = new DocumentLifetime(scene, documentId, documentOwner, project);
+            var lifetime = new DocumentLifetime(scene, documentId, documentOwner);
             this.openScenes[scene.Id] = lifetime;
             this.pendingPropertySyncs.Register(scene.Id, lifetime.Id);
         }
@@ -449,16 +448,13 @@ internal sealed partial class ScenePreview
         public EventHandler<DocumentContentReplacedEventArgs>? OnContentReplaced { get; set; }
     }
 
-    private sealed class DocumentLifetime(Scene scene, DocumentId documentId, OwnerThread owner, ProjectContext project)
+    private sealed class DocumentLifetime(Scene scene, DocumentId documentId, OwnerThread owner)
     {
         public Guid Id { get; } = Guid.NewGuid();
 
         public Scene Scene { get; } = scene;
 
         public DocumentId DocumentId { get; } = documentId;
-
-        // The project the document is opened in: its engine target and the roots its texture references resolve from.
-        public ProjectContext Project { get; } = project;
 
         // The thread that owns the document: its scene is read and its events are raised there.
         public OwnerThread Owner { get; } = owner;

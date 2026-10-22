@@ -136,7 +136,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         _ = this.AssetCatalog.Setup(value => value.RefreshAsync(It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
 
         // The scene is a document of the project, saved where the editor saves scenes.
-        this.sceneKind = new SceneDocumentKind(session);
+        this.sceneKind = new SceneDocumentKind();
         this.materialKind = new MaterialDocumentKind(this.materialValidation);
         this.OpenDocuments = new OpenDocuments([this.sceneKind, this.materialKind], new ImmediateReadFileStore(new NativeAtomicFileStore(Disk)));
         this.UnsavedDocuments = new UnsavedDocuments(this.OpenDocuments);
@@ -276,7 +276,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             var catalog = new Mock<IAssetPublicationTarget>();
             _ = catalog.Setup(value => value.UsePublicationAsync(It.IsAny<ICookPublicationReadLease>(), It.IsAny<CancellationToken>())).Returns(Task.CompletedTask);
             this.contentSession = this.CreatePreviewSession(this.materialPipeline.Publication, this.materialCookCoordinator, this.Session, catalog.Object);
-            _ = (await this.contentSession.StartAsync(this.Session.Context, cancellationToken).ConfigureAwait(true)).Should().BeTrue("{0}", this.contentSession.Failure);
+            _ = (await this.contentSession.StartAsync(cancellationToken).ConfigureAwait(true)).Should().BeTrue("{0}", this.contentSession.Failure);
         }
 
         _ = (await this.contentSession.ChangeMountsAsync(this.Session.Context, desired, cancellationToken).ConfigureAwait(true)).Should().BeTrue();
@@ -389,7 +389,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
         }
 
         // One preview shows a scene on an engine, as in a workspace: the fixture's starts once it initializes.
-        this.preview ??= ScenePreviews.Create(this.previewEngine, this.OpenDocuments, operationResults: this.previewResults);
+        this.preview ??= ScenePreviews.Create(this.previewEngine, this.OpenDocuments, this.Session, operationResults: this.previewResults);
 
         await this.SynchronizeAsync(stale: null, cancellationToken).ConfigureAwait(true);
     }
@@ -455,10 +455,10 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
             documents,
             Mock.Of<IUnsavedCookInputs>(),
             new SceneSelectionService(),
-            new SceneNodeInteraction(settings, publisher, reducer, NullLoggerFactory.Instance),
+            new SceneNodeInteraction(this.Session, settings, publisher, reducer, NullLoggerFactory.Instance),
             new SceneEditorViews(),
             new PreviewSettingsService(this.Runtime, settings, this.Session, publisher, reducer),
-            new ViewportStateService(settings, publisher, reducer),
+            new ViewportStateService(this.Session, settings, publisher, reducer),
             new TransformToolSettingsService(settings: null),
             engineSettings.Object,
             NullLoggerFactory.Instance);
@@ -471,7 +471,7 @@ internal sealed class NativeSceneFixture : IAsyncDisposable
     public async Task<PreviewSession> StartWorkspacePreviewAsync(CatalogWorkloadServices services, IAssetPublicationTarget catalog)
     {
         var session = this.CreatePreviewSession(services.Publication, services.Runs, services.Session, catalog);
-        _ = (await session.StartAsync(services.Session.Context).ConfigureAwait(true)).Should().BeTrue("{0}", session.Failure);
+        _ = (await session.StartAsync().ConfigureAwait(true)).Should().BeTrue("{0}", session.Failure);
         return session;
     }
 

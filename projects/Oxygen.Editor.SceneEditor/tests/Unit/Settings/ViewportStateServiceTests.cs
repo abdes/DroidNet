@@ -21,8 +21,8 @@ namespace Oxygen.Editor.SceneEditor.Unit.Tests.Settings;
 
 /// <summary>
 /// Viewport state is user-local workspace state kept per project and scene: it round-trips through
-/// the editor settings store, stays isolated per project, never lets a late load replace newer
-/// state, and discards a payload it cannot use with a warning.
+/// the editor settings store, stays isolated per project session, survives a mount change, never
+/// lets a late load replace newer state, and discards a payload it cannot use with a warning.
 /// </summary>
 [TestClass]
 internal sealed class ViewportStateServiceTests
@@ -53,37 +53,59 @@ internal sealed class ViewportStateServiceTests
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        _ = (await service.RestoreAsync(fixture.Project, SceneA).ConfigureAwait(false)).Should().BeNull();
+        _ = (await service.RestoreAsync(SceneA).ConfigureAwait(false)).Should().BeNull();
 
-        service.Update(fixture.Project, SceneA, FourPanes);
-        service.Update(fixture.Project, SceneB, OnePane);
+        service.Update(SceneA, FourPanes);
+        service.Update(SceneB, OnePane);
         await service.FlushAsync().ConfigureAwait(false);
 
         var reopened = fixture.CreateService();
-        var restored = await reopened.RestoreAsync(fixture.Project, SceneA).ConfigureAwait(false);
+        var restored = await reopened.RestoreAsync(SceneA).ConfigureAwait(false);
         _ = restored.Should().NotBeNull();
         _ = restored!.Layout.Should().Be(SceneViewLayout.FourQuad);
         _ = restored.FocusedPane.Should().Be(2);
         _ = restored.Panes.Should().Equal(FourPanes.Panes);
-        _ = (await reopened.RestoreAsync(fixture.Project, SceneB).ConfigureAwait(false))!.Panes.Should().Equal(OnePane.Panes);
+        _ = (await reopened.RestoreAsync(SceneB).ConfigureAwait(false))!.Panes.Should().Equal(OnePane.Panes);
         _ = fixture.Results.Should().BeEmpty();
     }
 
     [TestMethod]
-    public async Task ProjectsKeepSeparateState()
+    public async Task SessionsKeepTheirProjectsState()
+    {
+        var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
+        await using var lifetime = fixture.ConfigureAwait(false);
+        var first = fixture.CreateService();
+        first.Update(SceneA, FourPanes);
+        await first.FlushAsync().ConfigureAwait(false);
+
+        var second = fixture.CreateService(session: fixture.OpenSession(Fixture.ProjectAt("Second")));
+        _ = (await second.RestoreAsync(SceneA).ConfigureAwait(false)).Should().BeNull("another project's session has its own state");
+        second.Update(SceneA, OnePane);
+        await second.FlushAsync().ConfigureAwait(false);
+
+        var reopened = await fixture.CreateService().RestoreAsync(SceneA).ConfigureAwait(false);
+        _ = reopened!.Panes.Should().Equal(FourPanes.Panes, "the other session's write does not reach this project");
+
+        // A new project at a reused path does not inherit the old project's viewports.
+        var replacement = fixture.CreateService(session: fixture.OpenSession(Fixture.ProjectAt("First")));
+        _ = (await replacement.RestoreAsync(SceneA).ConfigureAwait(false)).Should().BeNull();
+    }
+
+    [TestMethod]
+    public async Task MountChangeKeepsTheProjectsState()
     {
         var fixture = await Fixture.CreateAsync().ConfigureAwait(false);
         await using var lifetime = fixture.ConfigureAwait(false);
         var service = fixture.CreateService();
-        service.Update(fixture.Project, SceneA, FourPanes);
+        _ = await service.RestoreAsync(SceneA).ConfigureAwait(false);
+
+        // A mount change replaces the context with the same project id and root (scope topology, decision 7).
+        fixture.Session.ChangeContext(fixture.Project with { CookedContentOrder = [] });
+        service.Update(SceneA, OnePane);
         await service.FlushAsync().ConfigureAwait(false);
 
-        var second = Fixture.ProjectAt("Second");
-        _ = (await service.RestoreAsync(second, SceneA).ConfigureAwait(false)).Should().BeNull();
-
-        // A new project at a reused path does not inherit the old project's viewports.
-        var replacement = Fixture.ProjectAt("First");
-        _ = (await fixture.CreateService().RestoreAsync(replacement, SceneA).ConfigureAwait(false)).Should().BeNull();
+        var restored = await fixture.CreateService(session: fixture.OpenSession(fixture.Project)).RestoreAsync(SceneA).ConfigureAwait(false);
+        _ = restored!.Panes.Should().Equal(OnePane.Panes, "the project's settings scope is its root, which a mount change keeps");
     }
 
     [TestMethod]
@@ -102,8 +124,8 @@ internal sealed class ViewportStateServiceTests
             .Returns(Task.CompletedTask);
         var service = fixture.CreateService(store.Object);
 
-        var restoring = service.RestoreAsync(fixture.Project, SceneA);
-        service.Update(fixture.Project, SceneA, OnePane);
+        var restoring = service.RestoreAsync(SceneA);
+        service.Update(SceneA, OnePane);
         loaded.SetResult(new(fixture.Project.ProjectId, ViewportStateService.CurrentVersion, new Dictionary<SceneId, SceneViewportState>
         {
             [SceneA] = FourPanes,
@@ -127,7 +149,7 @@ internal sealed class ViewportStateServiceTests
             fixture.Context,
             ct: this.TestContext.CancellationToken).ConfigureAwait(false);
 
-        var restored = await fixture.CreateService().RestoreAsync(fixture.Project, SceneA).ConfigureAwait(false);
+        var restored = await fixture.CreateService().RestoreAsync(SceneA).ConfigureAwait(false);
 
         _ = restored.Should().BeNull();
         _ = fixture.Results.Should().ContainSingle().Which.Diagnostics.Should()
@@ -143,14 +165,14 @@ internal sealed class ViewportStateServiceTests
             .ConfigureAwait(false);
         var service = fixture.CreateService();
 
-        var restored = await service.RestoreAsync(fixture.Project, SceneA).ConfigureAwait(false);
-        service.Update(fixture.Project, SceneA, OnePane);
+        var restored = await service.RestoreAsync(SceneA).ConfigureAwait(false);
+        service.Update(SceneA, OnePane);
         await service.FlushAsync().ConfigureAwait(false);
 
         _ = restored.Should().BeNull();
         _ = fixture.Results.Should().ContainSingle().Which.Diagnostics.Should()
             .ContainSingle(issue => issue.Code == DiagnosticCodes.SettingsPrefix + "VIEWPORT_STATE_UNREADABLE");
-        var rewritten = await fixture.CreateService().RestoreAsync(fixture.Project, SceneA).ConfigureAwait(false);
+        var rewritten = await fixture.CreateService().RestoreAsync(SceneA).ConfigureAwait(false);
         _ = rewritten!.Panes.Should().Equal(OnePane.Panes, "a later write replaces the discarded payload");
     }
 
@@ -158,8 +180,17 @@ internal sealed class ViewportStateServiceTests
     {
         private readonly PersistentState database = new(new DbContextOptionsBuilder<PersistentState>().UseSqlite("Data Source=:memory:").Options);
         private readonly Mock<IOperationResultPublisher> publisher = new();
+        private readonly List<TestSession> sessions = [];
 
-        public ProjectContext Project { get; } = ProjectAt("First");
+        private Fixture()
+        {
+            this.Project = ProjectAt("First");
+            this.Session = this.OpenSession(this.Project);
+        }
+
+        public ProjectContext Project { get; }
+
+        public TestSession Session { get; }
 
         public SettingContext Context => SettingContext.Project(
             Path.TrimEndingDirectorySeparator(this.Project.ProjectRoot.FullPath).ToUpperInvariant());
@@ -180,10 +211,25 @@ internal sealed class ViewportStateServiceTests
         public static ProjectContext ProjectAt(string name)
             => TestProject.Create(new MockFileSystem(), Path.Combine(Path.GetTempPath(), "Oxygen.ViewportState", name)).Context with { Name = name };
 
-        // Each service gets its own store, so nothing is served from another service's cache.
-        public ViewportStateService CreateService(IEditorSettingsManager? store = null)
-            => new(store ?? this.Store, this.publisher.Object, new OperationStatusReducer());
+        public TestSession OpenSession(ProjectContext project)
+        {
+            var session = new TestSession(project);
+            this.sessions.Add(session);
+            return session;
+        }
 
-        public ValueTask DisposeAsync() => this.database.DisposeAsync();
+        // Each service gets its own store, so nothing is served from another service's cache.
+        public ViewportStateService CreateService(IEditorSettingsManager? store = null, TestSession? session = null)
+            => new(session ?? this.Session, store ?? this.Store, this.publisher.Object, new OperationStatusReducer());
+
+        public ValueTask DisposeAsync()
+        {
+            foreach (var session in this.sessions)
+            {
+                session.Dispose();
+            }
+
+            return this.database.DisposeAsync();
+        }
     }
 }

@@ -39,7 +39,7 @@ internal sealed partial class PreviewFixture : IDisposable
         this.World.OnExecute = this.Decide;
         var publisher = new Mock<IOperationResultPublisher>();
         _ = publisher.Setup(value => value.Publish(It.IsAny<OperationResult>())).Callback<OperationResult>(this.Results.Add);
-        this.Preview = new ScenePreview(this.Engine, this.Documents.Open, operationResults: publisher.Object);
+        this.Preview = new ScenePreview(this.Engine, this.Documents.Open, this.Documents.Session, operationResults: publisher.Object);
     }
 
     public TestSceneDocuments Documents { get; } = new(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));

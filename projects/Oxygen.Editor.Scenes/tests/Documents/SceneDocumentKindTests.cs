@@ -45,8 +45,7 @@ public sealed class SceneDocumentKindTests
     public async Task RejectedScene_FailsToDecodeWithItsReason(string json)
     {
         var project = TestProject.Create(new MockFileSystem());
-        using var session = new TestSession(project.Context);
-        var kind = new SceneDocumentKind(session, interaction: null, new FakeAssetRedirects());
+        var kind = new SceneDocumentKind(interaction: null, new FakeAssetRedirects());
         var file = new DocumentFile(
             project.PathOf($"/Content/Main{AssetFileTypes.SceneDescriptor}"),
             AssetPath.Parse($"/Content/Main{AssetFileTypes.Scene}"));

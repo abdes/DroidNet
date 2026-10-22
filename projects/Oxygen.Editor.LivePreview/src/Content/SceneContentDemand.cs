@@ -173,8 +173,7 @@ internal sealed partial class SceneContentDemand : IDisposable
     private void StartDemand(FollowedDocument entry, AssetPath reference)
     {
         var project = this.session.Context;
-        if ((entry.Demands.TryGetValue(reference, out var existing) && !existing.IsCancelled)
-            || entry.Content?.Project.ProjectId != project.ProjectId)
+        if (entry.Demands.TryGetValue(reference, out var existing) && !existing.IsCancelled)
         {
             return;
         }

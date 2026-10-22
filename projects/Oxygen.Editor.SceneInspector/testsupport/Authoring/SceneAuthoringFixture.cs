@@ -6,6 +6,7 @@ using Moq;
 using Oxygen.Editor.ContentPipeline.Inspection;
 using Oxygen.Editor.ContentPipeline.Testing;
 using Oxygen.Editor.LivePreview.Scenes;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Projects.Testing;
 using Oxygen.Editor.Scenes.Authoring;
 using Oxygen.Editor.Scenes.Edits.Assets;
@@ -17,19 +18,23 @@ using Oxygen.Editor.World;
 using Oxygen.Editor.World.Components;
 using Oxygen.Managed.Assets;
 using Oxygen.Managed.Core;
+using Testably.Abstractions.Testing;
 
 namespace Oxygen.Editor.SceneInspector.TestSupport;
 
 /// <summary>A scene document with a camera and sun node, open in a document area, for the views and models that edit it.</summary>
 internal sealed partial class SceneAuthoringFixture : IDisposable
 {
-    private readonly SceneNodeInteraction? interaction;
-
     /// <summary>Initializes a new instance of the <see cref="SceneAuthoringFixture"/> class.</summary>
-    /// <param name="interaction">Optional workspace interaction state the document's edits respect.</param>
-    public SceneAuthoringFixture(SceneNodeInteraction? interaction = null)
+    /// <param name="interaction">
+    /// Creates the workspace interaction state the document's edits respect, for the fixture's project session; none
+    /// when <see langword="null"/>.
+    /// </param>
+    public SceneAuthoringFixture(Func<IProjectSession, SceneNodeInteraction>? interaction = null)
     {
-        this.interaction = interaction;
+        var project = TestProject.Create(new MockFileSystem());
+        this.Session = new TestSession(project.Context);
+        this.Interaction = interaction?.Invoke(this.Session);
         this.PublishSurface(EngineAssets.BasicShape("Cube"));
         var scene = new Scene
         {
@@ -44,8 +49,7 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
         });
         _ = node.AddComponent(new DirectionalLightComponent { Name = "Sun" });
         scene.RootNodes.Add(node);
-        this.TestScene = TestScenes.Open(scene, interaction);
-        this.Session = new TestSession(this.TestScene.Project);
+        this.TestScene = TestScenes.Open(scene, this.Interaction, project: project);
         this.Scene = this.TestScene.Scene;
         this.Node = this.TestScene.NodeOf(node);
         this.Camera = this.Node.Components.OfType<PerspectiveCamera>().Single();
@@ -66,6 +70,9 @@ internal sealed partial class SceneAuthoringFixture : IDisposable
 
     /// <summary>Gets the project session of the scene's project, which the views under test belong to.</summary>
     public TestSession Session { get; }
+
+    /// <summary>Gets the workspace interaction state the document's edits respect, if the fixture has one.</summary>
+    public SceneNodeInteraction? Interaction { get; }
 
     /// <summary>Gets the shared selection authority wired into the Explorer and Inspector.</summary>
     public SceneSelectionService Selection { get; } = new();

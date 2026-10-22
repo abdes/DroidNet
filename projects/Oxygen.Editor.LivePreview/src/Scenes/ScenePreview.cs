@@ -6,6 +6,7 @@ using System.Collections.Immutable;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Logging.Abstractions;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Diagnostics;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Editor.World;
@@ -30,6 +31,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
 
     [System.Diagnostics.CodeAnalysis.SuppressMessage("Usage", "CA2213:Disposable fields should be disposed", Justification = "The application owns the injected engine service; disposing the preview must not shut down the shared runtime.")]
     private readonly IEngineService engineService;
+    private readonly IProjectSession session;
     private readonly ILogger<ScenePreview> logger;
     private readonly IOperationResultPublisher? operationResults;
     private readonly Oxygen.Editor.Assets.IAssetFeed? assetFeed;
@@ -42,18 +44,21 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     /// <summary>Initializes a new instance of the <see cref="ScenePreview"/> class, following the open documents.</summary>
     /// <param name="engineService">The embedded engine.</param>
     /// <param name="documents">The workspace's open documents.</param>
+    /// <param name="session">The project session whose scene documents the preview shows.</param>
     /// <param name="loggerFactory">The optional diagnostic logger factory.</param>
     /// <param name="operationResults">Publishes the engine's rejections and failures.</param>
     /// <param name="assetFeed">Reports which assets are mounted, so geometry waits for its asset.</param>
     public ScenePreview(
         IEngineService engineService,
         OpenDocuments documents,
+        IProjectSession session,
         ILoggerFactory? loggerFactory = null,
         IOperationResultPublisher? operationResults = null,
         Oxygen.Editor.Assets.IAssetFeed? assetFeed = null)
     {
         this.engineService = engineService ?? throw new ArgumentNullException(nameof(engineService));
         this.documents = documents ?? throw new ArgumentNullException(nameof(documents));
+        this.session = session ?? throw new ArgumentNullException(nameof(session));
         this.logger = loggerFactory?.CreateLogger<ScenePreview>() ?? NullLogger<ScenePreview>.Instance;
         this.operationResults = operationResults;
         this.assetFeed = assetFeed;
@@ -711,7 +716,7 @@ internal sealed partial class ScenePreview : IScenePreview, IDisposable
     {
         var scene = projection.Snapshot;
         cancellationToken.ThrowIfCancellationRequested();
-        var target = new RuntimeSceneTarget(world.Commands.RunId, scene.Id, projection.Lifetime.Id, Guid.NewGuid()) { ProjectId = projection.Lifetime.Project.ProjectId };
+        var target = new RuntimeSceneTarget(world.Commands.RunId, scene.Id, projection.Lifetime.Id, Guid.NewGuid()) { ProjectId = this.session.Context.ProjectId };
         world = new WorldDispatch(world.Commands, target, cancellationToken);
         lock (this.documentGate)
         {

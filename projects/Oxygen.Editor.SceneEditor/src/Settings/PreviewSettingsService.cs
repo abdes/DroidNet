@@ -46,7 +46,7 @@ public sealed partial class PreviewSettingsService(
     internal static readonly SettingKey<GroundGridSettings> GroundGridKey = new("WorldEditor", "GroundGrid");
     private readonly ILogger logger = loggerFactory?.CreateLogger<PreviewSettingsService>() ?? NullLogger<PreviewSettingsService>.Instance;
 
-    // Serializes database access across project switches and toolbar writes.
+    // Loads and writes run one at a time, in request order.
     private Task persistence = Task.CompletedTask;
     private Task savePump = Task.CompletedTask;
     private Preferences? pendingWrite;
@@ -180,9 +180,6 @@ public sealed partial class PreviewSettingsService(
 
     private static bool IsLive(EngineServiceState state) => state is EngineServiceState.Ready or EngineServiceState.Running;
 
-    private static SettingContext Context(ProjectContext project)
-        => SettingContext.Project(project.ProjectRoot.FullPath.ToUpperInvariant());
-
     private static string RejectionCode(string property) => property switch
     {
         nameof(VSyncEnabled) => "VSYNC_REJECTED",
@@ -199,7 +196,7 @@ public sealed partial class PreviewSettingsService(
         var value = new Preferences { ProjectId = project.ProjectId };
         try
         {
-            var stored = await settings.LoadSettingAsync(Key, Context(project)).ConfigureAwait(true);
+            var stored = await settings.LoadSettingAsync(Key, project.SettingsScope).ConfigureAwait(true);
             if (stored is not null && stored.ProjectId == project.ProjectId)
             {
                 if (stored.FrameRateCap < 1 || stored.FrameRateCap > maxCap)
@@ -388,7 +385,7 @@ public sealed partial class PreviewSettingsService(
                 this.pendingWrite = null;
                 try
                 {
-                    await settings.SaveSettingAsync(Key, write, Context(this.Project)).ConfigureAwait(true);
+                    await settings.SaveSettingAsync(Key, write, this.Project.SettingsScope).ConfigureAwait(true);
                     this.saveFailed = false;
                 }
                 catch (Exception failure)
@@ -450,8 +447,8 @@ public sealed partial class PreviewSettingsService(
 
     private void ReportFailure(string code, string title, string message, Exception exception)
     {
+        this.LogPreferenceFailure(exception, code);
         var project = this.Project;
-        this.LogPreferenceFailure(exception, code, project);
         RuntimeOperationResults.PublishFailure(
             results,
             status,

@@ -3,6 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 using System.IO.Abstractions;
+using Oxygen.Editor.Data.Settings;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.Projects;
@@ -79,6 +80,15 @@ public sealed record ProjectContext
     ///     not replace the context, so <see cref="IProjectSession.Settings"/> holds the current ones.
     /// </summary>
     public ProjectSettings Settings { get; init; } = new();
+
+    /// <summary>
+    ///     Gets the scope of the project's user-local settings in the editor database: the project root, compared without
+    ///     case as Windows paths are. A change of the content mounts keeps the root, so it keeps the scope too.
+    /// </summary>
+    /// <remarks>
+    ///     A path can be reused by another project, so a stored value carries the project id it was written for.
+    /// </remarks>
+    public SettingContext SettingsScope => SettingContext.Project(this.ProjectRoot.FullPath.ToUpperInvariant());
 
     /// <summary>
     ///     Creates a context snapshot from a loaded project.

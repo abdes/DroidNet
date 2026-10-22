@@ -56,10 +56,10 @@ internal static class TestSceneEditorServices
             Mock.Of<IDocumentService>(),
             Mock.Of<IUnsavedCookInputs>(),
             new SceneSelectionService(),
-            new SceneNodeInteraction(settings, publisher, reducer, NullLoggerFactory.Instance),
+            new SceneNodeInteraction(session, settings, publisher, reducer, NullLoggerFactory.Instance),
             new SceneEditorViews(),
             previewSettings ?? new PreviewSettingsService(engine, settings, session, publisher, reducer),
-            new ViewportStateService(settings, publisher, reducer),
+            new ViewportStateService(session, settings, publisher, reducer),
             new TransformToolSettingsService(settings: null),
             engineSettings.Object,
             NullLoggerFactory.Instance);

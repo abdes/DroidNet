@@ -35,7 +35,7 @@ internal sealed partial class PreviewSessionTests
     {
         using var fixture = new SessionFixture(EngineServiceState.NoEngine);
 
-        var ready = await fixture.Session.StartAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var ready = await fixture.Session.StartAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = ready.Should().BeTrue();
         _ = fixture.Session.State.Should().Be(PreviewSessionState.Ready, fixture.Session.Failure?.Message);
@@ -50,7 +50,7 @@ internal sealed partial class PreviewSessionTests
     {
         using var fixture = new SessionFixture(EngineServiceState.Running);
 
-        _ = await fixture.Session.StartAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await fixture.Session.StartAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = fixture.Engine.Starts.Should().Be(0);
         _ = fixture.Session.State.Should().Be(PreviewSessionState.Ready, fixture.Session.Failure?.Message);
@@ -62,7 +62,7 @@ internal sealed partial class PreviewSessionTests
         using var fixture = new SessionFixture(EngineServiceState.NoEngine);
         fixture.Engine.StartFailure = new InvalidOperationException("No device.");
 
-        var ready = await fixture.Session.StartAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
+        var ready = await fixture.Session.StartAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = ready.Should().BeFalse();
         _ = fixture.Session.State.Should().Be(PreviewSessionState.EngineUnavailable);
@@ -82,7 +82,7 @@ internal sealed partial class PreviewSessionTests
         using var fixture = new SessionFixture(EngineServiceState.Running);
         fixture.FailCatalog = true;
 
-        _ = await fixture.Session.StartAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await fixture.Session.StartAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         _ = fixture.Session.State.Should().Be(PreviewSessionState.ContentUnavailable);
         _ = fixture.Session.Failure!.Code.Should().Be(AssetMountDiagnosticCodes.RefreshFailed);
@@ -98,7 +98,7 @@ internal sealed partial class PreviewSessionTests
     public async Task Disposal_ReleasesTheCookedRootsAndKeepsTheEngineRunning()
     {
         var fixture = new SessionFixture(EngineServiceState.Running);
-        _ = await fixture.Session.StartAsync(fixture.Project, this.TestContext.CancellationToken).ConfigureAwait(false);
+        _ = await fixture.Session.StartAsync(this.TestContext.CancellationToken).ConfigureAwait(false);
 
         await fixture.Session.DisposeAsync().ConfigureAwait(false);
 
@@ -120,7 +120,6 @@ internal sealed partial class PreviewSessionTests
             var info = TestProject.InfoOf(project);
             this.sessions = new TestSessionHost();
             var session = this.sessions.Open(project);
-            this.Project = session.Context;
             this.coordinator = new ContentCookCoordinator(session, NullLogger<ContentCookCoordinator>.Instance);
             var files = new NativeAtomicFileStore(new Testably.Abstractions.RealFileSystem());
             var manager = new Mock<IProjectManagerService>();
@@ -134,8 +133,6 @@ internal sealed partial class PreviewSessionTests
         }
 
         public FakeEngine Engine { get; }
-
-        public ProjectContext Project { get; }
 
         public PreviewSession Session { get; }
 

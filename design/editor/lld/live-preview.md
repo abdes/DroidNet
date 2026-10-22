@@ -289,7 +289,7 @@ public sealed partial class PreviewSession : ObservableObject, IContentMountChan
     public PreviewSessionState State { get; }   // NotStarted, Starting, Ready, EngineUnavailable, ContentUnavailable
     public PreviewFailure? Failure { get; }     // Code, Title, Message
 
-    public Task<bool> StartAsync(ProjectContext project, CancellationToken cancellationToken = default);
+    public Task<bool> StartAsync(CancellationToken cancellationToken = default);
     public Task<bool> RetryAsync(CancellationToken cancellationToken = default);
     public Task<bool> ChangeMountsAsync(ProjectContext expected, ProjectInfo candidate, CancellationToken cancellationToken = default);
 }

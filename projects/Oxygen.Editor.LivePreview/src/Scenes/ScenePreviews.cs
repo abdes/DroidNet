@@ -5,6 +5,7 @@
 using Microsoft.Extensions.Logging;
 using Oxygen.Editor.Assets;
 using Oxygen.Editor.Documents;
+using Oxygen.Editor.Projects;
 using Oxygen.Editor.Runtime.Engine;
 using Oxygen.Managed.Core.Diagnostics;
 
@@ -17,6 +18,7 @@ public static class ScenePreviews
     /// <remarks>The preview is disposable; the workspace container that holds it disposes it.</remarks>
     /// <param name="engine">The embedded engine.</param>
     /// <param name="documents">The workspace's open documents.</param>
+    /// <param name="session">The project session whose scene documents the preview shows.</param>
     /// <param name="loggerFactory">The optional logger factory.</param>
     /// <param name="operationResults">Publishes the engine's rejections and failures.</param>
     /// <param name="assetFeed">Reports which assets are mounted, so geometry waits for its asset.</param>
@@ -24,8 +26,9 @@ public static class ScenePreviews
     public static IScenePreview Create(
         IEngineService engine,
         OpenDocuments documents,
+        IProjectSession session,
         ILoggerFactory? loggerFactory = null,
         IOperationResultPublisher? operationResults = null,
         IAssetFeed? assetFeed = null)
-        => new ScenePreview(engine, documents, loggerFactory, operationResults, assetFeed);
+        => new ScenePreview(engine, documents, session, loggerFactory, operationResults, assetFeed);
 }

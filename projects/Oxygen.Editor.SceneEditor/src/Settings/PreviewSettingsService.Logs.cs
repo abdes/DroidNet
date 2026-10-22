@@ -3,12 +3,11 @@
 // SPDX-License-Identifier: MIT
 
 using Microsoft.Extensions.Logging;
-using Oxygen.Editor.Projects;
 using Oxygen.Managed.Core;
 
 namespace Oxygen.Editor.SceneEditor.Settings;
 
-/// <content>Logging for preview preference persistence.</content>
+/// <summary>Logging helpers for <see cref="PreviewSettingsService"/>.</summary>
 public sealed partial class PreviewSettingsService
 {
     [LoggerMessage(
@@ -17,14 +16,14 @@ public sealed partial class PreviewSettingsService
         Message = "Preview preferences failed ({Code}) for project {ProjectRoot}.")]
     private static partial void LogPreferenceFailure(ILogger logger, Exception exception, string code, FileSystemPath projectRoot);
 
-    private void LogPreferenceFailure(Exception exception, string code, ProjectContext project)
+    private void LogPreferenceFailure(Exception exception, string code)
     {
         if (!this.logger.IsEnabled(LogLevel.Error))
         {
             return;
         }
 
-        var root = project.ProjectRoot;
+        var root = this.Project.ProjectRoot;
         LogPreferenceFailure(this.logger, exception, code, root);
     }
 }

@@ -37,9 +37,9 @@ public sealed partial class PublicationPreviewEngineTests : DroidNet.Tests.Visua
     {
         var session = project.CreateSession(engine);
         await using var sessionLifetime = session.ConfigureAwait(true);
-        _ = (await session.StartAsync(project.Context, token).ConfigureAwait(true)).Should().BeTrue();
+        _ = (await session.StartAsync(token).ConfigureAwait(true)).Should().BeTrue();
         using var documents = new TestSceneDocuments(TestProject.Create(new MockFileSystem(), @"C:\LivePreviewTests"));
-        using var preview = new ScenePreview(engine, documents.Open);
+        using var preview = new ScenePreview(engine, documents.Open, documents.Session);
         var built = new Scene { Name = "Test Scene" };
         built.RootNodes.Add(new SceneNode(built, "Cube"));
         var document = await documents.OpenAsync(built.Dehydrate()).ConfigureAwait(true);
@@ -64,7 +64,7 @@ public sealed partial class PublicationPreviewEngineTests : DroidNet.Tests.Visua
         var session = project.CreateSession(engine);
         await using (session.ConfigureAwait(true))
         {
-            _ = (await session.StartAsync(project.Context, token).ConfigureAwait(true)).Should().BeTrue();
+            _ = (await session.StartAsync(token).ConfigureAwait(true)).Should().BeTrue();
             _ = (await project.Pipeline.CookAssetAsync(material, token).ConfigureAwait(true)).IsMounted.Should().BeTrue();
             published = await project.ReadPublishedContentRootAsync(token).ConfigureAwait(true);
             runId = engine.ContentStatus.RunId;
@@ -84,7 +84,7 @@ public sealed partial class PublicationPreviewEngineTests : DroidNet.Tests.Visua
         _ = (await project.ReadPublishedContentRootAsync(token).ConfigureAwait(true)).Should().Be(published, "the prior publication stays selected");
         var reopened = project.CreateSession(engine);
         await using var reopenedLifetime = reopened.ConfigureAwait(true);
-        _ = (await reopened.StartAsync(project.Context, token).ConfigureAwait(true)).Should().BeTrue();
+        _ = (await reopened.StartAsync(token).ConfigureAwait(true)).Should().BeTrue();
         _ = engine.ContentStatus.RunId.Should().Be(runId, "the engine kept running");
         var retried = await project.Pipeline.CookAssetAsync(material, token).ConfigureAwait(true);
         _ = retried.IsPublished.Should().BeTrue();
@@ -97,7 +97,7 @@ public sealed partial class PublicationPreviewEngineTests : DroidNet.Tests.Visua
         var material = project.WriteMaterial("Shared", Red);
         var session = project.CreateSession(engine);
         await using var sessionLifetime = session.ConfigureAwait(true);
-        _ = (await session.StartAsync(project.Context, token).ConfigureAwait(true)).Should().BeTrue();
+        _ = (await session.StartAsync(token).ConfigureAwait(true)).Should().BeTrue();
         _ = (await project.Pipeline.CookAssetAsync(material, token).ConfigureAwait(true)).IsMounted.Should().BeTrue();
         var content = engine.ContentStatus;
         using var gate = new CaptureGate(project, engine);
